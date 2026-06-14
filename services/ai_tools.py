@@ -115,24 +115,69 @@ def _doc_candidates(files: list[File]) -> list[dict]:
     return [{"id": f.id, "name": f.name, "type": f.type} for f in docs]
 
 
-def _list_candidates(files: list[File], blocks: list[Block]) -> list[dict]:
-    candidates = []
-    for f in files:
-        if f.type == "tasks":
-            candidates.append(
-                {"kind": "tasks_file", "file_id": f.id, "name": f.name, "block_id": None}
-            )
-    for b in blocks:
-        if b.type == "checklist":
-            f = File.query.get(b.file_id)
-            candidates.append(
-                {
-                    "kind": "checklist",
-                    "file_id": b.file_id,
-                    "name": f.name if f else "checklist",
-                    "block_id": b.id,
-                }
-            )
+def _all_list_candidates() -> list[dict]:
+    """All task files and checklists across every topic (capture-first routing)."""
+    topics = Topic.query.order_by(Topic.id).all()
+    topic_by_id = {t.id: t for t in topics}
+
+    candidates: list[dict] = []
+
+    task_files = (
+        File.query.filter_by(type="tasks")
+        .order_by(File.topic_id, File.order_index, File.id)
+        .all()
+    )
+    for f in task_files:
+        topic = topic_by_id.get(f.topic_id)
+        topic_name = topic.name if topic else "unknown"
+        candidates.append(
+            {
+                "kind": "tasks_file",
+                "file_id": f.id,
+                "topic_id": f.topic_id,
+                "topic_name": topic_name,
+                "topic_type": topic.type if topic else None,
+                "name": f.name,
+                "block_id": None,
+                "label": f"{topic_name} → {f.name}",
+            }
+        )
+
+    checklist_blocks = (
+        Block.query.filter_by(type="checklist")
+        .order_by(Block.file_id, Block.order_index, Block.id)
+        .all()
+    )
+    file_ids = {b.file_id for b in checklist_blocks}
+    files_by_id = {
+        f.id: f
+        for f in File.query.filter(File.id.in_(file_ids)).all()
+    } if file_ids else {}
+
+    for b in checklist_blocks:
+        f = files_by_id.get(b.file_id)
+        topic = topic_by_id.get(f.topic_id) if f else None
+        topic_name = topic.name if topic else "unknown"
+        file_name = f.name if f else "checklist"
+        items = (b.content or {}).get("items") or []
+        hint = ""
+        if items:
+            first = items[0].get("text", "").strip()
+            if first:
+                hint = f" ({first[:40]}{'…' if len(first) > 40 else ''})"
+        candidates.append(
+            {
+                "kind": "checklist",
+                "file_id": b.file_id,
+                "topic_id": f.topic_id if f else None,
+                "topic_name": topic_name,
+                "topic_type": topic.type if topic else None,
+                "name": file_name,
+                "block_id": b.id,
+                "label": f"{topic_name} → {file_name}{hint}",
+            }
+        )
+
     return candidates
 
 
@@ -200,15 +245,21 @@ def run_tool(tool: str, topic_id: int, context: dict, locale: str = "en") -> dic
         }
 
     if tool == "smart_list":
-        candidates = _list_candidates(files, blocks)
+        candidates = _all_list_candidates()
         if not candidates:
-            raise ValueError("No tasks or checklist targets in this topic")
+            raise ValueError("No lists found across topics")
 
+        source_topic = topic.name
         pick = chat_json(
-            "Choose where to add a list item. Return JSON: "
+            "The user captured a thought in one topic and wants it added to the best "
+            "matching list anywhere in the system. Lists may live in other topics "
+            "(e.g. grocery items → Home/Tasks, ideas → a project Tasks file). "
+            "Return JSON: "
             '{"kind": "tasks_file"|"checklist", "file_id": number, '
-            '"block_id": number|null, "item_text": string}',
-            f"Content to add as a list item:\n{text}\n\nCandidates:\n"
+            '"block_id": number|null, "item_text": string, "reason": string}',
+            f"Captured in topic: {source_topic}\n"
+            f"Content to add:\n{text}\n\n"
+            f"All list candidates (topic → list):\n"
             f"{json.dumps(candidates, ensure_ascii=False)}",
         )
         item_text = (pick.get("item_text") or text).strip()
@@ -219,12 +270,15 @@ def run_tool(tool: str, topic_id: int, context: dict, locale: str = "en") -> dic
             block = _append_checklist_item(int(pick["block_id"]), item_text)
             db.session.commit()
             f = File.query.get(file_id)
+            target_topic = Topic.query.get(f.topic_id) if f else None
             return {
                 "tool": tool,
                 "action": "write",
                 "result": item_text,
                 "target_file_id": file_id,
                 "target_file_name": f.name if f else None,
+                "target_topic_id": target_topic.id if target_topic else None,
+                "target_topic_name": target_topic.name if target_topic else None,
                 "block_id": block.id,
                 "target_kind": "checklist",
             }
@@ -232,12 +286,15 @@ def run_tool(tool: str, topic_id: int, context: dict, locale: str = "en") -> dic
         task = _add_task_to_file(file_id, item_text)
         db.session.commit()
         f = File.query.get(file_id)
+        target_topic = Topic.query.get(f.topic_id) if f else None
         return {
             "tool": tool,
             "action": "write",
             "result": item_text,
             "target_file_id": file_id,
             "target_file_name": f.name if f else None,
+            "target_topic_id": target_topic.id if target_topic else None,
+            "target_topic_name": target_topic.name if target_topic else None,
             "task_id": task.id,
             "target_kind": "task",
         }
