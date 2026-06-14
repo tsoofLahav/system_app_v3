@@ -97,34 +97,19 @@ class Task(db.Model):
 
 
 class TaskView(db.Model):
+    """Task membership in a view, or a section placeholder (task_id NULL)."""
+
     __tablename__ = "task_views"
 
     id = db.Column(db.Integer, primary_key=True)
-    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"))
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=True)
     view_type = db.Column(db.Text, nullable=False)
-    section_id = db.Column(db.Integer, db.ForeignKey("view_sections.id"))
+    section_name = db.Column(db.Text, nullable=True)
 
     def to_dict(self):
         return {
             "id": self.id,
             "task_id": self.task_id,
             "view_type": self.view_type,
-            "section_id": self.section_id,
-        }
-
-
-class ViewSection(db.Model):
-    __tablename__ = "view_sections"
-
-    id = db.Column(db.Integer, primary_key=True)
-    view_type = db.Column(db.Text, nullable=False)
-    name = db.Column(db.Text, nullable=False)
-    order_index = db.Column(db.Integer, default=0)
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "view_type": self.view_type,
-            "name": self.name,
-            "order_index": self.order_index,
+            "section_name": self.section_name,
         }

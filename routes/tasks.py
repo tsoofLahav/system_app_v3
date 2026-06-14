@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from models import Block, File, Task, TaskView, Topic, ViewSection, db
+from models import Block, File, Task, TaskView, Topic, db
 from routes.helpers import apply_updates, get_or_404
 
 tasks_bp = Blueprint("tasks", __name__)
@@ -26,23 +26,22 @@ def list_tasks_by_block(block_id):
 @tasks_bp.route("/tasks/view/<view_type>", methods=["GET"])
 def list_tasks_by_view(view_type):
     rows = (
-        db.session.query(Task, TaskView, ViewSection, Topic)
+        db.session.query(Task, TaskView, Topic)
         .join(TaskView, TaskView.task_id == Task.id)
-        .outerjoin(ViewSection, TaskView.section_id == ViewSection.id)
         .outerjoin(Block, Task.block_id == Block.id)
         .outerjoin(File, Block.file_id == File.id)
         .outerjoin(Topic, File.topic_id == Topic.id)
         .filter(TaskView.view_type == view_type)
-        .order_by(ViewSection.order_index.nulls_last(), Task.id)
+        .filter(TaskView.task_id.isnot(None))
+        .order_by(TaskView.section_name.nulls_last(), Task.id)
         .all()
     )
     result = []
-    for task, task_view, section, topic in rows:
+    for task, task_view, topic in rows:
         item = task.to_dict()
         item["task_view_id"] = task_view.id
         item["view_type"] = task_view.view_type
-        item["section_id"] = task_view.section_id
-        item["section_name"] = section.name if section else None
+        item["section_name"] = task_view.section_name
         item["topic_id"] = topic.id if topic else None
         item["topic_name"] = topic.name if topic else None
         result.append(item)

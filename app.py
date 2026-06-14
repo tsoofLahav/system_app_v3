@@ -4,7 +4,6 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 
 from config import DATABASE_URL, UPLOAD_FOLDER
-from migrate import run_migrations
 from models import db
 from routes import register_blueprints
 from routes.helpers import register_error_handlers
@@ -18,7 +17,6 @@ def create_app():
 
     CORS(app)
     db.init_app(app)
-    run_migrations(app)
     register_blueprints(app)
     register_error_handlers(app)
 
