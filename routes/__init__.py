@@ -1,3 +1,4 @@
+from routes.ai import ai_bp
 from routes.blocks import blocks_bp
 from routes.files import files_bp
 from routes.task_views import task_views_bp
@@ -7,6 +8,7 @@ from routes.upload import upload_bp
 
 
 def register_blueprints(app):
+    app.register_blueprint(ai_bp)
     app.register_blueprint(topics_bp)
     app.register_blueprint(files_bp)
     app.register_blueprint(blocks_bp)
