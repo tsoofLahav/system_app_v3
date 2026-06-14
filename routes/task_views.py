@@ -10,7 +10,7 @@ task_views_bp = Blueprint("task_views", __name__)
 def list_task_views():
     views = (
         TaskView.query.filter(TaskView.task_id.isnot(None))
-        .order_by(TaskView.id)
+        .order_by(TaskView.order_index, TaskView.id)
         .all()
     )
     return jsonify([v.to_dict() for v in views])
@@ -26,7 +26,7 @@ def list_task_views_by_type(view_type):
     views = (
         TaskView.query.filter_by(view_type=view_type)
         .filter(TaskView.task_id.isnot(None))
-        .order_by(TaskView.id)
+        .order_by(TaskView.order_index, TaskView.id)
         .all()
     )
     return jsonify([v.to_dict() for v in views])
@@ -39,7 +39,7 @@ def list_sections_for_view(view_type):
         TaskView.query.filter_by(view_type=view_type)
         .filter(TaskView.task_id.is_(None))
         .filter(TaskView.section_name.isnot(None))
-        .order_by(TaskView.id)
+        .order_by(TaskView.order_index, TaskView.id)
         .all()
     )
     return jsonify([v.to_dict() for v in rows])
@@ -58,10 +58,17 @@ def create_task_view():
     if task_id is None:
         if not section_name:
             return jsonify({"error": "section_name is required for section placeholders"}), 400
+        max_order = (
+            db.session.query(db.func.max(TaskView.order_index))
+            .filter_by(view_type=view_type)
+            .filter(TaskView.task_id.is_(None))
+            .scalar()
+        ) or -1
         view = TaskView(
             task_id=None,
             view_type=view_type,
             section_name=section_name,
+            order_index=data.get("order_index", max_order + 1),
         )
     else:
         view = TaskView(
@@ -79,7 +86,7 @@ def create_task_view():
 def update_task_view(view_id):
     view = get_or_404(TaskView, view_id)
     data = request.get_json(silent=True) or {}
-    apply_updates(view, data, {"task_id", "view_type", "section_name"})
+    apply_updates(view, data, {"task_id", "view_type", "section_name", "order_index"})
     db.session.commit()
     return jsonify(view.to_dict())
 
