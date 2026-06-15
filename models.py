@@ -41,6 +41,7 @@ class File(db.Model):
     name = db.Column(db.Text, nullable=False)
     type = db.Column(db.Text, nullable=False)
     order_index = db.Column(db.Integer)
+    is_main = db.Column(db.Boolean)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -50,6 +51,7 @@ class File(db.Model):
             "name": self.name,
             "type": self.type,
             "order_index": self.order_index,
+            "is_main": self.is_main,
             "created_at": _iso(self.created_at),
         }
 

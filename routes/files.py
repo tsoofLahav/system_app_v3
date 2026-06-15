@@ -38,6 +38,7 @@ def create_file():
         name=data["name"],
         type=data["type"],
         order_index=data.get("order_index"),
+        is_main=data.get("is_main"),
     )
     db.session.add(file)
     db.session.commit()
@@ -48,7 +49,7 @@ def create_file():
 def update_file(file_id):
     file = get_or_404(File, file_id)
     data = request.get_json(silent=True) or {}
-    apply_updates(file, data, {"topic_id", "name", "type", "order_index"})
+    apply_updates(file, data, {"topic_id", "name", "type", "order_index", "is_main"})
     db.session.commit()
     return jsonify(file.to_dict())
 

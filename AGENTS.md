@@ -93,6 +93,7 @@ task_views.task_id → tasks.id
 | name | TEXT NOT NULL | |
 | type | TEXT NOT NULL | e.g. `overview`, `plan`, `doc`, `data`, `tasks`, `protocol` |
 | order_index | INTEGER | used for sort order within a topic |
+| is_main | BOOLEAN | optional; when set, overrides frontend default main/secondary visibility |
 | created_at | TIMESTAMP | |
 
 #### `blocks`
@@ -229,11 +230,12 @@ Successful DELETE returns `204` with empty body.
   "topic_id": 1,
   "name": "Project plan",
   "type": "plan",
-  "order_index": 0
+  "order_index": 0,
+  "is_main": true
 }
 ```
 
-**PATCH body** — any subset of: `topic_id`, `name`, `type`, `order_index`
+**PATCH body** — any subset of: `topic_id`, `name`, `type`, `order_index`, `is_main`
 
 ---
 
