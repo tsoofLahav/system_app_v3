@@ -10,7 +10,7 @@ Before any backend work, read [`../CONSTITUTION.md`](../CONSTITUTION.md). It def
 
 ## Project overview
 
-**system_app** is a personal productivity app. The backend is a REST API built with Flask. The live backend files are at this repository root (`app.py`, `models.py`, `routes/`, `services/`). The Flutter frontend lives in `system_app_front_end/` and consumes this API. There is **no authentication** yet — do not add auth unless explicitly requested.
+**system_app** is a personal productivity app. The backend is a REST API built with Flask. Backend files live inside `system_app_back_end/` (`app.py`, `models.py`, `routes/`, `services/`). The Flutter frontend lives in a separate project/repo and consumes this API. There is **no authentication** yet — do not add auth unless explicitly requested.
 
 ### Tech stack
 
@@ -26,8 +26,7 @@ Before any backend work, read [`../CONSTITUTION.md`](../CONSTITUTION.md). It def
 ### Repository layout
 
 ```
-system_app/
-├── CONSTITUTION.md        # App purpose & philosophy (read-only for agents)
+system_app_back_end/
 ├── app.py                 # Flask app factory + health check; entry point
 ├── config.py              # DATABASE_URL, UPLOAD_FOLDER, AI config
 ├── models.py              # SQLAlchemy models + to_dict() serializers
@@ -35,8 +34,7 @@ system_app/
 ├── Procfile               # web: gunicorn app:app
 ├── routes/                # blueprints
 ├── services/              # AI and automation services
-├── migrations/            # manual SQL migrations
-└── system_app_front_end/  # Flutter app
+└── migrations/            # manual SQL migrations
 ```
 
 ---

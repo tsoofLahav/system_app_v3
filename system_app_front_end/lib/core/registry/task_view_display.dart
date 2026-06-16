@@ -1,1 +1,0 @@
-enum TaskViewDisplayMode { bySection, byTopic }
