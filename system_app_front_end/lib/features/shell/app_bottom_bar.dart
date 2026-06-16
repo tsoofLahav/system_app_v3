@@ -11,18 +11,18 @@ import '../../design_system/layout_preview_icon.dart';
 import 'preferences_dialog.dart';
 
 abstract final class AppBottomBarMetrics {
-  static const barHeight = 58.0;
-  static const floatMargin = 16.0;
-  static const scrollInset = 96.0;
+  static const barHeight = 54.0;
+  static const floatMargin = 12.0;
+  static const scrollInset = 82.0;
 }
 
 abstract final class AppTopicHeaderMetrics {
-  static const headerHeight = 34.0;
-  static const addButtonSize = 34.0;
-  static const headerGap = 10.0;
-  static const horizontalMargin = 20.0;
-  static const floatMargin = 16.0;
-  static const scrollTopInset = 72.0;
+  static const headerHeight = 32.0;
+  static const addButtonSize = 32.0;
+  static const headerGap = 8.0;
+  static const horizontalMargin = 16.0;
+  static const floatMargin = 10.0;
+  static const scrollTopInset = 52.0;
 }
 
 const _iconSize = 22.0;
@@ -32,8 +32,7 @@ class AppBottomBar extends StatelessWidget {
 
   final AppState state;
 
-  bool get _showLayout =>
-      !state.isViewMode && state.selectedDetail != null;
+  bool get _showLayout => !state.isViewMode && state.selectedDetail != null;
 
   @override
   Widget build(BuildContext context) {
@@ -83,8 +82,7 @@ class AppBottomBar extends StatelessWidget {
               _AiToolGroup(
                 state: state,
                 enabled: hasContext && !state.aiRunning,
-                graphEnabled:
-                    (hasContext || hasGraphData) && !state.aiRunning,
+                graphEnabled: (hasContext || hasGraphData) && !state.aiRunning,
                 running: state.aiRunning,
                 onTool: (tool) => _runTool(context, tool),
               ),
@@ -117,16 +115,16 @@ class AppBottomBar extends StatelessWidget {
   Future<void> _runTool(BuildContext context, String tool) async {
     final s = state.strings;
     if (!state.canRunAiTool(tool)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s['aiNoContext'])),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s['aiNoContext'])));
       return;
     }
 
     if (tool == 'review') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s['aiReviewSoon'])),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s['aiReviewSoon'])));
       return;
     }
 
@@ -136,9 +134,9 @@ class AppBottomBar extends StatelessWidget {
       _showResult(context, result);
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -153,9 +151,12 @@ class AppBottomBar extends StatelessWidget {
 
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppGlassDialog(
         title: Text(s['aiDone']),
-        content: SingleChildScrollView(
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s['ok'])),
+        ],
+        child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -168,12 +169,6 @@ class AppBottomBar extends StatelessWidget {
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s['ok']),
-          ),
-        ],
       ),
     );
   }
@@ -184,15 +179,21 @@ class AppBottomBar extends StatelessWidget {
 
     final s = state.strings;
     final layoutId = state.layoutFor(topic);
-    final fileCount =
-        state.mainFilesFor(topic, state.selectedDetail!.files).length;
+    final fileCount = state
+        .mainFilesFor(topic, state.selectedDetail!.files)
+        .length;
 
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppGlassDialog(
         title: Text(s['layout']),
-        contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-        content: Wrap(
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s['cancel']),
+          ),
+        ],
+        child: Wrap(
           spacing: 12,
           runSpacing: 12,
           alignment: WrapAlignment.center,
@@ -212,12 +213,6 @@ class AppBottomBar extends StatelessWidget {
               ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s['cancel']),
-          ),
-        ],
       ),
     );
   }
@@ -543,8 +538,8 @@ class _LayoutPickerTile extends StatelessWidget {
                       fontSize: 10,
                       color: enabled
                           ? (selected
-                              ? Theme.of(context).colorScheme.primary
-                              : AppColors.text)
+                                ? Theme.of(context).colorScheme.primary
+                                : AppColors.text)
                           : AppColors.textHint,
                     ),
                     textAlign: TextAlign.center,

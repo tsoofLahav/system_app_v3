@@ -12,6 +12,7 @@ import 'models/task.dart';
 import 'models/task_view_membership.dart';
 import 'models/topic.dart';
 import 'models/view_section.dart';
+import 'registry/file_behavior_registry.dart';
 import 'registry/file_registry.dart';
 import 'registry/task_view_display.dart';
 import 'registry/topic_appearance.dart';
@@ -75,6 +76,7 @@ class AppState extends ChangeNotifier {
   final Map<int, String> _layoutByTopicId = {};
   AppLanguage language = AppLanguage.en;
   AiFocus? aiFocus;
+  int? pendingFocusBlockId;
   bool aiRunning = false;
 
   final Map<int, Timer?> _saveTimers = {};
@@ -101,6 +103,16 @@ class AppState extends ChangeNotifier {
   void setAiFocus(AiFocus focus) {
     aiFocus = focus;
     notifyListeners();
+  }
+
+  void requestBlockFocus(int blockId) {
+    pendingFocusBlockId = blockId;
+    notifyListeners();
+  }
+
+  void clearBlockFocus(int blockId) {
+    if (pendingFocusBlockId != blockId) return;
+    pendingFocusBlockId = null;
   }
 
   ResolvedAiContext? resolveAiContext() {
@@ -303,10 +315,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> refreshTopics() async {
     topics = await _topicService.listTopics();
-    mainTopic = topics.firstWhere(
-      (t) => t.isMain,
-      orElse: () => mainTopic!,
-    );
+    mainTopic = topics.firstWhere((t) => t.isMain, orElse: () => mainTopic!);
     notifyListeners();
   }
 
@@ -323,11 +332,16 @@ class AppState extends ChangeNotifier {
       final tasksByBlockId = <int, List<Task>>{};
 
       for (final file in files) {
-        final blocks = await _blockService.listForFile(file.id);
+        final blocks = await _ensureTrailingDefaultBlock(
+          file,
+          await _blockService.listForFile(file.id),
+        );
         blocksByFileId[file.id] = blocks;
         for (final block in blocks) {
           if (block.type == 'task' || block.type == 'task_list') {
-            tasksByBlockId[block.id] = await _taskService.listForBlock(block.id);
+            tasksByBlockId[block.id] = await _taskService.listForBlock(
+              block.id,
+            );
           }
         }
       }
@@ -474,14 +488,12 @@ class AppState extends ChangeNotifier {
       }
 
       final orderedIds = ordered.map((f) => f.id).toSet();
-      final others =
-          detail.files.where((f) => !orderedIds.contains(f.id)).toList();
+      final others = detail.files
+          .where((f) => !orderedIds.contains(f.id))
+          .toList();
       final updatedOrdered = [
         for (var i = 0; i < ordered.length; i++)
-          ordered[i].copyWith(
-            orderIndex: i,
-            isMain: allMain || i < mainCount,
-          ),
+          ordered[i].copyWith(orderIndex: i, isMain: allMain || i < mainCount),
       ];
       _applyOptimisticFiles([...updatedOrdered, ...others]);
       return null;
@@ -502,11 +514,12 @@ class AppState extends ChangeNotifier {
     final secondaryFiles = secondaryFilesFor(topic, detail.files);
     final orderIndex = isMain
         ? (mainFiles.isEmpty
-            ? 0
-            : (mainFiles.last.orderIndex ?? mainFiles.length - 1) + 1)
+              ? 0
+              : (mainFiles.last.orderIndex ?? mainFiles.length - 1) + 1)
         : (secondaryFiles.isEmpty
-            ? 0
-            : (secondaryFiles.last.orderIndex ?? secondaryFiles.length - 1) + 1);
+              ? 0
+              : (secondaryFiles.last.orderIndex ?? secondaryFiles.length - 1) +
+                    1);
 
     await _fileService.updateFile(file.id, {
       'is_main': isMain,
@@ -547,17 +560,19 @@ class AppState extends ChangeNotifier {
       color: color,
     );
 
-    final defs = FileRegistry.recommendedForTopicType(type)
-        .where((d) => selectedFileTypes.contains(d.type));
+    final defs = FileRegistry.recommendedForTopicType(
+      type,
+    ).where((d) => selectedFileTypes.contains(d.type));
 
     for (final def in defs) {
-      await _fileService.createFile(
+      final file = await _fileService.createFile(
         topicId: topic.id,
         name: def.name,
         type: def.type,
         orderIndex: def.orderIndex,
         isMain: topic.isMain ? true : def.isMain,
       );
+      await _createDefaultBlocks(file);
     }
 
     await refreshTopics();
@@ -594,19 +609,58 @@ class AppState extends ChangeNotifier {
     final isMain = topic.isMain
         ? true
         : def?.isMain ??
-            FileRegistry.isMainFile(
-              topicType: topic.type,
-              fileType: type,
-              isMainTopic: false,
-            );
-    await _fileService.createFile(
+              FileRegistry.isMainFile(
+                topicType: topic.type,
+                fileType: type,
+                isMainTopic: false,
+              );
+    final file = await _fileService.createFile(
       topicId: topic.id,
       name: name,
       type: type,
       orderIndex: def?.orderIndex,
       isMain: isMain,
     );
+    await _createDefaultBlocks(file);
     await selectTopic(topic);
+  }
+
+  Future<void> updateFileName(Topic topic, AppFile file, String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || trimmed == file.name) return;
+    await _fileService.updateFile(file.id, {'name': trimmed});
+    await selectTopic(topic);
+  }
+
+  Future<void> _createDefaultBlocks(AppFile file) async {
+    final defaults = FileBehaviorRegistry.defaultBlocksForFileType(file.type);
+    for (var i = 0; i < defaults.length; i++) {
+      final spec = defaults[i];
+      await _blockService.createBlock(
+        fileId: file.id,
+        type: spec.type,
+        content: spec.content,
+        orderIndex: i,
+      );
+    }
+  }
+
+  Future<List<Block>> _ensureTrailingDefaultBlock(
+    AppFile file,
+    List<Block> blocks,
+  ) async {
+    final trailingType = FileBehaviorRegistry.inlineInsertForFileType(
+      file.type,
+    );
+    if (trailingType == null || trailingType != 'text') return blocks;
+    if (blocks.isNotEmpty && _isEmptyTextBlock(blocks.last)) return blocks;
+    final block = await _blockService.createBlock(
+      fileId: file.id,
+      type: trailingType,
+      content: FileBehaviorRegistry.defaultContentForBlockType(trailingType),
+      orderIndex: blocks.length,
+    );
+    return [...blocks, block];
   }
 
   Future<void> deleteTopic(Topic topic) async {
@@ -638,7 +692,11 @@ class AppState extends ChangeNotifier {
     await selectTopic(topic);
   }
 
-  Future<void> addBlock(AppFile file, String type, Map<String, dynamic> content) async {
+  Future<void> addBlock(
+    AppFile file,
+    String type,
+    Map<String, dynamic> content,
+  ) async {
     final topic = selectedTopic;
     if (topic == null) return;
     final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
@@ -649,6 +707,87 @@ class AppState extends ChangeNotifier {
       orderIndex: blocks.length,
     );
     await selectTopic(topic);
+  }
+
+  Future<void> addDefaultBlock(AppFile file, String type) async {
+    if (type == 'image') return;
+    await addBlock(
+      file,
+      type,
+      FileBehaviorRegistry.defaultContentForBlockType(type),
+    );
+  }
+
+  Future<void> insertDefaultBlock(
+    AppFile file,
+    String type, {
+    required int orderIndex,
+  }) async {
+    final topic = selectedTopic;
+    if (topic == null || type == 'image') return;
+    if (type == 'text') {
+      final existing = _textBlockForInsertion(file, orderIndex);
+      if (existing != null) {
+        requestBlockFocus(existing.id);
+        return;
+      }
+    }
+    final targetIndex = await _shiftBlocksForInsert(
+      file,
+      _effectiveInsertIndex(file, orderIndex, type),
+    );
+    final block = await _blockService.createBlock(
+      fileId: file.id,
+      type: type,
+      content: FileBehaviorRegistry.defaultContentForBlockType(type),
+      orderIndex: targetIndex,
+    );
+    if (type == 'text') requestBlockFocus(block.id);
+    await selectTopic(topic);
+  }
+
+  Block? _textBlockForInsertion(AppFile file, int orderIndex) {
+    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    final targetIndex = orderIndex.clamp(0, blocks.length).toInt();
+    if (targetIndex > 0 && blocks[targetIndex - 1].type == 'text') {
+      return blocks[targetIndex - 1];
+    }
+    if (targetIndex < blocks.length && blocks[targetIndex].type == 'text') {
+      return blocks[targetIndex];
+    }
+    return null;
+  }
+
+  int _effectiveInsertIndex(AppFile file, int orderIndex, String type) {
+    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    final targetIndex = orderIndex.clamp(0, blocks.length).toInt();
+    if (type == 'text') return targetIndex;
+    if (targetIndex < blocks.length && _isEmptyTextBlock(blocks[targetIndex])) {
+      return targetIndex;
+    }
+    if (targetIndex == blocks.length &&
+        blocks.isNotEmpty &&
+        _isEmptyTextBlock(blocks.last)) {
+      return blocks.length - 1;
+    }
+    return targetIndex;
+  }
+
+  bool _isEmptyTextBlock(Block block) =>
+      block.type == 'text' && block.text.trim().isEmpty;
+
+  Future<int> _shiftBlocksForInsert(AppFile file, int orderIndex) async {
+    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    final targetIndex = orderIndex.clamp(0, blocks.length).toInt();
+    final shifted = blocks
+        .where((b) => (b.orderIndex ?? 0) >= targetIndex)
+        .toList();
+    for (final block in shifted.reversed) {
+      await _blockService.updateBlock(block.id, {
+        'order_index': (block.orderIndex ?? 0) + 1,
+      });
+    }
+    return targetIndex;
   }
 
   Future<void> addHeaderBlock(AppFile file) async {
@@ -718,10 +857,9 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> toggleTaskStatus(Task task) async {
-    final updated = await _taskService.updateTask(
-      task.id,
-      {'status': task.isDone ? 'active' : 'done'},
-    );
+    final updated = await _taskService.updateTask(task.id, {
+      'status': task.isDone ? 'active' : 'done',
+    });
     _applyTaskUpdate(updated);
   }
 
@@ -842,7 +980,11 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> reorderViewSections(String viewType, int oldIndex, int newIndex) async {
+  Future<void> reorderViewSections(
+    String viewType,
+    int oldIndex,
+    int newIndex,
+  ) async {
     final sections = sectionsForViewType(viewType);
     if (oldIndex < 0 ||
         oldIndex >= sections.length ||
@@ -876,12 +1018,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addChecklistItem(Block block) async {
+  Future<void> addChecklistItem(Block block, {int? index}) async {
     final items = List<Map<String, dynamic>>.from(
       block.content['items'] as List<dynamic>? ?? [],
     );
-    items.add({'text': 'New item', 'done': false});
-    await updateBlockContent(block, {...block.content, 'items': items}, notify: true);
+    final insertIndex = (index ?? items.length).clamp(0, items.length).toInt();
+    items.insert(insertIndex, {'text': '', 'done': false});
+    await updateBlockContent(block, {
+      ...block.content,
+      'items': items,
+    }, notify: true);
   }
 
   Future<void> updateChecklistItem(
@@ -893,12 +1039,22 @@ class AppState extends ChangeNotifier {
     final items = List<Map<String, dynamic>>.from(
       block.content['items'] as List<dynamic>? ?? [],
     );
-    if (index < 0 || index >= items.length) return;
+    if (index < 0 || index > items.length) return;
+    if (index == items.length) {
+      items.add({'text': '', 'done': false});
+    }
     items[index] = {'text': text, 'done': done};
-    await updateBlockContent(block, {...block.content, 'items': items}, notify: true);
+    await updateBlockContent(block, {
+      ...block.content,
+      'items': items,
+    }, notify: true);
   }
 
-  Future<void> addImageBlock(AppFile file, String filename, List<int> bytes) async {
+  Future<void> addImageBlock(
+    AppFile file,
+    String filename,
+    List<int> bytes,
+  ) async {
     final topic = selectedTopic;
     if (topic == null) return;
     final uploaded = await _imageService.uploadBytes(filename, bytes);
@@ -911,6 +1067,31 @@ class AppState extends ChangeNotifier {
         'filename': uploaded['filename'],
       },
       orderIndex: blocks.length,
+    );
+    await selectTopic(topic);
+  }
+
+  Future<void> insertImageBlock(
+    AppFile file,
+    String filename,
+    List<int> bytes, {
+    required int orderIndex,
+  }) async {
+    final topic = selectedTopic;
+    if (topic == null) return;
+    final uploaded = await _imageService.uploadBytes(filename, bytes);
+    final targetIndex = await _shiftBlocksForInsert(
+      file,
+      _effectiveInsertIndex(file, orderIndex, 'image'),
+    );
+    await _blockService.createBlock(
+      fileId: file.id,
+      type: 'image',
+      content: {
+        'image_path': uploaded['image_path'],
+        'filename': uploaded['filename'],
+      },
+      orderIndex: targetIndex,
     );
     await selectTopic(topic);
   }

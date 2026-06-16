@@ -1,30 +1,32 @@
 # system_app_front_end
 
-A new Flutter project.
+Frontend (Flutter desktop) for `system_app`.
 
-## Getting Started
+## Before Working
 
-This project is a starting point for a Flutter application.
+- Read [`AGENTS.md`](AGENTS.md) first.
+- For product direction, read [`../CONSTITUTION.md`](../CONSTITUTION.md) before planning large changes.
 
-A few resources to get you started if this is your first Flutter project:
+## Agent Start Path
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+1. Read [`AGENTS.md`](AGENTS.md) for workflow and guardrails.
+2. Read [`lib/README.md`](lib/README.md) for architecture and placement rules.
+3. Read the local folder `README.md` before editing code in that folder.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Documentation Index
 
-## Pane Reorder Mode
+- Architecture overview: [`lib/README.md`](lib/README.md)
+- Core layer: [`lib/core/README.md`](lib/core/README.md)
+- Feature layer: [`lib/features/README.md`](lib/features/README.md)
+- Shared widgets: [`lib/shared/README.md`](lib/shared/README.md)
+- Design system: [`lib/design_system/README.md`](lib/design_system/README.md)
+- Rebuild runbooks: [`docs/runbooks/README.md`](docs/runbooks/README.md)
 
-- Reorder mode shows two lists: `main` (up to 4 panes) and `additional` (unlimited).
-- The top list has a fixed viewport of 4 row-heights; it can scroll if drag gaps make content taller.
-- The divider is fixed between the two frames, and the additional list always starts below it.
-- Reorder mode is app-level and stays on when moving between topics.
-- Drag and drop works within each list and across lists.
-- Cross-list rule when `main` is full: dropped pane is inserted at the target index in `main`, and the last `main` pane is pushed to the top of `additional`.
-- Dropping from `main` to `additional` always works and preserves order around the drop target.
-- During drag, temporary drop slots appear; when active they open only a space (no outlined placeholder card).
-- The grabbed pane is removed from its old position while dragging (`childWhenDragging` hidden), so the interaction feels like true pickup/move.
-- On successful drop, ordering is persisted using backend `order_index` and `is_main` updates.
+Use folder-local `README.md` files as the primary source for behavior and structure.
+
+## Run
+
+```bash
+flutter pub get
+flutter run -d macos
+```
