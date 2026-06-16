@@ -1,14 +1,14 @@
 from flask import Blueprint, jsonify, request
 
 from models import Block, db
-from routes.helpers import apply_updates, get_or_404
+from routes.helpers import active_query, apply_updates, get_or_404
 
 blocks_bp = Blueprint("blocks", __name__)
 
 
 @blocks_bp.route("/blocks", methods=["GET"])
 def list_blocks():
-    blocks = Block.query.order_by(Block.order_index, Block.id).all()
+    blocks = active_query(Block).order_by(Block.order_index, Block.id).all()
     return jsonify([b.to_dict() for b in blocks])
 
 
@@ -20,7 +20,8 @@ def get_block(block_id):
 @blocks_bp.route("/files/<int:file_id>/blocks", methods=["GET"])
 def list_blocks_by_file(file_id):
     blocks = (
-        Block.query.filter_by(file_id=file_id)
+        active_query(Block)
+        .filter_by(file_id=file_id)
         .order_by(Block.order_index, Block.id)
         .all()
     )
@@ -48,7 +49,12 @@ def create_block():
 def update_block(block_id):
     block = get_or_404(Block, block_id)
     data = request.get_json(silent=True) or {}
-    apply_updates(block, data, {"file_id", "type", "content", "order_index"})
+    apply_updates(
+        block,
+        data,
+        {"file_id", "type", "content", "order_index", "archived_at"},
+        datetime_fields={"archived_at"},
+    )
     db.session.commit()
     return jsonify(block.to_dict())
 

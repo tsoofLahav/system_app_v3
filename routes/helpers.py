@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import jsonify
+from flask import jsonify, request
 from werkzeug.exceptions import HTTPException
 
 from models import db
@@ -23,6 +23,21 @@ def get_or_404(model, item_id):
 
         abort(404, description=f"{model.__name__} not found")
     return item
+
+
+def include_archived():
+    return request.args.get("include_archived", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def active_query(model):
+    query = model.query
+    if not include_archived() and hasattr(model, "archived_at"):
+        query = query.filter(model.archived_at.is_(None))
+    return query
 
 
 def apply_updates(instance, data, allowed_fields, datetime_fields=None):

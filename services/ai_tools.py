@@ -93,6 +93,7 @@ def _save_image_from_url(url: str) -> str:
 def _topic_files(topic_id: int) -> list[File]:
     return (
         File.query.filter_by(topic_id=topic_id)
+        .filter(File.archived_at.is_(None))
         .order_by(File.order_index, File.id)
         .all()
     )
@@ -103,6 +104,7 @@ def _blocks_for_files(file_ids: list[int]) -> list[Block]:
         return []
     return (
         Block.query.filter(Block.file_id.in_(file_ids))
+        .filter(Block.archived_at.is_(None))
         .order_by(Block.file_id, Block.order_index, Block.id)
         .all()
     )
@@ -117,13 +119,14 @@ def _doc_candidates(files: list[File]) -> list[dict]:
 
 def _all_list_candidates() -> list[dict]:
     """All task files and checklists across every topic (capture-first routing)."""
-    topics = Topic.query.order_by(Topic.id).all()
+    topics = Topic.query.filter(Topic.archived_at.is_(None)).order_by(Topic.id).all()
     topic_by_id = {t.id: t for t in topics}
 
     candidates: list[dict] = []
 
     task_files = (
         File.query.filter_by(type="tasks")
+        .filter(File.archived_at.is_(None))
         .order_by(File.topic_id, File.order_index, File.id)
         .all()
     )
@@ -145,6 +148,7 @@ def _all_list_candidates() -> list[dict]:
 
     checklist_blocks = (
         Block.query.filter_by(type="checklist")
+        .filter(Block.archived_at.is_(None))
         .order_by(Block.file_id, Block.order_index, Block.id)
         .all()
     )

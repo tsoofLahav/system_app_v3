@@ -10,7 +10,7 @@ Before any backend work, read [`../CONSTITUTION.md`](../CONSTITUTION.md). It def
 
 ## Project overview
 
-**system_app** is a personal productivity app. The backend is a REST API built with Flask. The Flutter frontend lives in `system_app_front_end/` and consumes this API. There is **no authentication** yet — do not add auth unless explicitly requested.
+**system_app** is a personal productivity app. The backend is a REST API built with Flask. The live backend files are at this repository root (`app.py`, `models.py`, `routes/`, `services/`). The Flutter frontend lives in `system_app_front_end/` and consumes this API. There is **no authentication** yet — do not add auth unless explicitly requested.
 
 ### Tech stack
 
@@ -28,23 +28,15 @@ Before any backend work, read [`../CONSTITUTION.md`](../CONSTITUTION.md). It def
 ```
 system_app/
 ├── CONSTITUTION.md        # App purpose & philosophy (read-only for agents)
-├── system_app_back_end/   # Flask API (this folder)
-│   ├── app.py             # Flask app factory + health check; entry point
-│   ├── config.py          # DATABASE_URL, UPLOAD_FOLDER
-│   ├── models.py          # SQLAlchemy models + to_dict() serializers
-│   ├── requirements.txt
-│   ├── Procfile           # web: gunicorn app:app
-│   ├── AGENTS.md          # this file
-│   └── routes/
-│       ├── __init__.py    # register_blueprints()
-│       ├── helpers.py     # shared CRUD helpers + error handlers
-│       ├── topics.py
-│       ├── files.py
-│       ├── blocks.py
-│       ├── tasks.py
-│       ├── task_views.py
-│       └── upload.py
-└── system_app_front_end/  # Flutter app (separate; do not modify from backend tasks)
+├── app.py                 # Flask app factory + health check; entry point
+├── config.py              # DATABASE_URL, UPLOAD_FOLDER, AI config
+├── models.py              # SQLAlchemy models + to_dict() serializers
+├── requirements.txt
+├── Procfile               # web: gunicorn app:app
+├── routes/                # blueprints
+├── services/              # AI and automation services
+├── migrations/            # manual SQL migrations
+└── system_app_front_end/  # Flutter app
 ```
 
 ---

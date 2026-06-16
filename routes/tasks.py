@@ -1,14 +1,14 @@
 from flask import Blueprint, jsonify, request
 
 from models import Block, File, Task, TaskView, Topic, db
-from routes.helpers import apply_updates, get_or_404
+from routes.helpers import active_query, apply_updates, get_or_404
 
 tasks_bp = Blueprint("tasks", __name__)
 
 
 @tasks_bp.route("/tasks", methods=["GET"])
 def list_tasks():
-    tasks = Task.query.order_by(Task.id).all()
+    tasks = active_query(Task).order_by(Task.id).all()
     return jsonify([t.to_dict() for t in tasks])
 
 
@@ -19,7 +19,7 @@ def get_task(task_id):
 
 @tasks_bp.route("/blocks/<int:block_id>/tasks", methods=["GET"])
 def list_tasks_by_block(block_id):
-    tasks = Task.query.filter_by(block_id=block_id).order_by(Task.id).all()
+    tasks = active_query(Task).filter_by(block_id=block_id).order_by(Task.id).all()
     return jsonify([t.to_dict() for t in tasks])
 
 
@@ -33,6 +33,10 @@ def list_tasks_by_view(view_type):
         .outerjoin(Topic, File.topic_id == Topic.id)
         .filter(TaskView.view_type == view_type)
         .filter(TaskView.task_id.isnot(None))
+        .filter(Task.archived_at.is_(None))
+        .filter(Block.archived_at.is_(None))
+        .filter(File.archived_at.is_(None))
+        .filter(Topic.archived_at.is_(None))
         .order_by(TaskView.section_name.nulls_last(), Task.id)
         .all()
     )
@@ -79,8 +83,8 @@ def update_task(task_id):
     apply_updates(
         task,
         data,
-        {"block_id", "title", "status", "due_date"},
-        datetime_fields={"due_date"},
+        {"block_id", "title", "status", "due_date", "archived_at"},
+        datetime_fields={"due_date", "archived_at"},
     )
     db.session.commit()
     return jsonify(task.to_dict())

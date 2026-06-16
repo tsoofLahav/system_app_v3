@@ -1,14 +1,14 @@
 from flask import Blueprint, jsonify, request
 
 from models import File, db
-from routes.helpers import apply_updates, get_or_404
+from routes.helpers import active_query, apply_updates, get_or_404
 
 files_bp = Blueprint("files", __name__)
 
 
 @files_bp.route("/files", methods=["GET"])
 def list_files():
-    files = File.query.order_by(File.order_index, File.id).all()
+    files = active_query(File).order_by(File.order_index, File.id).all()
     return jsonify([f.to_dict() for f in files])
 
 
@@ -20,7 +20,8 @@ def get_file(file_id):
 @files_bp.route("/topics/<int:topic_id>/files", methods=["GET"])
 def list_files_by_topic(topic_id):
     files = (
-        File.query.filter_by(topic_id=topic_id)
+        active_query(File)
+        .filter_by(topic_id=topic_id)
         .order_by(File.order_index, File.id)
         .all()
     )
@@ -49,7 +50,12 @@ def create_file():
 def update_file(file_id):
     file = get_or_404(File, file_id)
     data = request.get_json(silent=True) or {}
-    apply_updates(file, data, {"topic_id", "name", "type", "order_index", "is_main"})
+    apply_updates(
+        file,
+        data,
+        {"topic_id", "name", "type", "order_index", "is_main", "archived_at"},
+        datetime_fields={"archived_at"},
+    )
     db.session.commit()
     return jsonify(file.to_dict())
 

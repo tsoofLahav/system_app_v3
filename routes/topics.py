@@ -1,14 +1,14 @@
 from flask import Blueprint, jsonify, request
 
 from models import Topic, db
-from routes.helpers import apply_updates, get_or_404
+from routes.helpers import active_query, apply_updates, get_or_404
 
 topics_bp = Blueprint("topics", __name__)
 
 
 @topics_bp.route("/topics", methods=["GET"])
 def list_topics():
-    topics = Topic.query.order_by(Topic.id).all()
+    topics = active_query(Topic).order_by(Topic.id).all()
     return jsonify([t.to_dict() for t in topics])
 
 
@@ -39,7 +39,12 @@ def create_topic():
 def update_topic(topic_id):
     topic = get_or_404(Topic, topic_id)
     data = request.get_json(silent=True) or {}
-    apply_updates(topic, data, {"name", "type", "icon", "color", "parent_id"})
+    apply_updates(
+        topic,
+        data,
+        {"name", "type", "icon", "color", "parent_id", "archived_at"},
+        datetime_fields={"archived_at"},
+    )
     db.session.commit()
     return jsonify(topic.to_dict())
 
