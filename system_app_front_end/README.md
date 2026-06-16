@@ -21,8 +21,10 @@ samples, guidance on mobile development, and a full API reference.
 - Reorder mode shows two lists: `main` (up to 4 panes) and `additional` (unlimited).
 - The top list has a fixed viewport of 4 row-heights; it can scroll if drag gaps make content taller.
 - The divider is fixed between the two frames, and the additional list always starts below it.
+- Reorder mode is app-level and stays on when moving between topics.
 - Drag and drop works within each list and across lists.
 - Cross-list rule when `main` is full: dropped pane is inserted at the target index in `main`, and the last `main` pane is pushed to the top of `additional`.
 - Dropping from `main` to `additional` always works and preserves order around the drop target.
 - During drag, temporary drop slots appear; when active they open only a space (no outlined placeholder card).
+- The grabbed pane is removed from its old position while dragging (`childWhenDragging` hidden), so the interaction feels like true pickup/move.
 - On successful drop, ordering is persisted using backend `order_index` and `is_main` updates.

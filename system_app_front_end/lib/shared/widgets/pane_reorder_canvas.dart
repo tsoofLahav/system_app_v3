@@ -276,7 +276,7 @@ class _PaneReorderCanvasState extends State<PaneReorderCanvas> {
               child: _buildTile(file, dimmed: false),
             ),
           ),
-          childWhenDragging: Opacity(opacity: 0.35, child: tile),
+          childWhenDragging: const SizedBox.shrink(),
           child: tile,
         ),
       ),
