@@ -1,36 +1,33 @@
 from datetime import datetime
 
 from models import AiProposal, File, db
-from services.file_ai_mapper import (
-    build_deltas,
+from services.diff_engine import build_change_set, build_document_change_set, merge_document
+from services.openai_service import chat_json
+from services.unit_mapper import (
+    apply_units_to_file,
     detect_language,
     flatten_process_files_for_ai,
-    merge_segments,
-    segments_from_ai_payload,
-    segments_from_file,
-    apply_segments_to_file,
+    units_from_file,
 )
-from services.openai_service import chat_json
 
 
 SMART_PROCESS_UPDATE_PROMPT = (
-    "You are updating a personal process. Read the plan first, then the documentation "
-    "from recently. Offer a new plan version similar to the original but with changes "
-    "considering the docs. Only critical changes, and the plan should stay practical "
-    "and concise. Afterwards go over the tasks file and update according to the plan. "
-    "Respond in the same language as the input files."
+    "You are a practical process consultant with healthy common sense. "
+    "Read the plan first, then the recent documentation. Infer what actually changed "
+    "in reality from the documentation. Update the plan with only justified critical "
+    "changes: revise existing points when needed, remove obsolete points, add only "
+    "when necessary. Keep the plan practical and concise, similar in spirit to the "
+    "original but not blindly loyal to it. Then update the tasks file to match the "
+    "revised plan. Tasks must change when the plan or documentation implies it. "
+    "Use only the provided unit IDs. Respond in the same language as the input files."
 )
 
 SMART_PROCESS_UPDATE_SCHEMA = (
-    "Return JSON with this shape: "
-    '{"plan": {"segments": [{"type": "text|header|summary|list|table", "content": {...}, '
-    '"label": "readable text"}], '
-    '"tasks": {"segments": [{"type": "text|header|task|list", "content": {...}, '
-    '"label": "readable text"}]}}. '
-    "For tasks use type task with content {\"title\": \"...\"}. "
-    "For list use content {\"items\": [{\"text\": \"...\"}]}. "
-    "For table use content {\"rows\": [[\"cell\"]]}. "
-    "For text/header/summary use content {\"text\": \"...\"}."
+    "Return JSON: "
+    '{"plan_ops":[{"op":"replace|remove|add_after","unit_id":"...","text":"...",'
+    '"reason":"..."}],'
+    '"tasks_ops":[{"op":"replace|remove|add_after","unit_id":"...","text":"...",'
+    '"reason":"..."}]}'
 )
 
 
@@ -55,13 +52,28 @@ def smart_process_update(topic, plan_file, doc_file, tasks_file):
         user_prompt,
     )
 
-    old_plan_segments = segments_from_file(plan_file.id)
-    old_tasks_segments = segments_from_file(tasks_file.id)
-    new_plan_segments = segments_from_ai_payload(
-        (ai_result.get("plan") or {}).get("segments")
-    )
-    new_tasks_segments = segments_from_ai_payload(
-        (ai_result.get("tasks") or {}).get("segments")
+    plan_units = units_from_file(plan_file.id)
+    tasks_units = units_from_file(tasks_file.id)
+    plan_ops = ai_result.get("plan_ops") or []
+    tasks_ops = ai_result.get("tasks_ops") or []
+
+    if not tasks_ops and _doc_implies_task_changes(flattened["documentation"]):
+        retry = chat_json(
+            f"{SMART_PROCESS_UPDATE_PROMPT} {lang_note} "
+            "The tasks file must be updated. Return tasks_ops only in JSON: "
+            '{"tasks_ops":[...]}',
+            f"{flattened['tasks']}\n\nRevised plan context:\n"
+            f"{flattened['plan']}\n\nDocumentation:\n{flattened['documentation']}",
+        )
+        tasks_ops = retry.get("tasks_ops") or tasks_ops
+
+    change_set = build_change_set(
+        [
+            build_document_change_set("plan", plan_file.name, plan_units, plan_ops),
+            build_document_change_set(
+                "tasks", tasks_file.name, tasks_units, tasks_ops
+            ),
+        ]
     )
 
     return {
@@ -75,14 +87,7 @@ def smart_process_update(topic, plan_file, doc_file, tasks_file):
                 "type": tasks_file.type,
             },
         },
-        "original_segments": {
-            "plan": old_plan_segments,
-            "tasks": old_tasks_segments,
-        },
-        "deltas": {
-            "plan": build_deltas(old_plan_segments, new_plan_segments),
-            "tasks": build_deltas(old_tasks_segments, new_tasks_segments),
-        },
+        "change_set": change_set,
     }
 
 
@@ -124,8 +129,7 @@ def finalize_process_update(proposal, decisions):
 
     payload = proposal.payload or {}
     source_files = payload.get("source_files") or {}
-    original_segments = payload.get("original_segments") or {}
-    deltas = payload.get("deltas") or {}
+    change_set = payload.get("change_set") or {}
     topic_id = proposal.topic_id
 
     plan_source = _get_file(source_files.get("plan", {}).get("id"))
@@ -134,18 +138,21 @@ def finalize_process_update(proposal, decisions):
     if plan_source is None or doc_source is None or tasks_source is None:
         raise ValueError("source files no longer exist")
 
-    plan_decisions = (decisions or {}).get("plan") or {}
-    tasks_decisions = (decisions or {}).get("tasks") or {}
+    documents = {
+        doc.get("key"): doc for doc in change_set.get("documents") or [] if doc.get("key")
+    }
+    plan_doc = documents.get("plan") or {}
+    tasks_doc = documents.get("tasks") or {}
 
-    final_plan = merge_segments(
-        original_segments.get("plan") or [],
-        deltas.get("plan") or [],
-        plan_decisions,
+    final_plan_units = merge_document(
+        plan_doc.get("units") or [],
+        plan_doc.get("changes") or [],
+        decisions or {},
     )
-    final_tasks = merge_segments(
-        original_segments.get("tasks") or [],
-        deltas.get("tasks") or [],
-        tasks_decisions,
+    final_tasks_units = merge_document(
+        tasks_doc.get("units") or [],
+        tasks_doc.get("changes") or [],
+        decisions or {},
     )
 
     now = datetime.utcnow()
@@ -157,26 +164,23 @@ def finalize_process_update(proposal, decisions):
         name=plan_source.name,
         file_type="plan",
         order_index=plan_source.order_index,
-        create_defaults=False,
     )
     doc_file = _create_refresh_file(
         topic_id,
         name=doc_source.name,
         file_type="doc",
         order_index=doc_source.order_index,
-        create_defaults=False,
     )
     tasks_file = _create_refresh_file(
         topic_id,
         name=tasks_source.name,
         file_type="tasks",
         order_index=tasks_source.order_index,
-        create_defaults=False,
     )
 
-    apply_segments_to_file(plan_file, final_plan)
+    apply_units_to_file(plan_file, final_plan_units)
     _create_empty_doc_table(doc_file)
-    apply_segments_to_file(tasks_file, final_tasks)
+    apply_units_to_file(tasks_file, final_tasks_units)
 
     proposal.status = "approved"
     proposal.decided_at = datetime.utcnow()
@@ -194,13 +198,19 @@ def finalize_process_update(proposal, decisions):
     return proposal
 
 
+def _doc_implies_task_changes(documentation_text):
+    lowered = (documentation_text or "").lower()
+    hints = ("task", "todo", "משימ", "לעשות", "צריך", "need to", "should")
+    return any(hint in lowered for hint in hints)
+
+
 def _get_file(file_id):
     if not file_id:
         return None
     return db.session.get(File, int(file_id))
 
 
-def _create_refresh_file(topic_id, name, file_type, order_index, create_defaults):
+def _create_refresh_file(topic_id, name, file_type, order_index):
     from models import Topic
 
     topic = db.session.get(Topic, topic_id)
@@ -216,23 +226,6 @@ def _create_refresh_file(topic_id, name, file_type, order_index, create_defaults
     )
     db.session.add(file)
     db.session.flush()
-    if create_defaults:
-        from services.automation_actions import DEFAULT_BLOCKS
-
-        for index, (block_type, content) in enumerate(
-            DEFAULT_BLOCKS.get(file_type, DEFAULT_BLOCKS["text"])
-        ):
-            from models import Block
-
-            db.session.add(
-                Block(
-                    file_id=file.id,
-                    type=block_type,
-                    content=content,
-                    order_index=index,
-                )
-            )
-        db.session.flush()
     return file
 
 

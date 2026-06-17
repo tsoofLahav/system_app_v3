@@ -34,6 +34,16 @@ Rule schedules use simple text values produced by the frontend controls:
 - `weekly DAY HH:MM` runs once a week on a weekday such as `mon` or `friday`.
 - `monthly PLACEMENT DAY HH:MM` runs once a month on the `first`, `second`, `third`, or `last` matching weekday, for example `monthly last mon 09:00`.
 
+## ChangeSet (reusable diff contract)
+
+Automations and AI actions can store reviewable edits as `change_set` version 1:
+
+- `documents[]` each have `key`, `title`, `units[]`, and `changes[]`.
+- `units` use stable derived IDs such as `block:12:item:1` or `task:5`.
+- `changes` list only modified units (`replace`, `remove`, `add_after`).
+- AI actions return edit operations on unit IDs; `services/diff_engine.py` builds the change set.
+- Finalize applies accepted changes through `services/unit_mapper.py`.
+
 ## API Ownership
 
 - CRUD for rules is exposed through `/automation_rules`.
