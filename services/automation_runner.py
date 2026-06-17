@@ -1,3 +1,4 @@
+import calendar
 from datetime import datetime, timedelta
 
 from models import AutomationRule, AutomationRun, db
@@ -83,9 +84,47 @@ def next_run_after(schedule, after):
         if candidate <= after:
             candidate += timedelta(days=7)
         return candidate
-    raise ValueError("schedule must be 'daily HH:MM' or 'weekly DAY HH:MM'")
+    if kind == "monthly":
+        placement = (parts[0] if parts else "first").lower()
+        weekday = WEEKDAYS.get((parts[1] if len(parts) > 1 else "mon").lower(), 0)
+        hour, minute = _parse_time(parts[2] if len(parts) > 2 else "00:00")
+        candidate = _monthly_candidate(
+            after.year, after.month, placement, weekday, hour, minute
+        )
+        if candidate <= after:
+            year, month = _next_month(after.year, after.month)
+            candidate = _monthly_candidate(year, month, placement, weekday, hour, minute)
+        return candidate
+    raise ValueError(
+        "schedule must be 'daily HH:MM', 'weekly DAY HH:MM', "
+        "or 'monthly PLACEMENT DAY HH:MM'"
+    )
 
 
 def _parse_time(value):
     hour, minute = value.split(":")
-    return int(hour), int(minute)
+    hour, minute = int(hour), int(minute)
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        raise ValueError("time must be HH:MM in 24-hour format")
+    return hour, minute
+
+
+def _monthly_candidate(year, month, placement, weekday, hour, minute):
+    if placement == "last":
+        last_day = calendar.monthrange(year, month)[1]
+        last_weekday = datetime(year, month, last_day).weekday()
+        day = last_day - ((last_weekday - weekday) % 7)
+    else:
+        occurrence = {"first": 1, "second": 2, "third": 3}.get(placement)
+        if occurrence is None:
+            raise ValueError("monthly placement must be first, second, third, or last")
+        first_weekday = datetime(year, month, 1).weekday()
+        day = 1 + ((weekday - first_weekday) % 7) + ((occurrence - 1) * 7)
+
+    return datetime(year, month, day, hour, minute)
+
+
+def _next_month(year, month):
+    if month == 12:
+        return year + 1, 1
+    return year, month + 1

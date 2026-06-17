@@ -80,6 +80,14 @@ def update_automation_rule(rule_id):
     return jsonify(rule.to_dict())
 
 
+@automation_rules_bp.route("/automation_rules/<int:rule_id>/run", methods=["POST"])
+def run_automation_rule_now(rule_id):
+    rule = get_or_404(AutomationRule, rule_id)
+    from services.automation_runner import run_rule
+
+    return jsonify(run_rule(rule, now=datetime.utcnow()))
+
+
 @automation_rules_bp.route("/automation_rules/<int:rule_id>", methods=["DELETE"])
 def delete_automation_rule(rule_id):
     rule = get_or_404(AutomationRule, rule_id)
