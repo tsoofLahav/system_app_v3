@@ -28,8 +28,15 @@ python scripts/run_automations.py
 
 The script runs due enabled rules and stores a row in `automation_runs`. Rules update `last_run_at` and `next_run_at` after successful execution. Actions must be idempotent for their run window.
 
+Rule schedules use simple text values produced by the frontend controls:
+
+- `daily HH:MM` runs once a day at a 24-hour time.
+- `weekly DAY HH:MM` runs once a week on a weekday such as `mon` or `friday`.
+- `monthly PLACEMENT DAY HH:MM` runs once a month on the `first`, `second`, `third`, or `last` matching weekday, for example `monthly last mon 09:00`.
+
 ## API Ownership
 
 - CRUD for rules is exposed through `/automation_rules`.
+- Manual execution for testing is exposed through `POST /automation_rules/<id>/run`.
 - AI proposals are exposed through `/ai_proposals` and approval/rejection endpoints.
 - Archive is exposed through normal resource PATCH fields and by `include_archived=true` list query parameters.
