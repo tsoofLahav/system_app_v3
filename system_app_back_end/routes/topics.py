@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from models import Topic, db
 from routes.helpers import active_query, apply_updates, get_or_404
+from services.delete_cascade import delete_topic_cascade
 
 topics_bp = Blueprint("topics", __name__)
 
@@ -51,7 +52,7 @@ def update_topic(topic_id):
 
 @topics_bp.route("/topics/<int:topic_id>", methods=["DELETE"])
 def delete_topic(topic_id):
-    topic = get_or_404(Topic, topic_id)
-    db.session.delete(topic)
+    get_or_404(Topic, topic_id)
+    delete_topic_cascade(topic_id)
     db.session.commit()
     return "", 204

@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from models import File, db
 from routes.helpers import active_query, apply_updates, get_or_404
+from services.delete_cascade import delete_file_cascade
 
 files_bp = Blueprint("files", __name__)
 
@@ -62,7 +63,7 @@ def update_file(file_id):
 
 @files_bp.route("/files/<int:file_id>", methods=["DELETE"])
 def delete_file(file_id):
-    file = get_or_404(File, file_id)
-    db.session.delete(file)
+    get_or_404(File, file_id)
+    delete_file_cascade(file_id)
     db.session.commit()
     return "", 204

@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from models import Block, File, Task, TaskView, Topic, db
 from routes.helpers import active_query, apply_updates, get_or_404
+from services.delete_cascade import delete_task_cascade
 
 tasks_bp = Blueprint("tasks", __name__)
 
@@ -92,7 +93,7 @@ def update_task(task_id):
 
 @tasks_bp.route("/tasks/<int:task_id>", methods=["DELETE"])
 def delete_task(task_id):
-    task = get_or_404(Task, task_id)
-    db.session.delete(task)
+    get_or_404(Task, task_id)
+    delete_task_cascade(task_id)
     db.session.commit()
     return "", 204
