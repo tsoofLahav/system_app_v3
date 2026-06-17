@@ -16,7 +16,7 @@ The initial action library contains:
 - `create_file_by_time`: create a file with configured topic, name, type, visibility, and default block contents.
 - `archive_at_time`: archive a topic, file, block, or task at a configured time.
 - `rotate_daily_main_file`: archive the current main-topic `Daily` file and create a fresh `Daily` text file every day at 00:00.
-- `weekly_process_refresh`: for each process, archive current plan/doc/tasks files and create fresh files. The doc file starts empty. Plan and tasks files receive pending AI proposals.
+- `weekly_process_refresh`: for each process, locate plan/doc/tasks files by type order, call the smart process update AI action, and store a delta proposal. Finalize archives old files and recreates plan, empty documentation table, and tasks after user review.
 
 ## Scheduling
 
@@ -38,5 +38,6 @@ Rule schedules use simple text values produced by the frontend controls:
 
 - CRUD for rules is exposed through `/automation_rules`.
 - Manual execution for testing is exposed through `POST /automation_rules/<id>/run`.
+- Process update finalize is exposed through `POST /ai_proposals/<id>/finalize`.
 - AI proposals are exposed through `/ai_proposals` and approval/rejection endpoints.
 - Archive is exposed through normal resource PATCH fields and by `include_archived=true` list query parameters.

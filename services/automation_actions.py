@@ -1,7 +1,10 @@
 from datetime import datetime
 
 from models import Block, File, Task, Topic, db
-from services.ai_proposal_actions import create_process_refresh_proposal
+from services.ai_proposal_actions import (
+    create_process_refresh_skipped_proposal,
+    create_smart_process_update_proposal,
+)
 
 
 DEFAULT_BLOCKS = {
@@ -95,40 +98,55 @@ def weekly_process_refresh(params):
 
 
 def _refresh_process(topic, params):
-    old_files = (
-        File.query.filter_by(topic_id=topic.id)
+    files_by_type = _process_files_by_type(topic.id)
+    missing = [file_type for file_type in ("plan", "doc", "tasks") if file_type not in files_by_type]
+    if missing:
+        message = (
+            f"Cannot automatically update process '{topic.name}': "
+            f"missing {', '.join(missing)} file(s)."
+        )
+        proposal = create_process_refresh_skipped_proposal(topic, missing, message)
+        return {
+            "topic_id": topic.id,
+            "skipped": True,
+            "missing_types": missing,
+            "proposal_id": proposal.id,
+            "message": message,
+        }
+
+    plan_file = files_by_type["plan"]
+    doc_file = files_by_type["doc"]
+    tasks_file = files_by_type["tasks"]
+    proposal = create_smart_process_update_proposal(
+        topic,
+        plan_file,
+        doc_file,
+        tasks_file,
+    )
+    return {
+        "topic_id": topic.id,
+        "skipped": False,
+        "proposal_id": proposal.id,
+        "source_file_ids": {
+            "plan": plan_file.id,
+            "doc": doc_file.id,
+            "tasks": tasks_file.id,
+        },
+    }
+
+
+def _process_files_by_type(topic_id):
+    files = (
+        File.query.filter_by(topic_id=topic_id)
         .filter(File.type.in_(["plan", "doc", "tasks"]))
         .filter(File.archived_at.is_(None))
         .order_by(File.order_index, File.id)
         .all()
     )
-    old_by_type = {f.type: f for f in old_files}
-    now = datetime.utcnow()
-    for file in old_files:
-        file.archived_at = now
-
-    created = {}
-    for order, file_type in enumerate(("plan", "doc", "tasks")):
-        name = _default_name(file_type)
-        new_file = _create_file(
-            topic,
-            name=name,
-            file_type=file_type,
-            is_main=True,
-            order_index=order,
-            create_defaults=file_type != "doc",
-        )
-        created[file_type] = new_file
-        old_file = old_by_type.get(file_type)
-        if old_file and file_type in ("plan", "tasks"):
-            proposal_type = "tasks_refresh" if file_type == "tasks" else "plan_refresh"
-            create_process_refresh_proposal(topic, old_file, new_file, proposal_type)
-
-    return {
-        "topic_id": topic.id,
-        "archived_file_ids": [f.id for f in old_files],
-        "created_file_ids": [created[t].id for t in ("plan", "doc", "tasks")],
-    }
+    by_type = {}
+    for file in files:
+        by_type.setdefault(file.type, file)
+    return by_type
 
 
 def _resolve_topic(params):
