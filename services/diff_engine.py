@@ -24,9 +24,10 @@ def build_document_change_set(key, title, units, ops):
             if old_text == text:
                 continue
             change_index += 1
+            change_id = f"{key}:c{change_index}"
             changes.append(
                 {
-                    "id": f"c{change_index}",
+                    "id": change_id,
                     "action": "replace",
                     "unit_id": unit_id,
                     "old_text": old_text,
@@ -39,9 +40,10 @@ def build_document_change_set(key, title, units, ops):
                 continue
             old_text = (unit_by_id[unit_id].get("text") or "").strip()
             change_index += 1
+            change_id = f"{key}:c{change_index}"
             changes.append(
                 {
-                    "id": f"c{change_index}",
+                    "id": change_id,
                     "action": "remove",
                     "unit_id": unit_id,
                     "old_text": old_text,
@@ -55,16 +57,17 @@ def build_document_change_set(key, title, units, ops):
             anchor = unit_by_id[unit_id]
             kind = op.get("kind") or anchor.get("kind") or "list_item"
             change_index += 1
+            change_id = f"{key}:c{change_index}"
             changes.append(
                 {
-                    "id": f"c{change_index}",
+                    "id": change_id,
                     "action": "add_after",
                     "unit_id": unit_id,
                     "old_text": "",
                     "new_text": text,
                     "reason": reason,
                     "new_unit": {
-                        "id": f"new:c{change_index}",
+                        "id": f"new:{change_id}",
                         "kind": kind,
                         "text": text,
                     },
