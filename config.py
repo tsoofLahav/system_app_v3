@@ -26,7 +26,20 @@ DATABASE_URL = os.environ.get(
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "/var/data/uploads")
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def resolve_upload_folder() -> str:
+    """Pick a writable uploads directory (Render disk, env override, or local ./uploads)."""
+    configured = os.environ.get("UPLOAD_FOLDER")
+    if configured:
+        return os.path.abspath(configured)
+    if os.path.isdir("/var/data"):
+        return "/var/data/uploads"
+    return os.path.join(_BASE_DIR, "uploads")
+
+
+UPLOAD_FOLDER = resolve_upload_folder()
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
