@@ -39,7 +39,8 @@ Rule schedules use simple text values produced by the frontend controls:
 Automations and AI actions can store reviewable edits as `change_set` version 1:
 
 - `documents[]` each have `key`, `title`, `units[]`, and `changes[]`.
-- `units` use stable derived IDs such as `block:12:item:1` or `task:5`.
+- `units` use stable derived IDs such as `block:12:item:1`, `block:12:sent:0`, or `task:5`.
+- Documentation tables are flattened to read-only prose for the AI (not edited via unit ops).
 - `changes` list only modified units (`replace`, `remove`, `add_after`).
 - AI actions return edit operations on unit IDs; `services/diff_engine.py` builds the change set.
 - Finalize applies accepted changes through `services/unit_mapper.py`.

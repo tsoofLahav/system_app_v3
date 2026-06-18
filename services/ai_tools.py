@@ -67,18 +67,6 @@ def _add_task_to_file(file_id: int, title: str) -> Task:
     return task
 
 
-def _append_checklist_item(block_id: int, text: str) -> Block:
-    block = Block.query.get(block_id)
-    if block is None:
-        raise ValueError("Checklist block not found")
-    content = dict(block.content or {})
-    items = list(content.get("items") or [])
-    items.append({"text": text, "done": False})
-    content["items"] = items
-    block.content = content
-    db.session.flush()
-    return block
-
 
 def _save_image_from_url(url: str) -> str:
     upload_folder = current_app.config["UPLOAD_FOLDER"]
@@ -118,7 +106,7 @@ def _doc_candidates(files: list[File]) -> list[dict]:
 
 
 def _all_list_candidates() -> list[dict]:
-    """All task files and checklists across every topic (capture-first routing)."""
+    """All task files across every topic (capture-first routing)."""
     topics = Topic.query.filter(Topic.archived_at.is_(None)).order_by(Topic.id).all()
     topic_by_id = {t.id: t for t in topics}
 
@@ -143,42 +131,6 @@ def _all_list_candidates() -> list[dict]:
                 "name": f.name,
                 "block_id": None,
                 "label": f"{topic_name} → {f.name}",
-            }
-        )
-
-    checklist_blocks = (
-        Block.query.filter_by(type="checklist")
-        .filter(Block.archived_at.is_(None))
-        .order_by(Block.file_id, Block.order_index, Block.id)
-        .all()
-    )
-    file_ids = {b.file_id for b in checklist_blocks}
-    files_by_id = {
-        f.id: f
-        for f in File.query.filter(File.id.in_(file_ids)).all()
-    } if file_ids else {}
-
-    for b in checklist_blocks:
-        f = files_by_id.get(b.file_id)
-        topic = topic_by_id.get(f.topic_id) if f else None
-        topic_name = topic.name if topic else "unknown"
-        file_name = f.name if f else "checklist"
-        items = (b.content or {}).get("items") or []
-        hint = ""
-        if items:
-            first = items[0].get("text", "").strip()
-            if first:
-                hint = f" ({first[:40]}{'…' if len(first) > 40 else ''})"
-        candidates.append(
-            {
-                "kind": "checklist",
-                "file_id": b.file_id,
-                "topic_id": f.topic_id if f else None,
-                "topic_name": topic_name,
-                "topic_type": topic.type if topic else None,
-                "name": file_name,
-                "block_id": b.id,
-                "label": f"{topic_name} → {file_name}{hint}",
             }
         )
 
@@ -256,36 +208,17 @@ def run_tool(tool: str, topic_id: int, context: dict, locale: str = "en") -> dic
         source_topic = topic.name
         pick = chat_json(
             "The user captured a thought in one topic and wants it added to the best "
-            "matching list anywhere in the system. Lists may live in other topics "
+            "matching tasks file anywhere in the system. Lists may live in other topics "
             "(e.g. grocery items → Home/Tasks, ideas → a project Tasks file). "
-            "Return JSON: "
-            '{"kind": "tasks_file"|"checklist", "file_id": number, '
-            '"block_id": number|null, "item_text": string, "reason": string}',
+            'Return JSON: {"kind": "tasks_file", "file_id": number, '
+            '"item_text": string, "reason": string}',
             f"Captured in topic: {source_topic}\n"
             f"Content to add:\n{text}\n\n"
-            f"All list candidates (topic → list):\n"
+            f"All task file candidates (topic → file):\n"
             f"{json.dumps(candidates, ensure_ascii=False)}",
         )
         item_text = (pick.get("item_text") or text).strip()
-        kind = pick.get("kind")
         file_id = int(pick["file_id"])
-
-        if kind == "checklist" and pick.get("block_id"):
-            block = _append_checklist_item(int(pick["block_id"]), item_text)
-            db.session.commit()
-            f = File.query.get(file_id)
-            target_topic = Topic.query.get(f.topic_id) if f else None
-            return {
-                "tool": tool,
-                "action": "write",
-                "result": item_text,
-                "target_file_id": file_id,
-                "target_file_name": f.name if f else None,
-                "target_topic_id": target_topic.id if target_topic else None,
-                "target_topic_name": target_topic.name if target_topic else None,
-                "block_id": block.id,
-                "target_kind": "checklist",
-            }
 
         task = _add_task_to_file(file_id, item_text)
         db.session.commit()

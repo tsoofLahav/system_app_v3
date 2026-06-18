@@ -29,5 +29,8 @@ if DATABASE_URL.startswith("postgres://"):
 UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "/var/data/uploads")
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
 OPENAI_IMAGE_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "dall-e-3")
+OPENAI_PROCESS_UPDATE_TEMPERATURE = float(
+    os.environ.get("OPENAI_PROCESS_UPDATE_TEMPERATURE", "0.5")
+)
