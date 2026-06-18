@@ -1,0 +1,556 @@
+import 'package:flutter/material.dart';
+
+import '../../core/app_state.dart';
+import '../../core/models/topic.dart';
+import '../../core/registry/view_registry.dart';
+import '../../design_system/app_colors.dart';
+import '../../design_system/app_icons.dart';
+import '../../design_system/app_typography.dart';
+import '../../design_system/glass_surface.dart';
+import '../../shared/widgets/topic_emoji.dart';
+import '../../shared/widgets/disclosure_icon.dart';
+import '../create_topic/create_topic_dialog.dart';
+
+class AppSidebar extends StatefulWidget {
+  const AppSidebar({super.key, required this.state});
+
+  final AppState state;
+
+  @override
+  State<AppSidebar> createState() => _AppSidebarState();
+}
+
+class _AppSidebarState extends State<AppSidebar> {
+  static const double _defaultWidth = 200;
+  static const double _minWidth = 150;
+  static const double _maxWidth = 340;
+  static const double _resizeHandleWidth = 8;
+
+  double _width = _defaultWidth;
+
+  void _resize(DragUpdateDetails details) {
+    final direction = Directionality.of(context);
+    final delta = direction == TextDirection.rtl
+        ? -details.delta.dx
+        : details.delta.dx;
+    setState(() {
+      _width = (_width + delta).clamp(_minWidth, _maxWidth).toDouble();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.state;
+    final s = state.strings;
+
+    return SizedBox(
+      width: _width,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GlassSurface(
+              borderRadius: BorderRadius.zero,
+              blurSigma: 22,
+              tintOpacity: 0.76,
+              tintColor: const Color(0xFFDDF6F2),
+              elevation: 4,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: TextButton(
+                      onPressed: () => state.goHome(),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.text,
+                        backgroundColor:
+                            !state.isViewMode &&
+                                state.selectedTopic?.isMain == true
+                            ? AppColors.noteBorder.withValues(alpha: 0.35)
+                            : Colors.transparent,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                      ),
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text(s['main'], overflow: TextOverflow.ellipsis),
+                      ),
+                    ),
+                  ),
+                  const _SidebarDivider(),
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      children: [
+                        _ViewSection(state: state),
+                        const _SidebarDivider(),
+                        _TopicSection(
+                          title: s['projects'],
+                          topics: state.projects,
+                          selected: state.selectedTopic,
+                          isViewMode: state.isViewMode,
+                          state: state,
+                          onSelect: state.selectTopic,
+                        ),
+                        _TopicSection(
+                          title: s['processes'],
+                          topics: state.processes,
+                          selected: state.selectedTopic,
+                          isViewMode: state.isViewMode,
+                          state: state,
+                          onSelect: state.selectTopic,
+                        ),
+                        _TopicSection(
+                          title: s['areas'],
+                          topics: state.areas,
+                          selected: state.selectedTopic,
+                          isViewMode: state.isViewMode,
+                          state: state,
+                          onSelect: state.selectTopic,
+                        ),
+                        const _SidebarDivider(),
+                        _ArchiveSection(state: state),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                    child: TextButton.icon(
+                      onPressed: () => _createTopic(context),
+                      icon: const AppIcon(AppIcons.add, size: 18),
+                      label: Text(
+                        s['newTopic'],
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.text,
+                        alignment: AlignmentDirectional.centerStart,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          PositionedDirectional(
+            top: 0,
+            bottom: 0,
+            end: 0,
+            width: _resizeHandleWidth,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.resizeColumn,
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onHorizontalDragUpdate: _resize,
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: Container(
+                    width: 1,
+                    color: AppColors.sidebarBorder.withValues(alpha: 0.4),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _createTopic(BuildContext context) async {
+    final state = widget.state;
+    final result = await showDialog<CreateTopicResult>(
+      context: context,
+      builder: (_) => CreateTopicDialog(state: state),
+    );
+    if (result == null) return;
+    await state.createTopic(
+      name: result.name,
+      type: result.type,
+      icon: result.icon,
+      color: result.color,
+      selectedFileTypes: result.selectedFileTypes,
+    );
+  }
+}
+
+class _SidebarDivider extends StatelessWidget {
+  const _SidebarDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Divider(
+        height: 1,
+        thickness: 1,
+        color: AppColors.noteBorder.withValues(alpha: 0.45),
+      ),
+    );
+  }
+}
+
+class _ViewSection extends StatelessWidget {
+  const _ViewSection({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = state.strings;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(8, 4, 8, 2),
+          child: Text(s['views'], style: AppTypography.sidebarSectionStyle),
+        ),
+        for (final view in ViewRegistry.views)
+          _ViewTile(
+            label: state.viewLabel(view.type),
+            selected: state.selectedViewType == view.type,
+            onTap: () => state.selectView(view.type),
+          ),
+        const SizedBox(height: 2),
+      ],
+    );
+  }
+}
+
+class _ViewTile extends StatelessWidget {
+  const _ViewTile({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? Theme.of(
+              context,
+            ).colorScheme.primaryContainer.withValues(alpha: 0.5)
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(20, 3, 8, 3),
+          child: Text(
+            label,
+            style: AppTypography.sidebarItemStyle,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ArchiveSection extends StatefulWidget {
+  const _ArchiveSection({required this.state});
+
+  final AppState state;
+
+  @override
+  State<_ArchiveSection> createState() => _ArchiveSectionState();
+}
+
+class _ArchiveSectionState extends State<_ArchiveSection> {
+  bool expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.state.strings;
+    final archivedTopics = widget.state.archivedTopics;
+    final archivedFiles = widget.state.archivedFilesByTopicId;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => setState(() => expanded = !expanded),
+          child: Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(8, 4, 8, 2),
+            child: Row(
+              children: [
+                DisclosureIcon(expanded: expanded, color: AppColors.text),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    s['archive'],
+                    style: AppTypography.sidebarSectionStyle,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (expanded) ...[
+          for (final topic in archivedTopics)
+            _TopicTile(
+              topic: topic,
+              displayName: widget.state.topicDisplayName(topic),
+              selected: widget.state.selectedTopic?.id == topic.id,
+              state: widget.state,
+              onTap: () {
+                widget.state.selectTopic(topic, includeArchived: true);
+              },
+              onEdit: () {},
+            ),
+          for (final entry in archivedFiles.entries)
+            for (final file in entry.value)
+              _ArchiveFileTile(
+                fileName: file.name,
+                topicName: _topicNameFor(entry.key),
+                onTap: () {
+                  final topic = widget.state.topics.firstWhere(
+                    (t) => t.id == entry.key,
+                  );
+                  widget.state.selectTopic(topic, includeArchived: true);
+                },
+              ),
+        ],
+        const SizedBox(height: 2),
+      ],
+    );
+  }
+
+  String? _topicNameFor(int topicId) {
+    for (final topic in widget.state.topics) {
+      if (topic.id == topicId) return widget.state.topicDisplayName(topic);
+    }
+    return null;
+  }
+}
+
+class _ArchiveFileTile extends StatelessWidget {
+  const _ArchiveFileTile({
+    required this.fileName,
+    required this.topicName,
+    required this.onTap,
+  });
+
+  final String fileName;
+  final String? topicName;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = topicName == null ? fileName : '$topicName / $fileName';
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(20, 3, 8, 3),
+          child: Text(
+            label,
+            style: AppTypography.sidebarItemStyle,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TopicSection extends StatefulWidget {
+  const _TopicSection({
+    required this.title,
+    required this.topics,
+    required this.selected,
+    required this.isViewMode,
+    required this.state,
+    required this.onSelect,
+  });
+
+  final String title;
+  final List<Topic> topics;
+  final Topic? selected;
+  final bool isViewMode;
+  final AppState state;
+  final Future<void> Function(Topic) onSelect;
+
+  @override
+  State<_TopicSection> createState() => _TopicSectionState();
+}
+
+class _TopicSectionState extends State<_TopicSection> {
+  bool expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => setState(() => expanded = !expanded),
+          child: Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(8, 4, 8, 2),
+            child: Row(
+              children: [
+                DisclosureIcon(expanded: expanded, color: AppColors.text),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    style: AppTypography.sidebarSectionStyle,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (expanded)
+          ...widget.topics.map(
+            (topic) => _TopicTile(
+              topic: topic,
+              displayName: widget.state.topicDisplayName(topic),
+              selected: !widget.isViewMode && widget.selected?.id == topic.id,
+              state: widget.state,
+              onTap: () => widget.onSelect(topic),
+              onEdit: () => _editTopic(context, topic),
+              onDelete: topic.isMain
+                  ? null
+                  : () => _confirmDelete(context, topic),
+            ),
+          ),
+        const SizedBox(height: 2),
+      ],
+    );
+  }
+
+  Future<void> _editTopic(BuildContext context, Topic topic) async {
+    final result = await showDialog<EditTopicResult>(
+      context: context,
+      builder: (_) => CreateTopicDialog(state: widget.state, topic: topic),
+    );
+    if (result == null) return;
+    await widget.state.updateTopic(
+      topic: topic,
+      name: result.name,
+      icon: result.icon,
+      color: result.color,
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, Topic topic) async {
+    final s = widget.state.strings;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AppGlassDialog(
+        title: Text(s['deleteTopicTitle']),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s['cancel']),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(s['delete']),
+          ),
+        ],
+        child: Text(s.deleteTopicMessage(topic.name)),
+      ),
+    );
+    if (ok == true) {
+      await widget.state.deleteTopic(topic);
+    }
+  }
+}
+
+class _TopicTile extends StatelessWidget {
+  const _TopicTile({
+    required this.topic,
+    required this.displayName,
+    required this.selected,
+    required this.state,
+    required this.onTap,
+    required this.onEdit,
+    this.onDelete,
+  });
+
+  final Topic topic;
+  final String displayName;
+  final bool selected;
+  final AppState state;
+  final VoidCallback onTap;
+  final VoidCallback onEdit;
+  final VoidCallback? onDelete;
+
+  Future<void> _showContextMenu(
+    BuildContext context,
+    Offset globalPosition,
+  ) async {
+    final s = state.strings;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+      Offset.zero & overlay.size,
+    );
+
+    final action = await showMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        PopupMenuItem(value: 'edit', child: Text(s['edit'])),
+        if (onDelete != null)
+          PopupMenuItem(value: 'delete', child: Text(s['delete'])),
+      ],
+    );
+
+    if (action == 'edit') onEdit();
+    if (action == 'delete') onDelete?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? Theme.of(
+              context,
+            ).colorScheme.primaryContainer.withValues(alpha: 0.5)
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: onTap,
+        onSecondaryTapDown: (details) =>
+            _showContextMenu(context, details.globalPosition),
+        child: Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(20, 3, 8, 3),
+          child: Row(
+            children: [
+              TopicEmoji(value: topic.icon, size: 14),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  displayName,
+                  style: AppTypography.sidebarItemStyle,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -1,0 +1,33 @@
+# Automation Mechanism
+
+Automation is configured by the user and executed by the backend. The frontend exposes the rules, archive access, and AI proposal decisions.
+
+## User-Facing Contract
+
+- Automations are visible from the global Automations menu.
+- The menu shows each main automation as a compact row with its current timing, an enable/disable switch, an edit-time action, and a run-now action for testing.
+- Timing opens in a separate dialog with structured controls: once a day, once a week, or once a month. Daily schedules choose a time. Weekly schedules choose a calendar day and time. Monthly schedules choose a calendar day, time, and month placement such as the first, second, third, or last Monday.
+- When an automation runs, the open app detects the updated run timestamp and refreshes the current topic or task view so new and archived files are visible immediately. If no topic or view is open, content refresh is skipped.
+- Archived content appears in a sidebar Archive section and does not compete with active topics.
+- AI-generated process suggestions are pending until the user approves them.
+
+## Initial Rules
+
+| Rule | Default Timing | Behavior |
+| --- | --- | --- |
+| Daily rotation | Every day at 00:00 | Archive current main-topic `Daily` file and create a new `Daily` text file. |
+| Weekly process refresh | Weekly | For each process, find plan/doc/tasks files and create a smart-update proposal. After user review, archive old files and recreate plan, empty doc table, and tasks. |
+
+## AI Proposals
+
+AI proposal generation is an AI concern, not a general automation concern. Automation creates the moment when proposals are requested; the proposal layer stores suggested content and exposes review/finalize actions.
+
+The `process_smart_update` AI action reads plan, documentation, and tasks as flattened units with stable IDs, returns edit operations, and stores a reusable `change_set`. Finalize archives the old files and creates fresh plan, empty documentation table, and tasks files after review.
+
+Skipped processes create a `process_refresh_skipped` warning proposal on the process topic.
+
+Change review UI lives in `lib/shared/change_review/` and works with any automation that produces a `change_set`.
+
+## Archive
+
+Archive uses `archived_at` timestamps from the backend. Normal active lists hide archived rows. Archive views request data with `include_archived=true` and filter for archived rows locally when needed.
