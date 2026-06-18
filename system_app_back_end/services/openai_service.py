@@ -23,7 +23,7 @@ def chat_text(system: str, user: str, *, max_tokens: int = 500) -> str:
     return (response.choices[0].message.content or "").strip()
 
 
-def chat_json(system: str, user: str) -> dict:
+def chat_json(system: str, user: str, *, temperature: float = 0.2) -> dict:
     response = _client().chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
@@ -31,7 +31,7 @@ def chat_json(system: str, user: str) -> dict:
             {"role": "user", "content": user},
         ],
         response_format={"type": "json_object"},
-        temperature=0.2,
+        temperature=temperature,
     )
     raw = response.choices[0].message.content or "{}"
     return json.loads(raw)

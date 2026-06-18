@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from config import OPENAI_PROCESS_UPDATE_TEMPERATURE
 from models import AiProposal, File, db
 from services.diff_engine import build_change_set, build_document_change_set, merge_document
 from services.openai_service import chat_json
@@ -11,24 +12,47 @@ from services.unit_mapper import (
 )
 
 
-SMART_PROCESS_UPDATE_PROMPT = (
-    "You are a practical process consultant with healthy common sense. "
-    "Read the plan first, then the recent documentation. Infer what actually changed "
-    "in reality from the documentation. Update the plan with only justified critical "
-    "changes: revise existing points when needed, remove obsolete points, add only "
-    "when necessary. Keep the plan practical and concise, similar in spirit to the "
-    "original but not blindly loyal to it. Then update the tasks file to match the "
-    "revised plan. Tasks must change when the plan or documentation implies it. "
-    "Use only the provided unit IDs. Respond in the same language as the input files."
-)
+SMART_PROCESS_UPDATE_PROMPT = """You update a personal process from weekly documentation.
 
-SMART_PROCESS_UPDATE_SCHEMA = (
-    "Return JSON: "
-    '{"plan_ops":[{"op":"replace|remove|add_after","unit_id":"...","text":"...",'
-    '"reason":"..."}],'
-    '"tasks_ops":[{"op":"replace|remove|add_after","unit_id":"...","text":"...",'
-    '"reason":"..."}]}'
-)
+## Files
+
+PLAN — Concise guide: purpose, principles, durable conclusions. Edit existing points before adding new ones.
+
+TASKS — Recurring practical actions from the plan (daily, weekly, every X days, etc.). Specific wording, aligned with the plan.
+
+DOCUMENTATION — User notes (read only). May state routine changes explicitly or only imply them. Infer justified updates from these notes.
+
+## What to do
+
+1. Read PLAN, then DOCUMENTATION, then TASKS.
+2. Decide what in PLAN and TASKS should change based on the documentation.
+3. Return only edits to existing units, using the unit IDs provided.
+
+For each edit, `text` is the new line as it should appear in the file — a direct replacement for that unit, not a suggestion about what to do.
+
+## Output
+
+JSON only:
+{"plan_ops":[],"tasks_ops":[]}
+
+Each op:
+- op: "replace" | "remove" | "add_after"
+- unit_id: from PLAN or TASKS input
+- text: required for replace and add_after — the full new line
+
+Use remove sparingly. Use add_after only when a new point is clearly needed.
+
+## Examples
+
+Plan unit: [block:3:item:1] Practice 3 minutes daily
+Doc: practice feels too short; 5 min works better
+→ {"op":"replace","unit_id":"block:3:item:1","text":"Practice 5 minutes daily"}
+
+Tasks unit: [task:12] Evening stretch routine
+Plan now emphasizes morning mobility
+→ {"op":"replace","unit_id":"task:12","text":"Morning mobility routine (10 min)"}
+
+Respond in the same language as the input files."""
 
 
 def smart_process_update(topic, plan_file, doc_file, tasks_file):
@@ -48,8 +72,9 @@ def smart_process_update(topic, plan_file, doc_file, tasks_file):
     )
 
     ai_result = chat_json(
-        f"{SMART_PROCESS_UPDATE_PROMPT} {lang_note} {SMART_PROCESS_UPDATE_SCHEMA}",
+        f"{SMART_PROCESS_UPDATE_PROMPT}\n\n{lang_note}",
         user_prompt,
+        temperature=OPENAI_PROCESS_UPDATE_TEMPERATURE,
     )
 
     plan_units = units_from_file(plan_file.id)
@@ -59,11 +84,12 @@ def smart_process_update(topic, plan_file, doc_file, tasks_file):
 
     if not tasks_ops and _doc_implies_task_changes(flattened["documentation"]):
         retry = chat_json(
-            f"{SMART_PROCESS_UPDATE_PROMPT} {lang_note} "
+            f"{SMART_PROCESS_UPDATE_PROMPT}\n\n{lang_note}\n"
             "The tasks file must be updated. Return tasks_ops only in JSON: "
-            '{"tasks_ops":[...]}',
+            '{"tasks_ops":[]}',
             f"{flattened['tasks']}\n\nRevised plan context:\n"
             f"{flattened['plan']}\n\nDocumentation:\n{flattened['documentation']}",
+            temperature=OPENAI_PROCESS_UPDATE_TEMPERATURE,
         )
         tasks_ops = retry.get("tasks_ops") or tasks_ops
 
@@ -200,7 +226,7 @@ def finalize_process_update(proposal, decisions):
 
 def _doc_implies_task_changes(documentation_text):
     lowered = (documentation_text or "").lower()
-    hints = ("task", "todo", "משימ", "לעשות", "צריך", "need to", "should")
+    hints = ("task", "todo", "משימ", "לעשות", "צריך", "need to", "should", "routine")
     return any(hint in lowered for hint in hints)
 
 

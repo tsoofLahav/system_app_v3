@@ -2,6 +2,8 @@ import re
 
 from models import Block, Task, db
 
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
+
 
 def units_from_file(file_id):
     blocks = (
@@ -39,12 +41,30 @@ def flatten_units_for_ai(units, title):
     return f"=== {title.upper()} ===\n{body}".strip()
 
 
+def flatten_doc_file_for_ai(doc_file):
+    blocks = (
+        Block.query.filter_by(file_id=doc_file.id)
+        .filter(Block.archived_at.is_(None))
+        .order_by(Block.order_index, Block.id)
+        .all()
+    )
+    lines = []
+    for block in blocks:
+        if block.type == "table":
+            lines.extend(_table_rows_to_lines(block.content or {}))
+            continue
+        for unit in _block_to_units(block, {}):
+            text = (unit.get("text") or "").strip()
+            if text:
+                lines.append(text)
+    body = "\n".join(lines)
+    return f"=== {doc_file.name.upper()} ===\n{body}".strip()
+
+
 def flatten_process_files_for_ai(plan_file, doc_file, tasks_file):
     return {
         "plan": flatten_units_for_ai(units_from_file(plan_file.id), plan_file.name),
-        "documentation": flatten_units_for_ai(
-            units_from_file(doc_file.id), doc_file.name
-        ),
+        "documentation": flatten_doc_file_for_ai(doc_file),
         "tasks": flatten_units_for_ai(units_from_file(tasks_file.id), tasks_file.name),
     }
 
@@ -61,7 +81,6 @@ def apply_units_to_file(file, units):
 
     order = 0
     list_items = []
-    checklist_items = []
     task_list_block = None
     has_tasks = any(unit.get("kind") == "task" for unit in units)
 
@@ -75,6 +94,10 @@ def apply_units_to_file(file, units):
         db.session.add(task_list_block)
         db.session.flush()
         order += 1
+
+    prose_buffer = []
+    prose_kind = None
+    prose_block_id = None
 
     def flush_list():
         nonlocal order, list_items
@@ -91,34 +114,75 @@ def apply_units_to_file(file, units):
         order += 1
         list_items = []
 
-    def flush_checklist():
-        nonlocal order, checklist_items
-        if not checklist_items:
+    def flush_prose():
+        nonlocal order, prose_buffer, prose_kind, prose_block_id
+        if not prose_buffer:
+            prose_kind = None
+            prose_block_id = None
             return
-        db.session.add(
-            Block(
-                file_id=file.id,
-                type="checklist",
-                content={"items": checklist_items},
-                order_index=order,
-            )
-        )
-        order += 1
-        checklist_items = []
+        text = " ".join(prose_buffer).strip()
+        if text:
+            if prose_kind == "header":
+                db.session.add(
+                    Block(
+                        file_id=file.id,
+                        type="header",
+                        content={"text": text, "level": 2},
+                        order_index=order,
+                    )
+                )
+            elif prose_kind == "summary":
+                db.session.add(
+                    Block(
+                        file_id=file.id,
+                        type="summary",
+                        content={"text": text},
+                        order_index=order,
+                    )
+                )
+            else:
+                db.session.add(
+                    Block(
+                        file_id=file.id,
+                        type="text",
+                        content={"text": text},
+                        order_index=order,
+                    )
+                )
+            order += 1
+        prose_buffer = []
+        prose_kind = None
+        prose_block_id = None
 
     for unit in units:
         kind = unit.get("kind")
         text = (unit.get("text") or "").strip()
+        block_id = unit.get("block_id")
+
+        if kind in ("paragraph", "header", "summary"):
+            if (
+                text
+                and prose_kind == kind
+                and prose_block_id is not None
+                and block_id is not None
+                and prose_block_id == block_id
+            ):
+                prose_buffer.append(text)
+                continue
+            flush_list()
+            flush_prose()
+            if text:
+                prose_kind = kind
+                prose_block_id = block_id
+                prose_buffer = [text]
+            continue
+
+        flush_prose()
         if kind == "list_item":
             if text:
                 list_items.append({"text": text})
             continue
         flush_list()
-        if kind == "checklist_item":
-            if text:
-                checklist_items.append({"text": text, "done": False})
-            continue
-        flush_checklist()
         if kind == "task":
             if not text or task_list_block is None:
                 continue
@@ -139,72 +203,47 @@ def apply_units_to_file(file, units):
             )
             order += 1
             continue
-        if kind == "header":
-            db.session.add(
-                Block(
-                    file_id=file.id,
-                    type="header",
-                    content={"text": text, "level": 2},
-                    order_index=order,
-                )
-            )
-            order += 1
-            continue
-        if kind == "summary":
-            db.session.add(
-                Block(
-                    file_id=file.id,
-                    type="summary",
-                    content={"text": text},
-                    order_index=order,
-                )
-            )
-            order += 1
-            continue
-        if kind == "paragraph" and text:
-            db.session.add(
-                Block(
-                    file_id=file.id,
-                    type="text",
-                    content={"text": text},
-                    order_index=order,
-                )
-            )
-            order += 1
+
     flush_list()
-    flush_checklist()
+    flush_prose()
     db.session.flush()
+
+
+def _split_prose_units(block_id, kind, text):
+    text = (text or "").strip()
+    if not text:
+        return []
+    parts = [part.strip() for part in _SENTENCE_SPLIT.split(text) if part.strip()]
+    if not parts:
+        return []
+    return [
+        {
+            "id": f"block:{block_id}:sent:{index}",
+            "kind": kind,
+            "text": part,
+            "block_id": block_id,
+        }
+        for index, part in enumerate(parts)
+    ]
+
+
+def _table_rows_to_lines(content):
+    lines = []
+    for row in content.get("rows") or []:
+        cells = [str(cell).strip() for cell in row if str(cell).strip()]
+        if cells:
+            lines.append(" | ".join(cells))
+    return lines
 
 
 def _block_to_units(block, tasks_by_id):
     content = dict(block.content or {})
     if block.type == "text":
-        return [
-            {
-                "id": f"block:{block.id}",
-                "kind": "paragraph",
-                "text": (content.get("text") or "").strip(),
-                "block_id": block.id,
-            }
-        ]
+        return _split_prose_units(block.id, "paragraph", content.get("text") or "")
     if block.type == "header":
-        return [
-            {
-                "id": f"block:{block.id}",
-                "kind": "header",
-                "text": (content.get("text") or "").strip(),
-                "block_id": block.id,
-            }
-        ]
+        return _split_prose_units(block.id, "header", content.get("text") or "")
     if block.type == "summary":
-        return [
-            {
-                "id": f"block:{block.id}",
-                "kind": "summary",
-                "text": (content.get("text") or "").strip(),
-                "block_id": block.id,
-            }
-        ]
+        return _split_prose_units(block.id, "summary", content.get("text") or "")
     if block.type == "list":
         units = []
         for index, item in enumerate(content.get("items") or []):
@@ -215,22 +254,6 @@ def _block_to_units(block, tasks_by_id):
                 {
                     "id": f"block:{block.id}:item:{index}",
                     "kind": "list_item",
-                    "text": text,
-                    "block_id": block.id,
-                    "path": ["items", index],
-                }
-            )
-        return units
-    if block.type == "checklist":
-        units = []
-        for index, item in enumerate(content.get("items") or []):
-            text = (item.get("text") or "").strip()
-            if not text:
-                continue
-            units.append(
-                {
-                    "id": f"block:{block.id}:item:{index}",
-                    "kind": "checklist_item",
                     "text": text,
                     "block_id": block.id,
                     "path": ["items", index],
