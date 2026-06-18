@@ -16,7 +16,7 @@ SMART_PROCESS_UPDATE_PROMPT = """You update a personal process from weekly docum
 
 ## Files
 
-PLAN — Concise guide: purpose, principles, durable conclusions. Edit existing points before adding new ones.
+PLAN — Concise guide: purpose, principles, durable conclusions. Prefer editing existing points over adding new ones. You may remove or merge points when it keeps the plan more organized and concise without losing important information.
 
 TASKS — Recurring practical actions from the plan (daily, weekly, every X days, etc.). Specific wording, aligned with the plan.
 
@@ -40,7 +40,7 @@ Each op:
 - unit_id: from PLAN or TASKS input
 - text: required for replace and add_after — the full new line
 
-Use remove sparingly. Use add_after only when a new point is clearly needed.
+Prefer replace and edit over remove and add. Use remove or merge when it helps the plan stay organized and concise. Use add_after only when a new point is clearly needed.
 
 ## Examples
 
