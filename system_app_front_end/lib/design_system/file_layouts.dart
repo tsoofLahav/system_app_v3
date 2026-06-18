@@ -209,5 +209,5 @@ abstract final class FileLayouts {
 }
 
 abstract final class AppLayoutSpacing {
-  static const gap = 12.0;
+  static const gap = 8.0;
 }

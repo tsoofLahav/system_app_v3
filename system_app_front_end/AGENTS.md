@@ -30,7 +30,7 @@ Read this before making frontend changes.
 - Core state/data layer: [`lib/core/README.md`](lib/core/README.md)
 - Feature modules: [`lib/features/README.md`](lib/features/README.md)
 - Shared UI primitives: [`lib/shared/README.md`](lib/shared/README.md)
-- Design system: [`lib/design_system/README.md`](lib/design_system/README.md)
+- Design system (visual contract, glass presets, spacing): [`lib/design_system/README.md`](lib/design_system/README.md)
 
 Use folder-local `README.md` files as the source of truth for that folder.
 

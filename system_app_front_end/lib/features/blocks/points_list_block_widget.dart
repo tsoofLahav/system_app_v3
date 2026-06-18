@@ -48,11 +48,11 @@ class _PointsListBlockWidgetState extends State<PointsListBlockWidget> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               SizedBox(
-                width: 14,
+                width: 12,
                 child: Text(
                   '•',
                   textAlign: TextAlign.center,
-                  style: AppTypography.noteBodyStyle,
+                  style: AppTypography.listItemStyle,
                 ),
               ),
               Expanded(
@@ -62,7 +62,7 @@ class _PointsListBlockWidgetState extends State<PointsListBlockWidget> {
                   initialValue: items[i],
                   maxLines: 1,
                   textInputAction: TextInputAction.next,
-                  style: AppTypography.noteBodyStyle,
+                  style: AppTypography.listItemStyle,
                   decoration: AppTypography.noteInputDecoration(),
                   onChanged: (value) {
                     final next = [...items];

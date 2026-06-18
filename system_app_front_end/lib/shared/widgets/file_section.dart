@@ -164,7 +164,7 @@ class _FileSectionState extends State<FileSection> {
                                 orderIndex: i + 1,
                               ),
                         child: Padding(
-                          padding: const EdgeInsets.only(bottom: 5),
+                          padding: const EdgeInsets.only(bottom: AppSpacing.blockGap),
                           child: BlockRenderer(
                             file: widget.file,
                             block: widget.blocks[i],
@@ -340,7 +340,7 @@ class _InlineInsertGap extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onSecondaryTapDown: onSecondaryTapDown,
-      child: const SizedBox(width: double.infinity, height: 6),
+      child: const SizedBox(width: double.infinity, height: 4),
     );
   }
 }

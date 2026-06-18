@@ -8,7 +8,7 @@ import 'file_reorder_tile.dart';
 import 'files_section_divider.dart';
 import 'pane_reorder_logic.dart';
 
-const _tileSpacing = 10.0;
+const _tileSpacing = 8.0;
 
 class PaneReorderCanvas extends StatefulWidget {
   const PaneReorderCanvas({

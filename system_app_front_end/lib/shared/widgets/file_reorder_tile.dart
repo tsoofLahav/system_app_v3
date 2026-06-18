@@ -38,19 +38,16 @@ class FileReorderTile extends StatelessWidget {
       opacity: dimmed ? 0.5 : 1,
       child: MouseRegion(
         cursor: SystemMouseCursors.grab,
-        child: GlassSurface(
-          borderRadius: BorderRadius.circular(12),
-          blurSigma: 6,
-          tintOpacity: 0.09,
-          showTopHighlight: false,
-          elevation: 0,
+        child: GlassSurface.styled(
+          style: AppGlassStyle.floating,
+          borderRadius: BorderRadius.circular(AppGlassStyle.floatingRadius),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppGlassStyle.floatingRadius),
             child: Stack(
               fit: StackFit.expand,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

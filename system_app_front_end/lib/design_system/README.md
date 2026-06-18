@@ -8,41 +8,58 @@ The app is a personal operating system, so the interface should reduce mental lo
 
 Surface hierarchy:
 - Canvas: quiet environmental background with a soft topic tint.
-- Files: primary working surfaces and the strongest visual objects on the page.
-- Floating controls: compact glass controls that stay available without competing with files.
-- Dialogs: Apple-style soft glass panels with one shared structure, small type, gentle separators, padding, title treatment, and action row.
-- Sidebar: Apple-style soft glass navigation; it supports context switching but does not dominate the workspace.
-- Topic header: plain text over a gentle top gradient veil, with no framed title capsule.
+- Files: primary working surfaces (`NoteCard`) — strongest objects on the page; not dialog glass.
+- Floating chrome: `+`, bottom bar segments, reorder tiles, dividers — shared `AppGlassStyle` presets.
+- Dialogs: soft glass panels via `AppGlassStyle.dialog`.
+- Sidebar: soft glass navigation; supports context switching without dominating the workspace.
+- Topic header: plain text over a gentle top gradient veil; minimal vertical clearance.
 
-Color rules:
-- Topic color is atmospheric: use it as a subtle canvas or glass tint, not as a loud card color.
-- Text stays soft charcoal; secondary text is muted.
-- Borders and shadows are restrained so the app feels composed rather than toy-like.
+## Glass presets (`AppGlassStyle`)
 
-Spacing rules:
-- Files receive the largest share of the viewport.
-- Floating headers use minimal vertical clearance because they are overlay chrome.
-- Internal file gaps stay compact and readable.
-- Additional files appear lower in the scroll flow so the first view stays focused.
+All floating chrome must use a preset from [`glass_surface.dart`](glass_surface.dart). Do not invent one-off blur/tint values.
 
-Typography rules:
-- English uses Inter for a calm, neutral interface voice.
-- Hebrew uses SF Hebrew on Apple platforms, with system Hebrew fallbacks where SF Hebrew is unavailable.
+| Preset | Use |
+|--------|-----|
+| `dialog` | Modals, `AppGlassDialog` |
+| `floating` | `+` button, bar tool segments, reorder tiles, toggle capsule |
+| `aiAccent` | Bottom-bar AI segment — cyan tint, stronger border, optional label |
 
-What lives here:
-- Tokens: colors, typography, spacing, icon references.
-- Shared visual components: glass surfaces, note containers, layout icons.
-- Theme wiring used by the whole app.
+## Spacing & density
 
-Ownership boundaries:
-- Visual consistency and primitive styling belong here.
-- Domain semantics (topic/task/file business rules) do not.
+Cross-app tokens in `AppSpacing`, `AppLayoutSpacing`, `AppTopicHeaderMetrics`:
 
-Adoption rules:
-- Prefer token reuse over new ad-hoc colors/sizes.
-- If a visual pattern repeats in two features, promote it here.
+- Canvas padding: **12px**; file layout gap: **8px**; note inner padding: **12px**.
+- Topic scroll top inset: **~38px** (header + float margin, not oversized).
+- Block gap inside files: **3–4px**; list/task line height: **~1.38**.
+- Task row vertical padding: **0–1px**; custom `TaskMark` (~14px), not Material checkbox.
 
-Guidelines:
-- Change tokens/components here before adding local style overrides.
-- Keep styles composable and predictable across features.
-- Avoid feature-specific business semantics in design-system files.
+Files receive the largest share of the viewport. Additional files sit lower in the scroll flow.
+
+## More-files divider
+
+`FilesSectionDivider`: outline-only circle (canvas-transparent fill), `…` when collapsed and `−` when expanded at the **same 14px** visual weight. Subtle lines on both sides.
+
+## Bottom bar
+
+Three glass segments on topic view (not one monolithic pill):
+
+1. **Tools** — preferences, automations, layout (`floating`).
+2. **Toggle** — pane drag mode (`floating` interior).
+3. **AI** — always visible on topic view (`aiAccent`); all tool icons shown; **no expand/collapse AI button**; tools dim/disabled when there is no AI context. Small **AI** label on the segment outline.
+
+## Color & typography
+
+- Topic color is atmospheric — subtle canvas or glass tint, not loud card color.
+- Text: soft charcoal; secondary text muted.
+- English: Inter; Hebrew: SF Hebrew with system fallbacks.
+- Prefer `listItemStyle` / `taskRowStyle` for dense list and task content.
+
+## Ownership
+
+- Tokens and visual primitives live here.
+- Domain semantics (topic/task/file rules) do not.
+
+## Adoption
+
+- Change tokens/components here before local style overrides.
+- If a pattern repeats in two features, promote it here.

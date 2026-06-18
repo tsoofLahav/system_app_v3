@@ -95,6 +95,7 @@ abstract final class AppSpacing {
   static const md = 12.0;
   static const lg = 18.0;
   static const xl = 26.0;
-  static const notePadding = EdgeInsets.all(16);
-  static const canvasPadding = EdgeInsets.all(18);
+  static const blockGap = 3.0;
+  static const notePadding = EdgeInsets.all(12);
+  static const canvasPadding = EdgeInsets.all(12);
 }

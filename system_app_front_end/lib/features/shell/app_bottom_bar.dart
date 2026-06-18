@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/app_strings.dart';
 import '../../core/app_state.dart';
 import '../../core/services/ai_service.dart';
 import '../../design_system/app_colors.dart';
@@ -12,9 +13,9 @@ import 'automation_dialog.dart';
 import 'preferences_dialog.dart';
 
 abstract final class AppBottomBarMetrics {
-  static const barHeight = 54.0;
+  static const barHeight = 44.0;
   static const floatMargin = 12.0;
-  static const scrollInset = 82.0;
+  static const scrollInset = 72.0;
 }
 
 abstract final class AppTopicHeaderMetrics {
@@ -22,11 +23,13 @@ abstract final class AppTopicHeaderMetrics {
   static const addButtonSize = 32.0;
   static const headerGap = 8.0;
   static const horizontalMargin = 16.0;
-  static const floatMargin = 10.0;
-  static const scrollTopInset = 52.0;
+  static const floatMargin = 6.0;
+  static const scrollTopInset = 38.0;
 }
 
 const _iconSize = 22.0;
+const _iconTapPadding = 4.0;
+const _segmentPadding = EdgeInsets.symmetric(horizontal: 4);
 
 class AppBottomBar extends StatelessWidget {
   const AppBottomBar({super.key, required this.state});
@@ -51,69 +54,91 @@ class AppBottomBar extends StatelessWidget {
 
     return SafeArea(
       top: false,
-      child: FloatingGlassPill(
-        verticalMargin: AppBottomBarMetrics.floatMargin,
-        height: AppBottomBarMetrics.barHeight,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _BarIconButton(
-              tooltip: s['preferences'],
-              icon: AppIcons.preferences,
-              onPressed: () =>
-                  showPreferencesDialog(context: context, state: state),
-            ),
-            _BarIconButton(
-              tooltip: s['automations'],
-              icon: AppIcons.automations,
-              onPressed: () =>
-                  showAutomationDialog(context: context, state: state),
-            ),
-            if (_showLayout) ...[
-              _BarIconButton(
-                tooltip: s['layout'],
-                icon: AppIcons.layout,
-                onPressed: () => _showLayoutPicker(context),
-              ),
-              _PaneDragToggle(state: state),
-            ],
-            if (canAi) ...[
-              const SizedBox(width: 4),
-              Container(
-                width: 1,
-                height: 26,
-                color: AppColors.textHint.withValues(alpha: 0.3),
-              ),
-              const SizedBox(width: 4),
-              _AiToolGroup(
-                state: state,
-                enabled: hasContext && !state.aiRunning,
-                graphEnabled: (hasContext || hasGraphData) && !state.aiRunning,
-                running: state.aiRunning,
-                onTool: (tool) => _runTool(context, tool),
-              ),
-            ],
-            if (state.aiRunning) ...[
-              const SizedBox(width: 8),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.aiCyan.withValues(alpha: 0.85),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: AppBottomBarMetrics.floatMargin,
+        ),
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GlassBarSegment(
+                height: AppBottomBarMetrics.barHeight,
+                padding: _segmentPadding,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _BarIconButton(
+                      tooltip: s['preferences'],
+                      icon: AppIcons.preferences,
+                      onPressed: () => showPreferencesDialog(
+                        context: context,
+                        state: state,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(s['aiRunning'], style: AppTypography.metaStyle),
-                ],
+                    _BarIconButton(
+                      tooltip: s['automations'],
+                      icon: AppIcons.automations,
+                      onPressed: () => showAutomationDialog(
+                        context: context,
+                        state: state,
+                      ),
+                    ),
+                    if (_showLayout)
+                      _BarIconButton(
+                        tooltip: s['layout'],
+                        icon: AppIcons.layout,
+                        onPressed: () => _showLayoutPicker(context),
+                      ),
+                  ],
+                ),
               ),
+              if (_showLayout) ...[
+                const SizedBox(width: 8),
+                GlassBarSegment(
+                  height: AppBottomBarMetrics.barHeight,
+                  padding: _segmentPadding,
+                  child: _PaneDragToggle(state: state),
+                ),
+              ],
+              if (canAi) ...[
+                const SizedBox(width: 8),
+                GlassBarSegment(
+                  style: AppGlassStyle.aiAccent,
+                  height: AppBottomBarMetrics.barHeight,
+                  padding: _segmentPadding,
+                  label: 'AI',
+                  child: _AiToolGroup(
+                    enabled: hasContext && !state.aiRunning,
+                    graphEnabled:
+                        (hasContext || hasGraphData) && !state.aiRunning,
+                    running: state.aiRunning,
+                    strings: s,
+                    onTool: (tool) => _runTool(context, tool),
+                  ),
+                ),
+              ],
+              if (state.aiRunning) ...[
+                const SizedBox(width: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.aiCyan.withValues(alpha: 0.85),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(s['aiRunning'], style: AppTypography.metaStyle),
+                  ],
+                ),
+              ],
             ],
-            const SizedBox(width: 4),
-          ],
+          ),
         ),
       ),
     );
@@ -240,8 +265,8 @@ class _BarIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       tooltip: tooltip,
-      padding: const EdgeInsets.all(8),
-      constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
+      padding: const EdgeInsets.all(_iconTapPadding),
+      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
       onPressed: onPressed,
       icon: AppIcon(
         icon,
@@ -269,69 +294,18 @@ class _PaneDragToggle extends StatelessWidget {
         child: InkWell(
           onTap: state.togglePaneDragMode,
           borderRadius: BorderRadius.circular(999),
-          child: Container(
-            width: 78,
-            height: 34,
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              color: AppColors.noteTop.withValues(alpha: 0.52),
-              border: Border.all(
-                color: AppColors.noteBorder.withValues(alpha: 0.85),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _PaneModeIcon(
+                icon: AppIcons.paneDrag,
+                active: on,
               ),
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                AnimatedAlign(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOut,
-                  alignment: on
-                      ? AlignmentDirectional.centerStart
-                      : AlignmentDirectional.centerEnd,
-                  child: Container(
-                    width: 34,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      color: AppColors.noteTop.withValues(alpha: 0.95),
-                      border: Border.all(
-                        color: AppColors.noteBorder.withValues(alpha: 0.95),
-                      ),
-                    ),
-                  ),
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    SizedBox(
-                      width: 34,
-                      child: Center(
-                        child: AppIcon(
-                          AppIcons.paneDrag,
-                          size: 16,
-                          color: on
-                              ? AppColors.text.withValues(alpha: 0.9)
-                              : AppColors.textHint.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 34,
-                      child: Center(
-                        child: AppIcon(
-                          AppIcons.summarize,
-                          size: 16,
-                          color: on
-                              ? AppColors.textHint.withValues(alpha: 0.7)
-                              : AppColors.text.withValues(alpha: 0.9),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              _PaneModeIcon(
+                icon: AppIcons.summarize,
+                active: !on,
+              ),
+            ],
           ),
         ),
       ),
@@ -339,131 +313,86 @@ class _PaneDragToggle extends StatelessWidget {
   }
 }
 
-class _AiToolGroup extends StatefulWidget {
+class _PaneModeIcon extends StatelessWidget {
+  const _PaneModeIcon({required this.icon, required this.active});
+
+  final IconData icon;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(_iconTapPadding),
+      child: AppIcon(
+        icon,
+        size: _iconSize,
+        color: active
+            ? AppColors.text.withValues(alpha: 0.78)
+            : AppColors.textHint.withValues(alpha: 0.38),
+      ),
+    );
+  }
+}
+
+class _AiToolGroup extends StatelessWidget {
   const _AiToolGroup({
-    required this.state,
+    required this.strings,
     required this.enabled,
     required this.graphEnabled,
     required this.running,
     required this.onTool,
   });
 
-  final AppState state;
+  final AppStrings strings;
   final bool enabled;
   final bool graphEnabled;
   final bool running;
   final ValueChanged<String> onTool;
 
   @override
-  State<_AiToolGroup> createState() => _AiToolGroupState();
-}
-
-class _AiToolGroupState extends State<_AiToolGroup> {
-  bool _expanded = true;
-
-  @override
   Widget build(BuildContext context) {
-    final s = widget.state.strings;
-    final cyan = AppColors.aiCyan;
+    final s = strings;
 
-    return GlassSurface(
-      borderRadius: BorderRadius.circular(999),
-      blurSigma: 10,
-      tintOpacity: 0.12,
-      showTopHighlight: true,
-      elevation: 1,
-      border: Border.all(color: cyan.withValues(alpha: 0.35), width: 0.85),
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _AiToggleButton(
-            tooltip: s['ai'],
-            expanded: _expanded,
-            onPressed: () => setState(() => _expanded = !_expanded),
-          ),
-          if (_expanded) ...[
-            _AiToolButton(
-              tooltip: s['aiConsult'],
-              icon: AppIcons.consult,
-              enabled: widget.enabled && !widget.running,
-              onPressed: () => widget.onTool('consult'),
-            ),
-            _AiToolButton(
-              tooltip: s['aiSummarize'],
-              icon: AppIcons.summarize,
-              enabled: widget.enabled && !widget.running,
-              onPressed: () => widget.onTool('summarize_to_doc'),
-            ),
-            _AiToolButton(
-              tooltip: s['aiSmartList'],
-              icon: AppIcons.smartList,
-              enabled: widget.enabled && !widget.running,
-              onPressed: () => widget.onTool('smart_list'),
-            ),
-            _AiToolButton(
-              tooltip: s['aiImage'],
-              icon: AppIcons.image,
-              enabled: widget.enabled && !widget.running,
-              onPressed: () => widget.onTool('create_image'),
-            ),
-            _AiToolButton(
-              tooltip: s['aiGraph'],
-              icon: AppIcons.graph,
-              enabled: widget.graphEnabled,
-              onPressed: () => widget.onTool('create_graph'),
-            ),
-            _AiToolButton(
-              tooltip: s['aiReview'],
-              icon: AppIcons.review,
-              enabled: !widget.running,
-              onPressed: () => widget.onTool('review'),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _AiToggleButton extends StatelessWidget {
-  const _AiToggleButton({
-    required this.tooltip,
-    required this.expanded,
-    required this.onPressed,
-  });
-
-  final String tooltip;
-  final bool expanded;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final cyan = AppColors.aiCyan;
-
-    return IconButton(
-      tooltip: tooltip,
-      padding: const EdgeInsets.all(8),
-      constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
-      onPressed: onPressed,
-      icon: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: cyan.withValues(alpha: expanded ? 0.7 : 0.35),
-            width: 1,
-          ),
-          color: cyan.withValues(alpha: expanded ? 0.1 : 0.05),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _AiToolButton(
+          tooltip: s['aiConsult'],
+          icon: AppIcons.consult,
+          enabled: enabled && !running,
+          onPressed: () => onTool('consult'),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(5),
-          child: AppIcon(
-            AppIcons.ai,
-            size: _iconSize,
-            color: cyan.withValues(alpha: expanded ? 0.95 : 0.65),
-          ),
+        _AiToolButton(
+          tooltip: s['aiSummarize'],
+          icon: AppIcons.summarize,
+          enabled: enabled && !running,
+          onPressed: () => onTool('summarize_to_doc'),
         ),
-      ),
+        _AiToolButton(
+          tooltip: s['aiSmartList'],
+          icon: AppIcons.smartList,
+          enabled: enabled && !running,
+          onPressed: () => onTool('smart_list'),
+        ),
+        _AiToolButton(
+          tooltip: s['aiImage'],
+          icon: AppIcons.image,
+          enabled: enabled && !running,
+          onPressed: () => onTool('create_image'),
+        ),
+        _AiToolButton(
+          tooltip: s['aiGraph'],
+          icon: AppIcons.graph,
+          enabled: graphEnabled,
+          onPressed: () => onTool('create_graph'),
+        ),
+        _AiToolButton(
+          tooltip: s['aiReview'],
+          icon: AppIcons.review,
+          enabled: !running,
+          onPressed: () => onTool('review'),
+        ),
+      ],
     );
   }
 }
@@ -485,8 +414,8 @@ class _AiToolButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       tooltip: tooltip,
-      padding: const EdgeInsets.all(8),
-      constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
+      padding: const EdgeInsets.all(_iconTapPadding),
+      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
       onPressed: enabled ? onPressed : null,
       icon: AppIcon(
         icon,

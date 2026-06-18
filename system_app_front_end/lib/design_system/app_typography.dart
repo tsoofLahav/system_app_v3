@@ -72,6 +72,12 @@ abstract final class AppTypography {
   /// Body, inputs, tasks, checklist items — smaller.
   static TextStyle get noteBodyStyle => _style(size: 12.5, height: 1.55);
 
+  /// Dense list bullets and list item fields.
+  static TextStyle get listItemStyle => _style(size: 12.5, height: 1.38);
+
+  /// Task rows in files and task views.
+  static TextStyle get taskRowStyle => _style(size: 12.5, height: 1.38);
+
   /// Secondary labels (sidebar sections, meta).
   static TextStyle get metaStyle =>
       _style(size: 12, color: AppColors.textHint, height: 1.4);

@@ -114,7 +114,7 @@ class TopicView extends StatelessWidget {
                         else ...[
                           if (state.pendingAiProposals.isNotEmpty) ...[
                             _AiProposalPanel(state: state),
-                            const SizedBox(height: AppSpacing.md),
+                            const SizedBox(height: AppSpacing.sm),
                           ],
                           if (mainFiles.isNotEmpty)
                             FileLayoutBoard(
