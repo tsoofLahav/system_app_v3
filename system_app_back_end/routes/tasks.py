@@ -56,7 +56,7 @@ def list_tasks_by_view(view_type):
 @tasks_bp.route("/tasks", methods=["POST"])
 def create_task():
     data = request.get_json(silent=True) or {}
-    if not data.get("title"):
+    if "title" not in data:
         return jsonify({"error": "title is required"}), 400
 
     due_date = data.get("due_date")
