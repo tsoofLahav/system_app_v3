@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../../config/api_config.dart';
 import '../../core/app_state.dart';
 import '../../core/models/app_file.dart';
 import '../../core/models/block.dart';
 import '../../core/models/task.dart';
 import 'checklist_block_widget.dart';
-import 'graph_placeholder_block_widget.dart';
+import 'graph_block_widget.dart';
 import 'header_block_widget.dart';
+import 'image_block_widget.dart';
 import 'points_list_block_widget.dart';
 import 'summary_block_widget.dart';
 import 'table_block_widget.dart';
+import 'tasks_connected_editor.dart';
 import 'task_block_widget.dart';
 import 'text_block_widget.dart';
 
@@ -21,12 +22,16 @@ class BlockRenderer extends StatelessWidget {
     required this.block,
     required this.tasks,
     required this.state,
+    this.topicAccent,
+    this.isMainTopic = false,
   });
 
   final AppFile file;
   final Block block;
   final List<Task> tasks;
   final AppState state;
+  final Color? topicAccent;
+  final bool isMainTopic;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +46,7 @@ class BlockRenderer extends StatelessWidget {
           aiFileId: file.id,
           autofocus: state.pendingFocusBlockId == block.id,
           onAutofocused: () => state.clearBlockFocus(block.id),
-          onChanged: (c) => state.updateBlockContent(block, c),
+          onChanged: (c) => state.updateBlockContent(block, c, notify: true),
         );
       case 'header':
         return HeaderBlockWidget(
@@ -49,15 +54,18 @@ class BlockRenderer extends StatelessWidget {
           hint: s['headerHint'],
           aiState: state,
           aiFileId: file.id,
-          onChanged: (c) => state.updateBlockContent(block, c),
+          onChanged: (c) => state.updateBlockContent(block, c, notify: true),
         );
       case 'summary':
         return SummaryBlockWidget(
           block: block,
           hint: s['summaryHint'],
+          topicAccent: topicAccent,
+          fileType: file.type,
+          isMainTopic: isMainTopic,
           aiState: state,
           aiFileId: file.id,
-          onChanged: (c) => state.updateBlockContent(block, c),
+          onChanged: (c) => state.updateBlockContent(block, c, notify: true),
         );
       case 'checklist':
         return ChecklistBlockWidget(
@@ -67,10 +75,25 @@ class BlockRenderer extends StatelessWidget {
           onAddItem: (index) => state.addChecklistItem(block, index: index),
           onItemChanged: (i, text, done) =>
               state.updateChecklistItem(block, i, text, done),
+          onRemoveItem: (i) => state.removeChecklistItem(block, i),
         );
       case 'task_list':
-        return const SizedBox.shrink();
+        return TasksConnectedEditor(
+          file: file,
+          listBlock: block,
+          state: state,
+        );
       case 'task':
+        final fileBlocks = state.selectedDetail?.blocksByFileId[file.id] ?? [];
+        Block? listBlock;
+        for (final b in fileBlocks) {
+          if (b.type == 'task_list') {
+            listBlock = b;
+            break;
+          }
+        }
+        if (listBlock != null) return const SizedBox.shrink();
+
         final taskId = block.content['task_id'] as int?;
         Task? task;
         for (final t in tasks) {
@@ -80,21 +103,21 @@ class BlockRenderer extends StatelessWidget {
           }
         }
         if (task == null) return const SizedBox.shrink();
-        final resolvedTask = task;
         return TaskBlockWidget(
-          task: resolvedTask,
+          task: task,
+          taskBlock: block,
+          file: file,
+          listBlock: block,
           state: state,
-          onToggle: () => state.toggleTaskStatus(resolvedTask),
+          onToggle: () => state.toggleTaskStatus(task!),
         );
       case 'image':
         final path = block.content['image_path'] as String? ?? '';
         if (path.isEmpty) return Text(s['noImage']);
-        final url = path.startsWith('http')
-            ? path
-            : '${ApiConfig.baseUrl}$path';
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Image.network(url, height: 180, fit: BoxFit.cover),
+        return ImageBlockWidget(
+          block: block,
+          maxWidth: 560,
+          onChanged: (c) => state.updateBlockContent(block, c, notify: true),
         );
       case 'measurement':
         return ListTile(
@@ -107,8 +130,6 @@ class BlockRenderer extends StatelessWidget {
       case 'table':
         return TableBlockWidget(
           block: block,
-          addRowLabel: s['addRow'],
-          addColumnLabel: s['addColumn'],
           onChanged: (c) => state.updateBlockContent(block, c, notify: true),
         );
       case 'list':
@@ -117,7 +138,10 @@ class BlockRenderer extends StatelessWidget {
           onChanged: (c) => state.updateBlockContent(block, c, notify: true),
         );
       case 'graph':
-        return GraphPlaceholderBlockWidget(label: s['graphPlaceholder']);
+        return GraphBlockWidget(
+          block: block,
+          emptyLabel: s['graphPlaceholder'],
+        );
       default:
         return Text(s.unknownBlock(block.type));
     }

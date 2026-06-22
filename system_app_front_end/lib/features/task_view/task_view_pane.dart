@@ -325,15 +325,17 @@ class _TaskGroupPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final paneAccent = accent ?? AppColors.text;
-
     return SizedBox(
       width: _paneWidth,
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: _minHeight),
         child: DecoratedBox(
-          decoration: topicTint
-              ? AppColors.topicPaneDecoration(paneAccent, isMain: isMain)
+          decoration: topicTint && accent != null
+              ? AppColors.filePaneDecoration(
+                  accent!,
+                  'tasks',
+                  isMainTopic: isMain,
+                )
               : AppColors.noteDecoration(),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),

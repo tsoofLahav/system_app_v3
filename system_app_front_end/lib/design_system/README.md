@@ -7,8 +7,8 @@ Purpose: shared visual language and reusable presentation primitives.
 The app is a personal operating system, so the interface should reduce mental load rather than ask for attention. The style is mature, calm, modern, practical, and color-supported.
 
 Surface hierarchy:
-- Canvas: quiet environmental background with a soft topic tint.
-- Files: primary working surfaces (`NoteCard`) — strongest objects on the page; not dialog glass.
+- Canvas: quiet neutral background (no topic tint).
+- Files: primary working surfaces (`NoteCard`) — topic × file-type pastel tint; strongest on `plan`, lightest on `text`.
 - Floating chrome: `+`, bottom bar segments, reorder tiles, dividers — shared `AppGlassStyle` presets.
 - Dialogs: soft glass panels via `AppGlassStyle.dialog`.
 - Sidebar: soft glass navigation; supports context switching without dominating the workspace.
@@ -20,9 +20,10 @@ All floating chrome must use a preset from [`glass_surface.dart`](glass_surface.
 
 | Preset | Use |
 |--------|-----|
-| `dialog` | Modals, `AppGlassDialog` |
-| `floating` | `+` button, bar tool segments, reorder tiles, toggle capsule |
-| `aiAccent` | Bottom-bar AI segment — cyan tint, stronger border, optional label |
+| `dialog` | Modals, `AppGlassDialog` — soft cyan frost |
+| `floating` | Reorder tiles, dividers — soft cyan frost |
+| `opaqueChrome` | Bottom bar segments, `+` button — solid white + lift shadow |
+| `aiAccent` | AI bar segment — cyan outline, `AI` label on the border |
 
 ## Spacing & density
 
@@ -49,7 +50,10 @@ Three glass segments on topic view (not one monolithic pill):
 
 ## Color & typography
 
-- Topic color is atmospheric — subtle canvas or glass tint, not loud card color.
+- **Canvas:** near-white neutral (`#FFFEFE` → `#FAFAF8`), slightly lighter than note surfaces.
+- **Main topic files:** pure white panes.
+- **Other file panes:** mid-strength topic × type fill (`text` 4.5% → `plan` 17%); thin saturated topic border.
+- **Sidebar / header:** vivid topic accent for wayfinding.
 - Text: soft charcoal; secondary text muted.
 - English: Inter; Hebrew: SF Hebrew with system fallbacks.
 - Prefer `listItemStyle` / `taskRowStyle` for dense list and task content.

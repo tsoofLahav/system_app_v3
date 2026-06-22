@@ -137,6 +137,7 @@ abstract final class FileBehaviorRegistry {
           'items': [
             {'text': ''},
           ],
+          'list_style': 'bullet',
         };
       case 'table':
         return {
@@ -146,7 +147,12 @@ abstract final class FileBehaviorRegistry {
           ],
         };
       case 'graph':
-        return {'placeholder': true};
+        return {
+          'chart_type': 'bar',
+          'title': '',
+          'labels': <String>[],
+          'values': <num>[],
+        };
       case 'task_list':
         return {};
       case 'image':

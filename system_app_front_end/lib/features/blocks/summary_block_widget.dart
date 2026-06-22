@@ -5,6 +5,7 @@ import '../../core/ai/ai_context.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_typography.dart';
 import '../../core/models/block.dart';
+import 'formatted_text_field.dart';
 
 class SummaryBlockWidget extends StatefulWidget {
   const SummaryBlockWidget({
@@ -12,6 +13,9 @@ class SummaryBlockWidget extends StatefulWidget {
     required this.block,
     required this.onChanged,
     this.hint = 'Summary...',
+    this.topicAccent,
+    this.fileType = 'doc',
+    this.isMainTopic = false,
     this.aiState,
     this.aiFileId,
   });
@@ -19,6 +23,9 @@ class SummaryBlockWidget extends StatefulWidget {
   final Block block;
   final ValueChanged<Map<String, dynamic>> onChanged;
   final String hint;
+  final Color? topicAccent;
+  final String fileType;
+  final bool isMainTopic;
   final AppState? aiState;
   final int? aiFileId;
 
@@ -57,23 +64,35 @@ class _SummaryBlockWidgetState extends State<SummaryBlockWidget> {
     );
   }
 
+  void _emit() {
+    widget.onChanged({
+      ...widget.block.content,
+      'text': _controller.text,
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final accent = widget.topicAccent ?? AppColors.text;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.noteBottom.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.noteBorder.withValues(alpha: 0.5)),
+      decoration: AppColors.summaryPaneDecoration(
+        accent,
+        widget.fileType,
+        isMainTopic: widget.isMainTopic,
       ),
-      child: TextField(
+      child: FormattedTextField(
         controller: _controller,
-        maxLines: null,
         style: AppTypography.noteBodyStyle,
-        decoration: AppTypography.noteInputDecoration(hint: widget.hint),
-        onChanged: (value) => widget.onChanged({'text': value}),
-        onTap: _reportAiFocus,
+        content: widget.block.content,
+        hintText: widget.hint,
+        maxLines: null,
+        onChanged: (_) {
+          _reportAiFocus();
+          _emit();
+        },
+        onContentChanged: widget.onChanged,
       ),
     );
   }

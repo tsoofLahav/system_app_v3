@@ -88,6 +88,7 @@ class _PaneReorderCanvasState extends State<PaneReorderCanvas> {
         tasks: _tasksForFile(file.id),
         state: widget.state,
         accent: widget.accent,
+        isMainTopic: widget.topic.isMain,
         dimmed: dimmed,
       ),
     );

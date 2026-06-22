@@ -109,6 +109,7 @@ class AppBottomBar extends StatelessWidget {
                   height: AppBottomBarMetrics.barHeight,
                   padding: _segmentPadding,
                   label: 'AI',
+                  labelOnBorder: true,
                   child: _AiToolGroup(
                     enabled: hasContext && !state.aiRunning,
                     graphEnabled:

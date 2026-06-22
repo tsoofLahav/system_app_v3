@@ -7,10 +7,10 @@ import '../../core/models/block.dart';
 import '../../core/models/task.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_typography.dart';
-import '../../design_system/glass_surface.dart';
 
 const fileReorderTileHeight = 88.0;
 const fileReorderTileMaxWidth = 360.0;
+const _tileRadius = 10.0;
 
 /// Draggable card that looks like a file pane cut off at the bottom.
 class FileReorderTile extends StatelessWidget {
@@ -21,6 +21,7 @@ class FileReorderTile extends StatelessWidget {
     required this.tasks,
     required this.state,
     required this.accent,
+    required this.isMainTopic,
     required this.dimmed,
   });
 
@@ -29,20 +30,24 @@ class FileReorderTile extends StatelessWidget {
   final List<Task> tasks;
   final AppState state;
   final Color accent;
+  final bool isMainTopic;
   final bool dimmed;
 
   @override
   Widget build(BuildContext context) {
+    final decoration = isMainTopic
+        ? AppColors.mainNoteDecoration()
+        : AppColors.filePaneDecoration(accent, file.type);
+
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 180),
       opacity: dimmed ? 0.5 : 1,
       child: MouseRegion(
         cursor: SystemMouseCursors.grab,
-        child: GlassSurface.styled(
-          style: AppGlassStyle.floating,
-          borderRadius: BorderRadius.circular(AppGlassStyle.floatingRadius),
+        child: DecoratedBox(
+          decoration: decoration,
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppGlassStyle.floatingRadius),
+            borderRadius: BorderRadius.circular(_tileRadius),
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -85,9 +90,9 @@ class FileReorderTile extends StatelessWidget {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          AppColors.noteTop.withValues(alpha: 0),
-                          AppColors.noteTop.withValues(alpha: 0.55),
-                          AppColors.noteTop.withValues(alpha: 0.88),
+                          Colors.white.withValues(alpha: 0),
+                          Colors.white.withValues(alpha: 0.55),
+                          Colors.white.withValues(alpha: 0.92),
                         ],
                         stops: const [0, 0.55, 1],
                       ),

@@ -25,8 +25,9 @@ ThemeData buildAppTheme(AppLanguage language) {
       shadowColor: Colors.black.withValues(alpha: 0.14),
       surfaceTintColor: const Color(0xFFDDF6F2).withValues(alpha: 0.18),
       textStyle: AppTypography.metaStyle.copyWith(
-        color: AppColors.text.withValues(alpha: 0.92),
-        fontSize: 12,
+        color: AppColors.text.withValues(alpha: 0.88),
+        fontSize: 11,
+        height: 1.2,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),

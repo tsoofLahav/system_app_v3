@@ -1,19 +1,20 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
-import '../../core/ai/ai_context.dart';
-import '../../core/l10n/app_strings.dart';
+import '../../core/services/api_service.dart';
 import '../../core/models/app_file.dart';
 import '../../core/models/block.dart';
 import '../../core/models/task.dart';
 import '../../core/models/topic.dart';
-import '../../core/registry/file_behavior_registry.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
 import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
 import '../../design_system/note_widgets.dart';
+import '../../features/blocks/block_context_menu.dart';
 import '../../features/blocks/block_renderer.dart';
 
 class FileSection extends StatefulWidget {
@@ -39,8 +40,6 @@ class FileSection extends StatefulWidget {
 }
 
 class _FileSectionState extends State<FileSection> {
-  final _taskController = TextEditingController();
-  final _taskFocusNode = FocusNode();
   late final TextEditingController _titleController;
 
   @override
@@ -49,7 +48,6 @@ class _FileSectionState extends State<FileSection> {
     _titleController = TextEditingController(
       text: widget.state.fileDisplayName(widget.file.name),
     );
-    _taskController.addListener(_reportTaskAiFocus);
   }
 
   @override
@@ -61,22 +59,8 @@ class _FileSectionState extends State<FileSection> {
     }
   }
 
-  void _reportTaskAiFocus() {
-    widget.state.setAiFocus(
-      AiFocus(
-        fileId: widget.file.id,
-        fullText: _taskController.text,
-        selection: _taskController.selection,
-        isTaskInput: true,
-      ),
-    );
-  }
-
   @override
   void dispose() {
-    _taskController.removeListener(_reportTaskAiFocus);
-    _taskController.dispose();
-    _taskFocusNode.dispose();
     _titleController.dispose();
     super.dispose();
   }
@@ -95,7 +79,9 @@ class _FileSectionState extends State<FileSection> {
     }
 
     final note = NoteCard(
-      accent: widget.accent,
+      topicAccent: widget.accent,
+      fileType: widget.file.type,
+      isMainTopic: topic.isMain,
       child: Padding(
         padding: AppSpacing.notePadding,
         child: Column(
@@ -157,15 +143,16 @@ class _FileSectionState extends State<FileSection> {
                     for (var i = 0; i < widget.blocks.length; i++) ...[
                       GestureDetector(
                         behavior: HitTestBehavior.translucent,
-                        onSecondaryTapDown: widget.blocks[i].type == 'table'
-                            ? null
-                            : (details) => _showBlockMenu(
-                                details.globalPosition,
-                                orderIndex: i + 1,
-                              ),
+                        onSecondaryTapDown: (details) => _showBlockMenu(
+                          details.globalPosition,
+                          orderIndex: i + 1,
+                          targetBlock: widget.blocks[i],
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.only(bottom: AppSpacing.blockGap),
                           child: BlockRenderer(
+                            topicAccent: widget.accent,
+                            isMainTopic: topic.isMain,
                             file: widget.file,
                             block: widget.blocks[i],
                             tasks: tasks,
@@ -178,28 +165,6 @@ class _FileSectionState extends State<FileSection> {
                           details.globalPosition,
                           orderIndex: i + 1,
                         ),
-                      ),
-                    ],
-                    if (FileBehaviorRegistry.showsTaskInputForFileType(
-                      widget.file.type,
-                    )) ...[
-                      TextField(
-                        controller: _taskController,
-                        focusNode: _taskFocusNode,
-                        style: AppTypography.noteBodyStyle,
-                        decoration: AppTypography.noteInputDecoration(
-                          hint: s['newTaskHint'],
-                        ),
-                        onTap: _reportTaskAiFocus,
-                        onSubmitted: (value) async {
-                          final listBlock = await widget.state
-                              .ensureTaskListBlock(widget.file);
-                          if (listBlock != null && value.trim().isNotEmpty) {
-                            await widget.state.addTask(listBlock, value);
-                            _taskController.clear();
-                            _taskFocusNode.requestFocus();
-                          }
-                        },
                       ),
                     ],
                     _FileContextArea(
@@ -258,44 +223,244 @@ class _FileSectionState extends State<FileSection> {
   Future<void> _showBlockMenu(
     Offset position, {
     required int orderIndex,
+    Block? targetBlock,
   }) async {
-    final s = widget.state.strings;
-    final options = FileBehaviorRegistry.contextMenuForFileType(
-      widget.file.type,
-    );
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final localPosition = overlay.globalToLocal(position);
-    final selected = await showMenu<String>(
+    await BlockContextMenu.show(
       context: context,
-      position: RelativeRect.fromLTRB(
-        localPosition.dx,
-        localPosition.dy,
-        overlay.size.width - localPosition.dx,
-        overlay.size.height - localPosition.dy,
+      globalPosition: position,
+      strings: widget.state.strings,
+      fileType: widget.file.type,
+      orderIndex: orderIndex,
+      targetBlock: targetBlock,
+      onAction: (action) => _handleBlockMenuAction(
+        action,
+        orderIndex: orderIndex,
+        targetBlock: targetBlock,
       ),
-      items: [
-        for (final type in options)
-          PopupMenuItem(value: type, child: Text(_blockLabel(type, s))),
-      ],
     );
-    if (selected == null) return;
-    await _insertBlock(selected, orderIndex: orderIndex);
+  }
+
+  Future<void> _handleBlockMenuAction(
+    String action, {
+    required int orderIndex,
+    Block? targetBlock,
+  }) async {
+    if (action.startsWith('insert:')) {
+      await _insertBlock(action.substring(7), orderIndex: orderIndex);
+      return;
+    }
+    final block = targetBlock;
+    if (block == null) return;
+
+    switch (action) {
+      case 'delete_block':
+        await widget.state.deleteBlock(widget.file, block);
+      case 'list:bullet':
+        await widget.state.updateBlockContent(
+          block,
+          {...block.content, 'list_style': 'bullet'},
+          notify: true,
+        );
+      case 'list:numbered':
+        await widget.state.updateBlockContent(
+          block,
+          {...block.content, 'list_style': 'numbered'},
+          notify: true,
+        );
+      case 'table:row':
+        await _addTableRow(block);
+      case 'table:column':
+        await _addTableColumn(block);
+      case 'graph:bar':
+      case 'graph:line':
+      case 'graph:pie':
+        final type = action.substring(6);
+        await widget.state.updateBlockContent(
+          block,
+          {...block.content, 'chart_type': type},
+          notify: true,
+        );
+      case 'graph:edit':
+        await _editGraphData(block);
+      case 'image:replace':
+        await _replaceImage(block);
+      case 'image:reset_width':
+        final content = Map<String, dynamic>.from(block.content);
+        content.remove('width');
+        content.remove('height');
+        await widget.state.updateBlockContent(block, content, notify: true);
+    }
+  }
+
+  Future<void> _addTableRow(Block block) async {
+    final rows = _tableRows(block.content['rows']);
+    final columnCount = rows.map((r) => r.length).fold<int>(2, (a, b) => a > b ? a : b);
+    rows.add([for (var i = 0; i < columnCount; i++) '']);
+    await widget.state.updateBlockContent(
+      block,
+      {...block.content, 'rows': rows},
+      notify: true,
+    );
+  }
+
+  Future<void> _addTableColumn(Block block) async {
+    final rows = _tableRows(block.content['rows']);
+    final next = [for (final row in rows) [...row, '']];
+    await widget.state.updateBlockContent(
+      block,
+      {...block.content, 'rows': next},
+      notify: true,
+    );
+  }
+
+  List<List<String>> _tableRows(Object? value) {
+    if (value is! List || value.isEmpty) {
+      return [
+        ['', ''],
+        ['', ''],
+      ];
+    }
+    return [
+      for (final row in value)
+        if (row is List)
+          [for (final cell in row) cell?.toString() ?? '']
+        else
+          [row.toString()],
+    ];
+  }
+
+  Future<void> _editGraphData(Block block) async {
+    final s = widget.state.strings;
+    final labelsController = TextEditingController(
+      text: ((block.content['labels'] as List?) ?? []).join(', '),
+    );
+    final valuesController = TextEditingController(
+      text: ((block.content['values'] as List?) ?? []).join(', '),
+    );
+    final titleController = TextEditingController(
+      text: block.content['title']?.toString() ?? '',
+    );
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AppGlassDialog(
+        title: Text(s['editGraph']),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s['cancel']),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(s['save']),
+          ),
+        ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: AppTypography.noteInputDecoration(hint: s['name']),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: labelsController,
+              decoration: AppTypography.noteInputDecoration(hint: 'A, B, C'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: valuesController,
+              decoration: AppTypography.noteInputDecoration(hint: '10, 20, 15'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final labels = labelsController.text
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    final values = valuesController.text
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .map((s) => double.tryParse(s) ?? 0)
+        .toList();
+    await widget.state.updateBlockContent(
+      block,
+      {
+        ...block.content,
+        'title': titleController.text.trim(),
+        'labels': labels,
+        'values': values,
+      },
+      notify: true,
+    );
+  }
+
+  Future<void> _replaceImage(Block block) async {
+    try {
+      final picked = await _pickLocalImageFile();
+      if (picked == null) return;
+      final uploaded = await widget.state.uploadImageBytes(picked.$1, picked.$2);
+      await widget.state.updateBlockContent(
+        block,
+        {
+          ...block.content,
+          'image_path': uploaded['image_path'],
+          'filename': uploaded['filename'],
+        },
+        notify: true,
+      );
+    } on ApiException catch (e) {
+      _showUploadError(e.message);
+    }
+  }
+
+  /// Opens the OS file picker after the context menu closes; returns name + bytes.
+  Future<(String, List<int>)?> _pickLocalImageFile() async {
+    // Let the popup route finish closing before opening the native picker.
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    if (!mounted) return null;
+
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+      withData: true,
+    );
+    final file = result != null && result.files.isNotEmpty
+        ? result.files.first
+        : null;
+    if (file == null || file.name.isEmpty) return null;
+
+    final bytes = file.bytes ?? await _readBytesFromPath(file.path);
+    if (bytes == null || bytes.isEmpty) return null;
+    return (file.name, bytes);
+  }
+
+  Future<List<int>?> _readBytesFromPath(String? path) async {
+    if (path == null || path.isEmpty) return null;
+    try {
+      return await File(path).readAsBytes();
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _insertBlock(String type, {required int orderIndex}) async {
     if (type == 'image') {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        withData: true,
-      );
-      final file = result?.files.first;
-      if (file?.bytes != null && file!.name.isNotEmpty) {
+      try {
+        final picked = await _pickLocalImageFile();
+        if (picked == null) return;
         await widget.state.insertImageBlock(
           widget.file,
-          file.name,
-          file.bytes!,
+          picked.$1,
+          picked.$2,
           orderIndex: orderIndex,
         );
+      } on ApiException catch (e) {
+        _showUploadError(e.message);
       }
       return;
     }
@@ -306,27 +471,11 @@ class _FileSectionState extends State<FileSection> {
     );
   }
 
-  String _blockLabel(String type, AppStrings s) {
-    switch (type) {
-      case 'text':
-        return s['addText'];
-      case 'header':
-        return s['addHeader'];
-      case 'summary':
-        return s['addSummary'];
-      case 'image':
-        return s['addImage'];
-      case 'table':
-        return s['addTable'];
-      case 'list':
-        return s['addList'];
-      case 'graph':
-        return s['addGraph'];
-      case 'task_list':
-        return s['addTaskList'];
-      default:
-        return type;
-    }
+  void _showUploadError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 }
 

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/models/block.dart';
 import '../../design_system/app_typography.dart';
+import 'connected_lines_editor.dart';
+import 'list_text_parse.dart';
 
-class PointsListBlockWidget extends StatefulWidget {
+class PointsListBlockWidget extends StatelessWidget {
   const PointsListBlockWidget({
     super.key,
     required this.block,
@@ -14,97 +17,26 @@ class PointsListBlockWidget extends StatefulWidget {
   final ValueChanged<Map<String, dynamic>> onChanged;
 
   @override
-  State<PointsListBlockWidget> createState() => _PointsListBlockWidgetState();
-}
-
-class _PointsListBlockWidgetState extends State<PointsListBlockWidget> {
-  final _focusNodes = <FocusNode>[];
-  int? _pendingFocusIndex;
-
-  @override
-  void didUpdateWidget(PointsListBlockWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _requestPendingFocus();
-  }
-
-  @override
-  void dispose() {
-    for (final node in _focusNodes) {
-      node.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final items = _itemsFrom(widget.block.content['items']);
-    _syncFocusNodes(items.length);
+    final items = _itemsFrom(block.content['items']);
+    final listStyle = block.content['list_style'] as String? ?? 'bullet';
+    final numbered = listStyle == 'numbered';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < items.length; i++)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: 12,
-                child: Text(
-                  '•',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.listItemStyle,
-                ),
-              ),
-              Expanded(
-                child: TextFormField(
-                  key: ValueKey('${widget.block.id}-$i'),
-                  focusNode: _focusNodes[i],
-                  initialValue: items[i],
-                  maxLines: 1,
-                  textInputAction: TextInputAction.next,
-                  style: AppTypography.listItemStyle,
-                  decoration: AppTypography.noteInputDecoration(),
-                  onChanged: (value) {
-                    final next = [...items];
-                    next[i] = value;
-                    widget.onChanged({
-                      ...widget.block.content,
-                      'items': _toContentItems(next),
-                    });
-                  },
-                  onFieldSubmitted: (_) {
-                    _pendingFocusIndex = i + 1;
-                    final next = [...items]..insert(i + 1, '');
-                    widget.onChanged({
-                      ...widget.block.content,
-                      'items': _toContentItems(next),
-                    });
-                  },
-                ),
-              ),
-            ],
-          ),
-      ],
+    return ConnectedLinesEditor(
+      lines: items,
+      style: AppTypography.listItemStyle,
+      gutterLabelBuilder: (index) => numbered ? '${index + 1}.' : '•',
+      onCopyAll: () {
+        Clipboard.setData(ClipboardData(text: serializeListLines(items)));
+      },
+      onLinesChanged: (lines) {
+        onChanged({
+          ...block.content,
+          'items': _toContentItems(lines),
+          'list_style': listStyle,
+        });
+      },
     );
-  }
-
-  void _syncFocusNodes(int count) {
-    while (_focusNodes.length < count) {
-      _focusNodes.add(FocusNode());
-    }
-    while (_focusNodes.length > count) {
-      _focusNodes.removeLast().dispose();
-    }
-  }
-
-  void _requestPendingFocus() {
-    final index = _pendingFocusIndex;
-    if (index == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || index >= _focusNodes.length) return;
-      _focusNodes[index].requestFocus();
-    });
-    _pendingFocusIndex = null;
   }
 
   static List<String> _itemsFrom(Object? value) {

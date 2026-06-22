@@ -5,6 +5,7 @@ import '../../core/app_state.dart';
 import '../sidebar/app_sidebar.dart';
 import '../task_view/task_view_pane.dart';
 import '../topic/topic_view.dart';
+import '../../design_system/glass_surface.dart';
 import 'app_bottom_bar.dart';
 
 class AppShell extends StatelessWidget {
@@ -40,6 +41,12 @@ class AppShell extends StatelessWidget {
                       child: state.isViewMode
                           ? TaskViewPane(state: state)
                           : TopicView(state: state),
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: const ChromeFloorShadow(),
                     ),
                     Positioned(
                       left: 0,

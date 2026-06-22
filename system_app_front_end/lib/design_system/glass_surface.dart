@@ -14,6 +14,7 @@ class GlassStyleSpec {
     this.showTopHighlight = true,
     this.elevation = 0,
     this.border,
+    this.opaqueChrome = false,
   });
 
   final double blurSigma;
@@ -22,6 +23,7 @@ class GlassStyleSpec {
   final bool showTopHighlight;
   final double elevation;
   final BoxBorder? border;
+  final bool opaqueChrome;
 }
 
 abstract final class AppGlassStyle {
@@ -35,9 +37,14 @@ abstract final class AppGlassStyle {
         width: 0.85,
       );
 
+  static BoxBorder get _opaqueChromeBorder => Border.all(
+        color: AppColors.noteBorder.withValues(alpha: 0.48),
+        width: AppColors.filePaneBorderWidth,
+      );
+
   static BoxBorder aiBorder([double alpha = 0.45]) => Border.all(
         color: AppColors.aiCyan.withValues(alpha: alpha),
-        width: 0.85,
+        width: AppColors.filePaneBorderWidth,
       );
 
   static const dialog = GlassStyleSpec(
@@ -58,13 +65,23 @@ abstract final class AppGlassStyle {
     border: _dialogBorder,
   );
 
+  /// Bottom bar segments and `+` — solid white pills with lift shadow.
+  static final opaqueChrome = GlassStyleSpec(
+    blurSigma: 0,
+    tintOpacity: 1,
+    showTopHighlight: false,
+    elevation: 0,
+    border: _opaqueChromeBorder,
+    opaqueChrome: true,
+  );
+
   static final aiAccent = GlassStyleSpec(
-    blurSigma: 24,
-    tintOpacity: 0.82,
-    tintColor: dialogTint,
-    showTopHighlight: true,
-    elevation: 5,
-    border: aiBorder(0.5),
+    blurSigma: 0,
+    tintOpacity: 1,
+    showTopHighlight: false,
+    elevation: 0,
+    border: aiBorder(0.44),
+    opaqueChrome: true,
   );
 }
 
@@ -82,6 +99,7 @@ class GlassSurface extends StatelessWidget {
     this.border,
     this.padding,
     this.elevation = 0,
+    this.opaqueChrome = false,
   });
 
   factory GlassSurface.styled({
@@ -102,6 +120,7 @@ class GlassSurface extends StatelessWidget {
       border: border ?? style.border,
       padding: padding,
       elevation: elevation ?? style.elevation,
+      opaqueChrome: style.opaqueChrome,
       child: child,
     );
   }
@@ -116,31 +135,44 @@ class GlassSurface extends StatelessWidget {
   final BoxBorder? border;
   final EdgeInsetsGeometry? padding;
   final double elevation;
+  final bool opaqueChrome;
+
+  static List<BoxShadow> get _opaqueChromeShadow => [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.11),
+          blurRadius: 20,
+          offset: const Offset(0, 5),
+        ),
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.05),
+          blurRadius: 6,
+          offset: const Offset(0, 2),
+        ),
+      ];
 
   @override
   Widget build(BuildContext context) {
     final resolved = style;
     final radius = borderRadius ?? BorderRadius.zero;
-    final highlight = Colors.white;
     final effectiveBlur = resolved?.blurSigma ?? blurSigma;
     final effectiveTintOpacity = resolved?.tintOpacity ?? tintOpacity;
     final effectiveTintColor = resolved?.tintColor ?? tintColor;
     final effectiveHighlight = resolved?.showTopHighlight ?? showTopHighlight;
     final effectiveElevation = resolved?.elevation ?? elevation;
     final effectiveBorder = resolved?.border ?? border;
-
-    Color blendTint(double alpha) {
-      final base = Colors.white.withValues(alpha: alpha);
-      if (effectiveTintColor == null) return base;
-      return Color.alphaBlend(
-        effectiveTintColor.withValues(alpha: alpha * 0.42),
-        base,
-      );
-    }
+    final useOpaqueChrome = resolved?.opaqueChrome ?? opaqueChrome;
 
     final content = padding != null
         ? Padding(padding: padding!, child: child)
         : child;
+
+    if (useOpaqueChrome) {
+      return _OpaqueChromeShell(
+        borderRadius: radius,
+        border: effectiveBorder,
+        child: content,
+      );
+    }
 
     return ClipRRect(
       borderRadius: radius,
@@ -154,31 +186,12 @@ class GlassSurface extends StatelessWidget {
           children: [
             Positioned.fill(
               child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: radius,
-                  border: effectiveBorder ??
-                      Border.all(
-                        color: highlight.withValues(alpha: 0.62),
-                        width: 0.85,
-                      ),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      blendTint(effectiveTintOpacity + 0.06),
-                      blendTint(effectiveTintOpacity - 0.02),
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: (effectiveTintColor ?? AppColors.noteShadow)
-                          .withValues(
-                        alpha: effectiveTintColor != null ? 0.1 : 0.05,
-                      ),
-                      blurRadius: 20 + effectiveElevation,
-                      offset: Offset(0, 5 + effectiveElevation * 0.5),
-                    ),
-                  ],
+                decoration: _frostedDecoration(
+                  radius: radius,
+                  tintColor: effectiveTintColor,
+                  tintOpacity: effectiveTintOpacity,
+                  border: effectiveBorder,
+                  elevation: effectiveElevation,
                 ),
               ),
             ),
@@ -208,6 +221,109 @@ class GlassSurface extends StatelessWidget {
       ),
     );
   }
+
+  static BoxDecoration _frostedDecoration({
+    required BorderRadius radius,
+    required Color? tintColor,
+    required double tintOpacity,
+    required BoxBorder? border,
+    required double elevation,
+  }) {
+    Color blendTint(double alpha) {
+      final base = Colors.white.withValues(alpha: alpha);
+      if (tintColor == null) return base;
+      return Color.alphaBlend(
+        tintColor.withValues(alpha: alpha * 0.42),
+        base,
+      );
+    }
+
+    return BoxDecoration(
+      borderRadius: radius,
+      border: border ??
+          Border.all(
+            color: Colors.white.withValues(alpha: 0.62),
+            width: 0.85,
+          ),
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          blendTint(tintOpacity + 0.06),
+          blendTint(tintOpacity - 0.02),
+        ],
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: (tintColor ?? AppColors.noteShadow).withValues(
+            alpha: tintColor != null ? 0.1 : 0.05,
+          ),
+          blurRadius: 20 + elevation,
+          offset: Offset(0, 5 + elevation * 0.5),
+        ),
+      ],
+    );
+  }
+}
+
+/// Solid white floating chrome — no backdrop blur (avoids muddy translucency).
+class _OpaqueChromeShell extends StatelessWidget {
+  const _OpaqueChromeShell({
+    required this.borderRadius,
+    required this.child,
+    this.border,
+  });
+
+  final BorderRadius borderRadius;
+  final Widget child;
+  final BoxBorder? border;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveBorder = border ?? AppGlassStyle._opaqueChromeBorder;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: borderRadius,
+        color: Colors.white,
+        border: effectiveBorder,
+        boxShadow: GlassSurface._opaqueChromeShadow,
+      ),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: child,
+      ),
+    );
+  }
+}
+
+/// Ambient shadow band at the bottom of the workspace behind floating chrome.
+class ChromeFloorShadow extends StatelessWidget {
+  const ChromeFloorShadow({super.key, this.height = 96});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: SizedBox(
+        height: height,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.transparent,
+                Colors.black.withValues(alpha: 0.035),
+                Colors.black.withValues(alpha: 0.085),
+              ],
+              stops: const [0.0, 0.42, 1.0],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Capsule segment for the bottom bar and similar floating tool groups.
@@ -219,6 +335,7 @@ class GlassBarSegment extends StatelessWidget {
     this.height,
     this.padding = const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
     this.label,
+    this.labelOnBorder = false,
   });
 
   final Widget child;
@@ -227,10 +344,14 @@ class GlassBarSegment extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final String? label;
 
+  /// When true, [label] sits on the top outline (for the AI segment).
+  final bool labelOnBorder;
+
   @override
   Widget build(BuildContext context) {
+    final resolvedStyle = style ?? AppGlassStyle.opaqueChrome;
     final segment = GlassSurface.styled(
-      style: style ?? AppGlassStyle.floating,
+      style: resolvedStyle,
       borderRadius: BorderRadius.circular(AppGlassStyle.pillRadius),
       padding: padding,
       child: height != null
@@ -240,35 +361,40 @@ class GlassBarSegment extends StatelessWidget {
 
     if (label == null) return segment;
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        segment,
-        Positioned(
-          top: -5,
-          left: 0,
-          right: 0,
-          child: Center(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: AppGlassStyle.dialogTint.withValues(alpha: 0.92),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 5),
-                child: Text(
-                  label!,
-                  style: AppTypography.metaStyle.copyWith(
-                    fontSize: 9,
-                    letterSpacing: 0.6,
-                    color: AppColors.aiCyan.withValues(alpha: 0.9),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
+    if (labelOnBorder) {
+      return Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
+        children: [
+          segment,
+          Transform.translate(
+            offset: const Offset(0, -5),
+            child: _OutlineSegmentLabel(text: label!),
           ),
-        ),
-      ],
+        ],
+      );
+    }
+
+    return segment;
+  }
+}
+
+class _OutlineSegmentLabel extends StatelessWidget {
+  const _OutlineSegmentLabel({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: AppTypography.metaStyle.copyWith(
+        fontSize: 9,
+        letterSpacing: 0.6,
+        color: AppColors.aiCyan.withValues(alpha: 0.85),
+        fontWeight: FontWeight.w500,
+        height: 1,
+      ),
     );
   }
 }
@@ -338,8 +464,7 @@ class GlassCircleButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
-      child: GlassSurface.styled(
-        style: AppGlassStyle.floating,
+      child: _OpaqueChromeShell(
         borderRadius: BorderRadius.circular(AppGlassStyle.pillRadius),
         child: Material(
           color: Colors.transparent,

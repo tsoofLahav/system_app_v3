@@ -4,6 +4,8 @@ import '../../core/app_state.dart';
 import '../../core/ai/ai_context.dart';
 import '../../design_system/app_typography.dart';
 import '../../core/models/block.dart';
+import 'block_text_focus.dart';
+import 'formatted_text_field.dart';
 
 class HeaderBlockWidget extends StatefulWidget {
   const HeaderBlockWidget({
@@ -38,6 +40,7 @@ class _HeaderBlockWidgetState extends State<HeaderBlockWidget> {
   @override
   void dispose() {
     _controller.removeListener(_reportAiFocus);
+    BlockTextFocusRegistry.unregister(_controller);
     _controller.dispose();
     super.dispose();
   }
@@ -56,6 +59,13 @@ class _HeaderBlockWidgetState extends State<HeaderBlockWidget> {
     );
   }
 
+  void _emit() {
+    widget.onChanged({
+      ...widget.block.content,
+      'text': _controller.text,
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final level = widget.block.content['level'] as int? ?? 2;
@@ -65,15 +75,16 @@ class _HeaderBlockWidgetState extends State<HeaderBlockWidget> {
       _ => AppTypography.blockHeaderStyle.copyWith(fontSize: 12),
     };
 
-    return TextField(
+    return FormattedTextField(
       controller: _controller,
       style: style,
-      decoration: AppTypography.noteInputDecoration(hint: widget.hint),
-      onChanged: (value) => widget.onChanged({
-        ...widget.block.content,
-        'text': value,
-      }),
-      onTap: _reportAiFocus,
+      content: widget.block.content,
+      hintText: widget.hint,
+      onChanged: (_) {
+        _reportAiFocus();
+        _emit();
+      },
+      onContentChanged: widget.onChanged,
     );
   }
 }

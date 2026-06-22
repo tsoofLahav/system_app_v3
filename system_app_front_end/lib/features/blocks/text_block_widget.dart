@@ -4,6 +4,8 @@ import '../../core/app_state.dart';
 import '../../core/ai/ai_context.dart';
 import '../../core/models/block.dart';
 import '../../design_system/app_typography.dart';
+import 'block_text_focus.dart';
+import 'formatted_text_field.dart';
 
 class TextBlockWidget extends StatefulWidget {
   const TextBlockWidget({
@@ -46,7 +48,9 @@ class _TextBlockWidgetState extends State<TextBlockWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.block.id != widget.block.id &&
         _controller.text != widget.block.text) {
+      _controller.removeListener(_reportAiFocus);
       _controller.text = widget.block.text;
+      _controller.addListener(_reportAiFocus);
     }
     _requestAutofocus();
   }
@@ -78,9 +82,17 @@ class _TextBlockWidgetState extends State<TextBlockWidget> {
     );
   }
 
+  void _emit() {
+    widget.onChanged({
+      ...widget.block.content,
+      'text': _controller.text,
+    });
+  }
+
   @override
   void dispose() {
     _controller.removeListener(_reportAiFocus);
+    BlockTextFocusRegistry.unregister(_controller);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -88,14 +100,18 @@ class _TextBlockWidgetState extends State<TextBlockWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    return FormattedTextField(
       controller: _controller,
       focusNode: _focusNode,
-      maxLines: null,
       style: AppTypography.noteBodyStyle,
-      decoration: AppTypography.noteInputDecoration(hint: widget.hint),
-      onChanged: (value) => widget.onChanged({'text': value}),
-      onTap: _reportAiFocus,
+      content: widget.block.content,
+      hintText: widget.hint,
+      maxLines: null,
+      onChanged: (_) {
+        _reportAiFocus();
+        _emit();
+      },
+      onContentChanged: widget.onChanged,
     );
   }
 }

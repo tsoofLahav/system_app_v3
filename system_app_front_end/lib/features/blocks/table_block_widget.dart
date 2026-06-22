@@ -3,20 +3,18 @@ import 'package:flutter/material.dart';
 import '../../core/models/block.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_typography.dart';
+import 'block_text_focus.dart';
+import 'formatted_text_field.dart';
 
 class TableBlockWidget extends StatelessWidget {
   const TableBlockWidget({
     super.key,
     required this.block,
     required this.onChanged,
-    required this.addRowLabel,
-    required this.addColumnLabel,
   });
 
   final Block block;
   final ValueChanged<Map<String, dynamic>> onChanged;
-  final String addRowLabel;
-  final String addColumnLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -29,25 +27,19 @@ class TableBlockWidget extends StatelessWidget {
         [...row, for (var i = row.length; i < columnCount; i++) ''],
     ];
 
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onSecondaryTapDown: (details) => _showTableMenu(
-        context,
-        details.globalPosition,
-        paddedRows,
-        columnCount,
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.noteBorder),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            children: [
-              for (var rowIndex = 0; rowIndex < paddedRows.length; rowIndex++)
-                Row(
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.noteBorder),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          children: [
+            for (var rowIndex = 0; rowIndex < paddedRows.length; rowIndex++)
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     for (
                       var columnIndex = 0;
@@ -65,44 +57,11 @@ class TableBlockWidget extends StatelessWidget {
                       ),
                   ],
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
-  }
-
-  Future<void> _showTableMenu(
-    BuildContext context,
-    Offset position,
-    List<List<String>> rows,
-    int columnCount,
-  ) async {
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final localPosition = overlay.globalToLocal(position);
-    final selected = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        localPosition.dx,
-        localPosition.dy,
-        overlay.size.width - localPosition.dx,
-        overlay.size.height - localPosition.dy,
-      ),
-      items: [
-        PopupMenuItem(value: 'row', child: Text(addRowLabel)),
-        PopupMenuItem(value: 'column', child: Text(addColumnLabel)),
-      ],
-    );
-    if (selected == 'row') {
-      final next = _copyRows(rows)
-        ..add([for (var i = 0; i < columnCount; i++) '']);
-      onChanged({...block.content, 'rows': next});
-    } else if (selected == 'column') {
-      final next = [
-        for (final row in rows) [...row, ''],
-      ];
-      onChanged({...block.content, 'rows': next});
-    }
   }
 
   static List<List<String>> _normalizedRows(Object? value) {
@@ -128,30 +87,68 @@ class TableBlockWidget extends StatelessWidget {
   ];
 }
 
-class _TableCell extends StatelessWidget {
+class _TableCell extends StatefulWidget {
   const _TableCell({super.key, required this.text, required this.onChanged});
 
   final String text;
   final ValueChanged<String> onChanged;
 
   @override
+  State<_TableCell> createState() => _TableCellState();
+}
+
+class _TableCellState extends State<_TableCell> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.text);
+    _controller.addListener(_registerFocus);
+  }
+
+  @override
+  void didUpdateWidget(_TableCell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text && _controller.text != widget.text) {
+      _controller.text = widget.text;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_registerFocus);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _registerFocus() {
+    BlockTextFocusRegistry.register(
+      controller: _controller,
+      changed: () => widget.onChanged(_controller.text),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       width: 120,
-      constraints: const BoxConstraints(minHeight: 38),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: const BoxDecoration(
         border: Border(
           right: BorderSide(color: AppColors.noteBorder),
           bottom: BorderSide(color: AppColors.noteBorder),
         ),
       ),
-      child: TextFormField(
-        initialValue: text,
-        maxLines: null,
-        style: AppTypography.noteBodyStyle,
-        decoration: AppTypography.noteInputDecoration(),
-        onChanged: onChanged,
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: FormattedTextField(
+          controller: _controller,
+          style: AppTypography.noteBodyStyle,
+          maxLines: null,
+          minLines: 1,
+          onChanged: widget.onChanged,
+        ),
       ),
     );
   }
