@@ -13,7 +13,7 @@ Any file may contain any block type. This keeps manual editing and existing AI t
 | `text` | Free writing and notes | `text` | `text` | `image`, `summary`, `header`, `text` |
 | `overview` | Overview/recap file | `summary`, `task_list`, `table`, `text` | `text` | `header`, `text`, `summary`, `task_list`, `table`, `list` |
 | `plan` | Planning and steps | `text`, `list`, `text` | `text` | `header`, `text`, `summary`, `list`, `image` |
-| `tasks` | Dedicated task entry | `task_list` | none | `header`, `task_list` |
+| `tasks` | Dedicated task entry | `task_list` | none (edit in `task_list`) | `header`, `task_list` |
 | `doc` | Documentation | `table`, `text` | `text` | `header`, `text`, `summary`, `graph` |
 
 The file name is the visible editable header. Profiles do not seed an extra `header` block by default.
@@ -30,6 +30,9 @@ Topic defaults:
 - Files with a text default keep an empty text block at the end.
 - Right-click menus open at the pointer.
 - Lists and task entry continue by pressing Enter, not by visible "add" buttons.
+- **`list` and `task_list` use one connected multiline editor** (`ConnectedLinesEditor`): each newline is one item/task; soft wrap stays on the same item. See [`lib/features/blocks/README.md`](../../lib/features/blocks/README.md).
+- Task files edit all tasks inside the `task_list` block. There is no separate bottom task input. Empty lines are real tasks (empty title) so Enter can open a new row without the cursor jumping back.
+- Individual `task` blocks remain in the file for order/IDs but are hidden when a `task_list` is present.
 - Table row/column actions live in a right-click menu on the table.
 - Right-click inside a table opens only the table menu; right-click outside a table opens the file block menu.
 - AI tools may insert any block type anywhere
@@ -41,8 +44,8 @@ The corner menu contains file actions only: delete file, show on main, and move 
 - `header`: optional inner section block; the file name is the primary header.
 - `text`: free writing.
 - `summary`: standalone summary text, manually written or AI-filled.
-- `task_list`: task entry anchor for task files and recap files.
-- `task`: canonical task reference block.
+- `task_list`: unified task editor anchor; renders all task titles for the file in one connected document.
+- `task`: canonical task reference block (order + `task_id`); hidden in UI when `task_list` exists in the same file.
 - `image`: uploaded or generated visual block.
 - `table`: editable grid block for documentation and recap structures.
 - `graph`: placeholder/rendering target for AI graph insertion.

@@ -266,7 +266,8 @@ Successful DELETE returns `204` with empty body.
 | PATCH | `/tasks/<id>` | Partial update |
 | DELETE | `/tasks/<id>` | Delete |
 
-**POST body** (required: `title`):
+**POST body** (required: `title` field; value may be `""` for a blank task row):
+
 ```json
 {
   "block_id": 1,
@@ -275,6 +276,8 @@ Successful DELETE returns `204` with empty body.
   "due_date": "2026-06-15T09:00:00"
 }
 ```
+
+Empty string titles are valid. The field must be present; omitting `title` returns 400.
 
 **PATCH body** — any subset of: `block_id`, `title`, `status`, `due_date`
 

@@ -36,6 +36,8 @@ The file name is the visible editable header. Profiles do not seed an extra `hea
 | `tasks` | Dedicated task entry | `task_list` | none | `header`, `task_list` |
 | `doc` | Documentation | `table` | `text` | `header`, `text`, `summary`, `graph` |
 
+Task-file editing happens entirely in the `task_list` block (connected lines). No trailing input row.
+
 Topic defaults:
 - Projects: `overview`, `text`, `tasks`
 - Processes: `overview`, `plan`, `tasks`, `doc`
