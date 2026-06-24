@@ -6,6 +6,9 @@ import '../../design_system/app_typography.dart';
 import '../../core/models/block.dart';
 import 'block_text_focus.dart';
 import 'formatted_text_field.dart';
+import 'rich_text_block_sync.dart';
+import 'span_text_editing_controller.dart';
+import 'text_formatting.dart';
 
 class HeaderBlockWidget extends StatefulWidget {
   const HeaderBlockWidget({
@@ -28,13 +31,33 @@ class HeaderBlockWidget extends StatefulWidget {
 }
 
 class _HeaderBlockWidgetState extends State<HeaderBlockWidget> {
-  late final TextEditingController _controller;
+  late final SpanTextEditingController _controller;
+  final _focusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.block.text);
+    final rich = richContentFromBlock(widget.block.content);
+    _controller = SpanTextEditingController(
+      text: rich.text,
+      spans: rich.spans,
+    );
     _controller.addListener(_reportAiFocus);
+  }
+
+  @override
+  void didUpdateWidget(HeaderBlockWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_focusNode.hasFocus ||
+        BlockTextFocusRegistry.isInMenuSession ||
+        BlockTextFocusRegistry.activeController == _controller) {
+      return;
+    }
+    syncRichControllerFromBlockIfIdle(
+      focusNode: _focusNode,
+      blockContent: widget.block.content,
+      controller: _controller,
+    );
   }
 
   @override
@@ -42,6 +65,7 @@ class _HeaderBlockWidgetState extends State<HeaderBlockWidget> {
     _controller.removeListener(_reportAiFocus);
     BlockTextFocusRegistry.unregister(_controller);
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -62,7 +86,7 @@ class _HeaderBlockWidgetState extends State<HeaderBlockWidget> {
   void _emit() {
     widget.onChanged({
       ...widget.block.content,
-      'text': _controller.text,
+      ..._controller.contentPatch(_controller.text),
     });
   }
 
@@ -77,14 +101,14 @@ class _HeaderBlockWidgetState extends State<HeaderBlockWidget> {
 
     return FormattedTextField(
       controller: _controller,
+      focusNode: _focusNode,
       style: style,
-      content: widget.block.content,
+      blockContent: widget.block.content,
       hintText: widget.hint,
       onChanged: (_) {
         _reportAiFocus();
         _emit();
       },
-      onContentChanged: widget.onChanged,
     );
   }
 }

@@ -1,8 +1,12 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import 'block_text_focus.dart';
-import 'text_formatting.dart';
+import 'format_range.dart';
+import 'frozen_selection_painter.dart';
+import 'span_text_editing_controller.dart';
 
 /// Text field that registers for block context-menu clipboard/format actions.
 class FormattedTextField extends StatefulWidget {
@@ -10,7 +14,7 @@ class FormattedTextField extends StatefulWidget {
     super.key,
     required this.controller,
     required this.style,
-    this.content,
+    this.blockContent,
     this.hintText,
     this.maxLines,
     this.minLines = 1,
@@ -21,14 +25,13 @@ class FormattedTextField extends StatefulWidget {
     this.onPaste,
     this.textInputAction,
     this.focusNode,
-    this.onContentChanged,
     this.onEnter,
     this.stripNewlines = false,
   });
 
   final TextEditingController controller;
   final TextStyle style;
-  final Map<String, dynamic>? content;
+  final Map<String, dynamic>? blockContent;
   final String? hintText;
   final int? maxLines;
   final int minLines;
@@ -39,7 +42,6 @@ class FormattedTextField extends StatefulWidget {
   final Future<void> Function(String text)? onPaste;
   final TextInputAction? textInputAction;
   final FocusNode? focusNode;
-  final ValueChanged<Map<String, dynamic>>? onContentChanged;
   final VoidCallback? onEnter;
   final bool stripNewlines;
 
@@ -78,17 +80,27 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       _startListeningKeys();
       BlockTextFocusRegistry.register(
         controller: widget.controller,
-        changed: () => widget.onChanged?.call(widget.controller.text),
-        contentChanged: widget.onContentChanged,
-        content: {
-          ...?widget.content,
-          'text': widget.controller.text,
-        },
+        changed: _notifyChanged,
+        blockContent: widget.blockContent,
+        fontSize: widget.style.fontSize ?? 12.5,
+        focusNode: _focusNode,
       );
     } else {
       _stopListeningKeys();
+      if (BlockTextFocusRegistry.isInMenuSession &&
+          BlockTextFocusRegistry.activeController == widget.controller) {
+        return;
+      }
       BlockTextFocusRegistry.unregister(widget.controller);
     }
+  }
+
+  void _notifyChanged() {
+    final controller = widget.controller;
+    if (controller is SpanTextEditingController) {
+      controller.ensureSpansMatchText();
+    }
+    widget.onChanged?.call(controller.text);
   }
 
   void _startListeningKeys() {
@@ -137,38 +149,168 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
 
   @override
   Widget build(BuildContext context) {
-    final style = applyBlockTextStyle(widget.style, widget.content);
+    final style = widget.style;
     final formatters = <TextInputFormatter>[
       if (widget.onEnter != null) _SubmitOnEnterFormatter(widget.onEnter!),
       if (widget.stripNewlines) _StripNewlinesFormatter(),
     ];
 
-    return TextField(
-      controller: widget.controller,
-      focusNode: _focusNode,
-      style: style,
-      maxLines: widget.maxLines,
-      minLines: widget.minLines,
-      decoration: InputDecoration(
-        isDense: true,
-        border: InputBorder.none,
-        hintText: widget.hintText,
-        hintStyle: style.copyWith(color: style.color?.withValues(alpha: 0.35)),
-        contentPadding: EdgeInsets.zero,
-      ),
-      textInputAction:
-          widget.onEnter != null ? TextInputAction.none : widget.textInputAction,
-      onChanged: widget.onChanged,
-      onSubmitted: widget.onSubmitted,
-      onTap: () => _onFocusChanged(),
-      inputFormatters: formatters.isEmpty ? null : formatters,
-      contextMenuBuilder: (context, editableTextState) {
-        return AdaptiveTextSelectionToolbar.editableText(
-          editableTextState: editableTextState,
-        );
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (event) {
+        if (event.kind == PointerDeviceKind.mouse &&
+            event.buttons == kSecondaryMouseButton &&
+            (_focusNode.hasFocus ||
+                BlockTextFocusRegistry.activeController ==
+                    widget.controller)) {
+          FormatRange.capturePending(
+            widget.controller.text,
+            widget.controller.selection,
+          );
+        }
       },
+      child: ValueListenableBuilder<int>(
+        valueListenable: BlockTextFocusRegistry.menuSessionListenable,
+        builder: (context, _, child) {
+          final frozenRange = BlockTextFocusRegistry.frozenFormatRange;
+          final showOverlay = BlockTextFocusRegistry.isInMenuSession &&
+              BlockTextFocusRegistry.activeController == widget.controller &&
+              frozenRange != null &&
+              frozenRange.isValid;
+
+          if (!showOverlay) return child!;
+
+          final theme = Theme.of(context);
+          final selectionColor = theme.textSelectionTheme.selectionColor ??
+              theme.colorScheme.primary.withValues(alpha: 0.3);
+
+          return _FrozenSelectionOverlay(
+            selection: frozenRange.selection,
+            selectionColor: selectionColor,
+            child: child!,
+          );
+        },
+        child: TextField(
+          controller: widget.controller,
+          focusNode: _focusNode,
+          style: style,
+          maxLines: widget.maxLines,
+          minLines: widget.minLines,
+          decoration: InputDecoration(
+            isDense: true,
+            border: InputBorder.none,
+            hintText: widget.hintText,
+            hintStyle:
+                style.copyWith(color: style.color?.withValues(alpha: 0.35)),
+            contentPadding: EdgeInsets.zero,
+          ),
+          textInputAction: widget.onEnter != null
+              ? TextInputAction.none
+              : widget.textInputAction,
+          onChanged: (_) => _notifyChanged(),
+          onSubmitted: widget.onSubmitted,
+          onTap: () => _onFocusChanged(),
+          inputFormatters: formatters.isEmpty ? null : formatters,
+          contextMenuBuilder: (context, editableTextState) {
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
     );
   }
+}
+
+/// Highlights the frozen range using [RenderEditable] selection boxes.
+class _FrozenSelectionOverlay extends StatefulWidget {
+  const _FrozenSelectionOverlay({
+    required this.selection,
+    required this.selectionColor,
+    required this.child,
+  });
+
+  final TextSelection selection;
+  final Color selectionColor;
+  final Widget child;
+
+  @override
+  State<_FrozenSelectionOverlay> createState() => _FrozenSelectionOverlayState();
+}
+
+class _FrozenSelectionOverlayState extends State<_FrozenSelectionOverlay> {
+  List<Rect> _rects = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    BlockTextFocusRegistry.menuSessionListenable.addListener(_scheduleMeasure);
+  }
+
+  @override
+  void dispose() {
+    BlockTextFocusRegistry.menuSessionListenable.removeListener(_scheduleMeasure);
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _FrozenSelectionOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selection != widget.selection) {
+      _scheduleMeasure();
+    }
+  }
+
+  void _scheduleMeasure() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _measure();
+    });
+  }
+
+  void _measure() {
+    final host = context.findRenderObject() as RenderBox?;
+    final editable = host == null ? null : _findRenderEditable(host);
+    if (editable == null || host == null || !host.hasSize) {
+      if (_rects.isNotEmpty) setState(() => _rects = const []);
+      return;
+    }
+
+    if (!widget.selection.isValid || widget.selection.isCollapsed) {
+      if (_rects.isNotEmpty) setState(() => _rects = const []);
+      return;
+    }
+
+    final transform = editable.getTransformTo(host);
+    final boxes = editable.getBoxesForSelection(widget.selection);
+    final next = <Rect>[
+      for (final box in boxes)
+        MatrixUtils.transformRect(transform, box.toRect()),
+    ];
+
+    if (!FrozenSelectionPainter.rectsEqual(_rects, next)) {
+      setState(() => _rects = next);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _scheduleMeasure();
+    return CustomPaint(
+      foregroundPainter: FrozenSelectionPainter(
+        rects: _rects,
+        selectionColor: widget.selectionColor,
+      ),
+      child: widget.child,
+    );
+  }
+}
+
+RenderEditable? _findRenderEditable(RenderObject root) {
+  if (root is RenderEditable) return root;
+  RenderEditable? found;
+  root.visitChildren((child) {
+    found ??= _findRenderEditable(child);
+  });
+  return found;
 }
 
 /// Enter creates a new list/task row instead of a soft line break.

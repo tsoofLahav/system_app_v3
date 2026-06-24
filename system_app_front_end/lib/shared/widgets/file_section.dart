@@ -12,6 +12,7 @@ import '../../core/models/topic.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
 import '../../design_system/app_typography.dart';
+import '../../features/blocks/graph_content.dart';
 import '../../design_system/glass_surface.dart';
 import '../../design_system/note_widgets.dart';
 import '../../features/blocks/block_context_menu.dart';
@@ -280,8 +281,20 @@ class _FileSectionState extends State<FileSection> {
           {...block.content, 'chart_type': type},
           notify: true,
         );
-      case 'graph:edit':
-        await _editGraphData(block);
+      case 'graph:add_variable':
+        await _addGraphVariable(block);
+      case 'graph:remove_variable':
+        await _removeGraphVariable(block);
+      case 'graph:colors':
+        await widget.state.updateBlockContent(
+          block,
+          {
+            ...block.content,
+            'palette_index': nextGraphPaletteIndex(block.content),
+            'colors': null,
+          },
+          notify: true,
+        );
       case 'image:replace':
         await _replaceImage(block);
       case 'image:reset_width':
@@ -329,72 +342,35 @@ class _FileSectionState extends State<FileSection> {
     ];
   }
 
-  Future<void> _editGraphData(Block block) async {
-    final s = widget.state.strings;
-    final labelsController = TextEditingController(
-      text: ((block.content['labels'] as List?) ?? []).join(', '),
-    );
-    final valuesController = TextEditingController(
-      text: ((block.content['values'] as List?) ?? []).join(', '),
-    );
-    final titleController = TextEditingController(
-      text: block.content['title']?.toString() ?? '',
-    );
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AppGlassDialog(
-        title: Text(s['editGraph']),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(s['cancel']),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(s['save']),
-          ),
-        ],
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              decoration: AppTypography.noteInputDecoration(hint: s['name']),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: labelsController,
-              decoration: AppTypography.noteInputDecoration(hint: 'A, B, C'),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: valuesController,
-              decoration: AppTypography.noteInputDecoration(hint: '10, 20, 15'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (ok != true) return;
-    final labels = labelsController.text
-        .split(',')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
-    final values = valuesController.text
-        .split(',')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .map((s) => double.tryParse(s) ?? 0)
-        .toList();
+  Future<void> _addGraphVariable(Block block) async {
+    final labels = graphLabels(block.content);
+    final values = graphValues(block.content, labels.length);
+    final nextLabels = [...labels, nextGraphLabel(labels)];
+    final nextValues = [...values, 0.0];
     await widget.state.updateBlockContent(
       block,
-      {
-        ...block.content,
-        'title': titleController.text.trim(),
-        'labels': labels,
-        'values': values,
-      },
+      graphContentWithColumns(
+        base: block.content,
+        labels: nextLabels,
+        values: nextValues,
+      ),
+      notify: true,
+    );
+  }
+
+  Future<void> _removeGraphVariable(Block block) async {
+    final labels = graphLabels(block.content);
+    if (labels.length <= 1) return;
+    final values = graphValues(block.content, labels.length);
+    final nextLabels = labels.sublist(0, labels.length - 1);
+    final nextValues = values.sublist(0, values.length - 1);
+    await widget.state.updateBlockContent(
+      block,
+      graphContentWithColumns(
+        base: block.content,
+        labels: nextLabels,
+        values: nextValues,
+      ),
       notify: true,
     );
   }

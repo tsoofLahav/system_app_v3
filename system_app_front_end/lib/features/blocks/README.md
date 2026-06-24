@@ -38,22 +38,38 @@ What this folder owns:
 ### Other block types
 
 - `header` — optional inner section; file name is the primary header.
-- `text` / `summary` — `{ "text": string }`; single-field editors (`text_block_widget.dart`, etc.).
+- `text` / `summary` / `header` — inline rich text (`text` + `spans`); see [RICH_TEXT.md](RICH_TEXT.md).
 - `checklist` — per-row fields today (not yet on connected-lines model).
 - `image`, `table`, `graph` — see respective widgets.
+
+### Rich text (`text`, `summary`, `header`)
+
+Inline bold / italic / underline / size on marked text or the current paragraph (right-click format menu).
+
+| File | Role |
+|---|---|
+| `span_text_editing_controller.dart` | `TextEditingController` + span runs while editing |
+| `text_formatting.dart` | Span math, `applyActionToMark`, `TextSpanBuilder` |
+| `format_range.dart` | Selection or paragraph range; frozen at menu open |
+| `block_text_focus.dart` | Active field, frozen range, clipboard/format actions |
+| `formatted_text_field.dart` | `TextField` wrapper + menu selection overlay |
+| `rich_text_block_sync.dart` | Idle-only sync from block → controller |
+
+**Invariants and regression checklist:** [RICH_TEXT.md](RICH_TEXT.md). Run `flutter test test/span_shift_test.dart` after changes.
 
 ## Common block types (quick reference)
 
 | type | Content shape (main fields) |
 |---|---|
-| `text` | `{ "text": string }` |
-| `summary` | `{ "text": string }` |
+| `text` | `{ "text": string, "spans"?: [...] }` |
+| `summary` | `{ "text": string, "spans"?: [...] }` |
+| `header` | `{ "text": string, "spans"?: [...] }` |
 | `list` | `{ "items": [{ "text" }], "list_style" }` |
 | `task_list` | anchor block; tasks live in `tasks` table |
 | `task` | `{ "task_id": number }` |
 | `table` | `{ "rows": [[string]] }` |
 | `image` | `{ "image_path", "filename" }` |
-| `graph` | chart metadata for `graph_block_widget.dart` |
+| `graph` | `{ chart_type, labels[], values[], palette_index }` — default columns A/B/C; edit values in grid below chart |
 
 Inputs and dependencies:
 - Block payloads and related tasks from `AppState` topic detail.

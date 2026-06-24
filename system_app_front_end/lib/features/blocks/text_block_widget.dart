@@ -6,6 +6,9 @@ import '../../core/models/block.dart';
 import '../../design_system/app_typography.dart';
 import 'block_text_focus.dart';
 import 'formatted_text_field.dart';
+import 'rich_text_block_sync.dart';
+import 'span_text_editing_controller.dart';
+import 'text_formatting.dart';
 
 class TextBlockWidget extends StatefulWidget {
   const TextBlockWidget({
@@ -32,13 +35,17 @@ class TextBlockWidget extends StatefulWidget {
 }
 
 class _TextBlockWidgetState extends State<TextBlockWidget> {
-  late final TextEditingController _controller;
+  late final SpanTextEditingController _controller;
   final _focusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.block.text);
+    final rich = richContentFromBlock(widget.block.content);
+    _controller = SpanTextEditingController(
+      text: rich.text,
+      spans: rich.spans,
+    );
     _controller.addListener(_reportAiFocus);
     _requestAutofocus();
   }
@@ -46,12 +53,16 @@ class _TextBlockWidgetState extends State<TextBlockWidget> {
   @override
   void didUpdateWidget(TextBlockWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.block.id != widget.block.id &&
-        _controller.text != widget.block.text) {
-      _controller.removeListener(_reportAiFocus);
-      _controller.text = widget.block.text;
-      _controller.addListener(_reportAiFocus);
+    if (_focusNode.hasFocus ||
+        BlockTextFocusRegistry.isInMenuSession ||
+        BlockTextFocusRegistry.activeController == _controller) {
+      return;
     }
+    syncRichControllerFromBlockIfIdle(
+      focusNode: _focusNode,
+      blockContent: widget.block.content,
+      controller: _controller,
+    );
     _requestAutofocus();
   }
 
@@ -85,7 +96,7 @@ class _TextBlockWidgetState extends State<TextBlockWidget> {
   void _emit() {
     widget.onChanged({
       ...widget.block.content,
-      'text': _controller.text,
+      ..._controller.contentPatch(_controller.text),
     });
   }
 
@@ -104,14 +115,13 @@ class _TextBlockWidgetState extends State<TextBlockWidget> {
       controller: _controller,
       focusNode: _focusNode,
       style: AppTypography.noteBodyStyle,
-      content: widget.block.content,
+      blockContent: widget.block.content,
       hintText: widget.hint,
       maxLines: null,
       onChanged: (_) {
         _reportAiFocus();
         _emit();
       },
-      onContentChanged: widget.onChanged,
     );
   }
 }

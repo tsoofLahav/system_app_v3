@@ -5,6 +5,7 @@ import '../../core/models/block.dart';
 import '../../core/registry/file_behavior_registry.dart';
 import '../../shared/widgets/app_context_menu.dart';
 import 'block_text_focus.dart';
+import 'format_range.dart';
 
 typedef BlockMenuHandler = Future<void> Function(String action);
 
@@ -19,31 +20,37 @@ class BlockContextMenu {
     required int orderIndex,
     Block? targetBlock,
     BlockMenuHandler? onAction,
-  }) {
-    final entries = <AppContextMenuEntry>[
-      for (final type in FileBehaviorRegistry.contextMenuForFileType(fileType))
-        AppContextMenuItem(
-          value: 'insert:$type',
-          label: _insertLabel(type, strings),
-        ),
-    ];
-
-    if (targetBlock != null) {
-      entries.add(const AppContextMenuDivider());
-      entries.addAll(_blockActions(targetBlock, strings));
+  }) async {
+    final controller = BlockTextFocusRegistry.activeController;
+    if (controller != null) {
+      FormatRange.capturePending(controller.text, controller.selection);
     }
+    BlockTextFocusRegistry.openMenuSession();
+    try {
+      final entries = <AppContextMenuEntry>[
+        for (final type in FileBehaviorRegistry.contextMenuForFileType(fileType))
+          AppContextMenuItem(
+            value: 'insert:$type',
+            label: _insertLabel(type, strings),
+          ),
+      ];
 
-    if (BlockTextFocusRegistry.hasFocus) {
-      entries
-        ..add(const AppContextMenuDivider())
-        ..addAll(_textActions(strings));
-    }
+      if (targetBlock != null) {
+        entries.add(const AppContextMenuDivider());
+        entries.addAll(_blockActions(targetBlock, strings));
+      }
 
-    return AppContextMenu.show(
-      context: context,
-      globalPosition: globalPosition,
-      entries: entries,
-    ).then((value) async {
+      if (BlockTextFocusRegistry.hasFocus) {
+        entries
+          ..add(const AppContextMenuDivider())
+          ..addAll(_textActions(strings));
+      }
+
+      final value = await AppContextMenu.show(
+        context: context,
+        globalPosition: globalPosition,
+        entries: entries,
+      );
       if (value == null) return null;
       if (value.startsWith('text:')) {
         await _handleTextAction(value);
@@ -51,7 +58,9 @@ class BlockContextMenu {
       }
       await onAction?.call(value);
       return value;
-    });
+    } finally {
+      BlockTextFocusRegistry.closeMenuSession();
+    }
   }
 
   static List<AppContextMenuEntry> _blockActions(
@@ -87,10 +96,23 @@ class BlockContextMenu {
         ]);
       case 'graph':
         items.addAll([
+          AppContextMenuItem(
+            value: 'graph:add_variable',
+            label: strings['graphAddVariable'],
+          ),
+          AppContextMenuItem(
+            value: 'graph:remove_variable',
+            label: strings['graphRemoveVariable'],
+          ),
+          const AppContextMenuDivider(),
+          AppContextMenuItem(
+            value: 'graph:colors',
+            label: strings['graphChangeColors'],
+          ),
+          const AppContextMenuDivider(),
           AppContextMenuItem(value: 'graph:bar', label: strings['graphBar']),
           AppContextMenuItem(value: 'graph:line', label: strings['graphLine']),
           AppContextMenuItem(value: 'graph:pie', label: strings['graphPie']),
-          AppContextMenuItem(value: 'graph:edit', label: strings['editGraph']),
         ]);
       case 'image':
         items.addAll([
@@ -132,35 +154,8 @@ class BlockContextMenu {
       case 'text:underline':
       case 'text:size_up':
       case 'text:size_down':
-        _applyTextStyleToggle(value);
+        BlockTextFocusRegistry.applyTextFormat(value);
     }
-  }
-
-  static void _applyTextStyleToggle(String action) {
-    final content = BlockTextFocusRegistry.activeContent;
-    final onContent = BlockTextFocusRegistry.onContentChanged;
-    final controller = BlockTextFocusRegistry.activeController;
-    if (content == null || onContent == null) return;
-    final style = Map<String, dynamic>.from(
-      content['text_style'] as Map<String, dynamic>? ?? {},
-    );
-    switch (action) {
-      case 'text:bold':
-        style['bold'] = !(style['bold'] as bool? ?? false);
-      case 'text:italic':
-        style['italic'] = !(style['italic'] as bool? ?? false);
-      case 'text:underline':
-        style['underline'] = !(style['underline'] as bool? ?? false);
-      case 'text:size_up':
-        style['size'] = ((style['size'] as num?)?.toDouble() ?? 13) + 1;
-      case 'text:size_down':
-        style['size'] = ((style['size'] as num?)?.toDouble() ?? 13) - 1;
-    }
-    if ((style['size'] as num?) != null && (style['size'] as num) < 10) {
-      style['size'] = 10;
-    }
-    final text = controller?.text ?? content['text']?.toString() ?? '';
-    onContent({...content, 'text': text, 'text_style': style});
   }
 
   static String _insertLabel(String type, AppStrings s) {

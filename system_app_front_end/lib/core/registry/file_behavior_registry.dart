@@ -150,8 +150,9 @@ abstract final class FileBehaviorRegistry {
         return {
           'chart_type': 'bar',
           'title': '',
-          'labels': <String>[],
-          'values': <num>[],
+          'labels': ['A', 'B', 'C'],
+          'values': <double>[0, 0, 0],
+          'palette_index': 0,
         };
       case 'task_list':
         return {};

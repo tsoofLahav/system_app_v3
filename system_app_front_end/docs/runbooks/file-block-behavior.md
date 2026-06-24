@@ -35,6 +35,7 @@ Topic defaults:
 - Individual `task` blocks remain in the file for order/IDs but are hidden when a `task_list` is present.
 - Table row/column actions live in a right-click menu on the table.
 - Right-click inside a table opens only the table menu; right-click outside a table opens the file block menu.
+- Right-click inside a text/header/summary block: format (bold, size, etc.) applies to marked text or the current paragraph; selection stays visible via a paint-only overlay. See [RICH_TEXT.md](../../lib/features/blocks/RICH_TEXT.md).
 - AI tools may insert any block type anywhere
 
 The corner menu contains file actions only: delete file, show on main, and move to additional files.
@@ -42,13 +43,13 @@ The corner menu contains file actions only: delete file, show on main, and move 
 ## Block Taxonomy
 
 - `header`: optional inner section block; the file name is the primary header.
-- `text`: free writing.
-- `summary`: standalone summary text, manually written or AI-filled.
+- `text`: free writing; optional inline `spans` for bold/italic/underline/size.
+- `summary`: standalone summary text; same rich-text model as `text`.
 - `task_list`: unified task editor anchor; renders all task titles for the file in one connected document.
 - `task`: canonical task reference block (order + `task_id`); hidden in UI when `task_list` exists in the same file.
 - `image`: uploaded or generated visual block.
 - `table`: editable grid block for documentation and recap structures.
-- `graph`: placeholder/rendering target for AI graph insertion.
+- `graph`: bar/line/pie chart with A/B/C default columns, editable name/value grid; right-click to add/remove variables, change colors, or switch chart type.
 - `list`: structured points or numbered list block.
 - `measurement`: specialized measured value block.
 

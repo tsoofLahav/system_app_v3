@@ -141,6 +141,7 @@ class BlockRenderer extends StatelessWidget {
         return GraphBlockWidget(
           block: block,
           emptyLabel: s['graphPlaceholder'],
+          onChanged: (c) => state.updateBlockContent(block, c, notify: true),
         );
       default:
         return Text(s.unknownBlock(block.type));
