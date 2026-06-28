@@ -36,11 +36,13 @@ The file name is the visible editable header. Profiles do not seed an extra `hea
 | `plan` | Planning and steps | `text`, `list` | `text` | `header`, `text`, `summary`, `list`, `image` |
 | `tasks` | Dedicated task entry | `task_list` | none | `header`, `task_list` |
 | `doc` | Documentation | `table` | `text` | `header`, `text`, `summary`, `graph` |
+| `board` | Image canvas / mood board | `board` (items with x/y/width/height) | none | none |
 
 Task-file editing happens entirely in the `task_list` block (connected lines). No trailing input row.
+Board files store positioned images in one `board` block (`content.items[]` with `image_path`, `x`, `y`, `width`, `height`, `z_index`).
 
 Topic defaults:
-- **Main topic:** `allFileTypes` — Text, Recap, and Plan are main by default; Tasks and Documentation are additional. Daily (`main`) is always main.
+- **Main topic:** `allFileTypes` — Text, Recap, and Plan are main by default; Tasks, Documentation, and Board are additional. Daily (`main`) is always main.
 - Projects: `overview`, `text`, `tasks`
 - Processes: `overview`, `plan`, `tasks`, `doc`
 - Areas: `tasks`, `doc`

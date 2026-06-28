@@ -41,6 +41,7 @@ What this folder owns:
 - `text` / `summary` / `header` — inline rich text (`text` + `spans`); see [RICH_TEXT.md](RICH_TEXT.md).
 - `checklist` — per-row fields today (not yet on connected-lines model).
 - `image`, `table`, `graph` — see respective widgets.
+- `board` — free-form canvas for a **board file**. **Resize mode:** image stretches freely with `BoxFit.fill` (width and height independent). **Crop mode:** selects a region of the source image (`crop_left/top/width/height` 0–1); drag pans, handles trim the region; frame size stays fixed while cropping.
 
 ### Rich text (`text`, `summary`, `header`)
 

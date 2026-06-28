@@ -87,6 +87,12 @@ abstract final class FileBehaviorRegistry {
       ],
       inlineInsertDefault: 'text',
     ),
+    'board': FileBehaviorProfile(
+      id: 'board',
+      defaultBlocks: [DefaultBlockSpec('board', {'items': []})],
+      contextMenuBlocks: const [],
+      inlineInsertDefault: null,
+    ),
   };
 
   static const _fileTypeToProfile = <String, String>{
@@ -97,6 +103,7 @@ abstract final class FileBehaviorRegistry {
     'protocol': 'plan',
     'tasks': 'tasks',
     'doc': 'doc',
+    'board': 'board',
     'data': 'text',
   };
 
@@ -158,6 +165,8 @@ abstract final class FileBehaviorRegistry {
         return {};
       case 'image':
         return {'image_path': '', 'filename': ''};
+      case 'board':
+        return {'items': []};
       default:
         return {};
     }

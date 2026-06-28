@@ -10,6 +10,7 @@ import 'models/ai_proposal.dart';
 import 'models/app_file.dart';
 import 'models/automation_rule.dart';
 import 'models/block.dart';
+import '../features/blocks/board_content.dart';
 import '../features/blocks/line_task_sync.dart';
 import 'models/task.dart';
 import 'models/task_view_membership.dart';
@@ -193,11 +194,14 @@ class AppState extends ChangeNotifier {
     return hasAiContext;
   }
 
-  Future<AiRunResult?> runAiTool(String tool) async {
+  Future<AiRunResult?> runAiTool(
+    String tool, {
+    ResolvedAiContext? contextOverride,
+  }) async {
     final topic = selectedTopic;
     if (topic == null) return null;
 
-    var ctx = resolveAiContext();
+    var ctx = contextOverride ?? resolveAiContext();
     if (tool == 'create_graph' &&
         (ctx == null || ctx.text.trim().isEmpty) &&
         hasDataForGraph) {
@@ -220,6 +224,89 @@ class AppState extends ChangeNotifier {
         context: ctx,
         locale: language.name,
       );
+      await selectTopic(topic);
+      return result;
+    } catch (e) {
+      error = e.toString();
+      rethrow;
+    } finally {
+      aiRunning = false;
+      notifyListeners();
+    }
+  }
+
+  Future<AiRunResult?> runAiToolWithText(
+    String tool,
+    String text, {
+    int? fileId,
+    int? blockId,
+  }) {
+    final topic = selectedTopic;
+    if (topic == null || text.trim().isEmpty) return Future.value(null);
+    return runAiTool(
+      tool,
+      contextOverride: ResolvedAiContext(
+        text: text.trim(),
+        sourceType: AiSourceType.paragraph,
+        topicId: topic.id,
+        fileId: fileId,
+        blockId: blockId,
+      ),
+    );
+  }
+
+  Future<AiRunResult?> runBoardAiImage(
+    AppFile file,
+    Block boardBlock,
+    String prompt,
+  ) async {
+    final topic = selectedTopic;
+    if (topic == null || prompt.trim().isEmpty) return null;
+
+    aiRunning = true;
+    error = null;
+    notifyListeners();
+    try {
+      final result = await _aiService.runTool(
+        tool: 'create_image',
+        topicId: topic.id,
+        context: ResolvedAiContext(
+          text: prompt.trim(),
+          sourceType: AiSourceType.paragraph,
+          topicId: topic.id,
+          fileId: file.id,
+          blockId: boardBlock.id,
+        ),
+        locale: language.name,
+      );
+
+      if (result.imagePath != null && result.imagePath!.isNotEmpty) {
+        final blocks = await _blockService.listForFile(file.id);
+        final board = blocks.where((b) => b.type == 'board').firstOrNull;
+        if (board != null) {
+          final items = boardItemsFromContent(board.content);
+          final (x, y) = staggerBoardPlacement(items);
+          final filename = result.imagePath!.split('/').last;
+          final next = BoardItem(
+            id: nextBoardItemId(items),
+            imagePath: result.imagePath!,
+            filename: filename,
+            x: x,
+            y: y,
+            width: 220,
+            height: 165,
+            zIndex: nextBoardZIndex(items),
+          );
+          final content = boardContentFromItems([...items, next]);
+          await _blockService.updateBlock(board.id, {'content': content});
+        }
+        for (final block in blocks) {
+          if (block.type == 'image') {
+            await _blockService.deleteBlock(block.id);
+          }
+        }
+      }
+
       await selectTopic(topic);
       return result;
     } catch (e) {
@@ -546,7 +633,12 @@ class AppState extends ChangeNotifier {
           file.id,
           includeArchived: includeArchived || file.isArchived,
         );
-        final normalized = await _removeAdjacentTextBlocks(file, loaded);
+        final ensured = file.type == 'board'
+            ? await _ensureBoardBlock(file, loaded)
+            : loaded;
+        final normalized = file.type == 'board'
+            ? ensured
+            : await _removeAdjacentTextBlocks(file, ensured);
         final blocks = await _ensureTrailingDefaultBlock(file, normalized);
         blocksByFileId[file.id] = blocks;
         for (final block in blocks) {
@@ -874,6 +966,21 @@ class AppState extends ChangeNotifier {
         orderIndex: i,
       );
     }
+  }
+
+  Future<List<Block>> _ensureBoardBlock(
+    AppFile file,
+    List<Block> blocks,
+  ) async {
+    if (file.type != 'board' || file.isArchived) return blocks;
+    if (blocks.any((b) => b.type == 'board')) return blocks;
+    final block = await _blockService.createBlock(
+      fileId: file.id,
+      type: 'board',
+      content: FileBehaviorRegistry.defaultContentForBlockType('board'),
+      orderIndex: blocks.length,
+    );
+    return [...blocks, block];
   }
 
   Future<List<Block>> _removeAdjacentTextBlocks(
@@ -1587,6 +1694,38 @@ class AppState extends ChangeNotifier {
       ...block.content,
       'items': items,
     }, notify: true);
+  }
+
+  Future<void> addBoardImageItem(
+    AppFile file,
+    Block boardBlock,
+    String filename,
+    List<int> bytes,
+  ) async {
+    final topic = selectedTopic;
+    if (topic == null) return;
+    final uploaded = await _imageService.uploadBytes(filename, bytes);
+    final items = boardItemsFromContent(boardBlock.content);
+    final (x, y) = staggerBoardPlacement(items);
+    final next = BoardItem(
+      id: nextBoardItemId(items),
+      imagePath: uploaded['image_path'] as String? ?? '',
+      filename: uploaded['filename'] as String? ?? filename,
+      x: x,
+      y: y,
+      width: 220,
+      height: 165,
+      zIndex: nextBoardZIndex(items),
+    );
+    if (next.imagePath.isEmpty) return;
+    await updateBlockContent(
+      boardBlock,
+      boardContentFromItems([...items, next]),
+      notify: true,
+    );
+    await _blockService.updateBlock(boardBlock.id, {
+      'content': boardContentFromItems([...items, next]),
+    });
   }
 
   Future<Map<String, dynamic>> uploadImageBytes(

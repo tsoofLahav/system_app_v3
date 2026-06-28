@@ -1,6 +1,3 @@
-import 'dart:io';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
@@ -15,8 +12,10 @@ import '../../design_system/app_typography.dart';
 import '../../features/blocks/graph_content.dart';
 import '../../design_system/glass_surface.dart';
 import '../../design_system/note_widgets.dart';
+import '../../features/blocks/board_block_widget.dart';
 import '../../features/blocks/block_context_menu.dart';
 import '../../features/blocks/block_renderer.dart';
+import '../../shared/utils/local_image_picker.dart';
 
 class FileSection extends StatefulWidget {
   const FileSection({
@@ -68,6 +67,124 @@ class _FileSectionState extends State<FileSection> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.file.type == 'board') {
+      return _buildBoardFile(context);
+    }
+    return _buildBlockFile(context);
+  }
+
+  Block? _boardBlock() {
+    for (final block in widget.blocks) {
+      if (block.type == 'board') return block;
+    }
+    return null;
+  }
+
+  Widget _buildBoardFile(BuildContext context) {
+    final s = widget.state.strings;
+    final topic = widget.topic;
+    final isMainPane = widget.state.fileIsMain(topic, widget.file);
+    final boardBlock = _boardBlock();
+
+    return NoteCard(
+      topicAccent: widget.accent,
+      fileType: widget.file.type,
+      isMainTopic: topic.isMain,
+      child: Padding(
+        padding: AppSpacing.notePadding,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _titleController,
+                    style: AppTypography.noteTitleStyle,
+                    decoration: AppTypography.noteInputDecoration(),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: _saveTitle,
+                    onEditingComplete: () => _saveTitle(_titleController.text),
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 34,
+                    minHeight: 34,
+                  ),
+                  icon: AppIcon(
+                    AppIcons.more,
+                    size: 18,
+                    color: AppColors.noteMeta.withValues(alpha: 0.72),
+                  ),
+                  onSelected: (value) => _onMenu(value, isMainPane: isMainPane),
+                  itemBuilder: (context) => [
+                    if (!isMainPane)
+                      PopupMenuItem(
+                        value: 'showOnMain',
+                        child: Text(s['showOnMain']),
+                      ),
+                    if (isMainPane)
+                      PopupMenuItem(
+                        value: 'moveToMoreFiles',
+                        child: Text(s['moveToMoreFiles']),
+                      ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text(s['deleteFile']),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Expanded(
+              child: boardBlock == null
+                  ? Center(
+                      child: Text(
+                        s['boardEmptyHint'],
+                        style: AppTypography.noteBodyStyle.copyWith(
+                          color: AppColors.noteHint,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : BoardBlockWidget(
+                      block: boardBlock,
+                      addImageTooltip: s['boardAddImage'],
+                      aiImageTooltip: s['aiImage'],
+                      cropTooltip: s['boardCrop'],
+                      aiPromptTitle: s['boardAiPromptTitle'],
+                      aiPromptHint: s['boardAiPromptHint'],
+                      emptyHint: s['boardEmptyHint'],
+                      deleteImageLabel: s['boardDeleteImage'],
+                      cancelLabel: s['cancel'],
+                      submitLabel: s['aiImage'],
+                      aiRunning: widget.state.aiRunning,
+                      uploadImage: (filename, bytes) =>
+                          widget.state.uploadImageBytes(filename, bytes),
+                      onRunAiImage: (prompt) => _runBoardAiImage(
+                        context,
+                        boardBlock,
+                        prompt,
+                      ),
+                      onChanged: (content) => widget.state.updateBlockContent(
+                        boardBlock,
+                        content,
+                        notify: true,
+                      ),
+                      onCommit: (content) =>
+                          widget.state.scheduleBlockSave(boardBlock, content),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBlockFile(BuildContext context) {
     final s = widget.state.strings;
     final topic = widget.topic;
     final isMainPane = widget.state.fileIsMain(topic, widget.file);
@@ -111,7 +228,7 @@ class _FileSectionState extends State<FileSection> {
                     size: 18,
                     color: AppColors.noteMeta.withValues(alpha: 0.72),
                   ),
-                  onSelected: (value) => _onMenu(value),
+                  onSelected: (value) => _onMenu(value, isMainPane: isMainPane),
                   itemBuilder: (context) => [
                     if (canToggleVisibility && !isMainPane)
                       PopupMenuItem(
@@ -186,7 +303,7 @@ class _FileSectionState extends State<FileSection> {
     return note;
   }
 
-  Future<void> _onMenu(String value) async {
+  Future<void> _onMenu(String value, {required bool isMainPane}) async {
     final s = widget.state.strings;
     if (value == 'delete') {
       final ok = await showDialog<bool>(
@@ -211,6 +328,54 @@ class _FileSectionState extends State<FileSection> {
       await widget.state.promoteFileToMain(widget.topic, widget.file);
     } else if (value == 'moveToMoreFiles') {
       await widget.state.demoteFileToSecondary(widget.topic, widget.file);
+    }
+  }
+
+  Future<void> _runBoardAiImage(
+    BuildContext context,
+    Block boardBlock,
+    String prompt,
+  ) async {
+    final s = widget.state.strings;
+    try {
+      final result = await widget.state.runBoardAiImage(
+        widget.file,
+        boardBlock,
+        prompt,
+      );
+      if (!context.mounted || result == null) return;
+      final message = result.result ?? s['aiDone'];
+      final target = result.targetFileName;
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AppGlassDialog(
+          title: Text(s['aiDone']),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(s['ok']),
+            ),
+          ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (target != null) ...[
+                Text(target, style: AppTypography.metaStyle),
+                const SizedBox(height: 8),
+              ],
+              Text(message, style: AppTypography.noteBodyStyle),
+            ],
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      _showUploadError(e.message);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     }
   }
 
@@ -395,34 +560,7 @@ class _FileSectionState extends State<FileSection> {
   }
 
   /// Opens the OS file picker after the context menu closes; returns name + bytes.
-  Future<(String, List<int>)?> _pickLocalImageFile() async {
-    // Let the popup route finish closing before opening the native picker.
-    await Future<void>.delayed(const Duration(milliseconds: 80));
-    if (!mounted) return null;
-
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      allowMultiple: false,
-      withData: true,
-    );
-    final file = result != null && result.files.isNotEmpty
-        ? result.files.first
-        : null;
-    if (file == null || file.name.isEmpty) return null;
-
-    final bytes = file.bytes ?? await _readBytesFromPath(file.path);
-    if (bytes == null || bytes.isEmpty) return null;
-    return (file.name, bytes);
-  }
-
-  Future<List<int>?> _readBytesFromPath(String? path) async {
-    if (path == null || path.isEmpty) return null;
-    try {
-      return await File(path).readAsBytes();
-    } catch (_) {
-      return null;
-    }
-  }
+  Future<(String, List<int>)?> _pickLocalImageFile() => pickLocalImageFile();
 
   Future<void> _insertBlock(String type, {required int orderIndex}) async {
     if (type == 'image') {

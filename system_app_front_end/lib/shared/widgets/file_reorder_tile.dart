@@ -125,6 +125,37 @@ class _FileContentPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = state.strings;
 
+    if (file.type == 'board') {
+      final boardBlock = blocks.where((b) => b.type == 'board').firstOrNull;
+      final items = boardBlock?.content['items'];
+      if (items is List && items.isNotEmpty) {
+        final first = items.first;
+        if (first is Map) {
+          final path = first['image_path'] as String? ?? '';
+          if (path.isNotEmpty) {
+            final url = path.startsWith('http')
+                ? path
+                : '${ApiConfig.baseUrl}$path';
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.network(
+                url,
+                height: 36,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+            );
+          }
+        }
+      }
+      return Text(
+        s['boardEmptyHint'],
+        style: AppTypography.noteBodyStyle.copyWith(color: AppColors.noteHint),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
     if (blocks.isEmpty && file.type != 'tasks') {
       return Text(
         s['writeHere'],
@@ -287,6 +318,13 @@ class _PreviewBlock extends StatelessWidget {
         );
       case 'task_list':
         return const SizedBox.shrink();
+      case 'board':
+        return Text(
+          s['boardEmptyHint'],
+          style: AppTypography.noteBodyStyle.copyWith(color: AppColors.noteHint),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        );
       default:
         return Text(
           s.unknownBlock(block.type),

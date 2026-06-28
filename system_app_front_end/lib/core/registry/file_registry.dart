@@ -40,6 +40,12 @@ class FileRegistry {
       isMain: false,
       orderIndex: 4,
     ),
+    RecommendedFile(
+      name: 'Board',
+      type: 'board',
+      isMain: false,
+      orderIndex: 5,
+    ),
   ];
 
   static const projectFiles = [

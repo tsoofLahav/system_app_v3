@@ -4,6 +4,7 @@ import '../../core/app_state.dart';
 import '../../core/models/app_file.dart';
 import '../../core/models/block.dart';
 import '../../core/models/task.dart';
+import 'board_block_widget.dart';
 import 'checklist_block_widget.dart';
 import 'graph_block_widget.dart';
 import 'header_block_widget.dart';
@@ -142,6 +143,25 @@ class BlockRenderer extends StatelessWidget {
           block: block,
           emptyLabel: s['graphPlaceholder'],
           onChanged: (c) => state.updateBlockContent(block, c, notify: true),
+        );
+      case 'board':
+        return BoardBlockWidget(
+          block: block,
+          addImageTooltip: s['boardAddImage'],
+          aiImageTooltip: s['aiImage'],
+          cropTooltip: s['boardCrop'],
+          aiPromptTitle: s['boardAiPromptTitle'],
+          aiPromptHint: s['boardAiPromptHint'],
+          emptyHint: s['boardEmptyHint'],
+          deleteImageLabel: s['boardDeleteImage'],
+          cancelLabel: s['cancel'],
+          submitLabel: s['aiImage'],
+          aiRunning: state.aiRunning,
+          uploadImage: (filename, bytes) =>
+              state.uploadImageBytes(filename, bytes),
+          onRunAiImage: (_) async {},
+          onChanged: (c) => state.updateBlockContent(block, c, notify: true),
+          onCommit: (c) => state.scheduleBlockSave(block, c),
         );
       default:
         return Text(s.unknownBlock(block.type));

@@ -15,6 +15,7 @@ Any file may contain any block type. This keeps manual editing and existing AI t
 | `plan` | Planning and steps | `text`, `list`, `text` | `text` | `header`, `text`, `summary`, `list`, `image` |
 | `tasks` | Dedicated task entry | `task_list` | none (edit in `task_list`) | `header`, `task_list` |
 | `doc` | Documentation | `table`, `text` | `text` | `header`, `text`, `summary`, `graph` |
+| `board` | Free-form image canvas | `board` | none | none (canvas toolbar) |
 
 The file name is the visible editable header. Profiles do not seed an extra `header` block by default.
 
@@ -29,6 +30,7 @@ Topic defaults:
 - Right-click inside file = glass bubble menu (`AppContextMenu`): **Add block →** hover submenu for profile-filtered inserts, plus block/text actions. See [`lib/shared/widgets/README.md`](../../lib/shared/widgets/README.md).
 - Files with a text default keep a text block at the end (never two consecutive text blocks).
 - On topic load, adjacent empty text blocks after another text block are removed; trailing ensure skips when the file already ends with text.
+- **Board files** use a single `board` block and a canvas UI (not a block list): upload images, drag anywhere, resize freely. No trailing text block and no right-click block menu inside the pane.
 - Right-click menus open at the pointer.
 - Lists and task entry continue by pressing Enter, not by visible "add" buttons.
 - **`list` and `task_list` use one connected multiline editor** (`ConnectedLinesEditor`): each newline is one item/task; soft wrap stays on the same item. See [`lib/features/blocks/README.md`](../../lib/features/blocks/README.md).
