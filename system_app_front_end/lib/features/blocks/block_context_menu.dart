@@ -27,13 +27,23 @@ class BlockContextMenu {
     }
     BlockTextFocusRegistry.openMenuSession();
     try {
-      final entries = <AppContextMenuEntry>[
-        for (final type in FileBehaviorRegistry.contextMenuForFileType(fileType))
-          AppContextMenuItem(
-            value: 'insert:$type',
-            label: _insertLabel(type, strings),
+      final entries = <AppContextMenuEntry>[];
+      final insertTypes =
+          FileBehaviorRegistry.contextMenuForFileType(fileType);
+      if (insertTypes.isNotEmpty) {
+        entries.add(
+          AppContextMenuSubmenu(
+            label: strings['addBlock'],
+            children: [
+              for (final type in insertTypes)
+                AppContextMenuItem(
+                  value: 'insert:$type',
+                  label: _insertLabel(type, strings),
+                ),
+            ],
           ),
-      ];
+        );
+      }
 
       if (targetBlock != null) {
         entries.add(const AppContextMenuDivider());
@@ -50,6 +60,7 @@ class BlockContextMenu {
         context: context,
         globalPosition: globalPosition,
         entries: entries,
+        isRtl: strings.isRtl,
       );
       if (value == null) return null;
       if (value.startsWith('text:')) {

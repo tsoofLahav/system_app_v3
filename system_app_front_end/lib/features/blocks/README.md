@@ -57,6 +57,19 @@ Inline bold / italic / underline / size on marked text or the current paragraph 
 
 **Invariants and regression checklist:** [RICH_TEXT.md](RICH_TEXT.md). Run `flutter test test/span_shift_test.dart` after changes.
 
+### File right-click menu
+
+Right-click in a file opens `BlockContextMenu` → `AppContextMenu` (bubble overlay, not Material `showMenu`).
+
+| File | Role |
+|---|---|
+| `block_context_menu.dart` | Builds entries, opens/closes `BlockTextFocusRegistry` menu session |
+| `../shared/widgets/app_context_menu.dart` | Bubble UI, hover submenus, RTL layout |
+
+- **Add block →** profile-filtered insert types (`FileBehaviorRegistry.contextMenuForFileType`) in a hover side bubble.
+- Block-specific actions (delete, table/graph/list/image) and text format actions (when a text field is focused) stay in the main bubble.
+- Menu UI rules (chevron, RTL, overlay): [`../shared/widgets/README.md`](../shared/widgets/README.md).
+
 ## Common block types (quick reference)
 
 | type | Content shape (main fields) |

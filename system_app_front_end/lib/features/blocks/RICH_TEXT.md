@@ -83,7 +83,7 @@ Before merging any rich-text PR:
 | `formatted_text_field.dart` | `TextField` wrapper, focus registration, `_FrozenSelectionOverlay` |
 | `frozen_selection_painter.dart` | Paints precomputed selection rects during menu |
 | `rich_text_block_sync.dart` | Idle-only sync from block → controller |
-| `block_context_menu.dart` | Opens/closes menu session around `showMenu` |
+| `block_context_menu.dart` | Opens/closes menu session around `AppContextMenu` bubble |
 
 ## Persistence
 

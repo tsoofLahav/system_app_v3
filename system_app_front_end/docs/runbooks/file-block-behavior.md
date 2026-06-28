@@ -26,7 +26,7 @@ Topic defaults:
 ## UI
 
 - File corner `...` = file actions only (delete, main/additional visibility)
-- Right-click inside file = profile-filtered block insert menu
+- Right-click inside file = glass bubble menu (`AppContextMenu`): **Add block →** hover submenu for profile-filtered inserts, plus block/text actions. See [`lib/shared/widgets/README.md`](../../lib/shared/widgets/README.md).
 - Files with a text default keep an empty text block at the end.
 - Right-click menus open at the pointer.
 - Lists and task entry continue by pressing Enter, not by visible "add" buttons.
