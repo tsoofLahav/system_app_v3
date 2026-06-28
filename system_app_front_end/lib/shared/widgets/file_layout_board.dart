@@ -15,6 +15,7 @@ class FileLayoutBoard extends StatelessWidget {
     required this.state,
     required this.accent,
     required this.onDeleteFile,
+    this.slotHeight,
   });
 
   final Topic topic;
@@ -23,6 +24,7 @@ class FileLayoutBoard extends StatelessWidget {
   final AppState state;
   final Color accent;
   final void Function(AppFile file) onDeleteFile;
+  final double? slotHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +52,9 @@ class FileLayoutBoard extends StatelessWidget {
 
     final slots = List.generate(primaryCount, slotAt);
     final primary = layout.builder(context, slots);
+    final sizedPrimary = slotHeight != null
+        ? SizedBox(height: slotHeight, child: primary)
+        : primary;
 
     final overflowStart = fixedCapacity ?? files.length;
     final overflow = files.length > overflowStart
@@ -68,7 +73,7 @@ class FileLayoutBoard extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [primary, overflow],
+      children: [sizedPrimary, overflow],
     );
   }
 }

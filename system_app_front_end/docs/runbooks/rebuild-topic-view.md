@@ -22,4 +22,5 @@ Rebuild the topic page that renders file panes, supports layout mode, and integr
 - Opening a topic shows the correct files, blocks, and task summaries.
 - Main vs additional grouping matches persisted `is_main` and ordering (main topic included).
 - Main section shows at most 3 files; additional files appear below the divider.
+- Primary file panes grow taller as the window enlarges (min 540px) before the more-files section becomes visible.
 - File-level actions update UI and persist correctly after refresh.

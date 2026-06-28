@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'dart:ui';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/core/registry/file_behavior_registry.dart';
 import 'package:system_app_front_end/core/registry/file_registry.dart';
+import 'package:system_app_front_end/features/blocks/board_clipboard.dart';
 import 'package:system_app_front_end/features/blocks/board_content.dart';
 
 void main() {
@@ -51,6 +54,52 @@ void main() {
     expect(restored.first.imagePath, '/images/a.png');
     expect(restored.first.x, 10);
     expect(restored.first.cropWidth, 0.5);
+  });
+
+  test('board content preserves canvas size and background', () {
+    const items = [
+      BoardItem(
+        id: '1',
+        imagePath: '/images/a.png',
+        filename: 'a.png',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 80,
+        zIndex: 0,
+      ),
+    ];
+    final base = {
+      'canvas_width': 800,
+      'canvas_height': 600,
+      'background_color': 0xFFE8F4FC,
+      'items': [],
+    };
+    final encoded = boardContentFromItems(items, base: base);
+    expect(boardContentCanvasWidth(encoded), 800);
+    expect(boardContentCanvasHeight(encoded), 600);
+    expect(
+      boardContentBackgroundColor(encoded),
+      const Color(0xFFE8F4FC),
+    );
+  });
+
+  test('board clipboard payload round-trips item json', () {
+    const item = BoardItem(
+      id: '3',
+      imagePath: '/images/b.png',
+      filename: 'b.png',
+      x: 12,
+      y: 34,
+      width: 120,
+      height: 90,
+      zIndex: 2,
+    );
+    final payload = '$boardClipMagic${jsonEncode(item.toJson())}';
+    final restored = boardItemFromClipboardText(payload);
+    expect(restored?.id, '3');
+    expect(restored?.imagePath, '/images/b.png');
+    expect(restored?.x, 12);
   });
 
   test('board crop metrics map source region to display size', () {

@@ -14,7 +14,7 @@ Inputs and dependencies:
 
 Main flows:
 1. Load topic detail through `AppState.selectTopic`.
-2. Render files in layout mode (normal editing flow).
+2. Render files in layout mode (normal editing flow); primary `FileLayoutBoard` uses viewport-based `slotHeight`.
 3. Render split-frame reorder mode when pane-drag mode is enabled.
 4. Persist reordered files via `reorderTopicFiles(...)`.
 

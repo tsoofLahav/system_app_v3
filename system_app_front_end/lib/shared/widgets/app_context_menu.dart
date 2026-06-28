@@ -47,7 +47,7 @@ abstract final class AppContextMenu {
   static const _submenuWidth = 188.0;
   static const _horizontalPadding = 10.0;
   static const _bubbleRadius = 12.0;
-  static const _submenuGap = 0.0;
+  static const _submenuGap = 4.0;
 
   static TextStyle _labelStyle({
     bool destructive = false,
@@ -178,15 +178,13 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
     final isRtl = widget.isRtl;
 
     final mainHeight = _menuHeight(widget.entries);
-    final submenuHeight = _openSubmenuIndex == null
-        ? 0.0
-        : _submenuPanelHeight(_submenuAt(_openSubmenuIndex!));
+    final hostHeight = _hostHeight(_openSubmenuIndex);
 
     final totalWidth = AppContextMenu._menuWidth +
         (_openSubmenuIndex == null
             ? 0
             : AppContextMenu._submenuWidth + AppContextMenu._submenuGap);
-    final totalHeight = mainHeight > submenuHeight ? mainHeight : submenuHeight;
+    final totalHeight = hostHeight;
 
     var left = local.dx;
     var top = local.dy;
@@ -215,7 +213,7 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
             clipBehavior: Clip.none,
             children: [
               if (_openSubmenuIndex != null && isRtl)
-                _positionedSubmenu(isRtl: true),
+                _positionedSubmenu(isRtl: true, mainHeight: mainHeight),
               Positioned(
                 left: _openSubmenuIndex != null && isRtl
                     ? AppContextMenu._submenuWidth + AppContextMenu._submenuGap
@@ -226,8 +224,11 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
                   children: _buildMainEntries(context),
                 ),
               ),
-              if (_openSubmenuIndex != null && !isRtl)
-                _positionedSubmenu(isRtl: false),
+              if (_openSubmenuIndex != null && !isRtl) ...[
+                _submenuBridge(isRtl: false),
+                _positionedSubmenu(isRtl: false, mainHeight: mainHeight),
+              ],
+              if (_openSubmenuIndex != null && isRtl) _submenuBridge(isRtl: true),
             ],
           ),
         ),
@@ -235,12 +236,56 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
     );
   }
 
-  Widget _positionedSubmenu({required bool isRtl}) {
+  double _hostHeight(int? submenuIndex) {
+    final mainHeight = _menuHeight(widget.entries);
+    if (submenuIndex == null) return mainHeight;
+    final submenu = _submenuAt(submenuIndex);
+    if (submenu == null) return mainHeight;
+    final submenuBottom =
+        _submenuTop(submenuIndex, mainHeight) + _submenuPanelHeight(submenu);
+    return submenuBottom > mainHeight ? submenuBottom : mainHeight;
+  }
+
+  double _submenuTop(int index, double mainHeight) {
+    final submenu = _submenuAt(index);
+    if (submenu == null) return _rowTop(index);
+    final alignedTop = _rowTop(index);
+    final submenuHeight = _submenuPanelHeight(submenu);
+    final overflow = alignedTop + submenuHeight - mainHeight;
+    if (overflow <= 0) return alignedTop;
+    return (alignedTop - overflow).clamp(0.0, alignedTop);
+  }
+
+  Widget _submenuBridge({required bool isRtl}) {
+    final index = _openSubmenuIndex;
+    final submenu = index == null ? null : _submenuAt(index);
+    if (index == null || submenu == null) return const SizedBox.shrink();
+
+    final mainHeight = _menuHeight(widget.entries);
+    final top = _submenuTop(index, mainHeight);
+    final height = _submenuPanelHeight(submenu);
+
+    return Positioned(
+      top: top,
+      left: isRtl ? AppContextMenu._submenuWidth : AppContextMenu._menuWidth,
+      width: AppContextMenu._submenuGap,
+      height: height,
+      child: MouseRegion(
+        onEnter: (_) => _submenuCloseTimer?.cancel(),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+
+  Widget _positionedSubmenu({
+    required bool isRtl,
+    required double mainHeight,
+  }) {
     final submenu = _submenuAt(_openSubmenuIndex!);
     if (submenu == null) return const SizedBox.shrink();
 
     return Positioned(
-      top: _rowTop(_openSubmenuIndex!),
+      top: _submenuTop(_openSubmenuIndex!, mainHeight),
       left: isRtl ? 0 : AppContextMenu._menuWidth + AppContextMenu._submenuGap,
       child: MouseRegion(
         onEnter: (_) => _submenuCloseTimer?.cancel(),
@@ -264,7 +309,7 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
 
   void _scheduleCloseSubmenu() {
     _submenuCloseTimer?.cancel();
-    _submenuCloseTimer = Timer(const Duration(milliseconds: 120), () {
+    _submenuCloseTimer = Timer(const Duration(milliseconds: 200), () {
       if (!mounted) return;
       setState(() => _openSubmenuIndex = null);
     });

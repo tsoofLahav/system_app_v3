@@ -36,6 +36,8 @@ Cross-app tokens in `AppSpacing`, `AppLayoutSpacing`, `AppTopicHeaderMetrics`:
 
 Files receive the largest share of the viewport. Additional files sit lower in the scroll flow.
 
+**Primary file slot height:** `FileLayouts.primarySlotHeight` grows main file panes with the window (minimum **540px**) before the more-files divider scrolls into view. Reserve below primary: `FileLayouts.secondarySectionReserve` (120px). Pass `slotHeight` into `FileLayoutBoard` from `TopicView`.
+
 ## More-files divider
 
 `FilesSectionDivider`: outline-only circle (canvas-transparent fill), `…` when collapsed and `−` when expanded at the **same 14px** visual weight. Subtle lines on both sides.

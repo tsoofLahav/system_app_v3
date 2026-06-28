@@ -41,7 +41,15 @@ What this folder owns:
 - `text` / `summary` / `header` — inline rich text (`text` + `spans`); see [RICH_TEXT.md](RICH_TEXT.md).
 - `checklist` — per-row fields today (not yet on connected-lines model).
 - `image`, `table`, `graph` — see respective widgets.
-- `board` — free-form canvas for a **board file**. **Resize mode:** image stretches freely with `BoxFit.fill` (width and height independent). **Crop mode:** selects a region of the source image (`crop_left/top/width/height` 0–1); drag pans, handles trim the region; frame size stays fixed while cropping.
+- `board` — free-form canvas for a **board file**. Fixed workspace (default 960×540); pan/scroll when the pane is smaller. **Resize mode:** image stretches freely with `BoxFit.fill` (width and height independent). **Crop mode:** selects a region of the source image (`crop_left/top/width/height` 0–1); drag pans, handles trim the region; frame size stays fixed while cropping. **Right-click / ⌘C/⌘V:** copy/paste board items or external images; **Background →** preset or custom color (`background_color` ARGB in block content).
+
+| File | Role |
+|---|---|
+| `board_block_widget.dart` | Canvas UI, toolbar, crop/resize, context menu |
+| `board_content.dart` | `BoardItem` model, crop math, canvas/background helpers |
+| `board_clipboard.dart` | Copy/paste payload + image bytes |
+| `board_crop_overlay.dart` / `board_item_image.dart` | Crop UI and image rendering |
+| `shared/utils/clipboard_image.dart` | macOS `MethodChannel` for system clipboard images |
 
 ### Rich text (`text`, `summary`, `header`)
 
@@ -84,6 +92,7 @@ Right-click in a file opens `BlockContextMenu` → `AppContextMenu` (bubble over
 | `table` | `{ "rows": [[string]] }` |
 | `image` | `{ "image_path", "filename" }` |
 | `graph` | `{ chart_type, labels[], values[], palette_index }` — default columns A/B/C; edit values in grid below chart |
+| `board` | `{ items[], canvas_width?, canvas_height?, background_color? }` — each item: `id`, `image_path`, `filename`, `x`, `y`, `width`, `height`, `z_index`, optional crop fields |
 
 Inputs and dependencies:
 - Block payloads and related tasks from `AppState` topic detail.

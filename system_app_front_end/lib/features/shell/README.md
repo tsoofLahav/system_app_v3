@@ -14,7 +14,7 @@ Inputs and dependencies:
 
 Main flow:
 1. Read global mode from `AppState`.
-2. Render sidebar + active pane + bottom controls.
+2. Render sidebar + active pane + bottom controls. Topic ↔ task view switches use `AnimatedSwitcher` with `viewPaneReady` so cached view panes cross-fade without flashing loaders on topic→topic navigation.
 3. Dispatch global actions (home, toggles, preferences, automation settings) back to `AppState`.
 
 Side effects and persistence:

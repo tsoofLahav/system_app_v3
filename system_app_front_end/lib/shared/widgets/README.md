@@ -26,6 +26,8 @@ Glass-style bubble menus (outline + shadow + blur) used for file/block right-cli
 
 **Submenu layout:** main panel stays at `left: 0`; in RTL the side bubble is to its left and the main panel shifts right when open.
 
+**Submenu hit target:** the overlay host height must include `rowTop + submenuHeight` (not just `max(main, submenu)`), so lower submenu rows (e.g. **Custom color…**) stay hoverable. An invisible bridge spans the gap between main and side panels.
+
 ## Disclosure chevrons (`disclosure_icon.dart`)
 
 Shared RTL-safe expand/submenu arrow. Reuse anywhere a row opens a nested panel (sidebar sections, context submenu rows, task assign menu uses the same flip pattern with `AppIcons.chevronRight`).

@@ -30,7 +30,10 @@ Topic defaults:
 - Right-click inside file = glass bubble menu (`AppContextMenu`): **Add block →** hover submenu for profile-filtered inserts, plus block/text actions. See [`lib/shared/widgets/README.md`](../../lib/shared/widgets/README.md).
 - Files with a text default keep a text block at the end (never two consecutive text blocks).
 - On topic load, adjacent empty text blocks after another text block are removed; trailing ensure skips when the file already ends with text.
-- **Board files** use a single `board` block and a canvas UI (not a block list): upload images, drag anywhere, resize freely. No trailing text block and no right-click block menu inside the pane.
+- **Board files** use a single `board` block and a canvas UI (not a block list): upload images, drag anywhere, resize freely, crop source regions, and generate images from the toolbar. No trailing text block and no block insert menu inside the pane.
+- **Board canvas:** fixed workspace (default **960×540**, matching the single-file slot height). Items stay inside the canvas; scroll horizontally/vertically when the pane is smaller than the workspace.
+- **Board right-click:** copy/paste images (⌘C/⌘V), preset/custom background color. Paste accepts in-app board items or image bytes from the system clipboard (macOS native handler in `MainFlutterWindow.swift` via `system_app/clipboard_image`).
+- **Board content:** `{ items[], canvas_width?, canvas_height?, background_color? }` — see [`lib/features/blocks/README.md`](../../lib/features/blocks/README.md).
 - Right-click menus open at the pointer.
 - Lists and task entry continue by pressing Enter, not by visible "add" buttons.
 - **`list` and `task_list` use one connected multiline editor** (`ConnectedLinesEditor`): each newline is one item/task; soft wrap stays on the same item. See [`lib/features/blocks/README.md`](../../lib/features/blocks/README.md).

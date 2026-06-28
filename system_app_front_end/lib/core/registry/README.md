@@ -39,7 +39,18 @@ The file name is the visible editable header. Profiles do not seed an extra `hea
 | `board` | Image canvas / mood board | `board` (items with x/y/width/height) | none | none |
 
 Task-file editing happens entirely in the `task_list` block (connected lines). No trailing input row.
-Board files store positioned images in one `board` block (`content.items[]` with `image_path`, `x`, `y`, `width`, `height`, `z_index`).
+Board files store positioned images in one `board` block. Content shape:
+
+```json
+{
+  "items": [{ "id", "image_path", "filename", "x", "y", "width", "height", "z_index", "crop_*?" }],
+  "canvas_width": 960,
+  "canvas_height": 540,
+  "background_color": 4294967295
+}
+```
+
+Omitted `canvas_*` / `background_color` use defaults (960×540, translucent white). Right-click on the canvas handles copy/paste and background — not `BlockContextMenu`.
 
 Topic defaults:
 - **Main topic:** `allFileTypes` — Text, Recap, and Plan are main by default; Tasks, Documentation, and Board are additional. Daily (`main`) is always main.

@@ -80,7 +80,20 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     final displayMode = widget.state.viewDisplayMode;
 
     if (widget.state.loading && tasks.isEmpty && sections.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return TopicCanvasBackground(
+        accent: AppColors.text,
+        isMain: true,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 12),
+              Text(label, style: AppTypography.noteTitleStyle),
+            ],
+          ),
+        ),
+      );
     }
 
     return TopicCanvasBackground(

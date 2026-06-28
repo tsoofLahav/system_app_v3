@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
 import '../../config/api_config.dart';
 import '../../core/models/block.dart';
@@ -10,6 +11,8 @@ import '../../design_system/app_icons.dart';
 import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
 import '../../shared/utils/local_image_picker.dart';
+import '../../shared/widgets/app_context_menu.dart';
+import 'board_clipboard.dart';
 import 'board_content.dart';
 import 'board_crop_overlay.dart';
 import 'board_item_image.dart';
@@ -42,6 +45,16 @@ class BoardBlockWidget extends StatefulWidget {
     required this.deleteImageLabel,
     required this.cancelLabel,
     required this.submitLabel,
+    required this.copyImageLabel,
+    required this.pasteImageLabel,
+    required this.backgroundLabel,
+    required this.backgroundCustomLabel,
+    required this.backgroundWhiteLabel,
+    required this.backgroundLightGrayLabel,
+    required this.backgroundSkyLabel,
+    required this.backgroundCreamLabel,
+    required this.okLabel,
+    required this.isRtl,
     this.aiRunning = false,
   });
 
@@ -60,6 +73,16 @@ class BoardBlockWidget extends StatefulWidget {
   final String deleteImageLabel;
   final String cancelLabel;
   final String submitLabel;
+  final String copyImageLabel;
+  final String pasteImageLabel;
+  final String backgroundLabel;
+  final String backgroundCustomLabel;
+  final String backgroundWhiteLabel;
+  final String backgroundLightGrayLabel;
+  final String backgroundSkyLabel;
+  final String backgroundCreamLabel;
+  final String okLabel;
+  final bool isRtl;
   final bool aiRunning;
 
   @override
@@ -76,8 +99,22 @@ class _BoardBlockWidgetState extends State<BoardBlockWidget> {
   static const _minSize = 48.0;
   static const _handleSize = 10.0;
   static const _handleHit = 18.0;
-  static const _canvasMinHeight = 320.0;
-  static const _canvasPadding = 16.0;
+
+  static const _backgroundPresets = <int>[
+    0xFFFFFFFF,
+    0xFFF4F4F5,
+    0xFFE8F4FC,
+    0xFFFFF8E7,
+  ];
+
+  double get _canvasWidth =>
+      boardContentCanvasWidth(widget.block.content);
+
+  double get _canvasHeight =>
+      boardContentCanvasHeight(widget.block.content);
+
+  Color get _backgroundColor =>
+      boardContentBackgroundColor(widget.block.content);
 
   List<BoardItem> get _items =>
       _localItems ?? boardItemsFromContent(widget.block.content);
@@ -92,7 +129,15 @@ class _BoardBlockWidgetState extends State<BoardBlockWidget> {
 
   void _applyItems(List<BoardItem> items, {bool commit = false}) {
     setState(() => _localItems = items);
-    final content = boardContentFromItems(items);
+    final content = boardContentFromItems(
+      items,
+      base: widget.block.content,
+    );
+    widget.onChanged(content);
+    if (commit) widget.onCommit(content);
+  }
+
+  void _applyContent(Map<String, dynamic> content, {bool commit = false}) {
     widget.onChanged(content);
     if (commit) widget.onCommit(content);
   }
@@ -159,19 +204,135 @@ class _BoardBlockWidgetState extends State<BoardBlockWidget> {
     setState(() => _selectedId = null);
   }
 
-  double _contentHeight(List<BoardItem> items) {
-    var needed = _canvasMinHeight;
-    for (final item in items) {
-      needed = math.max(needed, item.y + item.height + _canvasPadding);
-    }
-    return needed;
+  BoardItem _duplicateForPaste(BoardItem source) {
+    final items = _items;
+    var x = source.x + 20;
+    var y = source.y + 20;
+    x = x.clamp(0.0, _canvasWidth - source.width);
+    y = y.clamp(0.0, _canvasHeight - source.height);
+    return source.copyWith(
+      id: nextBoardItemId(items),
+      x: x,
+      y: y,
+      zIndex: nextBoardZIndex(items),
+    );
   }
 
-  double _viewportHeight(double maxHeight, List<BoardItem> items) {
-    if (!maxHeight.isFinite || maxHeight <= 0) {
-      return _contentHeight(items);
+  Future<void> _copySelected() async {
+    final id = _selectedId;
+    if (id == null) return;
+    final item = _itemById(id);
+    if (item == null) return;
+    await copyBoardItemToClipboard(
+      item: item,
+      imageUrl: _imageUrl(item.imagePath),
+    );
+  }
+
+  Future<void> _paste() async {
+    final clipItem = await boardItemFromSystemClipboard();
+    if (clipItem != null && clipItem.imagePath.isNotEmpty) {
+      final next = _duplicateForPaste(clipItem);
+      _applyItems([..._items, next], commit: true);
+      setState(() => _selectedId = next.id);
+      return;
     }
-    return math.max(maxHeight, _contentHeight(items));
+
+    final bytes = await clipboardImageBytes();
+    if (bytes == null || bytes.isEmpty || !mounted) return;
+    try {
+      final uploaded = await widget.uploadImage('pasted.png', bytes);
+      final items = _items;
+      final (x, y) = staggerBoardPlacement(items);
+      final next = BoardItem(
+        id: nextBoardItemId(items),
+        imagePath: uploaded['image_path'] as String? ?? '',
+        filename: uploaded['filename'] as String? ?? 'pasted.png',
+        x: x,
+        y: y,
+        width: 220,
+        height: 165,
+        zIndex: nextBoardZIndex(items),
+      );
+      if (next.imagePath.isEmpty) return;
+      _applyItems([...items, next], commit: true);
+      setState(() => _selectedId = next.id);
+    } catch (_) {}
+  }
+
+  void _setBackgroundColor(Color color) {
+    final content = boardContentFromItems(_items, base: widget.block.content);
+    content['background_color'] = color.toARGB32();
+    setState(() {});
+    _applyContent(content, commit: true);
+  }
+
+  Future<void> _pickCustomBackground() async {
+    final picked = await showDialog<Color>(
+      context: context,
+      builder: (ctx) => _BoardBackgroundColorDialog(
+        initial: _backgroundColor,
+        title: widget.backgroundLabel,
+        cancelLabel: widget.cancelLabel,
+        submitLabel: widget.okLabel,
+      ),
+    );
+    if (picked == null || !mounted) return;
+    _setBackgroundColor(picked);
+  }
+
+  Future<void> _showContextMenu(Offset globalPosition) async {
+    final presetLabels = [
+      widget.backgroundWhiteLabel,
+      widget.backgroundLightGrayLabel,
+      widget.backgroundSkyLabel,
+      widget.backgroundCreamLabel,
+    ];
+    final value = await AppContextMenu.show(
+      context: context,
+      globalPosition: globalPosition,
+      isRtl: widget.isRtl,
+      entries: [
+        AppContextMenuItem(
+          value: 'copy',
+          label: widget.copyImageLabel,
+          enabled: _selectedId != null,
+        ),
+        AppContextMenuItem(
+          value: 'paste',
+          label: widget.pasteImageLabel,
+        ),
+        const AppContextMenuDivider(),
+        AppContextMenuSubmenu(
+          label: widget.backgroundLabel,
+          children: [
+            for (var i = 0; i < _backgroundPresets.length; i++)
+              AppContextMenuItem(
+                value: 'bg:${_backgroundPresets[i]}',
+                label: presetLabels[i],
+              ),
+            AppContextMenuItem(
+              value: 'bg:custom',
+              label: widget.backgroundCustomLabel,
+            ),
+          ],
+        ),
+      ],
+    );
+    if (value == null || !mounted) return;
+    switch (value) {
+      case 'copy':
+        await _copySelected();
+      case 'paste':
+        await _paste();
+      case 'bg:custom':
+        await _pickCustomBackground();
+      default:
+        if (value.startsWith('bg:')) {
+          final argb = int.tryParse(value.substring(3));
+          if (argb != null) _setBackgroundColor(Color(argb));
+        }
+    }
   }
 
   String _imageUrl(String path) =>
@@ -181,8 +342,8 @@ class _BoardBlockWidgetState extends State<BoardBlockWidget> {
     final item = _itemById(id);
     if (item == null) return;
     final next = item.copyWith(
-      x: (item.x + delta.dx).clamp(0, 10000),
-      y: (item.y + delta.dy).clamp(0, 10000),
+      x: (item.x + delta.dx).clamp(0.0, _canvasWidth - item.width),
+      y: (item.y + delta.dy).clamp(0.0, _canvasHeight - item.height),
     );
     _applyItems(_replaceItem(next));
   }
@@ -242,9 +403,14 @@ class _BoardBlockWidgetState extends State<BoardBlockWidget> {
       height = _minSize;
     }
 
+    left = left.clamp(0.0, _canvasWidth - _minSize);
+    top = top.clamp(0.0, _canvasHeight - _minSize);
+    width = width.clamp(_minSize, _canvasWidth - left);
+    height = height.clamp(_minSize, _canvasHeight - top);
+
     final next = base.copyWith(
-      x: left.clamp(0, 10000),
-      y: top.clamp(0, 10000),
+      x: left,
+      y: top,
       width: width,
       height: height,
     );
@@ -372,6 +538,17 @@ class _BoardBlockWidgetState extends State<BoardBlockWidget> {
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final isMeta = HardwareKeyboard.instance.isMetaPressed;
+    if (isMeta && event.logicalKey == LogicalKeyboardKey.keyC) {
+      if (_selectedId != null) {
+        _copySelected();
+        return KeyEventResult.handled;
+      }
+    }
+    if (isMeta && event.logicalKey == LogicalKeyboardKey.keyV) {
+      _paste();
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.delete ||
         event.logicalKey == LogicalKeyboardKey.backspace) {
       if (_selectedId != null) {
@@ -402,13 +579,14 @@ class _BoardBlockWidgetState extends State<BoardBlockWidget> {
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final canvasHeight = _viewportHeight(
-                  constraints.maxHeight,
-                  items,
-                );
+                final canvasWidth = _canvasWidth;
+                final canvasHeight = _canvasHeight;
+                final background = _backgroundColor;
 
                 return GestureDetector(
                   behavior: HitTestBehavior.opaque,
+                  onSecondaryTapDown: (details) =>
+                      _showContextMenu(details.globalPosition),
                   onTap: () {
                     if (_cropMode && _selectedId != null) {
                       _bakeCrop(_selectedId!);
@@ -421,7 +599,7 @@ class _BoardBlockWidgetState extends State<BoardBlockWidget> {
                   },
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.35),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: AppColors.noteBorder.withValues(alpha: 0.45),
@@ -429,64 +607,91 @@ class _BoardBlockWidgetState extends State<BoardBlockWidget> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: SingleChildScrollView(
-                        child: SizedBox(
-                          height: canvasHeight,
-                          width: constraints.maxWidth,
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              if (items.isEmpty)
-                                SizedBox(
-                                  height: math.max(
-                                    canvasHeight,
-                                    _canvasMinHeight,
+                      child: Scrollbar(
+                        thumbVisibility: true,
+                        child: SingleChildScrollView(
+                          child: Scrollbar(
+                            notificationPredicate: (notification) =>
+                                notification.depth == 1,
+                            thumbVisibility: true,
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: SizedBox(
+                                width: canvasWidth,
+                                height: canvasHeight,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: background,
                                   ),
-                                  width: constraints.maxWidth,
-                                  child: Center(
-                                    child: Text(
-                                      widget.emptyHint,
-                                      style: AppTypography.noteBodyStyle
-                                          .copyWith(
-                                        color: AppColors.noteHint,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
+                                  child: Stack(
+                                    clipBehavior: Clip.hardEdge,
+                                    children: [
+                                      if (items.isEmpty)
+                                        SizedBox(
+                                          width: canvasWidth,
+                                          height: canvasHeight,
+                                          child: Center(
+                                            child: Text(
+                                              widget.emptyHint,
+                                              style: AppTypography
+                                                  .noteBodyStyle
+                                                  .copyWith(
+                                                color: AppColors.noteHint,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                        ),
+                                      for (final item in items)
+                                        _BoardItemLayer(
+                                          item: item,
+                                          url: _imageUrl(item.imagePath),
+                                          selected: _selectedId == item.id,
+                                          cropMode: _cropMode &&
+                                              _selectedId == item.id,
+                                          cropSelection: _cropMode &&
+                                                  _selectedId == item.id
+                                              ? _cropSelectionLocal
+                                              : null,
+                                          onSelect: () =>
+                                              _selectItem(item.id),
+                                          onDragUpdate: (delta) {
+                                            _onItemDragUpdate(
+                                              item.id,
+                                              delta,
+                                            );
+                                          },
+                                          onDragEnd: () {
+                                            _applyItems(_items, commit: true);
+                                          },
+                                          onResizeUpdate: (handle, delta) {
+                                            _onResizeUpdate(
+                                              item.id,
+                                              handle,
+                                              delta,
+                                            );
+                                          },
+                                          onResizeEnd: () {
+                                            _applyItems(_items, commit: true);
+                                          },
+                                          onCropMove: _onCropSelectionMove,
+                                          onCropResize: _onCropSelectionResize,
+                                          onDelete: () {
+                                            setState(
+                                              () => _selectedId = item.id,
+                                            );
+                                            _deleteSelected();
+                                          },
+                                          onContextMenu: (position) =>
+                                              _showContextMenu(position),
+                                          deleteLabel:
+                                              widget.deleteImageLabel,
+                                        ),
+                                    ],
                                   ),
                                 ),
-                              for (final item in items)
-                                _BoardItemLayer(
-                                  item: item,
-                                  url: _imageUrl(item.imagePath),
-                                  selected: _selectedId == item.id,
-                                  cropMode:
-                                      _cropMode && _selectedId == item.id,
-                                  cropSelection: _cropMode &&
-                                          _selectedId == item.id
-                                      ? _cropSelectionLocal
-                                      : null,
-                                  onSelect: () => _selectItem(item.id),
-                                  onDragUpdate: (delta) {
-                                    _onItemDragUpdate(item.id, delta);
-                                  },
-                                  onDragEnd: () {
-                                    _applyItems(_items, commit: true);
-                                  },
-                                  onResizeUpdate: (handle, delta) {
-                                    _onResizeUpdate(item.id, handle, delta);
-                                  },
-                                  onResizeEnd: () {
-                                    _applyItems(_items, commit: true);
-                                  },
-                                  onCropMove: _onCropSelectionMove,
-                                  onCropResize: _onCropSelectionResize,
-                                  onDelete: () {
-                                    setState(() => _selectedId = item.id);
-                                    _deleteSelected();
-                                  },
-                                  deleteLabel: widget.deleteImageLabel,
-                                ),
-                            ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -517,6 +722,7 @@ class _BoardItemLayer extends StatelessWidget {
     required this.onCropMove,
     required this.onCropResize,
     required this.onDelete,
+    required this.onContextMenu,
     required this.deleteLabel,
   });
 
@@ -533,6 +739,7 @@ class _BoardItemLayer extends StatelessWidget {
   final ValueChanged<Offset> onCropMove;
   final void Function(BoardCropHandle handle, Offset delta) onCropResize;
   final VoidCallback onDelete;
+  final void Function(Offset globalPosition) onContextMenu;
   final String deleteLabel;
 
   @override
@@ -555,6 +762,10 @@ class _BoardItemLayer extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onSelect,
+        onSecondaryTapDown: (details) {
+          onSelect();
+          onContextMenu(details.globalPosition);
+        },
         child: Stack(
           clipBehavior: Clip.none,
           children: [
@@ -616,6 +827,10 @@ class _BoardItemLayer extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onSelect,
+        onSecondaryTapDown: (details) {
+          onSelect();
+          onContextMenu(details.globalPosition);
+        },
         onPanUpdate: (d) => onDragUpdate(d.delta),
         onPanEnd: (_) => onDragEnd(),
         child: Stack(
@@ -778,6 +993,62 @@ class _BoardResizeHandleState extends State<_BoardResizeHandle> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _BoardBackgroundColorDialog extends StatefulWidget {
+  const _BoardBackgroundColorDialog({
+    required this.initial,
+    required this.title,
+    required this.cancelLabel,
+    required this.submitLabel,
+  });
+
+  final Color initial;
+  final String title;
+  final String cancelLabel;
+  final String submitLabel;
+
+  @override
+  State<_BoardBackgroundColorDialog> createState() =>
+      _BoardBackgroundColorDialogState();
+}
+
+class _BoardBackgroundColorDialogState
+    extends State<_BoardBackgroundColorDialog> {
+  late Color _color;
+
+  @override
+  void initState() {
+    super.initState();
+    _color = widget.initial;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppGlassDialog(
+      title: Text(widget.title),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(widget.cancelLabel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _color),
+          child: Text(widget.submitLabel),
+        ),
+      ],
+      child: ColorPicker(
+        pickerColor: _color,
+        onColorChanged: (c) => setState(() => _color = c),
+        colorPickerWidth: 280,
+        pickerAreaHeightPercent: 0.7,
+        enableAlpha: true,
+        displayThumbColor: true,
+        labelTypes: const [],
+        portraitOnly: true,
       ),
     );
   }

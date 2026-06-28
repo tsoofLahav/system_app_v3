@@ -1,5 +1,13 @@
 import 'dart:ui';
 
+import 'package:flutter/material.dart';
+
+/// Default board workspace height — matches [FileLayouts] single-slot fallback.
+const boardCanvasDefaultHeight = 540.0;
+
+/// Default board workspace width — comfortable single-file desktop canvas.
+const boardCanvasDefaultWidth = 960.0;
+
 class BoardItem {
   const BoardItem({
     required this.id,
@@ -130,10 +138,44 @@ List<BoardItem> boardItemsFromContent(Map<String, dynamic> content) {
     ..sort((a, b) => a.zIndex.compareTo(b.zIndex));
 }
 
-Map<String, dynamic> boardContentFromItems(List<BoardItem> items) {
-  return {
+double boardContentCanvasWidth(Map<String, dynamic> content) {
+  return (content['canvas_width'] as num?)?.toDouble() ??
+      boardCanvasDefaultWidth;
+}
+
+double boardContentCanvasHeight(Map<String, dynamic> content) {
+  return (content['canvas_height'] as num?)?.toDouble() ??
+      boardCanvasDefaultHeight;
+}
+
+int? boardContentBackgroundColorValue(Map<String, dynamic> content) {
+  final value = content['background_color'];
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return null;
+}
+
+Color boardContentBackgroundColor(Map<String, dynamic> content) {
+  final value = boardContentBackgroundColorValue(content);
+  if (value != null) return Color(value);
+  return Colors.white.withValues(alpha: 0.35);
+}
+
+Map<String, dynamic> boardContentFromItems(
+  List<BoardItem> items, {
+  Map<String, dynamic>? base,
+}) {
+  final previous = base ?? const <String, dynamic>{};
+  final out = <String, dynamic>{
     'items': items.map((item) => item.toJson()).toList(),
   };
+  final width = boardContentCanvasWidth(previous);
+  final height = boardContentCanvasHeight(previous);
+  if (width != boardCanvasDefaultWidth) out['canvas_width'] = width;
+  if (height != boardCanvasDefaultHeight) out['canvas_height'] = height;
+  final background = boardContentBackgroundColorValue(previous);
+  if (background != null) out['background_color'] = background;
+  return out;
 }
 
 String nextBoardItemId(List<BoardItem> items) {

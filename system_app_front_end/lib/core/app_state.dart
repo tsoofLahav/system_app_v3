@@ -47,6 +47,13 @@ class TopicDetail {
   final Map<int, List<Task>> tasksByBlockId;
 }
 
+class _ViewSnapshot {
+  const _ViewSnapshot({required this.tasks, required this.sections});
+
+  final List<Task> tasks;
+  final List<ViewSection> sections;
+}
+
 class AppState extends ChangeNotifier {
   AppState() {
     _bootstrap = BootstrapService(
@@ -77,6 +84,9 @@ class AppState extends ChangeNotifier {
   String? selectedViewType;
   List<Task> viewTasks = [];
   List<ViewSection> viewSections = [];
+  final Map<String, _ViewSnapshot> _viewCache = {};
+  bool _showViewPaneDuringLoad = false;
+  bool _loadingTopicFromView = false;
   TaskViewDisplayMode viewDisplayMode = TaskViewDisplayMode.bySection;
   List<TaskViewMembership> _taskViewMemberships = [];
   List<AutomationRule> automationRules = [];
@@ -297,7 +307,10 @@ class AppState extends ChangeNotifier {
             height: 165,
             zIndex: nextBoardZIndex(items),
           );
-          final content = boardContentFromItems([...items, next]);
+          final content = boardContentFromItems(
+            [...items, next],
+            base: board.content,
+          );
           await _blockService.updateBlock(board.id, {'content': content});
         }
         for (final block in blocks) {
@@ -336,6 +349,45 @@ class AppState extends ChangeNotifier {
       .toList();
 
   bool get isViewMode => selectedViewType != null;
+
+  /// True when the task view pane should be shown (not the topic canvas).
+  bool get viewPaneReady {
+    final viewType = selectedViewType;
+    if (viewType == null) return false;
+    if (!loading) return true;
+    if (_viewCache.containsKey(viewType)) return true;
+    return _showViewPaneDuringLoad;
+  }
+
+  void _cacheCurrentView() {
+    final type = selectedViewType;
+    if (type == null) return;
+    final sections = sectionsForViewType(type);
+    if (viewTasks.isEmpty && sections.isEmpty) return;
+    _viewCache[type] = _ViewSnapshot(
+      tasks: List<Task>.from(viewTasks),
+      sections: List<ViewSection>.from(sections),
+    );
+  }
+
+  void _restoreViewCache(String viewType) {
+    final cached = _viewCache[viewType];
+    if (cached == null) return;
+    viewTasks = List<Task>.from(cached.tasks);
+    viewSections = [
+      ...viewSections.where((s) => s.viewType != viewType),
+      ...cached.sections,
+    ];
+  }
+
+  /// True while loading a topic after leaving a view (not topic-to-topic).
+  bool get topicDetailStale {
+    if (!_loadingTopicFromView) return false;
+    final topic = selectedTopic;
+    final detail = selectedDetail;
+    if (!loading || topic == null) return false;
+    return detail == null || detail.topic.id != topic.id;
+  }
 
   Future<void> initialize() async {
     loading = true;
@@ -614,10 +666,12 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> selectTopic(Topic topic, {bool includeArchived = false}) async {
+    final fromView = selectedViewType != null;
     loading = true;
     error = null;
     selectedViewType = null;
-    viewTasks = [];
+    _showViewPaneDuringLoad = false;
+    _loadingTopicFromView = fromView;
     selectedTopic = topic;
     notifyListeners();
     try {
@@ -664,6 +718,7 @@ class AppState extends ChangeNotifier {
       selectedDetail = null;
     } finally {
       loading = false;
+      _loadingTopicFromView = false;
       moreFilesExpanded = false;
       notifyListeners();
     }
@@ -676,20 +731,39 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> selectView(String viewType) async {
-    loading = true;
+    _cacheCurrentView();
+    final fromView = selectedViewType != null;
+    final cached = _viewCache[viewType];
+
     error = null;
     selectedViewType = viewType;
     selectedTopic = null;
-    selectedDetail = null;
+    _showViewPaneDuringLoad = fromView || cached != null;
+
+    if (cached != null) {
+      _restoreViewCache(viewType);
+    } else {
+      viewTasks = [];
+      viewSections = viewSections.where((s) => s.viewType != viewType).toList();
+    }
+
+    loading = true;
     notifyListeners();
     try {
-      viewSections = await _taskViewService.listSectionsForView(viewType);
-      viewTasks = await _taskService.listByView(viewType);
+      final sections = await _taskViewService.listSectionsForView(viewType);
+      final tasks = await _taskService.listByView(viewType);
+      viewSections = [
+        ...viewSections.where((s) => s.viewType != viewType),
+        ...sections,
+      ];
+      viewTasks = tasks;
+      _viewCache[viewType] = _ViewSnapshot(tasks: tasks, sections: sections);
     } catch (e) {
       error = e.toString();
-      viewTasks = [];
+      if (cached == null) viewTasks = [];
     } finally {
       loading = false;
+      _showViewPaneDuringLoad = false;
       moreFilesExpanded = false;
       notifyListeners();
     }
@@ -1720,11 +1794,14 @@ class AppState extends ChangeNotifier {
     if (next.imagePath.isEmpty) return;
     await updateBlockContent(
       boardBlock,
-      boardContentFromItems([...items, next]),
+      boardContentFromItems([...items, next], base: boardBlock.content),
       notify: true,
     );
     await _blockService.updateBlock(boardBlock.id, {
-      'content': boardContentFromItems([...items, next]),
+      'content': boardContentFromItems(
+        [...items, next],
+        base: boardBlock.content,
+      ),
     });
   }
 

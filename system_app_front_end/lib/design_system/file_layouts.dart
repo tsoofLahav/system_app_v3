@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// Describes how file note rectangles are arranged on the topic canvas.
@@ -80,12 +82,38 @@ abstract final class FileLayouts {
 
   static int? fixedCapacityFor(String id) => byId(id).fixedCapacity;
 
+  /// Default height for a primary file slot inside a scroll view.
+  static const primarySlotMinHeight = 540.0;
+
+  /// Extra space kept below primary files before the next section scrolls in.
+  static const secondarySectionReserve = 120.0;
+
+  /// Height for primary file layouts — grows with the window before content below appears.
+  static double primarySlotHeight(
+    BuildContext context, {
+    required double canvasPaddingTop,
+    required double canvasPaddingBottom,
+    double reservedAbove = 0,
+    double reservedBelow = 0,
+  }) {
+    final viewport = MediaQuery.sizeOf(context).height;
+    final available = viewport -
+        canvasPaddingTop -
+        canvasPaddingBottom -
+        reservedAbove -
+        reservedBelow;
+    return math.max(primarySlotMinHeight, available);
+  }
+
+  static double _slotHeightFromConstraints(BoxConstraints constraints) {
+    if (constraints.maxHeight.isFinite) return constraints.maxHeight;
+    return primarySlotMinHeight;
+  }
+
   static Widget _single(BuildContext context, List<Widget> slots) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final h = constraints.maxHeight.isFinite
-            ? constraints.maxHeight
-            : 540.0;
+        final h = _slotHeightFromConstraints(constraints);
         return SizedBox(
           height: h,
           child: slots.isNotEmpty ? slots.first : const SizedBox.shrink(),
@@ -97,9 +125,7 @@ abstract final class FileLayouts {
   static Widget _split(BuildContext context, List<Widget> slots) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final h = constraints.maxHeight.isFinite
-            ? constraints.maxHeight
-            : 540.0;
+        final h = _slotHeightFromConstraints(constraints);
         return SizedBox(
           height: h,
           child: Row(
@@ -119,9 +145,7 @@ abstract final class FileLayouts {
   static Widget _heroLeft(BuildContext context, List<Widget> slots) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final h = constraints.maxHeight.isFinite
-            ? constraints.maxHeight
-            : 540.0;
+        final h = _slotHeightFromConstraints(constraints);
         return SizedBox(
           height: h,
           child: Row(
@@ -149,9 +173,7 @@ abstract final class FileLayouts {
   static Widget _heroRight(BuildContext context, List<Widget> slots) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final h = constraints.maxHeight.isFinite
-            ? constraints.maxHeight
-            : 540.0;
+        final h = _slotHeightFromConstraints(constraints);
         return SizedBox(
           height: h,
           child: Row(

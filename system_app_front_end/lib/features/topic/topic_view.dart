@@ -26,11 +26,15 @@ class TopicView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (state.loading && state.selectedDetail == null) {
+    if (state.loading &&
+        state.selectedDetail == null &&
+        state.selectedTopic == null) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (state.error != null && state.selectedDetail == null) {
+    if (state.error != null &&
+        state.selectedDetail == null &&
+        state.selectedTopic == null) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -47,13 +51,26 @@ class TopicView extends StatelessWidget {
     }
 
     final detail = state.selectedDetail;
-    if (detail == null) {
+    final stale = state.topicDetailStale;
+
+    if (detail == null && !stale) {
       return Center(child: Text(state.strings['selectTopic']));
     }
 
-    final topic = detail.topic;
-    final mainFiles = state.mainFilesFor(topic, detail.files);
-    final secondaryFiles = state.secondaryFilesFor(topic, detail.files);
+    final topic = stale
+        ? (state.selectedTopic ?? detail?.topic)
+        : (detail?.topic ?? state.selectedTopic);
+    if (topic == null) {
+      return Center(child: Text(state.strings['selectTopic']));
+    }
+
+    final filesTopic = stale ? topic : detail!.topic;
+    final mainFiles = stale
+        ? const <AppFile>[]
+        : state.mainFilesFor(filesTopic, detail!.files);
+    final secondaryFiles = stale
+        ? const <AppFile>[]
+        : state.secondaryFilesFor(filesTopic, detail!.files);
     final accent = TopicAppearance.colorFromHex(topic.color);
     final layoutId = state.layoutFor(topic);
 
@@ -62,6 +79,97 @@ class TopicView extends StatelessWidget {
       bottom: AppSpacing.canvasPadding.bottom + AppBottomBarMetrics.scrollInset,
     );
 
+    Widget filesContent;
+    if (stale) {
+      filesContent = Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: CircularProgressIndicator(
+            color: accent.withValues(alpha: 0.7),
+          ),
+        ),
+      );
+    } else if (state.paneDragMode) {
+      filesContent = mainFiles.isEmpty && secondaryFiles.isEmpty
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Text(
+                  state.strings['noFilesYet'],
+                  style: AppTypography.noteBodyStyle,
+                ),
+              ),
+            )
+          : PaneReorderCanvas(
+              topic: topic,
+              mainFiles: mainFiles,
+              secondaryFiles: secondaryFiles,
+              state: state,
+              accent: accent,
+              onDeleteFile: (f) => state.deleteFile(topic, f),
+              onReorderError: (message) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(message)));
+              },
+            );
+    } else {
+      filesContent = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (mainFiles.isEmpty && secondaryFiles.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Text(
+                  state.strings['noFilesYet'],
+                  style: AppTypography.noteBodyStyle,
+                ),
+              ),
+            )
+          else ...[
+            if (state.pendingAiProposals.isNotEmpty) ...[
+              _AiProposalPanel(state: state),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+            if (mainFiles.isNotEmpty)
+              FileLayoutBoard(
+                topic: topic,
+                files: mainFiles,
+                layoutId: layoutId,
+                state: state,
+                accent: accent,
+                onDeleteFile: (f) => state.deleteFile(topic, f),
+                slotHeight: FileLayouts.primarySlotHeight(
+                  context,
+                  canvasPaddingTop: canvasPadding.top,
+                  canvasPaddingBottom: canvasPadding.bottom,
+                  reservedAbove: state.pendingAiProposals.isNotEmpty ? 96 : 0,
+                  reservedBelow: secondaryFiles.isNotEmpty
+                      ? FileLayouts.secondarySectionReserve
+                      : 0,
+                ),
+              ),
+            if (secondaryFiles.isNotEmpty) ...[
+              FilesSectionDivider(
+                collapsed: !state.moreFilesExpanded,
+                onTap: state.toggleMoreFiles,
+              ),
+              if (state.moreFilesExpanded)
+                FileLayoutBoard(
+                  topic: topic,
+                  files: secondaryFiles,
+                  layoutId: FileLayouts.grid,
+                  state: state,
+                  accent: accent,
+                  onDeleteFile: (f) => state.deleteFile(topic, f),
+                ),
+            ],
+          ],
+        ],
+      );
+    }
+
     return TopicCanvasBackground(
       accent: accent,
       isMain: topic.isMain,
@@ -69,80 +177,11 @@ class TopicView extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            child: state.paneDragMode
-                ? Padding(
-                    padding: canvasPadding,
-                    child: mainFiles.isEmpty && secondaryFiles.isEmpty
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(32),
-                              child: Text(
-                                state.strings['noFilesYet'],
-                                style: AppTypography.noteBodyStyle,
-                              ),
-                            ),
-                          )
-                        : PaneReorderCanvas(
-                            topic: topic,
-                            mainFiles: mainFiles,
-                            secondaryFiles: secondaryFiles,
-                            state: state,
-                            accent: accent,
-                            onDeleteFile: (f) => state.deleteFile(topic, f),
-                            onReorderError: (message) {
-                              ScaffoldMessenger.of(
-                                context,
-                              ).showSnackBar(SnackBar(content: Text(message)));
-                            },
-                          ),
-                  )
+            child: state.paneDragMode && !stale
+                ? Padding(padding: canvasPadding, child: filesContent)
                 : SingleChildScrollView(
                     padding: canvasPadding,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (mainFiles.isEmpty && secondaryFiles.isEmpty)
-                          Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(32),
-                              child: Text(
-                                state.strings['noFilesYet'],
-                                style: AppTypography.noteBodyStyle,
-                              ),
-                            ),
-                          )
-                        else ...[
-                          if (state.pendingAiProposals.isNotEmpty) ...[
-                            _AiProposalPanel(state: state),
-                            const SizedBox(height: AppSpacing.sm),
-                          ],
-                          if (mainFiles.isNotEmpty)
-                            FileLayoutBoard(
-                              topic: topic,
-                              files: mainFiles,
-                              layoutId: layoutId,
-                              state: state,
-                              accent: accent,
-                              onDeleteFile: (f) => state.deleteFile(topic, f),
-                            ),
-                          if (secondaryFiles.isNotEmpty) ...[
-                            FilesSectionDivider(
-                              collapsed: !state.moreFilesExpanded,
-                              onTap: state.toggleMoreFiles,
-                            ),
-                            if (state.moreFilesExpanded)
-                              FileLayoutBoard(
-                                topic: topic,
-                                files: secondaryFiles,
-                                layoutId: FileLayouts.grid,
-                                state: state,
-                                accent: accent,
-                                onDeleteFile: (f) => state.deleteFile(topic, f),
-                              ),
-                          ],
-                        ],
-                      ],
-                    ),
+                    child: filesContent,
                   ),
           ),
           Positioned(
@@ -153,7 +192,10 @@ class TopicView extends StatelessWidget {
               topic: topic,
               accent: accent,
               state: state,
-              onAddFile: () => _addFile(context, topic, detail.files),
+              addEnabled: !stale && detail != null,
+              onAddFile: detail == null
+                  ? () {}
+                  : () => _addFile(context, topic, detail.files),
             ),
           ),
         ],
@@ -310,12 +352,14 @@ class _TopicHeader extends StatelessWidget {
     required this.accent,
     required this.state,
     required this.onAddFile,
+    this.addEnabled = true,
   });
 
   final Topic topic;
   final Color accent;
   final AppState state;
   final VoidCallback onAddFile;
+  final bool addEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -379,12 +423,15 @@ class _TopicHeader extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: AppTopicHeaderMetrics.headerGap),
-                  GlassCircleButton(
-                    tooltip: s['addFile'],
-                    icon: AppIcons.add,
-                    onPressed: onAddFile,
-                    size: AppTopicHeaderMetrics.addButtonSize,
-                    iconSize: 15,
+                  Opacity(
+                    opacity: addEnabled ? 1 : 0.35,
+                    child: GlassCircleButton(
+                      tooltip: s['addFile'],
+                      icon: AppIcons.add,
+                      onPressed: addEnabled ? onAddFile : () {},
+                      size: AppTopicHeaderMetrics.addButtonSize,
+                      iconSize: 15,
+                    ),
                   ),
                 ],
               ),

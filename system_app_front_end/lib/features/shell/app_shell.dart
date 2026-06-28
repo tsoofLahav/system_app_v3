@@ -38,10 +38,33 @@ class AppShell extends StatelessWidget {
                   clipBehavior: Clip.none,
                   children: [
                     Positioned.fill(
-                      child: state.isViewMode
-                          ? TaskViewPane(state: state)
-                          : TopicView(state: state),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        switchInCurve: Curves.easeOut,
+                        switchOutCurve: Curves.easeIn,
+                        child: state.isViewMode && state.viewPaneReady
+                            ? TaskViewPane(
+                                key: ValueKey('view-${state.selectedViewType}'),
+                                state: state,
+                              )
+                            : TopicView(
+                                key: ValueKey(
+                                  'topic-${state.selectedDetail?.topic.id ?? 'none'}',
+                                ),
+                                state: state,
+                              ),
+                      ),
                     ),
+                    if (state.isViewMode && state.loading)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        child: LinearProgressIndicator(
+                          minHeight: 2,
+                          backgroundColor: Colors.transparent,
+                        ),
+                      ),
                     Positioned(
                       left: 0,
                       right: 0,
