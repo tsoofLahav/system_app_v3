@@ -19,6 +19,7 @@ Main flows:
 
 Side effects and persistence:
 - Section create/reorder/delete persists through task-view endpoints.
+- Section importance (`section_flag` on `task_views`, value `important`) propagates to all tasks in that section for filtering/automation.
 - Task status updates persist through task endpoints and reflect across views.
 
 Data contract assumptions:

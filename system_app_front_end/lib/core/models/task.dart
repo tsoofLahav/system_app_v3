@@ -1,3 +1,5 @@
+import 'view_section_flags.dart';
+
 class Task {
   const Task({
     required this.id,
@@ -10,6 +12,7 @@ class Task {
     this.taskViewId,
     this.viewType,
     this.sectionName,
+    this.sectionFlag,
     this.topicId,
     this.topicName,
   });
@@ -24,10 +27,13 @@ class Task {
   final int? taskViewId;
   final String? viewType;
   final String? sectionName;
+  final String? sectionFlag;
   final int? topicId;
   final String? topicName;
 
   bool get isDone => status == 'done';
+
+  bool get isImportant => sectionFlagIsImportant(sectionFlag);
 
   String get displayTopicName {
     if (topicName == null || topicName == 'main') return 'Main';
@@ -45,9 +51,11 @@ class Task {
     int? taskViewId,
     String? viewType,
     String? sectionName,
+    String? sectionFlag,
     int? topicId,
     String? topicName,
     bool clearSection = false,
+    bool clearSectionFlag = false,
   }) {
     return Task(
       id: id ?? this.id,
@@ -60,6 +68,8 @@ class Task {
       taskViewId: taskViewId ?? this.taskViewId,
       viewType: viewType ?? this.viewType,
       sectionName: clearSection ? null : (sectionName ?? this.sectionName),
+      sectionFlag:
+          clearSectionFlag ? null : (sectionFlag ?? this.sectionFlag),
       topicId: topicId ?? this.topicId,
       topicName: topicName ?? this.topicName,
     );
@@ -77,6 +87,7 @@ class Task {
       taskViewId: json['task_view_id'] as int?,
       viewType: json['view_type'] as String?,
       sectionName: json['section_name'] as String?,
+      sectionFlag: json['section_flag'] as String?,
       topicId: json['topic_id'] as int?,
       topicName: json['topic_name'] as String?,
     );

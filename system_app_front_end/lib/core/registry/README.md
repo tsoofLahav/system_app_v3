@@ -37,6 +37,7 @@ The file name is the visible editable header. Profiles do not seed an extra `hea
 | `tasks` | Dedicated task entry | `task_list` | none | `header`, `task_list` |
 | `doc` | Documentation | `table` | `text` | `header`, `text`, `summary`, `graph` |
 | `board` | Image canvas / mood board | `board` (items with x/y/width/height) | none | none |
+| `execution` | Execution steps (header + list) | `header`, `list` | `text` | `text`, `header`, `summary`, `list`, `graph`, `image` |
 
 Task-file editing happens entirely in the `task_list` block (connected lines). No trailing input row.
 Board files store positioned images in one `board` block. Content shape:
@@ -53,8 +54,8 @@ Board files store positioned images in one `board` block. Content shape:
 Omitted `canvas_*` / `background_color` use defaults (960×540, translucent white). Right-click on the canvas handles copy/paste and background — not `BlockContextMenu`.
 
 Topic defaults:
-- **Main topic:** `allFileTypes` — Text, Recap, and Plan are main by default; Tasks, Documentation, and Board are additional. Daily (`main`) is always main.
-- Projects: `overview`, `text`, `tasks`
+- **Main topic:** `allFileTypes` — Text, Recap, and Plan are main by default; Tasks, Documentation, Board, and Execution are additional. Daily (`main`) is always main.
+- Projects: `overview` (Summary), `tasks`, `execution` (main); `doc`, `plan` (additional)
 - Processes: `overview`, `plan`, `tasks`, `doc`
 - Areas: `tasks`, `doc`
 - When adding a file to a topic, every file type is available regardless of topic type.

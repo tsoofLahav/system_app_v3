@@ -168,6 +168,11 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                             padding: const EdgeInsetsDirectional.only(end: 6),
                             child: _SectionChip(
                               section: section,
+                              onToggleImportance: () =>
+                                  widget.state.setViewSectionImportance(
+                                    section,
+                                    important: !section.isImportant,
+                                  ),
                               onDelete: () =>
                                   widget.state.deleteViewSection(section),
                             ),
@@ -232,6 +237,11 @@ class _TaskViewPaneState extends State<TaskViewPane> {
           title: paneTitle(section.name),
           tasks: grouped[section.name] ?? [],
           state: widget.state,
+          isImportant: section.isImportant,
+          onToggleImportance: () => widget.state.setViewSectionImportance(
+            section,
+            important: !section.isImportant,
+          ),
         ),
       );
     }
@@ -269,6 +279,11 @@ class _TaskViewPaneState extends State<TaskViewPane> {
             title: paneTitle(section.name),
             tasks: const [],
             state: widget.state,
+            isImportant: section.isImportant,
+            onToggleImportance: () => widget.state.setViewSectionImportance(
+              section,
+              important: !section.isImportant,
+            ),
           ),
         );
       }
@@ -324,6 +339,8 @@ class _TaskGroupPane extends StatelessWidget {
     this.accent,
     this.isMain = true,
     this.topicTint = false,
+    this.isImportant = false,
+    this.onToggleImportance,
   });
 
   final String title;
@@ -332,12 +349,17 @@ class _TaskGroupPane extends StatelessWidget {
   final Color? accent;
   final bool isMain;
   final bool topicTint;
+  final bool isImportant;
+  final VoidCallback? onToggleImportance;
 
   static const double _paneWidth = 280;
   static const double _minHeight = 200;
 
+  static const _importantFlagColor = Color(0xFFC2410C);
+
   @override
   Widget build(BuildContext context) {
+    final s = state.strings;
     return SizedBox(
       width: _paneWidth,
       child: ConstrainedBox(
@@ -358,7 +380,37 @@ class _TaskGroupPane extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(title, style: AppTypography.noteTitleStyle),
+                  Row(
+                    children: [
+                      if (onToggleImportance != null)
+                        Tooltip(
+                          message: isImportant
+                              ? s['unmarkSectionImportant']
+                              : s['markSectionImportant'],
+                          child: InkWell(
+                            onTap: onToggleImportance,
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: AppIcon(
+                                AppIcons.flag,
+                                size: 14,
+                                color: isImportant
+                                    ? _importantFlagColor
+                                    : AppColors.noteMeta.withValues(
+                                        alpha: 0.45,
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (onToggleImportance != null)
+                        const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(title, style: AppTypography.noteTitleStyle),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: AppSpacing.sm),
                   if (tasks.isEmpty)
                     Text(
@@ -384,16 +436,42 @@ class _TaskGroupPane extends StatelessWidget {
 }
 
 class _SectionChip extends StatelessWidget {
-  const _SectionChip({required this.section, required this.onDelete});
+  const _SectionChip({
+    required this.section,
+    required this.onToggleImportance,
+    required this.onDelete,
+  });
 
   final ViewSection section;
+  final VoidCallback onToggleImportance;
   final VoidCallback onDelete;
+
+  static const _importantFlagColor = Color(0xFFC2410C);
 
   @override
   Widget build(BuildContext context) {
     return InputChip(
       avatar: AppIcon(AppIcons.drag, size: 14, color: AppColors.textHint),
-      label: Text(section.name, style: AppTypography.noteBodyStyle),
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: onToggleImportance,
+            borderRadius: BorderRadius.circular(4),
+            child: Padding(
+              padding: const EdgeInsetsDirectional.only(end: 4),
+              child: AppIcon(
+                AppIcons.flag,
+                size: 13,
+                color: section.isImportant
+                    ? _importantFlagColor
+                    : AppColors.noteMeta.withValues(alpha: 0.45),
+              ),
+            ),
+          ),
+          Text(section.name, style: AppTypography.noteBodyStyle),
+        ],
+      ),
       deleteIcon: const AppIcon(AppIcons.close, size: 14),
       onDeleted: onDelete,
       visualDensity: VisualDensity.compact,

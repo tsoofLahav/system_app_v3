@@ -120,6 +120,8 @@ class AppStrings {
     'addSection': 'Add section',
     'newSectionTitle': 'New section — {view}',
     'sectionName': 'Section name',
+    'markSectionImportant': 'Mark section as important',
+    'unmarkSectionImportant': 'Remove important mark',
     'cancel': 'Cancel',
     'add': 'Add',
     'noTasksInView':
@@ -296,6 +298,8 @@ class AppStrings {
     'addSection': 'הוסף מדור',
     'newSectionTitle': 'מדור חדש — {view}',
     'sectionName': 'שם מדור',
+    'markSectionImportant': 'סמן מדור כחשוב',
+    'unmarkSectionImportant': 'הסר סימון חשוב',
     'cancel': 'ביטול',
     'add': 'הוסף',
     'noTasksInView':
@@ -481,10 +485,12 @@ class AppStrings {
     'Text': 'Text',
     'Overview': 'Recap',
     'Recap': 'Recap',
+    'Summary': 'Summary',
     'Plan': 'Plan',
     'Tasks': 'Tasks',
     'Documentation': 'Documentation',
     'Board': 'Board',
+    'Execution': 'Execution',
     'Data': 'Data',
     'Protocol': 'Protocol',
   };
@@ -494,10 +500,12 @@ class AppStrings {
     'Text': 'טקסט',
     'Overview': 'סיכום',
     'Recap': 'סיכום',
+    'Summary': 'סיכום',
     'Plan': 'תכנית',
     'Tasks': 'משימות',
     'Documentation': 'תיעוד',
     'Board': 'לוח',
+    'Execution': 'ביצוע',
     'Data': 'נתונים',
     'Protocol': 'פרוטוקול',
   };
@@ -510,6 +518,7 @@ class AppStrings {
     'tasks': 'tasks',
     'doc': 'doc',
     'board': 'board',
+    'execution': 'execution',
     'data': 'data',
     'protocol': 'protocol',
   };
@@ -522,6 +531,7 @@ class AppStrings {
     'tasks': 'משימות',
     'doc': 'תיעוד',
     'board': 'לוח',
+    'execution': 'ביצוע',
     'data': 'נתונים',
     'protocol': 'פרוטוקול',
   };

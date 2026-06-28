@@ -1,5 +1,6 @@
 import '../models/task_view_membership.dart';
 import '../models/view_section.dart';
+import '../models/view_section_flags.dart';
 import 'api_service.dart';
 
 class TaskViewService {
@@ -44,6 +45,16 @@ class TaskViewService {
       if (sectionName != null) 'section_name': sectionName,
     }) as Map<String, dynamic>;
     return TaskViewMembership.fromJson(data);
+  }
+
+  Future<ViewSection> updateSectionImportance(
+    int id, {
+    required bool important,
+  }) async {
+    final data = await _api.patch('/task_views/$id', {
+      'section_flag': important ? ViewSectionFlags.important : null,
+    }) as Map<String, dynamic>;
+    return ViewSection.fromJson(data);
   }
 
   Future<TaskViewMembership> update(

@@ -21,5 +21,7 @@ Rebuild view-based task boards (daily/weekly/monthly/quarterly/arrangements/miss
 ## Validation
 - Selecting any view loads its tasks and sections.
 - Section changes persist and reload in correct order.
+- Section importance flag (`section_flag = important`) persists on the section placeholder and propagates to all task rows in that section.
+- `GET /tasks/view/<view_type>?important=true` returns only tasks in important sections (for automations).
 - Task status updates reflect across all relevant views.
 - By-section and by-topic display modes show consistent task totals.

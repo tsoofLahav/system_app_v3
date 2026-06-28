@@ -63,6 +63,8 @@ abstract final class AppColors {
         return 0.075;
       case 'board':
         return 0.09;
+      case 'execution':
+        return 0.14;
       case 'text':
         return 0.045;
       default:

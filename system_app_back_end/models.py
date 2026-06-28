@@ -116,6 +116,7 @@ class TaskView(db.Model):
     view_type = db.Column(db.Text, nullable=False)
     section_name = db.Column(db.Text, nullable=True)
     order_index = db.Column(db.Integer, default=0)
+    section_flag = db.Column(db.Text, nullable=True)
 
     def to_dict(self):
         return {
@@ -124,6 +125,7 @@ class TaskView(db.Model):
             "view_type": self.view_type,
             "section_name": self.section_name,
             "order_index": self.order_index,
+            "section_flag": self.section_flag,
         }
 
 

@@ -2,6 +2,10 @@ from flask import Blueprint, jsonify, request
 
 from models import TaskView, db
 from routes.helpers import apply_updates, get_or_404
+from services.task_view_flags import (
+    apply_section_flag_to_membership,
+    propagate_section_flag,
+)
 
 task_views_bp = Blueprint("task_views", __name__)
 
@@ -69,6 +73,7 @@ def create_task_view():
             view_type=view_type,
             section_name=section_name,
             order_index=data.get("order_index", max_order + 1),
+            section_flag=data.get("section_flag"),
         )
     else:
         view = TaskView(
@@ -76,6 +81,7 @@ def create_task_view():
             view_type=view_type,
             section_name=section_name,
         )
+        apply_section_flag_to_membership(view)
 
     db.session.add(view)
     db.session.commit()
@@ -86,7 +92,17 @@ def create_task_view():
 def update_task_view(view_id):
     view = get_or_404(TaskView, view_id)
     data = request.get_json(silent=True) or {}
-    apply_updates(view, data, {"task_id", "view_type", "section_name", "order_index"})
+    apply_updates(
+        view,
+        data,
+        {"task_id", "view_type", "section_name", "order_index", "section_flag"},
+    )
+
+    if view.task_id is None and "section_flag" in data:
+        propagate_section_flag(view.view_type, view.section_name, view.section_flag)
+    elif view.task_id is not None and "section_name" in data:
+        apply_section_flag_to_membership(view)
+
     db.session.commit()
     return jsonify(view.to_dict())
 

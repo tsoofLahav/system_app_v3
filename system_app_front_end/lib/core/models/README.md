@@ -12,7 +12,8 @@ Core entities:
 - Models should reflect API contracts, not widget presentation concerns.
 
 Contract notes:
-- Preserve backend keys (`view_type`, `section_name`, `order_index`) in parsing.
+- Preserve backend keys (`view_type`, `section_name`, `section_flag`, `order_index`) in parsing.
+- `ViewSectionFlags.important` marks a section (and its tasks) for priority/automation filters.
 - Keep nullable fields explicit to avoid hidden fallbacks.
 
 Guidelines:

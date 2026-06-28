@@ -16,6 +16,7 @@ import 'models/task.dart';
 import 'models/task_view_membership.dart';
 import 'models/topic.dart';
 import 'models/view_section.dart';
+import 'models/view_section_flags.dart';
 import 'registry/file_behavior_registry.dart';
 import 'registry/file_registry.dart';
 import 'registry/task_view_display.dart';
@@ -1632,6 +1633,7 @@ class AppState extends ChangeNotifier {
             taskViewId: membership.id,
             viewType: viewType,
             sectionName: sectionName,
+            sectionFlag: membership.sectionFlag,
           ),
         ];
       }
@@ -1660,11 +1662,45 @@ class AppState extends ChangeNotifier {
             (t) => t.id == task.id
                 ? t.copyWith(
                     sectionName: clearSection ? null : sectionName,
+                    sectionFlag: updated.sectionFlag,
                     clearSection: clearSection,
+                    clearSectionFlag: updated.sectionFlag == null,
                   )
                 : t,
           )
           .toList();
+    }
+    notifyListeners();
+  }
+
+  Future<void> setViewSectionImportance(
+    ViewSection section, {
+    required bool important,
+  }) async {
+    final updated = await _taskViewService.updateSectionImportance(
+      section.id,
+      important: important,
+    );
+    viewSections = viewSections
+        .map((s) => s.id == section.id ? updated : s)
+        .toList();
+
+    if (selectedViewType == section.viewType) {
+      final flag = important ? ViewSectionFlags.important : null;
+      viewTasks = viewTasks
+          .map(
+            (t) => t.sectionName == section.name
+                ? t.copyWith(
+                    sectionFlag: flag,
+                    clearSectionFlag: !important,
+                  )
+                : t,
+          )
+          .toList();
+      _viewCache[section.viewType] = _ViewSnapshot(
+        tasks: List<Task>.from(viewTasks),
+        sections: sectionsForViewType(section.viewType),
+      );
     }
     notifyListeners();
   }
@@ -1732,6 +1768,7 @@ class AppState extends ChangeNotifier {
             viewType: reordered[i].viewType,
             name: reordered[i].name,
             orderIndex: i,
+            sectionFlag: reordered[i].sectionFlag,
           ),
       ],
     ];

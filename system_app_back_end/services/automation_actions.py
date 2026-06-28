@@ -13,6 +13,11 @@ DEFAULT_BLOCKS = {
     "doc": [("text", {"text": ""})],
     "plan": [("text", {"text": ""})],
     "tasks": [("task_list", {})],
+    "execution": [
+        ("header", {"text": "", "level": 2}),
+        ("list", {"items": [{"text": ""}]}),
+        ("text", {"text": ""}),
+    ],
 }
 
 
@@ -202,4 +207,6 @@ def _default_name(file_type):
         "plan": "Plan",
         "doc": "Documentation",
         "tasks": "Tasks",
+        "execution": "Execution",
+        "overview": "Summary",
     }.get(file_type, "Text")

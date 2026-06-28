@@ -26,6 +26,13 @@ def list_tasks_by_block(block_id):
 
 @tasks_bp.route("/tasks/view/<view_type>", methods=["GET"])
 def list_tasks_by_view(view_type):
+    from services.task_view_flags import IMPORTANT_SECTION_FLAG
+
+    important_only = request.args.get("important", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
     rows = (
         db.session.query(Task, TaskView, Topic)
         .join(TaskView, TaskView.task_id == Task.id)
@@ -38,15 +45,17 @@ def list_tasks_by_view(view_type):
         .filter(Block.archived_at.is_(None))
         .filter(File.archived_at.is_(None))
         .filter(Topic.archived_at.is_(None))
-        .order_by(TaskView.section_name.nulls_last(), Task.id)
-        .all()
     )
+    if important_only:
+        rows = rows.filter(TaskView.section_flag == IMPORTANT_SECTION_FLAG)
+    rows = rows.order_by(TaskView.section_name.nulls_last(), Task.id).all()
     result = []
     for task, task_view, topic in rows:
         item = task.to_dict()
         item["task_view_id"] = task_view.id
         item["view_type"] = task_view.view_type
         item["section_name"] = task_view.section_name
+        item["section_flag"] = task_view.section_flag
         item["topic_id"] = topic.id if topic else None
         item["topic_name"] = topic.name if topic else None
         result.append(item)

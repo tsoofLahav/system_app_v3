@@ -16,11 +16,12 @@ Any file may contain any block type. This keeps manual editing and existing AI t
 | `tasks` | Dedicated task entry | `task_list` | none (edit in `task_list`) | `header`, `task_list` |
 | `doc` | Documentation | `table`, `text` | `text` | `header`, `text`, `summary`, `graph` |
 | `board` | Free-form image canvas | `board` | none | none (canvas toolbar) |
+| `execution` | Project execution steps | `header`, `list`, `text` | `text` | `text`, `header`, `summary`, `list`, `graph`, `image` |
 
 The file name is the visible editable header. Profiles do not seed an extra `header` block by default.
 
 Topic defaults:
-- Projects: `overview`, `text`, `tasks`
+- Projects: Summary (`overview`), Tasks, Execution (main); Documentation, Plan (additional)
 - Processes: `overview`, `plan`, `tasks`, `doc`
 - Areas: `tasks`, `doc`
 

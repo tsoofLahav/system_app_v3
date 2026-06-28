@@ -46,17 +46,35 @@ class FileRegistry {
       isMain: false,
       orderIndex: 5,
     ),
+    RecommendedFile(
+      name: 'Execution',
+      type: 'execution',
+      isMain: false,
+      orderIndex: 6,
+    ),
   ];
 
   static const projectFiles = [
     RecommendedFile(
-      name: 'Recap',
+      name: 'Summary',
       type: 'overview',
       isMain: true,
       orderIndex: 0,
     ),
-    RecommendedFile(name: 'Text', type: 'text', isMain: true, orderIndex: 1),
-    RecommendedFile(name: 'Tasks', type: 'tasks', isMain: true, orderIndex: 2),
+    RecommendedFile(name: 'Tasks', type: 'tasks', isMain: true, orderIndex: 1),
+    RecommendedFile(
+      name: 'Execution',
+      type: 'execution',
+      isMain: true,
+      orderIndex: 2,
+    ),
+    RecommendedFile(
+      name: 'Documentation',
+      type: 'doc',
+      isMain: false,
+      orderIndex: 3,
+    ),
+    RecommendedFile(name: 'Plan', type: 'plan', isMain: false, orderIndex: 4),
   ];
 
   static const processFiles = [
