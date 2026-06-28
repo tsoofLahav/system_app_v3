@@ -16,6 +16,7 @@ class RecommendedFile {
 
 class FileRegistry {
   static const mainTopicName = 'main';
+  static const maxMainFilesPerTopic = 3;
 
   /// Every file type the app supports.
   static const allFileTypes = [
@@ -27,11 +28,16 @@ class FileRegistry {
       orderIndex: 1,
     ),
     RecommendedFile(name: 'Plan', type: 'plan', isMain: true, orderIndex: 2),
-    RecommendedFile(name: 'Tasks', type: 'tasks', isMain: true, orderIndex: 3),
+    RecommendedFile(
+      name: 'Tasks',
+      type: 'tasks',
+      isMain: false,
+      orderIndex: 3,
+    ),
     RecommendedFile(
       name: 'Documentation',
       type: 'doc',
-      isMain: true,
+      isMain: false,
       orderIndex: 4,
     ),
   ];
@@ -101,10 +107,14 @@ class FileRegistry {
     required String fileType,
     required bool isMainTopic,
   }) {
-    if (isMainTopic) return true;
-    return recommendedForTopicType(
-      topicType,
-    ).any((f) => f.type == fileType && f.isMain);
+    final source = isMainTopic
+        ? allFileTypes
+        : recommendedForTopicType(topicType);
+    for (final file in source) {
+      if (file.type == fileType) return file.isMain;
+    }
+    if (isMainTopic && fileType == 'main') return true;
+    return false;
   }
 
   /// Resolved main/secondary visibility for a file (persisted override or registry default).

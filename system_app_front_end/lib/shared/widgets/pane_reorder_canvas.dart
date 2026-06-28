@@ -36,7 +36,6 @@ class PaneReorderCanvas extends StatefulWidget {
 
 class _PaneReorderCanvasState extends State<PaneReorderCanvas> {
   late PaneReorderState _sections;
-  late List<AppFile> _mainOnly;
   bool _persisting = false;
   int? _draggingFileId;
   PaneReorderSection? _hoverSection;
@@ -60,14 +59,10 @@ class _PaneReorderCanvasState extends State<PaneReorderCanvas> {
   }
 
   void _syncFromWidget() {
-    if (widget.topic.isMain) {
-      _mainOnly = List<AppFile>.from(widget.mainFiles);
-    } else {
-      _sections = PaneReorderState.fromFiles(
-        mainFiles: widget.mainFiles,
-        secondaryFiles: widget.secondaryFiles,
-      );
-    }
+    _sections = PaneReorderState.fromFiles(
+      mainFiles: widget.mainFiles,
+      secondaryFiles: widget.secondaryFiles,
+    );
   }
 
   List<Task> _tasksForFile(int fileId) {
@@ -149,26 +144,6 @@ class _PaneReorderCanvasState extends State<PaneReorderCanvas> {
     int toIndex,
   ) async {
     _onDragEnded();
-
-    if (widget.topic.isMain) {
-      final fromIndex = _mainOnly.indexWhere((f) => f.id == file.id);
-      if (fromIndex < 0) return;
-
-      final previous = List<AppFile>.from(_mainOnly);
-      setState(() {
-        final moved = _mainOnly.removeAt(fromIndex);
-        var insertAt = toIndex;
-        if (fromIndex < toIndex) insertAt--;
-        _mainOnly.insert(insertAt.clamp(0, _mainOnly.length), moved);
-      });
-
-      await _persist(
-        ordered: _mainOnly,
-        mainCount: _mainOnly.length,
-        onError: () => setState(() => _mainOnly = previous),
-      );
-      return;
-    }
 
     final fromSection = _sections.sectionOf(file);
     if (fromSection == null) return;
@@ -351,22 +326,8 @@ class _PaneReorderCanvasState extends State<PaneReorderCanvas> {
     );
   }
 
-  Widget _buildMainTopicLayout() {
-    return SingleChildScrollView(
-      child: _fileList(
-        files: _mainOnly,
-        section: PaneReorderSection.main,
-        emptySlotMinHeight: _rowHeight,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    return SizedBox.expand(
-      child: widget.topic.isMain
-          ? _buildMainTopicLayout()
-          : _buildDualSectionLayout(),
-    );
+    return SizedBox.expand(child: _buildDualSectionLayout());
   }
 }

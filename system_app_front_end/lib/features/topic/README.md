@@ -4,8 +4,8 @@ Purpose: topic canvas and file-pane experience.
 
 What this module covers:
 - Topic page composition (`TopicView`) and file-pane layout rendering.
-- Main vs additional file grouping rules in presentation.
-- Reorder-mode UI behavior and drag/drop interactions.
+- Main vs additional file grouping rules in presentation (including the main topic).
+- Reorder-mode UI behavior and drag/drop interactions; main section holds up to 3 files.
 
 Inputs and dependencies:
 - Topic detail state (`selectedDetail`, files, blocks, tasks) from `AppState`.

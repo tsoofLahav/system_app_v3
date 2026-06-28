@@ -542,13 +542,12 @@ class AppState extends ChangeNotifier {
       final tasksByBlockId = <int, List<Task>>{};
 
       for (final file in files) {
-        final blocks = await _ensureTrailingDefaultBlock(
-          file,
-          await _blockService.listForFile(
-            file.id,
-            includeArchived: includeArchived || file.isArchived,
-          ),
+        final loaded = await _blockService.listForFile(
+          file.id,
+          includeArchived: includeArchived || file.isArchived,
         );
+        final normalized = await _removeAdjacentTextBlocks(file, loaded);
+        final blocks = await _ensureTrailingDefaultBlock(file, normalized);
         blocksByFileId[file.id] = blocks;
         for (final block in blocks) {
           if (block.type == 'task' || block.type == 'task_list') {
@@ -694,9 +693,8 @@ class AppState extends ChangeNotifier {
     if (detail == null || detail.topic.id != topic.id) return null;
 
     try {
-      final allMain = topic.isMain;
       for (var i = 0; i < ordered.length; i++) {
-        final isMain = allMain || i < mainCount;
+        final isMain = i < mainCount;
         await _fileService.updateFile(ordered[i].id, {
           'order_index': i,
           'is_main': isMain,
@@ -709,7 +707,7 @@ class AppState extends ChangeNotifier {
           .toList();
       final updatedOrdered = [
         for (var i = 0; i < ordered.length; i++)
-          ordered[i].copyWith(orderIndex: i, isMain: allMain || i < mainCount),
+          ordered[i].copyWith(orderIndex: i, isMain: i < mainCount),
       ];
       _applyOptimisticFiles([...updatedOrdered, ...others]);
       return null;
@@ -726,8 +724,19 @@ class AppState extends ChangeNotifier {
     final detail = selectedDetail;
     if (detail == null || detail.topic.id != topic.id) return;
 
-    final mainFiles = mainFilesFor(topic, detail.files);
+    var mainFiles = mainFilesFor(topic, detail.files);
     final secondaryFiles = secondaryFilesFor(topic, detail.files);
+
+    int? evictedId;
+    if (isMain &&
+        !fileIsMain(topic, file) &&
+        mainFiles.length >= FileRegistry.maxMainFilesPerTopic) {
+      final evicted = mainFiles.last;
+      evictedId = evicted.id;
+      await _fileService.updateFile(evicted.id, {'is_main': false});
+      mainFiles = mainFiles.sublist(0, mainFiles.length - 1);
+    }
+
     final orderIndex = isMain
         ? (mainFiles.isEmpty
               ? 0
@@ -744,21 +753,25 @@ class AppState extends ChangeNotifier {
 
     final updated = detail.files
         .map(
-          (f) => f.id == file.id
-              ? f.copyWith(isMain: isMain, orderIndex: orderIndex)
-              : f,
+          (f) {
+            if (f.id == file.id) {
+              return f.copyWith(isMain: isMain, orderIndex: orderIndex);
+            }
+            if (evictedId != null && f.id == evictedId) {
+              return f.copyWith(isMain: false);
+            }
+            return f;
+          },
         )
         .toList();
     _applyOptimisticFiles(updated);
   }
 
   Future<void> promoteFileToMain(Topic topic, AppFile file) async {
-    if (topic.isMain) return;
     await setFileMainVisibility(topic, file, isMain: true);
   }
 
   Future<void> demoteFileToSecondary(Topic topic, AppFile file) async {
-    if (topic.isMain) return;
     await setFileMainVisibility(topic, file, isMain: false);
   }
 
@@ -786,7 +799,11 @@ class AppState extends ChangeNotifier {
         name: def.name,
         type: def.type,
         orderIndex: def.orderIndex,
-        isMain: topic.isMain ? true : def.isMain,
+        isMain: FileRegistry.isMainFile(
+          topicType: type,
+          fileType: def.type,
+          isMainTopic: topic.isMain,
+        ),
       );
       await _createDefaultBlocks(file);
     }
@@ -822,14 +839,12 @@ class AppState extends ChangeNotifier {
       fileType: type,
       isMainTopic: topic.isMain,
     );
-    final isMain = topic.isMain
-        ? true
-        : def?.isMain ??
-              FileRegistry.isMainFile(
-                topicType: topic.type,
-                fileType: type,
-                isMainTopic: false,
-              );
+    final isMain = def?.isMain ??
+        FileRegistry.isMainFile(
+          topicType: topic.type,
+          fileType: type,
+          isMainTopic: topic.isMain,
+        );
     final file = await _fileService.createFile(
       topicId: topic.id,
       name: name,
@@ -861,6 +876,23 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<List<Block>> _removeAdjacentTextBlocks(
+    AppFile file,
+    List<Block> blocks,
+  ) async {
+    if (file.isArchived || blocks.length < 2) return blocks;
+    var result = List<Block>.from(blocks);
+    for (var i = result.length - 1; i >= 1; i--) {
+      if (result[i].type == 'text' &&
+          result[i - 1].type == 'text' &&
+          _isEmptyTextBlock(result[i])) {
+        await _blockService.deleteBlock(result[i].id);
+        result.removeAt(i);
+      }
+    }
+    return result;
+  }
+
   Future<List<Block>> _ensureTrailingDefaultBlock(
     AppFile file,
     List<Block> blocks,
@@ -870,7 +902,7 @@ class AppState extends ChangeNotifier {
       file.type,
     );
     if (trailingType == null || trailingType != 'text') return blocks;
-    if (blocks.isNotEmpty && _isEmptyTextBlock(blocks.last)) return blocks;
+    if (blocks.isNotEmpty && blocks.last.type == 'text') return blocks;
     final block = await _blockService.createBlock(
       fileId: file.id,
       type: trailingType,
@@ -896,6 +928,10 @@ class AppState extends ChangeNotifier {
     final topic = selectedTopic;
     if (topic == null) return;
     final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    if (blocks.isNotEmpty && blocks.last.type == 'text') {
+      requestBlockFocus(blocks.last.id);
+      return;
+    }
     await _blockService.createBlock(
       fileId: file.id,
       type: 'text',

@@ -15,7 +15,8 @@ Decision precedence:
 3. UI-level display choices.
 
 Examples:
-- Which files are main by default for a topic type.
+- Which files are main by default for a topic type (and for the main topic via `allFileTypes`).
+- Main section capacity: at most `maxMainFilesPerTopic` (3) visible files per topic.
 - Which blocks a file starts with.
 - Which block types are suggested in a file context menu.
 - Which views appear in the sidebar and their labels.
@@ -39,10 +40,13 @@ The file name is the visible editable header. Profiles do not seed an extra `hea
 Task-file editing happens entirely in the `task_list` block (connected lines). No trailing input row.
 
 Topic defaults:
+- **Main topic:** `allFileTypes` — Text, Recap, and Plan are main by default; Tasks and Documentation are additional. Daily (`main`) is always main.
 - Projects: `overview`, `text`, `tasks`
 - Processes: `overview`, `plan`, `tasks`, `doc`
 - Areas: `tasks`, `doc`
 - When adding a file to a topic, every file type is available regardless of topic type.
+
+Main section limit: `FileRegistry.maxMainFilesPerTopic` (3). Reorder and promote-to-main evict the last main file when full.
 
 How to use it:
 - Add/adjust rules here first, then adapt UI behavior in features.

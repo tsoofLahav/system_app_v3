@@ -71,7 +71,7 @@ class _FileSectionState extends State<FileSection> {
     final s = widget.state.strings;
     final topic = widget.topic;
     final isMainPane = widget.state.fileIsMain(topic, widget.file);
-    final canToggleVisibility = !topic.isMain;
+    final canToggleVisibility = true;
     final tasks = <Task>[];
     for (final b in widget.blocks) {
       tasks.addAll(

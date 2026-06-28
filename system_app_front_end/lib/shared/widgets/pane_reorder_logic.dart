@@ -1,6 +1,7 @@
 import '../../core/models/app_file.dart';
+import '../../core/registry/file_registry.dart';
 
-const paneReorderMaxMainFiles = 4;
+const paneReorderMaxMainFiles = FileRegistry.maxMainFilesPerTopic;
 
 enum PaneReorderSection { main, additional }
 
@@ -67,6 +68,7 @@ PaneReorderState applyPaneReorderDrop({
       main.insert(insertAt, file);
     } else {
       final evicted = main.removeLast();
+      insertAt = insertAt.clamp(0, main.length);
       main.insert(insertAt, file);
       additional.insert(0, evicted);
     }

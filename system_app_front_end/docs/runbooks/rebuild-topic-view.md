@@ -20,5 +20,6 @@ Rebuild the topic page that renders file panes, supports layout mode, and integr
 
 ## Validation
 - Opening a topic shows the correct files, blocks, and task summaries.
-- Main vs additional grouping matches persisted `is_main` and ordering.
+- Main vs additional grouping matches persisted `is_main` and ordering (main topic included).
+- Main section shows at most 3 files; additional files appear below the divider.
 - File-level actions update UI and persist correctly after refresh.

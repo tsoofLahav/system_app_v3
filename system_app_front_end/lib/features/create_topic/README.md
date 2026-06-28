@@ -12,7 +12,7 @@ File choices:
 - Process topics start with `overview`, `plan`, `tasks`, and `doc`.
 - Area topics start with `tasks` and `doc`.
 - The add-file dialog offers every file type for every topic type.
-- File names, order, and main/additional placement come from `core/registry/file_registry.dart`.
+- File names, order, and main/additional placement come from `core/registry/file_registry.dart` (main topic uses `allFileTypes`; main section capped at 3 files).
 - Initial blocks for each selected file come from `core/registry/file_behavior_registry.dart`.
 
 Guidelines:

@@ -27,7 +27,8 @@ Topic defaults:
 
 - File corner `...` = file actions only (delete, main/additional visibility)
 - Right-click inside file = glass bubble menu (`AppContextMenu`): **Add block →** hover submenu for profile-filtered inserts, plus block/text actions. See [`lib/shared/widgets/README.md`](../../lib/shared/widgets/README.md).
-- Files with a text default keep an empty text block at the end.
+- Files with a text default keep a text block at the end (never two consecutive text blocks).
+- On topic load, adjacent empty text blocks after another text block are removed; trailing ensure skips when the file already ends with text.
 - Right-click menus open at the pointer.
 - Lists and task entry continue by pressing Enter, not by visible "add" buttons.
 - **`list` and `task_list` use one connected multiline editor** (`ConnectedLinesEditor`): each newline is one item/task; soft wrap stays on the same item. See [`lib/features/blocks/README.md`](../../lib/features/blocks/README.md).
@@ -62,6 +63,7 @@ Recap is a file composition, not a `recap` block type. Recap files are built fro
 - The corner `...` menu shows only file actions.
 - Right-click options differ by behavior profile.
 - Empty trailing text blocks are reused instead of creating duplicate empty text blocks.
+- Files never end with two consecutive text blocks (template defaults and trailing ensure share one block).
 - New files show the editable file title as their header.
 
 ## Source of truth
