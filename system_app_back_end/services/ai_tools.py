@@ -68,6 +68,16 @@ def _add_task_to_file(file_id: int, title: str) -> Task:
 
 
 
+def _save_image_bytes(data: bytes) -> str:
+    upload_folder = current_app.config["UPLOAD_FOLDER"]
+    os.makedirs(upload_folder, exist_ok=True)
+    filename = f"ai_{uuid.uuid4().hex[:10]}.png"
+    path = os.path.join(upload_folder, filename)
+    with open(path, "wb") as out:
+        out.write(data)
+    return f"/images/{filename}"
+
+
 def _save_image_from_url(url: str) -> str:
     upload_folder = current_app.config["UPLOAD_FOLDER"]
     os.makedirs(upload_folder, exist_ok=True)
@@ -238,12 +248,13 @@ def run_tool(tool: str, topic_id: int, context: dict, locale: str = "en") -> dic
 
     if tool == "create_image":
         prompt = chat_text(
-            "Turn the user content into a short DALL-E image prompt (one sentence, English).",
+            "Turn the user content into a short image-generation prompt "
+            "(one sentence, English).",
             text,
             max_tokens=120,
         )
-        image_url = generate_image(prompt)
-        image_path = _save_image_from_url(image_url)
+        image_bytes = generate_image(prompt)
+        image_path = _save_image_bytes(image_bytes)
 
         target_file_id = context.get("file_id")
         target = None

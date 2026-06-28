@@ -1,7 +1,9 @@
+import base64
 import json
 
 from config import OPENAI_API_KEY, OPENAI_IMAGE_MODEL, OPENAI_MODEL
 from openai import OpenAI
+from urllib.request import urlopen
 
 
 def _client():
@@ -37,12 +39,18 @@ def chat_json(system: str, user: str, *, temperature: float = 0.2) -> dict:
     return json.loads(raw)
 
 
-def generate_image(prompt: str) -> str:
-    """Returns a temporary URL from OpenAI."""
+def generate_image(prompt: str) -> bytes:
+    """Generate an image and return raw PNG bytes."""
     response = _client().images.generate(
         model=OPENAI_IMAGE_MODEL,
         prompt=prompt[:4000],
         size="1024x1024",
         n=1,
     )
-    return response.data[0].url
+    item = response.data[0]
+    if item.b64_json:
+        return base64.b64decode(item.b64_json)
+    if item.url:
+        with urlopen(item.url) as resp:
+            return resp.read()
+    raise RuntimeError("Image generation returned no image data")

@@ -43,7 +43,7 @@ UPLOAD_FOLDER = resolve_upload_folder()
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
-OPENAI_IMAGE_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "dall-e-3")
+OPENAI_IMAGE_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2")
 OPENAI_PROCESS_UPDATE_TEMPERATURE = float(
     os.environ.get("OPENAI_PROCESS_UPDATE_TEMPERATURE", "0.5")
 )
