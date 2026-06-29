@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from models import File, db
 from routes.helpers import active_query, apply_updates, get_or_404
+from services.automation_events import dispatch_file_changed
 from services.delete_cascade import delete_file_cascade
 
 files_bp = Blueprint("files", __name__)
@@ -58,6 +59,7 @@ def update_file(file_id):
         datetime_fields={"archived_at"},
     )
     db.session.commit()
+    dispatch_file_changed(file_id, "file_updated")
     return jsonify(file.to_dict())
 
 

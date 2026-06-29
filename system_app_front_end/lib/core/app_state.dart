@@ -9,6 +9,7 @@ import 'l10n/app_strings.dart';
 import 'models/ai_proposal.dart';
 import 'models/app_file.dart';
 import 'models/automation_rule.dart';
+import 'models/automation_run.dart';
 import 'models/block.dart';
 import '../features/blocks/board_content.dart';
 import 'models/task.dart';
@@ -115,8 +116,12 @@ class AppState extends ChangeNotifier {
 
   final Map<int, Timer?> _saveTimers = {};
   final Map<int, String?> _automationLastRunAtById = {};
+  final Map<int, int> _activeAutomationRunsByRuleId = {};
+  final Set<int> _notifiedAutomationRunIds = {};
   Timer? _automationRunPollTimer;
+  Timer? _automationStatusPollTimer;
   bool _pollingAutomationRuns = false;
+  String? _automationNotice;
 
   AppStrings get strings => AppStrings.forLanguage(language);
   bool get isRtl => strings.isRtl;
@@ -432,6 +437,7 @@ class AppState extends ChangeNotifier {
       await _refreshTaskViewMemberships();
       await selectTopic(mainTopic!);
       _rememberAutomationRunState();
+      await _hydrateActiveAutomationRuns();
       _startAutomationRunPolling();
     } catch (e) {
       error = e.toString();
@@ -547,10 +553,71 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> runAutomationRule(AutomationRule rule) async {
-    await _automationService.runRule(rule.id);
-    await refreshAutomationRules();
-    _rememberAutomationRunState();
-    await _refreshVisibleContentAfterAutomation();
+    final run = await _automationService.runRule(rule.id);
+    _trackAutomationRun(rule.id, run);
+    _ensureAutomationStatusPolling();
+    notifyListeners();
+  }
+
+  bool isAutomationRuleActive(int ruleId) =>
+      _activeAutomationRunsByRuleId.containsKey(ruleId);
+
+  String? takeAutomationNotice() {
+    final notice = _automationNotice;
+    _automationNotice = null;
+    return notice;
+  }
+
+  void _trackAutomationRun(int ruleId, AutomationRun run) {
+    if (run.isActive) {
+      _activeAutomationRunsByRuleId[ruleId] = run.id;
+    }
+  }
+
+  void _ensureAutomationStatusPolling() {
+    if (_automationStatusPollTimer != null) return;
+    _automationStatusPollTimer = Timer.periodic(
+      const Duration(seconds: 8),
+      (_) => _pollActiveAutomationRuns(),
+    );
+  }
+
+  Future<void> _pollActiveAutomationRuns() async {
+    if (_activeAutomationRunsByRuleId.isEmpty) {
+      _automationStatusPollTimer?.cancel();
+      _automationStatusPollTimer = null;
+      return;
+    }
+    if (_pollingAutomationRuns) return;
+    _pollingAutomationRuns = true;
+    try {
+      var completed = false;
+      for (final entry in _activeAutomationRunsByRuleId.entries.toList()) {
+        final run = await _automationService.getRun(entry.value);
+        if (run.isActive) continue;
+
+        _activeAutomationRunsByRuleId.remove(entry.key);
+        completed = true;
+        if (_notifiedAutomationRunIds.contains(run.id)) continue;
+        _notifiedAutomationRunIds.add(run.id);
+        _automationNotice = run.status == 'success'
+            ? strings['automationCompleted']
+            : strings['automationRunFailed'];
+      }
+
+      if (!completed) return;
+
+      await refreshAutomationRules();
+      _rememberAutomationRunState();
+      if (_hasOpenContent) {
+        await _refreshVisibleContentAfterAutomation();
+      }
+      notifyListeners();
+    } catch (_) {
+      // Active run checks should never interrupt editing.
+    } finally {
+      _pollingAutomationRuns = false;
+    }
   }
 
   void _startAutomationRunPolling() {
@@ -596,6 +663,20 @@ class AppState extends ChangeNotifier {
       ..addEntries(
         automationRules.map((rule) => MapEntry(rule.id, rule.lastRunAt)),
       );
+  }
+
+  Future<void> _hydrateActiveAutomationRuns() async {
+    try {
+      final runs = await _automationService.listActiveRuns();
+      for (final run in runs) {
+        _activeAutomationRunsByRuleId[run.ruleId] = run.id;
+      }
+      if (_activeAutomationRunsByRuleId.isNotEmpty) {
+        _ensureAutomationStatusPolling();
+      }
+    } catch (_) {
+      // Active run hydration should not block app startup.
+    }
   }
 
   bool get _hasOpenContent =>
@@ -2273,6 +2354,7 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _automationRunPollTimer?.cancel();
+    _automationStatusPollTimer?.cancel();
     for (final timer in _saveTimers.values) {
       timer?.cancel();
     }

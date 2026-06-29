@@ -22,48 +22,92 @@ WEEKDAYS = {
     "sunday": 6,
 }
 
+ACTIVE_RUN_STATUSES = ("queued", "running")
 
-def run_due_automations(now=None):
+
+def enqueue_run(rule, trigger_source, event_context=None):
+    existing = (
+        AutomationRun.query.filter_by(rule_id=rule.id)
+        .filter(AutomationRun.status.in_(ACTIVE_RUN_STATUSES))
+        .first()
+    )
+    if existing is not None:
+        return existing.to_dict()
+
+    now = datetime.utcnow()
+    run = AutomationRun(
+        rule_id=rule.id,
+        status="queued",
+        trigger_source=trigger_source,
+        event_context=event_context or {},
+        started_at=now,
+    )
+    db.session.add(run)
+    db.session.commit()
+    return run.to_dict()
+
+
+def enqueue_due_scheduled_rules(now=None):
     now = now or datetime.utcnow()
     rules = (
-        AutomationRule.query.filter_by(enabled=True)
+        AutomationRule.query.filter_by(enabled=True, trigger_type="schedule")
         .filter(AutomationRule.next_run_at <= now)
         .order_by(AutomationRule.next_run_at, AutomationRule.id)
         .all()
     )
     results = []
     for rule in rules:
-        results.append(run_rule(rule, now=now))
+        results.append(enqueue_run(rule, trigger_source="schedule"))
     return results
 
 
-def run_rule(rule, now=None):
-    now = now or datetime.utcnow()
-    run = AutomationRun(rule_id=rule.id, status="running", started_at=now)
-    db.session.add(run)
-    db.session.flush()
+def process_automation_queue(limit=5):
+    now = datetime.utcnow()
+    runs = (
+        AutomationRun.query.filter_by(status="queued")
+        .order_by(AutomationRun.id)
+        .with_for_update(skip_locked=True)
+        .limit(limit)
+        .all()
+    )
+    results = []
+    for run in runs:
+        run.status = "running"
+        run.started_at = now
+        results.append(_execute_run(run, now))
+    if runs:
+        db.session.commit()
+    return results
+
+
+def _execute_run(run, now):
+    rule = db.session.get(AutomationRule, run.rule_id)
+    if rule is None:
+        run.status = "failed"
+        run.error = "rule not found"
+        run.finished_at = datetime.utcnow()
+        return run.to_dict()
+
     try:
         result = run_action(rule)
         run.status = "success"
         run.result = result or {}
         rule.last_run_at = now
-        rule.next_run_at = next_run_after(rule.schedule, now)
+        if rule.trigger_type == "schedule" and rule.schedule:
+            rule.next_run_at = next_run_after(rule.schedule, now)
     except Exception as error:
-        db.session.rollback()
-        run = AutomationRun(
-            rule_id=rule.id,
-            status="failed",
-            started_at=now,
-            finished_at=datetime.utcnow(),
-            error=str(error),
-        )
-        db.session.add(run)
-        db.session.commit()
-        return run.to_dict()
+        run.status = "failed"
+        run.error = str(error)
 
     run.finished_at = datetime.utcnow()
-    db.session.commit()
     return run.to_dict()
+
+
+def run_due_automations(now=None):
+    """Backward-compatible entry point used by the cron script."""
+    enqueued = enqueue_due_scheduled_rules(now=now)
+    processed = process_automation_queue()
+    return {"enqueued": enqueued, "processed": processed}
 
 
 def next_run_after(schedule, after):

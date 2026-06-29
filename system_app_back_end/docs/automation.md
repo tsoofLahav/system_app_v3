@@ -1,13 +1,56 @@
 # Automation, Archive, and AI Proposals
 
-Automation is the app-owned action system. It runs explicit rules without a user click, either on a schedule or from a trigger. The backend owns scheduled execution so automations still run when the Flutter app is closed.
+Automation is the app-owned action system. It runs explicit rules without a user click, either on a schedule or from an event. The backend owns execution so automations still run when the Flutter app is closed.
 
 ## Concepts
 
-- `automation_rules` stores user-configurable rules: action type, schedule, timezone, params, enabled state, and last/next run times.
-- `automation_runs` records each attempt for auditability and idempotency.
+- `automation_rules` stores user-configurable rules: action type, trigger type, schedule, timezone, params, enabled state, and last/next run times.
+- `automation_runs` records each queued and completed attempt for auditability, status polling, and deduplication.
 - `archived_at` is the soft-history marker for topics, files, blocks, and tasks. Archived data stays accessible but is hidden from normal lists by default.
 - `ai_proposals` stores suggested changes that require user approval. Automation can request proposals, but AI proposal creation and approval live in the AI layer.
+
+## Execution model
+
+Automations are **non-blocking**:
+
+1. A trigger enqueues a row in `automation_runs` with `status=queued`.
+2. Render Cron runs `python scripts/run_automations.py`, which enqueues due schedule rules and processes the queue.
+3. The worker claims queued runs (`queued` → `running` → `success` | `failed`).
+4. Rules update `last_run_at` and `next_run_at` after **successful** execution.
+
+Run statuses: `queued`, `running`, `success`, `failed`.
+
+Each run stores:
+
+- `trigger_source`: `schedule`, `manual`, or `event`
+- `event_context`: JSON payload for event-triggered runs (for example `file_changed`)
+
+**Dedupe:** if a rule already has a `queued` or `running` run, new enqueue requests are ignored for that rule.
+
+## Trigger types
+
+| `trigger_type` | When it fires |
+| --- | --- |
+| `schedule` | Cron enqueues when `next_run_at <= now` |
+| `event` | Backend dispatches after matching domain events (v1: `file_changed`) |
+| manual | `POST /automation_rules/<id>/run` enqueues immediately |
+
+### Event rules (v1)
+
+Event rules use `trigger_type=event` and omit `schedule`.
+
+```json
+{
+  "trigger_type": "event",
+  "action_type": "your_action",
+  "params": {
+    "event": "file_changed",
+    "file_id": 42
+  }
+}
+```
+
+`dispatch_file_changed` runs after commits on file PATCH, block create/update/delete, and task create/update/delete for the resolved file.
 
 ## Automatic Actions
 
@@ -26,7 +69,7 @@ Render Cron should execute:
 python scripts/run_automations.py
 ```
 
-The script runs due enabled rules and stores a row in `automation_runs`. Rules update `last_run_at` and `next_run_at` after successful execution. Actions must be idempotent for their run window.
+The script enqueues due enabled schedule rules and processes up to five queued runs per invocation.
 
 Rule schedules use simple text values produced by the frontend controls:
 
@@ -48,7 +91,12 @@ Automations and AI actions can store reviewable edits as `change_set` version 1:
 ## API Ownership
 
 - CRUD for rules is exposed through `/automation_rules`.
-- Manual execution for testing is exposed through `POST /automation_rules/<id>/run`.
+- Manual execution for testing is exposed through `POST /automation_rules/<id>/run` (returns `202` with a queued run).
+- Run status is exposed through `GET /automation_runs/<id>` and `GET /automation_runs?status=queued,running`.
 - Process update finalize is exposed through `POST /ai_proposals/<id>/finalize`.
 - AI proposals are exposed through `/ai_proposals` and approval/rejection endpoints.
 - Archive is exposed through normal resource PATCH fields and by `include_archived=true` list query parameters.
+
+## Migration
+
+Apply [`migrations/007_automation_run_queue.sql`](../migrations/007_automation_run_queue.sql) before deploying queue support.

@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from models import Block, db
 from routes.helpers import active_query, apply_updates, get_or_404
+from services.automation_events import dispatch_file_changed
 
 blocks_bp = Blueprint("blocks", __name__)
 
@@ -42,6 +43,7 @@ def create_block():
     )
     db.session.add(block)
     db.session.commit()
+    dispatch_file_changed(block.file_id, "block_created", {"block_id": block.id})
     return jsonify(block.to_dict()), 201
 
 
@@ -56,12 +58,15 @@ def update_block(block_id):
         datetime_fields={"archived_at"},
     )
     db.session.commit()
+    dispatch_file_changed(block.file_id, "block_updated", {"block_id": block.id})
     return jsonify(block.to_dict())
 
 
 @blocks_bp.route("/blocks/<int:block_id>", methods=["DELETE"])
 def delete_block(block_id):
     block = get_or_404(Block, block_id)
+    file_id = block.file_id
     db.session.delete(block)
     db.session.commit()
+    dispatch_file_changed(file_id, "block_deleted", {"block_id": block_id})
     return "", 204

@@ -137,7 +137,7 @@ class AutomationRule(db.Model):
     name = db.Column(db.Text, nullable=False)
     action_type = db.Column(db.Text, nullable=False)
     trigger_type = db.Column(db.Text, nullable=False, default="schedule")
-    schedule = db.Column(db.Text, nullable=False)
+    schedule = db.Column(db.Text)
     timezone = db.Column(db.Text, nullable=False, default="UTC")
     params = db.Column(JSONB, nullable=False, default=dict)
     enabled = db.Column(db.Boolean, nullable=False, default=True)
@@ -172,6 +172,8 @@ class AutomationRun(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     rule_id = db.Column(db.Integer, db.ForeignKey("automation_rules.id"))
     status = db.Column(db.Text, nullable=False)
+    trigger_source = db.Column(db.Text, nullable=False, default="schedule")
+    event_context = db.Column(JSONB, nullable=False, default=dict)
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
     finished_at = db.Column(db.DateTime)
     result = db.Column(JSONB, nullable=False, default=dict)
@@ -182,6 +184,8 @@ class AutomationRun(db.Model):
             "id": self.id,
             "rule_id": self.rule_id,
             "status": self.status,
+            "trigger_source": self.trigger_source,
+            "event_context": self.event_context if self.event_context is not None else {},
             "started_at": _iso(self.started_at),
             "finished_at": _iso(self.finished_at),
             "result": self.result if self.result is not None else {},

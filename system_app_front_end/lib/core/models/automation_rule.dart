@@ -33,7 +33,7 @@ class AutomationRule {
       name: json['name'] as String,
       actionType: json['action_type'] as String,
       triggerType: json['trigger_type'] as String? ?? 'schedule',
-      schedule: json['schedule'] as String,
+      schedule: json['schedule'] as String? ?? '',
       timezone: json['timezone'] as String? ?? 'UTC',
       params: rawParams is Map<String, dynamic>
           ? Map<String, dynamic>.from(rawParams)

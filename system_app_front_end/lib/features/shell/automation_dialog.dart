@@ -110,12 +110,11 @@ class _AutomationRuleControl extends StatefulWidget {
 }
 
 class _AutomationRuleControlState extends State<_AutomationRuleControl> {
-  var _running = false;
-
   @override
   Widget build(BuildContext context) {
     final s = widget.state.strings;
     final schedule = _ScheduleDraft.fromSchedule(widget.rule.schedule);
+    final running = widget.state.isAutomationRuleActive(widget.rule.id);
     final label = switch (widget.rule.key) {
       'daily_rotation' => s['dailyRotation'],
       'weekly_process_refresh' => s['weeklyProcessRefresh'],
@@ -159,12 +158,19 @@ class _AutomationRuleControlState extends State<_AutomationRuleControl> {
                   ),
                   const SizedBox(width: 8),
                   TextButton(
-                    onPressed: _running ? null : _runNow,
-                    child: _running
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                    onPressed: running ? null : _runNow,
+                    child: running
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(s['automationRunning']),
+                            ],
                           )
                         : Text(s['runNow']),
                   ),
@@ -186,7 +192,6 @@ class _AutomationRuleControlState extends State<_AutomationRuleControl> {
 
   Future<void> _runNow() async {
     final s = widget.state.strings;
-    setState(() => _running = true);
     try {
       await widget.state.runAutomationRule(widget.rule);
       if (!mounted) return;
@@ -198,8 +203,6 @@ class _AutomationRuleControlState extends State<_AutomationRuleControl> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(s['automationRunFailed'])));
-    } finally {
-      if (mounted) setState(() => _running = false);
     }
   }
 }

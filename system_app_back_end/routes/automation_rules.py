@@ -9,6 +9,8 @@ automation_rules_bp = Blueprint("automation_rules", __name__)
 
 
 def _default_next_run(schedule):
+    if not schedule:
+        return None
     try:
         from services.automation_runner import next_run_after
 
@@ -31,22 +33,28 @@ def get_automation_rule(rule_id):
 @automation_rules_bp.route("/automation_rules", methods=["POST"])
 def create_automation_rule():
     data = request.get_json(silent=True) or {}
-    required = {"key", "name", "action_type", "schedule"}
+    trigger_type = data.get("trigger_type", "schedule")
+    required = {"key", "name", "action_type"}
     if any(not data.get(field) for field in required):
-        return jsonify({"error": "key, name, action_type, and schedule are required"}), 400
+        return jsonify({"error": "key, name, and action_type are required"}), 400
+    if trigger_type == "schedule" and not data.get("schedule"):
+        return jsonify({"error": "schedule is required for schedule rules"}), 400
 
+    schedule = data.get("schedule")
     next_run_at = data.get("next_run_at")
     rule = AutomationRule(
         key=data["key"],
         name=data["name"],
         action_type=data["action_type"],
-        trigger_type=data.get("trigger_type", "schedule"),
-        schedule=data["schedule"],
+        trigger_type=trigger_type,
+        schedule=schedule,
         timezone=data.get("timezone", "UTC"),
         params=data.get("params", {}),
         enabled=data.get("enabled", True),
         last_run_at=parse_datetime(data.get("last_run_at")) if data.get("last_run_at") else None,
-        next_run_at=parse_datetime(next_run_at) if next_run_at else _default_next_run(data["schedule"]),
+        next_run_at=parse_datetime(next_run_at)
+        if next_run_at
+        else _default_next_run(schedule),
     )
     db.session.add(rule)
     db.session.commit()
@@ -83,9 +91,10 @@ def update_automation_rule(rule_id):
 @automation_rules_bp.route("/automation_rules/<int:rule_id>/run", methods=["POST"])
 def run_automation_rule_now(rule_id):
     rule = get_or_404(AutomationRule, rule_id)
-    from services.automation_runner import run_rule
+    from services.automation_runner import enqueue_run
 
-    return jsonify(run_rule(rule, now=datetime.utcnow()))
+    run = enqueue_run(rule, trigger_source="manual")
+    return jsonify({"run": run}), 202
 
 
 @automation_rules_bp.route("/automation_rules/<int:rule_id>", methods=["DELETE"])

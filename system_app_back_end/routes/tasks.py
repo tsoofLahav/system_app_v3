@@ -2,9 +2,17 @@ from flask import Blueprint, jsonify, request
 
 from models import Block, File, Task, TaskView, Topic, db
 from routes.helpers import active_query, apply_updates, get_or_404
+from services.automation_events import dispatch_file_changed
 from services.delete_cascade import delete_task_cascade
 
 tasks_bp = Blueprint("tasks", __name__)
+
+
+def _file_id_for_task(task):
+    if task.block_id is None:
+        return None
+    block = db.session.get(Block, task.block_id)
+    return block.file_id if block is not None else None
 
 
 @tasks_bp.route("/tasks", methods=["GET"])
@@ -83,6 +91,11 @@ def create_task():
 
     db.session.add(task)
     db.session.commit()
+    dispatch_file_changed(
+        _file_id_for_task(task),
+        "task_created",
+        {"task_id": task.id},
+    )
     return jsonify(task.to_dict()), 201
 
 
@@ -97,12 +110,19 @@ def update_task(task_id):
         datetime_fields={"due_date", "archived_at"},
     )
     db.session.commit()
+    dispatch_file_changed(
+        _file_id_for_task(task),
+        "task_updated",
+        {"task_id": task.id},
+    )
     return jsonify(task.to_dict())
 
 
 @tasks_bp.route("/tasks/<int:task_id>", methods=["DELETE"])
 def delete_task(task_id):
-    get_or_404(Task, task_id)
+    task = get_or_404(Task, task_id)
+    file_id = _file_id_for_task(task)
     delete_task_cascade(task_id)
     db.session.commit()
+    dispatch_file_changed(file_id, "task_deleted", {"task_id": task_id})
     return "", 204
