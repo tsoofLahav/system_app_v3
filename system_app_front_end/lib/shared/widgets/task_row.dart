@@ -7,7 +7,8 @@ import '../../core/models/task.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_typography.dart';
 import '../../features/blocks/list_text_parse.dart';
-import '../../shared/widgets/task_assign_menu.dart';
+import '../../core/models/task_view_menu_context.dart';
+import '../../shared/widgets/task_context_menu.dart';
 import '../../features/blocks/formatted_text_field.dart';
 import 'task_mark.dart';
 
@@ -25,6 +26,7 @@ class TaskRow extends StatefulWidget {
     this.onPasteLines,
     this.autofocus = false,
     this.onAutofocused,
+    this.viewMenuContext,
   });
 
   final Task task;
@@ -33,11 +35,13 @@ class TaskRow extends StatefulWidget {
   final Block? taskBlock;
   final VoidCallback? onDelete;
   final ValueChanged<String>? onTitleChanged;
-  final VoidCallback? onAddTaskAfter;
+  final void Function(Offset globalPosition)? onAddTaskAfter;
   final List<String>? allTaskTitles;
-  final Future<void> Function(List<String> lines)? onPasteLines;
+  final Future<void> Function(List<String> lines, Offset globalPosition)?
+      onPasteLines;
   final bool autofocus;
   final VoidCallback? onAutofocused;
+  final TaskViewMenuContext? viewMenuContext;
 
   @override
   State<TaskRow> createState() => _TaskRowState();
@@ -94,74 +98,141 @@ class _TaskRowState extends State<TaskRow> {
     }
     _controller.text = lines.first;
     widget.onTitleChanged?.call(lines.first);
-    await widget.onPasteLines!(lines.sublist(1));
+    final box = _focusNode.context?.findRenderObject() as RenderBox?;
+    final position = box?.localToGlobal(Offset.zero) ?? Offset.zero;
+    await widget.onPasteLines!(lines.sublist(1), position);
+  }
+
+  void _copySelectionOrTitle() {
+    final selection = _controller.selection;
+    if (selection.isValid && !selection.isCollapsed) {
+      Clipboard.setData(
+        ClipboardData(
+          text: _controller.text.substring(selection.start, selection.end),
+        ),
+      );
+      return;
+    }
+    Clipboard.setData(ClipboardData(text: _controller.text));
+  }
+
+  void _cutSelectionOrTitle() {
+    final selection = _controller.selection;
+    if (selection.isValid && !selection.isCollapsed) {
+      Clipboard.setData(
+        ClipboardData(
+          text: _controller.text.substring(selection.start, selection.end),
+        ),
+      );
+      final next = _controller.text.replaceRange(
+        selection.start,
+        selection.end,
+        '',
+      );
+      _controller.text = next;
+      widget.onTitleChanged?.call(next);
+      return;
+    }
+    Clipboard.setData(ClipboardData(text: _controller.text));
+    _controller.clear();
+    widget.onTitleChanged?.call('');
+  }
+
+  void _copyAllTitles() {
+    final titles = widget.allTaskTitles;
+    if (titles == null || titles.isEmpty) return;
+    Clipboard.setData(ClipboardData(text: titles.join('\n')));
+  }
+
+  Future<void> _showContextMenu(Offset globalPosition) async {
+    await showTaskContextMenu(
+      context: context,
+      globalPosition: globalPosition,
+      task: widget.task,
+      state: widget.state,
+      onCut: _cutSelectionOrTitle,
+      onCopy: _copySelectionOrTitle,
+      onPaste: _handlePaste,
+      onCopyAll: widget.allTaskTitles != null ? _copyAllTitles : null,
+      viewMenuContext: widget.viewMenuContext,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final lineHeight = AppTypography.taskRowLineHeight;
+
     return Material(
       color: Colors.transparent,
-      child: InkWell(
-        onSecondaryTapDown: (details) => showTaskAssignMenu(
-          context: context,
-          globalPosition: details.globalPosition,
-          task: widget.task,
-          state: widget.state,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 1),
-          child: Focus(
-            onKeyEvent: (_, event) {
-              if (event is! KeyDownEvent) return KeyEventResult.ignored;
-              final isMeta = HardwareKeyboard.instance.isMetaPressed;
-              if (isMeta && event.logicalKey == LogicalKeyboardKey.keyA) {
-                final titles = widget.allTaskTitles;
-                if (titles != null && titles.isNotEmpty) {
-                  Clipboard.setData(
-                    ClipboardData(text: titles.join('\n')),
-                  );
-                }
-                return KeyEventResult.handled;
-              }
-              if (isMeta && event.logicalKey == LogicalKeyboardKey.keyV) {
-                _handlePaste();
-                return KeyEventResult.handled;
-              }
-              return KeyEventResult.ignored;
-            },
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 1),
-                  child: TaskMark(done: widget.task.isDone, onToggle: widget.onToggle),
-                ),
-                Expanded(
-                  child: FormattedTextField(
-                    controller: _controller,
-                    focusNode: _focusNode,
-                    style: AppTypography.taskRowStyle.copyWith(
-                      decoration: widget.task.isDone
-                          ? TextDecoration.lineThrough
-                          : null,
-                      color: widget.task.isDone
-                          ? AppColors.text.withValues(alpha: 0.45)
-                          : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1),
+        child: Focus(
+          onKeyEvent: (_, event) {
+            if (event is! KeyDownEvent) return KeyEventResult.ignored;
+            final isMeta = HardwareKeyboard.instance.isMetaPressed;
+            if (isMeta && event.logicalKey == LogicalKeyboardKey.keyA) {
+              _copyAllTitles();
+              return KeyEventResult.handled;
+            }
+            if (isMeta && event.logicalKey == LogicalKeyboardKey.keyV) {
+              _handlePaste();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onSecondaryTapDown: (details) =>
+                    _showContextMenu(details.globalPosition),
+                child: SizedBox(
+                  width: 32,
+                  height: lineHeight,
+                  child: Center(
+                    child: TaskMark(
+                      done: widget.task.isDone,
+                      onToggle: widget.onToggle,
+                      compact: true,
                     ),
-                    maxLines: null,
-                    minLines: 1,
-                    stripNewlines: true,
-                    onChanged: (v) => widget.onTitleChanged?.call(v),
-                    onEnter: widget.onAddTaskAfter,
-                    onBackspaceAtStart: () {
-                      if (_controller.text.isEmpty) {
-                        widget.onDelete?.call();
-                      }
-                    },
                   ),
                 ),
-              ],
-            ),
+              ),
+              Expanded(
+                child: FormattedTextField(
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  textAlignVertical: TextAlignVertical.top,
+                  onSecondaryTapDown: (details) =>
+                      _showContextMenu(details.globalPosition),
+                  style: AppTypography.taskRowStyle.copyWith(
+                    decoration: widget.task.isDone
+                        ? TextDecoration.lineThrough
+                        : null,
+                    color: widget.task.isDone
+                        ? AppColors.text.withValues(alpha: 0.45)
+                        : null,
+                  ),
+                  maxLines: null,
+                  minLines: 1,
+                  stripNewlines: true,
+                  onChanged: (v) => widget.onTitleChanged?.call(v),
+                  onEnter: () {
+                    final box =
+                        _focusNode.context?.findRenderObject() as RenderBox?;
+                    final position =
+                        box?.localToGlobal(Offset.zero) ?? Offset.zero;
+                    widget.onAddTaskAfter?.call(position);
+                  },
+                  onBackspaceAtStart: () {
+                    if (_controller.text.isEmpty) {
+                      widget.onDelete?.call();
+                    }
+                  },
+                ),
+              ),
+            ],
           ),
         ),
       ),

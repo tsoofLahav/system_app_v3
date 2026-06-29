@@ -78,6 +78,11 @@ abstract final class AppTypography {
   /// Task rows in files and task views.
   static TextStyle get taskRowStyle => _style(size: 12.5, height: 1.38);
 
+  static double get taskRowLineHeight {
+    final style = taskRowStyle;
+    return (style.fontSize ?? 12.5) * (style.height ?? 1.38);
+  }
+
   /// Secondary labels (sidebar sections, meta).
   static TextStyle get metaStyle =>
       _style(size: 12, color: AppColors.textHint, height: 1.4);

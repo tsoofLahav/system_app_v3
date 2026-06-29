@@ -3,7 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/app_state.dart';
+import '../../core/models/block.dart';
+import '../../core/models/task.dart';
+import '../../core/models/task_view_menu_context.dart';
 import '../../design_system/app_typography.dart';
+import '../../shared/widgets/task_context_menu.dart';
+import 'block_context_menu.dart';
 import 'list_text_parse.dart';
 
 typedef LineAccessoryBuilder = Widget Function(
@@ -29,8 +35,15 @@ class ConnectedLinesEditor extends StatefulWidget {
     this.accessoryWidth = 32,
     this.hint,
     this.debounceMs = 280,
-    this.onLineSecondaryTap,
+    this.contextMenuTasks,
+    this.contextMenuState,
     this.onCopyAll,
+    this.contextMenuFileType,
+    this.contextMenuTargetBlock,
+    this.onBlockMenuAction,
+    this.viewMenuContext,
+    this.dividerAfterLineIndex,
+    this.lineTaskIds,
   });
 
   final List<String> lines;
@@ -42,8 +55,15 @@ class ConnectedLinesEditor extends StatefulWidget {
   final double accessoryWidth;
   final String? hint;
   final int debounceMs;
-  final LineTapCallback? onLineSecondaryTap;
+  final List<Task>? contextMenuTasks;
+  final AppState? contextMenuState;
   final VoidCallback? onCopyAll;
+  final String? contextMenuFileType;
+  final Block? contextMenuTargetBlock;
+  final BlockMenuHandler? onBlockMenuAction;
+  final TaskViewMenuContext? viewMenuContext;
+  final int? dividerAfterLineIndex;
+  final List<int>? lineTaskIds;
 
   @override
   State<ConnectedLinesEditor> createState() => _ConnectedLinesEditorState();
@@ -53,12 +73,14 @@ class _ConnectedLinesEditorState extends State<ConnectedLinesEditor> {
   late TextEditingController _controller;
   Timer? _debounce;
   List<String> _lastEmitted = const [];
+  List<int> _lastTaskIds = const [];
   bool _editing = false;
 
   @override
   void initState() {
     super.initState();
     _lastEmitted = normalizeDocumentLines(widget.lines);
+    _lastTaskIds = List<int>.from(widget.lineTaskIds ?? const []);
     _controller = TextEditingController(text: documentFromLines(_lastEmitted));
     _controller.addListener(_onTextChanged);
   }
@@ -66,12 +88,19 @@ class _ConnectedLinesEditorState extends State<ConnectedLinesEditor> {
   @override
   void didUpdateWidget(ConnectedLinesEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_editing) return;
     final next = normalizeDocumentLines(widget.lines);
     final nextText = documentFromLines(next);
-    if (nextText != _controller.text) {
+    final nextTaskIds = widget.lineTaskIds ?? const <int>[];
+    final orderChanged = nextTaskIds.isNotEmpty &&
+        (_lastTaskIds.length != nextTaskIds.length ||
+            !_taskIdsEqual(_lastTaskIds, nextTaskIds));
+
+    if (orderChanged || (!_editing && nextText != _controller.text)) {
       _controller.text = nextText;
       _lastEmitted = next;
+      _lastTaskIds = List<int>.from(nextTaskIds);
+      _editing = false;
+      return;
     }
   }
 
@@ -108,6 +137,96 @@ class _ConnectedLinesEditorState extends State<ConnectedLinesEditor> {
     } else {
       _editing = false;
     }
+  }
+
+  bool get _hasTaskContextMenu =>
+      widget.contextMenuTasks != null && widget.contextMenuState != null;
+
+  Future<void> _showContextMenuForLine(
+    int lineIndex,
+    Offset globalPosition,
+  ) async {
+    final tasks = widget.contextMenuTasks;
+    final menuState = widget.contextMenuState;
+    if (tasks == null || menuState == null || lineIndex >= tasks.length) {
+      return;
+    }
+    await showTaskContextMenu(
+      context: context,
+      globalPosition: globalPosition,
+      task: tasks[lineIndex],
+      state: menuState,
+      onCut: () => _cutAtLine(lineIndex),
+      onCopy: () => _copyAtLine(lineIndex),
+      onPaste: () => _pasteAtLine(lineIndex),
+      onCopyAll: widget.onCopyAll,
+      fileType: widget.contextMenuFileType,
+      targetBlock: widget.contextMenuTargetBlock,
+      onBlockAction: widget.onBlockMenuAction,
+      viewMenuContext: widget.viewMenuContext,
+    );
+  }
+
+  void _copyAtLine(int lineIndex) {
+    final selection = _controller.selection;
+    if (selection.isValid && !selection.isCollapsed) {
+      Clipboard.setData(
+        ClipboardData(
+          text: _controller.text.substring(selection.start, selection.end),
+        ),
+      );
+      return;
+    }
+    final lines = linesFromDocument(_controller.text);
+    if (lineIndex < lines.length) {
+      Clipboard.setData(ClipboardData(text: lines[lineIndex]));
+    }
+  }
+
+  void _cutAtLine(int lineIndex) {
+    final selection = _controller.selection;
+    if (selection.isValid && !selection.isCollapsed) {
+      Clipboard.setData(
+        ClipboardData(
+          text: _controller.text.substring(selection.start, selection.end),
+        ),
+      );
+      _controller.text = _controller.text.replaceRange(
+        selection.start,
+        selection.end,
+        '',
+      );
+      _flush();
+      return;
+    }
+    final lines = linesFromDocument(_controller.text);
+    if (lineIndex >= lines.length) return;
+    Clipboard.setData(ClipboardData(text: lines[lineIndex]));
+    lines[lineIndex] = '';
+    _controller.text = documentFromLines(lines);
+    _flush();
+  }
+
+  Future<void> _pasteAtLine(int lineIndex) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final raw = data?.text;
+    if (raw == null || raw.isEmpty) return;
+    final pasted = parsePastedListText(raw);
+    if (pasted.isEmpty) return;
+
+    final lines = linesFromDocument(_controller.text);
+    while (lines.length <= lineIndex) {
+      lines.add('');
+    }
+
+    if (pasted.length == 1) {
+      lines[lineIndex] = pasted.first;
+    } else {
+      lines.removeAt(lineIndex);
+      lines.insertAll(lineIndex, pasted);
+    }
+    _controller.text = documentFromLines(lines);
+    _flush();
   }
 
   @override
@@ -152,11 +271,15 @@ class _ConnectedLinesEditorState extends State<ConnectedLinesEditor> {
                   style: widget.style,
                   contentWidth: fieldWidth,
                   width: accessoryWidth,
+                  dividerAfterLineIndex: widget.dividerAfterLineIndex,
                   childBuilder: (context, index) => widget.lineAccessoryBuilder!(
                     context,
                     index,
                   ),
-                  onSecondaryTap: widget.onLineSecondaryTap,
+                  onSecondaryTap: _hasTaskContextMenu
+                      ? (details, index) =>
+                          _showContextMenuForLine(index, details.globalPosition)
+                      : null,
                 ),
               if (widget.gutterLabelBuilder != null)
                 _AlignedLineColumn(
@@ -174,16 +297,37 @@ class _ConnectedLinesEditorState extends State<ConnectedLinesEditor> {
                 ),
               SizedBox(
                 width: fieldWidth,
-                child: TextField(
-                  controller: _controller,
-                  style: widget.style,
-                  maxLines: null,
-                  minLines: 1,
-                  keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
-                  decoration: AppTypography.noteInputDecoration(
-                    hint: widget.hint,
-                    fontSize: widget.style.fontSize,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onSecondaryTapDown: _hasTaskContextMenu
+                      ? (details) {
+                          final box = context.findRenderObject() as RenderBox?;
+                          if (box == null) return;
+                          final local = box.globalToLocal(details.globalPosition);
+                          final lineIndex = lineIndexAtLocalY(
+                            text: _controller.text,
+                            style: widget.style,
+                            maxWidth: fieldWidth,
+                            localY: local.dy,
+                            textDirection: Directionality.of(context),
+                          );
+                          _showContextMenuForLine(lineIndex, details.globalPosition);
+                        }
+                      : null,
+                  child: TextField(
+                    controller: _controller,
+                    style: widget.style,
+                    maxLines: null,
+                    minLines: 1,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
+                    decoration: AppTypography.noteInputDecoration(
+                      hint: widget.hint,
+                      fontSize: widget.style.fontSize,
+                    ),
+                    contextMenuBuilder: _hasTaskContextMenu
+                        ? (context, editableTextState) => const SizedBox.shrink()
+                        : null,
                   ),
                 ),
               ),
@@ -195,6 +339,14 @@ class _ConnectedLinesEditorState extends State<ConnectedLinesEditor> {
   }
 
   bool _listsEqual(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  bool _taskIdsEqual(List<int> a, List<int> b) {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
       if (a[i] != b[i]) return false;
@@ -213,6 +365,7 @@ class _AlignedLineColumn extends StatelessWidget {
     this.align = Alignment.topCenter,
     this.padding = EdgeInsets.zero,
     this.onSecondaryTap,
+    this.dividerAfterLineIndex,
   });
 
   final String text;
@@ -223,6 +376,7 @@ class _AlignedLineColumn extends StatelessWidget {
   final Alignment align;
   final EdgeInsets padding;
   final LineTapCallback? onSecondaryTap;
+  final int? dividerAfterLineIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -236,7 +390,7 @@ class _AlignedLineColumn extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (var i = 0; i < lines.length; i++)
+          for (var i = 0; i < lines.length; i++) ...[
             _LineHeightSlot(
               lineText: lines[i],
               style: style,
@@ -255,6 +409,16 @@ class _AlignedLineColumn extends StatelessWidget {
                 ),
               ),
             ),
+            if (dividerAfterLineIndex != null && i == dividerAfterLineIndex)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
+                ),
+              ),
+          ],
         ],
       ),
     );
@@ -290,4 +454,28 @@ class _LineHeightSlot extends StatelessWidget {
       child: child,
     );
   }
+}
+
+int lineIndexAtLocalY({
+  required String text,
+  required TextStyle style,
+  required double maxWidth,
+  required double localY,
+  required TextDirection textDirection,
+}) {
+  final lines = text.split('\n');
+  if (lines.isEmpty) return 0;
+
+  var y = 0.0;
+  for (var i = 0; i < lines.length; i++) {
+    final painter = TextPainter(
+      text: TextSpan(text: lines[i].isEmpty ? ' ' : lines[i], style: style),
+      textDirection: textDirection,
+      maxLines: null,
+    )..layout(maxWidth: maxWidth);
+    final nextY = y + painter.height;
+    if (localY < nextY) return i;
+    y = nextY;
+  }
+  return lines.length - 1;
 }

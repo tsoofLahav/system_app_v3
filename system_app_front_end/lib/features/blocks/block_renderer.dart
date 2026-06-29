@@ -12,6 +12,7 @@ import 'image_block_widget.dart';
 import 'points_list_block_widget.dart';
 import 'summary_block_widget.dart';
 import 'table_block_widget.dart';
+import 'block_context_menu.dart';
 import 'tasks_connected_editor.dart';
 import 'task_block_widget.dart';
 import 'text_block_widget.dart';
@@ -25,6 +26,7 @@ class BlockRenderer extends StatelessWidget {
     required this.state,
     this.topicAccent,
     this.isMainTopic = false,
+    this.onBlockMenuAction,
   });
 
   final AppFile file;
@@ -33,6 +35,7 @@ class BlockRenderer extends StatelessWidget {
   final AppState state;
   final Color? topicAccent;
   final bool isMainTopic;
+  final BlockMenuHandler? onBlockMenuAction;
 
   @override
   Widget build(BuildContext context) {
@@ -83,6 +86,7 @@ class BlockRenderer extends StatelessWidget {
           file: file,
           listBlock: block,
           state: state,
+          onBlockMenuAction: onBlockMenuAction,
         );
       case 'task':
         final fileBlocks = state.selectedDetail?.blocksByFileId[file.id] ?? [];

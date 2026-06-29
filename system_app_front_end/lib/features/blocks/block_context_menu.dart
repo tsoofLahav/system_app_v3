@@ -12,6 +12,45 @@ typedef BlockMenuHandler = Future<void> Function(String action);
 class BlockContextMenu {
   const BlockContextMenu._();
 
+  /// File/block rows for a context menu (add block, block actions). Omits
+  /// text-format actions unless [includeTextActions] and a field has focus.
+  static List<AppContextMenuEntry> buildFileEntries({
+    required AppStrings strings,
+    required String fileType,
+    Block? targetBlock,
+    bool includeTextActions = true,
+  }) {
+    final entries = <AppContextMenuEntry>[];
+    final insertTypes =
+        FileBehaviorRegistry.contextMenuForFileType(fileType);
+    if (insertTypes.isNotEmpty) {
+      entries.add(
+        AppContextMenuSubmenu(
+          label: strings['addBlock'],
+          children: [
+            for (final type in insertTypes)
+              AppContextMenuItem(
+                value: 'insert:$type',
+                label: _insertLabel(type, strings),
+              ),
+          ],
+        ),
+      );
+    }
+
+    if (targetBlock != null) {
+      if (entries.isNotEmpty) entries.add(const AppContextMenuDivider());
+      entries.addAll(_blockActions(targetBlock, strings));
+    }
+
+    if (includeTextActions && BlockTextFocusRegistry.hasFocus) {
+      entries
+        ..add(const AppContextMenuDivider())
+        ..addAll(_textActions(strings));
+    }
+    return entries;
+  }
+
   static Future<String?> show({
     required BuildContext context,
     required Offset globalPosition,
@@ -27,34 +66,11 @@ class BlockContextMenu {
     }
     BlockTextFocusRegistry.openMenuSession();
     try {
-      final entries = <AppContextMenuEntry>[];
-      final insertTypes =
-          FileBehaviorRegistry.contextMenuForFileType(fileType);
-      if (insertTypes.isNotEmpty) {
-        entries.add(
-          AppContextMenuSubmenu(
-            label: strings['addBlock'],
-            children: [
-              for (final type in insertTypes)
-                AppContextMenuItem(
-                  value: 'insert:$type',
-                  label: _insertLabel(type, strings),
-                ),
-            ],
-          ),
-        );
-      }
-
-      if (targetBlock != null) {
-        entries.add(const AppContextMenuDivider());
-        entries.addAll(_blockActions(targetBlock, strings));
-      }
-
-      if (BlockTextFocusRegistry.hasFocus) {
-        entries
-          ..add(const AppContextMenuDivider())
-          ..addAll(_textActions(strings));
-      }
+      final entries = buildFileEntries(
+        strings: strings,
+        fileType: fileType,
+        targetBlock: targetBlock,
+      );
 
       final value = await AppContextMenu.show(
         context: context,

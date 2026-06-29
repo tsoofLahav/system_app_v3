@@ -11,7 +11,6 @@ import 'models/app_file.dart';
 import 'models/automation_rule.dart';
 import 'models/block.dart';
 import '../features/blocks/board_content.dart';
-import '../features/blocks/line_task_sync.dart';
 import 'models/task.dart';
 import 'models/task_view_membership.dart';
 import 'models/topic.dart';
@@ -20,6 +19,7 @@ import 'models/view_section_flags.dart';
 import 'registry/file_behavior_registry.dart';
 import 'registry/file_registry.dart';
 import 'registry/task_view_display.dart';
+import 'models/view_pane_sync_context.dart';
 import 'registry/topic_appearance.dart';
 import '../design_system/file_layouts.dart';
 import 'services/ai_service.dart';
@@ -53,6 +53,18 @@ class _ViewSnapshot {
 
   final List<Task> tasks;
   final List<ViewSection> sections;
+}
+
+class TopicTasksTarget {
+  const TopicTasksTarget({
+    required this.topic,
+    required this.file,
+    required this.listBlock,
+  });
+
+  final Topic topic;
+  final AppFile file;
+  final Block listBlock;
 }
 
 class AppState extends ChangeNotifier {
@@ -102,8 +114,6 @@ class AppState extends ChangeNotifier {
   bool aiRunning = false;
 
   final Map<int, Timer?> _saveTimers = {};
-  final Map<int, List<String>> _taskLineSnapshots = {};
-  bool _syncingTasks = false;
   final Map<int, String?> _automationLastRunAtById = {};
   Timer? _automationRunPollTimer;
   bool _pollingAutomationRuns = false;
@@ -118,6 +128,25 @@ class AppState extends ChangeNotifier {
       topic.isMain ? strings['main'] : topic.name;
   String taskTopicDisplayName(Task task) =>
       strings.displayTopicName(task.topicName);
+
+  Topic? topicById(int id) {
+    for (final topic in topics) {
+      if (topic.id == id) return topic;
+    }
+    return null;
+  }
+
+  Topic? topicForViewPaneGroup({String? topicKey}) {
+    if (topicKey == null || topicKey == ViewPaneKeys.noTopic) return null;
+    for (final topic in topics) {
+      if (topic.name == topicKey) return topic;
+      if (topicKey == 'main' && topic.isMain) return topic;
+    }
+    return null;
+  }
+
+  List<Topic> get activeTopics =>
+      topics.where((t) => !t.isArchived).toList();
 
   List<Topic> get archivedTopics =>
       topics.where((t) => t.isArchived && !t.isMain).toList();
@@ -1300,6 +1329,7 @@ class AppState extends ChangeNotifier {
     required AppFile file,
     required Block listBlock,
     required Block afterTaskBlock,
+    String status = 'active',
   }) async {
     final topic = selectedTopic;
     final detail = selectedDetail;
@@ -1312,6 +1342,7 @@ class AppState extends ChangeNotifier {
       fileId: file.id,
       title: '',
       orderIndex: targetIndex,
+      status: status,
     );
     await selectTopic(topic);
     requestBlockFocus(taskBlock.id);
@@ -1339,6 +1370,7 @@ class AppState extends ChangeNotifier {
     required int fileId,
     required String title,
     required int orderIndex,
+    String status = 'active',
   }) async {
     final detail = selectedDetail;
     if (detail == null) {
@@ -1347,6 +1379,7 @@ class AppState extends ChangeNotifier {
     final task = await _taskService.createTask(
       blockId: listBlock.id,
       title: title,
+      status: status,
     );
     final taskBlock = await _blockService.createBlock(
       fileId: fileId,
@@ -1387,166 +1420,23 @@ class AppState extends ChangeNotifier {
       final task = taskById[taskId];
       if (task != null) ordered.add(task);
     }
+    ordered.sort((a, b) => a.id.compareTo(b.id));
     return ordered;
   }
 
-  Future<void> syncTasksFromLines({
-    required AppFile file,
-    required Block listBlock,
-    required List<String> lines,
-  }) async {
-    if (_syncingTasks) return;
-    final topic = selectedTopic;
+  Block? taskRowBlockInFile(AppFile file, Task task) {
     final detail = selectedDetail;
-    if (topic == null || detail == null) return;
-
-    final normalized = lines.isEmpty ? <String>[''] : List<String>.from(lines);
-    final ordered = orderedTasksForFile(file, listBlock);
-    final previous = _taskLineSnapshots[listBlock.id] ??
-        (ordered.isEmpty ? <String>[''] : ordered.map((task) => task.title).toList());
-
-    final region = diffLineRegion(previous, normalized);
-    if (region == null) {
-      _taskLineSnapshots[listBlock.id] = normalized;
-      return;
-    }
-
-    _syncingTasks = true;
-    try {
-      await _applyLineRegionToTasks(
-        file: file,
-        listBlock: listBlock,
-        region: region,
-        lines: normalized,
-      );
-      _taskLineSnapshots[listBlock.id] = normalized;
-      notifyListeners();
-    } finally {
-      _syncingTasks = false;
-    }
-  }
-
-  Future<void> _applyLineRegionToTasks({
-    required AppFile file,
-    required Block listBlock,
-    required LineChangeRegion region,
-    required List<String> lines,
-  }) async {
-    if (region.removed.length == 1 &&
-        region.added.length == 1 &&
-        region.start < orderedTasksForFile(file, listBlock).length) {
-      final task = orderedTasksForFile(file, listBlock)[region.start];
-      await _updateTaskTitleAllowEmpty(task, region.added.first);
-      await _ensureTaskCountMatchesLines(file, listBlock, lines);
-      return;
-    }
-
-    for (var i = region.removed.length - 1; i >= 0; i--) {
-      await _deleteTaskAtLineIndex(file, listBlock, region.start + i);
-    }
-
-    for (var i = 0; i < region.added.length; i++) {
-      final title = region.added[i];
-      final idx = region.start + i;
-      final ordered = orderedTasksForFile(file, listBlock);
-      if (idx < ordered.length) {
-        if (ordered[idx].title != title) {
-          await _updateTaskTitleAllowEmpty(ordered[idx], title);
-        }
-      } else {
-        final orderIndex = _orderIndexForTaskInsert(file, listBlock, idx);
-        final targetIndex = await _shiftBlocksForInsert(file, orderIndex);
-        await _createTaskBlock(
-          listBlock: listBlock,
-          fileId: file.id,
-          title: title,
-          orderIndex: targetIndex,
-        );
-      }
-    }
-
-    await _ensureTaskCountMatchesLines(file, listBlock, lines);
-  }
-
-  Future<void> _ensureTaskCountMatchesLines(
-    AppFile file,
-    Block listBlock,
-    List<String> lines,
-  ) async {
-    var ordered = orderedTasksForFile(file, listBlock);
-    while (ordered.length < lines.length) {
-      final index = ordered.length;
-      final orderIndex = _orderIndexForTaskInsert(file, listBlock, index);
-      final targetIndex = await _shiftBlocksForInsert(file, orderIndex);
-      await _createTaskBlock(
-        listBlock: listBlock,
-        fileId: file.id,
-        title: lines[index],
-        orderIndex: targetIndex,
-      );
-      ordered = orderedTasksForFile(file, listBlock);
-    }
-  }
-
-  Future<void> _deleteTaskAtLineIndex(
-    AppFile file,
-    Block listBlock,
-    int index,
-  ) async {
-    final ordered = orderedTasksForFile(file, listBlock);
-    if (index < 0 || index >= ordered.length) return;
-    final task = ordered[index];
-    final detail = selectedDetail;
-    if (detail == null) return;
-
-    final blocks = detail.blocksByFileId[file.id] ?? [];
-    Block? taskBlock;
-    for (final block in blocks) {
+    if (detail == null) return null;
+    for (final block in detail.blocksByFileId[file.id] ?? []) {
       if (block.type == 'task' && block.content['task_id'] == task.id) {
-        taskBlock = block;
-        break;
+        return block;
       }
     }
-
-    await _taskService.deleteTask(task.id);
-    if (taskBlock != null) {
-      await _blockService.deleteBlock(taskBlock.id);
-    }
-
-    detail.tasksByBlockId[listBlock.id] =
-        (detail.tasksByBlockId[listBlock.id] ?? [])
-            .where((t) => t.id != task.id)
-            .toList();
-    if (taskBlock != null) {
-      detail.blocksByFileId[file.id] =
-          (detail.blocksByFileId[file.id] ?? [])
-              .where((b) => b.id != taskBlock!.id)
-              .toList();
-    }
+    return null;
   }
 
-  int _orderIndexForTaskInsert(AppFile file, Block listBlock, int lineIndex) {
+  int _nextTaskBlockOrderIndex(AppFile file, Block listBlock) {
     final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
-    final ordered = orderedTasksForFile(file, listBlock);
-
-    if (lineIndex <= 0) {
-      for (final block in blocks) {
-        if (block.type == 'task') {
-          return block.orderIndex ?? 0;
-        }
-      }
-      return (listBlock.orderIndex ?? 0) + 1;
-    }
-
-    if (lineIndex <= ordered.length) {
-      final prevTask = ordered[lineIndex - 1];
-      for (final block in blocks) {
-        if (block.type == 'task' && block.content['task_id'] == prevTask.id) {
-          return (block.orderIndex ?? 0) + 1;
-        }
-      }
-    }
-
     Block? lastTaskBlock;
     for (final block in blocks) {
       if (block.type == 'task') lastTaskBlock = block;
@@ -1554,7 +1444,127 @@ class AppState extends ChangeNotifier {
     if (lastTaskBlock != null) {
       return (lastTaskBlock.orderIndex ?? 0) + 1;
     }
-    return blocks.length;
+    return (listBlock.orderIndex ?? 0) + 1;
+  }
+
+  Task? _taskForCreatedBlock(Block taskBlock, Block listBlock) {
+    final taskId = taskBlock.content['task_id'] as int?;
+    if (taskId == null) return null;
+    final tasks = selectedDetail?.tasksByBlockId[listBlock.id] ?? [];
+    for (final task in tasks) {
+      if (task.id == taskId) return task;
+    }
+    return null;
+  }
+
+  Future<Task?> createTaskInFileAfter({
+    required AppFile file,
+    required Block listBlock,
+    Task? afterTask,
+    String title = '',
+    String status = 'active',
+  }) async {
+    final topic = selectedTopic;
+    if (topic == null) return null;
+
+    final afterRow =
+        afterTask != null ? taskRowBlockInFile(file, afterTask) : null;
+    final orderIndex = afterRow != null
+        ? (afterRow.orderIndex ?? 0) + 1
+        : _nextTaskBlockOrderIndex(file, listBlock);
+    final targetIndex = await _shiftBlocksForInsert(file, orderIndex);
+    final taskBlock = await _createTaskBlock(
+      listBlock: listBlock,
+      fileId: file.id,
+      title: title,
+      orderIndex: targetIndex,
+      status: status,
+    );
+    final task = _taskForCreatedBlock(taskBlock, listBlock);
+    requestBlockFocus(taskBlock.id);
+    notifyListeners();
+    return task;
+  }
+
+  Future<void> deleteTaskInFile(AppFile file, Task task) async {
+    final row = taskRowBlockInFile(file, task);
+    await deleteTaskWithBlock(task, row);
+  }
+
+  Future<void> pasteTasksInFileAfter({
+    required AppFile file,
+    required Block listBlock,
+    required Task afterTask,
+    required List<String> lines,
+    required String status,
+  }) async {
+    Task? cursor = afterTask;
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      cursor = await createTaskInFileAfter(
+        file: file,
+        listBlock: listBlock,
+        afterTask: cursor,
+        title: trimmed,
+        status: status,
+      );
+    }
+  }
+
+  Future<Task?> createTaskInViewZoneAfter({
+    required ViewPaneSyncContext pane,
+    Task? afterTask,
+    String title = '',
+    required bool done,
+    required Future<int?> Function(Offset position) pickTopic,
+    Offset menuPosition = Offset.zero,
+  }) async {
+    Topic? topic;
+    if (afterTask != null) {
+      topic = topicForTask(afterTask);
+    }
+    if (topic == null && pane.displayMode == TaskViewDisplayMode.byTopic) {
+      topic = topicForViewPaneGroup(topicKey: pane.topicKey);
+    }
+    if (topic == null) {
+      final topicId = await pickTopic(menuPosition);
+      if (topicId == null) return null;
+      topic = topicById(topicId);
+    }
+    if (topic == null) return null;
+
+    return createTaskInView(
+      viewType: pane.viewType,
+      topic: topic,
+      title: title,
+      sectionName: pane.sectionName,
+      afterTask: afterTask,
+      status: done ? 'done' : 'active',
+    );
+  }
+
+  Future<void> pasteTasksInViewAfter({
+    required ViewPaneSyncContext pane,
+    required Task afterTask,
+    required List<String> lines,
+    required bool done,
+    required Future<int?> Function(Offset position) pickTopic,
+    Offset menuPosition = Offset.zero,
+  }) async {
+    Task? cursor = afterTask;
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      cursor = await createTaskInViewZoneAfter(
+        pane: pane,
+        afterTask: cursor,
+        title: trimmed,
+        done: done,
+        pickTopic: pickTopic,
+        menuPosition: menuPosition,
+      );
+    }
   }
 
   Future<void> _updateTaskTitleAllowEmpty(Task task, String title) async {
@@ -1582,19 +1592,365 @@ class AppState extends ChangeNotifier {
       'status': task.isDone ? 'active' : 'done',
     });
     _applyTaskUpdate(updated);
+    notifyListeners();
+  }
+
+  Topic? topicForTask(Task task) {
+    if (task.topicId != null) return topicById(task.topicId!);
+    if (task.topicName != null && task.topicName != ViewPaneKeys.noTopic) {
+      return topicForViewPaneGroup(topicKey: task.topicName);
+    }
+    return null;
+  }
+
+  Future<AppFile> _ensureTasksFileForTopic(Topic topic) async {
+    final def = FileRegistry.definitionFor(
+      topicType: topic.type,
+      fileType: 'tasks',
+      isMainTopic: topic.isMain,
+    );
+    final file = await _fileService.createFile(
+      topicId: topic.id,
+      name: def?.name ?? FileRegistry.defaultNameForType('tasks'),
+      type: 'tasks',
+      orderIndex: def?.orderIndex,
+      isMain: def?.isMain ??
+          FileRegistry.isMainFile(
+            topicType: topic.type,
+            fileType: 'tasks',
+            isMainTopic: topic.isMain,
+          ),
+    );
+    await _createDefaultBlocks(file);
+
+    final detail = selectedDetail;
+    if (detail != null && detail.topic.id == topic.id) {
+      detail.files.add(file);
+      final blocks = await _blockService.listForFile(file.id);
+      detail.blocksByFileId[file.id] = blocks;
+      for (final block in blocks) {
+        if (block.type == 'task_list') {
+          detail.tasksByBlockId[block.id] = const [];
+        }
+      }
+    }
+    return file;
+  }
+
+  Future<TopicTasksTarget> ensureTopicTasksTarget(Topic topic) async {
+    final files = await _fileService.listForTopic(topic.id);
+    AppFile? tasksFile;
+    for (final file in files) {
+      if (file.type == 'tasks' && !file.isArchived) {
+        tasksFile = file;
+        break;
+      }
+    }
+    tasksFile ??= await _ensureTasksFileForTopic(topic);
+
+    final blocks = await _blockService.listForFile(tasksFile.id);
+    Block? listBlock;
+    for (final block in blocks) {
+      if (block.type == 'task_list') {
+        listBlock = block;
+        break;
+      }
+    }
+    listBlock ??= await _blockService.createBlock(
+      fileId: tasksFile.id,
+      type: 'task_list',
+      content: const {},
+      orderIndex: 0,
+    );
+    return TopicTasksTarget(topic: topic, file: tasksFile, listBlock: listBlock);
+  }
+
+  Future<Block?> findTaskRowBlock(Task task) async {
+    if (task.blockId == null) return null;
+    final listBlock = await _blockService.getBlock(task.blockId!);
+    final fileId = listBlock.fileId;
+    if (fileId == null) return null;
+    final blocks = await _blockService.listForFile(fileId);
+    for (final block in blocks) {
+      if (block.type == 'task' && block.content['task_id'] == task.id) {
+        return block;
+      }
+    }
+    return null;
+  }
+
+  Future<int> _remoteOrderIndexAfterTask(
+    TopicTasksTarget target,
+    Task? afterTask,
+  ) async {
+    final blocks = await _blockService.listForFile(target.file.id);
+    if (afterTask == null) {
+      var maxOrder = target.listBlock.orderIndex ?? 0;
+      for (final block in blocks) {
+        if (block.type == 'task' && (block.orderIndex ?? 0) >= maxOrder) {
+          maxOrder = (block.orderIndex ?? 0) + 1;
+        }
+      }
+      return maxOrder;
+    }
+
+    final afterRow = await findTaskRowBlock(afterTask);
+    if (afterRow == null) {
+      return _remoteOrderIndexAfterTask(target, null);
+    }
+    final orderIndex = (afterRow.orderIndex ?? 0) + 1;
+    for (final block in blocks) {
+      if ((block.orderIndex ?? 0) >= orderIndex) {
+        await _blockService.updateBlock(block.id, {
+          'order_index': (block.orderIndex ?? 0) + 1,
+        });
+      }
+    }
+    return orderIndex;
+  }
+
+  Future<Task> createTaskInView({
+    required String viewType,
+    required Topic topic,
+    String title = '',
+    String? sectionName,
+    Task? afterTask,
+    String status = 'active',
+  }) async {
+    final target = await ensureTopicTasksTarget(topic);
+    final orderIndex = await _remoteOrderIndexAfterTask(target, afterTask);
+    final task = await _taskService.createTask(
+      blockId: target.listBlock.id,
+      title: title,
+      status: status,
+    );
+    await _blockService.createBlock(
+      fileId: target.file.id,
+      type: 'task',
+      content: {'task_id': task.id},
+      orderIndex: orderIndex,
+    );
+
+    TaskViewMembership membership;
+    final existing = membershipForTaskInView(task.id, viewType);
+    if (existing == null) {
+      membership = await _taskViewService.createMembership(
+        taskId: task.id,
+        viewType: viewType,
+        sectionName: sectionName,
+      );
+      _taskViewMemberships = [..._taskViewMemberships, membership];
+    } else if (sectionName != existing.sectionName) {
+      membership = await _taskViewService.update(
+        existing.id,
+        sectionName: sectionName,
+      );
+      _taskViewMemberships = _taskViewMemberships
+          .map((m) => m.id == existing.id ? membership : m)
+          .toList();
+    } else {
+      membership = existing;
+    }
+
+    final enriched = task.copyWith(
+      taskViewId: membership.id,
+      viewType: viewType,
+      sectionName: sectionName,
+      sectionFlag: membership.sectionFlag,
+      topicId: topic.id,
+      topicName: topic.name,
+    );
+
+    if (selectedViewType == viewType) {
+      viewTasks = [...viewTasks, enriched];
+      _cacheCurrentView();
+    }
+    _syncSelectedDetailTask(enriched, target);
+    notifyListeners();
+    return enriched;
+  }
+
+  Future<void> deleteTaskInView(Task task) async {
+    final rowBlock = await findTaskRowBlock(task);
+    await _taskService.deleteTask(task.id);
+    if (rowBlock != null) {
+      await _blockService.deleteBlock(rowBlock.id);
+    }
+    _taskViewMemberships = _taskViewMemberships
+        .where((m) => m.taskId != task.id)
+        .toList();
+    if (selectedViewType != null) {
+      viewTasks = viewTasks.where((t) => t.id != task.id).toList();
+      _cacheCurrentView();
+    }
+    _removeSelectedDetailTask(task);
+    notifyListeners();
+  }
+
+  Future<void> assignTaskToTopicInView(
+    Task task,
+    Topic topic, {
+    required String viewType,
+    String? sectionName,
+  }) async {
+    final target = await ensureTopicTasksTarget(topic);
+    final oldRow = await findTaskRowBlock(task);
+
+    if (task.blockId != target.listBlock.id) {
+      await _taskService.updateTask(task.id, {'block_id': target.listBlock.id});
+    }
+    if (oldRow != null && oldRow.fileId != target.file.id) {
+      await _blockService.deleteBlock(oldRow.id);
+    }
+
+    Block? rowBlock = oldRow;
+    if (rowBlock == null || rowBlock.fileId != target.file.id) {
+      final orderIndex = await _remoteOrderIndexAfterTask(target, null);
+      rowBlock = await _blockService.createBlock(
+        fileId: target.file.id,
+        type: 'task',
+        content: {'task_id': task.id},
+        orderIndex: orderIndex,
+      );
+    }
+
+    final existing = membershipForTaskInView(task.id, viewType);
+    TaskViewMembership membership;
+    if (existing == null) {
+      membership = await _taskViewService.createMembership(
+        taskId: task.id,
+        viewType: viewType,
+        sectionName: sectionName ?? task.sectionName,
+      );
+      _taskViewMemberships = [..._taskViewMemberships, membership];
+    } else {
+      final nextSection = sectionName ?? task.sectionName;
+      if (nextSection != existing.sectionName) {
+        membership = await _taskViewService.update(
+          existing.id,
+          sectionName: nextSection,
+        );
+        _taskViewMemberships = _taskViewMemberships
+            .map((m) => m.id == existing.id ? membership : m)
+            .toList();
+      } else {
+        membership = existing;
+      }
+    }
+
+    final enriched = task.copyWith(
+      blockId: target.listBlock.id,
+      taskViewId: membership.id,
+      viewType: viewType,
+      sectionName: membership.sectionName,
+      sectionFlag: membership.sectionFlag,
+      topicId: topic.id,
+      topicName: topic.name,
+    );
+
+    if (selectedViewType == viewType) {
+      viewTasks = viewTasks
+          .map((t) => t.id == task.id ? enriched : t)
+          .toList();
+      _cacheCurrentView();
+    }
+    _syncSelectedDetailTask(enriched, target, rowBlock: rowBlock);
+    notifyListeners();
+  }
+
+  Future<void> updateTaskViewSectionInView(
+    Task task,
+    String viewType, {
+    required String? sectionName,
+    bool clearSection = false,
+  }) async {
+    final existing = membershipForTaskInView(task.id, viewType);
+    if (existing == null) {
+      await addTaskToView(
+        task,
+        viewType,
+        sectionName: clearSection ? null : sectionName,
+      );
+      return;
+    }
+    if (!clearSection &&
+        sectionName != null &&
+        existing.sectionName == sectionName) {
+      await removeTaskFromView(existing);
+      return;
+    }
+    await updateTaskViewSection(
+      existing,
+      sectionName: sectionName,
+      task: task,
+      clearSection: clearSection,
+    );
+  }
+
+  void _syncSelectedDetailTask(
+    Task task,
+    TopicTasksTarget target, {
+    Block? rowBlock,
+  }) {
+    final detail = selectedDetail;
+    if (detail == null || detail.topic.id != target.topic.id) return;
+
+    final listId = target.listBlock.id;
+    final tasks = List<Task>.from(detail.tasksByBlockId[listId] ?? []);
+    final index = tasks.indexWhere((t) => t.id == task.id);
+    if (index >= 0) {
+      tasks[index] = task;
+    } else {
+      tasks.add(task);
+    }
+    detail.tasksByBlockId[listId] = tasks;
+
+    if (rowBlock != null) {
+      final block = rowBlock;
+      final blocks = List<Block>.from(detail.blocksByFileId[target.file.id] ?? []);
+      if (!blocks.any((b) => b.id == block.id)) {
+        blocks.add(block);
+        blocks.sort((a, b) => (a.orderIndex ?? 0).compareTo(b.orderIndex ?? 0));
+        detail.blocksByFileId[target.file.id] = blocks;
+      }
+    }
+  }
+
+  void _removeSelectedDetailTask(Task task) {
+    final detail = selectedDetail;
+    if (detail == null) return;
+    for (final entry in detail.tasksByBlockId.entries.toList()) {
+      detail.tasksByBlockId[entry.key] =
+          entry.value.where((t) => t.id != task.id).toList();
+    }
+    if (task.blockId != null) {
+      for (final entry in detail.blocksByFileId.entries.toList()) {
+        detail.blocksByFileId[entry.key] = entry.value
+            .where(
+              (b) =>
+                  b.type != 'task' || b.content['task_id'] != task.id,
+            )
+            .toList();
+      }
+    }
   }
 
   void _applyTaskUpdate(Task updated) {
+    Task merge(Task existing) => existing.copyWith(
+          title: updated.title,
+          status: updated.status,
+          blockId: updated.blockId,
+        );
+
     if (selectedViewType != null) {
-      viewTasks = viewTasks
-          .map((t) => t.id == updated.id ? updated : t)
-          .toList();
+      viewTasks = viewTasks.map((t) => t.id == updated.id ? merge(t) : t).toList();
+      _cacheCurrentView();
     }
     final detail = selectedDetail;
     if (detail != null) {
       for (final entry in detail.tasksByBlockId.entries) {
         detail.tasksByBlockId[entry.key] = entry.value
-            .map((t) => t.id == updated.id ? updated : t)
+            .map((t) => t.id == updated.id ? merge(t) : t)
             .toList();
       }
     }

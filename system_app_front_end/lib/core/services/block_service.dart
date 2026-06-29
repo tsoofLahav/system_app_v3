@@ -6,6 +6,11 @@ class BlockService {
 
   final ApiService _api;
 
+  Future<Block> getBlock(int id) async {
+    final data = await _api.get('/blocks/$id') as Map<String, dynamic>;
+    return Block.fromJson(data);
+  }
+
   Future<List<Block>> listForFile(
     int fileId, {
     bool includeArchived = false,

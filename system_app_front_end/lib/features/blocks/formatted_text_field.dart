@@ -27,6 +27,8 @@ class FormattedTextField extends StatefulWidget {
     this.focusNode,
     this.onEnter,
     this.stripNewlines = false,
+    this.onSecondaryTapDown,
+    this.textAlignVertical,
   });
 
   final TextEditingController controller;
@@ -44,6 +46,8 @@ class FormattedTextField extends StatefulWidget {
   final FocusNode? focusNode;
   final VoidCallback? onEnter;
   final bool stripNewlines;
+  final GestureTapDownCallback? onSecondaryTapDown;
+  final TextAlignVertical? textAlignVertical;
 
   @override
   State<FormattedTextField> createState() => _FormattedTextFieldState();
@@ -159,14 +163,20 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       behavior: HitTestBehavior.translucent,
       onPointerDown: (event) {
         if (event.kind == PointerDeviceKind.mouse &&
-            event.buttons == kSecondaryMouseButton &&
-            (_focusNode.hasFocus ||
-                BlockTextFocusRegistry.activeController ==
-                    widget.controller)) {
-          FormatRange.capturePending(
-            widget.controller.text,
-            widget.controller.selection,
-          );
+            event.buttons == kSecondaryMouseButton) {
+          if (widget.onSecondaryTapDown != null) {
+            widget.onSecondaryTapDown!(
+              TapDownDetails(globalPosition: event.position),
+            );
+            return;
+          }
+          if (_focusNode.hasFocus ||
+              BlockTextFocusRegistry.activeController == widget.controller) {
+            FormatRange.capturePending(
+              widget.controller.text,
+              widget.controller.selection,
+            );
+          }
         }
       },
       child: ValueListenableBuilder<int>(
@@ -194,6 +204,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
           controller: widget.controller,
           focusNode: _focusNode,
           style: style,
+          textAlignVertical: widget.textAlignVertical,
           maxLines: widget.maxLines,
           minLines: widget.minLines,
           decoration: InputDecoration(

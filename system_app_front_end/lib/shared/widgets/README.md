@@ -30,4 +30,12 @@ Glass-style bubble menus (outline + shadow + blur) used for file/block right-cli
 
 ## Disclosure chevrons (`disclosure_icon.dart`)
 
-Shared RTL-safe expand/submenu arrow. Reuse anywhere a row opens a nested panel (sidebar sections, context submenu rows, task assign menu uses the same flip pattern with `AppIcons.chevronRight`).
+Shared RTL-safe expand/submenu arrow. Reuse anywhere a row opens a nested panel (sidebar sections, context submenu rows, task context menu view submenus).
+
+## Task context menu (`task_context_menu.dart`)
+
+Single `AppContextMenu` for task right-click: file/block actions (add block, delete block) when in a task file, cut/copy/paste, copy all tasks, and per-view assignment submenus (Daily, Weekly, …) with section children. Used by [`TaskRow`](task_row.dart) in topic files and view panes (`ViewPaneTasksEditor`). Native `FormattedTextField` context menus are suppressed where this menu is shown.
+
+## Task row (`task_row.dart`, `task_mark.dart`)
+
+One `TaskRow` per task: compact `TaskMark` (aligned to `AppTypography.taskRowLineHeight`) + `FormattedTextField` title. Enter creates a task after the row; Backspace on empty deletes. `TaskMark(compact: true)` avoids the 32×32 hit target that misaligns checkboxes from single-line task text.

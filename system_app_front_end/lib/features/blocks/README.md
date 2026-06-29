@@ -15,8 +15,8 @@ What this folder owns:
 |---|---|
 | `connected_lines_editor.dart` | Single `TextField`; Enter / Backspace / arrows behave like plain text. Bullet or checkbox gutter aligns to each logical line (soft wrap does not create items). |
 | `points_list_block_widget.dart` | Thin wrapper for `list` blocks. Lines ↔ `content.items[].text` via `updateBlockContent`. |
-| `tasks_connected_editor.dart` | Unified editor for all tasks in a file. Lines ↔ individual `tasks` rows via `AppState.syncTasksFromLines`. |
-| `line_task_sync.dart` | Prefix/suffix line diff used when syncing task document changes to create/update/delete tasks. |
+| `tasks_connected_editor.dart` | Topic **tasks** file: active/done zones via [`features/tasks/`](../tasks/README.md) (`TaskLinesEditor` → `TaskZoneList` → `TaskRow`). |
+| `line_task_sync.dart` | Prefix/suffix line diff (used by `list` sync only; not task lists). |
 | `list_text_parse.dart` | Document helpers (`linesFromDocument`, `documentFromLines`) and paste splitting for bullet/semicolon lists. |
 
 **Why:** Per-row `TextField`s with custom Enter/Backspace handlers were fragile (focus jumps, crashes). Native multiline editing handles keyboard navigation; structured data is rebuilt from `\n`-split lines on a debounced sync.
@@ -29,11 +29,17 @@ What this folder owns:
 
 ### Task blocks (`task_list` + `task`)
 
-- **UI:** Only `task_list` renders `TasksConnectedEditor`. Individual `task` blocks stay in the DB for order and IDs but render as `SizedBox.shrink()` when a `task_list` exists in the same file.
-- **Data:** Each line maps to one `tasks` row (title) plus one `task` block (`content.task_id`). Order follows `task` block `order_index` in the file.
-- **Enter:** Creates a new task with an empty title (persisted immediately). Type on that line to set the title.
-- **Sync:** `AppState.syncTasksFromLines` diffs the previous snapshot against the new lines and creates, updates, or deletes tasks/blocks. Checkbox toggles and right-click assign still use per-task APIs.
+- **UI:** Only `task_list` renders `TasksConnectedEditor` (two zones, one `TaskRow` per task). Individual `task` blocks stay in the DB for order and IDs but render as `SizedBox.shrink()` when a `task_list` exists in the same file.
+- **Data:** Each task is a `tasks` row plus one `task` block (`content.task_id`). Display order within a zone follows `task.id`; block `order_index` is updated only on create/delete (not on mark/unmark).
+- **Enter:** Creates a new task after the current row (or from the draft row at the bottom of a zone) with the zone’s status (`active` or `done`).
+- **Toggle:** `AppState.toggleTaskStatus` — `PATCH status` only; row moves between active and done lists in the UI.
 - **Fallback:** If a file has `task` blocks but no `task_list`, each task still renders via `TaskBlockWidget` / `TaskRow` (legacy path).
+
+### Task views (`features/task_view/`)
+
+- **UI:** Each section/topic column uses [`view_pane_tasks_editor.dart`](../task_view/view_pane_tasks_editor.dart) → same `TaskLinesEditor` / `TaskRow` stack as topic files.
+- **Create:** `createTaskInViewZoneAfter`; by-section mode may require a topic picker when no neighbor topic exists.
+- **Done toggle:** PATCH merges preserve `section_name` / `topic`; done tasks appear in the done zone only (no block reorder).
 
 ### Other block types
 
@@ -106,13 +112,14 @@ Main flow:
 
 Side effects and persistence:
 - List content: block `PATCH` via `scheduleBlockSave`.
-- Task lines: task `POST` / `PATCH` / `DELETE` plus matching `task` block create/delete via `syncTasksFromLines`.
+- Task rows: per-task `POST` / `PATCH` / `DELETE` plus matching `task` block create/delete via `createTaskInFileAfter` / `deleteTaskInFile` (view panes: `createTaskInViewZoneAfter` / `deleteTaskInView`).
 
 Extension rules:
 - For a new block type: define intent and data shape, add renderer/editor, and wire persistence path.
 - Keep type dispatch explicit in `block_renderer.dart`.
 - Do not add file-type allowlist checks here. File type can suggest blocks, but rendering must accept any known block type in any file.
-- For line-based blocks, extend `ConnectedLinesEditor` (gutter/accessory columns) instead of adding per-row keyboard hacks.
+- For line-based **list** blocks, extend `ConnectedLinesEditor` (gutter/accessory columns).
+- **Task lists** use `features/tasks/` (`TaskRow` per task); do not route tasks through `ConnectedLinesEditor`.
 - Avoid visible "add row/item/point" controls. Lists and tasks grow from Enter; table structure actions live in the table right-click menu.
 
 Recap files:

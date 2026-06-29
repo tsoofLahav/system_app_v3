@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
 import '../../core/models/task.dart';
+import '../../core/task_list_order.dart';
+import '../../core/models/view_pane_sync_context.dart';
 import '../../core/models/view_section.dart';
 import '../../core/registry/task_view_display.dart';
 import '../../design_system/app_colors.dart';
@@ -10,7 +12,7 @@ import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
 import '../../design_system/note_widgets.dart';
 import '../shell/app_bottom_bar.dart';
-import '../../shared/widgets/task_row.dart';
+import 'view_pane_tasks_editor.dart';
 
 class TaskViewPane extends StatefulWidget {
   const TaskViewPane({super.key, required this.state});
@@ -202,8 +204,8 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                           AppBottomBarMetrics.scrollInset,
                     ),
                     child: displayMode == TaskViewDisplayMode.bySection
-                        ? _buildSectionPanes(tasks, sections)
-                        : _buildTopicPanes(tasks),
+                        ? _buildSectionPanes(tasks, sections, viewType)
+                        : _buildTopicPanes(tasks, viewType),
                   ),
           ),
         ],
@@ -211,7 +213,11 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     );
   }
 
-  Widget _buildSectionPanes(List<Task> tasks, List<ViewSection> sections) {
+  Widget _buildSectionPanes(
+    List<Task> tasks,
+    List<ViewSection> sections,
+    String viewType,
+  ) {
     final grouped = <String, List<Task>>{};
     for (final section in sections) {
       grouped[section.name] = [];
@@ -235,8 +241,11 @@ class _TaskViewPaneState extends State<TaskViewPane> {
         _TaskGroupPane(
           key: ValueKey('section-${section.id}'),
           title: paneTitle(section.name),
-          tasks: grouped[section.name] ?? [],
+          tasks: sortTasksById(grouped[section.name] ?? []),
           state: widget.state,
+          viewType: viewType,
+          displayMode: TaskViewDisplayMode.bySection,
+          sectionName: section.name,
           isImportant: section.isImportant,
           onToggleImportance: () => widget.state.setViewSectionImportance(
             section,
@@ -251,8 +260,10 @@ class _TaskViewPaneState extends State<TaskViewPane> {
         _TaskGroupPane(
           key: const ValueKey('section-uncategorized'),
           title: s['uncategorized'],
-          tasks: grouped[_uncategorizedKey]!,
+          tasks: sortTasksById(grouped[_uncategorizedKey]!),
           state: widget.state,
+          viewType: viewType,
+          displayMode: TaskViewDisplayMode.bySection,
         ),
       );
     }
@@ -265,8 +276,11 @@ class _TaskViewPaneState extends State<TaskViewPane> {
         _TaskGroupPane(
           key: ValueKey('section-extra-${entry.key}'),
           title: entry.key,
-          tasks: entry.value,
+          tasks: sortTasksById(entry.value),
           state: widget.state,
+          viewType: viewType,
+          displayMode: TaskViewDisplayMode.bySection,
+          sectionName: entry.key,
         ),
       );
     }
@@ -279,6 +293,9 @@ class _TaskViewPaneState extends State<TaskViewPane> {
             title: paneTitle(section.name),
             tasks: const [],
             state: widget.state,
+            viewType: viewType,
+            displayMode: TaskViewDisplayMode.bySection,
+            sectionName: section.name,
             isImportant: section.isImportant,
             onToggleImportance: () => widget.state.setViewSectionImportance(
               section,
@@ -300,15 +317,21 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     );
   }
 
-  Widget _buildTopicPanes(List<Task> tasks) {
+  Widget _buildTopicPanes(List<Task> tasks, String viewType) {
     final grouped = <String, List<Task>>{};
     for (final task in tasks) {
-      final key = task.topicName ?? 'main';
+      final key = task.topicName ?? ViewPaneKeys.noTopic;
       grouped.putIfAbsent(key, () => []);
       grouped[key]!.add(task);
     }
 
-    final keys = grouped.keys.toList()..sort();
+    final keys = grouped.keys.toList()..sort((a, b) {
+      if (a == ViewPaneKeys.noTopic) return 1;
+      if (b == ViewPaneKeys.noTopic) return -1;
+      return a.compareTo(b);
+    });
+
+    final s = widget.state.strings;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -317,12 +340,20 @@ class _TaskViewPaneState extends State<TaskViewPane> {
           if (i > 0) const SizedBox(width: AppSpacing.md),
           _TaskGroupPane(
             key: ValueKey('topic-${keys[i]}'),
-            title: widget.state.strings.displayTopicName(keys[i]),
-            tasks: grouped[keys[i]]!,
+            title: keys[i] == ViewPaneKeys.noTopic
+                ? s['noTopic']
+                : s.displayTopicName(keys[i]),
+            tasks: sortTasksById(grouped[keys[i]]!),
             state: widget.state,
-            accent: widget.state.topicAccentForTask(grouped[keys[i]]!.first),
-            isMain: widget.state.topicIsMain(grouped[keys[i]]!.first),
-            topicTint: true,
+            viewType: viewType,
+            displayMode: TaskViewDisplayMode.byTopic,
+            topicKey: keys[i] == ViewPaneKeys.noTopic ? null : keys[i],
+            accent: keys[i] == ViewPaneKeys.noTopic
+                ? null
+                : widget.state.topicAccentForTask(grouped[keys[i]]!.first),
+            isMain: keys[i] != ViewPaneKeys.noTopic &&
+                widget.state.topicIsMain(grouped[keys[i]]!.first),
+            topicTint: keys[i] != ViewPaneKeys.noTopic,
           ),
         ],
       ],
@@ -336,6 +367,10 @@ class _TaskGroupPane extends StatelessWidget {
     required this.title,
     required this.tasks,
     required this.state,
+    required this.viewType,
+    required this.displayMode,
+    this.sectionName,
+    this.topicKey,
     this.accent,
     this.isMain = true,
     this.topicTint = false,
@@ -346,6 +381,10 @@ class _TaskGroupPane extends StatelessWidget {
   final String title;
   final List<Task> tasks;
   final AppState state;
+  final String viewType;
+  final TaskViewDisplayMode displayMode;
+  final String? sectionName;
+  final String? topicKey;
   final Color? accent;
   final bool isMain;
   final bool topicTint;
@@ -412,19 +451,14 @@ class _TaskGroupPane extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  if (tasks.isEmpty)
-                    Text(
-                      state.strings['noTasks'],
-                      style: AppTypography.metaStyle,
-                    )
-                  else
-                    for (final task in tasks)
-                      TaskRow(
-                        key: ValueKey(task.id),
-                        task: task,
-                        state: state,
-                        onToggle: () => state.toggleTaskStatus(task),
-                      ),
+                  ViewPaneTasksEditor(
+                    viewType: viewType,
+                    displayMode: displayMode,
+                    sectionName: sectionName,
+                    topicKey: topicKey,
+                    tasks: tasks,
+                    state: state,
+                  ),
                 ],
               ),
             ),

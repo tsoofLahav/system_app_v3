@@ -269,14 +269,8 @@ class _FileSectionState extends State<FileSection> {
                           _showBlockMenu(details.globalPosition, orderIndex: 0),
                     ),
                     for (var i = 0; i < widget.blocks.length; i++) ...[
-                      GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onSecondaryTapDown: (details) => _showBlockMenu(
-                          details.globalPosition,
-                          orderIndex: i + 1,
-                          targetBlock: widget.blocks[i],
-                        ),
-                        child: Padding(
+                      if (widget.blocks[i].type == 'task_list')
+                        Padding(
                           padding: const EdgeInsets.only(bottom: AppSpacing.blockGap),
                           child: BlockRenderer(
                             topicAccent: widget.accent,
@@ -285,9 +279,33 @@ class _FileSectionState extends State<FileSection> {
                             block: widget.blocks[i],
                             tasks: tasks,
                             state: widget.state,
+                            onBlockMenuAction: (action) => _handleBlockMenuAction(
+                              action,
+                              orderIndex: i + 1,
+                              targetBlock: widget.blocks[i],
+                            ),
+                          ),
+                        )
+                      else
+                        GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onSecondaryTapDown: (details) => _showBlockMenu(
+                            details.globalPosition,
+                            orderIndex: i + 1,
+                            targetBlock: widget.blocks[i],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: AppSpacing.blockGap),
+                            child: BlockRenderer(
+                              topicAccent: widget.accent,
+                              isMainTopic: topic.isMain,
+                              file: widget.file,
+                              block: widget.blocks[i],
+                              tasks: tasks,
+                              state: widget.state,
+                            ),
                           ),
                         ),
-                      ),
                       _InlineInsertGap(
                         onSecondaryTapDown: (details) => _showBlockMenu(
                           details.globalPosition,

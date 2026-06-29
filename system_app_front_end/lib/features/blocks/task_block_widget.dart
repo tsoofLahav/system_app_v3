@@ -46,7 +46,9 @@ class TaskBlockWidget extends StatelessWidget {
       onToggle: onToggle,
       taskBlock: taskBlock,
       allTaskTitles: allTaskTitles,
-      onPasteLines: onPasteLines,
+      onPasteLines: onPasteLines == null
+          ? null
+          : (lines, _) => onPasteLines!(lines),
       autofocus: state.pendingFocusBlockId == taskBlock.id,
       onAutofocused: () => state.clearBlockFocus(taskBlock.id),
       onTitleChanged: (title) => state.updateTaskTitle(task, title),
@@ -55,7 +57,7 @@ class TaskBlockWidget extends StatelessWidget {
         taskBlock,
         focusTaskBlockAfterDelete: _previousTaskBlock(),
       ),
-      onAddTaskAfter: () => state.insertTaskAfter(
+      onAddTaskAfter: (_) => state.insertTaskAfter(
         file: file,
         listBlock: listBlock,
         afterTaskBlock: taskBlock,

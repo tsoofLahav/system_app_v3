@@ -1,73 +1,122 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/app_state.dart';
 import '../../core/models/app_file.dart';
 import '../../core/models/block.dart';
-import '../../core/models/task.dart';
-import '../../design_system/app_typography.dart';
-import '../../shared/widgets/task_assign_menu.dart';
-import '../../shared/widgets/task_mark.dart';
-import 'connected_lines_editor.dart';
+import '../../core/task_list_order.dart';
+import '../tasks/task_lines_editor.dart';
+import 'block_context_menu.dart';
 
-/// Unified task list editor: one connected document synced to individual tasks.
-class TasksConnectedEditor extends StatelessWidget {
+/// Per-task editors for a topic tasks file (active + done zones).
+class TasksConnectedEditor extends StatefulWidget {
   const TasksConnectedEditor({
     super.key,
     required this.file,
     required this.listBlock,
     required this.state,
+    this.onBlockMenuAction,
   });
 
   final AppFile file;
   final Block listBlock;
   final AppState state;
+  final BlockMenuHandler? onBlockMenuAction;
 
-  List<Task> get _orderedTasks => state.orderedTasksForFile(file, listBlock);
+  @override
+  State<TasksConnectedEditor> createState() => _TasksConnectedEditorState();
+}
+
+class _TasksConnectedEditorState extends State<TasksConnectedEditor> {
+  int? _focusTaskId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncFocusFromPendingBlock();
+  }
+
+  @override
+  void didUpdateWidget(TasksConnectedEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncFocusFromPendingBlock();
+  }
+
+  void _syncFocusFromPendingBlock() {
+    final blockId = widget.state.pendingFocusBlockId;
+    if (blockId == null) return;
+    for (final block in widget.state.selectedDetail?.blocksByFileId[widget.file.id] ??
+        []) {
+      if (block.id == blockId && block.type == 'task') {
+        setState(() {
+          _focusTaskId = block.content['task_id'] as int?;
+        });
+        return;
+      }
+    }
+  }
+
+  TaskZoneHandlers _handlers(bool done) {
+    final status = done ? 'done' : 'active';
+    return (
+      onCreateAfter: (afterTask, _) async {
+        final created = await widget.state.createTaskInFileAfter(
+          file: widget.file,
+          listBlock: widget.listBlock,
+          afterTask: afterTask,
+          status: status,
+        );
+        if (created != null) {
+          setState(() => _focusTaskId = created.id);
+        }
+      },
+      onCreateAtEnd: (title, _) async {
+        final parts = partitionTasksById(
+          widget.state.orderedTasksForFile(widget.file, widget.listBlock),
+        );
+        final zone = done ? parts.done : parts.active;
+        final created = await widget.state.createTaskInFileAfter(
+          file: widget.file,
+          listBlock: widget.listBlock,
+          afterTask: zone.isEmpty ? null : zone.last,
+          title: title,
+          status: status,
+        );
+        if (created != null) {
+          setState(() => _focusTaskId = created.id);
+        }
+      },
+      onTitleChanged: (task, title) =>
+          widget.state.updateTaskTitle(task, title),
+      onDelete: (task) => widget.state.deleteTaskInFile(widget.file, task),
+      onPasteAfter: (afterTask, lines, position) =>
+          widget.state.pasteTasksInFileAfter(
+            file: widget.file,
+            listBlock: widget.listBlock,
+            afterTask: afterTask,
+            lines: lines,
+            status: status,
+          ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final ordered = _orderedTasks;
-    final lines = ordered.map((task) => task.title).toList();
-    if (lines.isEmpty) {
-      lines.add('');
-    }
+    final tasks =
+        widget.state.orderedTasksForFile(widget.file, widget.listBlock);
 
-    return ConnectedLinesEditor(
-      lines: lines,
-      style: AppTypography.taskRowStyle,
-      hint: state.strings['newTaskHint'],
-      lineAccessoryBuilder: (context, index) {
-        if (index >= ordered.length) {
-          return TaskMark(done: false, onToggle: () {});
-        }
-        final task = ordered[index];
-        return TaskMark(
-          done: task.isDone,
-          onToggle: () => state.toggleTaskStatus(task),
-        );
+    return TaskLinesEditor(
+      tasks: tasks,
+      state: widget.state,
+      focusTaskId: _focusTaskId,
+      onFocusHandled: () {
+        final blockId = widget.state.pendingFocusBlockId;
+        if (blockId != null) widget.state.clearBlockFocus(blockId);
+        setState(() => _focusTaskId = null);
       },
-      onLineSecondaryTap: (details, index) {
-        if (index >= ordered.length) return;
-        showTaskAssignMenu(
-          context: context,
-          globalPosition: details.globalPosition,
-          task: ordered[index],
-          state: state,
-        );
-      },
-      onCopyAll: () {
-        final titles = ordered.map((task) => task.title).toList();
-        if (titles.isEmpty) return;
-        Clipboard.setData(ClipboardData(text: titles.join('\n')));
-      },
-      onLinesChanged: (nextLines) {
-        state.syncTasksFromLines(
-          file: file,
-          listBlock: listBlock,
-          lines: nextLines,
-        );
-      },
+      contextMenuFileType: widget.file.type,
+      contextMenuTargetBlock: widget.listBlock,
+      file: widget.file,
+      handlersFor: _handlers,
     );
   }
 }
