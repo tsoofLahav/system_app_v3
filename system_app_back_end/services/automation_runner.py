@@ -23,23 +23,40 @@ WEEKDAYS = {
 }
 
 ACTIVE_RUN_STATUSES = ("queued", "running")
+STALE_RUNNING_AFTER = timedelta(minutes=30)
+
+
+def _clear_stale_running_run(run, now):
+    if run.status != "running" or run.finished_at is not None:
+        return False
+    started_at = run.started_at or now
+    if now - started_at < STALE_RUNNING_AFTER:
+        return False
+    run.status = "failed"
+    run.error = "stale running run cleared"
+    run.finished_at = now
+    return True
 
 
 def enqueue_run(rule, trigger_source, event_context=None):
+    now = datetime.utcnow()
     existing = (
         AutomationRun.query.filter_by(rule_id=rule.id)
         .filter(AutomationRun.status.in_(ACTIVE_RUN_STATUSES))
         .first()
     )
     if existing is not None:
-        return existing.to_dict()
+        if _clear_stale_running_run(existing, now):
+            db.session.commit()
+        else:
+            return existing.to_dict()
 
-    now = datetime.utcnow()
     run = AutomationRun(
         rule_id=rule.id,
         status="queued",
         trigger_source=trigger_source,
         event_context=event_context or {},
+        result={},
         started_at=now,
     )
     db.session.add(run)

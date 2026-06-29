@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from models import AutomationRule, db
 from routes.helpers import apply_updates, get_or_404, parse_datetime
@@ -93,7 +94,19 @@ def run_automation_rule_now(rule_id):
     rule = get_or_404(AutomationRule, rule_id)
     from services.automation_runner import enqueue_run
 
-    run = enqueue_run(rule, trigger_source="manual")
+    try:
+        run = enqueue_run(rule, trigger_source="manual")
+    except (ProgrammingError, OperationalError) as error:
+        db.session.rollback()
+        detail = str(error.orig) if getattr(error, "orig", None) else str(error)
+        return jsonify({
+            "error": (
+                "Automation queue schema is missing. "
+                "Apply migrations/007_automation_run_queue.sql on this database."
+            ),
+            "detail": detail,
+        }), 503
+
     return jsonify({"run": run}), 202
 
 

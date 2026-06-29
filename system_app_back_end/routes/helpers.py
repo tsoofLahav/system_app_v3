@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from flask import jsonify, request
+from flask import current_app, jsonify, request
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from werkzeug.exceptions import HTTPException
 
 from models import db
@@ -67,6 +68,7 @@ def register_error_handlers(app):
     @app.errorhandler(Exception)
     def handle_unexpected_error(error):
         db.session.rollback()
+        current_app.logger.exception("Unhandled error: %s", error)
         response = jsonify({"error": "Internal server error"})
         response.status_code = 500
         return response
