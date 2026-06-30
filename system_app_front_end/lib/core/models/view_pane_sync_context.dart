@@ -2,6 +2,7 @@ import '../registry/task_view_display.dart';
 
 abstract final class ViewPaneKeys {
   static const noTopic = '__no_topic__';
+  static const automations = 'automations';
 }
 
 class ViewPaneSyncContext {

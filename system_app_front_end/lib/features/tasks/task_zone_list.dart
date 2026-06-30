@@ -7,6 +7,7 @@ import '../../core/models/task.dart';
 import '../../core/models/task_view_menu_context.dart';
 import '../../design_system/app_typography.dart';
 import '../../features/blocks/formatted_text_field.dart';
+import '../../core/registry/automation_flow_registry.dart';
 import '../../shared/widgets/task_row.dart';
 import '../blocks/block_context_menu.dart';
 
@@ -56,6 +57,7 @@ class _TaskZoneListState extends State<TaskZoneList> {
   @override
   Widget build(BuildContext context) {
     final titles = widget.tasks.map((task) => task.title).toList();
+    final hideDraft = widget.tasks.any((task) => task.isAutomationsTopic);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -80,12 +82,22 @@ class _TaskZoneListState extends State<TaskZoneList> {
             autofocus: widget.focusTaskId == task.id,
             onAutofocused: widget.onFocusHandled,
             viewMenuContext: widget.viewMenuContext,
+            readOnly: task.isAutomationsTopic,
+            toggleEnabled: true,
+            onRowTap: task.hasAutomationFlow
+                ? () => AutomationFlowRegistry.run(
+                      context: context,
+                      state: widget.state,
+                      task: task,
+                    )
+                : null,
           ),
-        _DraftTaskRow(
-          done: widget.done,
-          hint: widget.state.strings['newTaskHint'],
-          onSubmit: (title, position) => widget.onCreateAtEnd(title, position),
-        ),
+        if (!hideDraft)
+          _DraftTaskRow(
+            done: widget.done,
+            hint: widget.state.strings['newTaskHint'],
+            onSubmit: (title, position) => widget.onCreateAtEnd(title, position),
+          ),
       ],
     );
   }

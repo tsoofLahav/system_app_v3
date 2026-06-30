@@ -1,8 +1,10 @@
 from flask import Blueprint, jsonify, request
 
-from models import Block, File, Task, TaskView, Topic, db
+from models import AutomationCompanionTask, Block, File, Task, TaskView, Topic, db
 from routes.helpers import active_query, apply_updates, get_or_404
-from services.automation_events import dispatch_file_changed
+from services.automation_dispatcher import dispatch_file_changed
+from services.automation_topics import AUTOMATIONS_TOPIC_KEY
+from services.automation_trigger import handle_task_status_change
 from services.delete_cascade import delete_task_cascade
 
 tasks_bp = Blueprint("tasks", __name__)
@@ -13,6 +15,40 @@ def _file_id_for_task(task):
         return None
     block = db.session.get(Block, task.block_id)
     return block.file_id if block is not None else None
+
+
+def _topic_name_for_row(task_view, topic, companion):
+    if task_view.topic_key == AUTOMATIONS_TOPIC_KEY:
+        return AUTOMATIONS_TOPIC_KEY
+    if topic is not None:
+        return topic.name
+    return None
+
+
+def _enrich_task_row(task, task_view, topic, companion=None):
+    item = task.to_dict()
+    item["task_view_id"] = task_view.id
+    item["view_type"] = task_view.view_type
+    item["section_name"] = task_view.section_name
+    item["section_flag"] = task_view.section_flag
+    item["topic_key"] = task_view.topic_key
+    item["topic_name"] = _topic_name_for_row(task_view, topic, companion)
+    if companion is not None:
+        payload = companion.payload if companion.payload is not None else {}
+        if payload.get("topic_name"):
+            item["subject_topic_name"] = payload["topic_name"]
+        if companion.topic_id is not None:
+            item["subject_topic_id"] = companion.topic_id
+    elif topic is not None:
+        item["topic_id"] = topic.id
+    if companion is not None and companion.status == "pending":
+        item["companion_task_id"] = companion.id
+        item["flow_key"] = companion.flow_key
+        item["companion_payload"] = (
+            companion.payload if companion.payload is not None else {}
+        )
+        item["automation_rule_key"] = companion.rule_key
+    return item
 
 
 @tasks_bp.route("/tasks", methods=["GET"])
@@ -42,32 +78,34 @@ def list_tasks_by_view(view_type):
         "yes",
     }
     rows = (
-        db.session.query(Task, TaskView, Topic)
+        db.session.query(Task, TaskView, Topic, AutomationCompanionTask)
         .join(TaskView, TaskView.task_id == Task.id)
         .outerjoin(Block, Task.block_id == Block.id)
         .outerjoin(File, Block.file_id == File.id)
         .outerjoin(Topic, File.topic_id == Topic.id)
+        .outerjoin(
+            AutomationCompanionTask,
+            (AutomationCompanionTask.task_id == Task.id)
+            & (AutomationCompanionTask.status == "pending"),
+        )
         .filter(TaskView.view_type == view_type)
         .filter(TaskView.task_id.isnot(None))
         .filter(Task.archived_at.is_(None))
-        .filter(Block.archived_at.is_(None))
-        .filter(File.archived_at.is_(None))
-        .filter(Topic.archived_at.is_(None))
+        .filter(
+            (Block.id.is_(None))
+            | (
+                Block.archived_at.is_(None)
+                & File.archived_at.is_(None)
+                & Topic.archived_at.is_(None)
+            )
+        )
     )
     if important_only:
         rows = rows.filter(TaskView.section_flag == IMPORTANT_SECTION_FLAG)
     rows = rows.order_by(TaskView.section_name.nulls_last(), Task.id).all()
-    result = []
-    for task, task_view, topic in rows:
-        item = task.to_dict()
-        item["task_view_id"] = task_view.id
-        item["view_type"] = task_view.view_type
-        item["section_name"] = task_view.section_name
-        item["section_flag"] = task_view.section_flag
-        item["topic_id"] = topic.id if topic else None
-        item["topic_name"] = topic.name if topic else None
-        result.append(item)
-    return jsonify(result)
+    return jsonify(
+        [_enrich_task_row(task, task_view, topic, companion) for task, task_view, topic, companion in rows]
+    )
 
 
 @tasks_bp.route("/tasks", methods=["POST"])
@@ -101,8 +139,13 @@ def create_task():
 
 @tasks_bp.route("/tasks/<int:task_id>", methods=["PATCH"])
 def update_task(task_id):
+    from flask import current_app
+
+    from services.automation_runner import kick_run_async
+
     task = get_or_404(Task, task_id)
     data = request.get_json(silent=True) or {}
+    previous_status = task.status
     apply_updates(
         task,
         data,
@@ -110,12 +153,25 @@ def update_task(task_id):
         datetime_fields={"due_date", "archived_at"},
     )
     db.session.commit()
+
+    run_ids = []
+    if "status" in data and not data.get("_skip_automation_trigger"):
+        run_ids = handle_task_status_change(task, previous_status)
+        if run_ids:
+            app = current_app._get_current_object()
+            for run_id in run_ids:
+                kick_run_async(app, run_id)
+
     dispatch_file_changed(
         _file_id_for_task(task),
         "task_updated",
         {"task_id": task.id},
     )
-    return jsonify(task.to_dict())
+
+    payload = task.to_dict()
+    if run_ids:
+        payload["automation_run_ids"] = run_ids
+    return jsonify(payload)
 
 
 @tasks_bp.route("/tasks/<int:task_id>", methods=["DELETE"])

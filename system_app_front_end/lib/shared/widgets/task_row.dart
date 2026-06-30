@@ -27,6 +27,9 @@ class TaskRow extends StatefulWidget {
     this.autofocus = false,
     this.onAutofocused,
     this.viewMenuContext,
+    this.readOnly = false,
+    this.toggleEnabled = true,
+    this.onRowTap,
   });
 
   final Task task;
@@ -42,6 +45,9 @@ class TaskRow extends StatefulWidget {
   final bool autofocus;
   final VoidCallback? onAutofocused;
   final TaskViewMenuContext? viewMenuContext;
+  final bool readOnly;
+  final bool toggleEnabled;
+  final VoidCallback? onRowTap;
 
   @override
   State<TaskRow> createState() => _TaskRowState();
@@ -161,6 +167,61 @@ class _TaskRowState extends State<TaskRow> {
   @override
   Widget build(BuildContext context) {
     final lineHeight = AppTypography.taskRowLineHeight;
+    final titleStyle = AppTypography.taskRowStyle.copyWith(
+      decoration: widget.task.isDone ? TextDecoration.lineThrough : null,
+      color: widget.task.isDone
+          ? AppColors.text.withValues(alpha: 0.45)
+          : null,
+    );
+
+    Widget titleField;
+    if (widget.readOnly) {
+      titleField = InkWell(
+        onTap: widget.onRowTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.task.title, style: titleStyle),
+              if (widget.task.displaySubjectTopicName != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    widget.task.displaySubjectTopicName!,
+                    style: AppTypography.metaStyle.copyWith(
+                      color: AppColors.noteMeta.withValues(alpha: 0.75),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      titleField = FormattedTextField(
+        controller: _controller,
+        focusNode: _focusNode,
+        textAlignVertical: TextAlignVertical.top,
+        onSecondaryTapDown: (details) =>
+            _showContextMenu(details.globalPosition),
+        style: titleStyle,
+        maxLines: null,
+        minLines: 1,
+        stripNewlines: true,
+        onChanged: (v) => widget.onTitleChanged?.call(v),
+        onEnter: () {
+          final box = _focusNode.context?.findRenderObject() as RenderBox?;
+          final position = box?.localToGlobal(Offset.zero) ?? Offset.zero;
+          widget.onAddTaskAfter?.call(position);
+        },
+        onBackspaceAtStart: () {
+          if (_controller.text.isEmpty) {
+            widget.onDelete?.call();
+          }
+        },
+      );
+    }
 
     return Material(
       color: Colors.transparent,
@@ -191,47 +252,21 @@ class _TaskRowState extends State<TaskRow> {
                   width: 32,
                   height: lineHeight,
                   child: Center(
-                    child: TaskMark(
-                      done: widget.task.isDone,
-                      onToggle: widget.onToggle,
-                      compact: true,
+                    child: IgnorePointer(
+                      ignoring: !widget.toggleEnabled,
+                      child: Opacity(
+                        opacity: widget.toggleEnabled ? 1 : 0.35,
+                        child: TaskMark(
+                          done: widget.task.isDone,
+                          onToggle: widget.onToggle,
+                          compact: true,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-              Expanded(
-                child: FormattedTextField(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  textAlignVertical: TextAlignVertical.top,
-                  onSecondaryTapDown: (details) =>
-                      _showContextMenu(details.globalPosition),
-                  style: AppTypography.taskRowStyle.copyWith(
-                    decoration: widget.task.isDone
-                        ? TextDecoration.lineThrough
-                        : null,
-                    color: widget.task.isDone
-                        ? AppColors.text.withValues(alpha: 0.45)
-                        : null,
-                  ),
-                  maxLines: null,
-                  minLines: 1,
-                  stripNewlines: true,
-                  onChanged: (v) => widget.onTitleChanged?.call(v),
-                  onEnter: () {
-                    final box =
-                        _focusNode.context?.findRenderObject() as RenderBox?;
-                    final position =
-                        box?.localToGlobal(Offset.zero) ?? Offset.zero;
-                    widget.onAddTaskAfter?.call(position);
-                  },
-                  onBackspaceAtStart: () {
-                    if (_controller.text.isEmpty) {
-                      widget.onDelete?.call();
-                    }
-                  },
-                ),
-              ),
+              Expanded(child: titleField),
             ],
           ),
         ),

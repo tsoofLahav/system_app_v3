@@ -61,6 +61,7 @@ class AppStrings {
   String layoutLabel(String id) => _layouts[id] ?? id;
 
   String displayTopicName(String? topicName) {
+    if (topicName == 'automations') return _views['automations'] ?? topicName!;
     if (topicName == null || topicName == 'main') return this['main'];
     return topicName;
   }
@@ -262,6 +263,14 @@ class AppStrings {
     'saturday': 'Saturday',
     'sunday': 'Sunday',
     'automationTimeHelp': 'HH:MM',
+    'triggerByTime': 'By time',
+    'triggerByChanges': 'By changes',
+    'triggerByTask': 'By task',
+    'automationTrigger': 'Activation',
+    'automationTriggerView': 'View',
+    'automationTriggerSection': 'Section',
+    'automationTriggerSectionHelp': 'Create a section in this view if none exist.',
+    'createSection': 'Create section',
     'aiProposals': 'AI suggestions',
     'approve': 'Approve',
     'reject': 'Reject',
@@ -447,6 +456,14 @@ class AppStrings {
     'saturday': 'שבת',
     'sunday': 'ראשון',
     'automationTimeHelp': 'HH:MM',
+    'triggerByTime': 'לפי זמן',
+    'triggerByChanges': 'לפי שינויים',
+    'triggerByTask': 'לפי משימה',
+    'automationTrigger': 'הפעלה',
+    'automationTriggerView': 'תצוגה',
+    'automationTriggerSection': 'מדור',
+    'automationTriggerSectionHelp': 'צור מדור בתצוגה זו אם אין.',
+    'createSection': 'צור מדור',
     'aiProposals': 'הצעות AI',
     'approve': 'אשר',
     'reject': 'דחה',
@@ -471,6 +488,7 @@ class AppStrings {
     'quarterly': 'Quarterly',
     'arrangements': 'Arrangements',
     'missions': 'Missions',
+    'automations': 'Automations',
   };
 
   static const _viewsHe = {
@@ -480,6 +498,7 @@ class AppStrings {
     'quarterly': 'רבעוני',
     'arrangements': 'סידורים',
     'missions': 'משימות',
+    'automations': 'אוטומציות',
   };
 
   static const _topicTypesEn = {

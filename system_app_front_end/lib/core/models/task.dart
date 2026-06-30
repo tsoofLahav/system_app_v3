@@ -1,4 +1,5 @@
 import 'view_section_flags.dart';
+import 'view_pane_sync_context.dart';
 
 class Task {
   const Task({
@@ -15,6 +16,12 @@ class Task {
     this.sectionFlag,
     this.topicId,
     this.topicName,
+    this.topicKey,
+    this.subjectTopicName,
+    this.companionTaskId,
+    this.flowKey,
+    this.companionPayload = const {},
+    this.automationRuleKey,
   });
 
   final int id;
@@ -30,14 +37,37 @@ class Task {
   final String? sectionFlag;
   final int? topicId;
   final String? topicName;
+  final String? topicKey;
+  final String? subjectTopicName;
+  final int? companionTaskId;
+  final String? flowKey;
+  final Map<String, dynamic> companionPayload;
+  final String? automationRuleKey;
 
   bool get isDone => status == 'done';
+
+  bool get isCompanionTask => companionTaskId != null || flowKey != null;
+
+  bool get isAutomationsTopic =>
+      topicKey == ViewPaneKeys.automations ||
+      topicName == ViewPaneKeys.automations;
+
+  bool get hasAutomationFlow => flowKey != null && companionTaskId != null;
 
   bool get isImportant => sectionFlagIsImportant(sectionFlag);
 
   String get displayTopicName {
     if (topicName == null || topicName == 'main') return 'Main';
     return topicName!;
+  }
+
+  String? get displaySubjectTopicName {
+    final name = subjectTopicName ??
+        companionPayload['topic_name']?.toString();
+    if (name == null || name.isEmpty || name == 'main') {
+      return name == 'main' ? 'Main' : name;
+    }
+    return name;
   }
 
   Task copyWith({
@@ -54,6 +84,12 @@ class Task {
     String? sectionFlag,
     int? topicId,
     String? topicName,
+    String? topicKey,
+    String? subjectTopicName,
+    int? companionTaskId,
+    String? flowKey,
+    Map<String, dynamic>? companionPayload,
+    String? automationRuleKey,
     bool clearSection = false,
     bool clearSectionFlag = false,
   }) {
@@ -72,6 +108,12 @@ class Task {
           clearSectionFlag ? null : (sectionFlag ?? this.sectionFlag),
       topicId: topicId ?? this.topicId,
       topicName: topicName ?? this.topicName,
+      topicKey: topicKey ?? this.topicKey,
+      subjectTopicName: subjectTopicName ?? this.subjectTopicName,
+      companionTaskId: companionTaskId ?? this.companionTaskId,
+      flowKey: flowKey ?? this.flowKey,
+      companionPayload: companionPayload ?? this.companionPayload,
+      automationRuleKey: automationRuleKey ?? this.automationRuleKey,
     );
   }
 
@@ -90,6 +132,16 @@ class Task {
       sectionFlag: json['section_flag'] as String?,
       topicId: json['topic_id'] as int?,
       topicName: json['topic_name'] as String?,
+      topicKey: json['topic_key'] as String?,
+      subjectTopicName: json['subject_topic_name'] as String?,
+      companionTaskId: json['companion_task_id'] as int?,
+      flowKey: json['flow_key'] as String?,
+      companionPayload: json['companion_payload'] is Map<String, dynamic>
+          ? Map<String, dynamic>.from(
+              json['companion_payload'] as Map<String, dynamic>,
+            )
+          : const {},
+      automationRuleKey: json['automation_rule_key'] as String?,
     );
   }
 

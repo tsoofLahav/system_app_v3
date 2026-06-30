@@ -172,9 +172,9 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                               section: section,
                               onToggleImportance: () =>
                                   widget.state.setViewSectionImportance(
-                                    section,
-                                    important: !section.isImportant,
-                                  ),
+                                section,
+                                important: !section.isImportant,
+                              ),
                               onDelete: () =>
                                   widget.state.deleteViewSection(section),
                             ),
@@ -326,6 +326,8 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     }
 
     final keys = grouped.keys.toList()..sort((a, b) {
+      if (a == ViewPaneKeys.automations) return -1;
+      if (b == ViewPaneKeys.automations) return 1;
       if (a == ViewPaneKeys.noTopic) return 1;
       if (b == ViewPaneKeys.noTopic) return -1;
       return a.compareTo(b);
@@ -348,12 +350,15 @@ class _TaskViewPaneState extends State<TaskViewPane> {
             viewType: viewType,
             displayMode: TaskViewDisplayMode.byTopic,
             topicKey: keys[i] == ViewPaneKeys.noTopic ? null : keys[i],
-            accent: keys[i] == ViewPaneKeys.noTopic
+            accent: keys[i] == ViewPaneKeys.noTopic ||
+                    keys[i] == ViewPaneKeys.automations
                 ? null
                 : widget.state.topicAccentForTask(grouped[keys[i]]!.first),
             isMain: keys[i] != ViewPaneKeys.noTopic &&
+                keys[i] != ViewPaneKeys.automations &&
                 widget.state.topicIsMain(grouped[keys[i]]!.first),
-            topicTint: keys[i] != ViewPaneKeys.noTopic,
+            topicTint: keys[i] != ViewPaneKeys.noTopic &&
+                keys[i] != ViewPaneKeys.automations,
           ),
         ],
       ],

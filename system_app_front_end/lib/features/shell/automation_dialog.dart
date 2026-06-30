@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/app_state.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/models/automation_rule.dart';
+import '../../core/models/view_section.dart';
+import '../../core/registry/view_registry.dart';
 import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
 
@@ -120,6 +122,9 @@ class _AutomationRuleControlState extends State<_AutomationRuleControl> {
       'weekly_process_refresh' => s['weeklyProcessRefresh'],
       _ => widget.rule.name,
     };
+    final triggerType = widget.rule.triggerType;
+    final trigger = (widget.rule.params['trigger'] as Map?)?.cast<String, dynamic>() ??
+        <String, dynamic>{};
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -141,7 +146,7 @@ class _AutomationRuleControlState extends State<_AutomationRuleControl> {
                 dense: true,
                 title: Text(label, style: AppTypography.noteBodyStyle),
                 subtitle: Text(
-                  schedule.label(s),
+                  _triggerSummary(s, triggerType, schedule, trigger),
                   style: AppTypography.metaStyle,
                 ),
                 value: widget.rule.enabled,
@@ -150,13 +155,51 @@ class _AutomationRuleControlState extends State<_AutomationRuleControl> {
                   enabled: value,
                 ),
               ),
+              Text(s['automationTrigger'], style: AppTypography.metaStyle),
+              const SizedBox(height: 6),
+              SegmentedButton<String>(
+                segments: [
+                  ButtonSegment(value: 'schedule', label: Text(s['triggerByTime'])),
+                  ButtonSegment(value: 'event', label: Text(s['triggerByChanges'])),
+                  ButtonSegment(value: 'task', label: Text(s['triggerByTask'])),
+                ],
+                selected: {triggerType},
+                onSelectionChanged: (value) => _setTriggerType(value.first),
+              ),
+              const SizedBox(height: 8),
+              if (triggerType == 'schedule') ...[
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () => _showScheduleDialog(context),
+                      child: Text(s['editTime']),
+                    ),
+                  ],
+                ),
+              ] else if (triggerType == 'event') ...[
+                Text(
+                  s['triggerByChanges'],
+                  style: AppTypography.noteBodyStyle,
+                ),
+              ] else ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _taskTriggerLabel(s, trigger),
+                        style: AppTypography.noteBodyStyle,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => _showTaskTriggerDialog(context),
+                      child: Text(s['edit']),
+                    ),
+                  ],
+                ),
+              ],
               Row(
                 children: [
-                  TextButton(
-                    onPressed: () => _showScheduleDialog(context),
-                    child: Text(s['editTime']),
-                  ),
-                  const SizedBox(width: 8),
+                  if (triggerType == 'schedule') const Spacer(),
                   TextButton(
                     onPressed: running ? null : _runNow,
                     child: running
@@ -179,6 +222,56 @@ class _AutomationRuleControlState extends State<_AutomationRuleControl> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  String _triggerSummary(
+    AppStrings s,
+    String triggerType,
+    _ScheduleDraft schedule,
+    Map<String, dynamic> trigger,
+  ) {
+    return switch (triggerType) {
+      'event' => s['triggerByChanges'],
+      'task' => _taskTriggerLabel(s, trigger),
+      _ => schedule.label(s),
+    };
+  }
+
+  String _taskTriggerLabel(AppStrings s, Map<String, dynamic> trigger) {
+    final viewType = trigger['view_type'] as String?;
+    final section = trigger['section_name'] as String?;
+    if (viewType == null) return s['triggerByTask'];
+    final view = s.viewLabel(viewType);
+    if (section == null || section.isEmpty) return view;
+    return '$view · $section';
+  }
+
+  Future<void> _setTriggerType(String triggerType) async {
+    final params = Map<String, dynamic>.from(widget.rule.params);
+    if (triggerType == 'task') {
+      final trigger = Map<String, dynamic>.from(
+        (params['trigger'] as Map?)?.cast<String, dynamic>() ??
+            <String, dynamic>{},
+      );
+      trigger.putIfAbsent('view_type', () => 'weekly');
+      params['trigger'] = trigger;
+      params['version'] = 2;
+    }
+    await widget.state.updateAutomationRule(
+      widget.rule,
+      triggerType: triggerType,
+      params: params,
+    );
+  }
+
+  Future<void> _showTaskTriggerDialog(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => _TaskTriggerDialog(
+        state: widget.state,
+        rule: widget.rule,
       ),
     );
   }
@@ -531,4 +624,182 @@ int _weekdayNumber(String weekday) {
     'sun' => DateTime.sunday,
     _ => DateTime.monday,
   };
+}
+
+class _TaskTriggerDialog extends StatefulWidget {
+  const _TaskTriggerDialog({required this.state, required this.rule});
+
+  final AppState state;
+  final AutomationRule rule;
+
+  @override
+  State<_TaskTriggerDialog> createState() => _TaskTriggerDialogState();
+}
+
+class _TaskTriggerDialogState extends State<_TaskTriggerDialog> {
+  late String _viewType;
+  String? _sectionName;
+  List<ViewSection> _sections = [];
+  var _loading = true;
+  final _sectionController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    final trigger =
+        (widget.rule.params['trigger'] as Map?)?.cast<String, dynamic>() ??
+            <String, dynamic>{};
+    _viewType = trigger['view_type'] as String? ?? 'weekly';
+    _sectionName = trigger['section_name'] as String?;
+    _loadSections();
+  }
+
+  @override
+  void dispose() {
+    _sectionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSections() async {
+    setState(() => _loading = true);
+    final sections = await widget.state.fetchSectionsForView(_viewType);
+    if (!mounted) return;
+    setState(() {
+      _sections = sections;
+      _loading = false;
+      if (_sectionName != null &&
+          !sections.any((section) => section.name == _sectionName)) {
+        _sectionName = sections.isEmpty ? null : sections.first.name;
+      } else {
+        _sectionName ??= sections.isEmpty ? null : sections.first.name;
+      }
+    });
+  }
+
+  Future<void> _createSection() async {
+    final name = _sectionController.text.trim();
+    if (name.isEmpty) return;
+    await widget.state.createViewSection(_viewType, name);
+    _sectionController.clear();
+    if (!mounted) return;
+    final sections = await widget.state.fetchSectionsForView(_viewType);
+    if (!mounted) return;
+    setState(() {
+      _sections = sections;
+      _sectionName = name;
+    });
+  }
+
+  Future<void> _save() async {
+    if (_sectionName == null || _sectionName!.isEmpty) return;
+    final params = Map<String, dynamic>.from(widget.rule.params);
+    final trigger = Map<String, dynamic>.from(
+      (params['trigger'] as Map?)?.cast<String, dynamic>() ??
+          <String, dynamic>{},
+    );
+    trigger['view_type'] = _viewType;
+    trigger['section_name'] = _sectionName;
+    params['version'] = 2;
+    params['trigger'] = trigger;
+    final companion = Map<String, dynamic>.from(
+      (params['companion_task'] as Map?)?.cast<String, dynamic>() ??
+          <String, dynamic>{},
+    );
+    companion['view_type'] = _viewType;
+    params['companion_task'] = companion;
+    await widget.state.updateAutomationRule(
+      widget.rule,
+      triggerType: 'task',
+      params: params,
+    );
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.state.strings;
+
+    return AppGlassDialog(
+      title: Text(s['triggerByTask']),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(s['cancel']),
+        ),
+        FilledButton(
+          onPressed: _sectionName == null ? null : _save,
+          child: Text(s['save']),
+        ),
+      ],
+      child: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: _viewType,
+              decoration: InputDecoration(
+                isDense: true,
+                labelText: s['automationTriggerView'],
+              ),
+              items: [
+                for (final view in ViewRegistry.views)
+                  DropdownMenuItem(
+                    value: view.type,
+                    child: Text(s.viewLabel(view.type)),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _viewType = value);
+                _loadSections();
+              },
+            ),
+            const SizedBox(height: 10),
+            if (_loading)
+              const Center(child: CircularProgressIndicator(strokeWidth: 2))
+            else if (_sections.isEmpty) ...[
+              Text(
+                s['automationTriggerSectionHelp'],
+                style: AppTypography.noteBodyStyle,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _sectionController,
+                decoration: InputDecoration(
+                  isDense: true,
+                  labelText: s['sectionName'],
+                ),
+                onSubmitted: (_) => _createSection(),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton(
+                  onPressed: _createSection,
+                  child: Text(s['createSection']),
+                ),
+              ),
+            ] else
+              DropdownButtonFormField<String>(
+                initialValue: _sectionName,
+                decoration: InputDecoration(
+                  isDense: true,
+                  labelText: s['automationTriggerSection'],
+                ),
+                items: [
+                  for (final section in _sections)
+                    DropdownMenuItem(
+                      value: section.name,
+                      child: Text(section.name),
+                    ),
+                ],
+                onChanged: (value) => setState(() => _sectionName = value),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }

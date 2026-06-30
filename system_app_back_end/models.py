@@ -117,6 +117,7 @@ class TaskView(db.Model):
     section_name = db.Column(db.Text, nullable=True)
     order_index = db.Column(db.Integer, default=0)
     section_flag = db.Column(db.Text, nullable=True)
+    topic_key = db.Column(db.Text, nullable=True)
 
     def to_dict(self):
         return {
@@ -126,6 +127,7 @@ class TaskView(db.Model):
             "section_name": self.section_name,
             "order_index": self.order_index,
             "section_flag": self.section_flag,
+            "topic_key": self.topic_key,
         }
 
 
@@ -190,6 +192,35 @@ class AutomationRun(db.Model):
             "finished_at": _iso(self.finished_at),
             "result": self.result if self.result is not None else {},
             "error": self.error,
+        }
+
+
+class AutomationCompanionTask(db.Model):
+    __tablename__ = "automation_companion_tasks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
+    rule_key = db.Column(db.Text, nullable=False)
+    automation_run_id = db.Column(db.Integer, db.ForeignKey("automation_runs.id"))
+    flow_key = db.Column(db.Text, nullable=False)
+    topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"))
+    payload = db.Column(JSONB, nullable=False, default=dict)
+    status = db.Column(db.Text, nullable=False, default="pending")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "task_id": self.task_id,
+            "rule_key": self.rule_key,
+            "automation_run_id": self.automation_run_id,
+            "flow_key": self.flow_key,
+            "topic_id": self.topic_id,
+            "payload": self.payload if self.payload is not None else {},
+            "status": self.status,
+            "created_at": _iso(self.created_at),
+            "completed_at": _iso(self.completed_at),
         }
 
 

@@ -40,6 +40,10 @@ def create_automation_rule():
         return jsonify({"error": "key, name, and action_type are required"}), 400
     if trigger_type == "schedule" and not data.get("schedule"):
         return jsonify({"error": "schedule is required for schedule rules"}), 400
+    if trigger_type == "task":
+        trigger = (data.get("params") or {}).get("trigger") or {}
+        if not trigger.get("view_type"):
+            return jsonify({"error": "params.trigger.view_type is required for task rules"}), 400
 
     schedule = data.get("schedule")
     next_run_at = data.get("next_run_at")
@@ -58,6 +62,11 @@ def create_automation_rule():
         else _default_next_run(schedule, data.get("timezone", DEFAULT_AUTOMATION_TIMEZONE)),
     )
     db.session.add(rule)
+    db.session.flush()
+    if rule.trigger_type == "task":
+        from services.automation_trigger import ensure_trigger_task
+
+        ensure_trigger_task(rule)
     db.session.commit()
     return jsonify(rule.to_dict()), 201
 
@@ -85,6 +94,10 @@ def update_automation_rule(rule_id):
     )
     if ("schedule" in data or "timezone" in data) and "next_run_at" not in data:
         rule.next_run_at = _default_next_run(rule.schedule, rule.timezone)
+    if rule.trigger_type == "task" or data.get("trigger_type") == "task":
+        from services.automation_trigger import ensure_trigger_task
+
+        ensure_trigger_task(rule)
     db.session.commit()
     return jsonify(rule.to_dict())
 
@@ -92,10 +105,11 @@ def update_automation_rule(rule_id):
 @automation_rules_bp.route("/automation_rules/<int:rule_id>/run", methods=["POST"])
 def run_automation_rule_now(rule_id):
     rule = get_or_404(AutomationRule, rule_id)
-    from services.automation_runner import enqueue_run, kick_run_async
+    from services.automation_dispatcher import dispatch_manual_rule
+    from services.automation_runner import kick_run_async
 
     try:
-        run = enqueue_run(rule, trigger_source="manual")
+        run_ids = dispatch_manual_rule(rule)
     except (ProgrammingError, OperationalError) as error:
         db.session.rollback()
         detail = str(error.orig) if getattr(error, "orig", None) else str(error)
@@ -107,8 +121,21 @@ def run_automation_rule_now(rule_id):
             "detail": detail,
         }), 503
 
-    kick_run_async(current_app._get_current_object(), run["id"])
-    return jsonify({"run": run}), 202
+    if not run_ids:
+        return jsonify({"error": "automation is already running"}), 409
+
+    app = current_app._get_current_object()
+    runs = []
+    for run_id in run_ids:
+        kick_run_async(app, run_id)
+        from models import AutomationRun
+
+        run = db.session.get(AutomationRun, run_id)
+        if run is not None:
+            runs.append(run.to_dict())
+
+    primary = runs[0] if runs else {"id": run_ids[0], "status": "queued"}
+    return jsonify({"run": primary, "runs": runs}), 202
 
 
 @automation_rules_bp.route("/automation_rules/<int:rule_id>", methods=["DELETE"])

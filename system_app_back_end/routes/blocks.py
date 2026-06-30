@@ -2,7 +2,14 @@ from flask import Blueprint, jsonify, request
 
 from models import Block, db
 from routes.helpers import active_query, apply_updates, get_or_404
-from services.automation_events import dispatch_file_changed
+from services.automation_dispatcher import dispatch_file_changed
+
+
+def _topic_id_for_file(file_id):
+    if file_id is None:
+        return None
+    file = db.session.get(File, file_id)
+    return file.topic_id if file is not None else None
 
 blocks_bp = Blueprint("blocks", __name__)
 

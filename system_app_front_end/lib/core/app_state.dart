@@ -17,6 +17,7 @@ import 'models/task_view_membership.dart';
 import 'models/topic.dart';
 import 'models/view_section.dart';
 import 'models/view_section_flags.dart';
+import 'registry/automation_flow_registry.dart';
 import 'registry/file_behavior_registry.dart';
 import 'registry/file_registry.dart';
 import 'registry/task_view_display.dart';
@@ -26,6 +27,7 @@ import '../design_system/file_layouts.dart';
 import 'services/ai_service.dart';
 import 'services/ai_proposal_service.dart';
 import 'services/api_service.dart';
+import 'services/automation_companion_service.dart';
 import 'services/automation_service.dart';
 import 'services/block_service.dart';
 import 'services/bootstrap_service.dart';
@@ -88,6 +90,8 @@ class AppState extends ChangeNotifier {
   late final AiService _aiService = AiService(_api);
   late final AutomationService _automationService = AutomationService(_api);
   late final AiProposalService _aiProposalService = AiProposalService(_api);
+  late final AutomationCompanionService _companionService =
+      AutomationCompanionService(_api);
 
   bool loading = true;
   String? error;
@@ -468,6 +472,9 @@ class AppState extends ChangeNotifier {
       ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
   }
 
+  Future<List<ViewSection>> fetchSectionsForView(String viewType) =>
+      _taskViewService.listSectionsForView(viewType);
+
   Color topicAccentForTask(Task task) {
     Topic? topic;
     if (task.topicId != null) {
@@ -540,6 +547,8 @@ class AppState extends ChangeNotifier {
     AutomationRule rule, {
     bool? enabled,
     String? schedule,
+    String? triggerType,
+    Map<String, dynamic>? params,
   }) async {
     final patch = <String, dynamic>{};
     if (enabled != null) {
@@ -548,8 +557,17 @@ class AppState extends ChangeNotifier {
     if (schedule != null) {
       patch['schedule'] = schedule;
     }
+    if (triggerType != null) {
+      patch['trigger_type'] = triggerType;
+    }
+    if (params != null) {
+      patch['params'] = params;
+    }
     await _automationService.updateRule(rule.id, patch);
     await refreshAutomationRules();
+    if (selectedViewType != null) {
+      await refreshCurrentView();
+    }
   }
 
   Future<void> runAutomationRule(AutomationRule rule) async {
@@ -717,8 +735,9 @@ class AppState extends ChangeNotifier {
 
   Future<void> finalizeProcessUpdate(
     AiProposal proposal,
-    Map<String, bool> decisions,
-  ) async {
+    Map<String, bool> decisions, {
+    int? companionTaskId,
+  }) async {
     await _aiProposalService.finalize(
       proposal.id,
       Map<String, dynamic>.from(decisions),
@@ -726,6 +745,10 @@ class AppState extends ChangeNotifier {
     pendingAiProposals = pendingAiProposals
         .where((item) => item.id != proposal.id)
         .toList();
+    if (companionTaskId != null) {
+      await _completeCompanionTaskById(companionTaskId);
+      return;
+    }
     final topic = selectedTopic;
     if (topic != null) {
       await selectTopic(topic, includeArchived: topic.isArchived);
@@ -736,11 +759,59 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> rejectAiProposal(AiProposal proposal) async {
+  Future<void> rejectAiProposal(
+    AiProposal proposal, {
+    int? companionTaskId,
+  }) async {
     await _aiProposalService.reject(proposal.id);
     pendingAiProposals = pendingAiProposals
         .where((item) => item.id != proposal.id)
         .toList();
+    if (companionTaskId != null) {
+      await _completeCompanionTaskById(companionTaskId);
+      return;
+    }
+    notifyListeners();
+  }
+
+  Future<AiProposal> fetchAiProposal(int id) =>
+      _aiProposalService.getById(id);
+
+  Future<bool> runCompanionTaskFlow(BuildContext context, Task task) =>
+      AutomationFlowRegistry.run(context: context, state: this, task: task);
+
+  Future<void> _completeCompanionTaskById(int companionTaskId) async {
+    await _companionService.complete(companionTaskId);
+    if (selectedViewType != null) {
+      await refreshCurrentView();
+      return;
+    }
+    viewTasks = viewTasks
+        .where((task) => task.companionTaskId != companionTaskId)
+        .toList();
+    final viewType = selectedViewType;
+    if (viewType != null) {
+      final cached = _viewCache[viewType];
+      if (cached != null) {
+        _viewCache[viewType] = _ViewSnapshot(
+          tasks: viewTasks,
+          sections: cached.sections,
+        );
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> refreshCurrentView() async {
+    final viewType = selectedViewType;
+    if (viewType == null) return;
+    final tasks = await _taskService.listByView(viewType);
+    viewTasks = tasks;
+    final cached = _viewCache[viewType];
+    _viewCache[viewType] = _ViewSnapshot(
+      tasks: tasks,
+      sections: cached?.sections ?? sectionsForViewType(viewType),
+    );
     notifyListeners();
   }
 
@@ -757,7 +828,18 @@ class AppState extends ChangeNotifier {
         'schedule': 'daily 00:00',
         'timezone': automationTimezone,
         'enabled': true,
-        'params': {'topic_name': 'main', 'name': 'Daily', 'type': 'main'},
+        'params': {
+          'version': 2,
+          'scope': {'kind': 'topic', 'topic_name': 'main'},
+          'bindings': {
+            'files': [
+              {
+                'role': 'daily',
+                'match': {'type': 'main', 'name': 'Daily'},
+              },
+            ],
+          },
+        },
       });
       changed = true;
     }
@@ -770,7 +852,24 @@ class AppState extends ChangeNotifier {
         'schedule': 'weekly mon 00:00',
         'timezone': automationTimezone,
         'enabled': false,
-        'params': {},
+        'params': {
+          'version': 2,
+          'scope': {'kind': 'topic_type', 'topic_type': 'process'},
+          'bindings': {
+            'files': [
+              {'role': 'plan', 'match': {'type': 'plan'}},
+              {'role': 'doc', 'match': {'type': 'doc'}},
+              {'role': 'tasks', 'match': {'type': 'tasks'}},
+            ],
+          },
+          'companion_task': {
+            'enabled': true,
+            'view_type': 'weekly',
+            'section_name': 'Process updates',
+            'flow_key': 'process_update_review',
+            'title_template': 'Review update: {topic_name}',
+          },
+        },
       });
       changed = true;
     }

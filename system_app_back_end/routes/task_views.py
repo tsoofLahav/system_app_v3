@@ -80,6 +80,7 @@ def create_task_view():
             task_id=task_id,
             view_type=view_type,
             section_name=section_name,
+            topic_key=data.get("topic_key"),
         )
         apply_section_flag_to_membership(view)
 
@@ -95,7 +96,7 @@ def update_task_view(view_id):
     apply_updates(
         view,
         data,
-        {"task_id", "view_type", "section_name", "order_index", "section_flag"},
+        {"task_id", "view_type", "section_name", "order_index", "section_flag", "topic_key"},
     )
 
     if view.task_id is None and "section_flag" in data:

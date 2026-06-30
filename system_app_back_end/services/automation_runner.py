@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 
 from models import AutomationRule, AutomationRun, db
 from services.automation_actions import run_action
-from services.automation_schedule import next_run_after
 
 ACTIVE_RUN_STATUSES = ("queued", "running")
 STALE_ACTIVE_AFTER = timedelta(minutes=30)
@@ -53,15 +52,25 @@ def kick_run_async(app, run_id):
 
 def enqueue_run(rule, trigger_source, event_context=None):
     now = datetime.utcnow()
-    existing = (
+    event_context = event_context or {}
+    topic_id = event_context.get("topic_id")
+
+    active_runs = (
         AutomationRun.query.filter_by(rule_id=rule.id)
         .filter(AutomationRun.status.in_(ACTIVE_RUN_STATUSES))
-        .first()
+        .all()
     )
-    if existing is not None:
-        if _clear_stale_active_run(existing, now):
-            db.session.commit()
-        else:
+    for existing in active_runs:
+        existing_topic = (existing.event_context or {}).get("topic_id")
+        if topic_id is None and existing_topic is None:
+            if _clear_stale_active_run(existing, now):
+                db.session.commit()
+                break
+            return existing.to_dict()
+        if topic_id is not None and existing_topic == topic_id:
+            if _clear_stale_active_run(existing, now):
+                db.session.commit()
+                break
             return existing.to_dict()
 
     run = AutomationRun(
@@ -78,17 +87,9 @@ def enqueue_run(rule, trigger_source, event_context=None):
 
 
 def enqueue_due_scheduled_rules(now=None):
-    now = now or datetime.utcnow()
-    rules = (
-        AutomationRule.query.filter_by(enabled=True, trigger_type="schedule")
-        .filter(AutomationRule.next_run_at <= now)
-        .order_by(AutomationRule.next_run_at, AutomationRule.id)
-        .all()
-    )
-    results = []
-    for rule in rules:
-        results.append(enqueue_run(rule, trigger_source="schedule"))
-    return results
+    from services.automation_dispatcher import dispatch_due_scheduled_rules
+
+    return dispatch_due_scheduled_rules(now=now)
 
 
 def process_run(run_id, now=None):
@@ -139,14 +140,10 @@ def _execute_run(run, now):
         return run.to_dict()
 
     try:
-        result = run_action(rule)
+        result = run_action(rule, run=run)
         run.status = "success"
         run.result = result or {}
         rule.last_run_at = now
-        if rule.trigger_type == "schedule" and rule.schedule:
-            rule.next_run_at = next_run_after(
-                rule.schedule, now, timezone=rule.timezone
-            )
     except Exception as error:
         run.status = "failed"
         run.error = str(error)
