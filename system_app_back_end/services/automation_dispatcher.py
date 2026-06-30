@@ -110,13 +110,29 @@ def dispatch_task_triggered(task_id):
 
     run_ids = []
     for rule in rules_for_trigger_task(task_id):
-        run_id = _enqueue_for_rule(
-            rule,
-            "task",
-            {"task_id": int(task_id), "trigger": "task_unchecked"},
-        )
-        if run_id is not None:
-            run_ids.append(run_id)
+        topics = resolve_scope_topics(rule)
+        if not topics:
+            run_id = _enqueue_for_rule(
+                rule,
+                "task",
+                {"task_id": int(task_id), "trigger": "task_unchecked"},
+            )
+            if run_id is not None:
+                run_ids.append(run_id)
+            continue
+
+        for topic in topics:
+            run_id = _enqueue_for_rule(
+                rule,
+                "task",
+                {
+                    "task_id": int(task_id),
+                    "topic_id": topic.id,
+                    "trigger": "task_unchecked",
+                },
+            )
+            if run_id is not None:
+                run_ids.append(run_id)
     return run_ids
 
 

@@ -119,7 +119,7 @@ class _AutomationRuleControlState extends State<_AutomationRuleControl> {
     final running = widget.state.isAutomationRuleActive(widget.rule.id);
     final label = switch (widget.rule.key) {
       'daily_rotation' => s['dailyRotation'],
-      'weekly_process_refresh' => s['weeklyProcessRefresh'],
+      'weekly_process_refresh' => s['updateAllProcesses'],
       _ => widget.rule.name,
     };
     final triggerType = widget.rule.triggerType;
@@ -705,7 +705,8 @@ class _TaskTriggerDialogState extends State<_TaskTriggerDialog> {
       (params['companion_task'] as Map?)?.cast<String, dynamic>() ??
           <String, dynamic>{},
     );
-    companion['view_type'] = _viewType;
+    companion.putIfAbsent('view_type', () => _viewType);
+    companion.putIfAbsent('section_name', () => _sectionName);
     params['companion_task'] = companion;
     await widget.state.updateAutomationRule(
       widget.rule,

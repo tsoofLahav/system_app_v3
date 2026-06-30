@@ -8,11 +8,15 @@ from services.automation_topics import AUTOMATIONS_TOPIC_KEY
 def create_companion_task(rule, run, flow_key, payload, title, section_name=None):
     params = normalize_params(rule.params, rule.key, rule.action_type)
     companion = companion_config(params) or {}
-    view_type = companion.get("view_type", "weekly")
+    view_type = companion.get("view_type", "daily")
     section = section_name or companion.get("section_name", "Automations")
     topic_id = payload.get("topic_id")
 
     task = _resolve_companion_task(rule, title)
+    if task is None and rule.trigger_type == "task":
+        from services.automation_trigger import ensure_trigger_task
+
+        task = ensure_trigger_task(rule)
     if task is None:
         task = Task(block_id=None, title=title, status="active")
         db.session.add(task)
@@ -76,7 +80,6 @@ def _resolve_companion_task(rule, title):
     task = db.session.get(Task, int(task_id))
     if task is None:
         return None
-    task.title = title
     return task
 
 

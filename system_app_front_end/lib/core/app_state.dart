@@ -846,7 +846,7 @@ class AppState extends ChangeNotifier {
     if (!keys.contains('weekly_process_refresh')) {
       await _automationService.createRule({
         'key': 'weekly_process_refresh',
-        'name': 'Weekly process refresh',
+        'name': 'Update all processes',
         'action_type': 'weekly_process_refresh',
         'trigger_type': 'schedule',
         'schedule': 'weekly mon 00:00',
@@ -864,7 +864,7 @@ class AppState extends ChangeNotifier {
           },
           'companion_task': {
             'enabled': true,
-            'view_type': 'weekly',
+            'view_type': 'daily',
             'section_name': 'Process updates',
             'flow_key': 'process_update_review',
             'title_template': 'Review update: {topic_name}',
@@ -874,6 +874,13 @@ class AppState extends ChangeNotifier {
       changed = true;
     }
     for (final rule in automationRules) {
+      if (rule.key == 'weekly_process_refresh' &&
+          rule.name != 'Update all processes') {
+        await _automationService.updateRule(rule.id, {
+          'name': 'Update all processes',
+        });
+        changed = true;
+      }
       if (rule.key != 'daily_rotation' && rule.key != 'weekly_process_refresh') {
         continue;
       }

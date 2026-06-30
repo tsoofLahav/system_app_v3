@@ -3,7 +3,7 @@ PARAMS_VERSION = 2
 DEFAULT_COMPANION = {
     "weekly_process_refresh": {
         "enabled": True,
-        "view_type": "weekly",
+        "view_type": "daily",
         "section_name": "Process updates",
         "flow_key": "process_update_review",
         "title_template": "Review update: {topic_name}",
