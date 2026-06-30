@@ -63,11 +63,19 @@ The initial action library contains:
 
 ## Scheduling
 
-Render Cron should execute:
+### Run now (manual test)
+
+`POST /automation_rules/<id>/run` enqueues the run and immediately starts background processing for **that run id**. The HTTP response returns `202` without waiting for the action to finish.
+
+### Scheduled and event automations
+
+Render Cron (configured in the Render dashboard, not in application code) should execute every minute:
 
 ```bash
-python scripts/run_automations.py
+cd system_app_back_end && python scripts/run_automations.py
 ```
+
+Use the same repo, branch, and environment group as the web service so `DATABASE_URL` is available.
 
 The script enqueues due enabled schedule rules and processes up to five queued runs per invocation.
 
@@ -91,7 +99,7 @@ Automations and AI actions can store reviewable edits as `change_set` version 1:
 ## API Ownership
 
 - CRUD for rules is exposed through `/automation_rules`.
-- Manual execution for testing is exposed through `POST /automation_rules/<id>/run` (returns `202` with a queued run).
+- Manual execution for testing is exposed through `POST /automation_rules/<id>/run` (returns `202` with a queued run and processes that run in a background thread).
 - Run status is exposed through `GET /automation_runs/<id>` and `GET /automation_runs?status=queued,running`.
 - Process update finalize is exposed through `POST /ai_proposals/<id>/finalize`.
 - AI proposals are exposed through `/ai_proposals` and approval/rejection endpoints.

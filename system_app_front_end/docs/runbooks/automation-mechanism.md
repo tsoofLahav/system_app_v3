@@ -17,10 +17,20 @@ Automation is configured by the user and executed by the backend. The frontend e
 
 ```text
 Trigger (schedule / manual / file change)
-  → POST or internal enqueue → automation_runs.status = queued
-  → Render cron processes queue → running → success | failed
+  → enqueue → automation_runs.status = queued
+  → manual: background thread processes that run id immediately
+  → schedule/event: Render cron processes the queue
+  → running → success | failed
   → Flutter polls GET /automation_runs while active
 ```
+
+### Render Cron setup (dashboard, not code)
+
+1. Render dashboard → **New** → **Cron Job**
+2. Connect the same repo/branch as the backend web service
+3. **Schedule:** `*/1 * * * *` (every minute)
+4. **Command:** `cd system_app_back_end && python scripts/run_automations.py`
+5. Link the same PostgreSQL database (or shared environment group) so `DATABASE_URL` is set
 
 Event-triggered rules (`trigger_type=event`) match `params.event=file_changed` and `params.file_id` against file/block/task mutations on the backend. Event rules do not use the schedule UI.
 

@@ -1,4 +1,5 @@
 import calendar
+import threading
 from datetime import datetime, timedelta
 
 from models import AutomationRule, AutomationRun, db
@@ -23,19 +24,49 @@ WEEKDAYS = {
 }
 
 ACTIVE_RUN_STATUSES = ("queued", "running")
-STALE_RUNNING_AFTER = timedelta(minutes=30)
+STALE_ACTIVE_AFTER = timedelta(minutes=30)
 
 
-def _clear_stale_running_run(run, now):
-    if run.status != "running" or run.finished_at is not None:
+def _mark_stale_active_run(run, now):
+    run.status = "failed"
+    run.error = f"stale {run.status} run cleared"
+    run.finished_at = now
+
+
+def _clear_stale_active_run(run, now):
+    if run.status not in ACTIVE_RUN_STATUSES or run.finished_at is not None:
         return False
     started_at = run.started_at or now
-    if now - started_at < STALE_RUNNING_AFTER:
+    if now - started_at < STALE_ACTIVE_AFTER:
         return False
-    run.status = "failed"
-    run.error = "stale running run cleared"
-    run.finished_at = now
+    _mark_stale_active_run(run, now)
     return True
+
+
+def _clear_stale_active_runs(now):
+    stale_runs = (
+        AutomationRun.query.filter(AutomationRun.status.in_(ACTIVE_RUN_STATUSES))
+        .filter(AutomationRun.finished_at.is_(None))
+        .filter(AutomationRun.started_at < now - STALE_ACTIVE_AFTER)
+        .all()
+    )
+    for run in stale_runs:
+        _mark_stale_active_run(run, now)
+    return stale_runs
+
+
+def kick_run_async(app, run_id):
+    def work():
+        with app.app_context():
+            try:
+                process_run(run_id)
+            except Exception:
+                app.logger.exception(
+                    "background automation run failed for run_id=%s",
+                    run_id,
+                )
+
+    threading.Thread(target=work, daemon=True).start()
 
 
 def enqueue_run(rule, trigger_source, event_context=None):
@@ -46,7 +77,7 @@ def enqueue_run(rule, trigger_source, event_context=None):
         .first()
     )
     if existing is not None:
-        if _clear_stale_running_run(existing, now):
+        if _clear_stale_active_run(existing, now):
             db.session.commit()
         else:
             return existing.to_dict()
@@ -78,8 +109,28 @@ def enqueue_due_scheduled_rules(now=None):
     return results
 
 
+def process_run(run_id, now=None):
+    now = now or datetime.utcnow()
+    run = (
+        AutomationRun.query.filter_by(id=run_id, status="queued")
+        .with_for_update(skip_locked=True)
+        .first()
+    )
+    if run is None:
+        return None
+
+    run.status = "running"
+    run.started_at = now
+    result = _execute_run(run, now)
+    db.session.commit()
+    return result
+
+
 def process_automation_queue(limit=5):
     now = datetime.utcnow()
+    if _clear_stale_active_runs(now):
+        db.session.commit()
+
     runs = (
         AutomationRun.query.filter_by(status="queued")
         .order_by(AutomationRun.id)

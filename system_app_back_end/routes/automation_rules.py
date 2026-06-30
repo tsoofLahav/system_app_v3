@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from models import AutomationRule, db
@@ -92,7 +92,7 @@ def update_automation_rule(rule_id):
 @automation_rules_bp.route("/automation_rules/<int:rule_id>/run", methods=["POST"])
 def run_automation_rule_now(rule_id):
     rule = get_or_404(AutomationRule, rule_id)
-    from services.automation_runner import enqueue_run
+    from services.automation_runner import enqueue_run, kick_run_async
 
     try:
         run = enqueue_run(rule, trigger_source="manual")
@@ -107,6 +107,7 @@ def run_automation_rule_now(rule_id):
             "detail": detail,
         }), 503
 
+    kick_run_async(current_app._get_current_object(), run["id"])
     return jsonify({"run": run}), 202
 
 
