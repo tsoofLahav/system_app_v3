@@ -29,7 +29,8 @@ Trigger (schedule / manual / file change)
 1. Render dashboard → **New** → **Cron Job**
 2. Connect the same repo/branch as the backend web service
 3. **Schedule:** `*/1 * * * *` (every minute)
-4. **Command:** `cd system_app_back_end && python scripts/run_automations.py`
+4. **Command:** `cd system_app_back_end && python scripts/run_automations.py`  
+   (`PYTHONPATH=.` is no longer required; the script sets its own import path.)
 5. Link the same PostgreSQL database (or shared environment group) so `DATABASE_URL` is set
 
 Event-triggered rules (`trigger_type=event`) match `params.event=file_changed` and `params.file_id` against file/block/task mutations on the backend. Event rules do not use the schedule UI.

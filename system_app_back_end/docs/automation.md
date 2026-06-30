@@ -79,9 +79,9 @@ Use the same repo, branch, and environment group as the web service so `DATABASE
 
 The script enqueues due enabled schedule rules and processes up to five queued runs per invocation.
 
-Rule schedules use simple text values produced by the frontend controls:
+Rule schedules use simple text values produced by the frontend controls. Times are interpreted in each rule's `timezone` (default `Asia/Jerusalem` for built-in rules). `next_run_at` is stored in UTC.
 
-- `daily HH:MM` runs once a day at a 24-hour time.
+- `daily HH:MM` runs once a day at a 24-hour time in the rule timezone.
 - `weekly DAY HH:MM` runs once a week on a weekday such as `mon` or `friday`.
 - `monthly PLACEMENT DAY HH:MM` runs once a month on the `first`, `second`, `third`, or `last` matching weekday, for example `monthly last mon 09:00`.
 

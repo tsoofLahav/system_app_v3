@@ -1,3 +1,8 @@
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from app import create_app
 from services.automation_runner import enqueue_due_scheduled_rules, process_automation_queue
 

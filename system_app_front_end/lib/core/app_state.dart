@@ -745,7 +745,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<bool> _ensureMainAutomationRules() async {
-    var created = false;
+    var changed = false;
+    const automationTimezone = 'Asia/Jerusalem';
     final keys = automationRules.map((rule) => rule.key).toSet();
     if (!keys.contains('daily_rotation')) {
       await _automationService.createRule({
@@ -754,11 +755,11 @@ class AppState extends ChangeNotifier {
         'action_type': 'rotate_daily_main_file',
         'trigger_type': 'schedule',
         'schedule': 'daily 00:00',
-        'timezone': 'UTC',
+        'timezone': automationTimezone,
         'enabled': true,
         'params': {'topic_name': 'main', 'name': 'Daily', 'type': 'main'},
       });
-      created = true;
+      changed = true;
     }
     if (!keys.contains('weekly_process_refresh')) {
       await _automationService.createRule({
@@ -767,13 +768,23 @@ class AppState extends ChangeNotifier {
         'action_type': 'weekly_process_refresh',
         'trigger_type': 'schedule',
         'schedule': 'weekly mon 00:00',
-        'timezone': 'UTC',
+        'timezone': automationTimezone,
         'enabled': false,
         'params': {},
       });
-      created = true;
+      changed = true;
     }
-    return created;
+    for (final rule in automationRules) {
+      if (rule.key != 'daily_rotation' && rule.key != 'weekly_process_refresh') {
+        continue;
+      }
+      if (rule.timezone == automationTimezone) continue;
+      await _automationService.updateRule(rule.id, {
+        'timezone': automationTimezone,
+      });
+      changed = true;
+    }
+    return changed;
   }
 
   Future<void> selectTopic(Topic topic, {bool includeArchived = false}) async {

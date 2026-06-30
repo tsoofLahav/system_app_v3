@@ -6,16 +6,16 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from models import AutomationRule, db
 from routes.helpers import apply_updates, get_or_404, parse_datetime
 
+from services.automation_schedule import DEFAULT_AUTOMATION_TIMEZONE, next_run_after
+
 automation_rules_bp = Blueprint("automation_rules", __name__)
 
 
-def _default_next_run(schedule):
+def _default_next_run(schedule, timezone=DEFAULT_AUTOMATION_TIMEZONE):
     if not schedule:
         return None
     try:
-        from services.automation_runner import next_run_after
-
-        return next_run_after(schedule, datetime.utcnow())
+        return next_run_after(schedule, datetime.utcnow(), timezone=timezone)
     except Exception:
         return None
 
@@ -49,13 +49,13 @@ def create_automation_rule():
         action_type=data["action_type"],
         trigger_type=trigger_type,
         schedule=schedule,
-        timezone=data.get("timezone", "UTC"),
+        timezone=data.get("timezone", DEFAULT_AUTOMATION_TIMEZONE),
         params=data.get("params", {}),
         enabled=data.get("enabled", True),
         last_run_at=parse_datetime(data.get("last_run_at")) if data.get("last_run_at") else None,
         next_run_at=parse_datetime(next_run_at)
         if next_run_at
-        else _default_next_run(schedule),
+        else _default_next_run(schedule, data.get("timezone", DEFAULT_AUTOMATION_TIMEZONE)),
     )
     db.session.add(rule)
     db.session.commit()
@@ -83,8 +83,8 @@ def update_automation_rule(rule_id):
         },
         datetime_fields={"last_run_at", "next_run_at"},
     )
-    if "schedule" in data and "next_run_at" not in data:
-        rule.next_run_at = _default_next_run(rule.schedule)
+    if ("schedule" in data or "timezone" in data) and "next_run_at" not in data:
+        rule.next_run_at = _default_next_run(rule.schedule, rule.timezone)
     db.session.commit()
     return jsonify(rule.to_dict())
 
