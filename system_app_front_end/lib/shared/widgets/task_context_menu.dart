@@ -48,6 +48,7 @@ Future<void> showTaskContextMenu({
   VoidCallback? onCut,
   Future<void> Function()? onPaste,
   VoidCallback? onCopyAll,
+  VoidCallback? onDelete,
   String? fileType,
   Block? targetBlock,
   BlockMenuHandler? onBlockAction,
@@ -74,6 +75,8 @@ Future<void> showTaskContextMenu({
   }
 
   final taskEntries = <AppContextMenuEntry>[
+    if (onDelete != null)
+      AppContextMenuItem(value: 'delete_task', label: strings['delete']),
     if (onCut != null) AppContextMenuItem(value: 'cut', label: strings['cut']),
     if (onCopy != null) AppContextMenuItem(value: 'copy', label: strings['copy']),
     if (onPaste != null) AppContextMenuItem(value: 'paste', label: strings['paste']),
@@ -133,6 +136,8 @@ Future<void> showTaskContextMenu({
       await onPaste?.call();
     case 'copy_all':
       onCopyAll?.call();
+    case 'delete_task':
+      onDelete?.call();
     default:
       if (value.startsWith('topic:')) {
         await _handleTopicAction(

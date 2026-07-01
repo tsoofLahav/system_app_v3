@@ -73,7 +73,7 @@ class _TaskZoneListState extends State<TaskZoneList> {
                 : null,
             onToggle: () => widget.state.toggleTaskStatus(task),
             onTitleChanged: (title) => widget.onTitleChanged(task, title),
-            onDelete: () => widget.onDelete(task),
+            onDelete: task.isAutomationTrigger ? null : () => widget.onDelete(task),
             onAddTaskAfter: (position) =>
                 widget.onCreateAfter(task, position),
             onPasteLines: (lines, position) =>

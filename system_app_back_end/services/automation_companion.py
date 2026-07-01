@@ -1,34 +1,54 @@
 from datetime import datetime
 
-from models import AutomationCompanionTask, AutomationRun, Task, TaskView, Topic, db
-from services.automation_params import companion_config, normalize_params, trigger_config
+from models import AutomationCompanionTask, AutomationRun, Task, TaskView, db
+from services.automation_params import companion_config, normalize_params
 from services.automation_topics import AUTOMATIONS_TOPIC_KEY
 
 
-def create_companion_task(rule, run, flow_key, payload, title, section_name=None):
+def create_companion_task(rule, run, flow_key, payload, title=None, section_name=None):
     params = normalize_params(rule.params, rule.key, rule.action_type)
     companion = companion_config(params) or {}
-    view_type = companion.get("view_type", "daily")
-    section = section_name or companion.get("section_name", "Automations")
     topic_id = payload.get("topic_id")
+    run_id = run.id if isinstance(run, AutomationRun) else run.get("id")
 
-    task = _resolve_companion_task(rule, title)
-    if task is None and rule.trigger_type == "task":
+    if rule.trigger_type == "task":
         from services.automation_trigger import ensure_trigger_task
 
         task = ensure_trigger_task(rule)
-    if task is None:
-        task = Task(block_id=None, title=title, status="active")
-        db.session.add(task)
-        db.session.flush()
+        if task is None:
+            return None
+        return _upsert_companion_link(
+            task=task,
+            rule_key=rule.key,
+            run_id=run_id,
+            flow_key=flow_key,
+            topic_id=topic_id,
+            payload=payload,
+        )
 
+    view_type = companion.get("view_type", "daily")
+    section = section_name or companion.get("section_name", "Automations")
+    resolved_title = title or rule.name
+
+    task = Task(block_id=None, title=resolved_title, status="active")
+    db.session.add(task)
+    db.session.flush()
     _ensure_task_view(task, view_type, section)
+    return _upsert_companion_link(
+        task=task,
+        rule_key=rule.key,
+        run_id=run_id,
+        flow_key=flow_key,
+        topic_id=topic_id,
+        payload=payload,
+    )
 
-    run_id = run.id if isinstance(run, AutomationRun) else run.get("id")
+
+def _upsert_companion_link(task, rule_key, run_id, flow_key, topic_id, payload):
     link = (
         AutomationCompanionTask.query.filter_by(
             task_id=task.id,
-            rule_key=rule.key,
+            rule_key=rule_key,
             status="pending",
         )
         .order_by(AutomationCompanionTask.id.desc())
@@ -37,7 +57,7 @@ def create_companion_task(rule, run, flow_key, payload, title, section_name=None
     if link is None:
         link = AutomationCompanionTask(
             task_id=task.id,
-            rule_key=rule.key,
+            rule_key=rule_key,
             automation_run_id=run_id,
             flow_key=flow_key,
             topic_id=int(topic_id) if topic_id is not None else None,
@@ -67,20 +87,6 @@ def complete_companion_task(companion_id):
         task.status = "done"
     db.session.flush()
     return link.to_dict()
-
-
-def _resolve_companion_task(rule, title):
-    if rule.trigger_type != "task":
-        return None
-    params = normalize_params(rule.params, rule.key, rule.action_type)
-    trigger = trigger_config(params) or {}
-    task_id = trigger.get("task_id")
-    if not task_id:
-        return None
-    task = db.session.get(Task, int(task_id))
-    if task is None:
-        return None
-    return task
 
 
 def _ensure_task_view(task, view_type, section_name):

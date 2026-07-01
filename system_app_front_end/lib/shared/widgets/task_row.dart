@@ -160,6 +160,7 @@ class _TaskRowState extends State<TaskRow> {
       onCopy: _copySelectionOrTitle,
       onPaste: _handlePaste,
       onCopyAll: widget.allTaskTitles != null ? _copyAllTitles : null,
+      onDelete: widget.onDelete,
       viewMenuContext: widget.viewMenuContext,
     );
   }
@@ -178,6 +179,9 @@ class _TaskRowState extends State<TaskRow> {
     if (widget.readOnly) {
       titleField = InkWell(
         onTap: widget.onRowTap,
+        onSecondaryTapDown: widget.onDelete != null
+            ? (details) => _showContextMenu(details.globalPosition)
+            : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: Column(

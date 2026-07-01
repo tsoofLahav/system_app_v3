@@ -1,4 +1,4 @@
-from models import AiProposal, Block, File, Task, TaskView, Topic, db
+from models import AiProposal, AutomationCompanionTask, Block, File, Task, TaskView, Topic, db
 
 
 def delete_task_cascade(task_id):
@@ -6,6 +6,9 @@ def delete_task_cascade(task_id):
     if task is None:
         return
 
+    AutomationCompanionTask.query.filter_by(task_id=task_id).delete(
+        synchronize_session=False
+    )
     TaskView.query.filter_by(task_id=task_id).delete(synchronize_session=False)
     db.session.delete(task)
 

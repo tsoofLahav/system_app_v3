@@ -11,6 +11,20 @@ from services.automation_schedule import DEFAULT_AUTOMATION_TIMEZONE, next_run_a
 automation_rules_bp = Blueprint("automation_rules", __name__)
 
 
+def _merge_rule_params(existing, incoming):
+    base = dict(existing or {})
+    merged = {**base, **incoming}
+    if isinstance(incoming.get("trigger"), dict):
+        trigger = dict(base.get("trigger") or {})
+        trigger.update(incoming["trigger"])
+        merged["trigger"] = trigger
+    if isinstance(incoming.get("companion_task"), dict):
+        companion = dict(base.get("companion_task") or {})
+        companion.update(incoming["companion_task"])
+        merged["companion_task"] = companion
+    return merged
+
+
 def _default_next_run(schedule, timezone=DEFAULT_AUTOMATION_TIMEZONE):
     if not schedule:
         return None
@@ -63,7 +77,7 @@ def create_automation_rule():
     )
     db.session.add(rule)
     db.session.flush()
-    if rule.trigger_type == "task":
+    if rule.trigger_type == "task" and rule.enabled:
         from services.automation_trigger import ensure_trigger_task
 
         ensure_trigger_task(rule)
@@ -75,6 +89,12 @@ def create_automation_rule():
 def update_automation_rule(rule_id):
     rule = get_or_404(AutomationRule, rule_id)
     data = request.get_json(silent=True) or {}
+    previous_trigger_type = rule.trigger_type
+    previous_enabled = rule.enabled
+
+    if "params" in data and isinstance(data["params"], dict):
+        data["params"] = _merge_rule_params(rule.params, data["params"])
+
     apply_updates(
         rule,
         data,
@@ -94,10 +114,16 @@ def update_automation_rule(rule_id):
     )
     if ("schedule" in data or "timezone" in data) and "next_run_at" not in data:
         rule.next_run_at = _default_next_run(rule.schedule, rule.timezone)
-    if rule.trigger_type == "task" or data.get("trigger_type") == "task":
-        from services.automation_trigger import ensure_trigger_task
 
+    from services.automation_trigger import ensure_trigger_task, hide_trigger_task
+
+    was_task = previous_trigger_type == "task"
+    is_task = rule.trigger_type == "task"
+    if is_task and rule.enabled:
         ensure_trigger_task(rule)
+    elif was_task and (not is_task or not rule.enabled):
+        hide_trigger_task(rule)
+
     db.session.commit()
     return jsonify(rule.to_dict())
 
