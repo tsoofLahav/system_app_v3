@@ -52,6 +52,7 @@ Built-in automations are defined in code at `services/automation_definitions.py`
 | --- | --- | --- | --- | --- | --- |
 | `daily_rotation` | Main topic | `schedule`, `manual` | `daily` → type `main`, name `Daily` | — | — |
 | `process_refresh` | All `process` topics | `schedule`, `task`, `manual` | `plan`, `doc`, `tasks` | `process_update_review` in daily / Process updates | `smart_process_update` → `process_smart_update`, `process_refresh_skipped`; review `plan` + `tasks` |
+| `process_recap_update` | All `process` topics | `event`, `manual` | `plan`, `doc`, `tasks`, `overview` (write target) | — | `smart_process_recap_update` — direct write to recap |
 
 ### Instance vs definition
 
@@ -68,7 +69,7 @@ Built-in automations are defined in code at `services/automation_definitions.py`
 | --- | --- |
 | `schedule` | Cron enqueues when `next_run_at <= now` |
 | `task` | User unchecks the trigger task (`done` → `active`) on an enabled task-triggered rule |
-| `event` | Backend dispatches after matching domain events (v1: `file_changed`; not exposed in UI yet) |
+| `event` | Backend dispatches after matching domain events (`file_changed` on plan, doc, or tasks) |
 | manual | `POST /automation_rules/<id>/run` enqueues immediately |
 
 ### Event rules (v1)
@@ -96,6 +97,13 @@ The initial action library contains:
 - `archive_at_time`: archive a topic, file, block, or task at a configured time.
 - `rotate_daily_main_file`: archive the current main-topic `Daily` file and create a fresh `Daily` text file every day at 00:00.
 - `process_refresh`: for each process, locate plan/doc/tasks files by type order, call the smart process update AI action, and store a delta proposal. Finalize archives old files and recreates plan, empty documentation table, and tasks after user review.
+- `process_recap_update`: when plan, documentation, or tasks change in a process topic, regenerate the recap (`overview` file): AI-written summary, date-grouped update table, and a snapshot of flagged tasks. Writes blocks in place (no proposal or review).
+
+### Event recap (`process_recap_update`)
+
+- **Trigger:** `trigger_type=event` with `params.event=file_changed`. Matches changes to `plan`, `doc`, or `tasks` files (not recap itself).
+- **Run:** `smart_process_recap_update` in `services/ai_recap_actions.py` gathers previous summary, plan, documentation, and flagged tasks (`section_flag=important` on any view, scoped to the process). AI returns `summary_text` and merged `update_rows` by date; the action replaces recap blocks directly.
+- **Latency:** event enqueue calls `kick_run_async` so recap updates run in the background without waiting for cron.
 
 ## Scheduling
 

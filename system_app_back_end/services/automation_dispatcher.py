@@ -63,6 +63,8 @@ def file_matches_binding(file, binding, topic_id):
 def rule_matches_file_event(rule, file):
     if rule.trigger_type != "event":
         return False
+    if file.type == "overview":
+        return False
     params = normalize_params(rule.params, rule.key, rule.action_type)
     event_name = params.get("event") or params.get("trigger", {}).get("event")
     if event_name and event_name != "file_changed":
@@ -72,7 +74,17 @@ def rule_matches_file_event(rule, file):
     bindings = binding_files(params)
     if not bindings:
         return False
-    return any(file_matches_binding(file, binding, file.topic_id) for binding in bindings)
+    event_bindings = [
+        binding
+        for binding in bindings
+        if binding.get("role") != "overview"
+    ]
+    if not event_bindings:
+        return False
+    return any(
+        file_matches_binding(file, binding, file.topic_id)
+        for binding in event_bindings
+    )
 
 
 def _enqueue_for_rule(rule, trigger_source, event_context=None):
@@ -177,6 +189,19 @@ def dispatch_file_changed(file_id, change, meta=None):
         run_id = _enqueue_for_rule(rule, "event", context)
         if run_id is not None:
             run_ids.append(run_id)
+
+    if run_ids:
+        try:
+            from flask import current_app
+
+            from services.automation_runner import kick_run_async
+
+            app = current_app._get_current_object()
+            for run_id in run_ids:
+                kick_run_async(app, run_id)
+        except RuntimeError:
+            pass
+
     return run_ids
 
 

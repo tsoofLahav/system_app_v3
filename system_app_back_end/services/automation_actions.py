@@ -5,6 +5,7 @@ from services.ai_proposal_actions import (
     create_process_refresh_skipped_proposal,
     create_smart_process_update_proposal,
 )
+from services.ai_recap_actions import smart_process_recap_update
 from services.automation_companion import companion_title, create_companion_task
 from services.automation_definitions import get_definition, resolve_files_by_bindings, topic_in_scope
 from services.automation_params import companion_config, normalize_params
@@ -35,6 +36,8 @@ def run_action(rule, run=None):
         return rotate_daily_main_file(context)
     if action_type in {"process_refresh", "weekly_process_refresh"}:
         return process_refresh(context)
+    if action_type == "process_recap_update":
+        return process_recap_update(context)
     raise ValueError(f"Unknown automation action: {action_type}")
 
 
@@ -158,6 +161,44 @@ def process_refresh(context):
 def weekly_process_refresh(context):
     """Deprecated alias for process_refresh."""
     return process_refresh(context)
+
+
+def process_recap_update(context):
+    topic = context["topic"]
+    if topic is None:
+        raise ValueError("topic is required for process_recap_update")
+
+    event_context = context.get("event_context") or {}
+    trigger_file_id = event_context.get("file_id")
+    if trigger_file_id is not None:
+        changed = db.session.get(File, int(trigger_file_id))
+        if changed is not None and changed.type == "overview":
+            return {
+                "topic_id": topic.id,
+                "skipped": True,
+                "reason": "overview_change",
+            }
+
+    params = context["params"]
+    files_by_role = resolve_files_by_bindings(topic.id, params)
+    missing = [
+        role for role in ("overview", "plan", "doc") if role not in files_by_role
+    ]
+    if missing:
+        raise ValueError(
+            f"Cannot update recap for process '{topic.name}': "
+            f"missing {', '.join(missing)} file(s)."
+        )
+
+    recap_params = params.get("recap") or {}
+    max_date_groups = int(recap_params.get("max_date_groups") or 5)
+    return smart_process_recap_update(
+        topic,
+        files_by_role["overview"],
+        files_by_role["plan"],
+        files_by_role["doc"],
+        max_date_groups=max_date_groups,
+    )
 
 
 def _refresh_process(topic, params):

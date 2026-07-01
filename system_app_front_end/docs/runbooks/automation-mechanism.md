@@ -53,6 +53,15 @@ Definitions drive the table below; see backend `docs/automation.md` for full reg
 | --- | --- | --- | --- |
 | `daily_rotation` | Every day at 00:00 | Main | Archive current main-topic `Daily` file and create a new `Daily` text file. |
 | `process_refresh` | User schedule (disabled by default) | All processes | For each process, refresh plan/doc/tasks via AI proposal; companion review task in daily view. |
+| `process_recap_update` | On file change (enabled by default) | All processes | Regenerate process recap when plan, doc, or tasks change; direct AI write (no review). |
+
+## Process recap (`process_recap_update`)
+
+Separate from `process_refresh`: event-driven, updates only the recap (`overview`) file.
+
+- **Trigger:** By changes — edits to plan, documentation, or tasks in a process topic.
+- **Recap blocks updated:** `summary` (narrative), `table` (recent doc updates merged by date), `task_list` (snapshot of tasks flagged important in any view).
+- **No companion task** and no change-review dialog; the AI output replaces block content in place.
 
 ## AI Proposals
 

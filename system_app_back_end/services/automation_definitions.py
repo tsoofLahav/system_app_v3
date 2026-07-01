@@ -157,6 +157,35 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
         default_enabled=False,
         fan_out=True,
     ),
+    "process_recap_update": AutomationDefinition(
+        key="process_recap_update",
+        name="Update process recap",
+        description=(
+            "When plan, documentation, or tasks change, regenerate the process "
+            "recap with an AI summary and recent update notes."
+        ),
+        action_type="process_recap_update",
+        scope=ScopeConfig(
+            fixed={"kind": "topic_type", "topic_type": "process"},
+            allowed_kinds=("topic_type", "topic", "all"),
+        ),
+        activations=("event",),
+        bindings=(
+            FileBinding(role="plan", match={"type": "plan"}),
+            FileBinding(role="doc", match={"type": "doc"}),
+            FileBinding(role="tasks", match={"type": "tasks"}),
+            FileBinding(role="overview", match={"type": "overview"}),
+        ),
+        companion=None,
+        ai=AiConfig(
+            action_key="smart_process_recap_update",
+            proposal_types=(),
+            review_documents=(),
+        ),
+        default_schedule=None,
+        default_enabled=True,
+        fan_out=False,
+    ),
 }
 
 
@@ -233,6 +262,9 @@ def default_params(key: str) -> dict[str, Any]:
         "bindings": bindings_dict(definition),
         "companion_task": companion_params(definition),
     }
+    if definition.key == "process_recap_update":
+        result["event"] = "file_changed"
+        result["recap"] = {"max_date_groups": 5}
     return result
 
 
@@ -316,6 +348,11 @@ def apply_definition_to_params(
 
     if raw.get("trigger"):
         merged["trigger"] = dict(raw["trigger"])
+
+    if raw.get("recap"):
+        recap = dict(merged.get("recap") or {})
+        recap.update(dict(raw["recap"]))
+        merged["recap"] = recap
 
     for legacy_key in ("topic_name", "name", "type", "event"):
         if legacy_key in raw:
