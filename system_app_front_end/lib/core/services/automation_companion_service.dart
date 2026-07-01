@@ -19,7 +19,11 @@ class AutomationCompanionService {
         .toList();
   }
 
-  Future<void> complete(int companionTaskId) async {
-    await _api.post('/automation_companion_tasks/$companionTaskId/complete', {});
+  Future<Map<String, dynamic>> complete(int companionTaskId) async {
+    final data = await _api.post(
+      '/automation_companion_tasks/$companionTaskId/complete',
+      {},
+    );
+    return Map<String, dynamic>.from(data as Map);
   }
 }

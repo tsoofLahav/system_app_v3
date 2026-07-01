@@ -23,8 +23,6 @@ class AutomationCompanionLink {
   final String? topicType;
   final Map<String, dynamic> payload;
 
-  bool get isProcess => topicType == null || topicType == 'process';
-
   int? get proposalId {
     final raw = payload['proposal_id'];
     if (raw is int) return raw;

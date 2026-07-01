@@ -18,7 +18,7 @@ Future<bool> showProcessUpdateBatchDialog({
 }) async {
   final result = await showDialog<bool>(
     context: context,
-    barrierDismissible: false,
+    barrierDismissible: true,
     builder: (ctx) => ProcessUpdateBatchDialog(
       state: state,
       companions: companions,
@@ -47,6 +47,7 @@ class _ProcessUpdateBatchDialogState extends State<ProcessUpdateBatchDialog> {
   late int _index;
   AiProposal? _proposal;
   var _loading = true;
+  var _closing = false;
   Object? _error;
 
   AppStrings get _strings => widget.state.strings;
@@ -100,6 +101,33 @@ class _ProcessUpdateBatchDialogState extends State<ProcessUpdateBatchDialog> {
     if (mounted) Navigator.pop(context, true);
   }
 
+  Future<void> _advanceQueue() async {
+    if (!mounted || _closing) return;
+
+    if (_queue.isEmpty) {
+      await _closeWhenDone();
+      return;
+    }
+
+    setState(() {
+      _queue.removeAt(_index);
+      if (_queue.isEmpty) {
+        _closing = true;
+        return;
+      }
+      if (_index >= _queue.length) {
+        _index = _queue.length - 1;
+      }
+    });
+
+    if (_queue.isEmpty) {
+      await _closeWhenDone();
+      return;
+    }
+
+    await _loadCurrent();
+  }
+
   Future<void> _finishCurrent({Map<String, bool>? decisions}) async {
     final companion = _current;
     final proposal = _proposal;
@@ -118,31 +146,32 @@ class _ProcessUpdateBatchDialogState extends State<ProcessUpdateBatchDialog> {
       );
     }
 
-    if (!mounted) return;
+    await _advanceQueue();
+  }
 
-    setState(() {
-      _queue.removeAt(_index);
-      if (_queue.isEmpty) {
-        return;
-      }
-      if (_index >= _queue.length) {
-        _index = _queue.length - 1;
-      }
-    });
+  Future<void> _skipCurrent() async {
+    final companion = _current;
+    final proposal = _proposal;
+    if (proposal == null) return;
 
-    if (_queue.isEmpty) {
-      await _closeWhenDone();
-      return;
-    }
+    await widget.state.rejectAiProposal(
+      proposal,
+      companionTaskId: companion.id,
+    );
 
-    await _loadCurrent();
+    await _advanceQueue();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_closing || _queue.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     final s = _strings;
-    final companion = _queue.isEmpty ? null : _current;
-    final topicColor = TopicAppearance.colorFromHex(companion?.topicColor);
+    final companion = _current;
+    final topicColor = TopicAppearance.colorFromHex(companion.topicColor);
+    const frameRadius = 20.0;
 
     return Dialog(
       elevation: 0,
@@ -150,68 +179,57 @@ class _ProcessUpdateBatchDialogState extends State<ProcessUpdateBatchDialog> {
       insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 28),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 600),
-        child: GlassSurface.styled(
-          style: AppGlassStyle.dialog,
-          borderRadius: BorderRadius.circular(AppGlassStyle.dialogRadius),
-          border: Border(
-            top: BorderSide(color: topicColor.withValues(alpha: 0.72), width: 2.5),
-            left: BorderSide(
-              color: topicColor.withValues(alpha: 0.22),
-              width: 1,
-            ),
-            right: BorderSide(
-              color: topicColor.withValues(alpha: 0.22),
-              width: 1,
-            ),
-            bottom: BorderSide(
-              color: AppColors.noteBorder.withValues(alpha: 0.45),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(frameRadius),
+            border: Border.all(
+              color: topicColor.withValues(alpha: 0.34),
               width: 1,
             ),
           ),
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (companion != null)
-                _ProcessHeader(
-                  strings: s,
-                  topicName: companion.displayTopicName,
-                  topicColor: topicColor,
-                  index: _index,
-                  total: _queue.length,
-                  onPrevious: _index > 0 ? () => _goToIndex(_index - 1) : null,
-                  onNext: _index < _queue.length - 1
-                      ? () => _goToIndex(_index + 1)
-                      : null,
-                ),
-              const SizedBox(height: 14),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(frameRadius - 1),
+            child: GlassSurface.styled(
+              style: AppGlassStyle.dialog,
+              borderRadius: BorderRadius.circular(frameRadius - 1),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _TopicFrameHeader(
+                    strings: s,
+                    topicName: companion.displayTopicName,
+                    topicColor: topicColor,
+                    index: _index,
+                    total: _queue.length,
+                    onPrevious:
+                        _index > 0 ? () => _goToIndex(_index - 1) : null,
+                    onNext: _index < _queue.length - 1
+                        ? () => _goToIndex(_index + 1)
+                        : null,
                   ),
-                )
-              else if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    s['automationRunFailed'],
-                    style: AppTypography.noteBodyStyle,
-                  ),
-                )
-              else if (_proposal != null)
-                _buildReviewBody(_proposal!),
-              const SizedBox(height: 10),
-              Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: Text(s['cancel']),
-                ),
+                  const SizedBox(height: 12),
+                  if (_loading)
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  else if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        s['automationRunFailed'],
+                        style: AppTypography.noteBodyStyle,
+                      ),
+                    )
+                  else if (_proposal != null)
+                    _buildReviewBody(_proposal!),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -227,13 +245,12 @@ class _ProcessUpdateBatchDialogState extends State<ProcessUpdateBatchDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(message, style: AppTypography.noteBodyStyle),
-          const SizedBox(height: 12),
-          Align(
-            alignment: AlignmentDirectional.centerEnd,
-            child: FilledButton(
-              onPressed: () => _finishCurrent(),
-              child: Text(_strings['finishReview']),
-            ),
+          const SizedBox(height: 8),
+          _ReviewActions(
+            strings: _strings,
+            canFinish: true,
+            onCancel: _skipCurrent,
+            onFinish: _finishCurrent,
           ),
         ],
       );
@@ -252,14 +269,16 @@ class _ProcessUpdateBatchDialogState extends State<ProcessUpdateBatchDialog> {
       strings: _strings,
       changeSet: ChangeSet.fromJson(raw),
       embedded: true,
-      onCancel: () => Navigator.pop(context, false),
-      onComplete: (decisions) => _finishCurrent(decisions: decisions),
+      onCancel: _skipCurrent,
+      onComplete: (decisions) async {
+        await _finishCurrent(decisions: decisions);
+      },
     );
   }
 }
 
-class _ProcessHeader extends StatelessWidget {
-  const _ProcessHeader({
+class _TopicFrameHeader extends StatelessWidget {
+  const _TopicFrameHeader({
     required this.strings,
     required this.topicName,
     required this.topicColor,
@@ -280,10 +299,10 @@ class _ProcessHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final titleStyle = AppTypography.metaStyle.copyWith(
-      fontSize: 13,
+      fontSize: 12.5,
       fontWeight: FontWeight.w400,
-      letterSpacing: 0.2,
-      color: topicColor.withValues(alpha: 0.88),
+      letterSpacing: 0.15,
+      color: topicColor.withValues(alpha: 0.9),
     );
 
     return Column(
@@ -294,6 +313,7 @@ class _ProcessHeader extends StatelessWidget {
               tooltip: strings['previousProcess'],
               onPressed: onPrevious,
               icon: Icons.chevron_left,
+              color: topicColor,
             ),
             Expanded(
               child: Text(
@@ -308,17 +328,51 @@ class _ProcessHeader extends StatelessWidget {
               tooltip: strings['nextProcess'],
               onPressed: onNext,
               icon: Icons.chevron_right,
+              color: topicColor,
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        Text(
-          strings.processUpdateProgress(index + 1, total),
-          style: AppTypography.metaStyle.copyWith(
-            fontSize: 11,
-            color: AppColors.noteMeta.withValues(alpha: 0.7),
+        if (total > 1) ...[
+          const SizedBox(height: 2),
+          Text(
+            strings.processUpdateProgress(index + 1, total),
+            style: AppTypography.metaStyle.copyWith(
+              fontSize: 10.5,
+              color: AppColors.noteMeta.withValues(alpha: 0.62),
+            ),
+            textAlign: TextAlign.center,
           ),
-          textAlign: TextAlign.center,
+        ],
+      ],
+    );
+  }
+}
+
+class _ReviewActions extends StatelessWidget {
+  const _ReviewActions({
+    required this.strings,
+    required this.canFinish,
+    required this.onCancel,
+    required this.onFinish,
+  });
+
+  final AppStrings strings;
+  final bool canFinish;
+  final VoidCallback onCancel;
+  final VoidCallback onFinish;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        TextButton(
+          onPressed: onCancel,
+          child: Text(strings['cancel']),
+        ),
+        TextButton(
+          onPressed: canFinish ? onFinish : null,
+          child: Text(strings['finishUpdate']),
         ),
       ],
     );
@@ -330,11 +384,13 @@ class _NavButton extends StatelessWidget {
     required this.tooltip,
     required this.onPressed,
     required this.icon,
+    required this.color,
   });
 
   final String tooltip;
   final VoidCallback? onPressed;
   final IconData icon;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -343,7 +399,7 @@ class _NavButton extends StatelessWidget {
       onPressed: onPressed,
       visualDensity: VisualDensity.compact,
       iconSize: 20,
-      color: AppColors.text.withValues(alpha: onPressed == null ? 0.25 : 0.55),
+      color: color.withValues(alpha: onPressed == null ? 0.28 : 0.72),
       icon: Icon(icon),
     );
   }

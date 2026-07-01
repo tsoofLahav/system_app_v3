@@ -6,6 +6,7 @@ from services.ai_proposal_actions import (
     create_smart_process_update_proposal,
 )
 from services.automation_companion import companion_title, create_companion_task
+from services.automation_definitions import get_definition, resolve_files_by_bindings, topic_in_scope
 from services.automation_params import companion_config, normalize_params
 
 
@@ -103,19 +104,37 @@ def archive_at_time(context):
 def rotate_daily_main_file(context):
     params = context["params"]
     topic = _resolve_topic_from_context(context, params)
-    daily_name = params.get("name", "Daily")
-    existing = (
-        File.query.filter_by(topic_id=topic.id, name=daily_name)
-        .filter(File.archived_at.is_(None))
-        .order_by(File.id.desc())
-        .first()
+    files_by_role = resolve_files_by_bindings(topic.id, params)
+    daily_binding = (params.get("bindings") or {}).get("files") or []
+    daily_match = None
+    for binding in daily_binding:
+        if binding.get("role") == "daily":
+            daily_match = binding.get("match") or {}
+            break
+    daily_name = (
+        daily_match.get("name")
+        if daily_match
+        else params.get("name", "Daily")
     )
+    daily_type = (
+        daily_match.get("type")
+        if daily_match
+        else params.get("type", "main")
+    )
+    existing = files_by_role.get("daily")
+    if existing is None:
+        existing = (
+            File.query.filter_by(topic_id=topic.id, name=daily_name)
+            .filter(File.archived_at.is_(None))
+            .order_by(File.id.desc())
+            .first()
+        )
     if existing is not None:
         existing.archived_at = datetime.utcnow()
     file = _create_file(
         topic,
         name=daily_name,
-        file_type=params.get("type", "main"),
+        file_type=daily_type,
         is_main=True,
     )
     return {
@@ -137,10 +156,14 @@ def weekly_process_refresh(context):
 
 
 def _refresh_process(topic, params):
-    files_by_type = _process_files_by_type(topic.id)
-    missing = [
-        file_type for file_type in ("plan", "doc", "tasks") if file_type not in files_by_type
-    ]
+    files_by_role = resolve_files_by_bindings(topic.id, params)
+    definition = get_definition(action_type="weekly_process_refresh")
+    required_roles = (
+        [binding.role for binding in definition.bindings]
+        if definition is not None
+        else ["plan", "doc", "tasks"]
+    )
+    missing = [role for role in required_roles if role not in files_by_role]
     if missing:
         message = (
             f"Cannot automatically update process '{topic.name}': "
@@ -155,9 +178,9 @@ def _refresh_process(topic, params):
             "message": message,
         }
 
-    plan_file = files_by_type["plan"]
-    doc_file = files_by_type["doc"]
-    tasks_file = files_by_type["tasks"]
+    plan_file = files_by_role["plan"]
+    doc_file = files_by_role["doc"]
+    tasks_file = files_by_role["tasks"]
     proposal = create_smart_process_update_proposal(
         topic,
         plan_file,
@@ -177,9 +200,11 @@ def _refresh_process(topic, params):
 
 
 def _maybe_create_companion_task(rule, run, topic, result):
-    if topic is None or topic.type != "process":
+    params = normalize_params(rule.params, rule.key, rule.action_type)
+    scope = params.get("scope") or {}
+    if not topic_in_scope(topic, scope):
         return None
-    companion = companion_config(normalize_params(rule.params, rule.key, rule.action_type))
+    companion = companion_config(params) or {}
     if not companion or not companion.get("enabled", True):
         return None
     if run is None:
@@ -200,20 +225,6 @@ def _maybe_create_companion_task(rule, run, topic, result):
         payload=payload,
         title=title,
     )
-
-
-def _process_files_by_type(topic_id):
-    files = (
-        File.query.filter_by(topic_id=topic_id)
-        .filter(File.type.in_(["plan", "doc", "tasks"]))
-        .filter(File.archived_at.is_(None))
-        .order_by(File.order_index, File.id)
-        .all()
-    )
-    by_type = {}
-    for file in files:
-        by_type.setdefault(file.type, file)
-    return by_type
 
 
 def _resolve_scope_topics_from_params(params):

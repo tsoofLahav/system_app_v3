@@ -28,8 +28,6 @@ class AutomationDialog extends StatefulWidget {
 }
 
 class _AutomationDialogState extends State<AutomationDialog> {
-  static const _mainKeys = {'daily_rotation', 'weekly_process_refresh'};
-
   var _ensuringRules = true;
 
   @override
@@ -56,8 +54,11 @@ class _AutomationDialogState extends State<AutomationDialog> {
       listenable: widget.state,
       builder: (context, _) {
         final s = widget.state.strings;
+        final definitionKeys = widget.state.automationDefinitions
+            .map((definition) => definition.key)
+            .toSet();
         final rules = widget.state.automationRules
-            .where((rule) => _mainKeys.contains(rule.key))
+            .where((rule) => definitionKeys.contains(rule.key))
             .toList();
 
         return AppGlassDialog(
@@ -115,14 +116,13 @@ class _AutomationRuleControlState extends State<_AutomationRuleControl> {
   @override
   Widget build(BuildContext context) {
     final s = widget.state.strings;
+    final definition = widget.state.definitionForKey(widget.rule.key);
     final schedule = _ScheduleDraft.fromSchedule(widget.rule.schedule);
     final running = widget.state.isAutomationRuleActive(widget.rule.id);
-    final label = switch (widget.rule.key) {
-      'daily_rotation' => s['dailyRotation'],
-      'weekly_process_refresh' => s['updateAllProcesses'],
-      _ => widget.rule.name,
-    };
+    final label = definition?.name ?? widget.rule.name;
     final triggerType = widget.rule.triggerType;
+    final activations = definition?.activations ??
+        const ['schedule', 'event', 'task'];
     final trigger = (widget.rule.params['trigger'] as Map?)?.cast<String, dynamic>() ??
         <String, dynamic>{};
 
@@ -155,13 +155,44 @@ class _AutomationRuleControlState extends State<_AutomationRuleControl> {
                   enabled: value,
                 ),
               ),
+              if (definition != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  s.automationScopeForDefinition(definition.scopeFixed),
+                  style: AppTypography.metaStyle,
+                ),
+                if (definition.description.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    definition.description,
+                    style: AppTypography.metaStyle.copyWith(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.65),
+                    ),
+                  ),
+                ],
+              ],
               Text(s['automationTrigger'], style: AppTypography.metaStyle),
               const SizedBox(height: 6),
               SegmentedButton<String>(
                 segments: [
-                  ButtonSegment(value: 'schedule', label: Text(s['triggerByTime'])),
-                  ButtonSegment(value: 'event', label: Text(s['triggerByChanges'])),
-                  ButtonSegment(value: 'task', label: Text(s['triggerByTask'])),
+                  if (activations.contains('schedule'))
+                    ButtonSegment(
+                      value: 'schedule',
+                      label: Text(s['triggerByTime']),
+                    ),
+                  if (activations.contains('event'))
+                    ButtonSegment(
+                      value: 'event',
+                      label: Text(s['triggerByChanges']),
+                    ),
+                  if (activations.contains('task'))
+                    ButtonSegment(
+                      value: 'task',
+                      label: Text(s['triggerByTask']),
+                    ),
                 ],
                 selected: {triggerType},
                 onSelectionChanged: (value) => _setTriggerType(value.first),
@@ -249,6 +280,10 @@ class _AutomationRuleControlState extends State<_AutomationRuleControl> {
   }
 
   Future<void> _setTriggerType(String triggerType) async {
+    final definition = widget.state.definitionForKey(widget.rule.key);
+    if (definition != null && !definition.supportsActivation(triggerType)) {
+      return;
+    }
     final params = Map<String, dynamic>.from(widget.rule.params);
     if (triggerType == 'task') {
       final trigger = Map<String, dynamic>.from(

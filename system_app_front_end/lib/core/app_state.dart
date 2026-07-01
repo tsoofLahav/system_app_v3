@@ -9,6 +9,7 @@ import 'l10n/app_strings.dart';
 import 'models/ai_proposal.dart';
 import 'models/app_file.dart';
 import 'models/automation_companion_link.dart';
+import 'models/automation_definition.dart';
 import 'models/automation_rule.dart';
 import 'models/automation_run.dart';
 import 'models/block.dart';
@@ -29,6 +30,7 @@ import 'services/ai_service.dart';
 import 'services/ai_proposal_service.dart';
 import 'services/api_service.dart';
 import 'services/automation_companion_service.dart';
+import 'services/automation_definition_service.dart';
 import 'services/automation_service.dart';
 import 'services/block_service.dart';
 import 'services/bootstrap_service.dart';
@@ -90,6 +92,8 @@ class AppState extends ChangeNotifier {
   late final ImageService _imageService = ImageService(_api);
   late final AiService _aiService = AiService(_api);
   late final AutomationService _automationService = AutomationService(_api);
+  late final AutomationDefinitionService _definitionService =
+      AutomationDefinitionService(_api);
   late final AiProposalService _aiProposalService = AiProposalService(_api);
   late final AutomationCompanionService _companionService =
       AutomationCompanionService(_api);
@@ -109,6 +113,7 @@ class AppState extends ChangeNotifier {
   TaskViewDisplayMode viewDisplayMode = TaskViewDisplayMode.bySection;
   List<TaskViewMembership> _taskViewMemberships = [];
   List<AutomationRule> automationRules = [];
+  List<AutomationDefinition> automationDefinitions = [];
   List<AiProposal> pendingAiProposals = [];
   Map<int, List<AppFile>> archivedFilesByTopicId = {};
   bool moreFilesExpanded = false;
@@ -535,11 +540,19 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> refreshAutomationRules() async {
+    automationDefinitions = await _definitionService.list();
     automationRules = await _automationService.listRules();
     if (await _ensureMainAutomationRules()) {
       automationRules = await _automationService.listRules();
     }
     notifyListeners();
+  }
+
+  AutomationDefinition? definitionForKey(String key) {
+    for (final definition in automationDefinitions) {
+      if (definition.key == key) return definition;
+    }
+    return null;
   }
 
   Future<void> ensureMainAutomationRules() => refreshAutomationRules();
@@ -787,14 +800,24 @@ class AppState extends ChangeNotifier {
       AutomationFlowRegistry.run(context: context, state: this, task: task);
 
   Future<void> _completeCompanionTaskById(int companionTaskId) async {
-    await _companionService.complete(companionTaskId);
+    final result = await _companionService.complete(companionTaskId);
+    final taskId = result['task_id'];
+    final taskStatus = result['task_status'] as String?;
+    if (taskId is int && taskStatus != null) {
+      _applyTaskStatusInView(taskId, taskStatus);
+    }
     if (selectedViewType != null) {
       await refreshCurrentView();
       return;
     }
-    viewTasks = viewTasks
-        .where((task) => task.companionTaskId != companionTaskId)
-        .toList();
+    notifyListeners();
+  }
+
+  void _applyTaskStatusInView(int taskId, String status) {
+    viewTasks = [
+      for (final task in viewTasks)
+        if (task.id == taskId) task.copyWith(status: status) else task,
+    ];
     final viewType = selectedViewType;
     if (viewType != null) {
       final cached = _viewCache[viewType];
@@ -805,6 +828,23 @@ class AppState extends ChangeNotifier {
         );
       }
     }
+  }
+
+  Future<void> ensureAutomationTriggerTaskDone(int taskId) async {
+    final pending = await fetchPendingCompanionsForTask(taskId);
+    if (pending.isNotEmpty) return;
+
+    Task? task;
+    for (final row in viewTasks) {
+      if (row.id == taskId) {
+        task = row;
+        break;
+      }
+    }
+    if (task == null || task.isDone) return;
+
+    final data = await _taskService.updateTaskRaw(taskId, {'status': 'done'});
+    _applyTaskUpdate(Task.fromJson(data));
     notifyListeners();
   }
 
@@ -822,77 +862,39 @@ class AppState extends ChangeNotifier {
   }
 
   Future<bool> _ensureMainAutomationRules() async {
+    if (automationDefinitions.isEmpty) {
+      automationDefinitions = await _definitionService.list();
+    }
     var changed = false;
-    const automationTimezone = 'Asia/Jerusalem';
     final keys = automationRules.map((rule) => rule.key).toSet();
-    if (!keys.contains('daily_rotation')) {
-      await _automationService.createRule({
-        'key': 'daily_rotation',
-        'name': 'Daily rotation',
-        'action_type': 'rotate_daily_main_file',
-        'trigger_type': 'schedule',
-        'schedule': 'daily 00:00',
-        'timezone': automationTimezone,
-        'enabled': true,
-        'params': {
-          'version': 2,
-          'scope': {'kind': 'topic', 'topic_name': 'main'},
-          'bindings': {
-            'files': [
-              {
-                'role': 'daily',
-                'match': {'type': 'main', 'name': 'Daily'},
-              },
-            ],
-          },
-        },
-      });
-      changed = true;
-    }
-    if (!keys.contains('weekly_process_refresh')) {
-      await _automationService.createRule({
-        'key': 'weekly_process_refresh',
-        'name': 'Update all processes',
-        'action_type': 'weekly_process_refresh',
-        'trigger_type': 'schedule',
-        'schedule': 'weekly mon 00:00',
-        'timezone': automationTimezone,
-        'enabled': false,
-        'params': {
-          'version': 2,
-          'scope': {'kind': 'topic_type', 'topic_type': 'process'},
-          'bindings': {
-            'files': [
-              {'role': 'plan', 'match': {'type': 'plan'}},
-              {'role': 'doc', 'match': {'type': 'doc'}},
-              {'role': 'tasks', 'match': {'type': 'tasks'}},
-            ],
-          },
-          'companion_task': {
-            'enabled': true,
-            'view_type': 'daily',
-            'section_name': 'Process updates',
-            'flow_key': 'process_update_review',
-            'title_template': 'Review update: {topic_name}',
-          },
-        },
-      });
-      changed = true;
-    }
-    for (final rule in automationRules) {
-      if (rule.key == 'weekly_process_refresh' &&
-          rule.name != 'Update all processes') {
-        await _automationService.updateRule(rule.id, {
-          'name': 'Update all processes',
+    for (final definition in automationDefinitions) {
+      if (!keys.contains(definition.key)) {
+        await _automationService.createRule({
+          'key': definition.key,
+          'name': definition.name,
+          'action_type': definition.actionType,
+          'trigger_type': definition.activations.first,
+          if (definition.defaultSchedule != null)
+            'schedule': definition.defaultSchedule,
+          'timezone': definition.timezoneDefault,
+          'enabled': definition.defaultEnabled,
+          'params': definition.defaultParams,
         });
         changed = true;
       }
-      if (rule.key != 'daily_rotation' && rule.key != 'weekly_process_refresh') {
-        continue;
+    }
+    for (final rule in automationRules) {
+      final definition = definitionForKey(rule.key);
+      if (definition != null && rule.name != definition.name) {
+        await _automationService.updateRule(rule.id, {
+          'name': definition.name,
+        });
+        changed = true;
       }
-      if (rule.timezone == automationTimezone) continue;
+      if (definition == null) continue;
+      if (rule.timezone == definition.timezoneDefault) continue;
       await _automationService.updateRule(rule.id, {
-        'timezone': automationTimezone,
+        'timezone': definition.timezoneDefault,
       });
       changed = true;
     }

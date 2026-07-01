@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from models import AutomationCompanionTask, AutomationRun, Task, TaskView, Topic, db
+from models import AutomationCompanionTask, AutomationRun, AutomationRule, Task, TaskView, Topic, db
+from services.automation_definitions import get_definition, topic_in_scope
 from services.automation_params import companion_config, normalize_params
 from services.automation_topics import AUTOMATIONS_TOPIC_KEY
 
@@ -84,16 +85,20 @@ def complete_companion_task(companion_id):
     link.status = "completed"
     link.completed_at = datetime.utcnow()
     task_id = link.task_id
-    pending_count = AutomationCompanionTask.query.filter_by(
-        task_id=task_id,
-        status="pending",
-    ).count()
-    if pending_count == 0:
-        task = db.session.get(Task, task_id)
-        if task is not None:
-            task.status = "done"
     db.session.flush()
-    return link.to_dict()
+
+    task = db.session.get(Task, task_id)
+    task_marked_done = False
+    if task is not None and not pending_companions_for_task(task_id):
+        task.status = "done"
+        task_marked_done = True
+    db.session.flush()
+
+    result = link.to_dict()
+    result["task_marked_done"] = task_marked_done
+    if task is not None:
+        result["task_status"] = task.status
+    return result
 
 
 def _ensure_task_view(task, view_type, section_name):
@@ -151,15 +156,19 @@ def enrich_companion_dict(link):
     return item
 
 
-def _is_process_companion_link(link, enriched=None):
-    enriched = enriched if enriched is not None else enrich_companion_dict(link)
-    topic_type = enriched.get("topic_type")
-    if topic_type is not None:
-        return topic_type == "process"
-    if link.topic_id is None:
+def _companion_in_rule_scope(link):
+    rule = AutomationRule.query.filter_by(key=link.rule_key).order_by(AutomationRule.id).first()
+    if rule is None:
         return True
-    topic = db.session.get(Topic, link.topic_id)
-    return topic is not None and topic.type == "process"
+    params = normalize_params(rule.params, rule.key, rule.action_type)
+    scope = params.get("scope") or {}
+    definition = get_definition(link.rule_key, rule.action_type)
+    if definition is None:
+        return True
+    topic = db.session.get(Topic, link.topic_id) if link.topic_id else None
+    if topic is None and link.topic_id is None:
+        return True
+    return topic_in_scope(topic, scope)
 
 
 def pending_companions_for_task(task_id):
@@ -170,9 +179,9 @@ def pending_companions_for_task(task_id):
     )
     results = []
     for link in links:
-        enriched = enrich_companion_dict(link)
-        if _is_process_companion_link(link, enriched):
-            results.append(enriched)
+        if not _companion_in_rule_scope(link):
+            continue
+        results.append(enrich_companion_dict(link))
     return results
 
 
@@ -189,7 +198,7 @@ def pending_companions_by_task_ids(task_ids):
     )
     grouped = {}
     for link in links:
-        if not _is_process_companion_link(link):
+        if not _companion_in_rule_scope(link):
             continue
         grouped.setdefault(link.task_id, []).append(link)
     return grouped

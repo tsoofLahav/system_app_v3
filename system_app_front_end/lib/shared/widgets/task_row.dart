@@ -168,38 +168,47 @@ class _TaskRowState extends State<TaskRow> {
   @override
   Widget build(BuildContext context) {
     final lineHeight = AppTypography.taskRowLineHeight;
+    final isAutomationReview =
+        widget.task.hasAutomationFlow && widget.onRowTap != null;
     final titleStyle = AppTypography.taskRowStyle.copyWith(
       decoration: widget.task.isDone ? TextDecoration.lineThrough : null,
       color: widget.task.isDone
           ? AppColors.text.withValues(alpha: 0.45)
-          : null,
+          : isAutomationReview
+              ? AppColors.aiCyan.withValues(alpha: 0.92)
+              : null,
     );
 
     Widget titleField;
     if (widget.readOnly) {
-      titleField = InkWell(
-        onTap: widget.onRowTap,
-        onSecondaryTapDown: widget.onDelete != null
-            ? (details) => _showContextMenu(details.globalPosition)
-            : null,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(widget.task.title, style: titleStyle),
-              if (!widget.task.isAutomationTrigger &&
-                  widget.task.displaySubjectTopicName != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    widget.task.displaySubjectTopicName!,
-                    style: AppTypography.metaStyle.copyWith(
-                      color: AppColors.noteMeta.withValues(alpha: 0.75),
+      titleField = MouseRegion(
+        cursor: isAutomationReview
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
+        child: InkWell(
+          onTap: widget.onRowTap,
+          onSecondaryTapDown: widget.onDelete != null
+              ? (details) => _showContextMenu(details.globalPosition)
+              : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.task.title, style: titleStyle),
+                if (!widget.task.isAutomationTrigger &&
+                    widget.task.displaySubjectTopicName != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      widget.task.displaySubjectTopicName!,
+                      style: AppTypography.metaStyle.copyWith(
+                        color: AppColors.noteMeta.withValues(alpha: 0.75),
+                      ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -228,7 +237,7 @@ class _TaskRowState extends State<TaskRow> {
       );
     }
 
-    return Material(
+    final row = Material(
       color: Colors.transparent,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 1),
@@ -265,6 +274,7 @@ class _TaskRowState extends State<TaskRow> {
                           done: widget.task.isDone,
                           onToggle: widget.onToggle,
                           compact: true,
+                          accent: isAutomationReview,
                         ),
                       ),
                     ),
@@ -275,6 +285,23 @@ class _TaskRowState extends State<TaskRow> {
             ],
           ),
         ),
+      ),
+    );
+
+    if (!isAutomationReview) return row;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          color: AppColors.aiCyan.withValues(alpha: 0.05),
+          border: Border.all(
+            color: AppColors.aiCyan.withValues(alpha: 0.32),
+            width: 1,
+          ),
+        ),
+        child: row,
       ),
     );
   }

@@ -63,6 +63,8 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   String? _activeChangeId;
   bool _awaitingHandoff = false;
 
+  bool get _unifiedScroll => widget.embedded;
+
   @override
   void initState() {
     super.initState();
@@ -99,13 +101,23 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   }
 
   bool get _allReviewed {
-    if (_awaitingHandoff) return false;
+    if (!_unifiedScroll && _awaitingHandoff) return false;
     for (final document in _documents) {
       for (final change in _orderedChanges(document)) {
         if (!_decisions.containsKey(change.id)) return false;
       }
     }
     return true;
+  }
+
+  int get _pendingSuggestionCount {
+    var count = 0;
+    for (final document in _documents) {
+      for (final change in _orderedChanges(document)) {
+        if (!_decisions.containsKey(change.id)) count++;
+      }
+    }
+    return count;
   }
 
   GlobalKey _keyForUnit(String unitId) =>
@@ -121,9 +133,17 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     return items;
   }
 
-  ChangeItem? _nextPendingChange(ChangeDocument document) {
+  ChangeItem? _nextPendingChangeInDocument(ChangeDocument document) {
     for (final change in _orderedChanges(document)) {
       if (!_decisions.containsKey(change.id)) return change;
+    }
+    return null;
+  }
+
+  ChangeItem? _nextPendingChangeGlobally() {
+    for (final document in _documents) {
+      final next = _nextPendingChangeInDocument(document);
+      if (next != null) return next;
     }
     return null;
   }
@@ -138,11 +158,13 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   }
 
   void _presentNextSuggestion() {
-    if (!mounted || _awaitingHandoff) return;
+    if (!mounted || (!_unifiedScroll && _awaitingHandoff)) return;
 
     _removeSuggestionOverlay();
 
-    final next = _nextPendingChange(_activeDocument);
+    final next = _unifiedScroll
+        ? _nextPendingChangeGlobally()
+        : _nextPendingChangeInDocument(_activeDocument);
     if (next == null) {
       _onDocumentPhaseComplete();
       return;
@@ -151,7 +173,8 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     setState(() => _activeChangeId = next.id);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted || _activeChangeId != next.id || _awaitingHandoff) return;
+      if (!mounted || _activeChangeId != next.id) return;
+      if (!_unifiedScroll && _awaitingHandoff) return;
 
       final anchorKey = _keyForUnit(next.unitId);
       final anchorContext = anchorKey.currentContext;
@@ -164,10 +187,12 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
         );
       }
 
-      if (!mounted || _activeChangeId != next.id || _awaitingHandoff) return;
+      if (!mounted || _activeChangeId != next.id) return;
+      if (!_unifiedScroll && _awaitingHandoff) return;
 
       SchedulerBinding.instance.scheduleFrameCallback((_) {
-        if (!mounted || _activeChangeId != next.id || _awaitingHandoff) return;
+        if (!mounted || _activeChangeId != next.id) return;
+        if (!_unifiedScroll && _awaitingHandoff) return;
         _insertSuggestionOverlay(next);
       });
     });
@@ -196,6 +221,10 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
 
   void _onDocumentPhaseComplete() {
     _removeSuggestionOverlay();
+    if (_unifiedScroll) {
+      setState(() => _activeChangeId = null);
+      return;
+    }
     if (_documentPhase < _documents.length - 1) {
       setState(() {
         _activeChangeId = null;
@@ -235,18 +264,114 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     Navigator.pop(context, _decisions);
   }
 
-  @override
-  Widget build(BuildContext context) {
+  String _sectionTitle(ChangeDocument document) {
+    final s = widget.strings;
+    return switch (document.key) {
+      'plan' => s['reviewPlan'],
+      'tasks' => s['reviewTasks'],
+      _ => document.title,
+    };
+  }
+
+  Widget _buildUnifiedDocuments() {
+    final children = <Widget>[];
+
+    for (var i = 0; i < _documents.length; i++) {
+      final document = _documents[i];
+      if (i > 0) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Divider(
+              height: 1,
+              thickness: 1,
+              color: AppColors.noteBorder.withValues(alpha: 0.35),
+            ),
+          ),
+        );
+      }
+      children.add(
+        Text(
+          _sectionTitle(document),
+          style: AppTypography.metaStyle.copyWith(
+            color: AppColors.noteMeta.withValues(alpha: 0.82),
+          ),
+        ),
+      );
+      children.add(const SizedBox(height: 8));
+      children.add(
+        _DocumentReview(
+          document: document,
+          decisions: _decisions,
+          activeChangeId: _activeChangeId,
+          keyForUnit: _keyForUnit,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    );
+  }
+
+  Widget _buildPhasedDocument() {
     final s = widget.strings;
     final active = _activeDocument;
     final pendingCount = _orderedChanges(
       active,
     ).where((change) => !_decisions.containsKey(change.id)).length;
 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (!_awaitingHandoff && pendingCount > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              '${s['suggestedChange']} · $pendingCount',
+              style: AppTypography.metaStyle.copyWith(
+                color: AppColors.aiCyan.withValues(alpha: 0.9),
+              ),
+            ),
+          ),
+        _DocumentReview(
+          document: active,
+          decisions: _decisions,
+          activeChangeId: _activeChangeId,
+          keyForUnit: _keyForUnit,
+        ),
+        if (_awaitingHandoff) ...[
+          const SizedBox(height: 12),
+          Text(
+            s['planReviewComplete'],
+            style: AppTypography.noteBodyStyle,
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: _continueToNextDocument,
+              child: Text(s['continueToTasks']),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.strings;
+    final pendingCount = _pendingSuggestionCount;
+
     final content = ConstrainedBox(
       constraints: BoxConstraints(
         maxWidth: 520,
-        maxHeight: MediaQuery.sizeOf(context).height * (widget.embedded ? 0.55 : 0.75),
+        maxHeight: MediaQuery.sizeOf(context).height *
+            (widget.embedded ? 0.55 : 0.75),
       ),
       child: SingleChildScrollView(
         controller: _scrollController,
@@ -254,7 +379,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (!_awaitingHandoff && pendingCount > 0)
+            if (_unifiedScroll && pendingCount > 0)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Text(
@@ -264,31 +389,14 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
                   ),
                 ),
               ),
-            _DocumentReview(
-              document: active,
-              decisions: _decisions,
-              activeChangeId: _activeChangeId,
-              keyForUnit: _keyForUnit,
-            ),
-            if (_awaitingHandoff) ...[
-              const SizedBox(height: 12),
-              Text(
-                s['planReviewComplete'],
-                style: AppTypography.noteBodyStyle,
-              ),
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton(
-                  onPressed: _continueToNextDocument,
-                  child: Text(s['continueToTasks']),
-                ),
-              ),
-            ],
+            if (_unifiedScroll) _buildUnifiedDocuments() else _buildPhasedDocument(),
           ],
         ),
       ),
     );
+
+    final finishLabel =
+        widget.embedded ? s['finishUpdate'] : s['finishReview'];
 
     final actions = [
       TextButton(
@@ -297,7 +405,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
       ),
       TextButton(
         onPressed: _allReviewed ? _completeReview : null,
-        child: Text(s['finishReview']),
+        child: Text(finishLabel),
       ),
     ];
 

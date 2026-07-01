@@ -2,91 +2,47 @@ import copy
 
 from sqlalchemy.orm.attributes import flag_modified
 
-PARAMS_VERSION = 2
+from services.automation_definitions import (
+    PARAMS_VERSION,
+    apply_definition_to_params,
+    default_params,
+    get_definition,
+)
 
-DEFAULT_COMPANION = {
-    "weekly_process_refresh": {
-        "enabled": True,
-        "view_type": "daily",
-        "section_name": "Process updates",
-        "flow_key": "process_update_review",
-        "title_template": "Review update: {topic_name}",
-    },
-}
+__all__ = [
+    "PARAMS_VERSION",
+    "normalize_params",
+    "params_v2_for_rule",
+    "scope_kind",
+    "binding_files",
+    "companion_config",
+    "trigger_config",
+    "rule_params_snapshot",
+    "persist_rule_params",
+    "default_params",
+    "get_definition",
+]
 
 
 def normalize_params(params, rule_key=None, action_type=None):
     raw = dict(params or {})
-    if raw.get("version") == PARAMS_VERSION:
-        normalized = raw
-    else:
-        normalized = _migrate_v1_params(raw, rule_key, action_type)
-    if rule_key == "weekly_process_refresh" or action_type == "weekly_process_refresh":
-        return _ensure_weekly_process_refresh_params(normalized)
-    return normalized
-
-
-def _ensure_weekly_process_refresh_params(params):
-    result = dict(params)
-    result.setdefault("version", PARAMS_VERSION)
-    scope = dict(result.get("scope") or {})
-    if scope.get("kind") not in {"topic_type", "topic"}:
-        scope = {"kind": "topic_type", "topic_type": "process"}
-    elif scope.get("kind") == "topic_type":
-        scope.setdefault("topic_type", "process")
-    result["scope"] = scope
-    bindings = result.get("bindings") or {}
-    if not bindings.get("files"):
-        result["bindings"] = {
-            "files": [
-                {"role": "plan", "match": {"type": "plan"}},
-                {"role": "doc", "match": {"type": "doc"}},
-                {"role": "tasks", "match": {"type": "tasks"}},
-            ],
-        }
-    if not result.get("companion_task"):
-        result["companion_task"] = DEFAULT_COMPANION["weekly_process_refresh"]
-    return result
+    if raw.get("version") != PARAMS_VERSION:
+        raw = _migrate_v1_params(raw, rule_key, action_type)
+    return apply_definition_to_params(raw, rule_key, action_type)
 
 
 def _migrate_v1_params(params, rule_key, action_type):
-    if rule_key == "daily_rotation":
-        return {
-            "version": PARAMS_VERSION,
-            "scope": {
-                "kind": "topic",
-                "topic_name": params.get("topic_name", "main"),
-            },
-            "bindings": {
-                "files": [
-                    {
-                        "role": "daily",
-                        "match": {
-                            "type": params.get("type", "main"),
-                            "name": params.get("name", "Daily"),
-                        },
-                    }
-                ],
-            },
-            "companion_task": None,
-            "topic_name": params.get("topic_name", "main"),
-            "name": params.get("name", "Daily"),
-            "type": params.get("type", "main"),
-        }
-
-    if rule_key == "weekly_process_refresh" or action_type == "weekly_process_refresh":
-        return {
-            "version": PARAMS_VERSION,
-            "scope": {"kind": "topic_type", "topic_type": "process"},
-            "bindings": {
-                "files": [
-                    {"role": "plan", "match": {"type": "plan"}},
-                    {"role": "doc", "match": {"type": "doc"}},
-                    {"role": "tasks", "match": {"type": "tasks"}},
-                ],
-            },
-            "companion_task": DEFAULT_COMPANION["weekly_process_refresh"],
-        }
+    definition = get_definition(rule_key, action_type)
+    if definition is not None:
+        migrated = default_params(definition.key)
+        migrated.update(
+            {
+                key: value
+                for key, value in params.items()
+                if key not in {"scope", "bindings", "companion_task", "version"}
+            }
+        )
+        return migrated
 
     return {
         "version": PARAMS_VERSION,
@@ -129,5 +85,12 @@ def rule_params_snapshot(rule):
 
 def persist_rule_params(rule, params):
     """Assign params and force SQLAlchemy to persist JSONB changes."""
-    rule.params = copy.deepcopy(params)
+    normalized = apply_definition_to_params(params, rule.key, rule.action_type)
+    rule.params = copy.deepcopy(normalized)
+    flag_modified(rule, "params")
+
+
+def finalize_rule_params(rule):
+    """Normalize stored params from definition defaults (e.g. after read or before commit)."""
+    rule.params = apply_definition_to_params(rule.params, rule.key, rule.action_type)
     flag_modified(rule, "params")

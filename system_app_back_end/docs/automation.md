@@ -27,12 +27,46 @@ Each run stores:
 
 **Dedupe:** if a rule already has a `queued` or `running` run, new enqueue requests are ignored for that rule.
 
+## Automation definitions (registry)
+
+Built-in automations are defined in code at `services/automation_definitions.py`. Each **definition** is the source of truth for scope, file bindings, allowed activations, companion flow, and related AI actions. A user's `automation_rules` row is an **instance**: enabled flag, schedule, timezone, trigger placement, and companion view/section overrides.
+
+**v1 constraints:**
+
+- Scope and bindings are **fixed per automation** (not user-editable). Instances always inherit them from the definition on read/write.
+- No user-authored automation types yet; the schema supports future flexible scope and DB-backed templates.
+
+**Future flexibility (not enabled in v1):** editable scope (e.g. narrow to one process), user-defined automation types, and event-trigger UI. The registry `ScopeConfig.allowed_kinds` field is reserved for that upgrade path.
+
+### API
+
+- `GET /automation_definitions` — list built-in definitions
+- `GET /automation_definitions/<key>` — one definition
+- `GET /automation_rules` — each built-in rule may include a `definition` blob
+
+### Built-in automations
+
+| Key | Scope | Activations | Files (bindings) | Companion | AI |
+| --- | --- | --- | --- | --- | --- |
+| `daily_rotation` | Main topic | `schedule`, `manual` | `daily` → type `main`, name `Daily` | — | — |
+| `weekly_process_refresh` | All `process` topics | `schedule`, `task`, `manual` | `plan`, `doc`, `tasks` | `process_update_review` in daily / Process updates | `smart_process_update` → `process_smart_update`, `process_refresh_skipped`; review `plan` + `tasks` |
+
+### Instance vs definition
+
+| Layer | User can change | Fixed |
+| --- | --- | --- |
+| Definition (registry) | — | scope, bindings, action, AI, flow_key |
+| Rule instance (DB) | `enabled`, `schedule`, `timezone`, `trigger_type`, trigger task view/section | `key`, `action_type`, scope, bindings |
+
+`PATCH /automation_rules` rejects `params.scope` and `params.bindings` for built-in rules and validates `trigger_type` against `definition.activations`.
+
 ## Trigger types
 
 | `trigger_type` | When it fires |
 | --- | --- |
 | `schedule` | Cron enqueues when `next_run_at <= now` |
-| `event` | Backend dispatches after matching domain events (v1: `file_changed`) |
+| `task` | User unchecks the trigger task (`done` → `active`) on an enabled task-triggered rule |
+| `event` | Backend dispatches after matching domain events (v1: `file_changed`; not exposed in UI yet) |
 | manual | `POST /automation_rules/<id>/run` enqueues immediately |
 
 ### Event rules (v1)
@@ -98,6 +132,7 @@ Automations and AI actions can store reviewable edits as `change_set` version 1:
 
 ## API Ownership
 
+- Built-in definitions: `GET /automation_definitions`, `GET /automation_definitions/<key>`
 - CRUD for rules is exposed through `/automation_rules`.
 - Manual execution for testing is exposed through `POST /automation_rules/<id>/run` (returns `202` with a queued run and processes that run in a background thread).
 - Run status is exposed through `GET /automation_runs/<id>` and `GET /automation_runs?status=queued,running`.
@@ -108,3 +143,13 @@ Automations and AI actions can store reviewable edits as `change_set` version 1:
 ## Migration
 
 Apply [`migrations/007_automation_run_queue.sql`](../migrations/007_automation_run_queue.sql) before deploying queue support.
+
+## Add a new automation (checklist)
+
+1. **Registry entry** — add `AutomationDefinition` in `services/automation_definitions.py` (scope, activations, bindings, optional companion + AI metadata).
+2. **Action handler** — implement `run_action` branch in `services/automation_actions.py`; resolve files via `resolve_files_by_bindings`, not hardcoded types.
+3. **AI (optional)** — add proposal types / finalize path in `services/ai_proposal_actions.py`.
+4. **Companion (optional)** — configure `companion` in definition; ensure `create_companion_task` runs for topics in scope.
+5. **Flutter flow (optional)** — register `companion.flow_key` in `lib/core/registry/automation_flow_registry.dart`.
+6. **UI** — definition appears automatically via `GET /automation_definitions`; trigger segments and scope label come from definition metadata.
+7. **Docs** — add a row to the built-in automations table above.

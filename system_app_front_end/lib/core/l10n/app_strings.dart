@@ -98,6 +98,21 @@ class AppStrings {
           .replaceAll('{current}', '$current')
           .replaceAll('{total}', '$total');
 
+  String automationScopeLabel(String scope) =>
+      this['automationScope'].replaceAll('{scope}', scope);
+
+  String automationScopeForDefinition(Map<String, dynamic> scopeFixed) {
+    final kind = scopeFixed['kind'] as String? ?? 'all';
+    final scope = switch (kind) {
+      'topic_type' => topicTypeLabel(
+          scopeFixed['topic_type'] as String? ?? 'process',
+        ),
+      'topic' => displayTopicName(scopeFixed['topic_name'] as String?),
+      _ => this['allTopics'],
+    };
+    return automationScopeLabel(scope);
+  }
+
   // --- UI keys (use strings['key']) ---
 
   static const _uiEn = {
@@ -273,6 +288,8 @@ class AppStrings {
     'triggerByTime': 'By time',
     'triggerByChanges': 'By changes',
     'triggerByTask': 'By task',
+    'automationScope': 'Scope: {scope}',
+    'allTopics': 'All topics',
     'automationTrigger': 'Activation',
     'automationTriggerView': 'View',
     'automationTriggerSection': 'Section',
@@ -289,6 +306,7 @@ class AppStrings {
     'continueToTasks': 'Continue to tasks',
     'applySuggestion': 'Apply',
     'finishReview': 'Finish refresh',
+    'finishUpdate': 'Finish update',
     'previousProcess': 'Previous process',
     'nextProcess': 'Next process',
     'processUpdateProgress': 'Process {current} of {total}',
@@ -471,6 +489,8 @@ class AppStrings {
     'triggerByTime': 'לפי זמן',
     'triggerByChanges': 'לפי שינויים',
     'triggerByTask': 'לפי משימה',
+    'automationScope': 'היקף: {scope}',
+    'allTopics': 'כל הנושאים',
     'automationTrigger': 'הפעלה',
     'automationTriggerView': 'תצוגה',
     'automationTriggerSection': 'מדור',
@@ -487,6 +507,7 @@ class AppStrings {
     'continueToTasks': 'המשך למשימות',
     'applySuggestion': 'החל',
     'finishReview': 'סיים רענון',
+    'finishUpdate': 'סיים עדכון',
     'previousProcess': 'תהליך קודם',
     'nextProcess': 'תהליך הבא',
     'processUpdateProgress': 'תהליך {current} מתוך {total}',

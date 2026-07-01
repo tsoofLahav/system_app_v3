@@ -6,6 +6,13 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from models import AutomationRule, db
 from routes.helpers import apply_updates, get_or_404, parse_datetime
 
+from services.automation_definitions import (
+    allowed_trigger_types,
+    default_create_payload,
+    get_definition,
+    validate_rule_update,
+)
+from services.automation_params import finalize_rule_params
 from services.automation_schedule import DEFAULT_AUTOMATION_TIMEZONE, next_run_after
 
 automation_rules_bp = Blueprint("automation_rules", __name__)
@@ -37,21 +44,52 @@ def _default_next_run(schedule, timezone=DEFAULT_AUTOMATION_TIMEZONE):
 @automation_rules_bp.route("/automation_rules", methods=["GET"])
 def list_automation_rules():
     rules = AutomationRule.query.order_by(AutomationRule.id).all()
-    return jsonify([r.to_dict() for r in rules])
+    payload = []
+    for rule in rules:
+        item = rule.to_dict()
+        definition = get_definition(rule.key, rule.action_type)
+        if definition is not None:
+            item["definition"] = definition.to_dict()
+        payload.append(item)
+    return jsonify(payload)
 
 
 @automation_rules_bp.route("/automation_rules/<int:rule_id>", methods=["GET"])
 def get_automation_rule(rule_id):
-    return jsonify(get_or_404(AutomationRule, rule_id).to_dict())
+    rule = get_or_404(AutomationRule, rule_id)
+    item = rule.to_dict()
+    definition = get_definition(rule.key, rule.action_type)
+    if definition is not None:
+        item["definition"] = definition.to_dict()
+    return jsonify(item)
 
 
 @automation_rules_bp.route("/automation_rules", methods=["POST"])
 def create_automation_rule():
     data = request.get_json(silent=True) or {}
+    rule_key = data.get("key")
+    builtin = default_create_payload(rule_key) if rule_key else None
+    if builtin is not None:
+        for field, value in builtin.items():
+            data.setdefault(field, value)
+
     trigger_type = data.get("trigger_type", "schedule")
     required = {"key", "name", "action_type"}
     if any(not data.get(field) for field in required):
         return jsonify({"error": "key, name, and action_type are required"}), 400
+
+    definition = get_definition(data["key"], data.get("action_type"))
+    if definition is not None:
+        if trigger_type not in allowed_trigger_types(data["key"], data["action_type"]):
+            return jsonify({
+                "error": f"trigger_type '{trigger_type}' is not allowed for {data['key']}",
+            }), 400
+        params = data.get("params") or {}
+        if "scope" in params or "bindings" in params:
+            return jsonify({
+                "error": "params.scope and params.bindings are fixed for built-in automations",
+            }), 400
+
     if trigger_type == "schedule" and not data.get("schedule"):
         return jsonify({"error": "schedule is required for schedule rules"}), 400
     if trigger_type == "task":
@@ -75,6 +113,7 @@ def create_automation_rule():
         if next_run_at
         else _default_next_run(schedule, data.get("timezone", DEFAULT_AUTOMATION_TIMEZONE)),
     )
+    finalize_rule_params(rule)
     db.session.add(rule)
     db.session.flush()
     if rule.trigger_type == "task" and rule.enabled:
@@ -92,8 +131,15 @@ def update_automation_rule(rule_id):
     previous_trigger_type = rule.trigger_type
     previous_enabled = rule.enabled
 
+    validation_error = validate_rule_update(rule, data)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
+
     if "params" in data and isinstance(data["params"], dict):
-        data["params"] = _merge_rule_params(rule.params, data["params"])
+        incoming = dict(data["params"])
+        incoming.pop("scope", None)
+        incoming.pop("bindings", None)
+        data["params"] = _merge_rule_params(rule.params, incoming)
 
     apply_updates(
         rule,
@@ -112,6 +158,7 @@ def update_automation_rule(rule_id):
         },
         datetime_fields={"last_run_at", "next_run_at"},
     )
+    finalize_rule_params(rule)
     if ("schedule" in data or "timezone" in data) and "next_run_at" not in data:
         rule.next_run_at = _default_next_run(rule.schedule, rule.timezone)
 

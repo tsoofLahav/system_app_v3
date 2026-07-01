@@ -10,6 +10,7 @@ class TaskMark extends StatelessWidget {
     required this.onToggle,
     this.size = 14,
     this.compact = false,
+    this.accent = false,
   });
 
   final bool done;
@@ -17,9 +18,16 @@ class TaskMark extends StatelessWidget {
   final double size;
   /// Tight tap target for [TaskRow] — avoids 32×32 box pushing below text.
   final bool compact;
+  final bool accent;
 
   @override
   Widget build(BuildContext context) {
+    final borderColor = done
+        ? AppColors.aiCyan.withValues(alpha: 0.65)
+        : accent
+            ? AppColors.aiCyan.withValues(alpha: 0.55)
+            : AppColors.noteBorder.withValues(alpha: 0.85);
+
     final mark = AnimatedContainer(
       duration: const Duration(milliseconds: 140),
       width: size,
@@ -28,11 +36,11 @@ class TaskMark extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
         color: done
             ? AppColors.aiCyan.withValues(alpha: 0.14)
-            : Colors.transparent,
+            : accent
+                ? AppColors.aiCyan.withValues(alpha: 0.08)
+                : Colors.transparent,
         border: Border.all(
-          color: done
-              ? AppColors.aiCyan.withValues(alpha: 0.65)
-              : AppColors.noteBorder.withValues(alpha: 0.85),
+          color: borderColor,
           width: 1,
         ),
       ),

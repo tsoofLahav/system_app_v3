@@ -26,9 +26,7 @@ abstract final class AutomationFlowRegistry {
     required AppState state,
     required Task task,
   }) async {
-    final companions = (await state.fetchPendingCompanionsForTask(task.id))
-        .where((link) => link.isProcess)
-        .toList();
+    final companions = await state.fetchPendingCompanionsForTask(task.id);
     if (!context.mounted || companions.isEmpty) return false;
 
     final completed = await showProcessUpdateBatchDialog(
@@ -36,8 +34,11 @@ abstract final class AutomationFlowRegistry {
       state: state,
       companions: companions,
     );
-    if (completed && state.selectedViewType != null) {
-      await state.refreshCurrentView();
+    if (completed) {
+      await state.ensureAutomationTriggerTaskDone(task.id);
+      if (state.selectedViewType != null) {
+        await state.refreshCurrentView();
+      }
     }
     return completed;
   }

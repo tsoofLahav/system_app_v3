@@ -35,12 +35,24 @@ Trigger (schedule / manual / file change)
 
 Event-triggered rules (`trigger_type=event`) match `params.event=file_changed` and `params.file_id` against file/block/task mutations on the backend. Event rules do not use the schedule UI.
 
+## Automation definitions
+
+Built-in automations are loaded from `GET /automation_definitions`. The UI seeds missing rule instances from `default_params` in each definition (not hardcoded maps in `app_state`).
+
+- Scope is shown read-only in the automation dialog (fixed per automation in v1).
+- Trigger options (schedule / task / event) are limited to each definition's `activations`.
+- Companion pending links are filtered on the backend by rule scope; the frontend does not apply its own scope filter.
+
+**Future flexibility:** editable scope and user-defined automation types are planned; v1 uses code-defined built-ins only.
+
 ## Initial Rules
 
-| Rule | Default Timing | Behavior |
-| --- | --- | --- |
-| Daily rotation | Every day at 00:00 | Archive current main-topic `Daily` file and create a new `Daily` text file. |
-| Weekly process refresh | Weekly | For each process, find plan/doc/tasks files and create a smart-update proposal. After user review, archive old files and recreate plan, empty doc table, and tasks. |
+Definitions drive the table below; see backend `docs/automation.md` for full registry detail.
+
+| Key | Default timing | Scope | Behavior |
+| --- | --- | --- | --- |
+| `daily_rotation` | Every day at 00:00 | Main | Archive current main-topic `Daily` file and create a new `Daily` text file. |
+| `weekly_process_refresh` | Weekly (disabled by default) | All processes | For each process, refresh plan/doc/tasks via AI proposal; companion review task in daily view. |
 
 ## AI Proposals
 
@@ -58,8 +70,11 @@ Archive uses `archived_at` timestamps from the backend. Normal active lists hide
 
 ## Frontend files
 
+- `lib/core/models/automation_definition.dart` — definition model from API
+- `lib/core/services/automation_definition_service.dart` — `GET /automation_definitions`
 - `lib/core/models/automation_run.dart` — run status model
 - `lib/core/services/automation_service.dart` — rules + run status API
-- `lib/core/app_state.dart` — active run tracking and polling
-- `lib/features/shell/automation_dialog.dart` — run-now UI
+- `lib/core/app_state.dart` — definition loading, rule seeding, active run tracking
+- `lib/features/shell/automation_dialog.dart` — automation UI (activations + scope from definition)
+- `lib/core/registry/automation_flow_registry.dart` — companion `flow_key` → review dialog
 - `lib/features/shell/app_shell.dart` — completion snackbars
