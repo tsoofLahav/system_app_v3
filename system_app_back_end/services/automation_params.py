@@ -1,3 +1,7 @@
+import copy
+
+from sqlalchemy.orm.attributes import flag_modified
+
 PARAMS_VERSION = 2
 
 DEFAULT_COMPANION = {
@@ -89,3 +93,14 @@ def companion_config(params):
 
 def trigger_config(params):
     return params.get("trigger")
+
+
+def rule_params_snapshot(rule):
+    """Detached deep copy of rule params safe to mutate without touching the ORM object."""
+    return copy.deepcopy(normalize_params(rule.params, rule.key, rule.action_type))
+
+
+def persist_rule_params(rule, params):
+    """Assign params and force SQLAlchemy to persist JSONB changes."""
+    rule.params = copy.deepcopy(params)
+    flag_modified(rule, "params")
