@@ -511,12 +511,18 @@ class AppGlassDialog extends StatelessWidget {
       fontSize: 12,
     );
 
+    final insetPadding = 28.0 * 2;
+    final maxDialogHeight = MediaQuery.sizeOf(context).height - insetPadding;
+
     return Dialog(
       elevation: 0,
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 28),
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: width),
+        constraints: BoxConstraints(
+          maxWidth: width,
+          maxHeight: maxDialogHeight,
+        ),
         child: GlassSurface.styled(
           style: AppGlassStyle.dialog,
           borderRadius: BorderRadius.circular(AppGlassStyle.dialogRadius),
@@ -540,12 +546,16 @@ class AppGlassDialog extends StatelessWidget {
               const SizedBox(height: 12),
               _GlassDivider(color: separator),
               const SizedBox(height: 12),
-              DefaultTextStyle(
-                style: AppTypography.noteBodyStyle.copyWith(
-                  fontSize: 12,
-                  color: AppColors.text.withValues(alpha: 0.9),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: DefaultTextStyle(
+                    style: AppTypography.noteBodyStyle.copyWith(
+                      fontSize: 12,
+                      color: AppColors.text.withValues(alpha: 0.9),
+                    ),
+                    child: child,
+                  ),
                 ),
-                child: child,
               ),
               if (actions.isNotEmpty) ...[
                 const SizedBox(height: 14),

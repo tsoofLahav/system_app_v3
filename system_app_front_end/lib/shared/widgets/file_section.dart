@@ -291,7 +291,10 @@ class _FileSectionState extends State<FileSection> {
                           behavior: HitTestBehavior.translucent,
                           onSecondaryTapDown: (details) => _showBlockMenu(
                             details.globalPosition,
-                            orderIndex: i + 1,
+                            orderIndex: _insertOrderIndexForBlock(
+                              widget.blocks,
+                              i,
+                            ),
                             targetBlock: widget.blocks[i],
                           ),
                           child: Padding(
@@ -432,6 +435,14 @@ class _FileSectionState extends State<FileSection> {
         targetBlock: targetBlock,
       ),
     );
+  }
+
+  int _insertOrderIndexForBlock(List<Block> blocks, int blockIndex) {
+    final block = blocks[blockIndex];
+    if (block.type == 'text' && block.text.trim().isEmpty) {
+      return blockIndex;
+    }
+    return blockIndex + 1;
   }
 
   Future<void> _handleBlockMenuAction(

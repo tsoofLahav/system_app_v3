@@ -15,6 +15,7 @@ class BlockTextFocusRegistry {
   static VoidCallback? onChanged;
   static Map<String, dynamic>? activeBlockContent;
   static FocusNode? activeFocusNode;
+  static int? activeBlockId;
   static double baseFontSize = 12.5;
 
   static int _menuSessionDepth = 0;
@@ -31,11 +32,13 @@ class BlockTextFocusRegistry {
     Map<String, dynamic>? blockContent,
     double? fontSize,
     FocusNode? focusNode,
+    int? blockId,
   }) {
     activeController = controller;
     onChanged = changed;
     activeBlockContent = blockContent;
     activeFocusNode = focusNode;
+    activeBlockId = blockId;
     if (fontSize != null) baseFontSize = fontSize;
   }
 
@@ -46,6 +49,16 @@ class BlockTextFocusRegistry {
     onChanged = null;
     activeBlockContent = null;
     activeFocusNode = null;
+    activeBlockId = null;
+  }
+
+  /// Clears focus registry before a structural reload (e.g. block insert).
+  static void abandonStashedFocus() {
+    activeController = null;
+    onChanged = null;
+    activeBlockContent = null;
+    activeFocusNode = null;
+    activeBlockId = null;
   }
 
   static void openMenuSession() {
@@ -71,12 +84,19 @@ class BlockTextFocusRegistry {
 
     if (_menuSessionDepth != 0 || node == null || controller == null) return;
 
+    final restoreController = controller;
+    final restoreNode = node;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!node.hasFocus && node.canRequestFocus) {
-        node.requestFocus();
-      }
-      if (range != null && range.isValid) {
-        controller.selection = TextSelection.collapsed(offset: range.end);
+      if (restoreController != activeController) return;
+      try {
+        if (!restoreNode.hasFocus && restoreNode.canRequestFocus) {
+          restoreNode.requestFocus();
+        }
+        if (range != null && range.isValid) {
+          restoreController.selection = TextSelection.collapsed(offset: range.end);
+        }
+      } catch (_) {
+        // Controller or focus node may have been disposed after a reload.
       }
     });
   }

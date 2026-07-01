@@ -25,7 +25,7 @@ Each run stores:
 - `trigger_source`: `schedule`, `manual`, or `event`
 - `event_context`: JSON payload for event-triggered runs (for example `file_changed`)
 
-**Dedupe:** if a rule already has a `queued` or `running` run, new enqueue requests are ignored for that rule.
+**Dedupe:** if a rule already has a `queued` or `running` run, new enqueue requests are ignored for that rule. Event rules with change triggers additionally coalesce changes during an active run and schedule a follow-up when it finishes.
 
 ## Automation definitions (registry)
 
@@ -89,6 +89,29 @@ Event rules use `trigger_type=event` and omit `schedule`.
 
 `dispatch_file_changed` runs after commits on file PATCH, block create/update/delete, and task create/update/delete for the resolved file.
 
+### Change triggers (debounced events)
+
+Event automations use a shared **change trigger** layer (`services/automation_change_triggers.py`), not immediate enqueue on every save.
+
+1. **Idle debounce** — each change resets a per-rule timer (default **30s** after the last change). The automation runs only when that window elapses with no further changes.
+2. **In-run coalescing** — if changes arrive while a run is already `queued` or `running`, the trigger is marked **dirty**. When the run finishes, one follow-up is scheduled (using the same idle window from the latest change).
+
+Configuration lives on each definition as `change_trigger` and can be overridden per rule in `params.change_trigger`:
+
+```json
+{
+  "change_trigger": {
+    "enabled": true,
+    "idle_seconds": 30,
+    "coalesce_during_run": true
+  }
+}
+```
+
+Set `"enabled": false` on a rule to opt out and enqueue immediately (legacy instant event behaviour).
+
+Pending triggers are stored in `automation_change_triggers` and processed by background timers plus `run_automations.py` cron.
+
 ## Automatic Actions
 
 The initial action library contains:
@@ -101,9 +124,9 @@ The initial action library contains:
 
 ### Event recap (`process_recap_update`)
 
-- **Trigger:** `trigger_type=event` with `params.event=file_changed`. Matches changes to `plan`, `doc`, or `tasks` files (not recap itself).
+- **Trigger:** `trigger_type=event` with `params.event=file_changed`. Matches changes to `plan`, `doc`, or `tasks` files (not recap itself). Uses the shared change-trigger debounce (30s idle, follow-up if dirty during run).
 - **Run:** `smart_process_recap_update` in `services/ai_recap_actions.py` gathers previous summary, plan, documentation, and flagged tasks (`section_flag=important` on any view, scoped to the process). AI returns `summary_text` and merged `update_rows` by date; the action replaces recap blocks directly.
-- **Latency:** event enqueue calls `kick_run_async` so recap updates run in the background without waiting for cron.
+- **Latency:** fires after the idle window via a background timer; cron also processes overdue triggers.
 
 ## Scheduling
 

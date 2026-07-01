@@ -114,6 +114,7 @@ class _TextBlockWidgetState extends State<TextBlockWidget> {
     return FormattedTextField(
       controller: _controller,
       focusNode: _focusNode,
+      blockId: widget.block.id,
       style: AppTypography.noteBodyStyle,
       blockContent: widget.block.content,
       hintText: widget.hint,

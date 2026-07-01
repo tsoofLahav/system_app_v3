@@ -173,6 +173,19 @@ def dispatch_file_changed(file_id, change, meta=None):
     if file is None:
         return []
 
+    from flask import current_app
+
+    from services.automation_change_triggers import (
+        change_trigger_config_for_rule,
+        process_due_change_triggers,
+        record_change_event,
+    )
+
+    try:
+        app = current_app._get_current_object()
+    except RuntimeError:
+        app = None
+
     rules = AutomationRule.query.filter_by(enabled=True, trigger_type="event").all()
     run_ids = []
     for rule in rules:
@@ -186,21 +199,23 @@ def dispatch_file_changed(file_id, change, meta=None):
         }
         if meta:
             context.update(meta)
+
+        if change_trigger_config_for_rule(rule) is not None:
+            record_change_event(rule, context, app=app)
+            continue
+
         run_id = _enqueue_for_rule(rule, "event", context)
         if run_id is not None:
             run_ids.append(run_id)
 
-    if run_ids:
-        try:
-            from flask import current_app
+    if run_ids and app is not None:
+        from services.automation_runner import kick_run_async
 
-            from services.automation_runner import kick_run_async
+        for run_id in run_ids:
+            kick_run_async(app, run_id)
 
-            app = current_app._get_current_object()
-            for run_id in run_ids:
-                kick_run_async(app, run_id)
-        except RuntimeError:
-            pass
+    if app is not None:
+        process_due_change_triggers(app=app)
 
     return run_ids
 

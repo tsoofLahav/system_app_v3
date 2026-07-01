@@ -29,6 +29,7 @@ class FormattedTextField extends StatefulWidget {
     this.stripNewlines = false,
     this.onSecondaryTapDown,
     this.textAlignVertical,
+    this.blockId,
   });
 
   final TextEditingController controller;
@@ -48,6 +49,7 @@ class FormattedTextField extends StatefulWidget {
   final bool stripNewlines;
   final GestureTapDownCallback? onSecondaryTapDown;
   final TextAlignVertical? textAlignVertical;
+  final int? blockId;
 
   @override
   State<FormattedTextField> createState() => _FormattedTextFieldState();
@@ -88,6 +90,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         blockContent: widget.blockContent,
         fontSize: widget.style.fontSize ?? 12.5,
         focusNode: _focusNode,
+        blockId: widget.blockId,
       );
     } else {
       _stopListeningKeys();

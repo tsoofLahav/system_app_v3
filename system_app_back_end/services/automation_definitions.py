@@ -31,6 +31,18 @@ class CompanionConfig:
     default_section_name: str = "Process updates"
 
 
+DEFAULT_CHANGE_TRIGGER_IDLE_SECONDS = 30
+
+
+@dataclass(frozen=True)
+class ChangeTriggerConfig:
+    """Idle debounce + in-run coalescing for event-driven automations."""
+
+    enabled: bool = True
+    idle_seconds: int = DEFAULT_CHANGE_TRIGGER_IDLE_SECONDS
+    coalesce_during_run: bool = True
+
+
 @dataclass(frozen=True)
 class AiConfig:
     action_key: str | None = None
@@ -53,6 +65,7 @@ class AutomationDefinition:
     fan_out: bool = True
     default_schedule: str | None = None
     default_enabled: bool = True
+    change_trigger: ChangeTriggerConfig | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -75,8 +88,21 @@ class AutomationDefinition:
             "fan_out": self.fan_out,
             "default_schedule": self.default_schedule,
             "default_enabled": self.default_enabled,
+            "change_trigger": _change_trigger_to_dict(self.change_trigger),
             "default_params": default_params(self.key),
         }
+
+
+def _change_trigger_to_dict(
+    change_trigger: ChangeTriggerConfig | None,
+) -> dict[str, Any] | None:
+    if change_trigger is None:
+        return None
+    return {
+        "enabled": change_trigger.enabled,
+        "idle_seconds": change_trigger.idle_seconds,
+        "coalesce_during_run": change_trigger.coalesce_during_run,
+    }
 
 
 def _companion_to_dict(companion: CompanionConfig | None) -> dict[str, Any] | None:
@@ -185,6 +211,7 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
         default_schedule=None,
         default_enabled=True,
         fan_out=False,
+        change_trigger=ChangeTriggerConfig(idle_seconds=30),
     ),
 }
 
@@ -265,6 +292,9 @@ def default_params(key: str) -> dict[str, Any]:
     if definition.key == "process_recap_update":
         result["event"] = "file_changed"
         result["recap"] = {"max_date_groups": 5}
+    if "event" in definition.activations:
+        trigger = definition.change_trigger or ChangeTriggerConfig()
+        result["change_trigger"] = _change_trigger_to_dict(trigger)
     return result
 
 
@@ -353,6 +383,11 @@ def apply_definition_to_params(
         recap = dict(merged.get("recap") or {})
         recap.update(dict(raw["recap"]))
         merged["recap"] = recap
+
+    if raw.get("change_trigger"):
+        change_trigger = dict(merged.get("change_trigger") or {})
+        change_trigger.update(dict(raw["change_trigger"]))
+        merged["change_trigger"] = change_trigger
 
     for legacy_key in ("topic_name", "name", "type", "event"):
         if legacy_key in raw:

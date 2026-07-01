@@ -14,6 +14,7 @@ import 'models/automation_rule.dart';
 import 'models/automation_run.dart';
 import 'models/block.dart';
 import '../features/blocks/board_content.dart';
+import '../features/blocks/block_text_focus.dart';
 import 'models/task.dart';
 import 'models/task_view_membership.dart';
 import 'models/topic.dart';
@@ -1331,7 +1332,7 @@ class AppState extends ChangeNotifier {
       fileId: file.id,
       type: trailingType,
       content: FileBehaviorRegistry.defaultContentForBlockType(trailingType),
-      orderIndex: blocks.length,
+      orderIndex: _appendOrderIndex(blocks),
     );
     return [...blocks, block];
   }
@@ -1416,6 +1417,7 @@ class AppState extends ChangeNotifier {
       orderIndex: targetIndex,
     );
     if (type == 'text') requestBlockFocus(block.id);
+    BlockTextFocusRegistry.abandonStashedFocus();
     await selectTopic(topic);
   }
 
@@ -1435,32 +1437,82 @@ class AppState extends ChangeNotifier {
     final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
     final targetIndex = orderIndex.clamp(0, blocks.length).toInt();
     if (type == 'text') return targetIndex;
-    if (targetIndex < blocks.length && _isEmptyTextBlock(blocks[targetIndex])) {
+    return _effectiveNonTextInsertIndex(blocks, targetIndex);
+  }
+
+  int _effectiveNonTextInsertIndex(List<Block> blocks, int targetIndex) {
+    if (blocks.isEmpty) return targetIndex;
+
+    final trailingIndex = blocks.length - 1;
+    final trailing = blocks[trailingIndex];
+    if (trailing.type != 'text') return targetIndex;
+
+    if (_isEmptyTextBlock(trailing)) {
+      if (targetIndex >= trailingIndex) return trailingIndex;
       return targetIndex;
     }
-    if (targetIndex == blocks.length &&
-        blocks.isNotEmpty &&
-        _isEmptyTextBlock(blocks.last)) {
-      return blocks.length - 1;
-    }
+
+    if (targetIndex > trailingIndex) return blocks.length;
     return targetIndex;
   }
 
-  bool _isEmptyTextBlock(Block block) =>
-      block.type == 'text' && block.text.trim().isEmpty;
+  int _appendOrderIndex(List<Block> blocks) {
+    if (blocks.isEmpty) return 0;
+    var maxOrder = 0;
+    for (final block in blocks) {
+      final order = block.orderIndex ?? 0;
+      if (order > maxOrder) maxOrder = order;
+    }
+    return maxOrder + 1;
+  }
 
-  Future<int> _shiftBlocksForInsert(AppFile file, int orderIndex) async {
+  int _orderIndexForListInsert(List<Block> blocks, int listInsertIndex) {
+    final insertAt = listInsertIndex.clamp(0, blocks.length).toInt();
+    if (insertAt >= blocks.length) return _appendOrderIndex(blocks);
+    return blocks[insertAt].orderIndex ?? insertAt;
+  }
+
+  bool _isEmptyTextBlock(Block block) {
+    if (block.type != 'text') return false;
+    if (block.text.trim().isNotEmpty) return false;
+    final controller = BlockTextFocusRegistry.activeController;
+    if (BlockTextFocusRegistry.activeBlockId == block.id &&
+        controller != null &&
+        controller.text.trim().isNotEmpty) {
+      return false;
+    }
+    return true;
+  }
+
+  int _listInsertIndexAfterBlock(List<Block> blocks, Block afterBlock) {
+    for (var i = 0; i < blocks.length; i++) {
+      if (blocks[i].id == afterBlock.id) return i + 1;
+    }
+    return blocks.length;
+  }
+
+  int _listInsertIndexForNewTask(AppFile file, Block listBlock) {
     final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
-    final targetIndex = orderIndex.clamp(0, blocks.length).toInt();
-    final shifted = blocks
-        .where((b) => (b.orderIndex ?? 0) >= targetIndex)
-        .toList();
-    for (final block in shifted.reversed) {
+    var lastTaskListIndex = -1;
+    for (var i = 0; i < blocks.length; i++) {
+      if (blocks[i].type == 'task') lastTaskListIndex = i;
+    }
+    if (lastTaskListIndex >= 0) return lastTaskListIndex + 1;
+    return _listInsertIndexAfterBlock(blocks, listBlock);
+  }
+
+  Future<int> _shiftBlocksForInsert(AppFile file, int listInsertIndex) async {
+    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    final insertAt = listInsertIndex.clamp(0, blocks.length).toInt();
+    final newOrderIndex = _orderIndexForListInsert(blocks, insertAt);
+
+    for (var i = insertAt; i < blocks.length; i++) {
+      final block = blocks[i];
       await _blockService.updateBlock(block.id, {
-        'order_index': (block.orderIndex ?? 0) + 1,
+        'order_index': (block.orderIndex ?? i) + 1,
       });
     }
-    return targetIndex;
+    return newOrderIndex;
   }
 
   Future<void> addHeaderBlock(AppFile file) async {
@@ -1548,8 +1600,9 @@ class AppState extends ChangeNotifier {
     final detail = selectedDetail;
     if (topic == null || detail == null) return;
 
-    final orderIndex = (afterTaskBlock.orderIndex ?? 0) + 1;
-    final targetIndex = await _shiftBlocksForInsert(file, orderIndex);
+    final blocks = detail.blocksByFileId[file.id] ?? [];
+    final listInsertIndex = _listInsertIndexAfterBlock(blocks, afterTaskBlock);
+    final targetIndex = await _shiftBlocksForInsert(file, listInsertIndex);
     final taskBlock = await _createTaskBlock(
       listBlock: listBlock,
       fileId: file.id,
@@ -1648,18 +1701,6 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  int _nextTaskBlockOrderIndex(AppFile file, Block listBlock) {
-    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
-    Block? lastTaskBlock;
-    for (final block in blocks) {
-      if (block.type == 'task') lastTaskBlock = block;
-    }
-    if (lastTaskBlock != null) {
-      return (lastTaskBlock.orderIndex ?? 0) + 1;
-    }
-    return (listBlock.orderIndex ?? 0) + 1;
-  }
-
   Task? _taskForCreatedBlock(Block taskBlock, Block listBlock) {
     final taskId = taskBlock.content['task_id'] as int?;
     if (taskId == null) return null;
@@ -1682,10 +1723,11 @@ class AppState extends ChangeNotifier {
 
     final afterRow =
         afterTask != null ? taskRowBlockInFile(file, afterTask) : null;
-    final orderIndex = afterRow != null
-        ? (afterRow.orderIndex ?? 0) + 1
-        : _nextTaskBlockOrderIndex(file, listBlock);
-    final targetIndex = await _shiftBlocksForInsert(file, orderIndex);
+    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    final listInsertIndex = afterRow != null
+        ? _listInsertIndexAfterBlock(blocks, afterRow)
+        : _listInsertIndexForNewTask(file, listBlock);
+    final targetIndex = await _shiftBlocksForInsert(file, listInsertIndex);
     final taskBlock = await _createTaskBlock(
       listBlock: listBlock,
       fileId: file.id,
@@ -2498,6 +2540,7 @@ class AppState extends ChangeNotifier {
       },
       orderIndex: targetIndex,
     );
+    BlockTextFocusRegistry.abandonStashedFocus();
     await selectTopic(topic);
   }
 

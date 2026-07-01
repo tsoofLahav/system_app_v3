@@ -168,6 +168,39 @@ class AutomationRule(db.Model):
         }
 
 
+class AutomationChangeTrigger(db.Model):
+    __tablename__ = "automation_change_triggers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    rule_id = db.Column(
+        db.Integer, db.ForeignKey("automation_rules.id"), nullable=False
+    )
+    dedupe_key = db.Column(db.Text, nullable=False)
+    event_context = db.Column(JSONB, nullable=False, default=dict)
+    fire_at = db.Column(db.DateTime, nullable=False)
+    dirty = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint("rule_id", "dedupe_key", name="uq_automation_change_triggers"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "rule_id": self.rule_id,
+            "dedupe_key": self.dedupe_key,
+            "event_context": self.event_context if self.event_context is not None else {},
+            "fire_at": _iso(self.fire_at),
+            "dirty": self.dirty,
+            "created_at": _iso(self.created_at),
+            "updated_at": _iso(self.updated_at),
+        }
+
+
 class AutomationRun(db.Model):
     __tablename__ = "automation_runs"
 

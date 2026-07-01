@@ -138,6 +138,7 @@ def _execute_run(run, now):
         run.status = "failed"
         run.error = "rule not found"
         run.finished_at = datetime.utcnow()
+        _after_event_run_finished(run)
         return run.to_dict()
 
     activation_error = validate_rule_activation(
@@ -148,6 +149,7 @@ def _execute_run(run, now):
         run.status = "failed"
         run.error = activation_error
         run.finished_at = datetime.utcnow()
+        _after_event_run_finished(run)
         return run.to_dict()
 
     try:
@@ -160,11 +162,37 @@ def _execute_run(run, now):
         run.error = str(error)
 
     run.finished_at = datetime.utcnow()
+    _after_event_run_finished(run)
     return run.to_dict()
+
+
+def _after_event_run_finished(run):
+    if run.trigger_source != "event":
+        return
+    try:
+        from flask import current_app
+
+        from services.automation_change_triggers import (
+            on_automation_run_finished,
+            process_due_change_triggers,
+        )
+
+        app = current_app._get_current_object()
+        on_automation_run_finished(run, app=app)
+        process_due_change_triggers(app=app)
+    except RuntimeError:
+        pass
 
 
 def run_due_automations(now=None):
     """Backward-compatible entry point used by the cron script."""
+    from services.automation_change_triggers import process_due_change_triggers
+
     enqueued = enqueue_due_scheduled_rules(now=now)
     processed = process_automation_queue()
-    return {"enqueued": enqueued, "processed": processed}
+    change_trigger_runs = process_due_change_triggers(now=now)
+    return {
+        "enqueued": enqueued,
+        "processed": processed,
+        "change_triggers": change_trigger_runs,
+    }
