@@ -124,13 +124,13 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
         default_enabled=True,
         fan_out=False,
     ),
-    "weekly_process_refresh": AutomationDefinition(
-        key="weekly_process_refresh",
+    "process_refresh": AutomationDefinition(
+        key="process_refresh",
         name="Update all processes",
         description=(
             "For each process topic, run a smart update on plan, doc, and tasks files."
         ),
-        action_type="weekly_process_refresh",
+        action_type="process_refresh",
         scope=ScopeConfig(
             fixed={"kind": "topic_type", "topic_type": "process"},
             allowed_kinds=("topic_type", "topic", "all"),
@@ -160,7 +160,24 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
 }
 
 
-def get_definition(key: str | None, action_type: str | None = None) -> AutomationDefinition | None:
+LEGACY_AUTOMATION_ALIASES: dict[str, str] = {
+    "weekly_process_refresh": "process_refresh",
+}
+
+
+def _normalize_automation_identity(
+    key: str | None = None,
+    action_type: str | None = None,
+) -> tuple[str | None, str | None]:
+    if key and key in LEGACY_AUTOMATION_ALIASES:
+        key = LEGACY_AUTOMATION_ALIASES[key]
+    if action_type and action_type in LEGACY_AUTOMATION_ALIASES:
+        action_type = LEGACY_AUTOMATION_ALIASES[action_type]
+    return key, action_type
+
+
+def get_definition(key: str | None = None, action_type: str | None = None) -> AutomationDefinition | None:
+    key, action_type = _normalize_automation_identity(key, action_type)
     if key and key in AUTOMATION_DEFINITIONS:
         return AUTOMATION_DEFINITIONS[key]
     if action_type:

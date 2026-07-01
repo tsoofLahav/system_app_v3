@@ -52,7 +52,7 @@ Definitions drive the table below; see backend `docs/automation.md` for full reg
 | Key | Default timing | Scope | Behavior |
 | --- | --- | --- | --- |
 | `daily_rotation` | Every day at 00:00 | Main | Archive current main-topic `Daily` file and create a new `Daily` text file. |
-| `weekly_process_refresh` | Weekly (disabled by default) | All processes | For each process, refresh plan/doc/tasks via AI proposal; companion review task in daily view. |
+| `process_refresh` | User schedule (disabled by default) | All processes | For each process, refresh plan/doc/tasks via AI proposal; companion review task in daily view. |
 
 ## AI Proposals
 

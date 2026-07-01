@@ -51,7 +51,7 @@ Built-in automations are defined in code at `services/automation_definitions.py`
 | Key | Scope | Activations | Files (bindings) | Companion | AI |
 | --- | --- | --- | --- | --- | --- |
 | `daily_rotation` | Main topic | `schedule`, `manual` | `daily` → type `main`, name `Daily` | — | — |
-| `weekly_process_refresh` | All `process` topics | `schedule`, `task`, `manual` | `plan`, `doc`, `tasks` | `process_update_review` in daily / Process updates | `smart_process_update` → `process_smart_update`, `process_refresh_skipped`; review `plan` + `tasks` |
+| `process_refresh` | All `process` topics | `schedule`, `task`, `manual` | `plan`, `doc`, `tasks` | `process_update_review` in daily / Process updates | `smart_process_update` → `process_smart_update`, `process_refresh_skipped`; review `plan` + `tasks` |
 
 ### Instance vs definition
 
@@ -95,7 +95,7 @@ The initial action library contains:
 - `create_file_by_time`: create a file with configured topic, name, type, visibility, and default block contents.
 - `archive_at_time`: archive a topic, file, block, or task at a configured time.
 - `rotate_daily_main_file`: archive the current main-topic `Daily` file and create a fresh `Daily` text file every day at 00:00.
-- `weekly_process_refresh`: for each process, locate plan/doc/tasks files by type order, call the smart process update AI action, and store a delta proposal. Finalize archives old files and recreates plan, empty documentation table, and tasks after user review.
+- `process_refresh`: for each process, locate plan/doc/tasks files by type order, call the smart process update AI action, and store a delta proposal. Finalize archives old files and recreates plan, empty documentation table, and tasks after user review.
 
 ## Scheduling
 

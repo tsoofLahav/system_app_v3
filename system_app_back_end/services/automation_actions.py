@@ -33,8 +33,8 @@ def run_action(rule, run=None):
         return archive_at_time(context)
     if action_type == "rotate_daily_main_file":
         return rotate_daily_main_file(context)
-    if action_type == "weekly_process_refresh":
-        return weekly_process_refresh(context)
+    if action_type in {"process_refresh", "weekly_process_refresh"}:
+        return process_refresh(context)
     raise ValueError(f"Unknown automation action: {action_type}")
 
 
@@ -144,20 +144,25 @@ def rotate_daily_main_file(context):
     }
 
 
-def weekly_process_refresh(context):
+def process_refresh(context):
     rule = context["rule"]
     run = context["run"]
     topic = context["topic"]
     if topic is None:
-        raise ValueError("topic is required for weekly_process_refresh")
+        raise ValueError("topic is required for process_refresh")
     result = _refresh_process(topic, context["params"])
     _maybe_create_companion_task(rule, run, topic, result)
     return result
 
 
+def weekly_process_refresh(context):
+    """Deprecated alias for process_refresh."""
+    return process_refresh(context)
+
+
 def _refresh_process(topic, params):
     files_by_role = resolve_files_by_bindings(topic.id, params)
-    definition = get_definition(action_type="weekly_process_refresh")
+    definition = get_definition(action_type="process_refresh")
     required_roles = (
         [binding.role for binding in definition.bindings]
         if definition is not None
