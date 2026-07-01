@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 
 from models import AutomationRule, AutomationRun, db
 from services.automation_actions import run_action
+from services.automation_definitions import validate_rule_activation
 
 ACTIVE_RUN_STATUSES = ("queued", "running")
 STALE_ACTIVE_AFTER = timedelta(minutes=30)
@@ -136,6 +137,16 @@ def _execute_run(run, now):
     if rule is None:
         run.status = "failed"
         run.error = "rule not found"
+        run.finished_at = datetime.utcnow()
+        return run.to_dict()
+
+    activation_error = validate_rule_activation(
+        rule,
+        trigger_source=run.trigger_source,
+    )
+    if activation_error:
+        run.status = "failed"
+        run.error = activation_error
         run.finished_at = datetime.utcnow()
         return run.to_dict()
 

@@ -91,6 +91,6 @@ def persist_rule_params(rule, params):
 
 
 def finalize_rule_params(rule):
-    """Normalize stored params from definition defaults (e.g. after read or before commit)."""
+    """Ensure version and missing defaults without overwriting stored scope/bindings."""
     rule.params = apply_definition_to_params(rule.params, rule.key, rule.action_type)
     flag_modified(rule, "params")

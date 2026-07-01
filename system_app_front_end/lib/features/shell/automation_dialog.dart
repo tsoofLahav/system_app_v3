@@ -150,10 +150,15 @@ class _AutomationRuleControlState extends State<_AutomationRuleControl> {
                   style: AppTypography.metaStyle,
                 ),
                 value: widget.rule.enabled,
-                onChanged: (value) => widget.state.updateAutomationRule(
-                  widget.rule,
-                  enabled: value,
-                ),
+                onChanged: (value) async {
+                  final ok = await widget.state.updateAutomationRule(
+                    widget.rule,
+                    enabled: value,
+                  );
+                  if (!ok && context.mounted) {
+                    _showUpdateError(context);
+                  }
+                },
               ),
               if (definition != null) ...[
                 const SizedBox(height: 4),
@@ -294,11 +299,21 @@ class _AutomationRuleControlState extends State<_AutomationRuleControl> {
       params['trigger'] = trigger;
       params['version'] = 2;
     }
-    await widget.state.updateAutomationRule(
+    final ok = await widget.state.updateAutomationRule(
       widget.rule,
       triggerType: triggerType,
       params: params,
     );
+    if (!ok && mounted) {
+      _showUpdateError(context);
+    }
+  }
+
+  void _showUpdateError(BuildContext context) {
+    final message = widget.state.takeAutomationNotice() ??
+        widget.state.strings['automationRunFailed'];
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _showTaskTriggerDialog(BuildContext context) {
@@ -476,11 +491,19 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
   }
 
   Future<void> _save() async {
-    await widget.state.updateAutomationRule(
+    final ok = await widget.state.updateAutomationRule(
       widget.rule,
       schedule: _draft.toSchedule(),
     );
-    if (mounted) Navigator.pop(context);
+    if (!mounted) return;
+    if (!ok) {
+      final message = widget.state.takeAutomationNotice() ??
+          widget.state.strings['automationRunFailed'];
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
+    Navigator.pop(context);
   }
 }
 
@@ -743,12 +766,20 @@ class _TaskTriggerDialogState extends State<_TaskTriggerDialog> {
     companion.putIfAbsent('view_type', () => _viewType);
     companion.putIfAbsent('section_name', () => _sectionName);
     params['companion_task'] = companion;
-    await widget.state.updateAutomationRule(
+    final ok = await widget.state.updateAutomationRule(
       widget.rule,
       triggerType: 'task',
       params: params,
     );
-    if (mounted) Navigator.pop(context);
+    if (!mounted) return;
+    if (!ok) {
+      final message = widget.state.takeAutomationNotice() ??
+          widget.state.strings['automationRunFailed'];
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
+    Navigator.pop(context);
   }
 
   @override

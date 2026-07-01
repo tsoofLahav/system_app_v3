@@ -557,7 +557,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> ensureMainAutomationRules() => refreshAutomationRules();
 
-  Future<void> updateAutomationRule(
+  Future<bool> updateAutomationRule(
     AutomationRule rule, {
     bool? enabled,
     String? schedule,
@@ -577,10 +577,17 @@ class AppState extends ChangeNotifier {
     if (params != null) {
       patch['params'] = params;
     }
-    await _automationService.updateRule(rule.id, patch);
-    await refreshAutomationRules();
-    if (selectedViewType != null) {
-      await refreshCurrentView();
+    try {
+      await _automationService.updateRule(rule.id, patch);
+      await refreshAutomationRules();
+      if (selectedViewType != null) {
+        await refreshCurrentView();
+      }
+      return true;
+    } on ApiException catch (error) {
+      _automationNotice = error.message;
+      notifyListeners();
+      return false;
     }
   }
 

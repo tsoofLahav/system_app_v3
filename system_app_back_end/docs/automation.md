@@ -33,7 +33,9 @@ Built-in automations are defined in code at `services/automation_definitions.py`
 
 **v1 constraints:**
 
-- Scope and bindings are **fixed per automation** (not user-editable). Instances always inherit them from the definition on read/write.
+- The **frontend** only shows activations and scope described in each definition.
+- **PATCH accepts full `params`** (including echoed `scope`/`bindings` from GET). Missing keys are filled from definition defaults on save.
+- **Activation-time validation** (`validate_rule_activation`) runs when a rule is enqueued or executed. Unsupported scope, activations, or bindings fail the run with a clear error — not a 400 on config save.
 - No user-authored automation types yet; the schema supports future flexible scope and DB-backed templates.
 
 **Future flexibility (not enabled in v1):** editable scope (e.g. narrow to one process), user-defined automation types, and event-trigger UI. The registry `ScopeConfig.allowed_kinds` field is reserved for that upgrade path.
@@ -56,9 +58,9 @@ Built-in automations are defined in code at `services/automation_definitions.py`
 | Layer | User can change | Fixed |
 | --- | --- | --- |
 | Definition (registry) | — | scope, bindings, action, AI, flow_key |
-| Rule instance (DB) | `enabled`, `schedule`, `timezone`, `trigger_type`, trigger task view/section | `key`, `action_type`, scope, bindings |
+| Rule instance (DB) | `enabled`, `schedule`, `timezone`, `trigger_type`, trigger task view/section, full `params` | `key`, `action_type` |
 
-`PATCH /automation_rules` rejects `params.scope` and `params.bindings` for built-in rules and validates `trigger_type` against `definition.activations`.
+`PATCH /automation_rules` merges `params` as sent. Only `key` and `action_type` are rejected if changed on built-in rules. The UI should limit choices to `definition.activations`; invalid stored config surfaces when the automation runs.
 
 ## Trigger types
 

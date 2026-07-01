@@ -1,5 +1,8 @@
-from models import AutomationRule, File, Topic, db
+from datetime import datetime
+
+from models import AutomationRule, AutomationRun, File, Topic, db
 from services.automation_params import binding_files, normalize_params
+from services.automation_definitions import validate_rule_activation
 from services.automation_runner import enqueue_run
 from services.automation_schedule import next_run_after
 
@@ -73,12 +76,29 @@ def rule_matches_file_event(rule, file):
 
 
 def _enqueue_for_rule(rule, trigger_source, event_context=None):
+    activation_error = validate_rule_activation(rule, trigger_source=trigger_source)
+    if activation_error:
+        now = datetime.utcnow()
+        run = AutomationRun(
+            rule_id=rule.id,
+            status="failed",
+            trigger_source=trigger_source,
+            event_context=event_context or {},
+            result={},
+            error=activation_error,
+            started_at=now,
+            finished_at=now,
+        )
+        db.session.add(run)
+        db.session.flush()
+        return run.id
+
     context = dict(event_context or {})
     run = enqueue_run(rule, trigger_source=trigger_source, event_context=context)
     return run["id"] if run else None
 
 
-def dispatch_scheduled_rule(rule):
+def dispatch_scheduled_rule(rule, trigger_source="schedule"):
     topics = resolve_scope_topics(rule)
     run_ids = []
     if len(topics) <= 1:
@@ -102,7 +122,7 @@ def dispatch_scheduled_rule(rule):
 
 
 def dispatch_manual_rule(rule):
-    return dispatch_scheduled_rule(rule)
+    return dispatch_scheduled_rule(rule, trigger_source="manual")
 
 
 def dispatch_task_triggered(task_id):

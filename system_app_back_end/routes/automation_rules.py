@@ -7,7 +7,6 @@ from models import AutomationRule, db
 from routes.helpers import apply_updates, get_or_404, parse_datetime
 
 from services.automation_definitions import (
-    allowed_trigger_types,
     default_create_payload,
     get_definition,
     validate_rule_update,
@@ -78,18 +77,6 @@ def create_automation_rule():
     if any(not data.get(field) for field in required):
         return jsonify({"error": "key, name, and action_type are required"}), 400
 
-    definition = get_definition(data["key"], data.get("action_type"))
-    if definition is not None:
-        if trigger_type not in allowed_trigger_types(data["key"], data["action_type"]):
-            return jsonify({
-                "error": f"trigger_type '{trigger_type}' is not allowed for {data['key']}",
-            }), 400
-        params = data.get("params") or {}
-        if "scope" in params or "bindings" in params:
-            return jsonify({
-                "error": "params.scope and params.bindings are fixed for built-in automations",
-            }), 400
-
     if trigger_type == "schedule" and not data.get("schedule"):
         return jsonify({"error": "schedule is required for schedule rules"}), 400
     if trigger_type == "task":
@@ -136,10 +123,7 @@ def update_automation_rule(rule_id):
         return jsonify({"error": validation_error}), 400
 
     if "params" in data and isinstance(data["params"], dict):
-        incoming = dict(data["params"])
-        incoming.pop("scope", None)
-        incoming.pop("bindings", None)
-        data["params"] = _merge_rule_params(rule.params, incoming)
+        data["params"] = _merge_rule_params(rule.params, data["params"])
 
     apply_updates(
         rule,

@@ -229,35 +229,32 @@ def apply_definition_to_params(
     key: str | None,
     action_type: str | None = None,
 ) -> dict[str, Any]:
-    """Merge instance params with definition defaults; scope/bindings always from definition in v1."""
+    """Fill missing params from definition defaults; preserve stored scope/bindings."""
     definition = get_definition(key, action_type)
     raw = dict(params or {})
     if definition is None:
-        if raw.get("version") != PARAMS_VERSION:
-            raw["version"] = PARAMS_VERSION
+        raw.setdefault("version", PARAMS_VERSION)
         return raw
 
+    defaults = default_params(definition.key)
     merged = dict(raw)
     merged["version"] = PARAMS_VERSION
-    merged["scope"] = dict(definition.scope.fixed)
-    merged["bindings"] = bindings_dict(definition)
 
-    companion_default = companion_params(definition)
-    if companion_default is not None:
-        instance_companion = dict(merged.get("companion_task") or {})
-        for field_name in ("view_type", "section_name"):
-            if field_name in instance_companion:
-                companion_default[field_name] = instance_companion[field_name]
-        merged["companion_task"] = companion_default
-    else:
+    if merged.get("scope") is None:
+        merged["scope"] = dict(defaults["scope"])
+    if merged.get("bindings") is None:
+        merged["bindings"] = dict(defaults["bindings"])
+
+    if defaults.get("companion_task") is not None:
+        companion = dict(defaults["companion_task"])
+        companion.update(dict(merged.get("companion_task") or {}))
+        merged["companion_task"] = companion
+    elif "companion_task" not in merged:
         merged["companion_task"] = None
 
-    if "trigger" in raw:
-        merged["trigger"] = dict(raw["trigger"])
-
     for legacy_key in ("topic_name", "name", "type"):
-        if legacy_key in raw:
-            merged[legacy_key] = raw[legacy_key]
+        if legacy_key in defaults and legacy_key not in merged:
+            merged[legacy_key] = defaults[legacy_key]
 
     return merged
 
@@ -333,15 +330,10 @@ def validate_rule_update(
     rule,
     data: dict[str, Any],
 ) -> str | None:
-    """Return error message if invalid, else None."""
+    """Return error message if invalid, else None. Identity fields only on save."""
     definition = get_definition(rule.key, rule.action_type)
     if definition is None:
         return None
-
-    trigger_type = data.get("trigger_type", rule.trigger_type)
-    allowed = set(allowed_trigger_types(rule.key, rule.action_type))
-    if trigger_type not in allowed:
-        return f"trigger_type '{trigger_type}' is not allowed for {rule.key}"
 
     if "action_type" in data and data["action_type"] != definition.action_type:
         return f"action_type cannot be changed for {rule.key}"
@@ -349,12 +341,43 @@ def validate_rule_update(
     if "key" in data and data["key"] != definition.key:
         return f"key cannot be changed for built-in automation {rule.key}"
 
-    params = data.get("params")
-    if isinstance(params, dict):
-        if "scope" in params:
-            return "params.scope is fixed for built-in automations"
-        if "bindings" in params:
-            return "params.bindings is fixed for built-in automations"
+    return None
+
+
+def validate_rule_activation(rule, trigger_source: str | None = None) -> str | None:
+    """Validate stored rule config when enqueueing or executing a run."""
+    definition = get_definition(rule.key, rule.action_type)
+    if definition is None:
+        return None
+
+    from services.automation_params import normalize_params
+
+    params = normalize_params(rule.params, rule.key, rule.action_type)
+    scope = params.get("scope") or {}
+    scope_kind = scope.get("kind", "all")
+    if scope_kind not in definition.scope.allowed_kinds:
+        return f"{rule.key} does not support scope kind '{scope_kind}'"
+
+    if trigger_source == "manual":
+        allowed = set(allowed_trigger_types(rule.key, rule.action_type))
+        if "manual" not in allowed:
+            return f"{rule.key} does not support manual activation"
+    elif trigger_source:
+        if trigger_source not in definition.activations:
+            return (
+                f"{rule.key} does not support activation via '{trigger_source}'"
+            )
+    elif rule.trigger_type not in definition.activations:
+        return (
+            f"{rule.key} does not support activation via '{rule.trigger_type}'"
+        )
+
+    stored_bindings = (params.get("bindings") or {}).get("files") or []
+    stored_roles = {binding.get("role") for binding in stored_bindings if binding.get("role")}
+    required_roles = set(binding_roles(definition))
+    if required_roles and not required_roles.issubset(stored_roles):
+        missing = ", ".join(sorted(required_roles - stored_roles))
+        return f"{rule.key} is missing binding roles: {missing}"
 
     return None
 
