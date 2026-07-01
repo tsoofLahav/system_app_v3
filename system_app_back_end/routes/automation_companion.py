@@ -28,7 +28,9 @@ def list_automation_companion_tasks():
 )
 def complete_automation_companion_task(companion_id):
     link = get_or_404(AutomationCompanionTask, companion_id)
-    return jsonify(complete_companion_task(link.id))
+    result = complete_companion_task(link.id)
+    db.session.commit()
+    return jsonify(result)
 
 
 @automation_companion_bp.route(

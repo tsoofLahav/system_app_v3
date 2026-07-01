@@ -151,13 +151,29 @@ def enrich_companion_dict(link):
     return item
 
 
+def _is_process_companion_link(link, enriched=None):
+    enriched = enriched if enriched is not None else enrich_companion_dict(link)
+    topic_type = enriched.get("topic_type")
+    if topic_type is not None:
+        return topic_type == "process"
+    if link.topic_id is None:
+        return True
+    topic = db.session.get(Topic, link.topic_id)
+    return topic is not None and topic.type == "process"
+
+
 def pending_companions_for_task(task_id):
     links = (
         AutomationCompanionTask.query.filter_by(task_id=int(task_id), status="pending")
         .order_by(AutomationCompanionTask.id)
         .all()
     )
-    return [enrich_companion_dict(link) for link in links]
+    results = []
+    for link in links:
+        enriched = enrich_companion_dict(link)
+        if _is_process_companion_link(link, enriched):
+            results.append(enriched)
+    return results
 
 
 def pending_companions_by_task_ids(task_ids):
@@ -173,5 +189,7 @@ def pending_companions_by_task_ids(task_ids):
     )
     grouped = {}
     for link in links:
+        if not _is_process_companion_link(link):
+            continue
         grouped.setdefault(link.task_id, []).append(link)
     return grouped

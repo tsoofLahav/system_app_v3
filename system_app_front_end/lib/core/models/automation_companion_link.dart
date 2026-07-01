@@ -8,6 +8,7 @@ class AutomationCompanionLink {
     this.topicName,
     this.topicColor,
     this.topicIcon,
+    this.topicType,
     this.payload = const {},
   });
 
@@ -19,7 +20,10 @@ class AutomationCompanionLink {
   final String? topicName;
   final String? topicColor;
   final String? topicIcon;
+  final String? topicType;
   final Map<String, dynamic> payload;
+
+  bool get isProcess => topicType == null || topicType == 'process';
 
   int? get proposalId {
     final raw = payload['proposal_id'];
@@ -46,6 +50,7 @@ class AutomationCompanionLink {
       topicName: json['topic_name'] as String?,
       topicColor: json['topic_color'] as String?,
       topicIcon: json['topic_icon'] as String?,
+      topicType: json['topic_type'] as String?,
       payload: rawPayload is Map<String, dynamic>
           ? Map<String, dynamic>.from(rawPayload)
           : const {},

@@ -177,6 +177,8 @@ def _refresh_process(topic, params):
 
 
 def _maybe_create_companion_task(rule, run, topic, result):
+    if topic is None or topic.type != "process":
+        return None
     companion = companion_config(normalize_params(rule.params, rule.key, rule.action_type))
     if not companion or not companion.get("enabled", True):
         return None

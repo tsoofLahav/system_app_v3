@@ -6,6 +6,7 @@ import '../../core/models/ai_proposal.dart';
 import '../../core/models/automation_companion_link.dart';
 import '../../core/models/change_set.dart';
 import '../../core/registry/topic_appearance.dart';
+import '../../design_system/app_colors.dart';
 import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
 import '../../shared/change_review/change_review_dialog.dart';
@@ -92,6 +93,13 @@ class _ProcessUpdateBatchDialogState extends State<ProcessUpdateBatchDialog> {
     _loadCurrent();
   }
 
+  Future<void> _closeWhenDone() async {
+    if (widget.state.selectedViewType != null) {
+      await widget.state.refreshCurrentView();
+    }
+    if (mounted) Navigator.pop(context, true);
+  }
+
   Future<void> _finishCurrent({Map<String, bool>? decisions}) async {
     final companion = _current;
     final proposal = _proposal;
@@ -123,7 +131,7 @@ class _ProcessUpdateBatchDialogState extends State<ProcessUpdateBatchDialog> {
     });
 
     if (_queue.isEmpty) {
-      if (mounted) Navigator.pop(context, true);
+      await _closeWhenDone();
       return;
     }
 
@@ -135,54 +143,76 @@ class _ProcessUpdateBatchDialogState extends State<ProcessUpdateBatchDialog> {
     final s = _strings;
     final companion = _queue.isEmpty ? null : _current;
     final topicColor = TopicAppearance.colorFromHex(companion?.topicColor);
-    final topicEmoji = TopicAppearance.emojiFromId(companion?.topicIcon);
 
-    return AppGlassDialog(
-      width: 600,
-      title: Text(s['processUpdateReview']),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: Text(s['cancel']),
-        ),
-      ],
-      child: SizedBox(
-        width: 560,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (companion != null) ...[
-              _ProcessHeader(
-                strings: s,
-                topicName: companion.displayTopicName,
-                topicEmoji: topicEmoji,
-                topicColor: topicColor,
-                index: _index,
-                total: _queue.length,
-                onPrevious: _index > 0 ? () => _goToIndex(_index - 1) : null,
-                onNext: _index < _queue.length - 1
-                    ? () => _goToIndex(_index + 1)
-                    : null,
-              ),
-              const SizedBox(height: 12),
-            ],
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              )
-            else if (_error != null)
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  s['automationRunFailed'],
-                  style: AppTypography.noteBodyStyle,
+    return Dialog(
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 28),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600),
+        child: GlassSurface.styled(
+          style: AppGlassStyle.dialog,
+          borderRadius: BorderRadius.circular(AppGlassStyle.dialogRadius),
+          border: Border(
+            top: BorderSide(color: topicColor.withValues(alpha: 0.72), width: 2.5),
+            left: BorderSide(
+              color: topicColor.withValues(alpha: 0.22),
+              width: 1,
+            ),
+            right: BorderSide(
+              color: topicColor.withValues(alpha: 0.22),
+              width: 1,
+            ),
+            bottom: BorderSide(
+              color: AppColors.noteBorder.withValues(alpha: 0.45),
+              width: 1,
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (companion != null)
+                _ProcessHeader(
+                  strings: s,
+                  topicName: companion.displayTopicName,
+                  topicColor: topicColor,
+                  index: _index,
+                  total: _queue.length,
+                  onPrevious: _index > 0 ? () => _goToIndex(_index - 1) : null,
+                  onNext: _index < _queue.length - 1
+                      ? () => _goToIndex(_index + 1)
+                      : null,
                 ),
-              )
-            else if (_proposal != null)
-              _buildReviewBody(_proposal!),
-          ],
+              const SizedBox(height: 14),
+              if (_loading)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              else if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    s['automationRunFailed'],
+                    style: AppTypography.noteBodyStyle,
+                  ),
+                )
+              else if (_proposal != null)
+                _buildReviewBody(_proposal!),
+              const SizedBox(height: 10),
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: Text(s['cancel']),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -232,7 +262,6 @@ class _ProcessHeader extends StatelessWidget {
   const _ProcessHeader({
     required this.strings,
     required this.topicName,
-    required this.topicEmoji,
     required this.topicColor,
     required this.index,
     required this.total,
@@ -242,7 +271,6 @@ class _ProcessHeader extends StatelessWidget {
 
   final AppStrings strings;
   final String topicName;
-  final String topicEmoji;
   final Color topicColor;
   final int index;
   final int total;
@@ -251,54 +279,72 @@ class _ProcessHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final titleStyle = AppTypography.metaStyle.copyWith(
+      fontSize: 13,
+      fontWeight: FontWeight.w400,
+      letterSpacing: 0.2,
+      color: topicColor.withValues(alpha: 0.88),
+    );
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
-            IconButton(
+            _NavButton(
               tooltip: strings['previousProcess'],
               onPressed: onPrevious,
-              icon: const Icon(Icons.chevron_left),
+              icon: Icons.chevron_left,
             ),
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: topicColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: topicColor.withValues(alpha: 0.45)),
-                ),
-                child: Row(
-                  children: [
-                    Text(topicEmoji, style: const TextStyle(fontSize: 18)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        topicName,
-                        style: AppTypography.noteTitleStyle.copyWith(
-                          color: topicColor.withValues(alpha: 0.95),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              child: Text(
+                topicName,
+                style: titleStyle,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            IconButton(
+            _NavButton(
               tooltip: strings['nextProcess'],
               onPressed: onNext,
-              icon: const Icon(Icons.chevron_right),
+              icon: Icons.chevron_right,
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Text(
           strings.processUpdateProgress(index + 1, total),
-          style: AppTypography.metaStyle,
+          style: AppTypography.metaStyle.copyWith(
+            fontSize: 11,
+            color: AppColors.noteMeta.withValues(alpha: 0.7),
+          ),
           textAlign: TextAlign.center,
         ),
       ],
+    );
+  }
+}
+
+class _NavButton extends StatelessWidget {
+  const _NavButton({
+    required this.tooltip,
+    required this.onPressed,
+    required this.icon,
+  });
+
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      visualDensity: VisualDensity.compact,
+      iconSize: 20,
+      color: AppColors.text.withValues(alpha: onPressed == null ? 0.25 : 0.55),
+      icon: Icon(icon),
     );
   }
 }

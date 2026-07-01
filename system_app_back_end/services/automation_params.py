@@ -18,8 +18,35 @@ DEFAULT_COMPANION = {
 def normalize_params(params, rule_key=None, action_type=None):
     raw = dict(params or {})
     if raw.get("version") == PARAMS_VERSION:
-        return raw
-    return _migrate_v1_params(raw, rule_key, action_type)
+        normalized = raw
+    else:
+        normalized = _migrate_v1_params(raw, rule_key, action_type)
+    if rule_key == "weekly_process_refresh" or action_type == "weekly_process_refresh":
+        return _ensure_weekly_process_refresh_params(normalized)
+    return normalized
+
+
+def _ensure_weekly_process_refresh_params(params):
+    result = dict(params)
+    result.setdefault("version", PARAMS_VERSION)
+    scope = dict(result.get("scope") or {})
+    if scope.get("kind") not in {"topic_type", "topic"}:
+        scope = {"kind": "topic_type", "topic_type": "process"}
+    elif scope.get("kind") == "topic_type":
+        scope.setdefault("topic_type", "process")
+    result["scope"] = scope
+    bindings = result.get("bindings") or {}
+    if not bindings.get("files"):
+        result["bindings"] = {
+            "files": [
+                {"role": "plan", "match": {"type": "plan"}},
+                {"role": "doc", "match": {"type": "doc"}},
+                {"role": "tasks", "match": {"type": "tasks"}},
+            ],
+        }
+    if not result.get("companion_task"):
+        result["companion_task"] = DEFAULT_COMPANION["weekly_process_refresh"]
+    return result
 
 
 def _migrate_v1_params(params, rule_key, action_type):
