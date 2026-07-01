@@ -11,24 +11,19 @@ from services.automation_definitions import (
     get_definition,
     validate_rule_update,
 )
-from services.automation_params import finalize_rule_params
+from services.automation_params import finalize_rule_params, merge_rule_params, normalize_params
 from services.automation_schedule import DEFAULT_AUTOMATION_TIMEZONE, next_run_after
 
 automation_rules_bp = Blueprint("automation_rules", __name__)
 
 
-def _merge_rule_params(existing, incoming):
-    base = dict(existing or {})
-    merged = {**base, **incoming}
-    if isinstance(incoming.get("trigger"), dict):
-        trigger = dict(base.get("trigger") or {})
-        trigger.update(incoming["trigger"])
-        merged["trigger"] = trigger
-    if isinstance(incoming.get("companion_task"), dict):
-        companion = dict(base.get("companion_task") or {})
-        companion.update(incoming["companion_task"])
-        merged["companion_task"] = companion
-    return merged
+def _rule_payload(rule):
+    item = rule.to_dict()
+    item["params"] = normalize_params(rule.params, rule.key, rule.action_type)
+    definition = get_definition(rule.key, rule.action_type)
+    if definition is not None:
+        item["definition"] = definition.to_dict()
+    return item
 
 
 def _default_next_run(schedule, timezone=DEFAULT_AUTOMATION_TIMEZONE):
@@ -43,24 +38,13 @@ def _default_next_run(schedule, timezone=DEFAULT_AUTOMATION_TIMEZONE):
 @automation_rules_bp.route("/automation_rules", methods=["GET"])
 def list_automation_rules():
     rules = AutomationRule.query.order_by(AutomationRule.id).all()
-    payload = []
-    for rule in rules:
-        item = rule.to_dict()
-        definition = get_definition(rule.key, rule.action_type)
-        if definition is not None:
-            item["definition"] = definition.to_dict()
-        payload.append(item)
-    return jsonify(payload)
+    return jsonify([_rule_payload(rule) for rule in rules])
 
 
 @automation_rules_bp.route("/automation_rules/<int:rule_id>", methods=["GET"])
 def get_automation_rule(rule_id):
     rule = get_or_404(AutomationRule, rule_id)
-    item = rule.to_dict()
-    definition = get_definition(rule.key, rule.action_type)
-    if definition is not None:
-        item["definition"] = definition.to_dict()
-    return jsonify(item)
+    return jsonify(_rule_payload(rule))
 
 
 @automation_rules_bp.route("/automation_rules", methods=["POST"])
@@ -108,7 +92,7 @@ def create_automation_rule():
 
         ensure_trigger_task(rule)
     db.session.commit()
-    return jsonify(rule.to_dict()), 201
+    return jsonify(_rule_payload(rule)), 201
 
 
 @automation_rules_bp.route("/automation_rules/<int:rule_id>", methods=["PATCH"])
@@ -123,7 +107,8 @@ def update_automation_rule(rule_id):
         return jsonify({"error": validation_error}), 400
 
     if "params" in data and isinstance(data["params"], dict):
-        data["params"] = _merge_rule_params(rule.params, data["params"])
+        existing = normalize_params(rule.params, rule.key, rule.action_type)
+        data["params"] = merge_rule_params(existing, data["params"])
 
     apply_updates(
         rule,
@@ -156,7 +141,7 @@ def update_automation_rule(rule_id):
         hide_trigger_task(rule)
 
     db.session.commit()
-    return jsonify(rule.to_dict())
+    return jsonify(_rule_payload(rule))
 
 
 @automation_rules_bp.route("/automation_rules/<int:rule_id>/run", methods=["POST"])

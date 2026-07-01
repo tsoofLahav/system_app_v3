@@ -105,7 +105,7 @@ def dispatch_scheduled_rule(rule, trigger_source="schedule"):
         topic = topics[0] if topics else None
         context = {"topic_id": topic.id} if topic else {}
         context["scheduled"] = True
-        run_id = _enqueue_for_rule(rule, "schedule", context)
+        run_id = _enqueue_for_rule(rule, trigger_source, context)
         if run_id is not None:
             run_ids.append(run_id)
         return run_ids
@@ -113,7 +113,7 @@ def dispatch_scheduled_rule(rule, trigger_source="schedule"):
     for topic in topics:
         run_id = _enqueue_for_rule(
             rule,
-            "schedule",
+            trigger_source,
             {"topic_id": topic.id, "scheduled": True},
         )
         if run_id is not None:

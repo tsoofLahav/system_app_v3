@@ -209,12 +209,7 @@ def companion_params(definition: AutomationDefinition) -> dict[str, Any] | None:
 def default_params(key: str) -> dict[str, Any]:
     definition = get_definition(key)
     if definition is None:
-        return {
-            "version": PARAMS_VERSION,
-            "scope": {"kind": "all"},
-            "bindings": {"files": []},
-            "companion_task": None,
-        }
+        return generic_default_params()
     result: dict[str, Any] = {
         "version": PARAMS_VERSION,
         "scope": dict(definition.scope.fixed),
@@ -224,37 +219,90 @@ def default_params(key: str) -> dict[str, Any]:
     return result
 
 
+def generic_default_params() -> dict[str, Any]:
+    return {
+        "version": PARAMS_VERSION,
+        "scope": {"kind": "all"},
+        "bindings": {"files": []},
+        "companion_task": None,
+    }
+
+
+def _scope_needs_default(scope: Any) -> bool:
+    if not scope or not isinstance(scope, dict):
+        return True
+    kind = scope.get("kind")
+    if not kind:
+        return True
+    if kind == "topic_type" and not scope.get("topic_type"):
+        return True
+    if kind == "topic" and scope.get("topic_id") is None and not scope.get("topic_name"):
+        return True
+    return False
+
+
+def _bindings_need_default(bindings: Any, definition: AutomationDefinition) -> bool:
+    if not bindings or not isinstance(bindings, dict):
+        return True
+    files = bindings.get("files")
+    if not files:
+        return True
+    required_roles = set(binding_roles(definition))
+    if not required_roles:
+        return False
+    stored_roles = {binding.get("role") for binding in files if binding.get("role")}
+    return not required_roles.issubset(stored_roles)
+
+
 def apply_definition_to_params(
     params: dict[str, Any] | None,
     key: str | None,
     action_type: str | None = None,
 ) -> dict[str, Any]:
-    """Fill missing params from definition defaults; preserve stored scope/bindings."""
+    """Hydrate params from definition defaults; keep instance overrides where complete."""
     definition = get_definition(key, action_type)
     raw = dict(params or {})
     if definition is None:
-        raw.setdefault("version", PARAMS_VERSION)
-        return raw
+        merged = generic_default_params()
+        merged.update(raw)
+        merged["version"] = PARAMS_VERSION
+        merged["scope"] = dict(raw.get("scope") or merged["scope"])
+        merged["bindings"] = dict(raw.get("bindings") or merged["bindings"])
+        if raw.get("companion_task") is not None:
+            merged["companion_task"] = dict(raw["companion_task"])
+        if raw.get("trigger"):
+            merged["trigger"] = dict(raw["trigger"])
+        return merged
 
     defaults = default_params(definition.key)
-    merged = dict(raw)
+    merged = dict(defaults)
     merged["version"] = PARAMS_VERSION
 
-    if merged.get("scope") is None:
-        merged["scope"] = dict(defaults["scope"])
-    if merged.get("bindings") is None:
-        merged["bindings"] = dict(defaults["bindings"])
+    if not _scope_needs_default(raw.get("scope")):
+        merged["scope"] = dict(raw["scope"])
+    if not _bindings_need_default(raw.get("bindings"), definition):
+        merged["bindings"] = {
+            "files": [
+                {"role": binding.get("role"), "match": dict(binding.get("match") or {})}
+                for binding in (raw.get("bindings") or {}).get("files") or []
+            ],
+        }
 
     if defaults.get("companion_task") is not None:
         companion = dict(defaults["companion_task"])
-        companion.update(dict(merged.get("companion_task") or {}))
+        companion.update(dict(raw.get("companion_task") or {}))
         merged["companion_task"] = companion
-    elif "companion_task" not in merged:
+    elif raw.get("companion_task") is not None:
+        merged["companion_task"] = dict(raw["companion_task"])
+    else:
         merged["companion_task"] = None
 
-    for legacy_key in ("topic_name", "name", "type"):
-        if legacy_key in defaults and legacy_key not in merged:
-            merged[legacy_key] = defaults[legacy_key]
+    if raw.get("trigger"):
+        merged["trigger"] = dict(raw["trigger"])
+
+    for legacy_key in ("topic_name", "name", "type", "event"):
+        if legacy_key in raw:
+            merged[legacy_key] = raw[legacy_key]
 
     return merged
 

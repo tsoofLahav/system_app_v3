@@ -1808,13 +1808,32 @@ class AppState extends ChangeNotifier {
     _applyTaskUpdate(updated);
     final runIds = data['automation_run_ids'];
     if (runIds is List && runIds.isNotEmpty) {
+      var anyActive = false;
+      var anyFailed = false;
+      String? failureError;
       for (final rawId in runIds) {
         final runId = rawId is int ? rawId : (rawId as num).toInt();
         final run = await _automationService.getRun(runId);
         _trackAutomationRun(run.ruleId, run);
+        if (run.isActive) {
+          anyActive = true;
+        } else if (run.status == 'failed') {
+          anyFailed = true;
+          failureError ??= run.error;
+        }
       }
-      _ensureAutomationStatusPolling();
-      _automationNotice = strings['automationRan'];
+      if (anyFailed) {
+        _automationNotice = failureError ?? strings['automationRunFailed'];
+      } else if (anyActive) {
+        _automationNotice = strings['automationRan'];
+        _ensureAutomationStatusPolling();
+      } else {
+        _automationNotice = strings['automationCompleted'];
+        await refreshAutomationRules();
+        if (_hasOpenContent) {
+          await _refreshVisibleContentAfterAutomation();
+        }
+      }
     } else {
       final skip = data['automation_trigger_skipped'] as String?;
       if (skip == 'uncheck_to_run') {

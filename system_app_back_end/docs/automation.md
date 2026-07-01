@@ -34,7 +34,7 @@ Built-in automations are defined in code at `services/automation_definitions.py`
 **v1 constraints:**
 
 - The **frontend** only shows activations and scope described in each definition.
-- **PATCH accepts full `params`** (including echoed `scope`/`bindings` from GET). Missing keys are filled from definition defaults on save.
+- **PATCH accepts partial or full `params`**. Updates merge into stored params (only sent fields change). After merge, params are **hydrated** from definition defaults so `scope`, `bindings`, and companion never stay empty/incomplete in storage or on GET.
 - **Activation-time validation** (`validate_rule_activation`) runs when a rule is enqueued or executed. Unsupported scope, activations, or bindings fail the run with a clear error — not a 400 on config save.
 - No user-authored automation types yet; the schema supports future flexible scope and DB-backed templates.
 

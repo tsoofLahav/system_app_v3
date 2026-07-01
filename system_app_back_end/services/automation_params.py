@@ -12,6 +12,7 @@ from services.automation_definitions import (
 __all__ = [
     "PARAMS_VERSION",
     "normalize_params",
+    "merge_rule_params",
     "params_v2_for_rule",
     "scope_kind",
     "binding_files",
@@ -83,6 +84,49 @@ def rule_params_snapshot(rule):
     return copy.deepcopy(normalize_params(rule.params, rule.key, rule.action_type))
 
 
+def merge_rule_params(existing, incoming):
+    """Merge a partial params patch into stored params without dropping filled defaults."""
+    base = copy.deepcopy(existing or {})
+    if not incoming:
+        return base
+
+    patch = dict(incoming)
+    merged = dict(base)
+
+    for key, value in patch.items():
+        if key in {"trigger", "companion_task", "scope", "bindings"}:
+            continue
+        merged[key] = value
+
+    if isinstance(patch.get("scope"), dict):
+        scope = dict(base.get("scope") or {})
+        scope.update(patch["scope"])
+        merged["scope"] = scope
+
+    if isinstance(patch.get("bindings"), dict):
+        bindings = dict(base.get("bindings") or {})
+        patch_bindings = patch["bindings"]
+        if isinstance(patch_bindings.get("files"), list):
+            patch_files = patch_bindings["files"]
+            if patch_files:
+                bindings["files"] = [dict(binding) for binding in patch_files]
+            elif not bindings.get("files"):
+                bindings["files"] = []
+        merged["bindings"] = bindings
+
+    if isinstance(patch.get("trigger"), dict):
+        trigger = dict(base.get("trigger") or {})
+        trigger.update(patch["trigger"])
+        merged["trigger"] = trigger
+
+    if isinstance(patch.get("companion_task"), dict):
+        companion = dict(base.get("companion_task") or {})
+        companion.update(patch["companion_task"])
+        merged["companion_task"] = companion
+
+    return merged
+
+
 def persist_rule_params(rule, params):
     """Assign params and force SQLAlchemy to persist JSONB changes."""
     normalized = apply_definition_to_params(params, rule.key, rule.action_type)
@@ -91,6 +135,8 @@ def persist_rule_params(rule, params):
 
 
 def finalize_rule_params(rule):
-    """Ensure version and missing defaults without overwriting stored scope/bindings."""
-    rule.params = apply_definition_to_params(rule.params, rule.key, rule.action_type)
+    """Persist a fully hydrated params object after merge or create."""
+    rule.params = copy.deepcopy(
+        apply_definition_to_params(rule.params, rule.key, rule.action_type),
+    )
     flag_modified(rule, "params")
