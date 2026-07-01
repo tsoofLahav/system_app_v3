@@ -36,11 +36,17 @@ class ChangeReviewDialog extends StatefulWidget {
     required this.strings,
     required this.changeSet,
     this.title,
+    this.embedded = false,
+    this.onComplete,
+    this.onCancel,
   });
 
   final AppStrings strings;
   final ChangeSet changeSet;
   final String? title;
+  final bool embedded;
+  final ValueChanged<Map<String, bool>>? onComplete;
+  final VoidCallback? onCancel;
 
   @override
   State<ChangeReviewDialog> createState() => _ChangeReviewDialogState();
@@ -211,6 +217,24 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     );
   }
 
+  void _cancelReview() {
+    _removeSuggestionOverlay();
+    if (widget.embedded) {
+      widget.onCancel?.call();
+      return;
+    }
+    Navigator.pop(context);
+  }
+
+  void _completeReview() {
+    _removeSuggestionOverlay();
+    if (widget.embedded) {
+      widget.onComplete?.call(Map<String, bool>.from(_decisions));
+      return;
+    }
+    Navigator.pop(context, _decisions);
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.strings;
@@ -219,73 +243,84 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
       active,
     ).where((change) => !_decisions.containsKey(change.id)).length;
 
+    final content = ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: 520,
+        maxHeight: MediaQuery.sizeOf(context).height * (widget.embedded ? 0.55 : 0.75),
+      ),
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!_awaitingHandoff && pendingCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  '${s['suggestedChange']} · $pendingCount',
+                  style: AppTypography.metaStyle.copyWith(
+                    color: AppColors.aiCyan.withValues(alpha: 0.9),
+                  ),
+                ),
+              ),
+            _DocumentReview(
+              document: active,
+              decisions: _decisions,
+              activeChangeId: _activeChangeId,
+              keyForUnit: _keyForUnit,
+            ),
+            if (_awaitingHandoff) ...[
+              const SizedBox(height: 12),
+              Text(
+                s['planReviewComplete'],
+                style: AppTypography.noteBodyStyle,
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  onPressed: _continueToNextDocument,
+                  child: Text(s['continueToTasks']),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    final actions = [
+      TextButton(
+        onPressed: _cancelReview,
+        child: Text(s['cancel']),
+      ),
+      TextButton(
+        onPressed: _allReviewed ? _completeReview : null,
+        child: Text(s['finishReview']),
+      ),
+    ];
+
+    if (widget.embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          content,
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: actions,
+          ),
+        ],
+      );
+    }
+
     return AppGlassDialog(
       width: 560,
       title: Text(widget.title ?? _dialogTitle),
-      actions: [
-        TextButton(
-          onPressed: () {
-            _removeSuggestionOverlay();
-            Navigator.pop(context);
-          },
-          child: Text(s['cancel']),
-        ),
-        TextButton(
-          onPressed: _allReviewed
-              ? () {
-                  _removeSuggestionOverlay();
-                  Navigator.pop(context, _decisions);
-                }
-              : null,
-          child: Text(s['finishReview']),
-        ),
-      ],
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: 520,
-          maxHeight: MediaQuery.sizeOf(context).height * 0.75,
-        ),
-        child: SingleChildScrollView(
-          controller: _scrollController,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!_awaitingHandoff && pendingCount > 0)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(
-                    '${s['suggestedChange']} · $pendingCount',
-                    style: AppTypography.metaStyle.copyWith(
-                      color: AppColors.aiCyan.withValues(alpha: 0.9),
-                    ),
-                  ),
-                ),
-              _DocumentReview(
-                document: active,
-                decisions: _decisions,
-                activeChangeId: _activeChangeId,
-                keyForUnit: _keyForUnit,
-              ),
-              if (_awaitingHandoff) ...[
-                const SizedBox(height: 12),
-                Text(
-                  s['planReviewComplete'],
-                  style: AppTypography.noteBodyStyle,
-                ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton(
-                    onPressed: _continueToNextDocument,
-                    child: Text(s['continueToTasks']),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
+      actions: actions,
+      child: content,
     );
   }
 }

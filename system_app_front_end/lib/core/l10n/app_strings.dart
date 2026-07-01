@@ -93,6 +93,11 @@ class AppStrings {
   String fileTypeOption(String name, String type) =>
       '${fileNameLabel(name)} (${fileTypeLabel(type)})';
 
+  String processUpdateProgress(int current, int total) =>
+      this['processUpdateProgress']
+          .replaceAll('{current}', '$current')
+          .replaceAll('{total}', '$total');
+
   // --- UI keys (use strings['key']) ---
 
   static const _uiEn = {
@@ -284,6 +289,9 @@ class AppStrings {
     'continueToTasks': 'Continue to tasks',
     'applySuggestion': 'Apply',
     'finishReview': 'Finish refresh',
+    'previousProcess': 'Previous process',
+    'nextProcess': 'Next process',
+    'processUpdateProgress': 'Process {current} of {total}',
     'processRefreshSkipped': 'Automatic process update skipped',
     'dismiss': 'Dismiss',
     'unchanged': 'Unchanged',
@@ -479,6 +487,9 @@ class AppStrings {
     'continueToTasks': 'המשך למשימות',
     'applySuggestion': 'החל',
     'finishReview': 'סיים רענון',
+    'previousProcess': 'תהליך קודם',
+    'nextProcess': 'תהליך הבא',
+    'processUpdateProgress': 'תהליך {current} מתוך {total}',
     'processRefreshSkipped': 'עדכון תהליך אוטומטי דולג',
     'dismiss': 'סגור',
     'unchanged': 'ללא שינוי',

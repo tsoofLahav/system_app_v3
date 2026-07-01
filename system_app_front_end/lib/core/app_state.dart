@@ -8,6 +8,7 @@ import 'l10n/app_language.dart';
 import 'l10n/app_strings.dart';
 import 'models/ai_proposal.dart';
 import 'models/app_file.dart';
+import 'models/automation_companion_link.dart';
 import 'models/automation_rule.dart';
 import 'models/automation_run.dart';
 import 'models/block.dart';
@@ -776,6 +777,11 @@ class AppState extends ChangeNotifier {
 
   Future<AiProposal> fetchAiProposal(int id) =>
       _aiProposalService.getById(id);
+
+  Future<List<AutomationCompanionLink>> fetchPendingCompanionsForTask(
+    int taskId,
+  ) =>
+      _companionService.listPendingForTask(taskId);
 
   Future<bool> runCompanionTaskFlow(BuildContext context, Task task) =>
       AutomationFlowRegistry.run(context: context, state: this, task: task);

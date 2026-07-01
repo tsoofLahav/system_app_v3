@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from models import AutomationCompanionTask, AutomationRun, Task, TaskView, db
+from models import AutomationCompanionTask, AutomationRun, Task, TaskView, Topic, db
 from services.automation_params import companion_config, normalize_params
 from services.automation_topics import AUTOMATIONS_TOPIC_KEY
 
@@ -45,15 +45,16 @@ def create_companion_task(rule, run, flow_key, payload, title=None, section_name
 
 
 def _upsert_companion_link(task, rule_key, run_id, flow_key, topic_id, payload):
-    link = (
-        AutomationCompanionTask.query.filter_by(
-            task_id=task.id,
-            rule_key=rule_key,
-            status="pending",
-        )
-        .order_by(AutomationCompanionTask.id.desc())
-        .first()
+    query = AutomationCompanionTask.query.filter_by(
+        task_id=task.id,
+        rule_key=rule_key,
+        status="pending",
     )
+    if topic_id is not None:
+        query = query.filter_by(topic_id=int(topic_id))
+    else:
+        query = query.filter(AutomationCompanionTask.topic_id.is_(None))
+    link = query.order_by(AutomationCompanionTask.id.desc()).first()
     if link is None:
         link = AutomationCompanionTask(
             task_id=task.id,
@@ -82,9 +83,15 @@ def complete_companion_task(companion_id):
         return None
     link.status = "completed"
     link.completed_at = datetime.utcnow()
-    task = db.session.get(Task, link.task_id)
-    if task is not None:
-        task.status = "done"
+    task_id = link.task_id
+    pending_count = AutomationCompanionTask.query.filter_by(
+        task_id=task_id,
+        status="pending",
+    ).count()
+    if pending_count == 0:
+        task = db.session.get(Task, task_id)
+        if task is not None:
+            task.status = "done"
     db.session.flush()
     return link.to_dict()
 
@@ -128,3 +135,43 @@ def companion_title(rule, topic, template=None):
     if topic_name == "main":
         topic_name = "Main"
     return pattern.format(topic_name=topic_name, rule_name=rule.name)
+
+
+def enrich_companion_dict(link):
+    item = link.to_dict()
+    payload = link.payload if link.payload is not None else {}
+    topic = db.session.get(Topic, link.topic_id) if link.topic_id else None
+    if topic is not None:
+        item["topic_name"] = topic.name
+        item["topic_color"] = topic.color
+        item["topic_icon"] = topic.icon
+        item["topic_type"] = topic.type
+    elif payload.get("topic_name"):
+        item["topic_name"] = payload["topic_name"]
+    return item
+
+
+def pending_companions_for_task(task_id):
+    links = (
+        AutomationCompanionTask.query.filter_by(task_id=int(task_id), status="pending")
+        .order_by(AutomationCompanionTask.id)
+        .all()
+    )
+    return [enrich_companion_dict(link) for link in links]
+
+
+def pending_companions_by_task_ids(task_ids):
+    if not task_ids:
+        return {}
+    links = (
+        AutomationCompanionTask.query.filter(
+            AutomationCompanionTask.task_id.in_(task_ids),
+            AutomationCompanionTask.status == "pending",
+        )
+        .order_by(AutomationCompanionTask.id)
+        .all()
+    )
+    grouped = {}
+    for link in links:
+        grouped.setdefault(link.task_id, []).append(link)
+    return grouped

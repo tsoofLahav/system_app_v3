@@ -23,6 +23,8 @@ class Task {
     this.companionPayload = const {},
     this.automationRuleKey,
     this.isAutomationTrigger = false,
+    this.pendingCompanionCount = 0,
+    this.hasPendingCompanionFlow = false,
   });
 
   final int id;
@@ -45,16 +47,19 @@ class Task {
   final Map<String, dynamic> companionPayload;
   final String? automationRuleKey;
   final bool isAutomationTrigger;
+  final int pendingCompanionCount;
+  final bool hasPendingCompanionFlow;
 
   bool get isDone => status == 'done';
 
-  bool get isCompanionTask => companionTaskId != null || flowKey != null;
+  bool get isCompanionTask =>
+      hasPendingCompanionFlow || companionTaskId != null || flowKey != null;
 
   bool get isAutomationsTopic =>
       topicKey == ViewPaneKeys.automations ||
       topicName == ViewPaneKeys.automations;
 
-  bool get hasAutomationFlow => flowKey != null && companionTaskId != null;
+  bool get hasAutomationFlow => hasPendingCompanionFlow;
 
   bool get isImportant => sectionFlagIsImportant(sectionFlag);
 
@@ -93,6 +98,8 @@ class Task {
     Map<String, dynamic>? companionPayload,
     String? automationRuleKey,
     bool? isAutomationTrigger,
+    int? pendingCompanionCount,
+    bool? hasPendingCompanionFlow,
     bool clearSection = false,
     bool clearSectionFlag = false,
   }) {
@@ -118,6 +125,10 @@ class Task {
       companionPayload: companionPayload ?? this.companionPayload,
       automationRuleKey: automationRuleKey ?? this.automationRuleKey,
       isAutomationTrigger: isAutomationTrigger ?? this.isAutomationTrigger,
+      pendingCompanionCount:
+          pendingCompanionCount ?? this.pendingCompanionCount,
+      hasPendingCompanionFlow:
+          hasPendingCompanionFlow ?? this.hasPendingCompanionFlow,
     );
   }
 
@@ -147,6 +158,9 @@ class Task {
           : const {},
       automationRuleKey: json['automation_rule_key'] as String?,
       isAutomationTrigger: json['is_automation_trigger'] as bool? ?? false,
+      pendingCompanionCount: json['pending_companion_count'] as int? ?? 0,
+      hasPendingCompanionFlow:
+          json['has_pending_companion_flow'] as bool? ?? false,
     );
   }
 

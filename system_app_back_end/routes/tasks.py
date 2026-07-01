@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from models import AutomationCompanionTask, Block, File, Task, TaskView, Topic, db
+from models import Block, File, Task, TaskView, Topic, db
 from routes.helpers import active_query, apply_updates, get_or_404
 from services.automation_dispatcher import dispatch_file_changed
 from services.automation_topics import AUTOMATIONS_TOPIC_KEY
@@ -29,29 +29,33 @@ def _topic_name_for_row(task_view, topic, companion):
     return None
 
 
-def _enrich_task_row(task, task_view, topic, companion=None, trigger_ids=None):
+def _enrich_task_row(task, task_view, topic, companions=None, trigger_ids=None):
+    companions = companions or []
     item = task.to_dict()
     item["task_view_id"] = task_view.id
     item["view_type"] = task_view.view_type
     item["section_name"] = task_view.section_name
     item["section_flag"] = task_view.section_flag
     item["topic_key"] = task_view.topic_key
-    item["topic_name"] = _topic_name_for_row(task_view, topic, companion)
-    if companion is not None:
+    item["topic_name"] = _topic_name_for_row(task_view, topic, companions[0] if companions else None)
+    if companions:
+        companion = companions[0]
         payload = companion.payload if companion.payload is not None else {}
         if payload.get("topic_name"):
             item["subject_topic_name"] = payload["topic_name"]
         if companion.topic_id is not None:
             item["subject_topic_id"] = companion.topic_id
-    elif topic is not None:
-        item["topic_id"] = topic.id
-    if companion is not None and companion.status == "pending":
         item["companion_task_id"] = companion.id
         item["flow_key"] = companion.flow_key
-        item["companion_payload"] = (
-            companion.payload if companion.payload is not None else {}
-        )
+        item["companion_payload"] = payload
         item["automation_rule_key"] = companion.rule_key
+        item["pending_companion_count"] = len(companions)
+        item["has_pending_companion_flow"] = True
+    else:
+        item["pending_companion_count"] = 0
+        item["has_pending_companion_flow"] = False
+        if topic is not None:
+            item["topic_id"] = topic.id
     trigger_ids = trigger_ids if trigger_ids is not None else trigger_task_ids()
     if task.id in trigger_ids:
         item["is_automation_trigger"] = True
@@ -88,16 +92,11 @@ def list_tasks_by_view(view_type):
         "yes",
     }
     rows = (
-        db.session.query(Task, TaskView, Topic, AutomationCompanionTask)
+        db.session.query(Task, TaskView, Topic)
         .join(TaskView, TaskView.task_id == Task.id)
         .outerjoin(Block, Task.block_id == Block.id)
         .outerjoin(File, Block.file_id == File.id)
         .outerjoin(Topic, File.topic_id == Topic.id)
-        .outerjoin(
-            AutomationCompanionTask,
-            (AutomationCompanionTask.task_id == Task.id)
-            & (AutomationCompanionTask.status == "pending"),
-        )
         .filter(TaskView.view_type == view_type)
         .filter(TaskView.task_id.isnot(None))
         .filter(Task.archived_at.is_(None))
@@ -113,11 +112,21 @@ def list_tasks_by_view(view_type):
     if important_only:
         rows = rows.filter(TaskView.section_flag == IMPORTANT_SECTION_FLAG)
     rows = rows.order_by(TaskView.section_name.nulls_last(), Task.id).all()
+    from services.automation_companion import pending_companions_by_task_ids
+
+    task_ids = [task.id for task, _, _ in rows]
+    companions_by_task = pending_companions_by_task_ids(task_ids)
     trigger_ids = trigger_task_ids()
     return jsonify(
         [
-            _enrich_task_row(task, task_view, topic, companion, trigger_ids)
-            for task, task_view, topic, companion in rows
+            _enrich_task_row(
+                task,
+                task_view,
+                topic,
+                companions_by_task.get(task.id, []),
+                trigger_ids,
+            )
+            for task, task_view, topic in rows
         ]
     )
 
