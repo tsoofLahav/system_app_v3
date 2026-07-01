@@ -22,6 +22,7 @@ class Task {
     this.flowKey,
     this.companionPayload = const {},
     this.automationRuleKey,
+    this.isAutomationTrigger = false,
   });
 
   final int id;
@@ -43,6 +44,7 @@ class Task {
   final String? flowKey;
   final Map<String, dynamic> companionPayload;
   final String? automationRuleKey;
+  final bool isAutomationTrigger;
 
   bool get isDone => status == 'done';
 
@@ -90,6 +92,7 @@ class Task {
     String? flowKey,
     Map<String, dynamic>? companionPayload,
     String? automationRuleKey,
+    bool? isAutomationTrigger,
     bool clearSection = false,
     bool clearSectionFlag = false,
   }) {
@@ -114,6 +117,7 @@ class Task {
       flowKey: flowKey ?? this.flowKey,
       companionPayload: companionPayload ?? this.companionPayload,
       automationRuleKey: automationRuleKey ?? this.automationRuleKey,
+      isAutomationTrigger: isAutomationTrigger ?? this.isAutomationTrigger,
     );
   }
 
@@ -142,6 +146,7 @@ class Task {
             )
           : const {},
       automationRuleKey: json['automation_rule_key'] as String?,
+      isAutomationTrigger: json['is_automation_trigger'] as bool? ?? false,
     );
   }
 

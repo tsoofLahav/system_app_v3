@@ -29,8 +29,15 @@ class TaskService {
     return Task.fromJson(data);
   }
 
+  Future<Map<String, dynamic>> updateTaskRaw(
+    int id,
+    Map<String, dynamic> patch,
+  ) async {
+    return await _api.patch('/tasks/$id', patch) as Map<String, dynamic>;
+  }
+
   Future<Task> updateTask(int id, Map<String, dynamic> patch) async {
-    final data = await _api.patch('/tasks/$id', patch) as Map<String, dynamic>;
+    final data = await updateTaskRaw(id, patch);
     return Task.fromJson(data);
   }
 

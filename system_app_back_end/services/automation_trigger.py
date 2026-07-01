@@ -62,18 +62,6 @@ def ensure_trigger_task(rule):
     return task
 
 
-def rules_for_trigger_task(task_id):
-    if task_id is None:
-        return []
-    matches = []
-    for rule in AutomationRule.query.filter_by(enabled=True, trigger_type="task").all():
-        params = normalize_params(rule.params, rule.key, rule.action_type)
-        trigger = trigger_config(params) or {}
-        if int(trigger.get("task_id") or 0) == int(task_id):
-            matches.append(rule)
-    return matches
-
-
 def handle_task_status_change(task, previous_status):
     if previous_status != "done" or task.status != "active":
         return []

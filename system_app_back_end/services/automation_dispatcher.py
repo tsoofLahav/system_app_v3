@@ -106,7 +106,7 @@ def dispatch_manual_rule(rule):
 
 
 def dispatch_task_triggered(task_id):
-    from services.automation_trigger import rules_for_trigger_task
+    from services.automation_trigger_lookup import rules_for_trigger_task
 
     run_ids = []
     for rule in rules_for_trigger_task(task_id):

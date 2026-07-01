@@ -184,7 +184,17 @@ class _TaskRowState extends State<TaskRow> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(widget.task.title, style: titleStyle),
-              if (widget.task.displaySubjectTopicName != null)
+              if (widget.task.isAutomationTrigger)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    widget.state.strings['automationUncheckToRun'],
+                    style: AppTypography.metaStyle.copyWith(
+                      color: AppColors.aiCyan.withValues(alpha: 0.85),
+                    ),
+                  ),
+                )
+              else if (widget.task.displaySubjectTopicName != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(

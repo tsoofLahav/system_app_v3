@@ -5,6 +5,10 @@ from routes.helpers import active_query, apply_updates, get_or_404
 from services.automation_dispatcher import dispatch_file_changed
 from services.automation_topics import AUTOMATIONS_TOPIC_KEY
 from services.automation_trigger import handle_task_status_change
+from services.automation_trigger_lookup import (
+    rule_keys_for_trigger_task,
+    trigger_task_ids,
+)
 from services.delete_cascade import delete_task_cascade
 
 tasks_bp = Blueprint("tasks", __name__)
@@ -25,7 +29,7 @@ def _topic_name_for_row(task_view, topic, companion):
     return None
 
 
-def _enrich_task_row(task, task_view, topic, companion=None):
+def _enrich_task_row(task, task_view, topic, companion=None, trigger_ids=None):
     item = task.to_dict()
     item["task_view_id"] = task_view.id
     item["view_type"] = task_view.view_type
@@ -48,6 +52,12 @@ def _enrich_task_row(task, task_view, topic, companion=None):
             companion.payload if companion.payload is not None else {}
         )
         item["automation_rule_key"] = companion.rule_key
+    trigger_ids = trigger_ids if trigger_ids is not None else trigger_task_ids()
+    if task.id in trigger_ids:
+        item["is_automation_trigger"] = True
+        keys = rule_keys_for_trigger_task(task.id, enabled_only=False)
+        if keys:
+            item["automation_rule_key"] = keys[0]
     return item
 
 
@@ -103,8 +113,12 @@ def list_tasks_by_view(view_type):
     if important_only:
         rows = rows.filter(TaskView.section_flag == IMPORTANT_SECTION_FLAG)
     rows = rows.order_by(TaskView.section_name.nulls_last(), Task.id).all()
+    trigger_ids = trigger_task_ids()
     return jsonify(
-        [_enrich_task_row(task, task_view, topic, companion) for task, task_view, topic, companion in rows]
+        [
+            _enrich_task_row(task, task_view, topic, companion, trigger_ids)
+            for task, task_view, topic, companion in rows
+        ]
     )
 
 
@@ -171,6 +185,11 @@ def update_task(task_id):
     payload = task.to_dict()
     if run_ids:
         payload["automation_run_ids"] = run_ids
+    elif "status" in data:
+        if previous_status != "done" or task.status != "active":
+            payload["automation_trigger_skipped"] = "uncheck_to_run"
+        elif not rule_keys_for_trigger_task(task.id):
+            payload["automation_trigger_skipped"] = "not_trigger_task"
     return jsonify(payload)
 
 

@@ -1786,10 +1786,28 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> toggleTaskStatus(Task task) async {
-    final updated = await _taskService.updateTask(task.id, {
+    final data = await _taskService.updateTaskRaw(task.id, {
       'status': task.isDone ? 'active' : 'done',
     });
+    final updated = Task.fromJson(data);
     _applyTaskUpdate(updated);
+    final runIds = data['automation_run_ids'];
+    if (runIds is List && runIds.isNotEmpty) {
+      for (final rawId in runIds) {
+        final runId = rawId is int ? rawId : (rawId as num).toInt();
+        final run = await _automationService.getRun(runId);
+        _trackAutomationRun(run.ruleId, run);
+      }
+      _ensureAutomationStatusPolling();
+      _automationNotice = strings['automationRan'];
+    } else {
+      final skip = data['automation_trigger_skipped'] as String?;
+      if (skip == 'uncheck_to_run') {
+        _automationNotice = strings['automationUncheckToRun'];
+      } else if (skip == 'not_trigger_task') {
+        _automationNotice = strings['automationNotTriggerTask'];
+      }
+    }
     notifyListeners();
   }
 
