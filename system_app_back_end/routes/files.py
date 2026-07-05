@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from models import File, db
 from routes.helpers import active_query, apply_updates, get_or_404
+from services.archive_files import list_archived_files_for_topic
 from services.automation_dispatcher import dispatch_file_changed
 from services.delete_cascade import delete_file_cascade
 
@@ -28,6 +29,23 @@ def list_files_by_topic(topic_id):
         .all()
     )
     return jsonify([f.to_dict() for f in files])
+
+
+@files_bp.route("/topics/<int:topic_id>/archive/files", methods=["GET"])
+def list_archived_files_by_topic(topic_id):
+    limit = request.args.get("limit", default=24, type=int)
+    offset = request.args.get("offset", default=0, type=int)
+    q = request.args.get("q", default="", type=str).strip() or None
+
+    result = list_archived_files_for_topic(
+        topic_id,
+        limit=limit,
+        offset=offset,
+        q=q,
+    )
+    if result is None:
+        return jsonify({"error": "Topic not found"}), 404
+    return jsonify(result)
 
 
 @files_bp.route("/files", methods=["POST"])

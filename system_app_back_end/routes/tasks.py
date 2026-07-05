@@ -194,7 +194,9 @@ def update_task(task_id):
     payload = task.to_dict()
     if run_ids:
         payload["automation_run_ids"] = run_ids
-    elif "status" in data:
+    elif "status" in data and rule_keys_for_trigger_task(
+        task.id, enabled_only=False
+    ):
         if previous_status != "done" or task.status != "active":
             payload["automation_trigger_skipped"] = "uncheck_to_run"
         elif not rule_keys_for_trigger_task(task.id):
