@@ -2,7 +2,7 @@ from datetime import datetime
 
 from models import AutomationRule, AutomationRun, File, Topic, db
 from services.automation_params import binding_files, normalize_params
-from services.automation_definitions import validate_rule_activation
+from services.automation_definitions import get_definition, validate_rule_activation
 from services.automation_runner import enqueue_run
 from services.automation_schedule import next_run_after
 
@@ -111,6 +111,12 @@ def _enqueue_for_rule(rule, trigger_source, event_context=None):
 
 
 def dispatch_scheduled_rule(rule, trigger_source="schedule"):
+    definition = get_definition(rule.key, rule.action_type)
+    if definition is not None and not definition.fan_out:
+        context = {"scheduled": True}
+        run_id = _enqueue_for_rule(rule, trigger_source, context)
+        return [run_id] if run_id is not None else []
+
     topics = resolve_scope_topics(rule)
     run_ids = []
     if len(topics) <= 1:

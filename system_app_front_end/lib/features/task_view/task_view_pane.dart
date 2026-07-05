@@ -26,6 +26,7 @@ class TaskViewPane extends StatefulWidget {
 
 class _TaskViewPaneState extends State<TaskViewPane> {
   final _sectionController = TextEditingController();
+  int? _shownResetAcknowledgementId;
 
   @override
   void dispose() {
@@ -67,6 +68,88 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     );
   }
 
+  void _maybeShowTaskResetAcknowledgement(String viewType) {
+    final acknowledgement = widget.state.pendingTaskResetAcknowledgement;
+    if (acknowledgement == null) return;
+    if (acknowledgement.viewType != viewType) return;
+    if (_shownResetAcknowledgementId == acknowledgement.id) return;
+    _shownResetAcknowledgementId = acknowledgement.id;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _showTaskResetAcknowledgementDialog(acknowledgement.id);
+    });
+  }
+
+  Future<void> _showTaskResetAcknowledgementDialog(int acknowledgementId) async {
+    final acknowledgement = widget.state.pendingTaskResetAcknowledgement;
+    if (acknowledgement == null || acknowledgement.id != acknowledgementId) {
+      return;
+    }
+    final s = widget.state.strings;
+    final viewLabel = widget.state.viewLabel(acknowledgement.viewType);
+    final missed = acknowledgement.missedTasks.take(8).toList();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AppGlassDialog(
+        title: Text(s.taskResetAckTitle(viewLabel)),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await widget.state.approveTaskResetAcknowledgement(
+                acknowledgement.id,
+              );
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: Text(s['ok']),
+          ),
+        ],
+        child: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                s.taskResetAckBody(
+                  resetCount: acknowledgement.resetCount,
+                  missedCount: acknowledgement.missedCount,
+                ),
+                style: AppTypography.noteBodyStyle,
+                textAlign: TextAlign.start,
+              ),
+              if (missed.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  s['taskResetMissedTitle'],
+                  style: AppTypography.metaStyle,
+                  textAlign: TextAlign.start,
+                ),
+                const SizedBox(height: 6),
+                for (final task in missed)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      '- ${task['title'] ?? ''}',
+                      style: AppTypography.metaStyle,
+                      textAlign: TextAlign.start,
+                    ),
+                  ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                s['taskResetReportArchived'],
+                style: AppTypography.metaStyle.copyWith(
+                  color: AppColors.textHint,
+                ),
+                textAlign: TextAlign.start,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   static const _uncategorizedKey = '__uncategorized__';
 
   @override
@@ -85,6 +168,8 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     if (widget.state.loading && tasks.isEmpty && sections.isEmpty) {
       return MainPaneLoader(message: label);
     }
+
+    _maybeShowTaskResetAcknowledgement(viewType);
 
     return TopicCanvasBackground(
       accent: AppColors.text,

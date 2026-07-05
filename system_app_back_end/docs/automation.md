@@ -53,6 +53,7 @@ Built-in automations are defined in code at `services/automation_definitions.py`
 | `daily_rotation` | Main topic | `schedule`, `manual` | `daily` → type `main`, name `Daily` | — | — |
 | `process_refresh` | All `process` topics | `schedule`, `task`, `manual` | `plan`, `doc`, `tasks` | `process_update_review` in daily / Process updates | `smart_process_update` → `process_smart_update`, `process_refresh_skipped`; review `plan` + `tasks` |
 | `process_recap_update` | All `process` topics | `event`, `manual` | `plan`, `doc`, `tasks`, `overview` (write target) | — | `smart_process_recap_update` — direct write to recap |
+| `view_task_reset` | All task views (configured by `params.target_view`) | `schedule`, `manual` | — | one-time view acknowledgement | — |
 
 ### Instance vs definition
 
@@ -121,6 +122,14 @@ The initial action library contains:
 - `rotate_daily_main_file`: archive the current main-topic `Daily` file and create a fresh `Daily` text file every day at 00:00.
 - `process_refresh`: for each process, locate plan/doc/tasks files by type order, call the smart process update AI action, and store a delta proposal. Finalize archives old files and recreates plan, empty documentation table, and tasks after user review.
 - `process_recap_update`: when plan, documentation, or tasks change in a process topic, regenerate the recap (`overview` file): AI-written summary, date-grouped update table, and a snapshot of flagged tasks. Writes blocks in place (no proposal or review).
+- `view_task_reset`: for a configured task view, turn completed tasks back to active, record tasks that were already active as missed, write an archived report file under the real `Automations` topic, and create a pending acknowledgement shown when the user next opens that view.
+
+### View task reset (`view_task_reset`)
+
+- **Trigger:** schedule-only by default, with `params.target_view` selecting the task view (for example `weekly` at `weekly sat 23:59`).
+- **Run:** completed tasks in the target view are unchecked (`done` → `active`). Tasks that were already active are left unchanged and recorded as missed.
+- **Report:** each run creates an archived `doc` file in the `Automations` topic with reset/missed task details.
+- **Acknowledgement:** the run creates a pending `task_reset_acknowledgements` row; the frontend shows it once when opening the target view and marks it approved after the user confirms.
 
 ### Event recap (`process_recap_update`)
 
@@ -169,6 +178,7 @@ Automations and AI actions can store reviewable edits as `change_set` version 1:
 - CRUD for rules is exposed through `/automation_rules`.
 - Manual execution for testing is exposed through `POST /automation_rules/<id>/run` (returns `202` with a queued run and processes that run in a background thread).
 - Run status is exposed through `GET /automation_runs/<id>` and `GET /automation_runs?status=queued,running`.
+- View task reset acknowledgements are exposed through `GET /task_reset_acknowledgements?view_type=<view>&status=pending` and `POST /task_reset_acknowledgements/<id>/approve`.
 - Process update finalize is exposed through `POST /ai_proposals/<id>/finalize`.
 - AI proposals are exposed through `/ai_proposals` and approval/rejection endpoints.
 - Archive is exposed through normal resource PATCH fields and by `include_archived=true` list query parameters.
@@ -176,6 +186,7 @@ Automations and AI actions can store reviewable edits as `change_set` version 1:
 ## Migration
 
 Apply [`migrations/007_automation_run_queue.sql`](../migrations/007_automation_run_queue.sql) before deploying queue support.
+Apply [`migrations/012_task_reset_acknowledgements.sql`](../migrations/012_task_reset_acknowledgements.sql) before enabling view task reset acknowledgements.
 
 ## Add a new automation (checklist)
 

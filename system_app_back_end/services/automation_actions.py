@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from models import Block, File, Task, Topic, db
+from sqlalchemy import or_
+
+from models import Block, File, Task, TaskResetAcknowledgement, TaskView, Topic, db
 from services.ai_proposal_actions import (
     create_process_refresh_skipped_proposal,
     create_smart_process_update_proposal,
@@ -9,6 +11,7 @@ from services.ai_recap_actions import smart_process_recap_update
 from services.automation_companion import companion_title, create_companion_task
 from services.automation_definitions import get_definition, resolve_files_by_bindings, topic_in_scope
 from services.automation_params import companion_config, normalize_params
+from services.automation_topics import AUTOMATIONS_TOPIC_KEY
 
 
 DEFAULT_BLOCKS = {
@@ -38,6 +41,8 @@ def run_action(rule, run=None):
         return process_refresh(context)
     if action_type == "process_recap_update":
         return process_recap_update(context)
+    if action_type == "reset_view_tasks":
+        return reset_view_tasks(context)
     raise ValueError(f"Unknown automation action: {action_type}")
 
 
@@ -199,6 +204,191 @@ def process_recap_update(context):
         files_by_role["doc"],
         max_date_groups=max_date_groups,
     )
+
+
+def reset_view_tasks(context):
+    rule = context["rule"]
+    run = context["run"]
+    params = context["params"]
+    view_type = (params.get("target_view") or "weekly").strip()
+    if not view_type:
+        raise ValueError("target_view is required for reset_view_tasks")
+
+    reset_at = datetime.utcnow()
+    rows = _task_rows_for_view(view_type)
+    reset_tasks = []
+    missed_tasks = []
+
+    for task, task_view, topic in rows:
+        item = _task_reset_report_item(task, task_view, topic)
+        if task.status == "done":
+            task.status = "active"
+            reset_tasks.append(item)
+        else:
+            missed_tasks.append(item)
+
+    report_file = _create_task_reset_report_file(
+        params,
+        view_type,
+        reset_at,
+        reset_tasks,
+        missed_tasks,
+    )
+    acknowledgement = TaskResetAcknowledgement(
+        automation_run_id=run.id if run is not None else None,
+        rule_id=rule.id,
+        view_type=view_type,
+        report_file_id=report_file.id,
+        payload={
+            "view_type": view_type,
+            "reset_at": reset_at.isoformat(),
+            "report_file_id": report_file.id,
+            "report_topic_id": report_file.topic_id,
+            "reset_count": len(reset_tasks),
+            "missed_count": len(missed_tasks),
+            "reset_tasks": reset_tasks,
+            "missed_tasks": missed_tasks,
+        },
+        status="pending",
+    )
+    db.session.add(acknowledgement)
+    db.session.flush()
+
+    return {
+        "view_type": view_type,
+        "reset_at": reset_at.isoformat(),
+        "reset_count": len(reset_tasks),
+        "missed_count": len(missed_tasks),
+        "report_file_id": report_file.id,
+        "acknowledgement_id": acknowledgement.id,
+    }
+
+
+def _task_rows_for_view(view_type):
+    rows = (
+        db.session.query(Task, TaskView, Topic)
+        .join(TaskView, TaskView.task_id == Task.id)
+        .outerjoin(Block, Task.block_id == Block.id)
+        .outerjoin(File, Block.file_id == File.id)
+        .outerjoin(Topic, File.topic_id == Topic.id)
+        .filter(TaskView.view_type == view_type)
+        .filter(TaskView.task_id.isnot(None))
+        .filter(Task.archived_at.is_(None))
+        .filter(or_(TaskView.topic_key.is_(None), TaskView.topic_key != AUTOMATIONS_TOPIC_KEY))
+        .filter(
+            (Block.id.is_(None))
+            | (
+                Block.archived_at.is_(None)
+                & File.archived_at.is_(None)
+                & Topic.archived_at.is_(None)
+            )
+        )
+        .order_by(TaskView.section_name.nulls_last(), Task.id)
+        .all()
+    )
+    return rows
+
+
+def _task_reset_report_item(task, task_view, topic):
+    return {
+        "task_id": task.id,
+        "title": task.title,
+        "previous_status": task.status,
+        "section_name": task_view.section_name,
+        "topic_id": topic.id if topic is not None else None,
+        "topic_name": topic.name if topic is not None else None,
+        "due_date": task.due_date.isoformat() if task.due_date else None,
+        "created_at": task.created_at.isoformat() if task.created_at else None,
+    }
+
+
+def _create_task_reset_report_file(
+    params,
+    view_type,
+    reset_at,
+    reset_tasks,
+    missed_tasks,
+):
+    report_params = params.get("report") or {}
+    topic_name = report_params.get("topic_name") or "Automations"
+    file_type = report_params.get("file_type") or "doc"
+    archive = report_params.get("archive", True)
+    topic = _ensure_automations_topic(topic_name)
+    file = _create_file(
+        topic,
+        name=_task_reset_report_name(view_type, reset_at),
+        file_type=file_type,
+        is_main=False,
+        create_defaults=False,
+    )
+    db.session.add(
+        Block(
+            file_id=file.id,
+            type="text",
+            content={
+                "text": (
+                    f"{view_type.title()} tasks were reset on "
+                    f"{reset_at.isoformat()} UTC.\n"
+                    f"Unchecked completed tasks: {len(reset_tasks)}.\n"
+                    f"Missed tasks still active: {len(missed_tasks)}."
+                )
+            },
+            order_index=0,
+        )
+    )
+    db.session.add(
+        Block(
+            file_id=file.id,
+            type="table",
+            content={"rows": _task_reset_report_rows(reset_tasks, missed_tasks)},
+            order_index=1,
+        )
+    )
+    if archive:
+        file.archived_at = reset_at
+    db.session.flush()
+    return file
+
+
+def _ensure_automations_topic(topic_name):
+    topic = Topic.query.filter_by(name=topic_name).order_by(Topic.id).first()
+    if topic is not None:
+        if topic.archived_at is not None:
+            topic.archived_at = None
+        return topic
+
+    topic = Topic(
+        name=topic_name,
+        type="area",
+        icon="clock",
+        color="#37899E",
+    )
+    db.session.add(topic)
+    db.session.flush()
+    return topic
+
+
+def _task_reset_report_name(view_type, reset_at):
+    return f"{view_type.title()} missed tasks - {reset_at.date().isoformat()}"
+
+
+def _task_reset_report_rows(reset_tasks, missed_tasks):
+    rows = [["Kind", "Task", "Section", "Topic", "Task ID", "Due date"]]
+    for kind, tasks in (("Reset", reset_tasks), ("Missed", missed_tasks)):
+        for task in tasks:
+            rows.append(
+                [
+                    kind,
+                    task.get("title") or "",
+                    task.get("section_name") or "",
+                    task.get("topic_name") or "",
+                    str(task.get("task_id") or ""),
+                    task.get("due_date") or "",
+                ]
+            )
+    if len(rows) == 1:
+        rows.append(["No tasks", "", "", "", "", ""])
+    return rows
 
 
 def _refresh_process(topic, params):

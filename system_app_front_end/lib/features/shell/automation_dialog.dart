@@ -241,6 +241,11 @@ class _AutomationRuleCardState extends State<_AutomationRuleCard> {
     _ScheduleDraft schedule,
     Map<String, dynamic> trigger,
   ) {
+    if (widget.rule.key == 'view_task_reset') {
+      final targetView =
+          widget.rule.params['target_view'] as String? ?? 'weekly';
+      return '${s.viewLabel(targetView)} · ${schedule.label(s)}';
+    }
     return switch (triggerType) {
       'event' => s['triggerByChanges'],
       'task' => _taskTriggerLabel(s, trigger),
@@ -402,7 +407,16 @@ class _AutomationConfigDialogState extends State<_AutomationConfigDialog> {
               ),
               const SizedBox(height: 12),
               if (triggerType == 'schedule')
-                _ScheduleFields(state: widget.state, rule: rule)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (rule.key == 'view_task_reset') ...[
+                      _ViewResetFields(state: widget.state, rule: rule),
+                      const SizedBox(height: 12),
+                    ],
+                    _ScheduleFields(state: widget.state, rule: rule),
+                  ],
+                )
               else if (triggerType == 'event')
                 Text(
                   s['triggerByChanges'],
@@ -608,6 +622,75 @@ class _ScheduleFieldsState extends State<_ScheduleFields> {
       () => _draft = _draft.copyWith(weekday: _weekdayKeyForDate(picked)),
     );
     await _saveSchedule();
+  }
+}
+
+class _ViewResetFields extends StatefulWidget {
+  const _ViewResetFields({required this.state, required this.rule});
+
+  final AppState state;
+  final AutomationRule rule;
+
+  @override
+  State<_ViewResetFields> createState() => _ViewResetFieldsState();
+}
+
+class _ViewResetFieldsState extends State<_ViewResetFields> {
+  late String _viewType;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewType = widget.rule.params['target_view'] as String? ?? 'weekly';
+  }
+
+  @override
+  void didUpdateWidget(covariant _ViewResetFields oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.rule.id != widget.rule.id ||
+        oldWidget.rule.params != widget.rule.params) {
+      _viewType = widget.rule.params['target_view'] as String? ?? 'weekly';
+    }
+  }
+
+  Future<void> _save() async {
+    final params = Map<String, dynamic>.from(widget.rule.params);
+    params['version'] = 2;
+    params['target_view'] = _viewType;
+    final ok = await widget.state.updateAutomationRule(
+      widget.rule,
+      params: params,
+    );
+    if (!ok && mounted) {
+      final message = widget.state.takeAutomationNotice() ??
+          widget.state.strings['automationRunFailed'];
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.state.strings;
+    return DropdownButtonFormField<String>(
+      initialValue: _viewType,
+      decoration: InputDecoration(
+        isDense: true,
+        labelText: s['automationResetTargetView'],
+      ),
+      items: [
+        for (final view in ViewRegistry.views)
+          DropdownMenuItem(
+            value: view.type,
+            child: Text(s.viewLabel(view.type)),
+          ),
+      ],
+      onChanged: (value) async {
+        if (value == null) return;
+        setState(() => _viewType = value);
+        await _save();
+      },
+    );
   }
 }
 

@@ -213,6 +213,26 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
         fan_out=False,
         change_trigger=ChangeTriggerConfig(idle_seconds=30),
     ),
+    "view_task_reset": AutomationDefinition(
+        key="view_task_reset",
+        name="Reset view tasks",
+        description=(
+            "At a scheduled time, uncheck completed tasks in a task view and "
+            "record tasks that were still active as missed."
+        ),
+        action_type="reset_view_tasks",
+        scope=ScopeConfig(
+            fixed={"kind": "all"},
+            allowed_kinds=("all",),
+        ),
+        activations=("schedule",),
+        bindings=(),
+        companion=None,
+        ai=None,
+        default_schedule="weekly sat 23:59",
+        default_enabled=False,
+        fan_out=False,
+    ),
 }
 
 
@@ -292,6 +312,13 @@ def default_params(key: str) -> dict[str, Any]:
     if definition.key == "process_recap_update":
         result["event"] = "file_changed"
         result["recap"] = {"max_date_groups": 5}
+    if definition.key == "view_task_reset":
+        result["target_view"] = "weekly"
+        result["report"] = {
+            "topic_name": "Automations",
+            "file_type": "doc",
+            "archive": True,
+        }
     if "event" in definition.activations:
         trigger = definition.change_trigger or ChangeTriggerConfig()
         result["change_trigger"] = _change_trigger_to_dict(trigger)
@@ -388,6 +415,14 @@ def apply_definition_to_params(
         change_trigger = dict(merged.get("change_trigger") or {})
         change_trigger.update(dict(raw["change_trigger"]))
         merged["change_trigger"] = change_trigger
+
+    if raw.get("target_view"):
+        merged["target_view"] = raw["target_view"]
+
+    if raw.get("report"):
+        report = dict(merged.get("report") or {})
+        report.update(dict(raw["report"]))
+        merged["report"] = report
 
     for legacy_key in ("topic_name", "name", "type", "event"):
         if legacy_key in raw:

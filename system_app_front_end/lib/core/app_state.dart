@@ -17,6 +17,7 @@ import 'models/block.dart';
 import '../features/blocks/board_content.dart';
 import '../features/blocks/block_text_focus.dart';
 import 'models/task.dart';
+import 'models/task_reset_acknowledgement.dart';
 import 'models/task_view_membership.dart';
 import 'models/topic.dart';
 import 'models/view_section.dart';
@@ -39,6 +40,7 @@ import 'services/bootstrap_service.dart';
 import 'services/file_service.dart';
 import 'services/image_service.dart';
 import 'services/task_service.dart';
+import 'services/task_reset_acknowledgement_service.dart';
 import 'services/task_view_service.dart';
 import 'services/topic_service.dart';
 
@@ -99,6 +101,8 @@ class AppState extends ChangeNotifier {
   late final AiProposalService _aiProposalService = AiProposalService(_api);
   late final AutomationCompanionService _companionService =
       AutomationCompanionService(_api);
+  late final TaskResetAcknowledgementService _taskResetAcknowledgementService =
+      TaskResetAcknowledgementService(_api);
 
   bool loading = true;
   bool appReady = false;
@@ -110,6 +114,7 @@ class AppState extends ChangeNotifier {
   String? selectedViewType;
   List<Task> viewTasks = [];
   List<ViewSection> viewSections = [];
+  TaskResetAcknowledgement? pendingTaskResetAcknowledgement;
   final Map<String, _ViewSnapshot> _viewCache = {};
   bool _showViewPaneDuringLoad = false;
   bool _loadingTopicFromView = false;
@@ -1241,7 +1246,31 @@ class AppState extends ChangeNotifier {
       tasks: tasks,
       sections: cached?.sections ?? sectionsForViewType(viewType),
     );
+    await _loadPendingTaskResetAcknowledgement(viewType);
     notifyListeners();
+  }
+
+  Future<void> _loadPendingTaskResetAcknowledgement(String viewType) async {
+    try {
+      final pending =
+          await _taskResetAcknowledgementService.listPendingForView(viewType);
+      if (selectedViewType != viewType) return;
+      pendingTaskResetAcknowledgement =
+          pending.isEmpty ? null : pending.first;
+    } catch (_) {
+      // Acknowledgement lookup should not block opening the task view.
+      if (selectedViewType == viewType) {
+        pendingTaskResetAcknowledgement = null;
+      }
+    }
+  }
+
+  Future<void> approveTaskResetAcknowledgement(int id) async {
+    await _taskResetAcknowledgementService.approve(id);
+    if (pendingTaskResetAcknowledgement?.id == id) {
+      pendingTaskResetAcknowledgement = null;
+      notifyListeners();
+    }
   }
 
   Future<bool> _ensureMainAutomationRules() async {
@@ -1289,6 +1318,7 @@ class AppState extends ChangeNotifier {
     loading = true;
     error = null;
     selectedViewType = null;
+    pendingTaskResetAcknowledgement = null;
     _showViewPaneDuringLoad = false;
     _loadingTopicFromView = fromView;
     _clearArchiveMode();
@@ -1358,6 +1388,7 @@ class AppState extends ChangeNotifier {
     error = null;
     _clearArchiveMode();
     selectedViewType = viewType;
+    pendingTaskResetAcknowledgement = null;
     selectedTopic = null;
     _showViewPaneDuringLoad = fromView || cached != null;
 
@@ -1373,6 +1404,7 @@ class AppState extends ChangeNotifier {
     try {
       final sections = await _taskViewService.listSectionsForView(viewType);
       final tasks = await _taskService.listByView(viewType);
+      await _loadPendingTaskResetAcknowledgement(viewType);
       viewSections = [
         ...viewSections.where((s) => s.viewType != viewType),
         ...sections,

@@ -257,6 +257,33 @@ class AutomationCompanionTask(db.Model):
         }
 
 
+class TaskResetAcknowledgement(db.Model):
+    __tablename__ = "task_reset_acknowledgements"
+
+    id = db.Column(db.Integer, primary_key=True)
+    automation_run_id = db.Column(db.Integer, db.ForeignKey("automation_runs.id"))
+    rule_id = db.Column(db.Integer, db.ForeignKey("automation_rules.id"))
+    view_type = db.Column(db.Text, nullable=False)
+    report_file_id = db.Column(db.Integer, db.ForeignKey("files.id"))
+    payload = db.Column(JSONB, nullable=False, default=dict)
+    status = db.Column(db.Text, nullable=False, default="pending")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    approved_at = db.Column(db.DateTime)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "automation_run_id": self.automation_run_id,
+            "rule_id": self.rule_id,
+            "view_type": self.view_type,
+            "report_file_id": self.report_file_id,
+            "payload": self.payload if self.payload is not None else {},
+            "status": self.status,
+            "created_at": _iso(self.created_at),
+            "approved_at": _iso(self.approved_at),
+        }
+
+
 class AiProposal(db.Model):
     __tablename__ = "ai_proposals"
 

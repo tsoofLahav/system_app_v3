@@ -54,6 +54,7 @@ Definitions drive the table below; see backend `docs/automation.md` for full reg
 | `daily_rotation` | Every day at 00:00 | Main | Archive current main-topic `Daily` file and create a new `Daily` text file. |
 | `process_refresh` | User schedule (disabled by default) | All processes | For each process, refresh plan/doc/tasks via AI proposal; companion review task in daily view. |
 | `process_recap_update` | On file change (enabled by default) | All processes | Regenerate process recap when plan, doc, or tasks change; direct AI write (no review). |
+| `view_task_reset` | User schedule (disabled by default; weekly Saturday 23:59 default) | Configured task view | Uncheck completed tasks in the target view, record already-active tasks as missed, archive a report under Automations, and show a one-time acknowledgement when the view opens. |
 
 ## Process recap (`process_recap_update`)
 
@@ -77,6 +78,15 @@ Change review UI lives in `lib/shared/change_review/` and works with any automat
 
 Archive uses `archived_at` timestamps from the backend. Normal active lists hide archived rows. Archive views request data with `include_archived=true` and filter for archived rows locally when needed.
 
+## View task reset (`view_task_reset`)
+
+This automation is schedule-driven. The automation dialog reuses the normal schedule controls and adds a target-view picker backed by `params.target_view`.
+
+- Backend runs immediately at the scheduled time; it does not wait for app approval.
+- Completed tasks are changed from done to active.
+- Tasks that were already active are treated as missed and included in an archived report file under the real `Automations` topic.
+- The frontend fetches pending reset acknowledgements after `selectView(viewType)` and shows the acknowledgement dialog once for that view. Approving the dialog calls `POST /task_reset_acknowledgements/<id>/approve`.
+
 ## Frontend files
 
 - `lib/core/models/automation_definition.dart` — definition model from API
@@ -85,5 +95,8 @@ Archive uses `archived_at` timestamps from the backend. Normal active lists hide
 - `lib/core/services/automation_service.dart` — rules + run status API
 - `lib/core/app_state.dart` — definition loading, rule seeding, active run tracking
 - `lib/features/shell/automation_dialog.dart` — automation UI (activations + scope from definition)
+- `lib/core/models/task_reset_acknowledgement.dart` — pending view-reset acknowledgement model
+- `lib/core/services/task_reset_acknowledgement_service.dart` — acknowledgement API client
+- `lib/features/task_view/task_view_pane.dart` — first-open acknowledgement dialog
 - `lib/core/registry/automation_flow_registry.dart` — companion `flow_key` → review dialog
 - `lib/features/shell/app_shell.dart` — completion snackbars

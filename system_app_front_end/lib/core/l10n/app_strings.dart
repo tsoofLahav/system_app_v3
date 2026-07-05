@@ -132,6 +132,17 @@ class AppStrings {
     return automationScopeLabel(scope);
   }
 
+  String taskResetAckTitle(String viewLabel) =>
+      this['taskResetAckTitle'].replaceAll('{view}', viewLabel);
+
+  String taskResetAckBody({
+    required int resetCount,
+    required int missedCount,
+  }) =>
+      this['taskResetAckBody']
+          .replaceAll('{reset}', '$resetCount')
+          .replaceAll('{missed}', '$missedCount');
+
   // --- UI keys (use strings['key']) ---
 
   static const _uiEn = {
@@ -317,6 +328,7 @@ class AppStrings {
     'automationTriggerView': 'View',
     'automationTriggerSection': 'Section',
     'automationTriggerSectionHelp': 'Create a section in this view if none exist.',
+    'automationResetTargetView': 'View to reset',
     'createSection': 'Create section',
     'aiProposals': 'AI suggestions',
     'approve': 'Approve',
@@ -350,6 +362,11 @@ class AppStrings {
     'archiveDeleteTitle': 'Delete archived files?',
     'archiveDeleteBody': 'Delete {count} archived files permanently?',
     'archiveDeleteDone': 'Cancel selection',
+    'taskResetAckTitle': '{view} tasks reset',
+    'taskResetAckBody':
+        '{reset} completed tasks were unchecked. {missed} tasks were already unchecked and were recorded as missed.',
+    'taskResetMissedTitle': 'Missed tasks',
+    'taskResetReportArchived': 'A detailed report was saved in Archive.',
   };
 
   static const _uiHe = {
@@ -535,6 +552,7 @@ class AppStrings {
     'automationTriggerView': 'תצוגה',
     'automationTriggerSection': 'מדור',
     'automationTriggerSectionHelp': 'צור מדור בתצוגה זו אם אין.',
+    'automationResetTargetView': 'תצוגה לאיפוס',
     'createSection': 'צור מדור',
     'aiProposals': 'הצעות AI',
     'approve': 'אשר',
@@ -568,6 +586,11 @@ class AppStrings {
     'archiveDeleteTitle': 'למחוק קבצים מהארכיון?',
     'archiveDeleteBody': 'למחוק {count} קבצים מהארכיון לצמיתות?',
     'archiveDeleteDone': 'ביטול בחירה',
+    'taskResetAckTitle': 'משימות {view} אופסו',
+    'taskResetAckBody':
+        '{reset} משימות שהושלמו סומנו שוב כפעילות. {missed} משימות כבר היו פעילות ונרשמו כמשימות שפוספסו.',
+    'taskResetMissedTitle': 'משימות שפוספסו',
+    'taskResetReportArchived': 'דוח מפורט נשמר בארכיון.',
   };
 
   static const _viewsEn = {
@@ -606,12 +629,14 @@ class AppStrings {
     'daily_rotation': 'Daily rotation',
     'process_refresh': 'Update all processes',
     'process_recap_update': 'Update process recap',
+    'view_task_reset': 'Reset view tasks',
   };
 
   static const _automationNamesHe = {
     'daily_rotation': 'החלפת מסמך יומי',
     'process_refresh': 'עדכון כל התהליכים',
     'process_recap_update': 'עדכון סיכום תהליך',
+    'view_task_reset': 'איפוס משימות בתצוגה',
   };
 
   static const _automationDescriptionsEn = {
@@ -622,6 +647,8 @@ class AppStrings {
     'process_recap_update':
         'When plan, documentation, or tasks change, regenerate the process '
         'recap with an AI summary and recent update notes.',
+    'view_task_reset':
+        'At a scheduled time, uncheck completed tasks in a view and record active tasks as missed.',
   };
 
   static const _automationDescriptionsHe = {
@@ -631,6 +658,8 @@ class AppStrings {
     'process_recap_update':
         'כשהתוכנית, התיעוד או המשימות משתנים, צור מחדש את סיכום התהליך '
         'עם סיכום AI והערות עדכון אחרונות.',
+    'view_task_reset':
+        'בזמן מתוזמן, בטל סימון של משימות שהושלמו בתצוגה ורשום משימות פעילות כמשימות שפוספסו.',
   };
 
   static const _fileNamesEn = {
