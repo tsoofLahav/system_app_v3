@@ -652,6 +652,7 @@ class AppStrings {
     'daily_rotation': 'Daily rotation',
     'process_refresh': 'Update all processes',
     'process_recap_update': 'Update process recap',
+    'project_summary_update': 'Update project summary',
     'view_task_reset': 'Reset view tasks',
   };
 
@@ -659,6 +660,7 @@ class AppStrings {
     'daily_rotation': 'החלפת מסמך יומי',
     'process_refresh': 'עדכון כל התהליכים',
     'process_recap_update': 'עדכון סיכום תהליך',
+    'project_summary_update': 'עדכון סיכום פרויקט',
     'view_task_reset': 'איפוס משימות בתצוגה',
   };
 
@@ -670,6 +672,8 @@ class AppStrings {
     'process_recap_update':
         'When plan, documentation, or tasks change, regenerate the process '
         'recap with an AI summary and recent update notes.',
+    'project_summary_update':
+        'When project plan, execution, documentation, or tasks change, regenerate the project summary from its current structure.',
     'view_task_reset':
         'Manage daily, weekly, monthly, and quarterly schedules that uncheck completed tasks and record active tasks as missed.',
   };
@@ -681,6 +685,8 @@ class AppStrings {
     'process_recap_update':
         'כשהתוכנית, התיעוד או המשימות משתנים, צור מחדש את סיכום התהליך '
         'עם סיכום AI והערות עדכון אחרונות.',
+    'project_summary_update':
+        'כשהתוכנית, הביצוע, התיעוד או המשימות של פרויקט משתנים, צור מחדש את סיכום הפרויקט לפי המבנה הנוכחי.',
     'view_task_reset':
         'נהל תזמונים יומיים, שבועיים, חודשיים ורבעוניים שמבטלים סימון משימות שהושלמו ורושמים משימות פעילות כמשימות שפוספסו.',
   };

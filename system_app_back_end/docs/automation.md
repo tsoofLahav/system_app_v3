@@ -53,6 +53,7 @@ Built-in automations are defined in code at `services/automation_definitions.py`
 | `daily_rotation` | Main topic | `schedule`, `manual` | `daily` → type `main`, name `Daily` | — | — |
 | `process_refresh` | All `process` topics | `schedule`, `task`, `manual` | `plan`, `doc`, `tasks` | `process_update_review` in daily / Process updates | `smart_process_update` → `process_smart_update`, `process_refresh_skipped`; review `plan` + `tasks` |
 | `process_recap_update` | All `process` topics | `event`, `manual` | `plan`, `doc`, `tasks`, `overview` (write target) | — | `smart_process_recap_update` — direct write to recap |
+| `project_summary_update` | All `project` topics | `event`, `manual` | `plan`, `execution`, `tasks`, `doc`, `overview` (write target) | — | `smart_project_summary_update` — direct write to overview |
 | `view_task_reset` | Daily, weekly, monthly, and quarterly task views (configured by `params.view_resets`) | `schedule`, `manual` | — | one-time view acknowledgement | — |
 
 ### Instance vs definition
@@ -122,6 +123,7 @@ The initial action library contains:
 - `rotate_daily_main_file`: archive the current main-topic `Daily` file and create a fresh `Daily` text file every day at 00:00.
 - `process_refresh`: for each process, locate plan/doc/tasks files by type order, call the smart process update AI action, and store a delta proposal. Finalize archives old files and recreates plan, empty documentation table, and tasks after user review.
 - `process_recap_update`: when plan, documentation, or tasks change in a process topic, regenerate the recap (`overview` file): AI-written summary, date-grouped update table, and a snapshot of flagged tasks. Writes blocks in place (no proposal or review).
+- `project_summary_update`: when plan, execution, documentation, or tasks change in a project topic, regenerate the overview from the project state and part structure. Writes directly to overview only (no proposal or review).
 - `view_task_reset`: for each configured task view schedule, turn completed tasks back to active, record tasks that were already active as missed, write an archived report file under the real `Automations` topic, and create a pending acknowledgement shown when the user next opens that view.
 
 ### View task reset (`view_task_reset`)
@@ -138,6 +140,14 @@ The initial action library contains:
 - **Trigger:** `trigger_type=event` with `params.event=file_changed`. Matches changes to `plan`, `doc`, or `tasks` files (not recap itself). Uses the shared change-trigger debounce (30s idle, follow-up if dirty during run).
 - **Run:** `smart_process_recap_update` in `services/ai_recap_actions.py` gathers previous summary, plan, documentation, and flagged tasks (`section_flag=important` on any view, scoped to the process). AI returns `summary_text` and merged `update_rows` by date; the action replaces recap blocks directly.
 - **Latency:** fires after the idle window via a background timer; cron also processes overdue triggers.
+
+### Project summary (`project_summary_update`)
+
+- **Trigger:** `trigger_type=event` with `params.event=file_changed`. Matches project `plan`, `execution`, `doc`, and `tasks` files, excluding `overview` to avoid self-trigger loops.
+- **Parts:** project parts are inner `header` blocks read from `plan`, `execution`, and `tasks`.
+- **Current part:** AI infers the current main part from recent edits, docs, flagged tasks, and project content.
+- **Run:** `smart_project_summary_update` gathers plan, execution, documentation, tasks, previous overview, and flagged tasks, then replaces overview blocks with current summary, current part focus, flagged current-part tasks, flagged other-part tasks, recent progress date table, and ordered part list.
+- **Safety:** this automation only writes the `overview` file. Synchronizing project part headers across source files belongs to a separate future automation.
 
 ## Scheduling
 

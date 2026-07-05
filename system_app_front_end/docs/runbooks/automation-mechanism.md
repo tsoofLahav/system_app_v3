@@ -54,6 +54,7 @@ Definitions drive the table below; see backend `docs/automation.md` for full reg
 | `daily_rotation` | Every day at 00:00 | Main | Archive current main-topic `Daily` file and create a new `Daily` text file. |
 | `process_refresh` | User schedule (disabled by default) | All processes | For each process, refresh plan/doc/tasks via AI proposal; companion review task in daily view. |
 | `process_recap_update` | On file change (enabled by default) | All processes | Regenerate process recap when plan, doc, or tasks change; direct AI write (no review). |
+| `project_summary_update` | On project file change (enabled by default) | All projects | Regenerate the project overview directly from project parts, execution, documentation, and tasks. |
 | `view_task_reset` | Per-view schedules (disabled by default) | Daily, weekly, monthly, quarterly task views | Uncheck completed tasks in each due view, record already-active tasks as missed, archive a report under Automations, and show a one-time acknowledgement when the view opens. |
 
 ## Process recap (`process_recap_update`)
@@ -63,6 +64,22 @@ Separate from `process_refresh`: event-driven, updates only the recap (`overview
 - **Trigger:** By changes — edits to plan, documentation, or tasks in a process topic.
 - **Recap blocks updated:** `summary` (narrative), `table` (recent doc updates merged by date), `task_list` (snapshot of tasks flagged important in any view).
 - **No companion task** and no change-review dialog; the AI output replaces block content in place.
+
+## Project summary (`project_summary_update`)
+
+Projects use ordered **parts** as inner headers shared by `plan`, `execution`,
+and `tasks`. This automation runs after project core-file changes and writes
+directly to `overview`, like process recap.
+
+- **Trigger:** By changes — edits to project plan, execution, documentation, or tasks.
+- **Part reading:** Reads part headers from `plan`, `execution`, and `tasks`;
+  it does not modify those source files.
+- **Current part:** AI infers the main part in progress for overview display.
+- **Overview blocks updated:** project summary, current-part header and focused
+  update, flagged tasks for current part, flagged tasks from other parts, last
+  three progress dates table, and ordered parts list.
+- **No companion task** and no change-review dialog; the automation is a
+  direct-write overview/recap flow.
 
 ## AI Proposals
 

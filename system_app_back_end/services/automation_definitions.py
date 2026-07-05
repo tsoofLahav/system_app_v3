@@ -213,6 +213,37 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
         fan_out=False,
         change_trigger=ChangeTriggerConfig(idle_seconds=30),
     ),
+    "project_summary_update": AutomationDefinition(
+        key="project_summary_update",
+        name="Update project summary",
+        description=(
+            "When project plan, execution, documentation, or tasks change, "
+            "regenerate the project overview using the project-specific structure."
+        ),
+        action_type="project_summary_update",
+        scope=ScopeConfig(
+            fixed={"kind": "topic_type", "topic_type": "project"},
+            allowed_kinds=("topic_type", "topic", "all"),
+        ),
+        activations=("event",),
+        bindings=(
+            FileBinding(role="plan", match={"type": "plan"}),
+            FileBinding(role="execution", match={"type": "execution"}),
+            FileBinding(role="tasks", match={"type": "tasks"}),
+            FileBinding(role="doc", match={"type": "doc"}),
+            FileBinding(role="overview", match={"type": "overview"}),
+        ),
+        companion=None,
+        ai=AiConfig(
+            action_key="smart_project_summary_update",
+            proposal_types=(),
+            review_documents=(),
+        ),
+        default_schedule=None,
+        default_enabled=True,
+        fan_out=False,
+        change_trigger=ChangeTriggerConfig(idle_seconds=30),
+    ),
     "view_task_reset": AutomationDefinition(
         key="view_task_reset",
         name="Reset view tasks",
@@ -334,6 +365,9 @@ def default_params(key: str) -> dict[str, Any]:
     if definition.key == "process_recap_update":
         result["event"] = "file_changed"
         result["recap"] = {"max_date_groups": 5}
+    if definition.key == "project_summary_update":
+        result["event"] = "file_changed"
+        result["project_summary"] = {"max_date_groups": 3}
     if definition.key == "view_task_reset":
         result["target_view"] = "weekly"
         result["view_resets"] = {
@@ -436,6 +470,11 @@ def apply_definition_to_params(
         recap = dict(merged.get("recap") or {})
         recap.update(dict(raw["recap"]))
         merged["recap"] = recap
+
+    if raw.get("project_summary"):
+        project_summary = dict(merged.get("project_summary") or {})
+        project_summary.update(dict(raw["project_summary"]))
+        merged["project_summary"] = project_summary
 
     if raw.get("change_trigger"):
         change_trigger = dict(merged.get("change_trigger") or {})

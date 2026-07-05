@@ -100,6 +100,7 @@ def merge_rule_params(existing, incoming):
             "scope",
             "bindings",
             "recap",
+            "project_summary",
             "change_trigger",
             "view_resets",
         }:
@@ -136,6 +137,11 @@ def merge_rule_params(existing, incoming):
         recap = dict(base.get("recap") or {})
         recap.update(patch["recap"])
         merged["recap"] = recap
+
+    if isinstance(patch.get("project_summary"), dict):
+        project_summary = dict(base.get("project_summary") or {})
+        project_summary.update(patch["project_summary"])
+        merged["project_summary"] = project_summary
 
     if isinstance(patch.get("change_trigger"), dict):
         change_trigger = dict(base.get("change_trigger") or {})
