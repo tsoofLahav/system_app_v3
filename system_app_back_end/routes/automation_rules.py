@@ -30,6 +30,10 @@ def _rule_payload(rule):
 def _default_next_run(schedule, timezone=DEFAULT_AUTOMATION_TIMEZONE):
     if not schedule:
         return None
+    try:
+        return next_run_after(schedule, datetime.utcnow(), timezone=timezone)
+    except Exception:
+        return None
 
 
 def _default_next_run_for_rule(rule):
@@ -39,10 +43,6 @@ def _default_next_run_for_rule(rule):
         except Exception:
             return None
     return _default_next_run(rule.schedule, rule.timezone)
-    try:
-        return next_run_after(schedule, datetime.utcnow(), timezone=timezone)
-    except Exception:
-        return None
 
 
 @automation_rules_bp.route("/automation_rules", methods=["GET"])
