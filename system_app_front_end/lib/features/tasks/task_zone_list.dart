@@ -8,6 +8,7 @@ import '../../core/models/task_view_menu_context.dart';
 import '../../design_system/app_typography.dart';
 import '../../features/blocks/formatted_text_field.dart';
 import '../../core/registry/automation_flow_registry.dart';
+import '../../features/shell/automation_abandon_dialog.dart';
 import '../../shared/widgets/task_row.dart';
 import '../blocks/block_context_menu.dart';
 
@@ -71,7 +72,14 @@ class _TaskZoneListState extends State<TaskZoneList> {
             taskBlock: widget.file != null
                 ? widget.state.taskRowBlockInFile(widget.file!, task)
                 : null,
-            onToggle: () => widget.state.toggleTaskStatus(task),
+            onToggle: () => widget.state.toggleTaskStatus(
+              task,
+              confirmAbandonCompanionFlow: () =>
+                  showAutomationAbandonChangesDialog(
+                    context: context,
+                    state: widget.state,
+                  ),
+            ),
             onTitleChanged: (title) => widget.onTitleChanged(task, title),
             onDelete: task.isAutomationTrigger ? null : () => widget.onDelete(task),
             onAddTaskAfter: (position) =>

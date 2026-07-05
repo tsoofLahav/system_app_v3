@@ -12,6 +12,7 @@ import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
 import '../../design_system/note_widgets.dart';
 import '../shell/app_bottom_bar.dart';
+import '../../shared/widgets/main_pane_loader.dart';
 import 'view_pane_tasks_editor.dart';
 
 class TaskViewPane extends StatefulWidget {
@@ -82,20 +83,7 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     final displayMode = widget.state.viewDisplayMode;
 
     if (widget.state.loading && tasks.isEmpty && sections.isEmpty) {
-      return TopicCanvasBackground(
-        accent: AppColors.text,
-        isMain: true,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 12),
-              Text(label, style: AppTypography.noteTitleStyle),
-            ],
-          ),
-        ),
-      );
+      return MainPaneLoader(message: label);
     }
 
     return TopicCanvasBackground(

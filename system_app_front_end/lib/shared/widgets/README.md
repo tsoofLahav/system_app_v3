@@ -12,13 +12,15 @@ Standards:
 - Avoid direct dependencies on one feature's private state shape.
 - If usage narrows to one feature, move it back to that feature folder.
 
-## Context menus (`app_context_menu.dart`)
+## Main pane loading (`main_pane_loader.dart`)
+
+Use `MainPaneLoader` for any in-app fetch/reload spinner. It renders inside the main canvas only — sidebar and bottom bar stay visible. Use `compact: true` for inline/bottom pagination loaders.
 
 Glass-style bubble menus (outline + shadow + blur) used for file/block right-click. **Do not** use Material `showMenu` for new menus — extend `AppContextMenu` instead.
 
 | Piece | Role |
 |---|---|
-| `AppContextMenu.show` | Custom overlay; pass `isRtl: strings.isRtl` (do not rely on overlay inheriting `Directionality`) |
+| `AppContextMenu.show` | Custom overlay; pass `isRtl: strings.isRtl` (do not rely on overlay inheriting `Directionality`). Only one menu open at a time — call `AppContextMenu.dismissActive()` before async work if building entries off the UI thread. |
 | `AppContextMenuSubmenu` | Hover row with side bubble (e.g. **Add block →** insert types) |
 | `AppContextMenuItem` / `AppContextMenuDivider` | Action rows and separators |
 

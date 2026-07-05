@@ -36,7 +36,11 @@ class AppBottomBar extends StatelessWidget {
 
   final AppState state;
 
-  bool get _showLayout => !state.isViewMode && state.selectedDetail != null;
+  bool get _showLayout =>
+      !state.isArchiveMode && !state.isViewMode && state.selectedDetail != null;
+
+  bool get _showArchiveDelete =>
+      state.isArchiveMode && state.archiveTotalCount > 0;
 
   @override
   Widget build(BuildContext context) {
@@ -91,9 +95,38 @@ class AppBottomBar extends StatelessWidget {
                         icon: AppIcons.layout,
                         onPressed: () => _showLayoutPicker(context),
                       ),
+                    if (_showArchiveDelete)
+                      _BarIconButton(
+                        tooltip: state.archiveDeleteMode
+                            ? (state.archiveDeleteSelection.isEmpty
+                                  ? s['archiveDeleteDone']
+                                  : s['archiveDeleteConfirm'])
+                            : s['archiveDeleteSelect'],
+                        icon: AppIcons.trash,
+                        active: state.archiveDeleteMode,
+                        onPressed: () => _handleArchiveDelete(context),
+                      ),
                   ],
                 ),
               ),
+              if (_showArchiveDelete && state.archiveDeleteMode) ...[
+                const SizedBox(width: 8),
+                GlassBarSegment(
+                  height: AppBottomBarMetrics.barHeight,
+                  padding: _segmentPadding,
+                  child: TextButton(
+                    onPressed: state.archiveDeleteSelection.isEmpty
+                        ? null
+                        : () => _confirmArchiveDelete(context),
+                    child: Text(
+                      s['archiveDeleteConfirm'],
+                      style: AppTypography.metaStyle.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               if (_showLayout) ...[
                 const SizedBox(width: 8),
                 GlassBarSegment(
@@ -206,6 +239,42 @@ class AppBottomBar extends StatelessWidget {
     );
   }
 
+  Future<void> _handleArchiveDelete(BuildContext context) async {
+    if (!state.archiveDeleteMode) {
+      state.toggleArchiveDeleteMode();
+      return;
+    }
+    if (state.archiveDeleteSelection.isEmpty) {
+      state.toggleArchiveDeleteMode();
+      return;
+    }
+    await _confirmArchiveDelete(context);
+  }
+
+  Future<void> _confirmArchiveDelete(BuildContext context) async {
+    final s = state.strings;
+    final count = state.archiveDeleteSelection.length;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AppGlassDialog(
+        title: Text(s['archiveDeleteTitle']),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s['cancel']),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(s['delete']),
+          ),
+        ],
+        child: Text(s.archiveDeleteBody(count)),
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    await state.deleteSelectedArchiveFiles();
+  }
+
   void _showLayoutPicker(BuildContext context) {
     final topic = state.selectedDetail?.topic;
     if (topic == null) return;
@@ -256,11 +325,13 @@ class _BarIconButton extends StatelessWidget {
     required this.tooltip,
     required this.icon,
     required this.onPressed,
+    this.active = false,
   });
 
   final String tooltip;
   final IconData icon;
   final VoidCallback onPressed;
+  final bool active;
 
   @override
   Widget build(BuildContext context) {
@@ -272,7 +343,9 @@ class _BarIconButton extends StatelessWidget {
       icon: AppIcon(
         icon,
         size: _iconSize,
-        color: AppColors.text.withValues(alpha: 0.72),
+        color: active
+            ? AppColors.primary.withValues(alpha: 0.88)
+            : AppColors.text.withValues(alpha: 0.72),
       ),
     );
   }

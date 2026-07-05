@@ -31,6 +31,10 @@ abstract final class AppColors {
   /// AI menu accent — cyan glow on bottom-bar tools.
   static const aiCyan = Color(0xFF00D4FF);
 
+  /// App primary accent — teal-blue used for toggles, selections, and key actions.
+  static const primary = Color(0xFF37899E);
+  static const primaryLight = Color(0xFF51A0B0);
+
   /// Environmental background — always neutral (topic color lives on file panes).
   static const neutralCanvasGradient = LinearGradient(
     begin: Alignment.topLeft,

@@ -49,6 +49,17 @@ abstract final class AppContextMenu {
   static const _bubbleRadius = 12.0;
   static const _submenuGap = 4.0;
 
+  static VoidCallback? _dismissActive;
+  static Object? _dismissActiveSession;
+
+  /// Closes the currently open context menu, if any.
+  static void dismissActive() {
+    final dismiss = _dismissActive;
+    _dismissActive = null;
+    _dismissActiveSession = null;
+    dismiss?.call();
+  }
+
   static TextStyle _labelStyle({
     bool destructive = false,
     bool highlighted = false,
@@ -86,15 +97,29 @@ abstract final class AppContextMenu {
     required List<AppContextMenuEntry> entries,
     required bool isRtl,
   }) {
+    dismissActive();
+
     final overlay = Overlay.of(context, rootOverlay: true);
     final textDirection = isRtl ? TextDirection.rtl : TextDirection.ltr;
     final completer = Completer<String?>();
     late OverlayEntry entry;
+    var removed = false;
+    final session = Object();
 
     void close([String? value]) {
       if (!completer.isCompleted) completer.complete(value);
-      entry.remove();
+      if (identical(_dismissActiveSession, session)) {
+        _dismissActiveSession = null;
+        _dismissActive = null;
+      }
+      if (!removed) {
+        removed = true;
+        entry.remove();
+      }
     }
+
+    _dismissActiveSession = session;
+    _dismissActive = () => close(null);
 
     entry = OverlayEntry(
       builder: (overlayContext) => Directionality(
@@ -160,6 +185,7 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onTap: widget.onDismiss,
+                  onSecondaryTapDown: (_) => widget.onDismiss(),
                 ),
               ),
               _positionedMenu(context),

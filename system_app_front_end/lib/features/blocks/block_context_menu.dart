@@ -60,6 +60,7 @@ class BlockContextMenu {
     Block? targetBlock,
     BlockMenuHandler? onAction,
   }) async {
+    AppContextMenu.dismissActive();
     final controller = BlockTextFocusRegistry.activeController;
     if (controller != null) {
       FormatRange.capturePending(controller.text, controller.selection);
@@ -115,10 +116,21 @@ class BlockContextMenu {
         );
       case 'table':
         items.addAll([
-          AppContextMenuItem(value: 'table:row', label: strings['addRow']),
           AppContextMenuItem(
-            value: 'table:column',
-            label: strings['addColumn'],
+            value: 'table:row:before',
+            label: strings['addRowAbove'],
+          ),
+          AppContextMenuItem(
+            value: 'table:row:after',
+            label: strings['addRowBelow'],
+          ),
+          AppContextMenuItem(
+            value: 'table:column:before',
+            label: strings['addColumnBefore'],
+          ),
+          AppContextMenuItem(
+            value: 'table:column:after',
+            label: strings['addColumnAfter'],
           ),
         ]);
       case 'graph':

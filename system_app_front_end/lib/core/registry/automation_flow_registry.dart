@@ -36,6 +36,9 @@ abstract final class AutomationFlowRegistry {
     );
     if (completed) {
       await state.ensureAutomationTriggerTaskDone(task.id);
+      await state.refreshPendingProposalsForTopics(
+        companions.map((c) => c.topicId).whereType<int>(),
+      );
       if (state.selectedViewType != null) {
         await state.refreshCurrentView();
       }

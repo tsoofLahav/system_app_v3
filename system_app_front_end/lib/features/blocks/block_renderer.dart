@@ -13,6 +13,7 @@ import 'points_list_block_widget.dart';
 import 'summary_block_widget.dart';
 import 'table_block_widget.dart';
 import 'block_context_menu.dart';
+import '../../features/shell/automation_abandon_dialog.dart';
 import 'tasks_connected_editor.dart';
 import 'task_block_widget.dart';
 import 'text_block_widget.dart';
@@ -27,6 +28,7 @@ class BlockRenderer extends StatelessWidget {
     this.topicAccent,
     this.isMainTopic = false,
     this.onBlockMenuAction,
+    this.onTableCellSecondaryTapDown,
   });
 
   final AppFile file;
@@ -36,6 +38,7 @@ class BlockRenderer extends StatelessWidget {
   final Color? topicAccent;
   final bool isMainTopic;
   final BlockMenuHandler? onBlockMenuAction;
+  final TableCellSecondaryTapCallback? onTableCellSecondaryTapDown;
 
   @override
   Widget build(BuildContext context) {
@@ -114,7 +117,14 @@ class BlockRenderer extends StatelessWidget {
           file: file,
           listBlock: block,
           state: state,
-          onToggle: () => state.toggleTaskStatus(task!),
+          onToggle: () => state.toggleTaskStatus(
+            task!,
+            confirmAbandonCompanionFlow: () =>
+                showAutomationAbandonChangesDialog(
+                  context: context,
+                  state: state,
+                ),
+          ),
         );
       case 'image':
         final path = block.content['image_path'] as String? ?? '';
@@ -136,6 +146,7 @@ class BlockRenderer extends StatelessWidget {
         return TableBlockWidget(
           block: block,
           onChanged: (c) => state.updateBlockContent(block, c, notify: true),
+          onCellSecondaryTapDown: onTableCellSecondaryTapDown,
         );
       case 'list':
         return PointsListBlockWidget(

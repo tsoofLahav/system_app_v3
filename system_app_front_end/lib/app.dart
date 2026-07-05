@@ -24,15 +24,7 @@ class SystemApp extends StatelessWidget {
                 child: child ?? const SizedBox.shrink(),
               );
             },
-            home:
-                state.loading &&
-                    state.selectedDetail == null &&
-                    state.selectedViewType == null &&
-                    state.error == null
-                ? const Scaffold(
-                    body: Center(child: CircularProgressIndicator()),
-                  )
-                : AppShell(state: state),
+            home: AppShell(state: state),
           );
         },
       ),

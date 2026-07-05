@@ -7,9 +7,10 @@ import 'app_typography.dart';
 ThemeData buildAppTheme(AppLanguage language) {
   AppTypography.configure(appLanguage: language);
 
-  const seed = Color(0xFF6B7280);
+  const seed = AppColors.primary;
   final scheme = ColorScheme.fromSeed(
     seedColor: seed,
+    primary: AppColors.primary,
     surface: AppColors.canvasNeutralTop,
   );
 
@@ -19,6 +20,26 @@ ThemeData buildAppTheme(AppLanguage language) {
     scaffoldBackgroundColor: AppColors.canvasNeutralTop,
     textTheme: AppTypography.textTheme,
     dividerColor: AppColors.sidebarBorder,
+    switchTheme: SwitchThemeData(
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      thumbColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) {
+          return Colors.white.withValues(alpha: 0.72);
+        }
+        return Colors.white;
+      }),
+      trackColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
+          return AppColors.primary;
+        }
+        if (states.contains(WidgetState.disabled)) {
+          return AppColors.textHint.withValues(alpha: 0.18);
+        }
+        return AppColors.textHint.withValues(alpha: 0.28);
+      }),
+      trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
+      overlayColor: WidgetStateProperty.all(AppColors.primary.withValues(alpha: 0.08)),
+    ),
     popupMenuTheme: PopupMenuThemeData(
       color: AppColors.noteTop.withValues(alpha: 0.94),
       elevation: 8,

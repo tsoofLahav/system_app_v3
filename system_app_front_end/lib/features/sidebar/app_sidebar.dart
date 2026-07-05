@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
+import '../../core/models/archive_index.dart';
 import '../../core/models/topic.dart';
 import '../../core/registry/view_registry.dart';
 import '../../design_system/app_colors.dart';
@@ -11,31 +12,46 @@ import '../../shared/widgets/topic_emoji.dart';
 import '../../shared/widgets/disclosure_icon.dart';
 import '../create_topic/create_topic_dialog.dart';
 
+abstract final class AppSidebarMetrics {
+  static const defaultWidth = 200.0;
+  static const outerStart = 10.0;
+  static const outerEnd = 8.0;
+  static const outerVertical = 10.0;
+
+  static double contentInset(double panelWidth) =>
+      outerStart + panelWidth + outerEnd;
+}
+
 class AppSidebar extends StatefulWidget {
-  const AppSidebar({super.key, required this.state});
+  const AppSidebar({
+    super.key,
+    required this.state,
+    required this.width,
+    required this.onWidthChanged,
+  });
 
   final AppState state;
+  final double width;
+  final ValueChanged<double> onWidthChanged;
 
   @override
   State<AppSidebar> createState() => _AppSidebarState();
 }
 
 class _AppSidebarState extends State<AppSidebar> {
-  static const double _defaultWidth = 200;
   static const double _minWidth = 150;
   static const double _maxWidth = 340;
-  static const double _resizeHandleWidth = 8;
-
-  double _width = _defaultWidth;
+  static const double _resizeHandleWidth = 10;
+  static const _sidebarRadius = 14.0;
+  static const _panelTint = Color(0xFFDDF6F2);
 
   void _resize(DragUpdateDetails details) {
     final direction = Directionality.of(context);
     final delta = direction == TextDirection.rtl
         ? -details.delta.dx
         : details.delta.dx;
-    setState(() {
-      _width = (_width + delta).clamp(_minWidth, _maxWidth).toDouble();
-    });
+    final next = (widget.width + delta).clamp(_minWidth, _maxWidth).toDouble();
+    widget.onWidthChanged(next);
   }
 
   @override
@@ -44,19 +60,34 @@ class _AppSidebarState extends State<AppSidebar> {
     final s = state.strings;
 
     return SizedBox(
-      width: _width,
+      width: widget.width,
       child: Stack(
-        children: [
-          Positioned.fill(
-            child: GlassSurface(
-              borderRadius: BorderRadius.zero,
-              blurSigma: 22,
-              tintOpacity: 0.76,
-              tintColor: const Color(0xFFDDF6F2),
-              elevation: 4,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+          children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(_sidebarRadius),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: GlassSurface(
+                  borderRadius: BorderRadius.circular(_sidebarRadius),
+                  blurSigma: 22,
+                  tintOpacity: 0.76,
+                  tintColor: _panelTint,
+                  elevation: 0,
+                  border: Border.all(
+                    color: AppColors.noteBorder.withValues(alpha: 0.5),
+                    width: AppColors.filePaneBorderWidth,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                   const SizedBox(height: 12),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -66,6 +97,7 @@ class _AppSidebarState extends State<AppSidebar> {
                         foregroundColor: AppColors.text,
                         backgroundColor:
                             !state.isViewMode &&
+                                !state.isArchiveMode &&
                                 state.selectedTopic?.isMain == true
                             ? AppColors.noteBorder.withValues(alpha: 0.35)
                             : Colors.transparent,
@@ -91,7 +123,7 @@ class _AppSidebarState extends State<AppSidebar> {
                           title: s['projects'],
                           topics: state.projects,
                           selected: state.selectedTopic,
-                          isViewMode: state.isViewMode,
+                          isViewMode: state.isViewMode || state.isArchiveMode,
                           state: state,
                           onSelect: state.selectTopic,
                         ),
@@ -135,7 +167,8 @@ class _AppSidebarState extends State<AppSidebar> {
                       ),
                     ),
                   ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -149,13 +182,7 @@ class _AppSidebarState extends State<AppSidebar> {
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
                 onHorizontalDragUpdate: _resize,
-                child: Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: Container(
-                    width: 1,
-                    color: AppColors.sidebarBorder.withValues(alpha: 0.4),
-                  ),
-                ),
+                child: const SizedBox.expand(),
               ),
             ),
           ),
@@ -271,12 +298,15 @@ class _ArchiveSection extends StatefulWidget {
 
 class _ArchiveSectionState extends State<_ArchiveSection> {
   bool expanded = false;
+  var _projectsExpanded = true;
+  var _processesExpanded = true;
+  var _areasExpanded = true;
 
   @override
   Widget build(BuildContext context) {
     final s = widget.state.strings;
-    final archivedTopics = widget.state.archivedTopics;
-    final archivedFiles = widget.state.archivedFilesByTopicId;
+    final index = widget.state.archiveIndex;
+    if (index.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -301,72 +331,106 @@ class _ArchiveSectionState extends State<_ArchiveSection> {
           ),
         ),
         if (expanded) ...[
-          for (final topic in archivedTopics)
+          if (index.daily != null)
             _TopicTile(
-              topic: topic,
-              displayName: widget.state.topicDisplayName(topic),
-              selected: widget.state.selectedTopic?.id == topic.id,
+              topic: index.daily!.topic,
+              displayName: widget.state.topicDisplayName(index.daily!.topic),
+              selected: widget.state.isArchiveMode &&
+                  widget.state.selectedArchiveTopic?.id == index.daily!.topic.id,
               state: widget.state,
-              onTap: () {
-                widget.state.selectTopic(topic, includeArchived: true);
-              },
+              onTap: () => widget.state.selectArchiveTopic(index.daily!.topic),
               onEdit: () {},
             ),
-          for (final entry in archivedFiles.entries)
-            for (final file in entry.value)
-              _ArchiveFileTile(
-                fileName: file.name,
-                topicName: _topicNameFor(entry.key),
-                onTap: () {
-                  final topic = widget.state.topics.firstWhere(
-                    (t) => t.id == entry.key,
-                  );
-                  widget.state.selectTopic(topic, includeArchived: true);
-                },
-              ),
+          if (index.projects.isNotEmpty)
+            _ArchiveTopicGroup(
+              title: s['projects'],
+              expanded: _projectsExpanded,
+              onToggle: () =>
+                  setState(() => _projectsExpanded = !_projectsExpanded),
+              entries: index.projects,
+              state: widget.state,
+            ),
+          if (index.processes.isNotEmpty)
+            _ArchiveTopicGroup(
+              title: s['processes'],
+              expanded: _processesExpanded,
+              onToggle: () =>
+                  setState(() => _processesExpanded = !_processesExpanded),
+              entries: index.processes,
+              state: widget.state,
+            ),
+          if (index.areas.isNotEmpty)
+            _ArchiveTopicGroup(
+              title: s['areas'],
+              expanded: _areasExpanded,
+              onToggle: () => setState(() => _areasExpanded = !_areasExpanded),
+              entries: index.areas,
+              state: widget.state,
+            ),
         ],
         const SizedBox(height: 2),
       ],
     );
   }
-
-  String? _topicNameFor(int topicId) {
-    for (final topic in widget.state.topics) {
-      if (topic.id == topicId) return widget.state.topicDisplayName(topic);
-    }
-    return null;
-  }
 }
 
-class _ArchiveFileTile extends StatelessWidget {
-  const _ArchiveFileTile({
-    required this.fileName,
-    required this.topicName,
-    required this.onTap,
+class _ArchiveTopicGroup extends StatelessWidget {
+  const _ArchiveTopicGroup({
+    required this.title,
+    required this.expanded,
+    required this.onToggle,
+    required this.entries,
+    required this.state,
   });
 
-  final String fileName;
-  final String? topicName;
-  final VoidCallback onTap;
+  final String title;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final List<ArchiveTopicEntry> entries;
+  final AppState state;
 
   @override
   Widget build(BuildContext context) {
-    final label = topicName == null ? fileName : '$topicName / $fileName';
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(6),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(20, 3, 8, 3),
-          child: Text(
-            label,
-            style: AppTypography.sidebarItemStyle,
-            overflow: TextOverflow.ellipsis,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: onToggle,
+          child: Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 3, 8, 2),
+            child: Row(
+              children: [
+                DisclosureIcon(
+                  expanded: expanded,
+                  color: AppColors.text.withValues(alpha: 0.72),
+                  size: 14,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: AppTypography.metaStyle.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
+        if (expanded)
+          for (final entry in entries)
+            _TopicTile(
+              topic: entry.topic,
+              displayName: state.topicDisplayName(entry.topic),
+              selected: state.isArchiveMode &&
+                  state.selectedArchiveTopic?.id == entry.topic.id,
+              state: state,
+              onTap: () => state.selectArchiveTopic(entry.topic),
+              onEdit: () {},
+            ),
+      ],
     );
   }
 }

@@ -13,6 +13,8 @@ class AppStrings {
     this._fileNames,
     this._fileTypes,
     this._layouts,
+    this._automationNames,
+    this._automationDescriptions,
   );
 
   final AppLanguage language;
@@ -27,6 +29,8 @@ class AppStrings {
   final Map<String, String> _fileNames;
   final Map<String, String> _fileTypes;
   final Map<String, String> _layouts;
+  final Map<String, String> _automationNames;
+  final Map<String, String> _automationDescriptions;
 
   static AppStrings forLanguage(AppLanguage language) =>
       language == AppLanguage.he ? he : en;
@@ -39,6 +43,8 @@ class AppStrings {
     _fileNamesEn,
     _fileTypesEn,
     _layoutsEn,
+    _automationNamesEn,
+    _automationDescriptionsEn,
   );
 
   static const AppStrings he = AppStrings._(
@@ -49,6 +55,8 @@ class AppStrings {
     _fileNamesHe,
     _fileTypesHe,
     _layoutsHe,
+    _automationNamesHe,
+    _automationDescriptionsHe,
   );
 
   String operator [](String key) => _ui[key] ?? key;
@@ -59,6 +67,14 @@ class AppStrings {
       _fileNames[englishName] ?? englishName;
   String fileTypeLabel(String type) => _fileTypes[type] ?? type;
   String layoutLabel(String id) => _layouts[id] ?? id;
+
+  /// Built-in automation name by English definition [key] (from backend).
+  String automationNameLabel(String key, {String? fallback}) =>
+      _automationNames[key] ?? fallback ?? key;
+
+  /// Built-in automation description by English definition [key].
+  String automationDescriptionLabel(String key, {String? fallback}) =>
+      _automationDescriptions[key] ?? fallback ?? '';
 
   String displayTopicName(String? topicName) {
     if (topicName == 'automations') return _views['automations'] ?? topicName!;
@@ -71,6 +87,9 @@ class AppStrings {
 
   String deleteFileMessage(String name) =>
       this['deleteFileBody'].replaceAll('{name}', name);
+
+  String archiveDeleteBody(int count) =>
+      this['archiveDeleteBody'].replaceAll('{count}', '$count');
 
   String moreFiles(int count) =>
       this['moreFiles'].replaceAll('{count}', count.toString());
@@ -182,6 +201,10 @@ class AppStrings {
     'addTaskList': 'Add task list',
     'addRow': 'Add row',
     'addColumn': 'Add column',
+    'addRowAbove': 'Add row above',
+    'addRowBelow': 'Add row below',
+    'addColumnBefore': 'Add column before',
+    'addColumnAfter': 'Add column after',
     'deleteBlock': 'Delete block',
     'bulletList': 'Bullet list',
     'numberedList': 'Numbered list',
@@ -314,6 +337,19 @@ class AppStrings {
     'dismiss': 'Dismiss',
     'unchanged': 'Unchanged',
     'suggestedChange': 'Suggested change',
+    'automationAbandonTitle': 'Discard suggested changes?',
+    'automationAbandonBody':
+        'Marking this task done will discard all pending updates from this automation run.',
+    'automationAbandonConfirm': 'Discard changes',
+    'archiveSearchHint': 'Search archived files…',
+    'archiveNoFiles': 'No archived files in this topic.',
+    'archiveNoSearchResults': 'No archived files match your search.',
+    'archiveSelectFile': 'Select a file to preview',
+    'archiveDeleteSelect': 'Select archived files to delete',
+    'archiveDeleteConfirm': 'Delete selected files',
+    'archiveDeleteTitle': 'Delete archived files?',
+    'archiveDeleteBody': 'Delete {count} archived files permanently?',
+    'archiveDeleteDone': 'Cancel selection',
   };
 
   static const _uiHe = {
@@ -383,6 +419,10 @@ class AppStrings {
     'addTaskList': 'הוסף רשימת משימות',
     'addRow': 'הוסף שורה',
     'addColumn': 'הוסף עמודה',
+    'addRowAbove': 'הוסף שורה מעל',
+    'addRowBelow': 'הוסף שורה מתחת',
+    'addColumnBefore': 'הוסף עמודה לפני',
+    'addColumnAfter': 'הוסף עמודה אחרי',
     'deleteBlock': 'מחק בלוק',
     'bulletList': 'רשימת נקודות',
     'numberedList': 'רשימה ממוספרת',
@@ -451,7 +491,7 @@ class AppStrings {
     'aiReviewSoon': 'סקירה וניתוח — בקרוב.',
     'archive': 'ארכיון',
     'automations': 'אוטומציות',
-    'dailyRotation': 'החלפה יומית',
+    'dailyRotation': 'החלפת מסמך יומי',
     'updateAllProcesses': 'עדכון כל התהליכים',
     'enabled': 'פעיל',
     'disabled': 'כבוי',
@@ -515,6 +555,19 @@ class AppStrings {
     'dismiss': 'סגור',
     'unchanged': 'ללא שינוי',
     'suggestedChange': 'שינוי מוצע',
+    'automationAbandonTitle': 'לבטל את השינויים שהוצעו?',
+    'automationAbandonBody':
+        'סימון המשימה כבוצעה יבטל את כל העדכונים הממתינים מהרצת האוטומציה.',
+    'automationAbandonConfirm': 'בטל שינויים',
+    'archiveSearchHint': 'חיפוש קבצים בארכיון…',
+    'archiveNoFiles': 'אין קבצים בארכיון בנושא זה.',
+    'archiveNoSearchResults': 'לא נמצאו קבצים בארכיון התואמים לחיפוש.',
+    'archiveSelectFile': 'בחר קובץ לתצוגה מקדימה',
+    'archiveDeleteSelect': 'בחר קבצים בארכיון למחיקה',
+    'archiveDeleteConfirm': 'מחק קבצים שנבחרו',
+    'archiveDeleteTitle': 'למחוק קבצים מהארכיון?',
+    'archiveDeleteBody': 'למחוק {count} קבצים מהארכיון לצמיתות?',
+    'archiveDeleteDone': 'ביטול בחירה',
   };
 
   static const _viewsEn = {
@@ -547,6 +600,37 @@ class AppStrings {
     'project': 'פרויקט',
     'process': 'תהליך',
     'area': 'תחום',
+  };
+
+  static const _automationNamesEn = {
+    'daily_rotation': 'Daily rotation',
+    'process_refresh': 'Update all processes',
+    'process_recap_update': 'Update process recap',
+  };
+
+  static const _automationNamesHe = {
+    'daily_rotation': 'החלפת מסמך יומי',
+    'process_refresh': 'עדכון כל התהליכים',
+    'process_recap_update': 'עדכון סיכום תהליך',
+  };
+
+  static const _automationDescriptionsEn = {
+    'daily_rotation':
+        'Archive the current main Daily file and create a fresh one.',
+    'process_refresh':
+        'For each process topic, run a smart update on plan, doc, and tasks files.',
+    'process_recap_update':
+        'When plan, documentation, or tasks change, regenerate the process '
+        'recap with an AI summary and recent update notes.',
+  };
+
+  static const _automationDescriptionsHe = {
+    'daily_rotation': 'ארכב את קובץ היומי הראשי הנוכחי וצור אחד חדש.',
+    'process_refresh':
+        'עבור כל תהליך, הרץ עדכון חכם על קבצי התוכנית, התיעוד והמשימות.',
+    'process_recap_update':
+        'כשהתוכנית, התיעוד או המשימות משתנים, צור מחדש את סיכום התהליך '
+        'עם סיכום AI והערות עדכון אחרונות.',
   };
 
   static const _fileNamesEn = {

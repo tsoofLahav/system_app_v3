@@ -95,6 +95,8 @@ class _BoardBlockWidgetState extends State<BoardBlockWidget> {
   Rect? _cropSelectionLocal;
   List<BoardItem>? _localItems;
   final _focusNode = FocusNode();
+  final _verticalScrollController = ScrollController();
+  final _horizontalScrollController = ScrollController();
 
   static const _minSize = 48.0;
   static const _handleSize = 10.0;
@@ -561,6 +563,8 @@ class _BoardBlockWidgetState extends State<BoardBlockWidget> {
 
   @override
   void dispose() {
+    _horizontalScrollController.dispose();
+    _verticalScrollController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -608,13 +612,17 @@ class _BoardBlockWidgetState extends State<BoardBlockWidget> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: Scrollbar(
+                        controller: _verticalScrollController,
                         thumbVisibility: true,
                         child: SingleChildScrollView(
+                          controller: _verticalScrollController,
                           child: Scrollbar(
+                            controller: _horizontalScrollController,
                             notificationPredicate: (notification) =>
                                 notification.depth == 1,
                             thumbVisibility: true,
                             child: SingleChildScrollView(
+                              controller: _horizontalScrollController,
                               scrollDirection: Axis.horizontal,
                               child: SizedBox(
                                 width: canvasWidth,

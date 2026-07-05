@@ -12,6 +12,7 @@ import '../../design_system/file_layouts.dart';
 import '../../design_system/glass_surface.dart';
 import '../../design_system/note_widgets.dart';
 import '../shell/app_bottom_bar.dart';
+import '../../shared/widgets/main_pane_loader.dart';
 import '../../shared/widgets/file_layout_board.dart';
 import '../../shared/widgets/files_section_divider.dart';
 import '../../shared/widgets/pane_reorder_canvas.dart';
@@ -29,7 +30,7 @@ class TopicView extends StatelessWidget {
     if (state.loading &&
         state.selectedDetail == null &&
         state.selectedTopic == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const MainPaneLoader();
     }
 
     if (state.error != null &&

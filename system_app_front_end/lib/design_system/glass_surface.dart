@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
 import 'app_typography.dart';
+import 'bilingual_layout.dart';
 
 /// Shared glass parameters — use presets instead of ad-hoc values.
 class GlassStyleSpec {
@@ -563,15 +564,7 @@ class AppGlassDialog extends StatelessWidget {
                 const SizedBox(height: 10),
                 DefaultTextStyle(
                   style: actionText,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      for (var i = 0; i < actions.length; i++) ...[
-                        if (i > 0) const SizedBox(width: 8),
-                        actions[i],
-                      ],
-                    ],
-                  ),
+                  child: DialogActionsRow(children: actions),
                 ),
               ],
             ],

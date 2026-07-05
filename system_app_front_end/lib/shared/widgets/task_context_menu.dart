@@ -13,11 +13,12 @@ import '../../features/blocks/block_context_menu.dart';
 import 'app_context_menu.dart';
 
 /// Pick a topic before creating a task in a by-section view pane.
-Future<int?> showViewTopicPickerMenu({
+  Future<int?> showViewTopicPickerMenu({
   required BuildContext context,
   required Offset globalPosition,
   required AppState state,
 }) async {
+  AppContextMenu.dismissActive();
   final strings = state.strings;
   final entries = <AppContextMenuEntry>[
     for (final topic in state.activeTopics)
@@ -54,6 +55,7 @@ Future<void> showTaskContextMenu({
   BlockMenuHandler? onBlockAction,
   TaskViewMenuContext? viewMenuContext,
 }) async {
+  AppContextMenu.dismissActive();
   final strings = state.strings;
   final memberships = await state.membershipsForTask(task.id);
   final sectionsByView = viewMenuContext == null

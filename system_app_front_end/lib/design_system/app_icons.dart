@@ -8,6 +8,8 @@ abstract final class AppIcons {
   // Bottom bar & AI tools
   static const preferences = LucideIcons.settings2200;
   static const automations = LucideIcons.clock200;
+  static const runNow = LucideIcons.play200;
+  static const edit = LucideIcons.pencil200;
   static const layout = LucideIcons.layoutGrid200;
   static const ai = LucideIcons.sparkles200;
   static const consult = LucideIcons.messageCircle200;
@@ -29,6 +31,8 @@ abstract final class AppIcons {
   static const drag = LucideIcons.gripVertical200;
   static const paneDrag = LucideIcons.gripHorizontal200;
   static const close = LucideIcons.x200;
+  static const trash = LucideIcons.trash2200;
+  static const search = LucideIcons.search200;
 
   // Emoji picker categories
   static const recent = LucideIcons.clock200;

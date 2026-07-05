@@ -59,6 +59,7 @@ Three glass segments on topic view (not one monolithic pill):
 - Text: soft charcoal; secondary text muted.
 - English: Inter; Hebrew: SF Hebrew with system fallbacks.
 - Prefer `listItemStyle` / `taskRowStyle` for dense list and task content.
+- Bilingual layout helpers: [`bilingual_layout.dart`](bilingual_layout.dart). Rules: [`../core/l10n/BILINGUAL.md`](../core/l10n/BILINGUAL.md).
 
 ## Ownership
 

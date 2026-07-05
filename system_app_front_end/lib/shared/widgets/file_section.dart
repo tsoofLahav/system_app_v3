@@ -286,6 +286,29 @@ class _FileSectionState extends State<FileSection> {
                             ),
                           ),
                         )
+                      else if (widget.blocks[i].type == 'table')
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.blockGap),
+                          child: BlockRenderer(
+                            topicAccent: widget.accent,
+                            isMainTopic: topic.isMain,
+                            file: widget.file,
+                            block: widget.blocks[i],
+                            tasks: tasks,
+                            state: widget.state,
+                            onTableCellSecondaryTapDown: (position, row, column) =>
+                                _showBlockMenu(
+                              position,
+                              orderIndex: _insertOrderIndexForBlock(
+                                widget.blocks,
+                                i,
+                              ),
+                              targetBlock: widget.blocks[i],
+                              tableRow: row,
+                              tableColumn: column,
+                            ),
+                          ),
+                        )
                       else
                         GestureDetector(
                           behavior: HitTestBehavior.translucent,
@@ -421,6 +444,8 @@ class _FileSectionState extends State<FileSection> {
     Offset position, {
     required int orderIndex,
     Block? targetBlock,
+    int? tableRow,
+    int? tableColumn,
   }) async {
     await BlockContextMenu.show(
       context: context,
@@ -433,6 +458,8 @@ class _FileSectionState extends State<FileSection> {
         action,
         orderIndex: orderIndex,
         targetBlock: targetBlock,
+        tableRow: tableRow,
+        tableColumn: tableColumn,
       ),
     );
   }
@@ -449,6 +476,8 @@ class _FileSectionState extends State<FileSection> {
     String action, {
     required int orderIndex,
     Block? targetBlock,
+    int? tableRow,
+    int? tableColumn,
   }) async {
     if (action.startsWith('insert:')) {
       await _insertBlock(action.substring(7), orderIndex: orderIndex);
@@ -473,9 +502,20 @@ class _FileSectionState extends State<FileSection> {
           notify: true,
         );
       case 'table:row':
-        await _addTableRow(block);
+        await _insertTableRow(block, _tableRows(block.content['rows']).length);
+      case 'table:row:before':
+        await _insertTableRow(block, tableRow ?? 0);
+      case 'table:row:after':
+        await _insertTableRow(block, (tableRow ?? 0) + 1);
       case 'table:column':
-        await _addTableColumn(block);
+        await _insertTableColumn(
+          block,
+          _tableColumnCount(block.content['rows']),
+        );
+      case 'table:column:before':
+        await _insertTableColumn(block, tableColumn ?? 0);
+      case 'table:column:after':
+        await _insertTableColumn(block, (tableColumn ?? 0) + 1);
       case 'graph:bar':
       case 'graph:line':
       case 'graph:pie':
@@ -509,10 +549,11 @@ class _FileSectionState extends State<FileSection> {
     }
   }
 
-  Future<void> _addTableRow(Block block) async {
+  Future<void> _insertTableRow(Block block, int atIndex) async {
     final rows = _tableRows(block.content['rows']);
-    final columnCount = rows.map((r) => r.length).fold<int>(2, (a, b) => a > b ? a : b);
-    rows.add([for (var i = 0; i < columnCount; i++) '']);
+    final columnCount = _tableColumnCount(block.content['rows']);
+    final index = atIndex.clamp(0, rows.length);
+    rows.insert(index, [for (var i = 0; i < columnCount; i++) '']);
     await widget.state.updateBlockContent(
       block,
       {...block.content, 'rows': rows},
@@ -520,14 +561,26 @@ class _FileSectionState extends State<FileSection> {
     );
   }
 
-  Future<void> _addTableColumn(Block block) async {
+  Future<void> _insertTableColumn(Block block, int atIndex) async {
     final rows = _tableRows(block.content['rows']);
-    final next = [for (final row in rows) [...row, '']];
+    final next = [
+      for (final row in rows)
+        [
+          ...row.sublist(0, atIndex.clamp(0, row.length)),
+          '',
+          ...row.sublist(atIndex.clamp(0, row.length)),
+        ],
+    ];
     await widget.state.updateBlockContent(
       block,
       {...block.content, 'rows': next},
       notify: true,
     );
+  }
+
+  int _tableColumnCount(Object? rowsValue) {
+    final rows = _tableRows(rowsValue);
+    return rows.map((r) => r.length).fold<int>(2, (a, b) => a > b ? a : b);
   }
 
   List<List<String>> _tableRows(Object? value) {

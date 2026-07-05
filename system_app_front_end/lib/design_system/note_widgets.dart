@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
 
+/// Main-pane wrapper. Canvas gradient is painted once by [AppShell] so sidebar
+/// and content share a single continuous background.
 class TopicCanvasBackground extends StatelessWidget {
   const TopicCanvasBackground({
     super.key,
@@ -17,14 +19,7 @@ class TopicCanvasBackground extends StatelessWidget {
   final bool? isMain;
 
   @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: AppColors.neutralCanvasGradient,
-      ),
-      child: child,
-    );
-  }
+  Widget build(BuildContext context) => child;
 }
 
 class NoteCard extends StatelessWidget {

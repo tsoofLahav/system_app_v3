@@ -8,6 +8,7 @@ import 'l10n/app_language.dart';
 import 'l10n/app_strings.dart';
 import 'models/ai_proposal.dart';
 import 'models/app_file.dart';
+import 'models/archive_index.dart';
 import 'models/automation_companion_link.dart';
 import 'models/automation_definition.dart';
 import 'models/automation_rule.dart';
@@ -100,6 +101,7 @@ class AppState extends ChangeNotifier {
       AutomationCompanionService(_api);
 
   bool loading = true;
+  bool appReady = false;
   String? error;
   List<Topic> topics = [];
   Topic? mainTopic;
@@ -117,6 +119,27 @@ class AppState extends ChangeNotifier {
   List<AutomationDefinition> automationDefinitions = [];
   List<AiProposal> pendingAiProposals = [];
   Map<int, List<AppFile>> archivedFilesByTopicId = {};
+  ArchiveIndex archiveIndex = ArchiveIndex.empty;
+  Topic? selectedArchiveTopic;
+  List<AppFile> archiveFilesForTopic = [];
+  Map<int, List<Block>> archiveBlocksByFileId = {};
+  Map<int, List<Task>> archiveTasksByBlockId = {};
+  Map<int, List<String>> archiveHeaderTextsByFileId = {};
+  AppFile? selectedArchiveFile;
+  bool archiveDeleteMode = false;
+  final Set<int> archiveDeleteSelection = {};
+  int archiveTotalCount = 0;
+  bool archiveHasMore = false;
+  bool archiveInitialLoading = false;
+  bool archiveLoadingMore = false;
+  String archiveSearchQuery = '';
+  List<AppFile> archiveRemoteSearchResults = [];
+  bool archiveSearchHasMore = false;
+  bool archiveSearchLoading = false;
+  int _archiveBrowseOffset = 0;
+  int _archiveSearchOffset = 0;
+  Timer? _archiveSearchDebounce;
+  static const archivePageSize = 24;
   bool moreFilesExpanded = false;
   bool paneDragMode = false;
   final Map<int, String> _layoutByTopicId = {};
@@ -167,9 +190,31 @@ class AppState extends ChangeNotifier {
   List<Topic> get archivedTopics =>
       topics.where((t) => t.isArchived && !t.isMain).toList();
 
-  bool get hasArchive =>
-      archivedTopics.isNotEmpty ||
-      archivedFilesByTopicId.values.any((files) => files.isNotEmpty);
+  bool get hasArchive => !archiveIndex.isEmpty;
+
+  bool get isArchiveMode => selectedArchiveTopic != null;
+
+  bool get archiveIsSearching => archiveSearchQuery.isNotEmpty;
+
+  bool get archiveIsFetchingMore => archiveLoadingMore || archiveSearchLoading;
+
+  List<AppFile> get displayArchiveFiles {
+    if (!archiveIsSearching) return archiveFilesForTopic;
+    final q = archiveSearchQuery.toLowerCase();
+    final seen = <int>{};
+    final merged = <AppFile>[];
+    for (final file in archiveFilesForTopic) {
+      if (_archiveFileMatchesQuery(file, q) && seen.add(file.id)) {
+        merged.add(file);
+      }
+    }
+    for (final file in archiveRemoteSearchResults) {
+      if (seen.add(file.id)) {
+        merged.add(file);
+      }
+    }
+    return merged;
+  }
 
   Future<void> setLanguage(AppLanguage value) async {
     if (language == value) return;
@@ -241,7 +286,8 @@ class AppState extends ChangeNotifier {
     return detail.files.any((f) => f.type == 'data');
   }
 
-  bool get canUseAiTools => !isViewMode && selectedDetail != null;
+  bool get canUseAiTools =>
+      !isArchiveMode && !isViewMode && selectedDetail != null;
 
   bool canRunAiTool(String tool) {
     if (!canUseAiTools) return false;
@@ -454,6 +500,7 @@ class AppState extends ChangeNotifier {
       error = e.toString();
     } finally {
       loading = false;
+      appReady = true;
       notifyListeners();
     }
   }
@@ -527,17 +574,296 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> loadArchive() async {
+    ArchiveTopicEntry? daily;
+    final projectEntries = <ArchiveTopicEntry>[];
+    final processEntries = <ArchiveTopicEntry>[];
+    final areaEntries = <ArchiveTopicEntry>[];
     final archive = <int, List<AppFile>>{};
-    for (final topic in topics.where((t) => !t.isArchived)) {
-      final files = await _fileService.listForTopic(
+
+    for (final topic in topics) {
+      final summary = await _fileService.listArchiveForTopic(
         topic.id,
-        includeArchived: true,
+        limit: 0,
       );
-      final archived = files.where((f) => f.isArchived).toList();
-      if (archived.isNotEmpty) archive[topic.id] = archived;
+      if (summary.total == 0) continue;
+
+      archive[topic.id] = const [];
+      final entry = ArchiveTopicEntry(
+        topic: topic,
+        archivedFileCount: summary.total,
+      );
+
+      if (topic.isMain) {
+        daily = entry;
+      } else {
+        switch (topic.type) {
+          case 'project':
+            projectEntries.add(entry);
+          case 'process':
+            processEntries.add(entry);
+          case 'area':
+            areaEntries.add(entry);
+        }
+      }
     }
+
+    archiveIndex = ArchiveIndex(
+      daily: daily,
+      projects: projectEntries,
+      processes: processEntries,
+      areas: areaEntries,
+    );
     archivedFilesByTopicId = archive;
     notifyListeners();
+  }
+
+  void _clearArchiveMode() {
+    _archiveSearchDebounce?.cancel();
+    selectedArchiveTopic = null;
+    archiveFilesForTopic = [];
+    archiveBlocksByFileId = {};
+    archiveTasksByBlockId = {};
+    archiveHeaderTextsByFileId = {};
+    selectedArchiveFile = null;
+    archiveDeleteMode = false;
+    archiveDeleteSelection.clear();
+    archiveTotalCount = 0;
+    archiveHasMore = false;
+    archiveInitialLoading = false;
+    archiveLoadingMore = false;
+    archiveSearchQuery = '';
+    archiveRemoteSearchResults = [];
+    archiveSearchHasMore = false;
+    archiveSearchLoading = false;
+    _archiveBrowseOffset = 0;
+    _archiveSearchOffset = 0;
+  }
+
+  void _mergeArchiveHeaderTexts(Map<int, List<String>> texts) {
+    texts.forEach((fileId, headers) {
+      if (headers.isEmpty) return;
+      archiveHeaderTextsByFileId[fileId] = headers;
+    });
+  }
+
+  bool _archiveFileMatchesQuery(AppFile file, String query) {
+    if (query.isEmpty) return true;
+    return archiveFileSearchLabel(file).toLowerCase().contains(query);
+  }
+
+  Future<void> _loadArchiveBrowsePage({required bool append}) async {
+    final topic = selectedArchiveTopic;
+    if (topic == null) return;
+
+    archiveLoadingMore = append;
+    if (!append) {
+      archiveInitialLoading = true;
+    }
+    notifyListeners();
+
+    try {
+      final page = await _fileService.listArchiveForTopic(
+        topic.id,
+        limit: archivePageSize,
+        offset: append ? _archiveBrowseOffset : 0,
+      );
+      _mergeArchiveHeaderTexts(page.headerTextsByFileId);
+      if (append) {
+        archiveFilesForTopic = [...archiveFilesForTopic, ...page.files];
+      } else {
+        archiveFilesForTopic = page.files;
+      }
+      _archiveBrowseOffset = archiveFilesForTopic.length;
+      archiveHasMore = page.hasMore;
+      archiveTotalCount = page.total;
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      archiveInitialLoading = false;
+      archiveLoadingMore = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _fetchArchiveSearchPage({required bool reset}) async {
+    final topic = selectedArchiveTopic;
+    if (topic == null || archiveSearchQuery.isEmpty) return;
+
+    archiveSearchLoading = true;
+    notifyListeners();
+
+    try {
+      final page = await _fileService.listArchiveForTopic(
+        topic.id,
+        limit: archivePageSize,
+        offset: reset ? 0 : _archiveSearchOffset,
+        query: archiveSearchQuery,
+      );
+      _mergeArchiveHeaderTexts(page.headerTextsByFileId);
+      if (reset) {
+        archiveRemoteSearchResults = page.files;
+        _archiveSearchOffset = page.files.length;
+      } else {
+        archiveRemoteSearchResults = [
+          ...archiveRemoteSearchResults,
+          ...page.files,
+        ];
+        _archiveSearchOffset += page.files.length;
+      }
+      archiveSearchHasMore = page.hasMore;
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      archiveSearchLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadArchivePreviewForFile(AppFile file) async {
+    if (archiveBlocksByFileId.containsKey(file.id)) return;
+
+    try {
+      final blocks = await _blockService.listForFile(
+        file.id,
+        includeArchived: true,
+      );
+      archiveBlocksByFileId[file.id] = blocks;
+      final headerTexts = [
+        for (final block in blocks)
+          if (block.type == 'header' && block.text.trim().isNotEmpty)
+            block.text.trim(),
+      ];
+      if (headerTexts.isNotEmpty) {
+        archiveHeaderTextsByFileId[file.id] = headerTexts;
+      }
+      for (final block in blocks) {
+        if (block.type == 'task' || block.type == 'task_list') {
+          archiveTasksByBlockId[block.id] = await _taskService.listForBlock(
+            block.id,
+          );
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> selectArchiveTopic(Topic topic) async {
+    error = null;
+    selectedViewType = null;
+    selectedTopic = null;
+    selectedDetail = null;
+    pendingAiProposals = [];
+    _clearArchiveMode();
+    selectedArchiveTopic = topic;
+    notifyListeners();
+
+    try {
+      await _loadArchiveBrowsePage(append: false);
+      if (archiveFilesForTopic.isEmpty) return;
+      selectedArchiveFile = archiveFilesForTopic.first;
+      notifyListeners();
+      await _loadArchivePreviewForFile(archiveFilesForTopic.first);
+    } catch (e) {
+      error = e.toString();
+      _clearArchiveMode();
+      notifyListeners();
+    }
+  }
+
+  Future<void> selectArchiveFile(AppFile file) async {
+    if (selectedArchiveFile?.id == file.id) return;
+    selectedArchiveFile = file;
+    notifyListeners();
+    await _loadArchivePreviewForFile(file);
+  }
+
+  void onArchiveSearchQueryChanged(String query) {
+    final trimmed = query.trim();
+    if (trimmed == archiveSearchQuery) return;
+    archiveSearchQuery = trimmed;
+    archiveRemoteSearchResults = [];
+    archiveSearchHasMore = false;
+    _archiveSearchOffset = 0;
+    _archiveSearchDebounce?.cancel();
+    if (trimmed.isEmpty) {
+      archiveSearchLoading = false;
+      notifyListeners();
+      return;
+    }
+    notifyListeners();
+    _archiveSearchDebounce = Timer(const Duration(milliseconds: 350), () {
+      _fetchArchiveSearchPage(reset: true);
+    });
+  }
+
+  Future<void> loadMoreArchiveContent() async {
+    if (archiveLoadingMore || archiveSearchLoading) return;
+    if (archiveIsSearching) {
+      if (!archiveSearchHasMore) return;
+      await _fetchArchiveSearchPage(reset: false);
+      return;
+    }
+    if (!archiveHasMore) return;
+    await _loadArchiveBrowsePage(append: true);
+  }
+
+  List<String> headerTextsForArchiveFile(AppFile file) {
+    final cached = archiveHeaderTextsByFileId[file.id];
+    if (cached != null && cached.isNotEmpty) return cached;
+    final blocks = archiveBlocksByFileId[file.id] ?? const [];
+    return [
+      for (final block in blocks)
+        if (block.type == 'header' && block.text.trim().isNotEmpty)
+          block.text.trim(),
+    ];
+  }
+
+  String archiveFileSearchLabel(AppFile file) {
+    final title = fileDisplayName(file.name);
+    final headers = headerTextsForArchiveFile(file);
+    if (headers.isEmpty) return title;
+    return '$title ${headers.join(' ')}';
+  }
+
+  void toggleArchiveDeleteMode() {
+    archiveDeleteMode = !archiveDeleteMode;
+    if (!archiveDeleteMode) {
+      archiveDeleteSelection.clear();
+    }
+    notifyListeners();
+  }
+
+  void toggleArchiveDeleteSelection(AppFile file) {
+    if (archiveDeleteSelection.contains(file.id)) {
+      archiveDeleteSelection.remove(file.id);
+    } else {
+      archiveDeleteSelection.add(file.id);
+    }
+    notifyListeners();
+  }
+
+  Future<void> deleteSelectedArchiveFiles() async {
+    final topic = selectedArchiveTopic;
+    if (topic == null || archiveDeleteSelection.isEmpty) return;
+
+    final ids = archiveDeleteSelection.toList();
+
+    try {
+      for (final id in ids) {
+        await _fileService.deleteFile(id);
+      }
+      archiveDeleteMode = false;
+      archiveDeleteSelection.clear();
+      await loadArchive();
+      await selectArchiveTopic(topic);
+    } catch (e) {
+      error = e.toString();
+      archiveInitialLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> refreshAutomationRules() async {
@@ -759,6 +1085,7 @@ class AppState extends ChangeNotifier {
     AiProposal proposal,
     Map<String, bool> decisions, {
     int? companionTaskId,
+    bool refreshTopicBanner = true,
   }) async {
     await _aiProposalService.finalize(
       proposal.id,
@@ -769,6 +1096,13 @@ class AppState extends ChangeNotifier {
         .toList();
     if (companionTaskId != null) {
       await _completeCompanionTaskById(companionTaskId);
+      if (refreshTopicBanner) {
+        await refreshPendingProposalsForTopics(
+          _topicIdsForProposal(proposal),
+        );
+      } else {
+        notifyListeners();
+      }
       return;
     }
     final topic = selectedTopic;
@@ -784,6 +1118,7 @@ class AppState extends ChangeNotifier {
   Future<void> rejectAiProposal(
     AiProposal proposal, {
     int? companionTaskId,
+    bool refreshTopicBanner = true,
   }) async {
     await _aiProposalService.reject(proposal.id);
     pendingAiProposals = pendingAiProposals
@@ -791,7 +1126,47 @@ class AppState extends ChangeNotifier {
         .toList();
     if (companionTaskId != null) {
       await _completeCompanionTaskById(companionTaskId);
+      if (refreshTopicBanner) {
+        await refreshPendingProposalsForTopics(
+          _topicIdsForProposal(proposal),
+        );
+      } else {
+        notifyListeners();
+      }
       return;
+    }
+    notifyListeners();
+  }
+
+  Iterable<int> _topicIdsForProposal(AiProposal proposal) {
+    if (proposal.topicId != null) return [proposal.topicId!];
+    return const [];
+  }
+
+  /// Keeps the process-topic pending banner in sync after companion flows finish.
+  Future<void> refreshPendingProposalsForTopics(Iterable<int> topicIds) async {
+    final ids = topicIds.where((id) => id > 0).toSet();
+    if (ids.isEmpty) {
+      notifyListeners();
+      return;
+    }
+
+    final selected = selectedTopic;
+    if (selected != null && ids.contains(selected.id)) {
+      pendingAiProposals = await _aiProposalService.listPending(
+        topicId: selected.id,
+      );
+      notifyListeners();
+      return;
+    }
+
+    for (final topicId in ids) {
+      final fresh = await _aiProposalService.listPending(topicId: topicId);
+      pendingAiProposals = [
+        for (final proposal in pendingAiProposals)
+          if (proposal.topicId != topicId) proposal,
+        ...fresh,
+      ];
     }
     notifyListeners();
   }
@@ -916,6 +1291,7 @@ class AppState extends ChangeNotifier {
     selectedViewType = null;
     _showViewPaneDuringLoad = false;
     _loadingTopicFromView = fromView;
+    _clearArchiveMode();
     selectedTopic = topic;
     notifyListeners();
     try {
@@ -980,6 +1356,7 @@ class AppState extends ChangeNotifier {
     final cached = _viewCache[viewType];
 
     error = null;
+    _clearArchiveMode();
     selectedViewType = viewType;
     selectedTopic = null;
     _showViewPaneDuringLoad = fromView || cached != null;
@@ -1842,7 +2219,69 @@ class AppState extends ChangeNotifier {
     }, notify: true);
   }
 
-  Future<void> toggleTaskStatus(Task task) async {
+  Future<void> abandonAutomationCompanionFlow(Task task) async {
+    final companions = await fetchPendingCompanionsForTask(task.id);
+    final topicIds = <int>{
+      for (final companion in companions)
+        if (companion.topicId != null) companion.topicId!,
+    };
+    for (final companion in companions) {
+      final proposalId = companion.proposalId;
+      if (proposalId != null) {
+        try {
+          final proposal = await fetchAiProposal(proposalId);
+          await rejectAiProposal(
+            proposal,
+            companionTaskId: companion.id,
+            refreshTopicBanner: false,
+          );
+        } catch (_) {
+          await _completeCompanionTaskById(companion.id);
+        }
+      } else {
+        await _completeCompanionTaskById(companion.id);
+      }
+    }
+
+    await refreshPendingProposalsForTopics(topicIds);
+
+    Task? current;
+    for (final row in viewTasks) {
+      if (row.id == task.id) {
+        current = row;
+        break;
+      }
+    }
+    current ??= task;
+    if (!current.isDone) {
+      final data = await _taskService.updateTaskRaw(task.id, {
+        'status': 'done',
+        '_skip_automation_trigger': true,
+      });
+      _applyTaskUpdate(Task.fromJson(data));
+    }
+
+    if (selectedViewType != null) {
+      await refreshCurrentView();
+    } else {
+      notifyListeners();
+    }
+  }
+
+  Future<void> toggleTaskStatus(
+    Task task, {
+    Future<bool> Function()? confirmAbandonCompanionFlow,
+  }) async {
+    if (!task.isDone &&
+        task.isAutomationTrigger &&
+        task.hasAutomationFlow) {
+      if (confirmAbandonCompanionFlow == null) return;
+      final confirmed = await confirmAbandonCompanionFlow();
+      if (!confirmed) return;
+      await abandonAutomationCompanionFlow(task);
+      return;
+    }
+
     final data = await _taskService.updateTaskRaw(task.id, {
       'status': task.isDone ? 'active' : 'done',
     });
@@ -1878,10 +2317,12 @@ class AppState extends ChangeNotifier {
       }
     } else {
       final skip = data['automation_trigger_skipped'] as String?;
-      if (skip == 'uncheck_to_run') {
-        _automationNotice = strings['automationUncheckToRun'];
-      } else if (skip == 'not_trigger_task') {
-        _automationNotice = strings['automationNotTriggerTask'];
+      if (task.isAutomationTrigger) {
+        if (skip == 'uncheck_to_run') {
+          _automationNotice = strings['automationUncheckToRun'];
+        } else if (skip == 'not_trigger_task') {
+          _automationNotice = strings['automationNotTriggerTask'];
+        }
       }
     }
     notifyListeners();

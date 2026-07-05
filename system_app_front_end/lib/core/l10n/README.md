@@ -10,3 +10,4 @@ Guidelines:
 - Keep translatable UI text centralized here.
 - Maintain key parity across languages.
 - Use stable keys; avoid scattered inline literals in feature code.
+- For English/Hebrew layout and RTL rules, see **[BILINGUAL.md](BILINGUAL.md)**.
