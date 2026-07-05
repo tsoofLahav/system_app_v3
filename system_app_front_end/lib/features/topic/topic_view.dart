@@ -181,6 +181,7 @@ class TopicView extends StatelessWidget {
             child: state.paneDragMode && !stale
                 ? Padding(padding: canvasPadding, child: filesContent)
                 : SingleChildScrollView(
+                    key: PageStorageKey('topic-scroll-${topic.id}'),
                     padding: canvasPadding,
                     child: filesContent,
                   ),

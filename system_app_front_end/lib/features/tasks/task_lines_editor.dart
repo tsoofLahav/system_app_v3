@@ -6,6 +6,7 @@ import '../../core/models/block.dart';
 import '../../core/models/task.dart';
 import '../../core/models/task_view_menu_context.dart';
 import '../../core/task_list_order.dart';
+import '../blocks/block_context_menu.dart';
 import 'task_zone_list.dart';
 
 typedef TaskZoneHandlers = ({
@@ -14,7 +15,7 @@ typedef TaskZoneHandlers = ({
   Future<void> Function(Task task, String title) onTitleChanged,
   Future<void> Function(Task task) onDelete,
   Future<void> Function(Task afterTask, List<String> lines, Offset position)
-      onPasteAfter,
+  onPasteAfter,
 });
 
 /// Active and done zones as separate per-task lists.
@@ -28,6 +29,7 @@ class TaskLinesEditor extends StatelessWidget {
     this.onFocusHandled,
     this.contextMenuFileType,
     this.contextMenuTargetBlock,
+    this.onBlockMenuAction,
     this.viewMenuContext,
     this.file,
   });
@@ -39,6 +41,7 @@ class TaskLinesEditor extends StatelessWidget {
   final VoidCallback? onFocusHandled;
   final String? contextMenuFileType;
   final Block? contextMenuTargetBlock;
+  final BlockMenuHandler? onBlockMenuAction;
   final TaskViewMenuContext? viewMenuContext;
   final AppFile? file;
 
@@ -59,6 +62,7 @@ class TaskLinesEditor extends StatelessWidget {
           onFocusHandled: onFocusHandled,
           contextMenuFileType: contextMenuFileType,
           contextMenuTargetBlock: contextMenuTargetBlock,
+          onBlockMenuAction: onBlockMenuAction,
           viewMenuContext: viewMenuContext,
           file: file,
           onCreateAfter: handlersFor(false).onCreateAfter,
@@ -84,6 +88,7 @@ class TaskLinesEditor extends StatelessWidget {
             onFocusHandled: onFocusHandled,
             contextMenuFileType: contextMenuFileType,
             contextMenuTargetBlock: contextMenuTargetBlock,
+            onBlockMenuAction: onBlockMenuAction,
             viewMenuContext: viewMenuContext,
             file: file,
             onCreateAfter: handlersFor(true).onCreateAfter,

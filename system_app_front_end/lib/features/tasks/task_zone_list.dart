@@ -41,8 +41,12 @@ class TaskZoneList extends StatefulWidget {
   final Future<void> Function(String title, Offset position) onCreateAtEnd;
   final Future<void> Function(Task task, String title) onTitleChanged;
   final Future<void> Function(Task task) onDelete;
-  final Future<void> Function(Task afterTask, List<String> lines, Offset position)
-      onPasteAfter;
+  final Future<void> Function(
+    Task afterTask,
+    List<String> lines,
+    Offset position,
+  )
+  onPasteAfter;
   final String? contextMenuFileType;
   final Block? contextMenuTargetBlock;
   final BlockMenuHandler? onBlockMenuAction;
@@ -81,30 +85,35 @@ class _TaskZoneListState extends State<TaskZoneList> {
                   ),
             ),
             onTitleChanged: (title) => widget.onTitleChanged(task, title),
-            onDelete: task.isAutomationTrigger ? null : () => widget.onDelete(task),
-            onAddTaskAfter: (position) =>
-                widget.onCreateAfter(task, position),
+            onDelete: task.isAutomationTrigger
+                ? null
+                : () => widget.onDelete(task),
+            onAddTaskAfter: (position) => widget.onCreateAfter(task, position),
             onPasteLines: (lines, position) =>
                 widget.onPasteAfter(task, lines, position),
             allTaskTitles: titles,
             autofocus: widget.focusTaskId == task.id,
             onAutofocused: widget.onFocusHandled,
+            contextMenuFileType: widget.contextMenuFileType,
+            contextMenuTargetBlock: widget.contextMenuTargetBlock,
+            onBlockMenuAction: widget.onBlockMenuAction,
             viewMenuContext: widget.viewMenuContext,
             readOnly: task.isAutomationsTopic,
             toggleEnabled: true,
             onRowTap: task.hasAutomationFlow
                 ? () => AutomationFlowRegistry.run(
-                      context: context,
-                      state: widget.state,
-                      task: task,
-                    )
+                    context: context,
+                    state: widget.state,
+                    task: task,
+                  )
                 : null,
           ),
         if (!hideDraft)
           _DraftTaskRow(
             done: widget.done,
             hint: widget.state.strings['newTaskHint'],
-            onSubmit: (title, position) => widget.onCreateAtEnd(title, position),
+            onSubmit: (title, position) =>
+                widget.onCreateAtEnd(title, position),
           ),
       ],
     );
@@ -165,10 +174,9 @@ class _DraftTaskRowState extends State<_DraftTaskRow> {
               style: AppTypography.taskRowStyle.copyWith(
                 decoration: widget.done ? TextDecoration.lineThrough : null,
                 color: widget.done
-                    ? Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.45)
+                    ? Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.45)
                     : null,
               ),
               maxLines: null,

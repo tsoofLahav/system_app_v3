@@ -7,6 +7,7 @@ import '../../core/models/task.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_typography.dart';
 import '../../features/blocks/list_text_parse.dart';
+import '../../features/blocks/block_context_menu.dart';
 import '../../core/models/task_view_menu_context.dart';
 import '../../shared/widgets/task_context_menu.dart';
 import '../../features/blocks/formatted_text_field.dart';
@@ -26,6 +27,9 @@ class TaskRow extends StatefulWidget {
     this.onPasteLines,
     this.autofocus = false,
     this.onAutofocused,
+    this.contextMenuFileType,
+    this.contextMenuTargetBlock,
+    this.onBlockMenuAction,
     this.viewMenuContext,
     this.readOnly = false,
     this.toggleEnabled = true,
@@ -41,9 +45,12 @@ class TaskRow extends StatefulWidget {
   final void Function(Offset globalPosition)? onAddTaskAfter;
   final List<String>? allTaskTitles;
   final Future<void> Function(List<String> lines, Offset globalPosition)?
-      onPasteLines;
+  onPasteLines;
   final bool autofocus;
   final VoidCallback? onAutofocused;
+  final String? contextMenuFileType;
+  final Block? contextMenuTargetBlock;
+  final BlockMenuHandler? onBlockMenuAction;
   final TaskViewMenuContext? viewMenuContext;
   final bool readOnly;
   final bool toggleEnabled;
@@ -161,6 +168,9 @@ class _TaskRowState extends State<TaskRow> {
       onPaste: _handlePaste,
       onCopyAll: widget.allTaskTitles != null ? _copyAllTitles : null,
       onDelete: widget.onDelete,
+      fileType: widget.contextMenuFileType,
+      targetBlock: widget.contextMenuTargetBlock,
+      onBlockAction: widget.onBlockMenuAction,
       viewMenuContext: widget.viewMenuContext,
     );
   }
@@ -175,8 +185,8 @@ class _TaskRowState extends State<TaskRow> {
       color: widget.task.isDone
           ? AppColors.text.withValues(alpha: 0.45)
           : isAutomationReview
-              ? AppColors.aiCyan.withValues(alpha: 0.92)
-              : null,
+          ? AppColors.aiCyan.withValues(alpha: 0.92)
+          : null,
     );
 
     Widget titleField;

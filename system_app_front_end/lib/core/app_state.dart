@@ -189,8 +189,7 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  List<Topic> get activeTopics =>
-      topics.where((t) => !t.isArchived).toList();
+  List<Topic> get activeTopics => topics.where((t) => !t.isArchived).toList();
 
   List<Topic> get archivedTopics =>
       topics.where((t) => t.isArchived && !t.isMain).toList();
@@ -404,10 +403,10 @@ class AppState extends ChangeNotifier {
             height: 165,
             zIndex: nextBoardZIndex(items),
           );
-          final content = boardContentFromItems(
-            [...items, next],
-            base: board.content,
-          );
+          final content = boardContentFromItems([
+            ...items,
+            next,
+          ], base: board.content);
           await _blockService.updateBlock(board.id, {'content': content});
         }
         for (final block in blocks) {
@@ -1102,9 +1101,7 @@ class AppState extends ChangeNotifier {
     if (companionTaskId != null) {
       await _completeCompanionTaskById(companionTaskId);
       if (refreshTopicBanner) {
-        await refreshPendingProposalsForTopics(
-          _topicIdsForProposal(proposal),
-        );
+        await refreshPendingProposalsForTopics(_topicIdsForProposal(proposal));
       } else {
         notifyListeners();
       }
@@ -1132,9 +1129,7 @@ class AppState extends ChangeNotifier {
     if (companionTaskId != null) {
       await _completeCompanionTaskById(companionTaskId);
       if (refreshTopicBanner) {
-        await refreshPendingProposalsForTopics(
-          _topicIdsForProposal(proposal),
-        );
+        await refreshPendingProposalsForTopics(_topicIdsForProposal(proposal));
       } else {
         notifyListeners();
       }
@@ -1176,13 +1171,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<AiProposal> fetchAiProposal(int id) =>
-      _aiProposalService.getById(id);
+  Future<AiProposal> fetchAiProposal(int id) => _aiProposalService.getById(id);
 
   Future<List<AutomationCompanionLink>> fetchPendingCompanionsForTask(
     int taskId,
-  ) =>
-      _companionService.listPendingForTask(taskId);
+  ) => _companionService.listPendingForTask(taskId);
 
   Future<bool> runCompanionTaskFlow(BuildContext context, Task task) =>
       AutomationFlowRegistry.run(context: context, state: this, task: task);
@@ -1252,11 +1245,11 @@ class AppState extends ChangeNotifier {
 
   Future<void> _loadPendingTaskResetAcknowledgement(String viewType) async {
     try {
-      final pending =
-          await _taskResetAcknowledgementService.listPendingForView(viewType);
+      final pending = await _taskResetAcknowledgementService.listPendingForView(
+        viewType,
+      );
       if (selectedViewType != viewType) return;
-      pendingTaskResetAcknowledgement =
-          pending.isEmpty ? null : pending.first;
+      pendingTaskResetAcknowledgement = pending.isEmpty ? null : pending.first;
     } catch (_) {
       // Acknowledgement lookup should not block opening the task view.
       if (selectedViewType == viewType) {
@@ -1298,9 +1291,7 @@ class AppState extends ChangeNotifier {
     for (final rule in automationRules) {
       final definition = definitionForKey(rule.key);
       if (definition != null && rule.name != definition.name) {
-        await _automationService.updateRule(rule.id, {
-          'name': definition.name,
-        });
+        await _automationService.updateRule(rule.id, {'name': definition.name});
         changed = true;
       }
       if (definition == null) continue;
@@ -1315,6 +1306,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> selectTopic(Topic topic, {bool includeArchived = false}) async {
     final fromView = selectedViewType != null;
+    final switchingTopic = selectedTopic?.id != topic.id;
     loading = true;
     error = null;
     selectedViewType = null;
@@ -1369,7 +1361,9 @@ class AppState extends ChangeNotifier {
     } finally {
       loading = false;
       _loadingTopicFromView = false;
-      moreFilesExpanded = false;
+      if (switchingTopic) {
+        moreFilesExpanded = false;
+      }
       notifyListeners();
     }
   }
@@ -1570,19 +1564,15 @@ class AppState extends ChangeNotifier {
       'order_index': orderIndex,
     });
 
-    final updated = detail.files
-        .map(
-          (f) {
-            if (f.id == file.id) {
-              return f.copyWith(isMain: isMain, orderIndex: orderIndex);
-            }
-            if (evictedId != null && f.id == evictedId) {
-              return f.copyWith(isMain: false);
-            }
-            return f;
-          },
-        )
-        .toList();
+    final updated = detail.files.map((f) {
+      if (f.id == file.id) {
+        return f.copyWith(isMain: isMain, orderIndex: orderIndex);
+      }
+      if (evictedId != null && f.id == evictedId) {
+        return f.copyWith(isMain: false);
+      }
+      return f;
+    }).toList();
     _applyOptimisticFiles(updated);
   }
 
@@ -1658,7 +1648,8 @@ class AppState extends ChangeNotifier {
       fileType: type,
       isMainTopic: topic.isMain,
     );
-    final isMain = def?.isMain ??
+    final isMain =
+        def?.isMain ??
         FileRegistry.isMainFile(
           topicType: topic.type,
           fileType: type,
@@ -2130,8 +2121,9 @@ class AppState extends ChangeNotifier {
     final topic = selectedTopic;
     if (topic == null) return null;
 
-    final afterRow =
-        afterTask != null ? taskRowBlockInFile(file, afterTask) : null;
+    final afterRow = afterTask != null
+        ? taskRowBlockInFile(file, afterTask)
+        : null;
     final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
     final listInsertIndex = afterRow != null
         ? _listInsertIndexAfterBlock(blocks, afterRow)
@@ -2304,9 +2296,7 @@ class AppState extends ChangeNotifier {
     Task task, {
     Future<bool> Function()? confirmAbandonCompanionFlow,
   }) async {
-    if (!task.isDone &&
-        task.isAutomationTrigger &&
-        task.hasAutomationFlow) {
+    if (!task.isDone && task.isAutomationTrigger && task.hasAutomationFlow) {
       if (confirmAbandonCompanionFlow == null) return;
       final confirmed = await confirmAbandonCompanionFlow();
       if (!confirmed) return;
@@ -2379,7 +2369,8 @@ class AppState extends ChangeNotifier {
       name: def?.name ?? FileRegistry.defaultNameForType('tasks'),
       type: 'tasks',
       orderIndex: def?.orderIndex,
-      isMain: def?.isMain ??
+      isMain:
+          def?.isMain ??
           FileRegistry.isMainFile(
             topicType: topic.type,
             fileType: 'tasks',
@@ -2427,7 +2418,11 @@ class AppState extends ChangeNotifier {
       content: const {},
       orderIndex: 0,
     );
-    return TopicTasksTarget(topic: topic, file: tasksFile, listBlock: listBlock);
+    return TopicTasksTarget(
+      topic: topic,
+      file: tasksFile,
+      listBlock: listBlock,
+    );
   }
 
   Future<Block?> findTaskRowBlock(Task task) async {
@@ -2614,9 +2609,7 @@ class AppState extends ChangeNotifier {
     );
 
     if (selectedViewType == viewType) {
-      viewTasks = viewTasks
-          .map((t) => t.id == task.id ? enriched : t)
-          .toList();
+      viewTasks = viewTasks.map((t) => t.id == task.id ? enriched : t).toList();
       _cacheCurrentView();
     }
     _syncSelectedDetailTask(enriched, target, rowBlock: rowBlock);
@@ -2672,7 +2665,9 @@ class AppState extends ChangeNotifier {
 
     if (rowBlock != null) {
       final block = rowBlock;
-      final blocks = List<Block>.from(detail.blocksByFileId[target.file.id] ?? []);
+      final blocks = List<Block>.from(
+        detail.blocksByFileId[target.file.id] ?? [],
+      );
       if (!blocks.any((b) => b.id == block.id)) {
         blocks.add(block);
         blocks.sort((a, b) => (a.orderIndex ?? 0).compareTo(b.orderIndex ?? 0));
@@ -2685,16 +2680,14 @@ class AppState extends ChangeNotifier {
     final detail = selectedDetail;
     if (detail == null) return;
     for (final entry in detail.tasksByBlockId.entries.toList()) {
-      detail.tasksByBlockId[entry.key] =
-          entry.value.where((t) => t.id != task.id).toList();
+      detail.tasksByBlockId[entry.key] = entry.value
+          .where((t) => t.id != task.id)
+          .toList();
     }
     if (task.blockId != null) {
       for (final entry in detail.blocksByFileId.entries.toList()) {
         detail.blocksByFileId[entry.key] = entry.value
-            .where(
-              (b) =>
-                  b.type != 'task' || b.content['task_id'] != task.id,
-            )
+            .where((b) => b.type != 'task' || b.content['task_id'] != task.id)
             .toList();
       }
     }
@@ -2702,13 +2695,15 @@ class AppState extends ChangeNotifier {
 
   void _applyTaskUpdate(Task updated) {
     Task merge(Task existing) => existing.copyWith(
-          title: updated.title,
-          status: updated.status,
-          blockId: updated.blockId,
-        );
+      title: updated.title,
+      status: updated.status,
+      blockId: updated.blockId,
+    );
 
     if (selectedViewType != null) {
-      viewTasks = viewTasks.map((t) => t.id == updated.id ? merge(t) : t).toList();
+      viewTasks = viewTasks
+          .map((t) => t.id == updated.id ? merge(t) : t)
+          .toList();
       _cacheCurrentView();
     }
     final detail = selectedDetail;
@@ -2811,10 +2806,7 @@ class AppState extends ChangeNotifier {
       viewTasks = viewTasks
           .map(
             (t) => t.sectionName == section.name
-                ? t.copyWith(
-                    sectionFlag: flag,
-                    clearSectionFlag: !important,
-                  )
+                ? t.copyWith(sectionFlag: flag, clearSectionFlag: !important)
                 : t,
           )
           .toList();
@@ -2956,10 +2948,10 @@ class AppState extends ChangeNotifier {
       notify: true,
     );
     await _blockService.updateBlock(boardBlock.id, {
-      'content': boardContentFromItems(
-        [...items, next],
-        base: boardBlock.content,
-      ),
+      'content': boardContentFromItems([
+        ...items,
+        next,
+      ], base: boardBlock.content),
     });
   }
 

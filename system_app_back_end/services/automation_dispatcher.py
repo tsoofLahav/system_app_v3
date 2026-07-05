@@ -142,6 +142,19 @@ def dispatch_scheduled_rule(rule, trigger_source="schedule"):
         return run_ids
 
     if definition is not None and not definition.fan_out:
+        if trigger_source == "manual":
+            topics = resolve_scope_topics(rule)
+            if topics:
+                run_ids = []
+                for topic in topics:
+                    run_id = _enqueue_for_rule(
+                        rule,
+                        trigger_source,
+                        {"topic_id": topic.id, "scheduled": False},
+                    )
+                    if run_id is not None:
+                        run_ids.append(run_id)
+                return run_ids
         context = {"scheduled": True}
         run_id = _enqueue_for_rule(rule, trigger_source, context)
         return [run_id] if run_id is not None else []

@@ -44,8 +44,8 @@ class _TasksConnectedEditorState extends State<TasksConnectedEditor> {
   void _syncFocusFromPendingBlock() {
     final blockId = widget.state.pendingFocusBlockId;
     if (blockId == null) return;
-    for (final block in widget.state.selectedDetail?.blocksByFileId[widget.file.id] ??
-        []) {
+    for (final block
+        in widget.state.selectedDetail?.blocksByFileId[widget.file.id] ?? []) {
       if (block.id == blockId && block.type == 'task') {
         setState(() {
           _focusTaskId = block.content['task_id'] as int?;
@@ -101,8 +101,10 @@ class _TasksConnectedEditorState extends State<TasksConnectedEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final tasks =
-        widget.state.orderedTasksForFile(widget.file, widget.listBlock);
+    final tasks = widget.state.orderedTasksForFile(
+      widget.file,
+      widget.listBlock,
+    );
 
     return TaskLinesEditor(
       tasks: tasks,
@@ -115,6 +117,7 @@ class _TasksConnectedEditorState extends State<TasksConnectedEditor> {
       },
       contextMenuFileType: widget.file.type,
       contextMenuTargetBlock: widget.listBlock,
+      onBlockMenuAction: widget.onBlockMenuAction,
       file: widget.file,
       handlersFor: _handlers,
     );

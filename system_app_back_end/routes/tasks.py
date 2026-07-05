@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+from sqlalchemy import or_
 
 from models import Block, File, Task, TaskView, Topic, db
 from routes.helpers import active_query, apply_updates, get_or_404
@@ -78,8 +79,43 @@ def get_task(task_id):
 
 @tasks_bp.route("/blocks/<int:block_id>/tasks", methods=["GET"])
 def list_tasks_by_block(block_id):
-    tasks = active_query(Task).filter_by(block_id=block_id).order_by(Task.id).all()
+    block = get_or_404(Block, block_id)
+    referenced_ids = _referenced_task_ids_for_list_block(block)
+    tasks = (
+        active_query(Task)
+        .filter(or_(Task.block_id == block_id, Task.id.in_(referenced_ids)))
+        .order_by(Task.id)
+        .all()
+    )
     return jsonify([t.to_dict() for t in tasks])
+
+
+def _referenced_task_ids_for_list_block(list_block):
+    if list_block.type != "task_list" or list_block.file_id is None:
+        return []
+
+    ids = []
+    in_list = False
+    blocks = (
+        active_query(Block)
+        .filter_by(file_id=list_block.file_id)
+        .order_by(Block.order_index, Block.id)
+        .all()
+    )
+    for block in blocks:
+        if block.id == list_block.id:
+            in_list = True
+            continue
+        if not in_list:
+            continue
+        if block.type == "task_list":
+            break
+        if block.type != "task":
+            continue
+        task_id = (block.content or {}).get("task_id")
+        if task_id is not None:
+            ids.append(int(task_id))
+    return ids
 
 
 @tasks_bp.route("/tasks/view/<view_type>", methods=["GET"])

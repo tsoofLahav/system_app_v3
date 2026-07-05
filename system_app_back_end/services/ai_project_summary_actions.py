@@ -35,6 +35,11 @@ Write a compact overview that surfaces the current state first. Return:
   requested limit. Each row should summarize what was done and what should
   happen next.
 
+## Documentation table
+Documentation entries may span multiple rows. Merge rows that share the same
+date into one summary line in `recent_rows`, with one combined "done" summary
+and one combined "next" summary for that date.
+
 ## Output
 JSON only:
 {
@@ -288,25 +293,45 @@ def _apply_project_overview(
         ("summary", "summary", {"text": summary_text}),
         ("current_part_header", "header", _part_header_content(current_part, True)),
         ("current_part_update", "text", {"text": current_part_update}),
-        (
-            "current_part_tasks_header",
-            "header",
-            {"text": labels["current_tasks"], "level": 3},
-        ),
-        ("current_part_tasks", "list", {"items": _task_items(current_tasks)}),
-        (
-            "other_part_tasks_header",
-            "header",
-            {"text": labels["other_tasks"], "level": 3},
-        ),
-        ("other_part_tasks", "list", {"items": _task_items(other_tasks)}),
-        ("recent_progress", "table", {"rows": _recent_table_rows(recent_rows, labels)}),
-        ("parts_header", "header", {"text": labels["parts"], "level": 3}),
-        ("parts", "list", {"items": _part_items(parts, current_part)}),
     ]
+    if current_tasks:
+        role_specs.extend(
+            [
+                (
+                    "current_part_tasks_header",
+                    "header",
+                    {"text": labels["current_tasks"], "level": 3},
+                ),
+                ("current_part_tasks", "task_list", {}),
+            ]
+        )
+    if other_tasks:
+        role_specs.extend(
+            [
+                (
+                    "other_part_tasks_header",
+                    "header",
+                    {"text": labels["other_tasks"], "level": 3},
+                ),
+                ("other_part_tasks", "task_list", {}),
+            ]
+        )
+    role_specs.extend(
+        [
+            (
+                "recent_progress",
+                "table",
+                {"rows": _recent_table_rows(recent_rows, labels)},
+            ),
+            ("parts_header", "header", {"text": labels["parts"], "level": 3}),
+            ("parts", "list", {"items": _part_items(parts, current_part)}),
+        ]
+    )
     blocks = _active_blocks(overview_file.id)
     generated = []
-    for order, (role, block_type, content) in enumerate(role_specs):
+    generated_ids = set()
+    order = 0
+    for role, block_type, content in role_specs:
         block = _generated_block(overview_file, blocks, role, block_type)
         block.content = {
             **content,
@@ -314,15 +339,40 @@ def _apply_project_overview(
             "generated_role": role,
         }
         block.order_index = order
+        order += 1
         flag_modified(block, "content")
         generated.append(block)
+        generated_ids.add(block.id)
 
-    generated_ids = {block.id for block in generated}
-    order = len(role_specs)
+        if role == "current_part_tasks":
+            task_ids = _sync_generated_task_refs(
+                overview_file,
+                blocks,
+                block,
+                current_tasks,
+                start_order=order,
+                group="current_part",
+            )
+            generated_ids.update(task_ids)
+            order += len(task_ids)
+        elif role == "other_part_tasks":
+            task_ids = _sync_generated_task_refs(
+                overview_file,
+                blocks,
+                block,
+                other_tasks,
+                start_order=order,
+                group="other_parts",
+            )
+            generated_ids.update(task_ids)
+            order += len(task_ids)
+
+    blocks = _active_blocks(overview_file.id)
     for block in blocks:
         if block.id in generated_ids:
             continue
         if (block.content or {}).get("generated_by") == GENERATED_BY:
+            db.session.delete(block)
             continue
         block.order_index = order
         order += 1
@@ -345,31 +395,98 @@ def _generated_block(overview_file: File, blocks: list[Block], role: str, block_
     return block
 
 
+def _sync_generated_task_refs(
+    overview_file: File,
+    blocks: list[Block],
+    task_list_block: Block,
+    tasks: list[Task],
+    *,
+    start_order: int,
+    group: str,
+) -> set[int]:
+    for block in list(blocks):
+        content = block.content or {}
+        if (
+            block.type == "task"
+            and content.get("generated_by") == GENERATED_BY
+            and content.get("generated_role") == "task_ref"
+            and content.get("generated_group") == group
+        ):
+            db.session.delete(block)
+
+    order = start_order
+    generated_ids = set()
+    for task in tasks:
+        if task.id is None:
+            continue
+        block = Block(
+            file_id=overview_file.id,
+            type="task",
+            content={
+                "task_id": task.id,
+                "generated_by": GENERATED_BY,
+                "generated_role": "task_ref",
+                "generated_group": group,
+                "generated_task_list_block_id": task_list_block.id,
+            },
+            order_index=order,
+        )
+        db.session.add(block)
+        db.session.flush()
+        generated_ids.add(block.id)
+        order += 1
+    db.session.flush()
+    return generated_ids
+
+
 def _normalize_recent_rows(raw_rows, max_date_groups: int) -> list[dict]:
-    rows = []
+    rows_by_date = {}
+    undated = []
     for item in raw_rows:
         if not isinstance(item, dict):
             continue
         date = str(item.get("date") or "").strip()
         done = str(item.get("done") or item.get("summary") or "").strip()
         next_step = str(item.get("next") or item.get("next_step") or "").strip()
-        if date or done or next_step:
-            rows.append({"date": date, "done": done, "next": next_step})
+        if not (date or done or next_step):
+            continue
+        if not date:
+            undated.append({"date": date, "done": done, "next": next_step})
+            continue
+        row = rows_by_date.setdefault(date, {"date": date, "done": [], "next": []})
+        if done:
+            row["done"].append(done)
+        if next_step:
+            row["next"].append(next_step)
+    rows = [
+        {
+            "date": row["date"],
+            "done": _join_unique(row["done"]),
+            "next": _join_unique(row["next"]),
+        }
+        for row in rows_by_date.values()
+    ]
+    rows.extend(undated)
     return rows[:max_date_groups]
+
+
+def _join_unique(values: list[str]) -> str:
+    seen = set()
+    result = []
+    for value in values:
+        key = " ".join(value.casefold().split())
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(value)
+    return " / ".join(result)
 
 
 def _recent_table_rows(recent_rows: list[dict], labels: dict[str, str]) -> list[list[str]]:
     rows = [[labels["date"], labels["done"], labels["next"]]]
     for item in recent_rows:
         rows.append([item.get("date") or "", item.get("done") or "", item.get("next") or ""])
-    if len(rows) == 1:
-        rows.append(["", "", ""])
     return rows
-
-
-def _task_items(tasks: list[Task]) -> list[dict]:
-    items = [{"text": task.title} for task in tasks if (task.title or "").strip()]
-    return items or [{"text": ""}]
 
 
 def _part_items(parts: list[str], current_part: str) -> list[dict]:
