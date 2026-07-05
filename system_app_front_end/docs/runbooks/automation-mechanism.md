@@ -6,7 +6,7 @@ Automation is configured by the user and executed by the backend. The frontend e
 
 - Automations are visible from the global Automations menu.
 - The menu shows each main automation as a compact row with its current timing, an enable/disable switch, an edit-time action, and a run-now action for testing.
-- Timing opens in a separate dialog with structured controls: once a day, once a week, or once a month. Daily schedules choose a time. Weekly schedules choose a calendar day and time. Monthly schedules choose a calendar day, time, and month placement such as the first, second, third, or last Monday.
+- Timing opens in a separate dialog with structured controls: once a day, once a week, or once a month. Daily schedules choose a time. Weekly schedules choose a calendar day and time. Monthly schedules choose a calendar day, time, and month placement such as the first, second, third, or last Monday. The task-view reset automation uses one grouped editor with those same locked controls per view.
 - **Run now is non-blocking:** the app enqueues the run, shows “Automation started”, and polls run status in the background.
 - When a run completes, the open app refreshes the current topic or task view so new and archived files are visible. If no topic or view is open, content refresh is skipped.
 - A 30-second rule poll remains as a fallback for scheduled runs that complete while the app was in the background.
@@ -54,7 +54,7 @@ Definitions drive the table below; see backend `docs/automation.md` for full reg
 | `daily_rotation` | Every day at 00:00 | Main | Archive current main-topic `Daily` file and create a new `Daily` text file. |
 | `process_refresh` | User schedule (disabled by default) | All processes | For each process, refresh plan/doc/tasks via AI proposal; companion review task in daily view. |
 | `process_recap_update` | On file change (enabled by default) | All processes | Regenerate process recap when plan, doc, or tasks change; direct AI write (no review). |
-| `view_task_reset` | User schedule (disabled by default; weekly Saturday 23:59 default) | Configured task view | Uncheck completed tasks in the target view, record already-active tasks as missed, archive a report under Automations, and show a one-time acknowledgement when the view opens. |
+| `view_task_reset` | Per-view schedules (disabled by default) | Daily, weekly, monthly, quarterly task views | Uncheck completed tasks in each due view, record already-active tasks as missed, archive a report under Automations, and show a one-time acknowledgement when the view opens. |
 
 ## Process recap (`process_recap_update`)
 
@@ -80,7 +80,12 @@ Archive uses `archived_at` timestamps from the backend. Normal active lists hide
 
 ## View task reset (`view_task_reset`)
 
-This automation is schedule-driven. The automation dialog reuses the normal schedule controls and adds a target-view picker backed by `params.target_view`.
+This automation is schedule-driven. The automation dialog keeps it as one main automation row, then manages four locked schedules inside that row through `params.view_resets`.
+
+- Daily reset: time only (`daily HH:MM`).
+- Weekly reset: day and time (`weekly DAY HH:MM`).
+- Monthly reset: placement, day, and time (`monthly first|second|third|last DAY HH:MM`).
+- Quarterly reset: same placement/day/time pattern as monthly, plus a 3-month or 4-month interval (`quarterly 3|4 PLACEMENT DAY HH:MM`). It can sync its placement/day/time with the monthly reset while keeping its own interval.
 
 - Backend runs immediately at the scheduled time; it does not wait for app approval.
 - Completed tasks are changed from done to active.

@@ -13,6 +13,7 @@ from services.automation_definitions import (
 )
 from services.automation_params import finalize_rule_params, merge_rule_params, normalize_params
 from services.automation_schedule import DEFAULT_AUTOMATION_TIMEZONE, next_run_after
+from services.view_task_reset_schedule import next_view_reset_run
 
 automation_rules_bp = Blueprint("automation_rules", __name__)
 
@@ -29,6 +30,15 @@ def _rule_payload(rule):
 def _default_next_run(schedule, timezone=DEFAULT_AUTOMATION_TIMEZONE):
     if not schedule:
         return None
+
+
+def _default_next_run_for_rule(rule):
+    if rule.key == "view_task_reset" and rule.action_type == "reset_view_tasks":
+        try:
+            return next_view_reset_run(rule.params or {}, datetime.utcnow(), rule.timezone)
+        except Exception:
+            return None
+    return _default_next_run(rule.schedule, rule.timezone)
     try:
         return next_run_after(schedule, datetime.utcnow(), timezone=timezone)
     except Exception:
@@ -80,11 +90,11 @@ def create_automation_rule():
         params=data.get("params", {}),
         enabled=data.get("enabled", True),
         last_run_at=parse_datetime(data.get("last_run_at")) if data.get("last_run_at") else None,
-        next_run_at=parse_datetime(next_run_at)
-        if next_run_at
-        else _default_next_run(schedule, data.get("timezone", DEFAULT_AUTOMATION_TIMEZONE)),
+        next_run_at=parse_datetime(next_run_at) if next_run_at else None,
     )
     finalize_rule_params(rule)
+    if next_run_at is None:
+        rule.next_run_at = _default_next_run_for_rule(rule)
     db.session.add(rule)
     db.session.flush()
     if rule.trigger_type == "task" and rule.enabled:
@@ -128,8 +138,11 @@ def update_automation_rule(rule_id):
         datetime_fields={"last_run_at", "next_run_at"},
     )
     finalize_rule_params(rule)
-    if ("schedule" in data or "timezone" in data) and "next_run_at" not in data:
-        rule.next_run_at = _default_next_run(rule.schedule, rule.timezone)
+    if (
+        "next_run_at" not in data
+        and {"schedule", "timezone", "params", "enabled"}.intersection(data)
+    ):
+        rule.next_run_at = _default_next_run_for_rule(rule) if rule.enabled else None
 
     from services.automation_trigger import ensure_trigger_task, hide_trigger_task
 

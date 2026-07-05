@@ -55,6 +55,7 @@ def enqueue_run(rule, trigger_source, event_context=None):
     now = datetime.utcnow()
     event_context = event_context or {}
     topic_id = event_context.get("topic_id")
+    target_view = event_context.get("target_view")
 
     active_runs = (
         AutomationRun.query.filter_by(rule_id=rule.id)
@@ -63,7 +64,17 @@ def enqueue_run(rule, trigger_source, event_context=None):
     )
     for existing in active_runs:
         existing_topic = (existing.event_context or {}).get("topic_id")
+        existing_target_view = (existing.event_context or {}).get("target_view")
+        if topic_id is None and target_view is not None:
+            if existing_target_view != target_view:
+                continue
+            if _clear_stale_active_run(existing, now):
+                db.session.commit()
+                break
+            return existing.to_dict()
         if topic_id is None and existing_topic is None:
+            if existing_target_view is not None:
+                continue
             if _clear_stale_active_run(existing, now):
                 db.session.commit()
                 break

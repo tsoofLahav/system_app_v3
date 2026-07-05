@@ -53,7 +53,7 @@ Built-in automations are defined in code at `services/automation_definitions.py`
 | `daily_rotation` | Main topic | `schedule`, `manual` | `daily` → type `main`, name `Daily` | — | — |
 | `process_refresh` | All `process` topics | `schedule`, `task`, `manual` | `plan`, `doc`, `tasks` | `process_update_review` in daily / Process updates | `smart_process_update` → `process_smart_update`, `process_refresh_skipped`; review `plan` + `tasks` |
 | `process_recap_update` | All `process` topics | `event`, `manual` | `plan`, `doc`, `tasks`, `overview` (write target) | — | `smart_process_recap_update` — direct write to recap |
-| `view_task_reset` | All task views (configured by `params.target_view`) | `schedule`, `manual` | — | one-time view acknowledgement | — |
+| `view_task_reset` | Daily, weekly, monthly, and quarterly task views (configured by `params.view_resets`) | `schedule`, `manual` | — | one-time view acknowledgement | — |
 
 ### Instance vs definition
 
@@ -122,11 +122,13 @@ The initial action library contains:
 - `rotate_daily_main_file`: archive the current main-topic `Daily` file and create a fresh `Daily` text file every day at 00:00.
 - `process_refresh`: for each process, locate plan/doc/tasks files by type order, call the smart process update AI action, and store a delta proposal. Finalize archives old files and recreates plan, empty documentation table, and tasks after user review.
 - `process_recap_update`: when plan, documentation, or tasks change in a process topic, regenerate the recap (`overview` file): AI-written summary, date-grouped update table, and a snapshot of flagged tasks. Writes blocks in place (no proposal or review).
-- `view_task_reset`: for a configured task view, turn completed tasks back to active, record tasks that were already active as missed, write an archived report file under the real `Automations` topic, and create a pending acknowledgement shown when the user next opens that view.
+- `view_task_reset`: for each configured task view schedule, turn completed tasks back to active, record tasks that were already active as missed, write an archived report file under the real `Automations` topic, and create a pending acknowledgement shown when the user next opens that view.
 
 ### View task reset (`view_task_reset`)
 
-- **Trigger:** schedule-only by default, with `params.target_view` selecting the task view (for example `weekly` at `weekly sat 23:59`).
+- **Trigger:** schedule-only by default. One automation rule stores per-view schedules in `params.view_resets` so the general Automations dialog stays compact.
+- **Timing:** `daily` is locked to `daily HH:MM`; `weekly` is locked to `weekly DAY HH:MM`; `monthly` is locked to `monthly PLACEMENT DAY HH:MM`; `quarterly` is locked to `quarterly INTERVAL PLACEMENT DAY HH:MM` where `INTERVAL` is `3` or `4`.
+- **Queueing:** the rule's `next_run_at` is the earliest enabled view schedule. When due, the dispatcher enqueues one run per due view using `event_context.target_view`.
 - **Run:** completed tasks in the target view are unchecked (`done` → `active`). Tasks that were already active are left unchanged and recorded as missed.
 - **Report:** each run creates an archived `doc` file in the `Automations` topic with reset/missed task details.
 - **Acknowledgement:** the run creates a pending `task_reset_acknowledgements` row; the frontend shows it once when opening the target view and marks it approved after the user confirms.

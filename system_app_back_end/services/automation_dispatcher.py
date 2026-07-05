@@ -5,6 +5,11 @@ from services.automation_params import binding_files, normalize_params
 from services.automation_definitions import get_definition, validate_rule_activation
 from services.automation_runner import enqueue_run
 from services.automation_schedule import next_run_after
+from services.view_task_reset_schedule import (
+    due_view_resets,
+    next_view_reset_run,
+    view_reset_configs,
+)
 
 
 def resolve_scope_topics(rule):
@@ -112,6 +117,30 @@ def _enqueue_for_rule(rule, trigger_source, event_context=None):
 
 def dispatch_scheduled_rule(rule, trigger_source="schedule"):
     definition = get_definition(rule.key, rule.action_type)
+    if rule.key == "view_task_reset" and rule.action_type == "reset_view_tasks":
+        params = normalize_params(rule.params, rule.key, rule.action_type)
+        now = datetime.utcnow()
+        if trigger_source == "manual":
+            due_resets = [
+                {"view_type": view_type, "schedule": config.get("schedule")}
+                for view_type, config in view_reset_configs(params).items()
+                if config.get("enabled", True)
+            ]
+        else:
+            baseline = rule.last_run_at or rule.created_at or now
+            due_resets = due_view_resets(params, baseline, now, rule.timezone)
+        run_ids = []
+        for reset in due_resets:
+            context = {
+                "scheduled": trigger_source == "schedule",
+                "target_view": reset["view_type"],
+                "schedule": reset.get("schedule"),
+            }
+            run_id = _enqueue_for_rule(rule, trigger_source, context)
+            if run_id is not None:
+                run_ids.append(run_id)
+        return run_ids
+
     if definition is not None and not definition.fan_out:
         context = {"scheduled": True}
         run_id = _enqueue_for_rule(rule, trigger_source, context)
@@ -239,7 +268,10 @@ def dispatch_due_scheduled_rules(now=None):
     results = []
     for rule in rules:
         run_ids = dispatch_scheduled_rule(rule)
-        if run_ids and rule.schedule:
+        if rule.key == "view_task_reset" and rule.action_type == "reset_view_tasks":
+            params = normalize_params(rule.params, rule.key, rule.action_type)
+            rule.next_run_at = next_view_reset_run(params, now, rule.timezone)
+        elif run_ids and rule.schedule:
             rule.next_run_at = next_run_after(
                 rule.schedule, now, timezone=rule.timezone
             )

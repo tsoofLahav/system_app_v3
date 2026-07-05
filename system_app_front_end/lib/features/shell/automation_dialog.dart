@@ -74,34 +74,34 @@ class _AutomationDialogState extends State<AutomationDialog> {
             ),
           ],
           child: SizedBox(
-              width: 360,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_ensuringRules)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_ensuringRules)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
-                    )
-                  else if (rules.isEmpty)
-                    Text(
-                      s['noAutomations'],
-                      style: AppTypography.noteBodyStyle,
-                      textAlign: TextAlign.start,
-                    )
-                  else
-                    for (final rule in rules)
-                      _AutomationRuleCard(state: widget.state, rule: rule),
-                ],
-              ),
+                    ),
+                  )
+                else if (rules.isEmpty)
+                  Text(
+                    s['noAutomations'],
+                    style: AppTypography.noteBodyStyle,
+                    textAlign: TextAlign.start,
+                  )
+                else
+                  for (final rule in rules)
+                    _AutomationRuleCard(state: widget.state, rule: rule),
+              ],
             ),
+          ),
         );
       },
     );
@@ -130,7 +130,8 @@ class _AutomationRuleCardState extends State<_AutomationRuleCard> {
       fallback: definition?.name ?? widget.rule.name,
     );
     final triggerType = widget.rule.triggerType;
-    final trigger = (widget.rule.params['trigger'] as Map?)?.cast<String, dynamic>() ??
+    final trigger =
+        (widget.rule.params['trigger'] as Map?)?.cast<String, dynamic>() ??
         <String, dynamic>{};
 
     return Padding(
@@ -242,9 +243,11 @@ class _AutomationRuleCardState extends State<_AutomationRuleCard> {
     Map<String, dynamic> trigger,
   ) {
     if (widget.rule.key == 'view_task_reset') {
-      final targetView =
-          widget.rule.params['target_view'] as String? ?? 'weekly';
-      return '${s.viewLabel(targetView)} · ${schedule.label(s)}';
+      final resets = _viewResetConfigs(widget.rule.params);
+      final enabledCount = resets.values
+          .where((config) => config.enabled)
+          .length;
+      return s.taskResetScheduleSummary(enabledCount);
     }
     return switch (triggerType) {
       'event' => s['triggerByChanges'],
@@ -263,19 +266,19 @@ class _AutomationRuleCardState extends State<_AutomationRuleCard> {
   }
 
   void _showUpdateError(BuildContext context) {
-    final message = widget.state.takeAutomationNotice() ??
+    final message =
+        widget.state.takeAutomationNotice() ??
         widget.state.strings['automationRunFailed'];
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _showConfigDialog(BuildContext context) {
     return showDialog<void>(
       context: context,
-      builder: (ctx) => _AutomationConfigDialog(
-        state: widget.state,
-        rule: widget.rule,
-      ),
+      builder: (ctx) =>
+          _AutomationConfigDialog(state: widget.state, rule: widget.rule),
     );
   }
 
@@ -338,8 +341,8 @@ class _AutomationConfigDialogState extends State<_AutomationConfigDialog> {
             fallback: definition.description,
           );
     final triggerType = rule.triggerType;
-    final activations = definition?.activations ??
-        const ['schedule', 'event', 'task'];
+    final activations =
+        definition?.activations ?? const ['schedule', 'event', 'task'];
 
     return AppGlassDialog(
       title: Text(label, textAlign: TextAlign.center),
@@ -373,62 +376,58 @@ class _AutomationConfigDialogState extends State<_AutomationConfigDialog> {
               ],
               const SizedBox(height: 12),
             ],
-              Text(
-                s['automationTrigger'],
-                style: AppTypography.metaStyle,
-                textAlign: TextAlign.start,
+            Text(
+              s['automationTrigger'],
+              style: AppTypography.metaStyle,
+              textAlign: TextAlign.start,
+            ),
+            const SizedBox(height: 6),
+            SegmentedButton<String>(
+              style: SegmentedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: AppTypography.metaStyle,
               ),
-              const SizedBox(height: 6),
-              SegmentedButton<String>(
-                style: SegmentedButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  textStyle: AppTypography.metaStyle,
-                ),
-                segments: [
-                  if (activations.contains('schedule'))
-                    ButtonSegment(
-                      value: 'schedule',
-                      label: Text(s['triggerByTime']),
-                    ),
-                  if (activations.contains('event'))
-                    ButtonSegment(
-                      value: 'event',
-                      label: Text(s['triggerByChanges']),
-                    ),
-                  if (activations.contains('task'))
-                    ButtonSegment(
-                      value: 'task',
-                      label: Text(s['triggerByTask']),
-                    ),
-                ],
-                selected: {triggerType},
-                onSelectionChanged: (value) => _setTriggerType(value.first),
-              ),
-              const SizedBox(height: 12),
-              if (triggerType == 'schedule')
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (rule.key == 'view_task_reset') ...[
-                      _ViewResetFields(state: widget.state, rule: rule),
-                      const SizedBox(height: 12),
-                    ],
+              segments: [
+                if (activations.contains('schedule'))
+                  ButtonSegment(
+                    value: 'schedule',
+                    label: Text(s['triggerByTime']),
+                  ),
+                if (activations.contains('event'))
+                  ButtonSegment(
+                    value: 'event',
+                    label: Text(s['triggerByChanges']),
+                  ),
+                if (activations.contains('task'))
+                  ButtonSegment(value: 'task', label: Text(s['triggerByTask'])),
+              ],
+              selected: {triggerType},
+              onSelectionChanged: (value) => _setTriggerType(value.first),
+            ),
+            const SizedBox(height: 12),
+            if (triggerType == 'schedule')
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (rule.key == 'view_task_reset')
+                    _ViewResetFields(state: widget.state, rule: rule)
+                  else
                     _ScheduleFields(state: widget.state, rule: rule),
-                  ],
-                )
-              else if (triggerType == 'event')
-                Text(
-                  s['triggerByChanges'],
-                  style: AppTypography.noteBodyStyle,
-                  textAlign: TextAlign.start,
-                )
-              else
-                _TaskTriggerFields(state: widget.state, rule: rule),
-            ],
-          ),
+                ],
+              )
+            else if (triggerType == 'event')
+              Text(
+                s['triggerByChanges'],
+                style: AppTypography.noteBodyStyle,
+                textAlign: TextAlign.start,
+              )
+            else
+              _TaskTriggerFields(state: widget.state, rule: rule),
+          ],
         ),
-      );
+      ),
+    );
   }
 
   Future<void> _setTriggerType(String triggerType) async {
@@ -458,10 +457,12 @@ class _AutomationConfigDialogState extends State<_AutomationConfigDialog> {
   }
 
   void _showUpdateError(BuildContext context) {
-    final message = widget.state.takeAutomationNotice() ??
+    final message =
+        widget.state.takeAutomationNotice() ??
         widget.state.strings['automationRunFailed'];
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -499,10 +500,12 @@ class _ScheduleFieldsState extends State<_ScheduleFields> {
       schedule: _draft.toSchedule(),
     );
     if (!ok && mounted) {
-      final message = widget.state.takeAutomationNotice() ??
+      final message =
+          widget.state.takeAutomationNotice() ??
           widget.state.strings['automationRunFailed'];
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -520,11 +523,8 @@ class _ScheduleFieldsState extends State<_ScheduleFields> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<_ScheduleFrequency>(
-          value: _draft.frequency,
-          decoration: InputDecoration(
-            isDense: true,
-            labelText: s['frequency'],
-          ),
+          initialValue: _draft.frequency,
+          decoration: InputDecoration(isDense: true, labelText: s['frequency']),
           items: [
             DropdownMenuItem(
               value: _ScheduleFrequency.daily,
@@ -569,7 +569,7 @@ class _ScheduleFieldsState extends State<_ScheduleFields> {
         ],
         if (_draft.frequency == _ScheduleFrequency.monthly) ...[
           DropdownButtonFormField<String>(
-            value: _draft.monthPlacement,
+            initialValue: _draft.monthPlacement,
             decoration: InputDecoration(
               isDense: true,
               labelText: s['placementInMonth'],
@@ -636,12 +636,12 @@ class _ViewResetFields extends StatefulWidget {
 }
 
 class _ViewResetFieldsState extends State<_ViewResetFields> {
-  late String _viewType;
+  late Map<String, _ViewResetConfig> _configs;
 
   @override
   void initState() {
     super.initState();
-    _viewType = widget.rule.params['target_view'] as String? ?? 'weekly';
+    _configs = _viewResetConfigs(widget.rule.params);
   }
 
   @override
@@ -649,47 +649,367 @@ class _ViewResetFieldsState extends State<_ViewResetFields> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.rule.id != widget.rule.id ||
         oldWidget.rule.params != widget.rule.params) {
-      _viewType = widget.rule.params['target_view'] as String? ?? 'weekly';
+      _configs = _viewResetConfigs(widget.rule.params);
     }
   }
 
   Future<void> _save() async {
     final params = Map<String, dynamic>.from(widget.rule.params);
     params['version'] = 2;
-    params['target_view'] = _viewType;
+    params['target_view'] = 'weekly';
+    params['view_resets'] = {
+      for (final entry in _configs.entries) entry.key: entry.value.toJson(),
+    };
     final ok = await widget.state.updateAutomationRule(
       widget.rule,
+      triggerType: 'schedule',
       params: params,
     );
     if (!ok && mounted) {
-      final message = widget.state.takeAutomationNotice() ??
+      final message =
+          widget.state.takeAutomationNotice() ??
           widget.state.strings['automationRunFailed'];
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
+  }
+
+  Future<void> _updateConfig(
+    String viewType,
+    _ViewResetConfig Function(_ViewResetConfig config) update,
+  ) async {
+    setState(() {
+      final next = Map<String, _ViewResetConfig>.from(_configs);
+      next[viewType] = update(
+        next[viewType] ?? _defaultViewResetConfig(viewType),
+      );
+      if (viewType == 'monthly') {
+        final quarterly = next['quarterly'];
+        if (quarterly != null && quarterly.syncWithMonthly) {
+          next['quarterly'] = quarterly.copyWith(
+            schedule: _quarterlyScheduleFromMonthly(
+              next['monthly']!.schedule,
+              quarterly.intervalMonths,
+            ),
+          );
+        }
+      }
+      _configs = next;
+    });
+    await _save();
   }
 
   @override
   Widget build(BuildContext context) {
     final s = widget.state.strings;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          s['automationResetGroupedHelp'],
+          style: AppTypography.metaStyle,
+          textAlign: TextAlign.start,
+        ),
+        const SizedBox(height: 8),
+        for (final viewType in _viewResetViewTypes) ...[
+          _ViewResetScheduleCard(
+            state: widget.state,
+            viewType: viewType,
+            config: _configs[viewType] ?? _defaultViewResetConfig(viewType),
+            monthlyConfig:
+                _configs['monthly'] ?? _defaultViewResetConfig('monthly'),
+            onChanged: (update) => _updateConfig(viewType, update),
+          ),
+          const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+}
+
+class _ViewResetScheduleCard extends StatelessWidget {
+  const _ViewResetScheduleCard({
+    required this.state,
+    required this.viewType,
+    required this.config,
+    required this.monthlyConfig,
+    required this.onChanged,
+  });
+
+  final AppState state;
+  final String viewType;
+  final _ViewResetConfig config;
+  final _ViewResetConfig monthlyConfig;
+  final Future<void> Function(
+    _ViewResetConfig Function(_ViewResetConfig config) update,
+  )
+  onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = state.strings;
+    final draft = config.schedule;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.mainNoteTop.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.noteBorder.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  state.viewLabel(viewType),
+                  style: AppTypography.metaStyle,
+                  textAlign: TextAlign.start,
+                ),
+              ),
+              AppSwitch(
+                value: config.enabled,
+                onChanged: (value) =>
+                    onChanged((current) => current.copyWith(enabled: value)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (viewType == 'quarterly') ...[
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    initialValue: config.intervalMonths,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      labelText: s['automationResetQuarterlyInterval'],
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: 3,
+                        child: Text(s['automationResetEvery3Months']),
+                      ),
+                      DropdownMenuItem(
+                        value: 4,
+                        child: Text(s['automationResetEvery4Months']),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      onChanged(
+                        (current) => current.copyWith(
+                          intervalMonths: value,
+                          schedule: current.syncWithMonthly
+                              ? _quarterlyScheduleFromMonthly(
+                                  monthlyConfig.schedule,
+                                  value,
+                                )
+                              : current.schedule.copyWith(
+                                  frequency: _ScheduleFrequency.quarterly,
+                                  intervalMonths: value,
+                                ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Row(
+                    children: [
+                      AppSwitch(
+                        value: config.syncWithMonthly,
+                        onChanged: (value) => onChanged(
+                          (current) => current.copyWith(
+                            syncWithMonthly: value,
+                            schedule: value
+                                ? _quarterlyScheduleFromMonthly(
+                                    monthlyConfig.schedule,
+                                    current.intervalMonths,
+                                  )
+                                : current.schedule,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          s['automationResetSyncMonthly'],
+                          style: AppTypography.metaStyle,
+                          textAlign: TextAlign.start,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (viewType != 'daily') ...[
+            if (viewType == 'monthly' ||
+                (viewType == 'quarterly' && !config.syncWithMonthly)) ...[
+              _PlacementDropdown(
+                state: state,
+                value: draft.monthPlacement,
+                onChanged: (value) => onChanged(
+                  (current) => current.copyWith(
+                    schedule: current.schedule.copyWith(monthPlacement: value),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            if (viewType != 'quarterly' || !config.syncWithMonthly) ...[
+              _WeekdayPicker(
+                state: state,
+                weekday: draft.weekday,
+                onChanged: (weekday) => onChanged(
+                  (current) => current.copyWith(
+                    schedule: current.schedule.copyWith(weekday: weekday),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ],
+          if (viewType == 'quarterly' && config.syncWithMonthly)
+            Text(
+              s['automationResetSyncedMonthlyTime'],
+              style: AppTypography.metaStyle.copyWith(
+                color: AppColors.textHint,
+              ),
+              textAlign: TextAlign.start,
+            )
+          else
+            _TimeField(
+              state: state,
+              viewType: viewType,
+              time: draft.time,
+              onChanged: (time) => onChanged(
+                (current) => current.copyWith(
+                  schedule: current.schedule.copyWith(time: time),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlacementDropdown extends StatelessWidget {
+  const _PlacementDropdown({
+    required this.state,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final AppState state;
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = state.strings;
     return DropdownButtonFormField<String>(
-      initialValue: _viewType,
+      initialValue: value,
       decoration: InputDecoration(
         isDense: true,
-        labelText: s['automationResetTargetView'],
+        labelText: s['placementInMonth'],
       ),
       items: [
-        for (final view in ViewRegistry.views)
-          DropdownMenuItem(
-            value: view.type,
-            child: Text(s.viewLabel(view.type)),
-          ),
+        DropdownMenuItem(value: 'first', child: Text(s['first'])),
+        DropdownMenuItem(value: 'second', child: Text(s['second'])),
+        DropdownMenuItem(value: 'third', child: Text(s['third'])),
+        DropdownMenuItem(value: 'last', child: Text(s['last'])),
       ],
-      onChanged: (value) async {
+      onChanged: (value) {
         if (value == null) return;
-        setState(() => _viewType = value);
-        await _save();
+        onChanged(value);
       },
+    );
+  }
+}
+
+class _WeekdayPicker extends StatelessWidget {
+  const _WeekdayPicker({
+    required this.state,
+    required this.weekday,
+    required this.onChanged,
+  });
+
+  final AppState state;
+  final String weekday;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = state.strings;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Text(
+            '${s['dayOfWeek']}: ${_weekdayLabel(s, weekday)}',
+            style: AppTypography.metaStyle,
+            textAlign: TextAlign.start,
+          ),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.calendar_today_outlined, size: 16),
+          label: Text(s['chooseDay']),
+          onPressed: () async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: _initialDateForWeekday(weekday),
+              firstDate: DateTime(2020),
+              lastDate: DateTime(2100),
+            );
+            if (picked == null) return;
+            onChanged(_weekdayKeyForDate(picked));
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _TimeField extends StatelessWidget {
+  const _TimeField({
+    required this.state,
+    required this.viewType,
+    required this.time,
+    required this.onChanged,
+  });
+
+  final AppState state;
+  final String viewType;
+  final String time;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = state.strings;
+    return TextFormField(
+      key: ValueKey('reset-$viewType-$time'),
+      initialValue: time,
+      style: AppTypography.noteBodyStyle,
+      textAlign: TextAlign.start,
+      decoration: InputDecoration(
+        isDense: true,
+        labelText: s['time'],
+        helperText: s['automationTimeHelp'],
+      ),
+      onChanged: (value) {
+        final normalized = _tryNormalizeTime(value.trim());
+        if (normalized == null) return;
+        onChanged(normalized);
+      },
+      onFieldSubmitted: (_) {},
     );
   }
 }
@@ -716,7 +1036,7 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
     super.initState();
     final trigger =
         (widget.rule.params['trigger'] as Map?)?.cast<String, dynamic>() ??
-            <String, dynamic>{};
+        <String, dynamic>{};
     _viewType = trigger['view_type'] as String? ?? 'weekly';
     _sectionName = trigger['section_name'] as String?;
     _loadSections();
@@ -729,7 +1049,7 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
         oldWidget.rule.params != widget.rule.params) {
       final trigger =
           (widget.rule.params['trigger'] as Map?)?.cast<String, dynamic>() ??
-              <String, dynamic>{};
+          <String, dynamic>{};
       _viewType = trigger['view_type'] as String? ?? 'weekly';
       _sectionName = trigger['section_name'] as String?;
     }
@@ -796,10 +1116,12 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
       params: params,
     );
     if (!ok && mounted) {
-      final message = widget.state.takeAutomationNotice() ??
+      final message =
+          widget.state.takeAutomationNotice() ??
           widget.state.strings['automationRunFailed'];
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -811,7 +1133,7 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DropdownButtonFormField<String>(
-          value: _viewType,
+          initialValue: _viewType,
           decoration: InputDecoration(
             isDense: true,
             labelText: s['automationTriggerView'],
@@ -859,7 +1181,7 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
           ),
         ] else
           DropdownButtonFormField<String>(
-            value: _sectionName,
+            initialValue: _sectionName,
             decoration: InputDecoration(
               isDense: true,
               labelText: s['automationTriggerSection'],
@@ -881,7 +1203,110 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
   }
 }
 
-enum _ScheduleFrequency { daily, weekly, monthly }
+const _viewResetViewTypes = ['daily', 'weekly', 'monthly', 'quarterly'];
+
+enum _ScheduleFrequency { daily, weekly, monthly, quarterly }
+
+class _ViewResetConfig {
+  const _ViewResetConfig({
+    required this.enabled,
+    required this.schedule,
+    this.intervalMonths = 3,
+    this.syncWithMonthly = false,
+  });
+
+  final bool enabled;
+  final _ScheduleDraft schedule;
+  final int intervalMonths;
+  final bool syncWithMonthly;
+
+  _ViewResetConfig copyWith({
+    bool? enabled,
+    _ScheduleDraft? schedule,
+    int? intervalMonths,
+    bool? syncWithMonthly,
+  }) {
+    return _ViewResetConfig(
+      enabled: enabled ?? this.enabled,
+      schedule: schedule ?? this.schedule,
+      intervalMonths: intervalMonths ?? this.intervalMonths,
+      syncWithMonthly: syncWithMonthly ?? this.syncWithMonthly,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'enabled': enabled,
+    'schedule': schedule.toSchedule(),
+    'interval_months': intervalMonths,
+    'sync_with_monthly': syncWithMonthly,
+  };
+}
+
+Map<String, _ViewResetConfig> _viewResetConfigs(Map<String, dynamic> params) {
+  final rawResets = params['view_resets'];
+  final result = {
+    for (final viewType in _viewResetViewTypes)
+      viewType: _defaultViewResetConfig(viewType),
+  };
+  if (rawResets is Map) {
+    for (final viewType in _viewResetViewTypes) {
+      final rawConfig = rawResets[viewType];
+      if (rawConfig is! Map) continue;
+      final defaultConfig = result[viewType]!;
+      final interval = rawConfig['interval_months'] as int?;
+      result[viewType] = defaultConfig.copyWith(
+        enabled: rawConfig['enabled'] as bool? ?? defaultConfig.enabled,
+        intervalMonths: interval == 4 ? 4 : 3,
+        syncWithMonthly:
+            rawConfig['sync_with_monthly'] as bool? ??
+            defaultConfig.syncWithMonthly,
+        schedule: _ScheduleDraft.fromSchedule(
+          rawConfig['schedule'] as String? ??
+              defaultConfig.schedule.toSchedule(),
+        ),
+      );
+    }
+  } else if (params['target_view'] is String) {
+    final targetView = params['target_view'] as String;
+    if (result.containsKey(targetView)) {
+      result[targetView] = result[targetView]!.copyWith(enabled: true);
+    }
+  }
+  return result;
+}
+
+_ViewResetConfig _defaultViewResetConfig(String viewType) {
+  return switch (viewType) {
+    'daily' => _ViewResetConfig(
+      enabled: true,
+      schedule: _ScheduleDraft.fromSchedule('daily 23:59'),
+    ),
+    'monthly' => _ViewResetConfig(
+      enabled: true,
+      schedule: _ScheduleDraft.fromSchedule('monthly last sat 23:59'),
+    ),
+    'quarterly' => _ViewResetConfig(
+      enabled: true,
+      schedule: _ScheduleDraft.fromSchedule('quarterly 3 last sat 23:59'),
+      intervalMonths: 3,
+      syncWithMonthly: true,
+    ),
+    _ => _ViewResetConfig(
+      enabled: true,
+      schedule: _ScheduleDraft.fromSchedule('weekly sat 23:59'),
+    ),
+  };
+}
+
+_ScheduleDraft _quarterlyScheduleFromMonthly(
+  _ScheduleDraft monthly,
+  int intervalMonths,
+) {
+  return monthly.copyWith(
+    frequency: _ScheduleFrequency.quarterly,
+    intervalMonths: intervalMonths,
+  );
+}
 
 class _ScheduleDraft {
   const _ScheduleDraft({
@@ -889,6 +1314,7 @@ class _ScheduleDraft {
     required this.time,
     required this.weekday,
     required this.monthPlacement,
+    this.intervalMonths = 3,
   });
 
   factory _ScheduleDraft.fromSchedule(String schedule) {
@@ -915,6 +1341,19 @@ class _ScheduleDraft {
       );
     }
 
+    if (parts.first == 'quarterly') {
+      final interval = int.tryParse(parts.length > 1 ? parts[1] : '3');
+      return _ScheduleDraft(
+        frequency: _ScheduleFrequency.quarterly,
+        intervalMonths: interval == 4 ? 4 : 3,
+        monthPlacement: _normalizePlacement(
+          parts.length > 2 ? parts[2] : 'first',
+        ),
+        weekday: _normalizeWeekday(parts.length > 3 ? parts[3] : 'mon'),
+        time: _normalizeTime(parts.length > 4 ? parts[4] : '00:00'),
+      );
+    }
+
     return _ScheduleDraft(
       frequency: _ScheduleFrequency.daily,
       weekday: 'mon',
@@ -928,24 +1367,28 @@ class _ScheduleDraft {
     time: '00:00',
     weekday: 'mon',
     monthPlacement: 'first',
+    intervalMonths: 3,
   );
 
   final _ScheduleFrequency frequency;
   final String time;
   final String weekday;
   final String monthPlacement;
+  final int intervalMonths;
 
   _ScheduleDraft copyWith({
     _ScheduleFrequency? frequency,
     String? time,
     String? weekday,
     String? monthPlacement,
+    int? intervalMonths,
   }) {
     return _ScheduleDraft(
       frequency: frequency ?? this.frequency,
       time: time ?? this.time,
       weekday: weekday ?? this.weekday,
       monthPlacement: monthPlacement ?? this.monthPlacement,
+      intervalMonths: intervalMonths ?? this.intervalMonths,
     );
   }
 
@@ -954,6 +1397,8 @@ class _ScheduleDraft {
       _ScheduleFrequency.daily => 'daily $time',
       _ScheduleFrequency.weekly => 'weekly $weekday $time',
       _ScheduleFrequency.monthly => 'monthly $monthPlacement $weekday $time',
+      _ScheduleFrequency.quarterly =>
+        'quarterly $intervalMonths $monthPlacement $weekday $time',
     };
   }
 
@@ -964,6 +1409,8 @@ class _ScheduleDraft {
         '${s['onceAWeek']}, ${_weekdayLabel(s, weekday)}, $time',
       _ScheduleFrequency.monthly =>
         '${s['onceAMonth']}, ${_placementLabel(s, monthPlacement)} ${_weekdayLabel(s, weekday)}, $time',
+      _ScheduleFrequency.quarterly =>
+        '${s['automationResetQuarterly']}, ${_placementLabel(s, monthPlacement)} ${_weekdayLabel(s, weekday)}, $time',
     };
   }
 }

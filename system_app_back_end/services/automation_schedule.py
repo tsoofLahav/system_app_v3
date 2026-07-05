@@ -88,9 +88,26 @@ def next_run_after(schedule, after_utc, timezone=UTC.key):
             )
         return local_to_utc_naive(candidate)
 
+    if kind == "quarterly":
+        interval = _parse_month_interval(parts[0] if parts else "3")
+        placement = (parts[1] if len(parts) > 1 else "first").lower()
+        weekday = WEEKDAYS.get((parts[2] if len(parts) > 2 else "mon").lower(), 0)
+        hour, minute = _parse_time(parts[3] if len(parts) > 3 else "00:00")
+        candidate = _interval_month_candidate_local(
+            after_local,
+            interval,
+            placement,
+            weekday,
+            hour,
+            minute,
+            tz,
+        )
+        return local_to_utc_naive(candidate)
+
     raise ValueError(
         "schedule must be 'daily HH:MM', 'weekly DAY HH:MM', "
-        "or 'monthly PLACEMENT DAY HH:MM'"
+        "'monthly PLACEMENT DAY HH:MM', or "
+        "'quarterly INTERVAL PLACEMENT DAY HH:MM'"
     )
 
 
@@ -100,6 +117,13 @@ def _parse_time(value):
     if hour < 0 or hour > 23 or minute < 0 or minute > 59:
         raise ValueError("time must be HH:MM in 24-hour format")
     return hour, minute
+
+
+def _parse_month_interval(value):
+    interval = int(value)
+    if interval not in {3, 4}:
+        raise ValueError("quarterly interval must be 3 or 4 months")
+    return interval
 
 
 def _monthly_candidate_local(year, month, placement, weekday, hour, minute, tz):
@@ -115,6 +139,33 @@ def _monthly_candidate_local(year, month, placement, weekday, hour, minute, tz):
         day = 1 + ((weekday - first_weekday) % 7) + ((occurrence - 1) * 7)
 
     return datetime(year, month, day, hour, minute, tzinfo=tz)
+
+
+def _interval_month_candidate_local(
+    after_local,
+    interval,
+    placement,
+    weekday,
+    hour,
+    minute,
+    tz,
+):
+    year, month = after_local.year, after_local.month
+    for _ in range(0, 24):
+        if (month - 1) % interval == 0:
+            candidate = _monthly_candidate_local(
+                year,
+                month,
+                placement,
+                weekday,
+                hour,
+                minute,
+                tz,
+            )
+            if candidate > after_local:
+                return candidate
+        year, month = _next_month(year, month)
+    raise ValueError("could not find next quarterly candidate")
 
 
 def _next_month(year, month):

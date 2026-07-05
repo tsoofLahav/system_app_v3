@@ -124,8 +124,8 @@ class AppStrings {
     final kind = scopeFixed['kind'] as String? ?? 'all';
     final scope = switch (kind) {
       'topic_type' => topicTypeLabel(
-          scopeFixed['topic_type'] as String? ?? 'process',
-        ),
+        scopeFixed['topic_type'] as String? ?? 'process',
+      ),
       'topic' => displayTopicName(scopeFixed['topic_name'] as String?),
       _ => this['allTopics'],
     };
@@ -138,10 +138,12 @@ class AppStrings {
   String taskResetAckBody({
     required int resetCount,
     required int missedCount,
-  }) =>
-      this['taskResetAckBody']
-          .replaceAll('{reset}', '$resetCount')
-          .replaceAll('{missed}', '$missedCount');
+  }) => this['taskResetAckBody']
+      .replaceAll('{reset}', '$resetCount')
+      .replaceAll('{missed}', '$missedCount');
+
+  String taskResetScheduleSummary(int enabledCount) =>
+      this['taskResetScheduleSummary'].replaceAll('{count}', '$enabledCount');
 
   // --- UI keys (use strings['key']) ---
 
@@ -327,8 +329,19 @@ class AppStrings {
     'automationTrigger': 'Activation',
     'automationTriggerView': 'View',
     'automationTriggerSection': 'Section',
-    'automationTriggerSectionHelp': 'Create a section in this view if none exist.',
+    'automationTriggerSectionHelp':
+        'Create a section in this view if none exist.',
     'automationResetTargetView': 'View to reset',
+    'automationResetGroupedHelp':
+        'Manage reset schedules per task view inside this automation.',
+    'automationResetQuarterly': 'Quarterly',
+    'automationResetQuarterlyInterval': 'Quarterly jump',
+    'automationResetEvery3Months': 'Every 3 months',
+    'automationResetEvery4Months': 'Every 4 months',
+    'automationResetSyncMonthly': 'Sync with monthly timing',
+    'automationResetSyncedMonthlyTime':
+        'Uses the monthly placement, day, and time.',
+    'taskResetScheduleSummary': '{count} view schedules configured',
     'createSection': 'Create section',
     'aiProposals': 'AI suggestions',
     'approve': 'Approve',
@@ -553,6 +566,16 @@ class AppStrings {
     'automationTriggerSection': 'מדור',
     'automationTriggerSectionHelp': 'צור מדור בתצוגה זו אם אין.',
     'automationResetTargetView': 'תצוגה לאיפוס',
+    'automationResetGroupedHelp':
+        'נהל תזמוני איפוס לכל תצוגת משימות בתוך האוטומציה הזו.',
+    'automationResetQuarterly': 'רבעוני',
+    'automationResetQuarterlyInterval': 'קפיצה רבעונית',
+    'automationResetEvery3Months': 'כל 3 חודשים',
+    'automationResetEvery4Months': 'כל 4 חודשים',
+    'automationResetSyncMonthly': 'סנכרן עם התזמון החודשי',
+    'automationResetSyncedMonthlyTime':
+        'משתמש במיקום, ביום ובשעה של התזמון החודשי.',
+    'taskResetScheduleSummary': '{count} תזמוני תצוגות מוגדרים',
     'createSection': 'צור מדור',
     'aiProposals': 'הצעות AI',
     'approve': 'אשר',
@@ -648,7 +671,7 @@ class AppStrings {
         'When plan, documentation, or tasks change, regenerate the process '
         'recap with an AI summary and recent update notes.',
     'view_task_reset':
-        'At a scheduled time, uncheck completed tasks in a view and record active tasks as missed.',
+        'Manage daily, weekly, monthly, and quarterly schedules that uncheck completed tasks and record active tasks as missed.',
   };
 
   static const _automationDescriptionsHe = {
@@ -659,7 +682,7 @@ class AppStrings {
         'כשהתוכנית, התיעוד או המשימות משתנים, צור מחדש את סיכום התהליך '
         'עם סיכום AI והערות עדכון אחרונות.',
     'view_task_reset':
-        'בזמן מתוזמן, בטל סימון של משימות שהושלמו בתצוגה ורשום משימות פעילות כמשימות שפוספסו.',
+        'נהל תזמונים יומיים, שבועיים, חודשיים ורבעוניים שמבטלים סימון משימות שהושלמו ורושמים משימות פעילות כמשימות שפוספסו.',
   };
 
   static const _fileNamesEn = {

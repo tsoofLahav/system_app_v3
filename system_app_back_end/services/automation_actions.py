@@ -210,7 +210,10 @@ def reset_view_tasks(context):
     rule = context["rule"]
     run = context["run"]
     params = context["params"]
-    view_type = (params.get("target_view") or "weekly").strip()
+    event_context = context.get("event_context") or {}
+    view_type = (
+        event_context.get("target_view") or params.get("target_view") or "weekly"
+    ).strip()
     if not view_type:
         raise ValueError("target_view is required for reset_view_tasks")
 

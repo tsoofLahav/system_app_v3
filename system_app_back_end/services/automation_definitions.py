@@ -217,8 +217,9 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
         key="view_task_reset",
         name="Reset view tasks",
         description=(
-            "At a scheduled time, uncheck completed tasks in a task view and "
-            "record tasks that were still active as missed."
+            "At configured daily, weekly, monthly, and quarterly reset times, "
+            "uncheck completed tasks in each matching task view and record "
+            "tasks that were still active as missed."
         ),
         action_type="reset_view_tasks",
         scope=ScopeConfig(
@@ -229,7 +230,7 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
         bindings=(),
         companion=None,
         ai=None,
-        default_schedule="weekly sat 23:59",
+        default_schedule="daily 23:59",
         default_enabled=False,
         fan_out=False,
     ),
@@ -238,6 +239,27 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
 
 LEGACY_AUTOMATION_ALIASES: dict[str, str] = {
     "weekly_process_refresh": "process_refresh",
+}
+
+VIEW_TASK_RESET_DEFAULTS: dict[str, dict[str, Any]] = {
+    "daily": {
+        "enabled": True,
+        "schedule": "daily 23:59",
+    },
+    "weekly": {
+        "enabled": True,
+        "schedule": "weekly sat 23:59",
+    },
+    "monthly": {
+        "enabled": True,
+        "schedule": "monthly last sat 23:59",
+    },
+    "quarterly": {
+        "enabled": True,
+        "schedule": "quarterly 3 last sat 23:59",
+        "interval_months": 3,
+        "sync_with_monthly": True,
+    },
 }
 
 
@@ -314,6 +336,10 @@ def default_params(key: str) -> dict[str, Any]:
         result["recap"] = {"max_date_groups": 5}
     if definition.key == "view_task_reset":
         result["target_view"] = "weekly"
+        result["view_resets"] = {
+            view_type: dict(config)
+            for view_type, config in VIEW_TASK_RESET_DEFAULTS.items()
+        }
         result["report"] = {
             "topic_name": "Automations",
             "file_type": "doc",
@@ -418,6 +444,24 @@ def apply_definition_to_params(
 
     if raw.get("target_view"):
         merged["target_view"] = raw["target_view"]
+
+    if raw.get("view_resets"):
+        resets = {
+            view_type: dict(config)
+            for view_type, config in (merged.get("view_resets") or {}).items()
+        }
+        for view_type, config in dict(raw["view_resets"]).items():
+            if view_type not in VIEW_TASK_RESET_DEFAULTS or not isinstance(config, dict):
+                continue
+            reset_config = dict(resets.get(view_type) or {})
+            reset_config.update(dict(config))
+            if view_type == "quarterly":
+                interval = reset_config.get("interval_months")
+                if interval not in (3, 4):
+                    interval = 3
+                reset_config["interval_months"] = interval
+            resets[view_type] = reset_config
+        merged["view_resets"] = resets
 
     if raw.get("report"):
         report = dict(merged.get("report") or {})

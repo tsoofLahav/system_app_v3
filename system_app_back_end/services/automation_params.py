@@ -94,7 +94,15 @@ def merge_rule_params(existing, incoming):
     merged = dict(base)
 
     for key, value in patch.items():
-        if key in {"trigger", "companion_task", "scope", "bindings", "recap", "change_trigger"}:
+        if key in {
+            "trigger",
+            "companion_task",
+            "scope",
+            "bindings",
+            "recap",
+            "change_trigger",
+            "view_resets",
+        }:
             continue
         merged[key] = value
 
@@ -133,6 +141,20 @@ def merge_rule_params(existing, incoming):
         change_trigger = dict(base.get("change_trigger") or {})
         change_trigger.update(patch["change_trigger"])
         merged["change_trigger"] = change_trigger
+
+    if isinstance(patch.get("view_resets"), dict):
+        view_resets = {
+            view_type: dict(config)
+            for view_type, config in (base.get("view_resets") or {}).items()
+            if isinstance(config, dict)
+        }
+        for view_type, config in patch["view_resets"].items():
+            if not isinstance(config, dict):
+                continue
+            reset_config = dict(view_resets.get(view_type) or {})
+            reset_config.update(config)
+            view_resets[view_type] = reset_config
+        merged["view_resets"] = view_resets
 
     return merged
 
