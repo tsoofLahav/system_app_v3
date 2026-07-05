@@ -89,7 +89,13 @@ def smart_project_summary_update(
         flagged_lines,
         "\n".join(existing_parts),
     )
-    lang_note = "Respond in Hebrew." if locale == "he" else "Respond in English."
+    if locale == "he":
+        lang_note = (
+            "All user-visible JSON string values must be written in Hebrew. "
+            "Do not translate existing Hebrew part names into English."
+        )
+    else:
+        lang_note = "All user-visible JSON string values must be written in English."
 
     user_prompt = (
         f"Project: {topic.name}\n"

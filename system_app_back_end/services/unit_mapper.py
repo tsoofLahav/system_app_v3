@@ -70,10 +70,23 @@ def flatten_process_files_for_ai(plan_file, doc_file, tasks_file):
 
 
 def detect_language(*texts):
-    combined = "\n".join(texts)
+    combined = _language_signal_text("\n".join(texts))
     hebrew = len(re.findall(r"[\u0590-\u05FF]", combined))
     latin = len(re.findall(r"[A-Za-z]", combined))
     return "he" if hebrew > latin else "en"
+
+
+def _language_signal_text(text):
+    lines = []
+    for line in (text or "").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("===") and stripped.endswith("==="):
+            continue
+        stripped = re.sub(r"^\[[^\]]+\]\s*", "", stripped)
+        lines.append(stripped)
+    return "\n".join(lines)
 
 
 def apply_units_to_file(file, units):

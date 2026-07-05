@@ -152,6 +152,13 @@ def _execute_run(run, now):
         _after_event_run_finished(run)
         return run.to_dict()
 
+    if not rule.enabled and run.trigger_source != "manual":
+        run.status = "success"
+        run.result = {"skipped": True, "reason": "rule_disabled"}
+        run.finished_at = datetime.utcnow()
+        _after_event_run_finished(run)
+        return run.to_dict()
+
     activation_error = validate_rule_activation(
         rule,
         trigger_source=run.trigger_source,

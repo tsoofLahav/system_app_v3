@@ -19,6 +19,9 @@ _watchers_lock = threading.Lock()
 
 
 def change_trigger_config_for_rule(rule: AutomationRule) -> ChangeTriggerConfig | None:
+    if not rule.enabled:
+        return None
+
     definition = get_definition(rule.key, rule.action_type)
     if definition is None or "event" not in definition.activations:
         return None

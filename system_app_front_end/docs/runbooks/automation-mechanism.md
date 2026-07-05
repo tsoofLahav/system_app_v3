@@ -13,6 +13,19 @@ Automation is configured by the user and executed by the backend. The frontend e
 - Archived content appears in a sidebar Archive section and does not compete with active topics.
 - AI-generated process suggestions are pending until the user approves them.
 
+## Automation Rules
+
+- Disabled automations do not run automatically. If a schedule/event/task run was
+  already queued and the user turns the automation off before it executes, the
+  backend skips that automatic run. Run now is still explicit.
+- AI-generated automation output should follow the dominant language of the
+  source files, not internal labels or metadata.
+- Direct-write automations must make their write target clear. Recap/summary
+  automations that own `overview` should not mutate source files unless that is
+  documented as part of a separate automation.
+- Event automations exclude their own generated overview/recap writes from
+  triggering a loop.
+
 ## Backend queue flow
 
 ```text

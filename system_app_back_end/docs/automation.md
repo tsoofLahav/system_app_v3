@@ -27,6 +27,14 @@ Each run stores:
 
 **Dedupe:** if a rule already has a `queued` or `running` run, new enqueue requests are ignored for that rule. Event rules with change triggers additionally coalesce changes during an active run and schedule a follow-up when it finishes.
 
+## Fundamental Rules
+
+- **Enabled gate:** disabled rules must not run automatically. Schedule, task, and event dispatchers should avoid enqueueing disabled rules; the runner also skips any already-queued automatic run if the rule was disabled before execution. Manual `run now` remains an explicit user action.
+- **Language preservation:** AI-backed automations must write user-visible output in the same dominant language as their source files. Prompts and language detection should avoid being biased by internal English labels, unit IDs, or block metadata.
+- **Scope and bindings:** automations resolve files through definition bindings and rule params. Actions should not hardcode file names when a binding exists.
+- **Self-trigger safety:** direct-write event automations must avoid triggering themselves. Overview/recap writes are excluded from file-change matching, and actions should still guard against overview-triggered runs.
+- **Direct-write safety:** direct-write automations should clearly document which files they mutate. If an automation only owns an overview/recap, it must not modify source files such as plan, execution, documentation, or tasks.
+
 ## Automation definitions (registry)
 
 Built-in automations are defined in code at `services/automation_definitions.py`. Each **definition** is the source of truth for scope, file bindings, allowed activations, companion flow, and related AI actions. A user's `automation_rules` row is an **instance**: enabled flag, schedule, timezone, trigger placement, and companion view/section overrides.
