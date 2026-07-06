@@ -300,6 +300,12 @@ class _AutomationRuleCardState extends State<_AutomationRuleCard> {
     return switch (triggerType) {
       'event' => s['triggerByChanges'],
       'task' => _taskTriggerLabel(s, trigger),
+      _ when widget.state
+              .definitionForKey(widget.rule.key)
+              ?.companion
+              ?.enabled ==
+          true =>
+        '${schedule.label(s)} · ${_taskTriggerLabel(s, trigger)}',
       _ => schedule.label(s),
     };
   }
@@ -364,6 +370,25 @@ class _AutomationConfigDialogState extends State<_AutomationConfigDialog> {
       if (rule.id == widget.rule.id) return rule;
     }
     return widget.rule;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _ensureCompanionTriggerTask();
+  }
+
+  Future<void> _ensureCompanionTriggerTask() async {
+    final definition = widget.state.definitionForKey(widget.rule.key);
+    if (definition?.companion?.enabled != true || !widget.rule.enabled) return;
+    final trigger =
+        (widget.rule.params['trigger'] as Map?)?.cast<String, dynamic>() ??
+        <String, dynamic>{};
+    if (trigger['view_type'] == null) return;
+    await widget.state.updateAutomationRule(
+      widget.rule,
+      params: Map<String, dynamic>.from(widget.rule.params),
+    );
   }
 
   @override
@@ -477,8 +502,19 @@ class _AutomationConfigDialogState extends State<_AutomationConfigDialog> {
                 s['triggerByChanges'],
                 style: AppTypography.noteBodyStyle,
                 textAlign: TextAlign.start,
-              )
-            else
+              ),
+            if (definition?.companion?.enabled == true) ...[
+              if (triggerType == 'schedule') ...[
+                const SizedBox(height: 12),
+                Text(
+                  s['automationTaskPlacement'],
+                  style: AppTypography.metaStyle,
+                  textAlign: TextAlign.start,
+                ),
+                const SizedBox(height: 6),
+              ],
+              _TaskTriggerFields(state: widget.state, rule: rule),
+            ] else if (triggerType == 'task')
               _TaskTriggerFields(state: widget.state, rule: rule),
           ],
         ),
@@ -1358,7 +1394,6 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
     params['companion_task'] = companion;
     final ok = await widget.state.updateAutomationRule(
       widget.rule,
-      triggerType: 'task',
       params: params,
     );
     if (!ok && mounted) {

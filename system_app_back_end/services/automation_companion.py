@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from models import AutomationCompanionTask, AutomationRun, AutomationRule, Task, TaskView, Topic, db
-from services.automation_definitions import get_definition, topic_in_scope
+from services.automation_definitions import get_definition, rule_uses_companion_trigger_task, topic_in_scope
 from services.automation_params import companion_config, normalize_params
 from services.automation_topics import AUTOMATIONS_TOPIC_KEY
 
@@ -12,13 +12,17 @@ def create_companion_task(rule, run, flow_key, payload, title=None, section_name
     topic_id = payload.get("topic_id")
     run_id = run.id if isinstance(run, AutomationRun) else run.get("id")
 
-    if rule.trigger_type == "task":
+    if not companion or not companion.get("enabled", True):
+        return None
+
+    definition = get_definition(rule.key, rule.action_type)
+    if rule_uses_companion_trigger_task(rule):
         from services.automation_trigger import ensure_trigger_task
 
         task = ensure_trigger_task(rule)
         if task is None:
             return None
-        return _upsert_companion_link(
+        link = _upsert_companion_link(
             task=task,
             rule_key=rule.key,
             run_id=run_id,
@@ -26,6 +30,10 @@ def create_companion_task(rule, run, flow_key, payload, title=None, section_name
             topic_id=topic_id,
             payload=payload,
         )
+        if rule.trigger_type != "task":
+            task.status = "active"
+            db.session.flush()
+        return link
 
     view_type = companion.get("view_type", "daily")
     section = section_name or companion.get("section_name", "Automations")

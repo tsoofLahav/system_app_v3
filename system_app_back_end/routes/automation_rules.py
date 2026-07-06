@@ -9,6 +9,8 @@ from routes.helpers import apply_updates, get_or_404, parse_datetime
 from services.automation_definitions import (
     default_create_payload,
     get_definition,
+    rule_uses_companion_trigger_task,
+    uses_companion_trigger_task,
     validate_rule_update,
 )
 from services.automation_params import finalize_rule_params, merge_rule_params, normalize_params
@@ -73,10 +75,22 @@ def create_automation_rule():
 
     if trigger_type == "schedule" and not data.get("schedule"):
         return jsonify({"error": "schedule is required for schedule rules"}), 400
-    if trigger_type == "task":
+
+    definition = get_definition(rule_key, data.get("action_type"))
+    needs_trigger_placement = trigger_type == "task" or uses_companion_trigger_task(
+        definition
+    )
+    if needs_trigger_placement:
         trigger = (data.get("params") or {}).get("trigger") or {}
         if not trigger.get("view_type"):
-            return jsonify({"error": "params.trigger.view_type is required for task rules"}), 400
+            return jsonify(
+                {
+                    "error": (
+                        "params.trigger.view_type is required for companion "
+                        "automations"
+                    )
+                }
+            ), 400
 
     schedule = data.get("schedule")
     next_run_at = data.get("next_run_at")
@@ -97,7 +111,9 @@ def create_automation_rule():
         rule.next_run_at = _default_next_run_for_rule(rule)
     db.session.add(rule)
     db.session.flush()
-    if rule.trigger_type == "task" and rule.enabled:
+    if rule.enabled and (
+        rule.trigger_type == "task" or rule_uses_companion_trigger_task(rule)
+    ):
         from services.automation_trigger import ensure_trigger_task
 
         ensure_trigger_task(rule)
@@ -146,11 +162,10 @@ def update_automation_rule(rule_id):
 
     from services.automation_trigger import ensure_trigger_task, hide_trigger_task
 
-    was_task = previous_trigger_type == "task"
-    is_task = rule.trigger_type == "task"
-    if is_task and rule.enabled:
+    uses_shared = rule_uses_companion_trigger_task(rule)
+    if rule.enabled and (uses_shared or rule.trigger_type == "task"):
         ensure_trigger_task(rule)
-    elif was_task and (not is_task or not rule.enabled):
+    elif not rule.enabled and (uses_shared or previous_trigger_type == "task"):
         hide_trigger_task(rule)
 
     db.session.commit()

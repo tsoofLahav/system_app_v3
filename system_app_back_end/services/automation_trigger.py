@@ -1,4 +1,5 @@
 from models import Task, TaskView, db
+from services.automation_definitions import get_definition, rule_uses_companion_trigger_task
 from services.automation_dispatcher import dispatch_task_triggered
 from services.automation_params import (
     persist_rule_params,
@@ -37,8 +38,10 @@ def hide_trigger_task(rule):
 
 
 def ensure_trigger_task(rule):
-    """Create or restore the single trigger task for a task-triggered automation rule."""
-    if rule.trigger_type != "task":
+    """Create or restore the shared companion trigger task for an automation rule."""
+    definition = get_definition(rule.key, rule.action_type)
+    uses_shared = rule_uses_companion_trigger_task(rule)
+    if not uses_shared and rule.trigger_type != "task":
         return None
 
     params = rule_params_snapshot(rule)

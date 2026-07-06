@@ -107,7 +107,7 @@ Skipped processes create a `process_refresh_skipped` warning proposal on the pro
 
 Task-triggered companion flow separate from `process_refresh` and `process_recap_update`.
 
-- **Trigger:** on a configured schedule, or when the user unchecks the automation trigger task.
+- **Trigger:** on a configured schedule, or when the user unchecks the automation trigger task. Both modes use the same companion task placement (view/section).
 - **Dialog:** tapping the trigger task opens `process_documentation_input_dialog.dart`, modeled after the process update batch dialog.
 - **Save:** `POST /process_documentation_inputs` writes `[date, text]` to the doc table and appends the grade to the doc line graph.
 - **Skip:** completes the companion link without writing.

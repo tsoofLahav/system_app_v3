@@ -130,7 +130,7 @@ The initial action library contains:
 - `create_file_by_time`: create a file with configured topic, name, type, visibility, and default block contents.
 - `archive_at_time`: archive a topic, file, block, or task at a configured time.
 - `rotate_daily_main_file`: archive the current main-topic `Daily` file and create a fresh `Daily` text file every day at 00:00.
-- `process_refresh`: for each process, locate plan/doc/tasks files by type order, call the smart process update AI action, and store a delta proposal. Finalize archives old files and recreates plan, empty documentation table, and tasks after user review.
+- `process_refresh`: for each process, locate plan/doc/tasks files by type order, call the smart process update AI action, and store a delta proposal. Companion links are staged on the configured trigger task for both schedule and task activations; finalize archives old files and recreates plan, empty documentation table, and tasks after user review.
 - `process_documentation_input`: for each process, stage companion links when the rule runs on schedule or when the user unchecks the trigger task. Opening the companion task launches a process input dialog; saving writes `[date, text]` into the doc table (new row below any header) and appends the grade to a line graph. Missing doc table/graph blocks are created automatically. Skipping a process completes its companion link without writing.
 - `process_recap_update`: when plan, documentation, or tasks change in a process topic, regenerate the recap (`overview` file): AI-written summary, date-grouped update table, and a snapshot of flagged tasks. Writes blocks in place (no proposal or review).
 - `project_summary_update`: when plan, execution, documentation, or tasks change in a project topic, regenerate the overview from the project state and part structure. Writes directly to overview only (no proposal or review).
@@ -145,10 +145,19 @@ The initial action library contains:
 - **Report:** each run creates an archived `doc` file in the `Automations` topic with reset/missed task details.
 - **Acknowledgement:** the run creates a pending `task_reset_acknowledgements` row; the frontend shows it once when opening the target view and marks it approved after the user confirms.
 
+### Companion trigger tasks (`process_refresh`, `process_documentation_input`)
+
+Automations with a companion flow share one trigger task configured in the Automations dialog (view + section):
+
+- **By time (`schedule`)**: the rule runs on schedule, stages companion links on that task, and marks it active for the user to open.
+- **By task (`task`)**: the same task is shown checked until the user unchecks it, which runs the automation and stages companions on that task.
+
+Unchecking only dispatches the automation when `trigger_type=task`. Scheduled runs never require unchecking first.
+
 ### Process documentation input (`process_documentation_input`)
 
-- **Trigger:** `trigger_type=schedule` or `trigger_type=task`. Schedule runs stage companions at the configured time; task mode stages companions when the user unchecks the trigger task.
-- **Flow:** tapping the companion task opens the `process_documentation_input` dialog. The user enters daily text and a 1–10 grade per process, or skips. Task mode batches all processes on one trigger task; schedule mode creates one active task per process.
+- **Trigger:** `trigger_type=schedule` or `trigger_type=task`. Both use the same configured companion task (view/section). Schedule runs stage companions at the configured time and marks the task active; task mode stages companions when the user unchecks that task.
+- **Flow:** tapping the companion task opens the `process_documentation_input` dialog. The user enters daily text and a 1–10 grade per process, or skips. All processes share one trigger task in both activation modes.
 - **Write API:** `POST /process_documentation_inputs` with `{ topic_id, text, grade, date?, timezone? }`.
 - **Doc table:** inserts `[date, text]` as a new row below any header row. Storage order is date-first so RTL tables show date on the right in Hebrew.
 - **Doc graph:** appends the date to `labels` and the grade to `values` on a line graph block, creating table/graph blocks when missing.

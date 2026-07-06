@@ -336,6 +336,7 @@ class AppStrings {
     'automationTriggerSection': 'Section',
     'automationTriggerSectionHelp':
         'Create a section in this view if none exist.',
+    'automationTaskPlacement': 'Task placement',
     'automationResetTargetView': 'View to reset',
     'automationResetGroupedHelp':
         'Manage reset schedules per task view inside this automation.',
@@ -583,6 +584,7 @@ class AppStrings {
     'automationTriggerView': 'תצוגה',
     'automationTriggerSection': 'מדור',
     'automationTriggerSectionHelp': 'צור מדור בתצוגה זו אם אין.',
+    'automationTaskPlacement': 'מיקום המשימה',
     'automationResetTargetView': 'תצוגה לאיפוס',
     'automationResetGroupedHelp':
         'נהל תזמוני איפוס לכל תצוגת משימות בתוך האוטומציה הזו.',

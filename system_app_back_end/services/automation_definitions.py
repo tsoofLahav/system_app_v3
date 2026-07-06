@@ -346,6 +346,20 @@ def list_definitions() -> list[AutomationDefinition]:
     return list(AUTOMATION_DEFINITIONS.values())
 
 
+def uses_companion_trigger_task(
+    definition: AutomationDefinition | None,
+) -> bool:
+    return (
+        definition is not None
+        and definition.companion is not None
+        and definition.companion.enabled
+    )
+
+
+def rule_uses_companion_trigger_task(rule) -> bool:
+    return uses_companion_trigger_task(get_definition(rule.key, rule.action_type))
+
+
 def allowed_trigger_types(key: str | None, action_type: str | None = None) -> tuple[str, ...]:
     definition = get_definition(key, action_type)
     if definition is None:
@@ -422,7 +436,7 @@ def default_params(key: str) -> dict[str, Any]:
     if "event" in definition.activations:
         trigger = definition.change_trigger or ChangeTriggerConfig()
         result["change_trigger"] = _change_trigger_to_dict(trigger)
-    if "task" in definition.activations:
+    if uses_companion_trigger_task(definition):
         trigger = _default_trigger_params(definition)
         if trigger is not None:
             result["trigger"] = trigger
