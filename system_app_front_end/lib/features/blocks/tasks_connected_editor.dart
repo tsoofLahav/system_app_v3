@@ -29,6 +29,9 @@ class TasksConnectedEditor extends StatefulWidget {
 class _TasksConnectedEditorState extends State<TasksConnectedEditor> {
   int? _focusTaskId;
 
+  bool get _isGeneratedProjectSummaryList =>
+      widget.listBlock.content['generated_by'] == 'project_summary_update';
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -99,6 +102,12 @@ class _TasksConnectedEditorState extends State<TasksConnectedEditor> {
     );
   }
 
+  void _showReadOnlyReferenceMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(widget.state.strings['summaryTasksReadOnly'])),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tasks = widget.state.orderedTasksForFile(
@@ -117,7 +126,11 @@ class _TasksConnectedEditorState extends State<TasksConnectedEditor> {
       },
       contextMenuFileType: widget.file.type,
       contextMenuTargetBlock: widget.listBlock,
-      onBlockMenuAction: widget.onBlockMenuAction,
+      onBlockMenuAction: _isGeneratedProjectSummaryList
+          ? null
+          : widget.onBlockMenuAction,
+      readOnlyTaskRefs: _isGeneratedProjectSummaryList,
+      onReadOnlyAction: _showReadOnlyReferenceMessage,
       file: widget.file,
       handlersFor: _handlers,
     );

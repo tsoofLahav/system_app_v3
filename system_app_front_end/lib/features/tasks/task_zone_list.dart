@@ -27,6 +27,8 @@ class TaskZoneList extends StatefulWidget {
     this.contextMenuFileType,
     this.contextMenuTargetBlock,
     this.onBlockMenuAction,
+    this.readOnlyTaskRefs = false,
+    this.onReadOnlyAction,
     this.viewMenuContext,
     this.focusTaskId,
     this.onFocusHandled,
@@ -50,6 +52,8 @@ class TaskZoneList extends StatefulWidget {
   final String? contextMenuFileType;
   final Block? contextMenuTargetBlock;
   final BlockMenuHandler? onBlockMenuAction;
+  final bool readOnlyTaskRefs;
+  final VoidCallback? onReadOnlyAction;
   final TaskViewMenuContext? viewMenuContext;
   final int? focusTaskId;
   final VoidCallback? onFocusHandled;
@@ -62,7 +66,9 @@ class _TaskZoneListState extends State<TaskZoneList> {
   @override
   Widget build(BuildContext context) {
     final titles = widget.tasks.map((task) => task.title).toList();
-    final hideDraft = widget.tasks.any((task) => task.isAutomationsTopic);
+    final hideDraft =
+        widget.readOnlyTaskRefs ||
+        widget.tasks.any((task) => task.isAutomationsTopic);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -84,21 +90,36 @@ class _TaskZoneListState extends State<TaskZoneList> {
                     state: widget.state,
                   ),
             ),
-            onTitleChanged: (title) => widget.onTitleChanged(task, title),
-            onDelete: task.isAutomationTrigger
+            onTitleChanged: widget.readOnlyTaskRefs
+                ? null
+                : (title) => widget.onTitleChanged(task, title),
+            onDelete: widget.readOnlyTaskRefs || task.isAutomationTrigger
                 ? null
                 : () => widget.onDelete(task),
-            onAddTaskAfter: (position) => widget.onCreateAfter(task, position),
-            onPasteLines: (lines, position) =>
-                widget.onPasteAfter(task, lines, position),
+            onAddTaskAfter: widget.readOnlyTaskRefs
+                ? null
+                : (position) => widget.onCreateAfter(task, position),
+            onPasteLines: widget.readOnlyTaskRefs
+                ? null
+                : (lines, position) =>
+                      widget.onPasteAfter(task, lines, position),
             allTaskTitles: titles,
             autofocus: widget.focusTaskId == task.id,
             onAutofocused: widget.onFocusHandled,
-            contextMenuFileType: widget.contextMenuFileType,
-            contextMenuTargetBlock: widget.contextMenuTargetBlock,
-            onBlockMenuAction: widget.onBlockMenuAction,
+            contextMenuFileType: widget.readOnlyTaskRefs
+                ? null
+                : widget.contextMenuFileType,
+            contextMenuTargetBlock: widget.readOnlyTaskRefs
+                ? null
+                : widget.contextMenuTargetBlock,
+            onBlockMenuAction: widget.readOnlyTaskRefs
+                ? null
+                : widget.onBlockMenuAction,
+            onReadOnlyAction: widget.readOnlyTaskRefs
+                ? widget.onReadOnlyAction
+                : null,
             viewMenuContext: widget.viewMenuContext,
-            readOnly: task.isAutomationsTopic,
+            readOnly: widget.readOnlyTaskRefs || task.isAutomationsTopic,
             toggleEnabled: true,
             onRowTap: task.hasAutomationFlow
                 ? () => AutomationFlowRegistry.run(

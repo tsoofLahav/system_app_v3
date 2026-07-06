@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/app_state.dart';
 import '../../core/l10n/app_strings.dart';
@@ -19,6 +20,53 @@ Future<void> showAutomationDialog({
   return showDialog<void>(
     context: context,
     builder: (ctx) => AutomationDialog(state: state),
+  );
+}
+
+InputDecoration _automationFieldDecoration(String label, {String? helperText}) {
+  final border = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(10),
+    borderSide: BorderSide(
+      color: AppColors.noteBorder.withValues(alpha: 0.58),
+      width: 0.8,
+    ),
+  );
+  return InputDecoration(
+    labelText: label,
+    helperText: helperText,
+    floatingLabelBehavior: FloatingLabelBehavior.always,
+    isDense: true,
+    filled: false,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    enabledBorder: border,
+    focusedBorder: border.copyWith(
+      borderSide: BorderSide(
+        color: AppColors.primary.withValues(alpha: 0.54),
+        width: 0.9,
+      ),
+    ),
+    border: border,
+  );
+}
+
+TextStyle _automationDropdownTextStyle() => AppTypography.noteBodyStyle
+    .copyWith(color: AppColors.text.withValues(alpha: 0.92), fontSize: 12);
+
+Color _automationDropdownColor() => AppColors.noteTop.withValues(alpha: 0.96);
+
+BorderRadius _automationDropdownRadius() => BorderRadius.circular(14);
+
+Widget _automationDropdownItem(String label) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Text(label),
+  );
+}
+
+Widget _compactDropdown({required double width, required Widget child}) {
+  return Align(
+    alignment: AlignmentDirectional.centerStart,
+    child: SizedBox(width: width, child: child),
   );
 }
 
@@ -382,28 +430,36 @@ class _AutomationConfigDialogState extends State<_AutomationConfigDialog> {
               textAlign: TextAlign.start,
             ),
             const SizedBox(height: 6),
-            SegmentedButton<String>(
-              style: SegmentedButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                textStyle: AppTypography.metaStyle,
+            Align(
+              alignment: Alignment.center,
+              child: IntrinsicWidth(
+                child: SegmentedButton<String>(
+                  style: SegmentedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    textStyle: AppTypography.metaStyle,
+                  ),
+                  segments: [
+                    if (activations.contains('schedule'))
+                      ButtonSegment(
+                        value: 'schedule',
+                        label: Text(s['triggerByTime']),
+                      ),
+                    if (activations.contains('event'))
+                      ButtonSegment(
+                        value: 'event',
+                        label: Text(s['triggerByChanges']),
+                      ),
+                    if (activations.contains('task'))
+                      ButtonSegment(
+                        value: 'task',
+                        label: Text(s['triggerByTask']),
+                      ),
+                  ],
+                  selected: {triggerType},
+                  onSelectionChanged: (value) => _setTriggerType(value.first),
+                ),
               ),
-              segments: [
-                if (activations.contains('schedule'))
-                  ButtonSegment(
-                    value: 'schedule',
-                    label: Text(s['triggerByTime']),
-                  ),
-                if (activations.contains('event'))
-                  ButtonSegment(
-                    value: 'event',
-                    label: Text(s['triggerByChanges']),
-                  ),
-                if (activations.contains('task'))
-                  ButtonSegment(value: 'task', label: Text(s['triggerByTask'])),
-              ],
-              selected: {triggerType},
-              onSelectionChanged: (value) => _setTriggerType(value.first),
             ),
             const SizedBox(height: 12),
             if (triggerType == 'schedule')
@@ -522,106 +578,77 @@ class _ScheduleFieldsState extends State<_ScheduleFields> {
           textAlign: TextAlign.start,
         ),
         const SizedBox(height: 8),
-        DropdownButtonFormField<_ScheduleFrequency>(
-          initialValue: _draft.frequency,
-          decoration: InputDecoration(isDense: true, labelText: s['frequency']),
-          items: [
-            DropdownMenuItem(
-              value: _ScheduleFrequency.daily,
-              child: Text(s['onceADay']),
-            ),
-            DropdownMenuItem(
-              value: _ScheduleFrequency.weekly,
-              child: Text(s['onceAWeek']),
-            ),
-            DropdownMenuItem(
-              value: _ScheduleFrequency.monthly,
-              child: Text(s['onceAMonth']),
-            ),
-          ],
-          onChanged: (value) async {
-            if (value == null) return;
-            setState(() => _draft = _draft.copyWith(frequency: value));
-            await _saveSchedule();
-          },
-        ),
-        const SizedBox(height: 10),
-        if (_draft.frequency != _ScheduleFrequency.daily) ...[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Text(
-                  '${s['dayOfWeek']}: ${_weekdayLabel(s, _draft.weekday)}',
-                  style: AppTypography.metaStyle,
-                  textAlign: TextAlign.start,
-                ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.calendar_today_outlined, size: 16),
-                label: Text(s['chooseDay']),
-                onPressed: _chooseDay,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-        ],
-        if (_draft.frequency == _ScheduleFrequency.monthly) ...[
-          DropdownButtonFormField<String>(
-            initialValue: _draft.monthPlacement,
-            decoration: InputDecoration(
-              isDense: true,
-              labelText: s['placementInMonth'],
-            ),
+        _compactDropdown(
+          width: 150,
+          child: DropdownButtonFormField<_ScheduleFrequency>(
+            initialValue: _draft.frequency,
+            decoration: _automationFieldDecoration(s['frequency']),
+            dropdownColor: _automationDropdownColor(),
+            borderRadius: _automationDropdownRadius(),
+            elevation: 6,
+            menuMaxHeight: 280,
+            itemHeight: null,
+            style: _automationDropdownTextStyle(),
             items: [
-              DropdownMenuItem(value: 'first', child: Text(s['first'])),
-              DropdownMenuItem(value: 'second', child: Text(s['second'])),
-              DropdownMenuItem(value: 'third', child: Text(s['third'])),
-              DropdownMenuItem(value: 'last', child: Text(s['last'])),
+              DropdownMenuItem(
+                value: _ScheduleFrequency.daily,
+                child: _automationDropdownItem(s['onceADay']),
+              ),
+              DropdownMenuItem(
+                value: _ScheduleFrequency.weekly,
+                child: _automationDropdownItem(s['onceAWeek']),
+              ),
+              DropdownMenuItem(
+                value: _ScheduleFrequency.monthly,
+                child: _automationDropdownItem(s['onceAMonth']),
+              ),
             ],
             onChanged: (value) async {
               if (value == null) return;
-              setState(() => _draft = _draft.copyWith(monthPlacement: value));
+              setState(() => _draft = _draft.copyWith(frequency: value));
+              await _saveSchedule();
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (_draft.frequency == _ScheduleFrequency.weekly) ...[
+          _WeekdayDropdown(
+            state: widget.state,
+            weekday: _draft.weekday,
+            onChanged: (weekday) async {
+              setState(() => _draft = _draft.copyWith(weekday: weekday));
               await _saveSchedule();
             },
           ),
           const SizedBox(height: 10),
         ],
-        TextFormField(
-          key: ValueKey('${widget.rule.id}-${_draft.time}'),
-          initialValue: _draft.time,
-          style: AppTypography.noteBodyStyle,
-          textAlign: TextAlign.start,
-          decoration: InputDecoration(
-            isDense: true,
-            labelText: s['time'],
-            helperText: s['automationTimeHelp'],
+        if (_draft.frequency == _ScheduleFrequency.monthly) ...[
+          _MonthPatternPicker(
+            state: widget.state,
+            placement: _draft.monthPlacement,
+            weekday: _draft.weekday,
+            onChanged: (placement, weekday) async {
+              setState(
+                () => _draft = _draft.copyWith(
+                  monthPlacement: placement,
+                  weekday: weekday,
+                ),
+              );
+              await _saveSchedule();
+            },
           ),
-          onFieldSubmitted: (_) => _saveSchedule(),
-          onChanged: (value) {
-            final normalized = _tryNormalizeTime(value.trim());
-            if (normalized == null) return;
-            setState(() => _draft = _draft.copyWith(time: normalized));
+          const SizedBox(height: 10),
+        ],
+        _TimeDigitsField(
+          label: s['time'],
+          time: _draft.time,
+          onChanged: (time) async {
+            setState(() => _draft = _draft.copyWith(time: time));
+            await _saveSchedule();
           },
-          onEditingComplete: _saveSchedule,
         ),
       ],
     );
-  }
-
-  Future<void> _chooseDay() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _initialDateForWeekday(_draft.weekday),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    if (picked == null) return;
-    setState(
-      () => _draft = _draft.copyWith(weekday: _weekdayKeyForDate(picked)),
-    );
-    await _saveSchedule();
   }
 }
 
@@ -781,39 +808,54 @@ class _ViewResetScheduleCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<int>(
-                    initialValue: config.intervalMonths,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      labelText: s['automationResetQuarterlyInterval'],
-                    ),
-                    items: [
-                      DropdownMenuItem(
-                        value: 3,
-                        child: Text(s['automationResetEvery3Months']),
-                      ),
-                      DropdownMenuItem(
-                        value: 4,
-                        child: Text(s['automationResetEvery4Months']),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value == null) return;
-                      onChanged(
-                        (current) => current.copyWith(
-                          intervalMonths: value,
-                          schedule: current.syncWithMonthly
-                              ? _quarterlyScheduleFromMonthly(
-                                  monthlyConfig.schedule,
-                                  value,
-                                )
-                              : current.schedule.copyWith(
-                                  frequency: _ScheduleFrequency.quarterly,
-                                  intervalMonths: value,
-                                ),
+                  child: Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: SizedBox(
+                      width: 190,
+                      child: DropdownButtonFormField<int>(
+                        initialValue: config.intervalMonths,
+                        decoration: _automationFieldDecoration(
+                          s['automationResetQuarterlyInterval'],
                         ),
-                      );
-                    },
+                        dropdownColor: _automationDropdownColor(),
+                        borderRadius: _automationDropdownRadius(),
+                        elevation: 6,
+                        menuMaxHeight: 280,
+                        itemHeight: null,
+                        style: _automationDropdownTextStyle(),
+                        items: [
+                          DropdownMenuItem(
+                            value: 3,
+                            child: _automationDropdownItem(
+                              s['automationResetEvery3Months'],
+                            ),
+                          ),
+                          DropdownMenuItem(
+                            value: 4,
+                            child: _automationDropdownItem(
+                              s['automationResetEvery4Months'],
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          onChanged(
+                            (current) => current.copyWith(
+                              intervalMonths: value,
+                              schedule: current.syncWithMonthly
+                                  ? _quarterlyScheduleFromMonthly(
+                                      monthlyConfig.schedule,
+                                      value,
+                                    )
+                                  : current.schedule.copyWith(
+                                      frequency: _ScheduleFrequency.quarterly,
+                                      intervalMonths: value,
+                                    ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -849,26 +891,29 @@ class _ViewResetScheduleCard extends StatelessWidget {
             const SizedBox(height: 10),
           ],
           if (viewType != 'daily') ...[
-            if (viewType == 'monthly' ||
-                (viewType == 'quarterly' && !config.syncWithMonthly)) ...[
-              _PlacementDropdown(
-                state: state,
-                value: draft.monthPlacement,
-                onChanged: (value) => onChanged(
-                  (current) => current.copyWith(
-                    schedule: current.schedule.copyWith(monthPlacement: value),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
-            if (viewType != 'quarterly' || !config.syncWithMonthly) ...[
-              _WeekdayPicker(
+            if (viewType == 'weekly') ...[
+              _WeekdayDropdown(
                 state: state,
                 weekday: draft.weekday,
                 onChanged: (weekday) => onChanged(
                   (current) => current.copyWith(
                     schedule: current.schedule.copyWith(weekday: weekday),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ] else if (viewType == 'monthly' ||
+                (viewType == 'quarterly' && !config.syncWithMonthly)) ...[
+              _MonthPatternPicker(
+                state: state,
+                placement: draft.monthPlacement,
+                weekday: draft.weekday,
+                onChanged: (placement, weekday) => onChanged(
+                  (current) => current.copyWith(
+                    schedule: current.schedule.copyWith(
+                      monthPlacement: placement,
+                      weekday: weekday,
+                    ),
                   ),
                 ),
               ),
@@ -900,42 +945,8 @@ class _ViewResetScheduleCard extends StatelessWidget {
   }
 }
 
-class _PlacementDropdown extends StatelessWidget {
-  const _PlacementDropdown({
-    required this.state,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final AppState state;
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = state.strings;
-    return DropdownButtonFormField<String>(
-      initialValue: value,
-      decoration: InputDecoration(
-        isDense: true,
-        labelText: s['placementInMonth'],
-      ),
-      items: [
-        DropdownMenuItem(value: 'first', child: Text(s['first'])),
-        DropdownMenuItem(value: 'second', child: Text(s['second'])),
-        DropdownMenuItem(value: 'third', child: Text(s['third'])),
-        DropdownMenuItem(value: 'last', child: Text(s['last'])),
-      ],
-      onChanged: (value) {
-        if (value == null) return;
-        onChanged(value);
-      },
-    );
-  }
-}
-
-class _WeekdayPicker extends StatelessWidget {
-  const _WeekdayPicker({
+class _WeekdayDropdown extends StatelessWidget {
+  const _WeekdayDropdown({
     required this.state,
     required this.weekday,
     required this.onChanged,
@@ -948,31 +959,80 @@ class _WeekdayPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = state.strings;
+    return _compactDropdown(
+      width: 132,
+      child: DropdownButtonFormField<String>(
+        initialValue: weekday,
+        decoration: _automationFieldDecoration(s['dayOfWeek']),
+        dropdownColor: _automationDropdownColor(),
+        borderRadius: _automationDropdownRadius(),
+        elevation: 6,
+        menuMaxHeight: 280,
+        itemHeight: null,
+        style: _automationDropdownTextStyle(),
+        items: [
+          for (final value in _weekdayKeys)
+            DropdownMenuItem(
+              value: value,
+              child: _automationDropdownItem(_weekdayLabel(s, value)),
+            ),
+        ],
+        onChanged: (value) {
+          if (value == null) return;
+          onChanged(value);
+        },
+      ),
+    );
+  }
+}
+
+class _MonthPatternPicker extends StatelessWidget {
+  const _MonthPatternPicker({
+    required this.state,
+    required this.placement,
+    required this.weekday,
+    required this.onChanged,
+  });
+
+  final AppState state;
+  final String placement;
+  final String weekday;
+  final void Function(String placement, String weekday) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = state.strings;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
           child: Text(
-            '${s['dayOfWeek']}: ${_weekdayLabel(s, weekday)}',
+            _monthPatternLabel(s, placement, weekday),
             style: AppTypography.metaStyle,
             textAlign: TextAlign.start,
           ),
         ),
-        const SizedBox(width: 8),
-        OutlinedButton.icon(
-          icon: const Icon(Icons.calendar_today_outlined, size: 16),
-          label: Text(s['chooseDay']),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          icon: const AppIcon(
+            AppIcons.calendar,
+            size: 18,
+            color: AppColors.primary,
+          ),
           onPressed: () async {
             final picked = await showDatePicker(
               context: context,
-              initialDate: _initialDateForWeekday(weekday),
+              initialDate: _initialDateForMonthPattern(placement, weekday),
               firstDate: DateTime(2020),
               lastDate: DateTime(2100),
             );
             if (picked == null) return;
-            onChanged(_weekdayKeyForDate(picked));
+            onChanged(_placementKeyForDate(picked), _weekdayKeyForDate(picked));
           },
         ),
+        const SizedBox(width: 56),
       ],
     );
   }
@@ -994,24 +1054,210 @@ class _TimeField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = state.strings;
-    return TextFormField(
-      key: ValueKey('reset-$viewType-$time'),
-      initialValue: time,
-      style: AppTypography.noteBodyStyle,
-      textAlign: TextAlign.start,
-      decoration: InputDecoration(
-        isDense: true,
-        labelText: s['time'],
-        helperText: s['automationTimeHelp'],
-      ),
+    return _TimeDigitsField(
+      key: ValueKey('reset-$viewType'),
+      label: s['time'],
+      time: time,
       onChanged: (value) {
-        final normalized = _tryNormalizeTime(value.trim());
-        if (normalized == null) return;
-        onChanged(normalized);
+        onChanged(value);
       },
-      onFieldSubmitted: (_) {},
     );
   }
+}
+
+class _TimeDigitsField extends StatefulWidget {
+  const _TimeDigitsField({
+    super.key,
+    required this.label,
+    required this.time,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String time;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_TimeDigitsField> createState() => _TimeDigitsFieldState();
+}
+
+class _TimeDigitsFieldState extends State<_TimeDigitsField> {
+  late final List<TextEditingController> _controllers;
+  late final List<FocusNode> _focusNodes;
+  late List<String> _digits;
+
+  @override
+  void initState() {
+    super.initState();
+    _digits = _digitsFromTime(widget.time);
+    _controllers = [
+      for (final digit in _digits) TextEditingController(text: digit),
+    ];
+    _focusNodes = [for (var i = 0; i < 4; i++) FocusNode()];
+    for (var i = 0; i < _focusNodes.length; i++) {
+      final index = i;
+      _focusNodes[index].addListener(() {
+        if (!_focusNodes[index].hasFocus) return;
+        _controllers[index].selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _controllers[index].text.length,
+        );
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _TimeDigitsField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.time == widget.time) return;
+    final next = _digitsFromTime(widget.time);
+    if (_digits.join() == next.join()) return;
+    _digits = next;
+    for (var i = 0; i < _controllers.length; i++) {
+      _controllers[i].text = _digits[i];
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _controllers) {
+      controller.dispose();
+    }
+    for (final focusNode in _focusNodes) {
+      focusNode.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(widget.label, style: AppTypography.metaStyle),
+        const SizedBox(height: 6),
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _digitBox(0),
+              const SizedBox(width: 2),
+              _digitBox(1),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  ':',
+                  style: AppTypography.noteBodyStyle.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              _digitBox(2),
+              const SizedBox(width: 2),
+              _digitBox(3),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _digitBox(int index) {
+    return SizedBox(
+      width: 24,
+      height: 30,
+      child: TextField(
+        controller: _controllers[index],
+        focusNode: _focusNodes[index],
+        textAlign: TextAlign.center,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        style: AppTypography.noteBodyStyle.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
+        decoration: InputDecoration(
+          isDense: true,
+          counterText: '',
+          contentPadding: const EdgeInsets.symmetric(vertical: 6),
+          enabledBorder: _timeDigitBorder(
+            AppColors.noteBorder.withValues(alpha: 0.68),
+          ),
+          focusedBorder: _timeDigitBorder(
+            AppColors.primary.withValues(alpha: 0.54),
+          ),
+          border: _timeDigitBorder(AppColors.noteBorder),
+        ),
+        onTap: () => _controllers[index].selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _controllers[index].text.length,
+        ),
+        onChanged: (value) => _setDigit(index, value),
+      ),
+    );
+  }
+
+  OutlineInputBorder _timeDigitBorder(Color color) {
+    return OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: color, width: 0.85),
+    );
+  }
+
+  void _setDigit(int index, String value) {
+    if (value.isEmpty) return;
+    _digits[index] = value.substring(value.length - 1);
+    _normalizeDigitsAfter(index);
+
+    for (var i = 0; i < _controllers.length; i++) {
+      _controllers[i].value = TextEditingValue(
+        text: _digits[i],
+        selection: const TextSelection.collapsed(offset: 1),
+      );
+    }
+
+    if (index < _focusNodes.length - 1) {
+      _focusNodes[index + 1].requestFocus();
+      _controllers[index + 1].selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _controllers[index + 1].text.length,
+      );
+    } else {
+      _focusNodes[index].unfocus();
+    }
+    widget.onChanged('${_digits[0]}${_digits[1]}:${_digits[2]}${_digits[3]}');
+  }
+
+  void _normalizeDigitsAfter(int editedIndex) {
+    final hourTens = int.tryParse(_digits[0]) ?? 0;
+    var hourOnes = int.tryParse(_digits[1]) ?? 0;
+    var minuteTens = int.tryParse(_digits[2]) ?? 0;
+
+    if (hourTens > 2) {
+      _digits[0] = '2';
+    }
+    if ((int.tryParse(_digits[0]) ?? 0) == 2 && hourOnes > 3) {
+      hourOnes = 3;
+      _digits[1] = '3';
+    }
+    if (minuteTens > 5) {
+      minuteTens = 5;
+      _digits[2] = '5';
+    }
+
+    if (editedIndex == 0 && (int.tryParse(_digits[0]) ?? 0) == 2) {
+      final nextHourOnes = int.tryParse(_digits[1]) ?? 0;
+      if (nextHourOnes > 3) {
+        _digits[1] = '3';
+      }
+    }
+  }
+}
+
+List<String> _digitsFromTime(String time) {
+  final normalized = _normalizeTime(time);
+  return [normalized[0], normalized[1], normalized[3], normalized[4]];
 }
 
 class _TaskTriggerFields extends StatefulWidget {
@@ -1132,25 +1378,31 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DropdownButtonFormField<String>(
-          initialValue: _viewType,
-          decoration: InputDecoration(
-            isDense: true,
-            labelText: s['automationTriggerView'],
+        _compactDropdown(
+          width: 140,
+          child: DropdownButtonFormField<String>(
+            initialValue: _viewType,
+            decoration: _automationFieldDecoration(s['automationTriggerView']),
+            dropdownColor: _automationDropdownColor(),
+            borderRadius: _automationDropdownRadius(),
+            elevation: 6,
+            menuMaxHeight: 280,
+            itemHeight: null,
+            style: _automationDropdownTextStyle(),
+            items: [
+              for (final view in ViewRegistry.views)
+                DropdownMenuItem(
+                  value: view.type,
+                  child: _automationDropdownItem(s.viewLabel(view.type)),
+                ),
+            ],
+            onChanged: (value) async {
+              if (value == null) return;
+              setState(() => _viewType = value);
+              await _loadSections();
+              await _save();
+            },
           ),
-          items: [
-            for (final view in ViewRegistry.views)
-              DropdownMenuItem(
-                value: view.type,
-                child: Text(s.viewLabel(view.type)),
-              ),
-          ],
-          onChanged: (value) async {
-            if (value == null) return;
-            setState(() => _viewType = value);
-            await _loadSections();
-            await _save();
-          },
         ),
         const SizedBox(height: 10),
         if (_loading)
@@ -1165,10 +1417,7 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
           TextField(
             controller: _sectionController,
             textAlign: TextAlign.start,
-            decoration: InputDecoration(
-              isDense: true,
-              labelText: s['sectionName'],
-            ),
+            decoration: _automationFieldDecoration(s['sectionName']),
             onSubmitted: (_) => _createSection(),
           ),
           const SizedBox(height: 8),
@@ -1180,23 +1429,31 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
             ),
           ),
         ] else
-          DropdownButtonFormField<String>(
-            initialValue: _sectionName,
-            decoration: InputDecoration(
-              isDense: true,
-              labelText: s['automationTriggerSection'],
+          _compactDropdown(
+            width: 180,
+            child: DropdownButtonFormField<String>(
+              initialValue: _sectionName,
+              decoration: _automationFieldDecoration(
+                s['automationTriggerSection'],
+              ),
+              dropdownColor: _automationDropdownColor(),
+              borderRadius: _automationDropdownRadius(),
+              elevation: 6,
+              menuMaxHeight: 280,
+              itemHeight: null,
+              style: _automationDropdownTextStyle(),
+              items: [
+                for (final section in _sections)
+                  DropdownMenuItem(
+                    value: section.name,
+                    child: _automationDropdownItem(section.name),
+                  ),
+              ],
+              onChanged: (value) async {
+                setState(() => _sectionName = value);
+                await _save();
+              },
             ),
-            items: [
-              for (final section in _sections)
-                DropdownMenuItem(
-                  value: section.name,
-                  child: Text(section.name),
-                ),
-            ],
-            onChanged: (value) async {
-              setState(() => _sectionName = value);
-              await _save();
-            },
           ),
       ],
     );
@@ -1472,12 +1729,16 @@ String _placementLabel(AppStrings s, String placement) {
   };
 }
 
-DateTime _initialDateForWeekday(String weekday) {
-  final now = DateTime.now();
-  final target = _weekdayNumber(weekday);
-  final days = (target - now.weekday) % 7;
-  return now.add(Duration(days: days));
+String _monthPatternLabel(AppStrings s, String placement, String weekday) {
+  final weekdayLabel = _weekdayLabel(s, weekday);
+  final placementLabel = _placementLabel(s, placement);
+  if (s.isRtl) {
+    return 'יום $weekdayLabel, בשבוע ה$placementLabel בחודש';
+  }
+  return '$weekdayLabel on the $placementLabel of the month';
 }
+
+const _weekdayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 String _weekdayKeyForDate(DateTime date) {
   return switch (date.weekday) {
@@ -1490,6 +1751,40 @@ String _weekdayKeyForDate(DateTime date) {
     DateTime.sunday => 'sun',
     _ => 'mon',
   };
+}
+
+String _placementKeyForDate(DateTime date) {
+  if (date.add(const Duration(days: 7)).month != date.month) {
+    return 'last';
+  }
+  final occurrence = ((date.day - 1) ~/ 7) + 1;
+  return switch (occurrence) {
+    1 => 'first',
+    2 => 'second',
+    3 => 'third',
+    _ => 'last',
+  };
+}
+
+DateTime _initialDateForMonthPattern(String placement, String weekday) {
+  final now = DateTime.now();
+  final targetWeekday = _weekdayNumber(weekday);
+  final firstOfMonth = DateTime(now.year, now.month);
+  final firstDelta = (targetWeekday - firstOfMonth.weekday) % 7;
+  final firstMatch = firstOfMonth.add(Duration(days: firstDelta));
+
+  if (placement == 'last') {
+    final lastOfMonth = DateTime(now.year, now.month + 1, 0);
+    final backDelta = (lastOfMonth.weekday - targetWeekday) % 7;
+    return lastOfMonth.subtract(Duration(days: backDelta));
+  }
+
+  final offset = switch (placement) {
+    'second' => 7,
+    'third' => 14,
+    _ => 0,
+  };
+  return firstMatch.add(Duration(days: offset));
 }
 
 int _weekdayNumber(String weekday) {

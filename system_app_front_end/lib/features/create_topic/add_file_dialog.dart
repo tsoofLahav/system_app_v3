@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/app_state.dart';
 import '../../core/models/topic.dart';
 import '../../core/registry/file_registry.dart';
+import '../../design_system/app_colors.dart';
+import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
 
 class AddFileResult {
@@ -91,27 +93,45 @@ class _AddFileDialogState extends State<AddFileDialog> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          DropdownButtonFormField<String>(
-            initialValue: _type,
-            decoration: InputDecoration(labelText: s['type']),
-            items: _options
-                .map(
-                  (o) => DropdownMenuItem(
-                    value: o.type,
-                    child: Text(s.fileTypeOption(o.name, o.type)),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) {
-              if (value == null) return;
-              setState(() {
-                _type = value;
-                _nameController.text = FileRegistry.defaultNameForType(
-                  _type,
-                  isMainTopic: widget.topic.isMain,
-                );
-              });
-            },
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: SizedBox(
+              width: 220,
+              child: DropdownButtonFormField<String>(
+                initialValue: _type,
+                decoration: InputDecoration(labelText: s['type']),
+                dropdownColor: AppColors.noteTop.withValues(alpha: 0.96),
+                borderRadius: BorderRadius.circular(14),
+                elevation: 6,
+                menuMaxHeight: 280,
+                itemHeight: null,
+                style: AppTypography.noteBodyStyle.copyWith(
+                  color: AppColors.text.withValues(alpha: 0.92),
+                  fontSize: 12,
+                ),
+                items: _options
+                    .map(
+                      (o) => DropdownMenuItem(
+                        value: o.type,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(s.fileTypeOption(o.name, o.type)),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    _type = value;
+                    _nameController.text = FileRegistry.defaultNameForType(
+                      _type,
+                      isMainTopic: widget.topic.isMain,
+                    );
+                  });
+                },
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           TextField(

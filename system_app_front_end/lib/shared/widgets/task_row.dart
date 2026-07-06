@@ -30,6 +30,7 @@ class TaskRow extends StatefulWidget {
     this.contextMenuFileType,
     this.contextMenuTargetBlock,
     this.onBlockMenuAction,
+    this.onReadOnlyAction,
     this.viewMenuContext,
     this.readOnly = false,
     this.toggleEnabled = true,
@@ -51,6 +52,7 @@ class TaskRow extends StatefulWidget {
   final String? contextMenuFileType;
   final Block? contextMenuTargetBlock;
   final BlockMenuHandler? onBlockMenuAction;
+  final VoidCallback? onReadOnlyAction;
   final TaskViewMenuContext? viewMenuContext;
   final bool readOnly;
   final bool toggleEnabled;
@@ -158,6 +160,10 @@ class _TaskRowState extends State<TaskRow> {
   }
 
   Future<void> _showContextMenu(Offset globalPosition) async {
+    if (widget.readOnly && widget.onReadOnlyAction != null) {
+      widget.onReadOnlyAction?.call();
+      return;
+    }
     await showTaskContextMenu(
       context: context,
       globalPosition: globalPosition,
@@ -191,37 +197,47 @@ class _TaskRowState extends State<TaskRow> {
 
     Widget titleField;
     if (widget.readOnly) {
-      titleField = MouseRegion(
-        cursor: isAutomationReview
-            ? SystemMouseCursors.click
-            : SystemMouseCursors.basic,
-        child: InkWell(
-          onTap: widget.onRowTap,
-          onSecondaryTapDown: widget.onDelete != null
-              ? (details) => _showContextMenu(details.globalPosition)
-              : null,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.task.title, style: titleStyle),
-                if (!widget.task.isAutomationTrigger &&
-                    widget.task.displaySubjectTopicName != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      widget.task.displaySubjectTopicName!,
-                      style: AppTypography.metaStyle.copyWith(
-                        color: AppColors.noteMeta.withValues(alpha: 0.75),
-                      ),
-                    ),
+      final readOnlyContent = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.task.title, style: titleStyle),
+            if (!widget.task.isAutomationTrigger &&
+                widget.task.displaySubjectTopicName != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  widget.task.displaySubjectTopicName!,
+                  style: AppTypography.metaStyle.copyWith(
+                    color: AppColors.noteMeta.withValues(alpha: 0.75),
                   ),
-              ],
-            ),
-          ),
+                ),
+              ),
+          ],
         ),
       );
+      if (!isAutomationReview && widget.onReadOnlyAction != null) {
+        titleField = GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onRowTap ?? widget.onReadOnlyAction,
+          onSecondaryTapDown: (details) =>
+              _showContextMenu(details.globalPosition),
+          child: readOnlyContent,
+        );
+      } else {
+        titleField = MouseRegion(
+          cursor: isAutomationReview
+              ? SystemMouseCursors.click
+              : SystemMouseCursors.basic,
+          child: InkWell(
+            onTap: widget.onRowTap ?? widget.onReadOnlyAction,
+            onSecondaryTapDown: (details) =>
+                _showContextMenu(details.globalPosition),
+            child: readOnlyContent,
+          ),
+        );
+      }
     } else {
       titleField = FormattedTextField(
         controller: _controller,

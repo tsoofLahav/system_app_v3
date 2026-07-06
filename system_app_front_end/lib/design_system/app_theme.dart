@@ -38,7 +38,9 @@ ThemeData buildAppTheme(AppLanguage language) {
         return AppColors.textHint.withValues(alpha: 0.28);
       }),
       trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
-      overlayColor: WidgetStateProperty.all(AppColors.primary.withValues(alpha: 0.08)),
+      overlayColor: WidgetStateProperty.all(
+        AppColors.primary.withValues(alpha: 0.08),
+      ),
     ),
     popupMenuTheme: PopupMenuThemeData(
       color: AppColors.noteTop.withValues(alpha: 0.94),
@@ -54,6 +56,34 @@ ThemeData buildAppTheme(AppLanguage language) {
     ),
     dialogTheme: DialogThemeData(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return Colors.transparent;
+          }
+          return Colors.transparent;
+        }),
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return AppColors.textHint.withValues(alpha: 0.45);
+          }
+          return AppColors.primary;
+        }),
+        side: WidgetStateProperty.resolveWith((states) {
+          final color = states.contains(WidgetState.disabled)
+              ? AppColors.textHint.withValues(alpha: 0.24)
+              : AppColors.primary.withValues(alpha: 0.9);
+          return BorderSide(color: color, width: 1.2);
+        }),
+        overlayColor: WidgetStateProperty.all(
+          AppColors.primary.withValues(alpha: 0.08),
+        ),
+        shape: WidgetStateProperty.all(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        ),
+      ),
     ),
   );
 }

@@ -33,6 +33,8 @@ abstract final class AppIcons {
   static const close = LucideIcons.x200;
   static const trash = LucideIcons.trash2200;
   static const search = LucideIcons.search200;
+  static const colorWheel = LucideIcons.palette200;
+  static const calendar = LucideIcons.calendar200;
 
   // Emoji picker categories
   static const recent = LucideIcons.clock200;

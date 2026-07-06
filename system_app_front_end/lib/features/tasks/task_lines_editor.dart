@@ -30,6 +30,8 @@ class TaskLinesEditor extends StatelessWidget {
     this.contextMenuFileType,
     this.contextMenuTargetBlock,
     this.onBlockMenuAction,
+    this.readOnlyTaskRefs = false,
+    this.onReadOnlyAction,
     this.viewMenuContext,
     this.file,
   });
@@ -42,6 +44,8 @@ class TaskLinesEditor extends StatelessWidget {
   final String? contextMenuFileType;
   final Block? contextMenuTargetBlock;
   final BlockMenuHandler? onBlockMenuAction;
+  final bool readOnlyTaskRefs;
+  final VoidCallback? onReadOnlyAction;
   final TaskViewMenuContext? viewMenuContext;
   final AppFile? file;
 
@@ -63,6 +67,8 @@ class TaskLinesEditor extends StatelessWidget {
           contextMenuFileType: contextMenuFileType,
           contextMenuTargetBlock: contextMenuTargetBlock,
           onBlockMenuAction: onBlockMenuAction,
+          readOnlyTaskRefs: readOnlyTaskRefs,
+          onReadOnlyAction: onReadOnlyAction,
           viewMenuContext: viewMenuContext,
           file: file,
           onCreateAfter: handlersFor(false).onCreateAfter,
@@ -89,6 +95,8 @@ class TaskLinesEditor extends StatelessWidget {
             contextMenuFileType: contextMenuFileType,
             contextMenuTargetBlock: contextMenuTargetBlock,
             onBlockMenuAction: onBlockMenuAction,
+            readOnlyTaskRefs: readOnlyTaskRefs,
+            onReadOnlyAction: onReadOnlyAction,
             viewMenuContext: viewMenuContext,
             file: file,
             onCreateAfter: handlersFor(true).onCreateAfter,
