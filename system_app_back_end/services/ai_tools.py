@@ -22,18 +22,6 @@ def _next_order(file_id: int) -> int:
     return last.order_index + 1
 
 
-def _append_text_block(file_id: int, text: str) -> Block:
-    block = Block(
-        file_id=file_id,
-        type="text",
-        content={"text": text},
-        order_index=_next_order(file_id),
-    )
-    db.session.add(block)
-    db.session.flush()
-    return block
-
-
 def _save_image_bytes(data: bytes) -> str:
     upload_folder = current_app.config["UPLOAD_FOLDER"]
     os.makedirs(upload_folder, exist_ok=True)
@@ -74,13 +62,6 @@ def _blocks_for_files(file_ids: list[int]) -> list[Block]:
     )
 
 
-def _doc_candidates(files: list[File]) -> list[dict]:
-    docs = [f for f in files if f.type == "doc"]
-    if not docs:
-        docs = [f for f in files if f.type in ("overview", "protocol")]
-    return [{"id": f.id, "name": f.name, "type": f.type} for f in docs]
-
-
 def _data_snippets(files: list[File], blocks: list[Block]) -> str:
     parts = []
     data_file_ids = {f.id for f in files if f.type == "data"}
@@ -117,38 +98,10 @@ def run_tool(tool: str, topic_id: int, context: dict, locale: str = "en") -> dic
         return {"tool": tool, "action": "display", "result": answer}
 
     if tool == "summarize_to_doc":
-        candidates = _doc_candidates(files)
-        if not candidates:
-            raise ValueError("No documentation file found in this topic")
-
-        pick = chat_json(
-            "Pick the best documentation file for a summary. Return JSON: "
-            '{"file_id": number, "reason": string}',
-            f"Context to summarize:\n{text}\n\nCandidates:\n{json.dumps(candidates)}",
-        )
-        file_id = int(pick.get("file_id") or candidates[0]["id"])
-        summary = chat_text(
-            f"Summarize clearly in 1-3 short paragraphs. {lang_note}",
-            text,
-            max_tokens=400,
-        )
-        block = _append_text_block(file_id, summary)
-        db.session.commit()
-        target = next((f for f in files if f.id == file_id), None)
-        return {
-            "tool": tool,
-            "action": "write",
-            "result": summary,
-            "target_file_id": file_id,
-            "target_file_name": target.name if target else None,
-            "block_id": block.id,
-        }
+        return run_smart_doc(text=text, source_topic_id=topic_id, locale=locale)
 
     if tool == "smart_list":
         return run_smart_list(text=text, source_topic_id=topic_id, locale=locale)
-
-    if tool == "smart_doc":
-        return run_smart_doc(text=text, source_topic_id=topic_id, locale=locale)
 
     if tool == "create_image":
         prompt = chat_text(

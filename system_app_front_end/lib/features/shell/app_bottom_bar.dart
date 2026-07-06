@@ -449,12 +449,6 @@ class _AiToolGroup extends StatelessWidget {
           onPressed: () => onTool('smart_list'),
         ),
         _AiToolButton(
-          tooltip: s['aiSmartDoc'],
-          icon: AppIcons.smartDoc,
-          enabled: enabled && !running,
-          onPressed: () => onTool('smart_doc'),
-        ),
-        _AiToolButton(
           tooltip: s['aiImage'],
           icon: AppIcons.image,
           enabled: enabled && !running,

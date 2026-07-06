@@ -13,9 +13,8 @@ abstract final class AppIcons {
   static const layout = LucideIcons.layoutGrid200;
   static const ai = LucideIcons.sparkles200;
   static const consult = LucideIcons.messageCircle200;
-  static const summarize = LucideIcons.fileText200;
+  static const summarize = LucideIcons.filePlus200;
   static const smartList = LucideIcons.listPlus200;
-  static const smartDoc = LucideIcons.filePlus200;
   static const image = LucideIcons.image200;
   static const graph = LucideIcons.chartColumn200;
   static const review = LucideIcons.scanSearch200;

@@ -8,7 +8,6 @@ ALLOWED_TOOLS = {
     "consult",
     "summarize_to_doc",
     "smart_list",
-    "smart_doc",
     "create_image",
     "create_graph",
     "review",

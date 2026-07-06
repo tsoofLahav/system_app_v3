@@ -43,7 +43,7 @@ def run_smart_doc(*, text: str, source_topic_id: int, locale: str = "en") -> dic
     target_file = db.session.get(File, file_id)
     target_topic = db.session.get(Topic, target_topic_id)
     return {
-        "tool": "smart_doc",
+        "tool": "summarize_to_doc",
         "action": "write",
         "result": cleaned,
         "date": entry_date,
