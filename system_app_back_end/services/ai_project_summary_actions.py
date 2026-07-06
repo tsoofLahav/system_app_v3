@@ -371,11 +371,7 @@ def _apply_project_overview(
     for block in blocks:
         if block.id in generated_ids:
             continue
-        if (block.content or {}).get("generated_by") == GENERATED_BY:
-            db.session.delete(block)
-            continue
-        block.order_index = order
-        order += 1
+        db.session.delete(block)
     db.session.flush()
 
 

@@ -93,9 +93,11 @@ def list_tasks_by_block(block_id):
 def _referenced_task_ids_for_list_block(list_block):
     if list_block.type != "task_list" or list_block.file_id is None:
         return []
+    content = list_block.content or {}
+    if content.get("generated_by") != "project_summary_update":
+        return []
 
     ids = []
-    in_list = False
     blocks = (
         active_query(Block)
         .filter_by(file_id=list_block.file_id)
@@ -103,16 +105,14 @@ def _referenced_task_ids_for_list_block(list_block):
         .all()
     )
     for block in blocks:
-        if block.id == list_block.id:
-            in_list = True
-            continue
-        if not in_list:
-            continue
-        if block.type == "task_list":
-            break
         if block.type != "task":
             continue
-        task_id = (block.content or {}).get("task_id")
+        content = block.content or {}
+        if content.get("generated_by") != "project_summary_update":
+            continue
+        if content.get("generated_task_list_block_id") != list_block.id:
+            continue
+        task_id = content.get("task_id")
         if task_id is not None:
             ids.append(int(task_id))
     return ids
