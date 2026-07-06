@@ -19,6 +19,7 @@ class FileLayoutBoard extends StatelessWidget {
     required this.onDeleteFile,
     this.slotHeight,
     this.broughtFile,
+    this.onFileTap,
   });
 
   final Topic topic;
@@ -29,6 +30,7 @@ class FileLayoutBoard extends StatelessWidget {
   final void Function(AppFile file) onDeleteFile;
   final double? slotHeight;
   final BroughtFileSnapshot? broughtFile;
+  final void Function(AppFile file)? onFileTap;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +38,7 @@ class FileLayoutBoard extends StatelessWidget {
     final detail = state.selectedDetail!;
 
     Widget slotForFile(AppFile file) {
-      return SizedBox.expand(
+      final section = SizedBox.expand(
         child: FileSection(
           topic: topic,
           file: file,
@@ -44,6 +46,15 @@ class FileLayoutBoard extends StatelessWidget {
           state: state,
           accent: accent,
           onDelete: () => onDeleteFile(file),
+        ),
+      );
+      if (onFileTap == null) return section;
+      return MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onFileTap!(file),
+          child: AbsorbPointer(child: section),
         ),
       );
     }

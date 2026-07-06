@@ -1,0 +1,80 @@
+import 'package:flutter/material.dart';
+
+import '../../design_system/app_colors.dart';
+import '../../design_system/app_typography.dart';
+import '../../design_system/layout_preview_icon.dart';
+
+class LayoutPickerTile extends StatelessWidget {
+  const LayoutPickerTile({
+    super.key,
+    required this.layoutId,
+    required this.label,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+    this.compact = false,
+    this.iconWidth = 56,
+    this.iconHeight = 40,
+  });
+
+  final String layoutId;
+  final String label;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback? onTap;
+  final bool compact;
+  final double iconWidth;
+  final double iconHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: label,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: EdgeInsets.all(compact ? 4 : 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LayoutPreviewIcon(
+                  layoutId: layoutId,
+                  selected: selected,
+                  enabled: enabled,
+                  width: iconWidth,
+                  height: iconHeight,
+                ),
+                if (!compact) ...[
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: 72,
+                    child: Text(
+                      label,
+                      style: AppTypography.metaStyle.copyWith(
+                        fontSize: 10,
+                        color: enabled
+                            ? (selected
+                                ? Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.92)
+                                : AppColors.text.withValues(alpha: 0.72))
+                            : AppColors.textHint.withValues(alpha: 0.45),
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -15,7 +15,6 @@ import '../shell/app_bottom_bar.dart';
 import '../../shared/widgets/main_pane_loader.dart';
 import '../../shared/widgets/file_layout_board.dart';
 import '../../shared/widgets/files_section_divider.dart';
-import '../../shared/widgets/pane_reorder_canvas.dart';
 import '../../shared/widgets/topic_emoji.dart';
 import '../create_topic/add_file_dialog.dart';
 import '../bring_file/bring_file_picker_dialog.dart';
@@ -82,7 +81,7 @@ class TopicView extends StatelessWidget {
     );
 
     final broughtFile =
-        !stale && topic.isMain && !state.paneDragMode ? state.broughtFile : null;
+        !stale && topic.isMain ? state.broughtFile : null;
     final hasPrimaryContent = mainFiles.isNotEmpty || broughtFile != null;
 
     Widget filesContent;
@@ -95,30 +94,6 @@ class TopicView extends StatelessWidget {
           ),
         ),
       );
-    } else if (state.paneDragMode) {
-      filesContent = mainFiles.isEmpty && secondaryFiles.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Text(
-                  state.strings['noFilesYet'],
-                  style: AppTypography.noteBodyStyle,
-                ),
-              ),
-            )
-          : PaneReorderCanvas(
-              topic: topic,
-              mainFiles: mainFiles,
-              secondaryFiles: secondaryFiles,
-              state: state,
-              accent: accent,
-              onDeleteFile: (f) => state.deleteFile(topic, f),
-              onReorderError: (message) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(message)));
-              },
-            );
     } else {
       filesContent = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -184,13 +159,11 @@ class TopicView extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            child: state.paneDragMode && !stale
-                ? Padding(padding: canvasPadding, child: filesContent)
-                : SingleChildScrollView(
-                    key: PageStorageKey('topic-scroll-${topic.id}'),
-                    padding: canvasPadding,
-                    child: filesContent,
-                  ),
+            child: SingleChildScrollView(
+              key: PageStorageKey('topic-scroll-${topic.id}'),
+              padding: canvasPadding,
+              child: filesContent,
+            ),
           ),
           Positioned(
             top: 0,
@@ -201,8 +174,7 @@ class TopicView extends StatelessWidget {
               accent: accent,
               state: state,
               addEnabled: !stale && detail != null,
-              bringFileEnabled:
-                  !stale && detail != null && topic.isMain && !state.paneDragMode,
+              bringFileEnabled: !stale && detail != null && topic.isMain,
               onAddFile: detail == null
                   ? () {}
                   : () => _addFile(context, topic, detail.files),
@@ -479,8 +451,6 @@ class _TopicHeader extends StatelessWidget {
   }
 
   String _headerTitle(AppState state, Topic topic) {
-    final name = state.topicDisplayName(topic);
-    if (!state.paneDragMode) return name;
-    return '$name - ${state.strings['reorderMode']}';
+    return state.topicDisplayName(topic);
   }
 }

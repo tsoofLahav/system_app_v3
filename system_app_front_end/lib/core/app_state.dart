@@ -152,7 +152,6 @@ class AppState extends ChangeNotifier {
   Timer? _archiveSearchDebounce;
   static const archivePageSize = 24;
   bool moreFilesExpanded = false;
-  bool paneDragMode = false;
   final Map<int, String> _layoutByTopicId = {};
   AppLanguage language = AppLanguage.en;
   AiFocus? aiFocus;
@@ -1637,14 +1636,6 @@ class AppState extends ChangeNotifier {
 
   void toggleMoreFiles() {
     moreFilesExpanded = !moreFilesExpanded;
-    notifyListeners();
-  }
-
-  void togglePaneDragMode() {
-    paneDragMode = !paneDragMode;
-    if (paneDragMode) {
-      moreFilesExpanded = true;
-    }
     notifyListeners();
   }
 

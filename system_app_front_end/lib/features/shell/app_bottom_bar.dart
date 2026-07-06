@@ -6,9 +6,8 @@ import '../../core/services/ai_service.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
 import '../../design_system/app_typography.dart';
-import '../../design_system/file_layouts.dart';
 import '../../design_system/glass_surface.dart';
-import '../../design_system/layout_preview_icon.dart';
+import '../arrange/file_arrange_overlay.dart';
 import 'automation_dialog.dart';
 import 'preferences_dialog.dart';
 
@@ -36,7 +35,7 @@ class AppBottomBar extends StatelessWidget {
 
   final AppState state;
 
-  bool get _showLayout =>
+  bool get _showArrange =>
       !state.isArchiveMode && !state.isViewMode && state.selectedDetail != null;
 
   bool get _showArchiveDelete =>
@@ -88,11 +87,11 @@ class AppBottomBar extends StatelessWidget {
                         state: state,
                       ),
                     ),
-                    if (_showLayout)
+                    if (_showArrange)
                       _BarIconButton(
-                        tooltip: s['layout'],
-                        icon: AppIcons.layout,
-                        onPressed: () => _showLayoutPicker(context),
+                        tooltip: s['arrangeFiles'],
+                        icon: AppIcons.arrange,
+                        onPressed: () => showFileArrangeOverlay(context, state),
                       ),
                     if (_showArchiveDelete)
                       _BarIconButton(
@@ -124,14 +123,6 @@ class AppBottomBar extends StatelessWidget {
                       ),
                     ),
                   ),
-                ),
-              ],
-              if (_showLayout) ...[
-                const SizedBox(width: 8),
-                GlassBarSegment(
-                  height: AppBottomBarMetrics.barHeight,
-                  padding: _segmentPadding,
-                  child: _PaneDragToggle(state: state),
                 ),
               ],
               if (canAi) ...[
@@ -274,49 +265,6 @@ class AppBottomBar extends StatelessWidget {
     await state.deleteSelectedArchiveFiles();
   }
 
-  void _showLayoutPicker(BuildContext context) {
-    final topic = state.selectedDetail?.topic;
-    if (topic == null) return;
-
-    final s = state.strings;
-    final layoutId = state.layoutFor(topic);
-    final fileCount = state
-        .mainFilesFor(topic, state.selectedDetail!.files)
-        .length;
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AppGlassDialog(
-        title: Text(s['layout']),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s['cancel']),
-          ),
-        ],
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          alignment: WrapAlignment.center,
-          children: [
-            for (final layout in FileLayouts.all)
-              _LayoutPickerTile(
-                layoutId: layout.id,
-                label: s.layoutLabel(layout.id),
-                selected: layoutId == layout.id,
-                enabled: FileLayouts.isAvailable(layout.id, fileCount),
-                onTap: FileLayouts.isAvailable(layout.id, fileCount)
-                    ? () {
-                        state.setLayoutForTopic(topic, layout.id);
-                        Navigator.pop(ctx);
-                      }
-                    : null,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _BarIconButton extends StatelessWidget {
@@ -345,63 +293,6 @@ class _BarIconButton extends StatelessWidget {
         color: active
             ? AppColors.primary.withValues(alpha: 0.88)
             : AppColors.text.withValues(alpha: 0.72),
-      ),
-    );
-  }
-}
-
-class _PaneDragToggle extends StatelessWidget {
-  const _PaneDragToggle({required this.state});
-
-  final AppState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = state.strings;
-    final on = state.paneDragMode;
-
-    return Tooltip(
-      message: on ? s['paneDragOn'] : s['paneDrag'],
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: state.togglePaneDragMode,
-          borderRadius: BorderRadius.circular(999),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _PaneModeIcon(
-                icon: AppIcons.paneDrag,
-                active: on,
-              ),
-              _PaneModeIcon(
-                icon: AppIcons.summarize,
-                active: !on,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PaneModeIcon extends StatelessWidget {
-  const _PaneModeIcon({required this.icon, required this.active});
-
-  final IconData icon;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(_iconTapPadding),
-      child: AppIcon(
-        icon,
-        size: _iconSize,
-        color: active
-            ? AppColors.text.withValues(alpha: 0.78)
-            : AppColors.textHint.withValues(alpha: 0.38),
       ),
     );
   }
@@ -502,65 +393,3 @@ class _AiToolButton extends StatelessWidget {
   }
 }
 
-class _LayoutPickerTile extends StatelessWidget {
-  const _LayoutPickerTile({
-    required this.layoutId,
-    required this.label,
-    required this.selected,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final String layoutId;
-  final String label;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: label,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.all(6),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                LayoutPreviewIcon(
-                  layoutId: layoutId,
-                  selected: selected,
-                  enabled: enabled,
-                  width: 56,
-                  height: 40,
-                ),
-                const SizedBox(height: 6),
-                SizedBox(
-                  width: 72,
-                  child: Text(
-                    label,
-                    style: AppTypography.metaStyle.copyWith(
-                      fontSize: 10,
-                      color: enabled
-                          ? (selected
-                                ? Theme.of(context).colorScheme.primary
-                                : AppColors.text)
-                          : AppColors.textHint,
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

@@ -26,11 +26,13 @@ abstract final class AppIcons {
   static const check = LucideIcons.check200;
   static const circle = LucideIcons.circle200;
   static const chevronRight = LucideIcons.chevronRight200;
+  static const chevronLeft = LucideIcons.chevronLeft200;
   static const chevronDown = LucideIcons.chevronDown200;
   static const addFile = LucideIcons.filePlus200;
   static const bringFile = LucideIcons.folderInput200;
   static const drag = LucideIcons.gripVertical200;
   static const paneDrag = LucideIcons.gripHorizontal200;
+  static const arrange = paneDrag;
   static const close = LucideIcons.x200;
   static const trash = LucideIcons.trash2200;
   static const search = LucideIcons.search200;

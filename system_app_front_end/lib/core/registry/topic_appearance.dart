@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../models/topic.dart';
+
 class TopicAppearance {
   static const String defaultColor = '#6B7280';
   static const String defaultEmoji = '📌';
@@ -69,6 +71,12 @@ class TopicAppearance {
     var v = hex.replaceFirst('#', '');
     if (v.length == 6) v = 'FF$v';
     return Color(int.parse(v, radix: 16));
+  }
+
+  /// Topic tint for glass/file chrome. Main topic stays white like its panes.
+  static Color accentFor(Topic topic) {
+    if (topic.isMain) return Colors.white;
+    return colorFromHex(topic.color);
   }
 
   static String hexFromColor(Color color) {

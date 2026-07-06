@@ -9,6 +9,10 @@ import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
 import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
+import '../../design_system/overlay_dialog_shell.dart';
+import '../../design_system/overlay_dialog_style.dart';
+import '../../design_system/overlay_file_preview_card.dart';
+import '../../design_system/horizontal_carousel.dart';
 
 Future<BrowseFileEntry?> showBringFilePickerDialog(
   BuildContext context,
@@ -16,7 +20,7 @@ Future<BrowseFileEntry?> showBringFilePickerDialog(
 ) {
   return showDialog<BrowseFileEntry>(
     context: context,
-    barrierColor: Colors.transparent,
+    barrierColor: OverlayDialogStyle.barrierColor,
     barrierDismissible: true,
     builder: (_) => BringFilePickerDialog(state: state),
   );
@@ -40,7 +44,9 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
 
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
-  final _scrollController = ScrollController();
+  late final ScrollController _scrollController;
+  late final HorizontalCarouselMetrics _metrics;
+  late HorizontalCarouselController _carousel;
 
   List<BrowseFileEntry> _entries = [];
   List<BrowseFileEntry> _filtered = [];
@@ -48,18 +54,24 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
   bool _loading = true;
   bool _previewsLoaded = false;
   String? _error;
-  double _scrollOffset = 0;
-  bool _isSnapping = false;
   bool _tapCandidate = false;
   Offset? _tapDownPosition;
 
-  static const _snapEpsilon = 1.5;
   static const _tapSlop = 12.0;
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
+    _scrollController = ScrollController();
+    _metrics = const HorizontalCarouselMetrics(
+      itemWidth: _itemWidth,
+      itemSpacing: _itemSpacing,
+    );
+    _carousel = HorizontalCarouselController(
+      metrics: _metrics,
+      scrollController: _scrollController,
+      onChanged: () => setState(() {}),
+    );
     _loadCatalog();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _searchFocusNode.requestFocus();
@@ -68,6 +80,7 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
 
   @override
   void dispose() {
+    _carousel.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     _scrollController.dispose();
@@ -110,10 +123,6 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
     }
   }
 
-  void _onScroll() {
-    setState(() => _scrollOffset = _scrollController.offset);
-  }
-
   void _onQueryChanged(String query) {
     setState(() {
       _filtered = filterBringFileCatalog(
@@ -135,21 +144,11 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
 
   int? _centeredIndex(double viewportWidth) {
     if (_filtered.isEmpty) return null;
-
-    final sidePadding = _sidePadding(viewportWidth);
-    final stride = _itemWidth + _itemSpacing;
-    final center = _scrollOffset + viewportWidth / 2;
-    var bestIndex = 0;
-    var bestDistance = double.infinity;
-    for (var i = 0; i < _filtered.length; i++) {
-      final itemCenter = sidePadding + i * stride + _itemWidth / 2;
-      final distance = (itemCenter - center).abs();
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestIndex = i;
-      }
-    }
-    return bestIndex;
+    return _metrics.centeredIndex(
+      viewportWidth: viewportWidth,
+      scrollOffset: _carousel.scrollOffset,
+      itemCount: _filtered.length,
+    );
   }
 
   void _selectCenteredFile(double viewportWidth) {
@@ -179,47 +178,6 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
     _tapDownPosition = null;
   }
 
-  void _snapToNearest() {
-    if (_isSnapping || !_scrollController.hasClients || _filtered.isEmpty) {
-      return;
-    }
-
-    final position = _scrollController.position;
-    final viewport = position.viewportDimension;
-    final sidePadding = _sidePadding(viewport);
-    final stride = _itemWidth + _itemSpacing;
-    final currentOffset = position.pixels;
-    final bestIndex = _centeredIndex(viewport) ?? 0;
-    final target =
-        (sidePadding + bestIndex * stride + _itemWidth / 2 - viewport / 2)
-            .clamp(0.0, position.maxScrollExtent);
-    if ((target - currentOffset).abs() < _snapEpsilon) return;
-
-    _isSnapping = true;
-    _scrollController
-        .animateTo(
-          target,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-        )
-        .whenComplete(() {
-          _isSnapping = false;
-        });
-  }
-
-  double _sidePadding(double viewportWidth) {
-    return ((viewportWidth - _itemWidth) / 2).clamp(0.0, double.infinity);
-  }
-
-  double _emphasisForIndex(int index, double viewportWidth) {
-    final sidePadding = _sidePadding(viewportWidth);
-    final stride = _itemWidth + _itemSpacing;
-    final itemCenter = sidePadding + index * stride + _itemWidth / 2;
-    final viewportCenter = _scrollOffset + viewportWidth / 2;
-    final distance = (itemCenter - viewportCenter).abs();
-    return (1 - (distance / (_itemWidth * 1.35)).clamp(0.0, 1.0)).toDouble();
-  }
-
   double _carouselWidth(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
     return (screenWidth - 24).clamp(620.0, 980.0);
@@ -237,15 +195,12 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
           _selectCenteredFile(carouselWidth);
         },
       },
-      child: Dialog(
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 64),
-        child: Align(
-          alignment: Alignment.center,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+      child: OverlayDialogShell(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 64),
+        onDismiss: _close,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: _searchMaxWidth),
                 child: _BringFileSearchBar(
@@ -269,7 +224,6 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
                 child: _buildCarouselBody(s),
               ),
             ],
-          ),
         ),
       ),
     );
@@ -297,7 +251,7 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final viewportWidth = constraints.maxWidth;
-        final sidePadding = _sidePadding(viewportWidth);
+        final sidePadding = _metrics.sidePadding(viewportWidth);
         return Listener(
           behavior: HitTestBehavior.translucent,
           onPointerDown: _onCarouselPointerDown,
@@ -309,7 +263,9 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
           },
           child: NotificationListener<ScrollEndNotification>(
             onNotification: (_) {
-              if (!_isSnapping) _snapToNearest();
+              if (!_carousel.isSnapping) {
+                _carousel.snapToNearest(_filtered.length);
+              }
               return false;
             },
             child: ListView.separated(
@@ -325,27 +281,36 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
                   const SizedBox(width: _itemSpacing),
               itemBuilder: (context, index) {
                 final entry = _filtered[index];
-                final emphasis = _emphasisForIndex(index, viewportWidth);
-                final scale = 0.86 + (0.14 * emphasis);
-                final opacity = 0.82 + (0.18 * emphasis);
-                final lift = (1 - emphasis) * 8;
-                final accent = TopicAppearance.colorFromHex(entry.topic.color);
+                final emphasis = _metrics.emphasisForIndex(
+                  index: index,
+                  viewportWidth: viewportWidth,
+                  scrollOffset: _carousel.scrollOffset,
+                );
+                final style = carouselEmphasisStyle(emphasis);
+                final accent = TopicAppearance.accentFor(entry.topic);
                 final previewLines =
                     _previewLinesByFileId[entry.file.id] ?? const [];
 
                 return IgnorePointer(
                   child: Transform.translate(
-                    offset: Offset(0, lift),
+                    offset: Offset(0, style.lift),
                     child: Transform.scale(
-                      scale: scale,
+                      scale: style.scale,
                       child: Opacity(
-                        opacity: opacity,
-                        child: _CarouselCard(
-                          entry: entry,
-                          accent: accent,
-                          state: widget.state,
-                          previewLines: previewLines,
-                          previewsLoaded: _previewsLoaded,
+                        opacity: style.opacity,
+                        child: SizedBox(
+                          width: _itemWidth,
+                          height: _carouselHeight,
+                          child: OverlayFilePreviewCard(
+                            fileName: widget.state
+                                .fileDisplayName(entry.file.name),
+                            topicLabel: widget.state
+                                .topicDisplayName(entry.topic),
+                            accent: accent,
+                            previewLines: previewLines,
+                            previewsLoaded: _previewsLoaded,
+                            strings: widget.state.strings,
+                          ),
                         ),
                       ),
                     ),
@@ -461,124 +426,3 @@ class _SearchDismissButton extends StatelessWidget {
   }
 }
 
-class _CarouselCard extends StatelessWidget {
-  const _CarouselCard({
-    required this.entry,
-    required this.accent,
-    required this.state,
-    required this.previewLines,
-    required this.previewsLoaded,
-  });
-
-  final BrowseFileEntry entry;
-  final Color accent;
-  final AppState state;
-  final List<String> previewLines;
-  final bool previewsLoaded;
-
-  static final _cardShadow = [
-    BoxShadow(
-      color: Colors.black.withValues(alpha: 0.11),
-      blurRadius: 20,
-      offset: const Offset(0, 5),
-    ),
-    BoxShadow(
-      color: Colors.black.withValues(alpha: 0.05),
-      blurRadius: 6,
-      offset: const Offset(0, 2),
-    ),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: _BringFilePickerDialogState._itemWidth,
-      height: _BringFilePickerDialogState._carouselHeight,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: _cardShadow,
-        ),
-        child: GlassSurface(
-          borderRadius: BorderRadius.circular(14),
-          tintColor: accent,
-          tintOpacity: 0.24,
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                state.topicDisplayName(entry.topic),
-                style: AppTypography.metaStyle.copyWith(
-                  color: accent.withValues(alpha: 0.92),
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                state.fileDisplayName(entry.file.name),
-                style: AppTypography.noteTitleStyle.copyWith(fontSize: 14),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 10),
-              Expanded(
-                child: _buildPreviewBody(),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPreviewBody() {
-    if (!previewsLoaded) {
-      return Align(
-        alignment: Alignment.topLeft,
-        child: Text(
-          state.strings['bringFilePreviewLoading'],
-          style: AppTypography.metaStyle.copyWith(
-            color: AppColors.noteHint.withValues(alpha: 0.8),
-            fontSize: 11,
-          ),
-        ),
-      );
-    }
-    if (previewLines.isEmpty) {
-      return Align(
-        alignment: Alignment.topLeft,
-        child: Text(
-          state.strings['bringFilePreviewEmpty'],
-          style: AppTypography.metaStyle.copyWith(
-            color: AppColors.noteHint.withValues(alpha: 0.75),
-            fontSize: 11,
-          ),
-        ),
-      );
-    }
-
-    return ListView.separated(
-      physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.zero,
-      itemCount: previewLines.length,
-      separatorBuilder: (_, index) => const SizedBox(height: 5),
-      itemBuilder: (context, index) {
-        final line = previewLines[index];
-        final isTask = line.startsWith('• ');
-        return Text(
-          line,
-          style: AppTypography.noteBodyStyle.copyWith(
-            fontSize: 11,
-            height: 1.35,
-            color: AppColors.text.withValues(alpha: isTask ? 0.72 : 0.78),
-          ),
-          maxLines: isTask ? 1 : 2,
-          overflow: TextOverflow.ellipsis,
-        );
-      },
-    );
-  }
-}

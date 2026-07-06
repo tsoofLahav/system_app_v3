@@ -94,6 +94,10 @@ class AppStrings {
   String moreFiles(int count) =>
       this['moreFiles'].replaceAll('{count}', count.toString());
 
+  String arrangePosition(int current, int total) => this['arrangePosition']
+      .replaceAll('{current}', current.toString())
+      .replaceAll('{total}', total.toString());
+
   String bringFileFromTopicNamed(String topic) =>
       this['bringFileFromTopicNamed'].replaceAll('{topic}', topic);
 
@@ -164,6 +168,13 @@ class AppStrings {
     'noFilesYet': 'No files yet. Add a file to get started.',
     'moreFiles': 'More files ({count})',
     'layout': 'Layout',
+    'arrangeFiles': 'Arrange files',
+    'arrangeDone': 'Done',
+    'arrangeTapMainHint': 'Tap a file to move it first',
+    'arrangeTapAdditionalHint': 'Tap to add centered file to main',
+    'moveFileEarlier': 'Move file earlier',
+    'moveFileLater': 'Move file later',
+    'arrangePosition': '{current} / {total}',
     'paneDrag': 'Reorder panes',
     'paneDragOn': 'Reorder panes — drag any pane',
     'reorderMode': 'Reorder mode',
@@ -425,6 +436,13 @@ class AppStrings {
     'noFilesYet': 'אין קבצים עדיין. הוסף קובץ כדי להתחיל.',
     'moreFiles': 'קבצים נוספים ({count})',
     'layout': 'פריסה',
+    'arrangeFiles': 'סידור קבצים',
+    'arrangeDone': 'סיום',
+    'arrangeTapMainHint': 'הקש על קובץ כדי להעביר אותו לראשון',
+    'arrangeTapAdditionalHint': 'הקש כדי להוסיף את הקובץ במרכז לראשי',
+    'moveFileEarlier': 'הזז קובץ קדימה',
+    'moveFileLater': 'הזז קובץ אחורה',
+    'arrangePosition': '{current} / {total}',
     'paneDrag': 'סידור חלוניות',
     'paneDragOn': 'סידור חלוניות — גרור חלונית',
     'reorderMode': 'סידור קבצים',
