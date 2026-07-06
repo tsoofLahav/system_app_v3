@@ -54,7 +54,6 @@ class AppBottomBar extends StatelessWidget {
     final s = state.strings;
     final canAi = state.canUseAiTools;
     final hasContext = state.hasAiContext;
-    final hasGraphData = state.hasDataForGraph;
 
     return SafeArea(
       top: false,
@@ -145,8 +144,7 @@ class AppBottomBar extends StatelessWidget {
                   labelOnBorder: true,
                   child: _AiToolGroup(
                     enabled: hasContext && !state.aiRunning,
-                    graphEnabled:
-                        (hasContext || hasGraphData) && !state.aiRunning,
+                    graphEnabled: hasContext && !state.aiRunning,
                     running: state.aiRunning,
                     strings: s,
                     onTool: (tool) => _runTool(context, tool),
@@ -214,11 +212,12 @@ class AppBottomBar extends StatelessWidget {
     final target = topic != null && file != null
         ? '$topic → $file'
         : (file ?? topic);
+    final title = result.status == 'not_graphable' ? s['aiGraph'] : s['aiDone'];
 
     showDialog<void>(
       context: context,
       builder: (ctx) => AppGlassDialog(
-        title: Text(s['aiDone']),
+        title: Text(title),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s['ok'])),
         ],

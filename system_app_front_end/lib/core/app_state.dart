@@ -287,19 +287,12 @@ class AppState extends ChangeNotifier {
     return ctx != null && ctx.text.trim().isNotEmpty;
   }
 
-  bool get hasDataForGraph {
-    final detail = selectedDetail;
-    if (detail == null) return false;
-    return detail.files.any((f) => f.type == 'data');
-  }
-
   bool get canUseAiTools =>
       !isArchiveMode && !isViewMode && selectedDetail != null;
 
   bool canRunAiTool(String tool) {
     if (!canUseAiTools) return false;
     if (tool == 'review') return true;
-    if (tool == 'create_graph') return hasAiContext || hasDataForGraph;
     return hasAiContext;
   }
 
@@ -311,17 +304,8 @@ class AppState extends ChangeNotifier {
     if (topic == null) return null;
 
     var ctx = contextOverride ?? resolveAiContext();
-    if (tool == 'create_graph' &&
-        (ctx == null || ctx.text.trim().isEmpty) &&
-        hasDataForGraph) {
-      ctx = ResolvedAiContext(
-        text: '',
-        sourceType: AiSourceType.line,
-        topicId: topic.id,
-      );
-    }
     if (ctx == null) return null;
-    if (tool != 'create_graph' && ctx.text.trim().isEmpty) return null;
+    if (ctx.text.trim().isEmpty) return null;
 
     aiRunning = true;
     error = null;

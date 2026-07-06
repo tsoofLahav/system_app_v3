@@ -1,4 +1,3 @@
-import json
 import os
 import uuid
 from urllib.request import urlopen
@@ -6,10 +5,11 @@ from urllib.request import urlopen
 from flask import current_app
 
 from models import Block, File, Topic, db
+from services.ai_interactive.create_graph import run_create_graph
 from services.ai_interactive.move_file import run_move_file_to_topic
 from services.ai_interactive.smart_doc import run_smart_doc
 from services.ai_interactive.smart_list import run_smart_list
-from services.openai_service import chat_json, chat_text, generate_image
+from services.openai_service import chat_text, generate_image
 
 
 def _next_order(file_id: int) -> int:
@@ -52,42 +52,16 @@ def _topic_files(topic_id: int) -> list[File]:
     )
 
 
-def _blocks_for_files(file_ids: list[int]) -> list[Block]:
-    if not file_ids:
-        return []
-    return (
-        Block.query.filter(Block.file_id.in_(file_ids))
-        .filter(Block.archived_at.is_(None))
-        .order_by(Block.file_id, Block.order_index, Block.id)
-        .all()
-    )
-
-
-def _data_snippets(files: list[File], blocks: list[Block]) -> str:
-    parts = []
-    data_file_ids = {f.id for f in files if f.type == "data"}
-    for b in blocks:
-        if b.file_id not in data_file_ids:
-            continue
-        if b.type == "table":
-            parts.append(json.dumps(b.content, ensure_ascii=False))
-        elif b.type == "measurement":
-            parts.append(json.dumps(b.content, ensure_ascii=False))
-    return "\n".join(parts)[:8000]
-
-
 def run_tool(tool: str, topic_id: int, context: dict, locale: str = "en") -> dict:
     topic = Topic.query.get(topic_id)
     if topic is None:
         raise ValueError("Topic not found")
 
     text = (context.get("text") or "").strip()
-    if not text and tool not in ("review", "create_graph", "move_file_to_topic"):
+    if not text and tool not in ("review", "move_file_to_topic"):
         raise ValueError("No context text provided")
 
     files = _topic_files(topic_id)
-    file_ids = [f.id for f in files]
-    blocks = _blocks_for_files(file_ids)
     lang_note = "Respond in Hebrew." if locale == "he" else "Respond in English."
 
     if tool == "move_file_to_topic":
@@ -153,35 +127,12 @@ def run_tool(tool: str, topic_id: int, context: dict, locale: str = "en") -> dic
         }
 
     if tool == "create_graph":
-        data_text = _data_snippets(files, blocks) or text
-        spec = chat_json(
-            "Create a chart spec from data. Return JSON: "
-            '{"title": string, "chart_type": "bar"|"line"|"pie", '
-            '"labels": string[], "values": number[], "insight": string}',
-            f"Data:\n{data_text}",
+        return run_create_graph(
+            text=text,
+            topic_id=topic_id,
+            context=context,
+            locale=locale,
         )
-        data_files = [f for f in files if f.type == "data"]
-        target = data_files[0] if data_files else (files[0] if files else None)
-        if target is None:
-            raise ValueError("No file to store chart")
-
-        block = Block(
-            file_id=target.id,
-            type="table",
-            content={"chart_spec": spec, "rows": []},
-            order_index=_next_order(target.id),
-        )
-        db.session.add(block)
-        db.session.commit()
-        return {
-            "tool": tool,
-            "action": "write",
-            "result": spec.get("insight", ""),
-            "chart_spec": spec,
-            "target_file_id": target.id,
-            "target_file_name": target.name,
-            "block_id": block.id,
-        }
 
     if tool == "review":
         return {
