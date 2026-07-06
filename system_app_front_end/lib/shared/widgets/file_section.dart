@@ -26,6 +26,8 @@ class FileSection extends StatefulWidget {
     required this.state,
     required this.onDelete,
     this.accent,
+    this.tasksByBlockId,
+    this.isGuestFile = false,
   });
 
   final Topic topic;
@@ -34,6 +36,8 @@ class FileSection extends StatefulWidget {
   final AppState state;
   final VoidCallback onDelete;
   final Color? accent;
+  final Map<int, List<Task>>? tasksByBlockId;
+  final bool isGuestFile;
 
   @override
   State<FileSection> createState() => _FileSectionState();
@@ -63,6 +67,24 @@ class _FileSectionState extends State<FileSection> {
   void dispose() {
     _titleController.dispose();
     super.dispose();
+  }
+
+  static const _guestHeaderEndReserve = 148.0;
+
+  Widget _buildTitleField() {
+    final field = TextField(
+      controller: _titleController,
+      style: AppTypography.noteTitleStyle,
+      decoration: AppTypography.noteInputDecoration(),
+      textInputAction: TextInputAction.done,
+      onSubmitted: _saveTitle,
+      onEditingComplete: () => _saveTitle(_titleController.text),
+    );
+    if (!widget.isGuestFile) return field;
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(end: _guestHeaderEndReserve),
+      child: field,
+    );
   }
 
   @override
@@ -97,49 +119,42 @@ class _FileSectionState extends State<FileSection> {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _titleController,
-                    style: AppTypography.noteTitleStyle,
-                    decoration: AppTypography.noteInputDecoration(),
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: _saveTitle,
-                    onEditingComplete: () => _saveTitle(_titleController.text),
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 34,
-                    minHeight: 34,
-                  ),
-                  icon: AppIcon(
-                    AppIcons.more,
-                    size: 18,
-                    color: AppColors.noteMeta.withValues(alpha: 0.72),
-                  ),
-                  onSelected: (value) => _onMenu(value, isMainPane: isMainPane),
-                  itemBuilder: (context) => [
-                    if (!isMainPane)
-                      PopupMenuItem(
-                        value: 'showOnMain',
-                        child: Text(s['showOnMain']),
-                      ),
-                    if (isMainPane)
-                      PopupMenuItem(
-                        value: 'moveToMoreFiles',
-                        child: Text(s['moveToMoreFiles']),
-                      ),
-                    PopupMenuItem(
-                      value: 'moveToTopic',
-                      child: Text(s['moveFileToTopic']),
+                Expanded(child: _buildTitleField()),
+                if (!widget.isGuestFile)
+                  PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 34,
+                      minHeight: 34,
                     ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Text(s['deleteFile']),
+                    icon: AppIcon(
+                      AppIcons.more,
+                      size: 18,
+                      color: AppColors.noteMeta.withValues(alpha: 0.72),
                     ),
-                  ],
-                ),
+                    onSelected: (value) =>
+                        _onMenu(value, isMainPane: isMainPane),
+                    itemBuilder: (context) => [
+                      if (!isMainPane)
+                        PopupMenuItem(
+                          value: 'showOnMain',
+                          child: Text(s['showOnMain']),
+                        ),
+                      if (isMainPane)
+                        PopupMenuItem(
+                          value: 'moveToMoreFiles',
+                          child: Text(s['moveToMoreFiles']),
+                        ),
+                      PopupMenuItem(
+                        value: 'moveToTopic',
+                        child: Text(s['moveFileToTopic']),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text(s['deleteFile']),
+                      ),
+                    ],
+                  ),
               ],
             ),
             const SizedBox(height: 4),
@@ -202,12 +217,12 @@ class _FileSectionState extends State<FileSection> {
     final s = widget.state.strings;
     final topic = widget.topic;
     final isMainPane = widget.state.fileIsMain(topic, widget.file);
-    final canToggleVisibility = true;
+    final canToggleVisibility = !widget.isGuestFile;
+    final tasksMap =
+        widget.tasksByBlockId ?? widget.state.selectedDetail?.tasksByBlockId ?? {};
     final tasks = <Task>[];
     for (final b in widget.blocks) {
-      tasks.addAll(
-        widget.state.selectedDetail?.tasksByBlockId[b.id] ?? const [],
-      );
+      tasks.addAll(tasksMap[b.id] ?? const []);
     }
 
     final note = NoteCard(
@@ -221,49 +236,42 @@ class _FileSectionState extends State<FileSection> {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _titleController,
-                    style: AppTypography.noteTitleStyle,
-                    decoration: AppTypography.noteInputDecoration(),
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: _saveTitle,
-                    onEditingComplete: () => _saveTitle(_titleController.text),
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 34,
-                    minHeight: 34,
-                  ),
-                  icon: AppIcon(
-                    AppIcons.more,
-                    size: 18,
-                    color: AppColors.noteMeta.withValues(alpha: 0.72),
-                  ),
-                  onSelected: (value) => _onMenu(value, isMainPane: isMainPane),
-                  itemBuilder: (context) => [
-                    if (canToggleVisibility && !isMainPane)
-                      PopupMenuItem(
-                        value: 'showOnMain',
-                        child: Text(s['showOnMain']),
-                      ),
-                    if (canToggleVisibility && isMainPane)
-                      PopupMenuItem(
-                        value: 'moveToMoreFiles',
-                        child: Text(s['moveToMoreFiles']),
-                      ),
-                    PopupMenuItem(
-                      value: 'moveToTopic',
-                      child: Text(s['moveFileToTopic']),
+                Expanded(child: _buildTitleField()),
+                if (!widget.isGuestFile)
+                  PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 34,
+                      minHeight: 34,
                     ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Text(s['deleteFile']),
+                    icon: AppIcon(
+                      AppIcons.more,
+                      size: 18,
+                      color: AppColors.noteMeta.withValues(alpha: 0.72),
                     ),
-                  ],
-                ),
+                    onSelected: (value) =>
+                        _onMenu(value, isMainPane: isMainPane),
+                    itemBuilder: (context) => [
+                      if (canToggleVisibility && !isMainPane)
+                        PopupMenuItem(
+                          value: 'showOnMain',
+                          child: Text(s['showOnMain']),
+                        ),
+                      if (canToggleVisibility && isMainPane)
+                        PopupMenuItem(
+                          value: 'moveToMoreFiles',
+                          child: Text(s['moveToMoreFiles']),
+                        ),
+                      PopupMenuItem(
+                        value: 'moveToTopic',
+                        child: Text(s['moveFileToTopic']),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text(s['deleteFile']),
+                      ),
+                    ],
+                  ),
               ],
             ),
             const SizedBox(height: 4),

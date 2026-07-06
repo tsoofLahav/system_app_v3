@@ -28,6 +28,7 @@ abstract final class AppIcons {
   static const chevronRight = LucideIcons.chevronRight200;
   static const chevronDown = LucideIcons.chevronDown200;
   static const addFile = LucideIcons.filePlus200;
+  static const bringFile = LucideIcons.folderInput200;
   static const drag = LucideIcons.gripVertical200;
   static const paneDrag = LucideIcons.gripHorizontal200;
   static const close = LucideIcons.x200;

@@ -18,6 +18,7 @@ import '../../shared/widgets/files_section_divider.dart';
 import '../../shared/widgets/pane_reorder_canvas.dart';
 import '../../shared/widgets/topic_emoji.dart';
 import '../create_topic/add_file_dialog.dart';
+import '../bring_file/bring_file_picker_dialog.dart';
 import 'process_update_review_dialog.dart';
 
 class TopicView extends StatelessWidget {
@@ -80,6 +81,10 @@ class TopicView extends StatelessWidget {
       bottom: AppSpacing.canvasPadding.bottom + AppBottomBarMetrics.scrollInset,
     );
 
+    final broughtFile =
+        !stale && topic.isMain && !state.paneDragMode ? state.broughtFile : null;
+    final hasPrimaryContent = mainFiles.isNotEmpty || broughtFile != null;
+
     Widget filesContent;
     if (stale) {
       filesContent = Center(
@@ -118,7 +123,7 @@ class TopicView extends StatelessWidget {
       filesContent = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (mainFiles.isEmpty && secondaryFiles.isEmpty)
+          if (!hasPrimaryContent && secondaryFiles.isEmpty)
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
@@ -133,13 +138,14 @@ class TopicView extends StatelessWidget {
               _AiProposalPanel(state: state),
               const SizedBox(height: AppSpacing.sm),
             ],
-            if (mainFiles.isNotEmpty)
+            if (hasPrimaryContent)
               FileLayoutBoard(
                 topic: topic,
                 files: mainFiles,
                 layoutId: layoutId,
                 state: state,
                 accent: accent,
+                broughtFile: broughtFile,
                 onDeleteFile: (f) => state.deleteFile(topic, f),
                 slotHeight: FileLayouts.primarySlotHeight(
                   context,
@@ -195,9 +201,14 @@ class TopicView extends StatelessWidget {
               accent: accent,
               state: state,
               addEnabled: !stale && detail != null,
+              bringFileEnabled:
+                  !stale && detail != null && topic.isMain && !state.paneDragMode,
               onAddFile: detail == null
                   ? () {}
                   : () => _addFile(context, topic, detail.files),
+              onBringFile: detail == null
+                  ? () {}
+                  : () => _bringFile(context, state),
             ),
           ),
         ],
@@ -220,6 +231,12 @@ class TopicView extends StatelessWidget {
     );
     if (result == null) return;
     await state.addFile(topic: topic, type: result.type, name: result.name);
+  }
+
+  Future<void> _bringFile(BuildContext context, AppState state) async {
+    final entry = await showBringFilePickerDialog(context, state);
+    if (entry == null) return;
+    await state.bringFile(entry.topic, entry.file);
   }
 }
 
@@ -354,14 +371,18 @@ class _TopicHeader extends StatelessWidget {
     required this.accent,
     required this.state,
     required this.onAddFile,
+    required this.onBringFile,
     this.addEnabled = true,
+    this.bringFileEnabled = false,
   });
 
   final Topic topic;
   final Color accent;
   final AppState state;
   final VoidCallback onAddFile;
+  final VoidCallback onBringFile;
   final bool addEnabled;
+  final bool bringFileEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -425,6 +446,19 @@ class _TopicHeader extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: AppTopicHeaderMetrics.headerGap),
+                  if (isMain) ...[
+                    Opacity(
+                      opacity: bringFileEnabled ? 1 : 0.35,
+                      child: GlassCircleButton(
+                        tooltip: s['bringFile'],
+                        icon: AppIcons.bringFile,
+                        onPressed: bringFileEnabled ? onBringFile : () {},
+                        size: AppTopicHeaderMetrics.addButtonSize,
+                        iconSize: 15,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   Opacity(
                     opacity: addEnabled ? 1 : 0.35,
                     child: GlassCircleButton(

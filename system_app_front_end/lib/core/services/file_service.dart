@@ -7,6 +7,11 @@ class FileService {
 
   final ApiService _api;
 
+  Future<List<AppFile>> listAll() async {
+    final data = await _api.get('/files') as List<dynamic>;
+    return data.map((e) => AppFile.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   Future<List<AppFile>> listForTopic(
     int topicId, {
     bool includeArchived = false,

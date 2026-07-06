@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'ai/ai_context.dart';
+import 'browse/bring_file_catalog.dart';
+import '../features/bring_file/bring_file_preview.dart';
 import 'l10n/app_language.dart';
 import 'l10n/app_strings.dart';
 import 'models/ai_proposal.dart';
@@ -14,6 +16,7 @@ import 'models/automation_definition.dart';
 import 'models/automation_rule.dart';
 import 'models/automation_run.dart';
 import 'models/block.dart';
+import 'models/brought_file_snapshot.dart';
 import '../features/blocks/board_content.dart';
 import '../features/blocks/block_text_focus.dart';
 import 'models/task.dart';
@@ -155,6 +158,7 @@ class AppState extends ChangeNotifier {
   AiFocus? aiFocus;
   int? pendingFocusBlockId;
   bool aiRunning = false;
+  BroughtFileSnapshot? broughtFile;
 
   final Map<int, Timer?> _saveTimers = {};
   final Map<int, String?> _automationLastRunAtById = {};
@@ -175,6 +179,115 @@ class AppState extends ChangeNotifier {
       topic.isMain ? strings['main'] : topic.name;
   String taskTopicDisplayName(Task task) =>
       strings.displayTopicName(task.topicName);
+
+  bool get hasBroughtFile => broughtFile != null;
+
+  bool isGuestFile(AppFile file) => broughtFile?.file.id == file.id;
+
+  void clearBroughtFile() {
+    if (broughtFile == null) return;
+    broughtFile = null;
+    notifyListeners();
+  }
+
+  Future<List<BrowseFileEntry>> loadBringFileCatalog() async {
+    final files = await _fileService.listAll();
+    return buildBringFileCatalog(
+      topics: topics,
+      files: files,
+      mainTopic: mainTopic,
+    );
+  }
+
+  Future<Map<int, List<String>>> loadBringFilePreviews(List<AppFile> files) async {
+    final previews = <int, List<String>>{};
+    await Future.wait(
+      files.map((file) async {
+        try {
+          final blocks = await _blockService.listForFile(file.id);
+          previews[file.id] = await previewLinesForFile(
+            file,
+            blocks,
+            _taskService.listForBlock,
+          );
+        } catch (_) {
+          previews[file.id] = const [];
+        }
+      }),
+    );
+    return previews;
+  }
+
+  Future<void> bringFile(Topic sourceTopic, AppFile file) async {
+    error = null;
+    try {
+      broughtFile = await _loadBroughtFileSnapshot(sourceTopic, file);
+    } catch (e) {
+      error = e.toString();
+      broughtFile = null;
+    }
+    notifyListeners();
+  }
+
+  Future<BroughtFileSnapshot> _loadBroughtFileSnapshot(
+    Topic sourceTopic,
+    AppFile file,
+  ) async {
+    final loaded = await _blockService.listForFile(file.id);
+    final ensured = file.type == 'board'
+        ? await _ensureBoardBlock(file, loaded)
+        : loaded;
+    final normalized = file.type == 'board'
+        ? ensured
+        : await _removeAdjacentTextBlocks(file, ensured);
+    final blocks = await _ensureTrailingDefaultBlock(file, normalized);
+    final tasksByBlockId = <int, List<Task>>{};
+    for (final block in blocks) {
+      if (block.type == 'task' || block.type == 'task_list') {
+        tasksByBlockId[block.id] = await _taskService.listForBlock(block.id);
+      }
+    }
+    return BroughtFileSnapshot(
+      sourceTopic: sourceTopic,
+      file: file,
+      blocks: blocks,
+      tasksByBlockId: tasksByBlockId,
+    );
+  }
+
+  Future<void> _reloadBroughtFileBlocks() async {
+    final guest = broughtFile;
+    if (guest == null) return;
+    try {
+      broughtFile = await _loadBroughtFileSnapshot(guest.sourceTopic, guest.file);
+    } catch (e) {
+      error = e.toString();
+      broughtFile = null;
+    }
+    notifyListeners();
+  }
+
+  List<Block> _blocksForFile(AppFile file) {
+    if (isGuestFile(file)) return broughtFile!.blocks;
+    return selectedDetail?.blocksByFileId[file.id] ?? [];
+  }
+
+  List<Block> _blocksForFileId(int fileId) {
+    if (broughtFile?.file.id == fileId) return broughtFile!.blocks;
+    return selectedDetail?.blocksByFileId[fileId] ?? [];
+  }
+
+  Map<int, List<Task>> _tasksByBlockIdForFile(AppFile file) {
+    if (isGuestFile(file)) return broughtFile!.tasksByBlockId;
+    return selectedDetail?.tasksByBlockId ?? {};
+  }
+
+  Future<void> _refreshAfterFileMutation(AppFile file) async {
+    final topic = selectedTopic;
+    if (topic == null) return;
+    await selectTopic(topic);
+    if (isGuestFile(file)) await _reloadBroughtFileBlocks();
+  }
 
   Topic? topicById(int id) {
     for (final topic in topics) {
@@ -1354,6 +1467,9 @@ class AppState extends ChangeNotifier {
   Future<void> selectTopic(Topic topic, {bool includeArchived = false}) async {
     final fromView = selectedViewType != null;
     final switchingTopic = selectedTopic?.id != topic.id;
+    if (!topic.isMain) {
+      broughtFile = null;
+    }
     loading = true;
     error = null;
     selectedViewType = null;
@@ -1717,6 +1833,13 @@ class AppState extends ChangeNotifier {
     final trimmed = name.trim();
     if (trimmed.isEmpty || trimmed == file.name) return;
     await _fileService.updateFile(file.id, {'name': trimmed});
+    if (isGuestFile(file) && selectedTopic?.isMain == true) {
+      broughtFile = broughtFile!.copyWith(
+        file: file.copyWith(name: trimmed),
+      );
+      notifyListeners();
+      return;
+    }
     await selectTopic(topic);
   }
 
@@ -1799,7 +1922,7 @@ class AppState extends ChangeNotifier {
   Future<void> addTextBlock(AppFile file) async {
     final topic = selectedTopic;
     if (topic == null) return;
-    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    final blocks = _blocksForFile(file);
     if (blocks.isNotEmpty && blocks.last.type == 'text') {
       requestBlockFocus(blocks.last.id);
       return;
@@ -1810,7 +1933,7 @@ class AppState extends ChangeNotifier {
       content: {'text': ''},
       orderIndex: blocks.length,
     );
-    await selectTopic(topic);
+    await _refreshAfterFileMutation(file);
   }
 
   Future<void> addBlock(
@@ -1820,14 +1943,14 @@ class AppState extends ChangeNotifier {
   ) async {
     final topic = selectedTopic;
     if (topic == null) return;
-    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    final blocks = _blocksForFile(file);
     await _blockService.createBlock(
       fileId: file.id,
       type: type,
       content: content,
       orderIndex: blocks.length,
     );
-    await selectTopic(topic);
+    await _refreshAfterFileMutation(file);
   }
 
   Future<void> addDefaultBlock(AppFile file, String type) async {
@@ -1865,11 +1988,11 @@ class AppState extends ChangeNotifier {
     );
     if (type == 'text') requestBlockFocus(block.id);
     BlockTextFocusRegistry.abandonStashedFocus();
-    await selectTopic(topic);
+    await _refreshAfterFileMutation(file);
   }
 
   Block? _textBlockForInsertion(AppFile file, int orderIndex) {
-    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    final blocks = _blocksForFile(file);
     final targetIndex = orderIndex.clamp(0, blocks.length).toInt();
     if (targetIndex > 0 && blocks[targetIndex - 1].type == 'text') {
       return blocks[targetIndex - 1];
@@ -1881,7 +2004,7 @@ class AppState extends ChangeNotifier {
   }
 
   int _effectiveInsertIndex(AppFile file, int orderIndex, String type) {
-    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    final blocks = _blocksForFile(file);
     final targetIndex = orderIndex.clamp(0, blocks.length).toInt();
     if (type == 'text') return targetIndex;
     return _effectiveNonTextInsertIndex(blocks, targetIndex);
@@ -1939,7 +2062,7 @@ class AppState extends ChangeNotifier {
   }
 
   int _listInsertIndexForNewTask(AppFile file, Block listBlock) {
-    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    final blocks = _blocksForFile(file);
     var lastTaskListIndex = -1;
     for (var i = 0; i < blocks.length; i++) {
       if (blocks[i].type == 'task') lastTaskListIndex = i;
@@ -1949,7 +2072,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<int> _shiftBlocksForInsert(AppFile file, int listInsertIndex) async {
-    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    final blocks = _blocksForFile(file);
     final insertAt = listInsertIndex.clamp(0, blocks.length).toInt();
     final newOrderIndex = _orderIndexForListInsert(blocks, insertAt);
 
@@ -1965,14 +2088,14 @@ class AppState extends ChangeNotifier {
   Future<void> addHeaderBlock(AppFile file) async {
     final topic = selectedTopic;
     if (topic == null) return;
-    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    final blocks = _blocksForFile(file);
     await _blockService.createBlock(
       fileId: file.id,
       type: 'header',
       content: {'text': 'Section', 'level': 2},
       orderIndex: blocks.length,
     );
-    await selectTopic(topic);
+    await _refreshAfterFileMutation(file);
   }
 
   void scheduleBlockSave(Block block, Map<String, dynamic> content) {
@@ -1982,6 +2105,10 @@ class AppState extends ChangeNotifier {
         await _blockService.updateBlock(block.id, {'content': content});
       } catch (e) {
         error = e.toString();
+        if (broughtFile != null &&
+            broughtFile!.blocks.any((b) => b.id == block.id)) {
+          broughtFile = null;
+        }
         notifyListeners();
       }
     });
@@ -1992,9 +2119,19 @@ class AppState extends ChangeNotifier {
     Map<String, dynamic> content, {
     bool notify = false,
   }) async {
+    final updated = block.copyWith(content: content);
+    if (broughtFile?.file.id == block.fileId) {
+      broughtFile = broughtFile!.copyWith(
+        blocks: broughtFile!.blocks
+            .map((b) => b.id == block.id ? updated : b)
+            .toList(),
+      );
+      if (notify) notifyListeners();
+      scheduleBlockSave(block, content);
+      return;
+    }
     final detail = selectedDetail;
     if (detail == null) return;
-    final updated = block.copyWith(content: content);
     final list = detail.blocksByFileId[block.fileId] ?? [];
     detail.blocksByFileId[block.fileId!] = list
         .map((b) => b.id == block.id ? updated : b)
@@ -2015,7 +2152,7 @@ class AppState extends ChangeNotifier {
       }
     }
     await _blockService.deleteBlock(block.id);
-    await selectTopic(topic);
+    await _refreshAfterFileMutation(file);
   }
 
   Future<void> addTasksFromLines(Block listBlock, List<String> lines) async {
@@ -2032,7 +2169,7 @@ class AppState extends ChangeNotifier {
       listBlock: block,
       fileId: block.fileId!,
       title: title.trim(),
-      orderIndex: detail.blocksByFileId[block.fileId]?.length ?? 0,
+      orderIndex: _blocksForFileId(block.fileId!).length,
     );
     notifyListeners();
   }
@@ -2047,7 +2184,7 @@ class AppState extends ChangeNotifier {
     final detail = selectedDetail;
     if (topic == null || detail == null) return;
 
-    final blocks = detail.blocksByFileId[file.id] ?? [];
+    final blocks = _blocksForFile(file);
     final listInsertIndex = _listInsertIndexAfterBlock(blocks, afterTaskBlock);
     final targetIndex = await _shiftBlocksForInsert(file, listInsertIndex);
     final taskBlock = await _createTaskBlock(
@@ -2057,7 +2194,7 @@ class AppState extends ChangeNotifier {
       orderIndex: targetIndex,
       status: status,
     );
-    await selectTopic(topic);
+    await _refreshAfterFileMutation(file);
     requestBlockFocus(taskBlock.id);
   }
 
@@ -2072,7 +2209,12 @@ class AppState extends ChangeNotifier {
     if (taskBlock != null) {
       await _blockService.deleteBlock(taskBlock.id);
     }
-    await selectTopic(topic);
+    final guest = broughtFile?.file;
+    if (guest != null && taskBlock?.fileId == guest.id) {
+      await _refreshAfterFileMutation(guest);
+    } else {
+      await selectTopic(topic);
+    }
     if (focusTaskBlockAfterDelete != null) {
       requestBlockFocus(focusTaskBlockAfterDelete.id);
     }
@@ -2100,6 +2242,19 @@ class AppState extends ChangeNotifier {
       content: {'task_id': task.id},
       orderIndex: orderIndex,
     );
+    if (broughtFile?.file.id == fileId) {
+      final guest = broughtFile!;
+      final nextBlocks = <Block>[...guest.blocks, taskBlock]
+        ..sort((a, b) => (a.orderIndex ?? 0).compareTo(b.orderIndex ?? 0));
+      broughtFile = guest.copyWith(
+        blocks: nextBlocks,
+        tasksByBlockId: {
+          ...guest.tasksByBlockId,
+          listBlock.id: [...(guest.tasksByBlockId[listBlock.id] ?? []), task],
+        },
+      );
+      return taskBlock;
+    }
     final nextBlocks = <Block>[
       ...(detail.blocksByFileId[fileId] ?? const <Block>[]),
       taskBlock,
@@ -2117,12 +2272,10 @@ class AppState extends ChangeNotifier {
   }
 
   List<Task> orderedTasksForFile(AppFile file, Block listBlock) {
-    final detail = selectedDetail;
-    if (detail == null) return [];
-    final blocks = List<Block>.from(detail.blocksByFileId[file.id] ?? [])
+    final blocks = List<Block>.from(_blocksForFile(file))
       ..sort((a, b) => (a.orderIndex ?? 0).compareTo(b.orderIndex ?? 0));
     final taskById = {
-      for (final task in detail.tasksByBlockId[listBlock.id] ?? const <Task>[])
+      for (final task in _tasksByBlockIdForFile(file)[listBlock.id] ?? const <Task>[])
         task.id: task,
     };
     final ordered = <Task>[];
@@ -2138,9 +2291,7 @@ class AppState extends ChangeNotifier {
   }
 
   Block? taskRowBlockInFile(AppFile file, Task task) {
-    final detail = selectedDetail;
-    if (detail == null) return null;
-    for (final block in detail.blocksByFileId[file.id] ?? []) {
+    for (final block in _blocksForFile(file)) {
       if (block.type == 'task' && block.content['task_id'] == task.id) {
         return block;
       }
@@ -2151,7 +2302,9 @@ class AppState extends ChangeNotifier {
   Task? _taskForCreatedBlock(Block taskBlock, Block listBlock) {
     final taskId = taskBlock.content['task_id'] as int?;
     if (taskId == null) return null;
-    final tasks = selectedDetail?.tasksByBlockId[listBlock.id] ?? [];
+    final tasks = broughtFile?.tasksByBlockId[listBlock.id] ??
+        selectedDetail?.tasksByBlockId[listBlock.id] ??
+        [];
     for (final task in tasks) {
       if (task.id == taskId) return task;
     }
@@ -2171,7 +2324,7 @@ class AppState extends ChangeNotifier {
     final afterRow = afterTask != null
         ? taskRowBlockInFile(file, afterTask)
         : null;
-    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    final blocks = _blocksForFile(file);
     final listInsertIndex = afterRow != null
         ? _listInsertIndexAfterBlock(blocks, afterRow)
         : _listInsertIndexForNewTask(file, listBlock);
@@ -3017,7 +3170,7 @@ class AppState extends ChangeNotifier {
     final topic = selectedTopic;
     if (topic == null) return;
     final uploaded = await _imageService.uploadBytes(filename, bytes);
-    final blocks = selectedDetail?.blocksByFileId[file.id] ?? [];
+    final blocks = _blocksForFile(file);
     await _blockService.createBlock(
       fileId: file.id,
       type: 'image',
@@ -3027,7 +3180,7 @@ class AppState extends ChangeNotifier {
       },
       orderIndex: blocks.length,
     );
-    await selectTopic(topic);
+    await _refreshAfterFileMutation(file);
   }
 
   Future<void> insertImageBlock(
@@ -3053,13 +3206,12 @@ class AppState extends ChangeNotifier {
       orderIndex: targetIndex,
     );
     BlockTextFocusRegistry.abandonStashedFocus();
-    await selectTopic(topic);
+    await _refreshAfterFileMutation(file);
   }
 
   Future<Block?> ensureTaskListBlock(AppFile file) async {
-    final detail = selectedDetail;
-    if (detail == null) return null;
-    final blocks = detail.blocksByFileId[file.id] ?? [];
+    if (selectedDetail == null && !isGuestFile(file)) return null;
+    final blocks = _blocksForFile(file);
     for (final block in blocks) {
       if (block.type == 'task_list') return block;
     }
@@ -3069,6 +3221,14 @@ class AppState extends ChangeNotifier {
       content: {},
       orderIndex: blocks.length,
     );
+    if (isGuestFile(file)) {
+      await _reloadBroughtFileBlocks();
+      return broughtFile?.blocks.firstWhere(
+        (b) => b.type == 'task_list',
+        orElse: () => block,
+      );
+    }
+    final detail = selectedDetail!;
     detail.blocksByFileId[file.id] = [...blocks, block];
     detail.tasksByBlockId[block.id] = [];
     notifyListeners();

@@ -94,6 +94,9 @@ class AppStrings {
   String moreFiles(int count) =>
       this['moreFiles'].replaceAll('{count}', count.toString());
 
+  String bringFileFromTopicNamed(String topic) =>
+      this['bringFileFromTopicNamed'].replaceAll('{topic}', topic);
+
   String newSectionTitle(String viewLabel) =>
       this['newSectionTitle'].replaceAll('{view}', viewLabel);
 
@@ -168,6 +171,14 @@ class AppStrings {
     'moveToMoreFiles': 'Move to more files',
     'moveFileToTopic': 'Move file to topic',
     'addFile': 'Add file',
+    'bringFile': 'Bring file',
+    'bringFileSearchHint': 'topic file name',
+    'bringFileEmpty': 'No matching files from other topics.',
+    'bringFileFromTopic': 'Tap to bring',
+    'bringFileFromTopicNamed': 'From {topic}',
+    'bringFileDismiss': 'Dismiss brought file',
+    'bringFilePreviewLoading': 'Loading preview…',
+    'bringFilePreviewEmpty': 'No preview text yet',
     'selectView': 'Select a view',
     'bySection': 'By section',
     'byTopic': 'By topic',
@@ -421,6 +432,14 @@ class AppStrings {
     'moveToMoreFiles': 'העבר לקבצים נוספים',
     'moveFileToTopic': 'העבר קובץ לנושא',
     'addFile': 'הוסף קובץ',
+    'bringFile': 'הבא קובץ',
+    'bringFileSearchHint': 'נושא שם קובץ',
+    'bringFileEmpty': 'לא נמצאו קבצים תואמים מנושאים אחרים.',
+    'bringFileFromTopic': 'לחץ להבאה',
+    'bringFileFromTopicNamed': 'מ{topic}',
+    'bringFileDismiss': 'הסר קובץ מובא',
+    'bringFilePreviewLoading': 'טוען תצוגה מקדימה…',
+    'bringFilePreviewEmpty': 'אין עדיין תוכן לתצוגה',
     'selectView': 'בחר תצוגה',
     'bySection': 'לפי מדור',
     'byTopic': 'לפי נושא',

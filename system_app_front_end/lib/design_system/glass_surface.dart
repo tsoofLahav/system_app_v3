@@ -497,12 +497,14 @@ class AppGlassDialog extends StatelessWidget {
     required this.child,
     this.actions = const [],
     this.width = 420,
+    this.scrollable = true,
   });
 
   final Widget title;
   final Widget child;
   final List<Widget> actions;
   final double width;
+  final bool scrollable;
 
   @override
   Widget build(BuildContext context) {
@@ -548,15 +550,23 @@ class AppGlassDialog extends StatelessWidget {
               _GlassDivider(color: separator),
               const SizedBox(height: 12),
               Flexible(
-                child: SingleChildScrollView(
-                  child: DefaultTextStyle(
-                    style: AppTypography.noteBodyStyle.copyWith(
-                      fontSize: 12,
-                      color: AppColors.text.withValues(alpha: 0.9),
-                    ),
-                    child: child,
-                  ),
-                ),
+                child: scrollable
+                    ? SingleChildScrollView(
+                        child: DefaultTextStyle(
+                          style: AppTypography.noteBodyStyle.copyWith(
+                            fontSize: 12,
+                            color: AppColors.text.withValues(alpha: 0.9),
+                          ),
+                          child: child,
+                        ),
+                      )
+                    : DefaultTextStyle(
+                        style: AppTypography.noteBodyStyle.copyWith(
+                          fontSize: 12,
+                          color: AppColors.text.withValues(alpha: 0.9),
+                        ),
+                        child: child,
+                      ),
               ),
               if (actions.isNotEmpty) ...[
                 const SizedBox(height: 14),
