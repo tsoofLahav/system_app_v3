@@ -195,17 +195,17 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
             fixed={"kind": "topic_type", "topic_type": "process"},
             allowed_kinds=("topic_type", "topic", "all"),
         ),
-        activations=("task",),
+        activations=("schedule", "task"),
         bindings=(FileBinding(role="doc", match={"type": "doc"}),),
         companion=CompanionConfig(
             enabled=True,
             flow_key="process_documentation_input",
-            title_template="Document processes",
+            title_template="Document: {topic_name}",
             default_view_type="daily",
             default_section_name="Process documentation",
         ),
         ai=None,
-        default_schedule=None,
+        default_schedule="daily 21:00",
         default_enabled=False,
         fan_out=True,
     ),
@@ -378,6 +378,20 @@ def companion_params(definition: AutomationDefinition) -> dict[str, Any] | None:
     }
 
 
+def _default_trigger_params(definition: AutomationDefinition) -> dict[str, Any] | None:
+    companion = definition.companion
+    if companion is None:
+        return None
+    title = companion.title_template
+    if "{topic_name}" in title:
+        title = definition.name
+    return {
+        "view_type": companion.default_view_type,
+        "section_name": companion.default_section_name,
+        "title": title or definition.name,
+    }
+
+
 def default_params(key: str) -> dict[str, Any]:
     definition = get_definition(key)
     if definition is None:
@@ -408,6 +422,10 @@ def default_params(key: str) -> dict[str, Any]:
     if "event" in definition.activations:
         trigger = definition.change_trigger or ChangeTriggerConfig()
         result["change_trigger"] = _change_trigger_to_dict(trigger)
+    if "task" in definition.activations:
+        trigger = _default_trigger_params(definition)
+        if trigger is not None:
+            result["trigger"] = trigger
     return result
 
 

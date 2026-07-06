@@ -705,7 +705,7 @@ class AppStrings {
     'view_task_reset':
         'Manage daily, weekly, monthly, and quarterly schedules that uncheck completed tasks and record active tasks as missed.',
     'process_documentation_input':
-        'For each process topic, collect daily documentation text and a progress grade, then write them into the doc table and graph.',
+        'For each process topic, collect daily documentation text and a progress grade on schedule or via a trigger task, then write them into the doc table and graph.',
   };
 
   static const _automationDescriptionsHe = {
@@ -720,7 +720,7 @@ class AppStrings {
     'view_task_reset':
         'נהל תזמונים יומיים, שבועיים, חודשיים ורבעוניים שמבטלים סימון משימות שהושלמו ורושמים משימות פעילות כמשימות שפוספסו.',
     'process_documentation_input':
-        'עבור כל תהליך, אסוף קלט תיעוד יומי וציון התקדמות, וכתוב אותם לטבלת התיעוד ולגרף.',
+        'עבור כל תהליך, אסוף קלט תיעוד יומי וציון התקדמות לפי תזמון או משימת טריגר, וכתוב אותם לטבלת התיעוד ולגרף.',
   };
 
   static const _fileNamesEn = {
