@@ -6,6 +6,7 @@ from urllib.request import urlopen
 from flask import current_app
 
 from models import Block, File, Topic, db
+from services.ai_interactive.move_file import run_move_file_to_topic
 from services.ai_interactive.smart_doc import run_smart_doc
 from services.ai_interactive.smart_list import run_smart_list
 from services.openai_service import chat_json, chat_text, generate_image
@@ -81,13 +82,23 @@ def run_tool(tool: str, topic_id: int, context: dict, locale: str = "en") -> dic
         raise ValueError("Topic not found")
 
     text = (context.get("text") or "").strip()
-    if not text and tool not in ("review", "create_graph"):
+    if not text and tool not in ("review", "create_graph", "move_file_to_topic"):
         raise ValueError("No context text provided")
 
     files = _topic_files(topic_id)
     file_ids = [f.id for f in files]
     blocks = _blocks_for_files(file_ids)
     lang_note = "Respond in Hebrew." if locale == "he" else "Respond in English."
+
+    if tool == "move_file_to_topic":
+        file_id = context.get("file_id")
+        if file_id is None:
+            raise ValueError("file_id is required")
+        return run_move_file_to_topic(
+            file_id=int(file_id),
+            source_topic_id=topic_id,
+            locale=locale,
+        )
 
     if tool == "consult":
         answer = chat_text(

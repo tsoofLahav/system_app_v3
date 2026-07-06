@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from models import Block, File, Task, db
+from models import Block, File, Task, TaskView, db
 from services.doc_table_rows import DEFAULT_TABLE_HEADER, insert_row_into_table_block
+from services.task_view_flags import apply_section_flag_to_membership
 
 
 def _next_order(file_id: int) -> int:
@@ -45,7 +46,13 @@ def _ensure_task_list_block(file_id: int) -> Block:
     return block
 
 
-def add_task_to_file(file_id: int, title: str) -> Task:
+def add_task_to_file(
+    file_id: int,
+    title: str,
+    *,
+    view_type: str | None = None,
+    section_name: str | None = None,
+) -> Task:
     list_block = _ensure_task_list_block(file_id)
     task = Task(block_id=list_block.id, title=title, status="active")
     db.session.add(task)
@@ -58,7 +65,41 @@ def add_task_to_file(file_id: int, title: str) -> Task:
     )
     db.session.add(task_block)
     db.session.flush()
+    if view_type:
+        add_task_view_membership(
+            task.id,
+            view_type=view_type,
+            section_name=section_name,
+        )
     return task
+
+
+def add_task_view_membership(
+    task_id: int,
+    *,
+    view_type: str,
+    section_name: str | None = None,
+) -> TaskView:
+    existing = (
+        TaskView.query.filter_by(task_id=int(task_id), view_type=view_type)
+        .first()
+    )
+    if existing is not None:
+        if section_name is not None and existing.section_name != section_name:
+            existing.section_name = section_name
+            apply_section_flag_to_membership(existing)
+            db.session.flush()
+        return existing
+
+    membership = TaskView(
+        task_id=int(task_id),
+        view_type=view_type,
+        section_name=section_name,
+    )
+    apply_section_flag_to_membership(membership)
+    db.session.add(membership)
+    db.session.flush()
+    return membership
 
 
 def _ensure_table_block(file: File) -> Block:

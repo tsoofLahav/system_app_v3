@@ -344,6 +344,35 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<AiRunResult?> runAiMoveFile(Topic topic, AppFile file) async {
+    if (!canUseAiTools) return null;
+
+    aiRunning = true;
+    error = null;
+    notifyListeners();
+    try {
+      final result = await _aiService.runTool(
+        tool: 'move_file_to_topic',
+        topicId: topic.id,
+        context: ResolvedAiContext(
+          text: file.name,
+          sourceType: AiSourceType.line,
+          topicId: topic.id,
+          fileId: file.id,
+        ),
+        locale: language.name,
+      );
+      await selectTopic(topic);
+      return result;
+    } catch (e) {
+      error = e.toString();
+      rethrow;
+    } finally {
+      aiRunning = false;
+      notifyListeners();
+    }
+  }
+
   Future<AiRunResult?> runAiToolWithText(
     String tool,
     String text, {

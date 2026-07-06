@@ -131,6 +131,10 @@ class _FileSectionState extends State<FileSection> {
                         child: Text(s['moveToMoreFiles']),
                       ),
                     PopupMenuItem(
+                      value: 'moveToTopic',
+                      child: Text(s['moveFileToTopic']),
+                    ),
+                    PopupMenuItem(
                       value: 'delete',
                       child: Text(s['deleteFile']),
                     ),
@@ -250,6 +254,10 @@ class _FileSectionState extends State<FileSection> {
                         value: 'moveToMoreFiles',
                         child: Text(s['moveToMoreFiles']),
                       ),
+                    PopupMenuItem(
+                      value: 'moveToTopic',
+                      child: Text(s['moveFileToTopic']),
+                    ),
                     PopupMenuItem(
                       value: 'delete',
                       child: Text(s['deleteFile']),
@@ -382,6 +390,40 @@ class _FileSectionState extends State<FileSection> {
       await widget.state.promoteFileToMain(widget.topic, widget.file);
     } else if (value == 'moveToMoreFiles') {
       await widget.state.demoteFileToSecondary(widget.topic, widget.file);
+    } else if (value == 'moveToTopic') {
+      await _moveFileToTopic(context);
+    }
+  }
+
+  Future<void> _moveFileToTopic(BuildContext context) async {
+    final s = widget.state.strings;
+    try {
+      final result = await widget.state.runAiMoveFile(widget.topic, widget.file);
+      if (!context.mounted || result == null) return;
+      final targetTopic = result.targetTopicName ?? s['aiDone'];
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AppGlassDialog(
+          title: Text(s['aiDone']),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(s['ok']),
+            ),
+          ],
+          child: Text(
+            '${widget.file.name} → $targetTopic',
+            style: AppTypography.noteBodyStyle,
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      _showUploadError(e.message);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     }
   }
 
