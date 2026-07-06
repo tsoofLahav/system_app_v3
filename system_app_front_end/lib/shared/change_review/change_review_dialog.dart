@@ -11,13 +11,29 @@ const _calloutWidth = 280.0;
 const _calloutHeight = 180.0;
 const _calloutGap = 18.0;
 
-const _documentOrder = {'plan': 0, 'tasks': 1};
+enum ChangeReviewMode { processUpdate, projectUpdate }
+
+const _processDocumentOrder = {'plan': 0, 'tasks': 1};
+const _projectDocumentOrder = {
+  'plan': 0,
+  'execution': 1,
+  'tasks': 2,
+  'doc': 3,
+};
+
+Map<String, int> _documentOrderFor(ChangeReviewMode mode) {
+  return switch (mode) {
+    ChangeReviewMode.projectUpdate => _projectDocumentOrder,
+    ChangeReviewMode.processUpdate => _processDocumentOrder,
+  };
+}
 
 Future<Map<String, bool>?> showChangeReviewDialog({
   required BuildContext context,
   required AppStrings strings,
   required ChangeSet changeSet,
   String? title,
+  ChangeReviewMode reviewMode = ChangeReviewMode.processUpdate,
 }) {
   return showDialog<Map<String, bool>>(
     context: context,
@@ -26,6 +42,7 @@ Future<Map<String, bool>?> showChangeReviewDialog({
       strings: strings,
       changeSet: changeSet,
       title: title,
+      reviewMode: reviewMode,
     ),
   );
 }
@@ -36,6 +53,7 @@ class ChangeReviewDialog extends StatefulWidget {
     required this.strings,
     required this.changeSet,
     this.title,
+    this.reviewMode = ChangeReviewMode.processUpdate,
     this.embedded = false,
     this.onComplete,
     this.onCancel,
@@ -44,6 +62,7 @@ class ChangeReviewDialog extends StatefulWidget {
   final AppStrings strings;
   final ChangeSet changeSet;
   final String? title;
+  final ChangeReviewMode reviewMode;
   final bool embedded;
   final ValueChanged<Map<String, bool>>? onComplete;
   final VoidCallback? onCancel;
@@ -68,10 +87,11 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   @override
   void initState() {
     super.initState();
+    final documentOrder = _documentOrderFor(widget.reviewMode);
     _documents = [...widget.changeSet.documents]
       ..sort(
-        (a, b) => (_documentOrder[a.key] ?? 99).compareTo(
-          _documentOrder[b.key] ?? 99,
+        (a, b) => (documentOrder[a.key] ?? 99).compareTo(
+          documentOrder[b.key] ?? 99,
         ),
       );
     _documentPhase = 0;
@@ -95,8 +115,34 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     final s = widget.strings;
     return switch (_activeDocument.key) {
       'plan' => s['reviewPlan'],
+      'execution' => s['reviewExecution'],
       'tasks' => s['reviewTasks'],
+      'doc' => s['reviewDocumentation'],
       _ => _activeDocument.title,
+    };
+  }
+
+  String get _handoffCompleteMessage {
+    final s = widget.strings;
+    return switch (_activeDocument.key) {
+      'plan' => s['planReviewComplete'],
+      'execution' => s['executionReviewComplete'],
+      'tasks' => s['tasksReviewComplete'],
+      _ => s['planReviewComplete'],
+    };
+  }
+
+  String get _continueToNextLabel {
+    final s = widget.strings;
+    if (_documentPhase >= _documents.length - 1) {
+      return s['finishReview'];
+    }
+    final nextKey = _documents[_documentPhase + 1].key;
+    return switch (nextKey) {
+      'execution' => s['continueToExecution'],
+      'tasks' => s['continueToTasks'],
+      'doc' => s['continueToDocumentation'],
+      _ => s['continueToTasks'],
     };
   }
 
@@ -268,7 +314,9 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     final s = widget.strings;
     return switch (document.key) {
       'plan' => s['reviewPlan'],
+      'execution' => s['reviewExecution'],
       'tasks' => s['reviewTasks'],
+      'doc' => s['reviewDocumentation'],
       _ => document.title,
     };
   }
@@ -346,7 +394,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
         if (_awaitingHandoff) ...[
           const SizedBox(height: 12),
           Text(
-            s['planReviewComplete'],
+            _handoffCompleteMessage,
             style: AppTypography.noteBodyStyle,
           ),
           const SizedBox(height: 10),
@@ -354,7 +402,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
             alignment: Alignment.centerRight,
             child: FilledButton(
               onPressed: _continueToNextDocument,
-              child: Text(s['continueToTasks']),
+              child: Text(_continueToNextLabel),
             ),
           ),
         ],
@@ -567,7 +615,8 @@ class _DocumentReview extends StatelessWidget {
   }
 
   bool _shouldShowAddition(ChangeUnit unit, ChangeItem? change) {
-    return change?.action == 'add_after' && decisions[change!.id] == true;
+    if (change == null || decisions[change.id] != true) return false;
+    return change.action == 'add_after' || change.action == 'add_row';
   }
 }
 

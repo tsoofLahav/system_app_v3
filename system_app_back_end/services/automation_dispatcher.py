@@ -65,6 +65,45 @@ def file_matches_binding(file, binding, topic_id):
     return True
 
 
+def file_qualifies_as_moved_to_additional(
+    file,
+    *,
+    prev_is_main,
+    prev_topic_id,
+):
+    if file is None or file.type != "text" or file.is_main:
+        return False
+    topic = db.session.get(Topic, file.topic_id)
+    if topic is None or topic.archived_at is not None or topic.type != "project":
+        return False
+    demoted = bool(prev_is_main) and prev_topic_id == file.topic_id
+    cross_topic = (
+        prev_topic_id is not None and int(prev_topic_id) != int(file.topic_id)
+    )
+    return demoted or cross_topic
+
+
+def rule_matches_moved_to_additional_event(rule, file):
+    if rule.trigger_type != "event":
+        return False
+    params = normalize_params(rule.params, rule.key, rule.action_type)
+    event_name = params.get("event") or params.get("trigger", {}).get("event")
+    if event_name != "file_moved_to_additional":
+        return False
+    if not topic_in_scope(rule, file.topic_id):
+        return False
+    bindings = binding_files(params)
+    input_bindings = [
+        binding for binding in bindings if binding.get("role") == "input"
+    ]
+    if not input_bindings:
+        return False
+    return any(
+        file_matches_binding(file, binding, file.topic_id)
+        for binding in input_bindings
+    )
+
+
 def rule_matches_file_event(rule, file):
     if rule.trigger_type != "event":
         return False
@@ -264,6 +303,43 @@ def dispatch_file_changed(file_id, change, meta=None):
 
     if app is not None:
         process_due_change_triggers(app=app)
+
+    return run_ids
+
+
+def dispatch_file_moved_to_additional(file, *, change, meta=None):
+    if file is None:
+        return []
+
+    from flask import current_app
+
+    try:
+        app = current_app._get_current_object()
+    except RuntimeError:
+        app = None
+
+    rules = AutomationRule.query.filter_by(enabled=True, trigger_type="event").all()
+    run_ids = []
+    for rule in rules:
+        if not rule_matches_moved_to_additional_event(rule, file):
+            continue
+        context = {
+            "event": "file_moved_to_additional",
+            "file_id": file.id,
+            "topic_id": file.topic_id,
+            "change": change,
+        }
+        if meta:
+            context.update(meta)
+        run_id = _enqueue_for_rule(rule, "event", context)
+        if run_id is not None:
+            run_ids.append(run_id)
+
+    if run_ids and app is not None:
+        from services.automation_runner import kick_run_async
+
+        for run_id in run_ids:
+            kick_run_async(app, run_id)
 
     return run_ids
 

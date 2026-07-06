@@ -270,6 +270,37 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
         fan_out=False,
         change_trigger=ChangeTriggerConfig(idle_seconds=30),
     ),
+    "project_update": AutomationDefinition(
+        key="project_update",
+        name="Update project from daily log",
+        description=(
+            "When a text daily log is moved to a project's additional files, "
+            "propose updates to plan, execution, tasks, and documentation."
+        ),
+        action_type="project_update",
+        scope=ScopeConfig(
+            fixed={"kind": "topic_type", "topic_type": "project"},
+            allowed_kinds=("topic_type", "topic", "all"),
+        ),
+        activations=("event", "manual"),
+        bindings=(
+            FileBinding(role="input", match={"type": "text", "is_main": False}),
+            FileBinding(role="plan", match={"type": "plan"}),
+            FileBinding(role="execution", match={"type": "execution"}),
+            FileBinding(role="tasks", match={"type": "tasks"}),
+            FileBinding(role="doc", match={"type": "doc"}),
+        ),
+        companion=None,
+        ai=AiConfig(
+            action_key="smart_project_update",
+            proposal_types=("project_smart_update", "project_update_skipped"),
+            review_documents=("plan", "execution", "tasks", "doc"),
+        ),
+        default_schedule=None,
+        default_enabled=True,
+        fan_out=False,
+        change_trigger=ChangeTriggerConfig(enabled=False),
+    ),
     "view_task_reset": AutomationDefinition(
         key="view_task_reset",
         name="Reset view tasks",
@@ -422,6 +453,8 @@ def default_params(key: str) -> dict[str, Any]:
     if definition.key == "project_summary_update":
         result["event"] = "file_changed"
         result["project_summary"] = {"max_date_groups": 3}
+    if definition.key == "project_update":
+        result["event"] = "file_moved_to_additional"
     if definition.key == "view_task_reset":
         result["target_view"] = "weekly"
         result["view_resets"] = {
@@ -601,9 +634,23 @@ def resolve_files_by_bindings(topic_id: int, params: dict[str, Any]) -> dict[str
         .order_by(File.order_index, File.id)
         .all()
     )
-    by_type: dict[str, Any] = {}
+    by_type: dict[str, list[Any]] = {}
     for file in files:
-        by_type.setdefault(file.type, file)
+        by_type.setdefault(file.type, []).append(file)
+
+    def pick_candidate(file_type: str, match: dict[str, Any]):
+        candidates = by_type.get(file_type) or []
+        if not candidates:
+            return None
+        if match.get("is_main") is False:
+            for candidate in candidates:
+                if not candidate.is_main:
+                    return candidate
+            return None
+        main_candidates = [candidate for candidate in candidates if candidate.is_main]
+        if main_candidates:
+            return main_candidates[0]
+        return candidates[0]
 
     resolved: dict[str, Any] = {}
     for binding in bindings:
@@ -612,11 +659,13 @@ def resolve_files_by_bindings(topic_id: int, params: dict[str, Any]) -> dict[str
         file_type = match.get("type")
         if not role or not file_type:
             continue
-        candidate = by_type.get(file_type)
+        candidate = pick_candidate(file_type, match)
         if candidate is None:
             continue
         expected_name = match.get("name")
         if expected_name and candidate.name != expected_name:
+            continue
+        if "is_main" in match and bool(candidate.is_main) != bool(match["is_main"]):
             continue
         resolved[role] = candidate
     return resolved

@@ -69,6 +69,7 @@ Definitions drive the table below; see backend `docs/automation.md` for full reg
 | `process_documentation_input` | User schedule or task trigger (disabled by default) | All processes | On schedule or uncheck, stage doc-input companions; tap task(s) to enter daily text and grade per process. |
 | `process_recap_update` | On file change (enabled by default) | All processes | Regenerate process recap when plan, doc, or tasks change; direct AI write (no review). |
 | `project_summary_update` | On project file change (enabled by default) | All projects | Regenerate the project overview directly from project parts, execution, documentation, and tasks. |
+| `project_update` | When a text log moves to project additional (enabled by default) | All projects | Propose updates to plan, execution, tasks, and doc from the daily log; review dialog opens on the project topic. |
 | `view_task_reset` | Per-view schedules (disabled by default) | Daily, weekly, monthly, quarterly task views | Uncheck completed tasks in each due view, record already-active tasks as missed, archive a report under Automations, and show a one-time acknowledgement when the view opens. |
 
 ## Process recap (`process_recap_update`)
@@ -95,6 +96,24 @@ directly to `overview`, like process recap.
 - **No companion task** and no change-review dialog; the automation is a
   direct-write overview/recap flow.
 
+## Project update (`project_update`)
+
+Event-driven proposal flow separate from `project_summary_update`.
+
+- **Trigger:** By changes — specifically when a `text` daily log is moved to a
+  project's additional files (demotion or cross-topic move). Does not fire for
+  files created directly in additional.
+- **Input:** the moved text file. Main project files (`plan`, `execution`,
+  `tasks`, `doc`) are resolved preferring `is_main` files.
+- **Proposal:** `project_smart_update` with a `change_set` over plan, execution,
+  tasks, and doc (`add_row` for documentation).
+- **Review:** no companion task. Opening the project topic auto-opens
+  `project_update_review_dialog.dart` (phased `ChangeReviewDialog`). Skipped
+  runs show `project_update_skipped` with dismiss only.
+- **Finalize:** `POST /ai_proposals/:id/finalize` archives/recreates changed
+  plan/execution/tasks files, appends doc rows in place, and syncs part headers
+  when the plan structure changed.
+
 ## AI Proposals
 
 AI proposal generation is an AI concern, not a general automation concern. Automation creates the moment when proposals are requested; the proposal layer stores suggested content and exposes review/finalize actions.
@@ -102,6 +121,10 @@ AI proposal generation is an AI concern, not a general automation concern. Autom
 The `process_smart_update` AI action reads plan, documentation, and tasks as flattened units with stable IDs, returns edit operations, and stores a reusable `change_set`. Finalize archives the old files and creates fresh plan, empty documentation table, and tasks files after review.
 
 Skipped processes create a `process_refresh_skipped` warning proposal on the process topic.
+
+The `project_smart_update` AI action reads a daily text log plus plan, execution, tasks, and documentation. It returns edit operations and optional doc rows; finalize applies accepted changes and leaves the input log in additional.
+
+Skipped projects create a `project_update_skipped` warning proposal on the project topic.
 
 ## Process documentation input (`process_documentation_input`)
 

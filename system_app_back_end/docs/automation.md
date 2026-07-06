@@ -63,6 +63,7 @@ Built-in automations are defined in code at `services/automation_definitions.py`
 | `process_documentation_input` | All `process` topics | `schedule`, `task` | `doc` | `process_documentation_input` in daily / Process documentation | — |
 | `process_recap_update` | All `process` topics | `event`, `manual` | `plan`, `doc`, `tasks`, `overview` (write target) | — | `smart_process_recap_update` — direct write to recap |
 | `project_summary_update` | All `project` topics | `event`, `manual` | `plan`, `execution`, `tasks`, `doc`, `overview` (write target) | — | `smart_project_summary_update` — direct write to overview |
+| `project_update` | All `project` topics | `event`, `manual` | `input` → type `text` in additional; `plan`, `execution`, `tasks`, `doc` | — | `smart_project_update` → `project_smart_update`, `project_update_skipped`; review `plan` + `execution` + `tasks` + `doc` |
 | `view_task_reset` | Daily, weekly, monthly, and quarterly task views (configured by `params.view_resets`) | `schedule`, `manual` | — | one-time view acknowledgement | — |
 
 ### Instance vs definition
@@ -134,6 +135,7 @@ The initial action library contains:
 - `process_documentation_input`: for each process, stage companion links when the rule runs on schedule or when the user unchecks the trigger task. Opening the companion task launches a process input dialog; saving writes `[date, text]` into the doc table (new row below any header) and appends the grade to a line graph. Missing doc table/graph blocks are created automatically. Skipping a process completes its companion link without writing.
 - `process_recap_update`: when plan, documentation, or tasks change in a process topic, regenerate the recap (`overview` file): AI-written summary, date-grouped update table, and a snapshot of flagged tasks. Writes blocks in place (no proposal or review).
 - `project_summary_update`: when plan, execution, documentation, or tasks change in a project topic, regenerate the overview from the project state and part structure. Writes directly to overview only (no proposal or review).
+- `project_update`: when a text daily log is moved to a project's additional files, propose updates to plan, execution, tasks, and documentation; review opens on the project topic (no companion task).
 - `view_task_reset`: for each configured task view schedule, turn completed tasks back to active, record tasks that were already active as missed, write an archived report file under the real `Automations` topic, and create a pending acknowledgement shown when the user next opens that view.
 
 ### View task reset (`view_task_reset`)
@@ -177,6 +179,14 @@ Unchecking only dispatches the automation when `trigger_type=task`. Scheduled ru
 - **Run:** `smart_project_summary_update` gathers plan, execution, documentation, tasks, previous overview, and flagged tasks, then replaces overview blocks with current summary, current part focus, flagged current-part tasks, flagged other-part tasks, recent progress date table, and ordered part list.
 - **Safety:** this automation only writes the `overview` file. Synchronizing project part headers across source files belongs to a separate future automation.
 
+### Project update (`project_update`)
+
+- **Trigger:** `trigger_type=event` (UI: **By changes**) with `params.event=file_moved_to_additional`. Fires immediately (change trigger disabled) when a `text` file is demoted to additional or moved into a project topic as additional. Does not fire when a file is created directly in additional.
+- **Input:** the moved `text` daily log (`event_context.file_id`).
+- **Run:** `smart_project_update` reads the input log plus main `plan`, `execution`, `tasks`, and `doc` files, then stores a `project_smart_update` proposal with a four-document `change_set` when needed.
+- **Review:** no companion task. When the user opens the project topic, the frontend auto-opens the change-review dialog. Skipped runs create `project_update_skipped` on the topic (dismiss only).
+- **Finalize:** archives and recreates changed `plan` / `execution` / `tasks` files; appends accepted rows to the existing doc table in place; leaves the input log in additional. When `plan_structure_changed` is true, `services/project_part_sync.py` aligns execution and tasks part headers to the plan.
+
 ## Scheduling
 
 ### Run now (manual test)
@@ -208,7 +218,7 @@ Automations and AI actions can store reviewable edits as `change_set` version 1:
 - `documents[]` each have `key`, `title`, `units[]`, and `changes[]`.
 - `units` use stable derived IDs such as `block:12:item:1`, `block:12:sent:0`, or `task:5`.
 - Documentation tables are flattened to read-only prose for the AI (not edited via unit ops).
-- `changes` list only modified units (`replace`, `remove`, `add_after`).
+- `changes` list only modified units (`replace`, `remove`, `add_after`, and for documentation `add_row`).
 - AI actions return edit operations on unit IDs; `services/diff_engine.py` builds the change set.
 - Finalize applies accepted changes through `services/unit_mapper.py`.
 

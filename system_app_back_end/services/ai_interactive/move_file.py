@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from models import File, Topic, db
 from services.ai_interactive.topic_router import match_file_to_topic
+from services.automation_dispatcher import (
+    dispatch_file_moved_to_additional,
+    file_qualifies_as_moved_to_additional,
+)
 
 
 def _next_topic_file_order(topic_id: int) -> int:
@@ -44,11 +48,25 @@ def run_move_file_to_topic(
     if target_topic is None:
         raise ValueError("Target topic not found")
 
+    prev_is_main = file.is_main
+    prev_topic_id = file.topic_id
+
     file.topic_id = target_topic_id
     file.is_main = False
     file.order_index = _next_topic_file_order(target_topic_id)
 
     db.session.commit()
+
+    if file_qualifies_as_moved_to_additional(
+        file,
+        prev_is_main=prev_is_main,
+        prev_topic_id=prev_topic_id,
+    ):
+        dispatch_file_moved_to_additional(
+            file,
+            change="file_moved_to_additional",
+            meta={"source_topic_id": prev_topic_id},
+        )
 
     return {
         "tool": "move_file_to_topic",

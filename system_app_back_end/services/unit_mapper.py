@@ -69,6 +69,53 @@ def flatten_process_files_for_ai(plan_file, doc_file, tasks_file):
     }
 
 
+def flatten_input_file_for_ai(input_file):
+    return flatten_units_for_ai(units_from_file(input_file.id), input_file.name)
+
+
+def flatten_project_files_for_ai(input_file, plan_file, execution_file, tasks_file, doc_file):
+    return {
+        "input": flatten_input_file_for_ai(input_file),
+        "plan": flatten_units_for_ai(units_from_file(plan_file.id), plan_file.name),
+        "execution": flatten_units_for_ai(
+            units_from_file(execution_file.id), execution_file.name
+        ),
+        "tasks": flatten_units_for_ai(units_from_file(tasks_file.id), tasks_file.name),
+        "documentation": flatten_doc_file_for_ai(doc_file),
+    }
+
+
+def units_from_doc_table(doc_file):
+    blocks = (
+        Block.query.filter_by(file_id=doc_file.id)
+        .filter(Block.archived_at.is_(None))
+        .order_by(Block.order_index, Block.id)
+        .all()
+    )
+    units = []
+    for block in blocks:
+        if block.type != "table":
+            continue
+        rows = (block.content or {}).get("rows") or []
+        for index, row in enumerate(rows):
+            if not isinstance(row, list):
+                continue
+            cells = [str(cell).strip() for cell in row]
+            if not any(cells):
+                continue
+            text = " | ".join(cell for cell in cells if cell)
+            units.append(
+                {
+                    "id": f"table:{block.id}:row:{index}",
+                    "kind": "table_row",
+                    "text": text,
+                    "block_id": block.id,
+                    "row_index": index,
+                }
+            )
+    return units
+
+
 def detect_language(*texts):
     combined = _language_signal_text("\n".join(texts))
     hebrew = len(re.findall(r"[\u0590-\u05FF]", combined))

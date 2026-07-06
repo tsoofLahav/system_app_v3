@@ -1214,6 +1214,27 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<void> finalizeProjectUpdate(
+    AiProposal proposal,
+    Map<String, bool> decisions,
+  ) async {
+    await _aiProposalService.finalize(
+      proposal.id,
+      Map<String, dynamic>.from(decisions),
+    );
+    pendingAiProposals = pendingAiProposals
+        .where((item) => item.id != proposal.id)
+        .toList();
+    final topic = selectedTopic;
+    if (topic != null) {
+      await selectTopic(topic, includeArchived: topic.isArchived);
+    } else {
+      await refreshTopics();
+      await loadArchive();
+      notifyListeners();
+    }
+  }
+
   Future<void> finalizeProcessUpdate(
     AiProposal proposal,
     Map<String, bool> decisions, {

@@ -5,7 +5,9 @@ from sqlalchemy import or_
 from models import Block, File, Task, TaskResetAcknowledgement, TaskView, Topic, db
 from services.ai_proposal_actions import (
     create_process_refresh_skipped_proposal,
+    create_project_update_skipped_proposal,
     create_smart_process_update_proposal,
+    create_smart_project_update_proposal,
 )
 from services.ai_recap_actions import smart_process_recap_update
 from services.ai_project_summary_actions import smart_project_summary_update
@@ -46,6 +48,8 @@ def run_action(rule, run=None):
         return process_recap_update(context)
     if action_type == "project_summary_update":
         return project_summary_update(context)
+    if action_type == "project_update":
+        return project_update(context)
     if action_type == "reset_view_tasks":
         return reset_view_tasks(context)
     raise ValueError(f"Unknown automation action: {action_type}")
@@ -279,6 +283,63 @@ def project_summary_update(context):
         files_by_role.get("doc"),
         max_date_groups=max_date_groups,
     )
+
+
+def project_update(context):
+    topic = context["topic"]
+    if topic is None:
+        raise ValueError("topic is required for project_update")
+
+    event_context = context.get("event_context") or {}
+    trigger_file_id = event_context.get("file_id")
+    input_file = (
+        db.session.get(File, int(trigger_file_id)) if trigger_file_id is not None else None
+    )
+    if input_file is None or input_file.type != "text" or input_file.is_main:
+        return {
+            "topic_id": topic.id,
+            "skipped": True,
+            "reason": "invalid_input_file",
+        }
+
+    params = context["params"]
+    files_by_role = resolve_files_by_bindings(topic.id, params)
+    required_roles = ("plan", "execution", "tasks", "doc")
+    missing = [role for role in required_roles if role not in files_by_role]
+    if missing:
+        message = (
+            f"Cannot automatically update project '{topic.name}': "
+            f"missing {', '.join(missing)} file(s)."
+        )
+        proposal = create_project_update_skipped_proposal(topic, missing, message)
+        return {
+            "topic_id": topic.id,
+            "skipped": True,
+            "missing_types": missing,
+            "proposal_id": proposal.id,
+            "message": message,
+        }
+
+    proposal = create_smart_project_update_proposal(
+        topic,
+        input_file,
+        files_by_role["plan"],
+        files_by_role["execution"],
+        files_by_role["tasks"],
+        files_by_role["doc"],
+    )
+    return {
+        "topic_id": topic.id,
+        "skipped": False,
+        "proposal_id": proposal.id,
+        "input_file_id": input_file.id,
+        "source_file_ids": {
+            "plan": files_by_role["plan"].id,
+            "execution": files_by_role["execution"].id,
+            "tasks": files_by_role["tasks"].id,
+            "doc": files_by_role["doc"].id,
+        },
+    }
 
 
 def reset_view_tasks(context):

@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, request
 
 from models import AiProposal, Block, db
 from routes.helpers import get_or_404
-from services.ai_proposal_actions import finalize_process_update
+from services.ai_proposal_actions import finalize_ai_proposal
 
 ai_proposals_bp = Blueprint("ai_proposals", __name__)
 
@@ -56,6 +56,10 @@ def approve_ai_proposal(proposal_id):
         return jsonify(
             {"error": "use /ai_proposals/<id>/finalize for process smart updates"}
         ), 400
+    if proposal.proposal_type == "project_smart_update":
+        return jsonify(
+            {"error": "use /ai_proposals/<id>/finalize for project smart updates"}
+        ), 400
     if proposal.proposal_type == "process_refresh_skipped":
         proposal.status = "rejected"
         proposal.decided_at = datetime.utcnow()
@@ -85,7 +89,7 @@ def finalize_ai_proposal(proposal_id):
     proposal = get_or_404(AiProposal, proposal_id)
     data = request.get_json(silent=True) or {}
     try:
-        proposal = finalize_process_update(proposal, data.get("decisions") or {})
+        proposal = finalize_ai_proposal(proposal, data.get("decisions") or {})
         db.session.commit()
         return jsonify(proposal.to_dict())
     except ValueError as error:

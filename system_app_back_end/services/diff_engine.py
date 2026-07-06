@@ -77,6 +77,44 @@ def build_document_change_set(key, title, units, ops):
     return {"key": key, "title": title, "units": units, "changes": changes}
 
 
+def build_doc_row_change_set(key, title, units, doc_ops):
+    changes = []
+    change_index = 0
+    anchor_id = units[-1]["id"] if units else f"{key}:table:anchor"
+    display_units = list(units)
+    if not display_units:
+        display_units = [
+            {
+                "id": anchor_id,
+                "kind": "table_row",
+                "text": "",
+            }
+        ]
+
+    for op in doc_ops or []:
+        date = (op.get("date") or "").strip()
+        text = (op.get("text") or "").strip()
+        reason = (op.get("reason") or "").strip()
+        if not date or not text:
+            continue
+        change_index += 1
+        change_id = f"{key}:c{change_index}"
+        changes.append(
+            {
+                "id": change_id,
+                "action": "add_row",
+                "unit_id": anchor_id,
+                "old_text": "",
+                "new_text": f"{date} | {text}",
+                "reason": reason,
+                "row_date": date,
+                "row_text": text,
+            }
+        )
+
+    return {"key": key, "title": title, "units": display_units, "changes": changes}
+
+
 def merge_document(units, changes, decisions):
     replace = {}
     remove = set()

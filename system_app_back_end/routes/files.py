@@ -3,7 +3,11 @@ from flask import Blueprint, jsonify, request
 from models import File, db
 from routes.helpers import active_query, apply_updates, get_or_404
 from services.archive_files import list_archived_files_for_topic
-from services.automation_dispatcher import dispatch_file_changed
+from services.automation_dispatcher import (
+    dispatch_file_changed,
+    dispatch_file_moved_to_additional,
+    file_qualifies_as_moved_to_additional,
+)
 from services.delete_cascade import delete_file_cascade
 
 files_bp = Blueprint("files", __name__)
@@ -69,6 +73,8 @@ def create_file():
 @files_bp.route("/files/<int:file_id>", methods=["PATCH"])
 def update_file(file_id):
     file = get_or_404(File, file_id)
+    prev_is_main = file.is_main
+    prev_topic_id = file.topic_id
     data = request.get_json(silent=True) or {}
     apply_updates(
         file,
@@ -77,6 +83,16 @@ def update_file(file_id):
         datetime_fields={"archived_at"},
     )
     db.session.commit()
+    if file_qualifies_as_moved_to_additional(
+        file,
+        prev_is_main=prev_is_main,
+        prev_topic_id=prev_topic_id,
+    ):
+        dispatch_file_moved_to_additional(
+            file,
+            change="file_moved_to_additional",
+            meta={"source_topic_id": prev_topic_id},
+        )
     dispatch_file_changed(file_id, "file_updated")
     return jsonify(file.to_dict())
 

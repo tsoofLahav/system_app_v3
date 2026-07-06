@@ -19,11 +19,69 @@ import '../../shared/widgets/topic_emoji.dart';
 import '../create_topic/add_file_dialog.dart';
 import '../bring_file/bring_file_picker_dialog.dart';
 import 'process_update_review_dialog.dart';
+import 'project_update_review_dialog.dart';
 
-class TopicView extends StatelessWidget {
+class TopicView extends StatefulWidget {
   const TopicView({super.key, required this.state});
 
   final AppState state;
+
+  @override
+  State<TopicView> createState() => _TopicViewState();
+}
+
+class _TopicViewState extends State<TopicView> {
+  int? _openedReviewTopicId;
+  final Set<int> _openedProjectProposalIds = {};
+
+  AppState get state => widget.state;
+
+  @override
+  void didUpdateWidget(covariant TopicView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _scheduleProjectUpdateReview();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleProjectUpdateReview();
+  }
+
+  void _scheduleProjectUpdateReview() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _maybeOpenProjectUpdateReview();
+    });
+  }
+
+  Future<void> _maybeOpenProjectUpdateReview() async {
+    final topic = state.selectedTopic;
+    if (topic == null || topic.type != 'project' || state.loading) return;
+
+    if (_openedReviewTopicId != topic.id) {
+      _openedReviewTopicId = topic.id;
+      _openedProjectProposalIds.clear();
+    }
+
+    AiProposal? proposal;
+    for (final item in state.pendingAiProposals) {
+      if (item.proposalType == 'project_smart_update') {
+        proposal = item;
+        break;
+      }
+    }
+    if (proposal == null || _openedProjectProposalIds.contains(proposal.id)) {
+      return;
+    }
+
+    _openedProjectProposalIds.add(proposal.id);
+    await showProjectUpdateReviewDialog(
+      context: context,
+      state: state,
+      proposal: proposal,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -248,6 +306,24 @@ class _AiProposalRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = state.strings;
 
+    if (proposal.proposalType == 'project_update_skipped') {
+      final message =
+          proposal.payload['message']?.toString() ?? s['projectUpdateSkipped'];
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: Text(message, style: AppTypography.noteBodyStyle)),
+            TextButton(
+              onPressed: () => state.rejectAiProposal(proposal),
+              child: Text(s['dismiss']),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (proposal.proposalType == 'process_refresh_skipped') {
       final message =
           proposal.payload['message']?.toString() ?? s['processRefreshSkipped'];
@@ -260,6 +336,35 @@ class _AiProposalRow extends StatelessWidget {
             TextButton(
               onPressed: () => state.rejectAiProposal(proposal),
               child: Text(s['dismiss']),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (proposal.proposalType == 'project_smart_update') {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                s['projectUpdateReview'],
+                style: AppTypography.noteBodyStyle,
+              ),
+            ),
+            TextButton(
+              onPressed: () => state.rejectAiProposal(proposal),
+              child: Text(s['reject']),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: () => showProjectUpdateReviewDialog(
+                context: context,
+                state: state,
+                proposal: proposal,
+              ),
+              child: Text(s['projectUpdateReview']),
             ),
           ],
         ),

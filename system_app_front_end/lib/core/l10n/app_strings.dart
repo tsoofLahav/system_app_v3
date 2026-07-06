@@ -378,10 +378,17 @@ class AppStrings {
     'reject': 'Reject',
     'pendingSuggestions': 'Pending suggestions',
     'processUpdateReview': 'Review process update',
+    'projectUpdateReview': 'Review project update',
     'reviewPlan': 'Plan',
+    'reviewExecution': 'Execution',
     'reviewTasks': 'Tasks',
+    'reviewDocumentation': 'Documentation',
     'planReviewComplete': 'Plan review complete',
+    'executionReviewComplete': 'Execution review complete',
+    'tasksReviewComplete': 'Tasks review complete',
+    'continueToExecution': 'Continue to execution',
     'continueToTasks': 'Continue to tasks',
+    'continueToDocumentation': 'Continue to documentation',
     'applySuggestion': 'Apply',
     'finishReview': 'Finish refresh',
     'finishUpdate': 'Finish update',
@@ -389,6 +396,7 @@ class AppStrings {
     'nextProcess': 'Next process',
     'processUpdateProgress': 'Process {current} of {total}',
     'processRefreshSkipped': 'Automatic process update skipped',
+    'projectUpdateSkipped': 'Automatic project update skipped',
     'processDocumentationInputLabel': 'Daily input',
     'processDocumentationInputHint': 'What happened in this process today?',
     'processDocumentationGradeLabel': 'Progress grade (1–10)',
@@ -645,10 +653,17 @@ class AppStrings {
     'reject': 'דחה',
     'pendingSuggestions': 'הצעות ממתינות',
     'processUpdateReview': 'סקירת עדכון תהליך',
+    'projectUpdateReview': 'סקירת עדכון פרויקט',
     'reviewPlan': 'תכנית',
+    'reviewExecution': 'ביצוע',
     'reviewTasks': 'משימות',
+    'reviewDocumentation': 'תיעוד',
     'planReviewComplete': 'סקירת התכנית הושלמה',
+    'executionReviewComplete': 'סקירת הביצוע הושלמה',
+    'tasksReviewComplete': 'סקירת המשימות הושלמה',
+    'continueToExecution': 'המשך לביצוע',
     'continueToTasks': 'המשך למשימות',
+    'continueToDocumentation': 'המשך לתיעוד',
     'applySuggestion': 'החל',
     'finishReview': 'סיים רענון',
     'finishUpdate': 'סיים עדכון',
@@ -656,6 +671,7 @@ class AppStrings {
     'nextProcess': 'תהליך הבא',
     'processUpdateProgress': 'תהליך {current} מתוך {total}',
     'processRefreshSkipped': 'עדכון תהליך אוטומטי דולג',
+    'projectUpdateSkipped': 'עדכון פרויקט אוטומטי דולג',
     'processDocumentationInputLabel': 'קלט יומי',
     'processDocumentationInputHint': 'מה קרה בתהליך הזה היום?',
     'processDocumentationGradeLabel': 'ציון התקדמות (1–10)',
@@ -726,6 +742,7 @@ class AppStrings {
     'process_refresh': 'Update all processes',
     'process_recap_update': 'Update process recap',
     'project_summary_update': 'Update project summary',
+    'project_update': 'Update project from daily log',
     'view_task_reset': 'Reset view tasks',
     'process_documentation_input': 'Process documentation input',
   };
@@ -735,6 +752,7 @@ class AppStrings {
     'process_refresh': 'עדכון כל התהליכים',
     'process_recap_update': 'עדכון סיכום תהליך',
     'project_summary_update': 'עדכון סיכום פרויקט',
+    'project_update': 'עדכון פרויקט מיומן יומי',
     'view_task_reset': 'איפוס משימות בתצוגה',
     'process_documentation_input': 'קלט תיעוד תהליכים',
   };
@@ -749,6 +767,8 @@ class AppStrings {
         'recap with an AI summary and recent update notes.',
     'project_summary_update':
         'When project plan, execution, documentation, or tasks change, regenerate the project summary from its current structure.',
+    'project_update':
+        'When a text daily log is moved to a project\'s additional files, propose updates to plan, execution, tasks, and documentation for review on the project topic.',
     'view_task_reset':
         'Manage daily, weekly, monthly, and quarterly schedules that uncheck completed tasks and record active tasks as missed.',
     'process_documentation_input':
@@ -764,6 +784,8 @@ class AppStrings {
         'עם סיכום AI והערות עדכון אחרונות.',
     'project_summary_update':
         'כשהתוכנית, הביצוע, התיעוד או המשימות של פרויקט משתנים, צור מחדש את סיכום הפרויקט לפי המבנה הנוכחי.',
+    'project_update':
+        'כשיומן טקסט יומי מועבר לקבצים נוספים של פרויקט, הצע עדכונים לתוכנית, ביצוע, משימות ותיעוד לסקירה בדף הפרויקט.',
     'view_task_reset':
         'נהל תזמונים יומיים, שבועיים, חודשיים ורבעוניים שמבטלים סימון משימות שהושלמו ורושמים משימות פעילות כמשימות שפוספסו.',
     'process_documentation_input':
