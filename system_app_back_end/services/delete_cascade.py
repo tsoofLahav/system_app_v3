@@ -1,4 +1,14 @@
-from models import AiProposal, AutomationCompanionTask, Block, File, Task, TaskView, Topic, db
+from models import (
+    AiProposal,
+    AutomationCompanionTask,
+    Block,
+    File,
+    Task,
+    TaskResetAcknowledgement,
+    TaskView,
+    Topic,
+    db,
+)
 
 
 def delete_task_cascade(task_id):
@@ -32,6 +42,9 @@ def delete_file_cascade(file_id):
     AiProposal.query.filter_by(target_file_id=file_id).delete(
         synchronize_session=False
     )
+    TaskResetAcknowledgement.query.filter_by(report_file_id=file_id).delete(
+        synchronize_session=False
+    )
     db.session.delete(file)
 
 
@@ -41,6 +54,10 @@ def delete_topic_cascade(topic_id):
         return
 
     AiProposal.query.filter_by(topic_id=topic_id).delete(synchronize_session=False)
+
+    AutomationCompanionTask.query.filter_by(topic_id=topic_id).delete(
+        synchronize_session=False
+    )
 
     files = File.query.filter_by(topic_id=topic_id).all()
     for file in files:
