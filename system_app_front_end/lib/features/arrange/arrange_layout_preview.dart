@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/l10n/app_strings.dart';
 import '../../core/models/app_file.dart';
+import '../../core/models/topic.dart';
 import '../../design_system/file_layouts.dart';
 import '../../design_system/overlay_file_preview_card.dart';
+import '../bring_file/bring_file_preview.dart';
 
 /// Layout-shaped arrangement of compact preview cards for the arrange overlay.
 class ArrangeLayoutPreview extends StatelessWidget {
@@ -11,20 +13,24 @@ class ArrangeLayoutPreview extends StatelessWidget {
     super.key,
     required this.files,
     required this.layoutId,
+    required this.topic,
     required this.accent,
     required this.fileNameFor,
     required this.onFileTap,
-    required this.previewLinesByFileId,
+    this.onFileSecondaryTap,
+    required this.previewsByFileId,
     required this.previewsLoaded,
     required this.strings,
   });
 
   final List<AppFile> files;
   final String layoutId;
+  final Topic topic;
   final Color accent;
   final String Function(AppFile file) fileNameFor;
   final void Function(AppFile file) onFileTap;
-  final Map<int, List<String>> previewLinesByFileId;
+  final void Function(AppFile file)? onFileSecondaryTap;
+  final Map<int, OverlayFilePreviewData> previewsByFileId;
   final bool previewsLoaded;
   final AppStrings strings;
 
@@ -37,15 +43,21 @@ class ArrangeLayoutPreview extends StatelessWidget {
         final slots = [
           for (var i = 0; i < files.length; i++)
             OverlayFilePreviewCard(
+              file: files[i],
+              topic: topic,
               fileName: fileNameFor(files[i]),
               accent: accent,
-              previewLines: previewLinesByFileId[files[i].id] ?? const [],
+              preview:
+                  previewsByFileId[files[i].id] ?? OverlayFilePreviewData.empty,
               previewsLoaded: previewsLoaded,
               strings: strings,
               padding: const EdgeInsets.all(12),
               titleFontSize: 13,
               emphasized: i == 0,
               onTap: () => onFileTap(files[i]),
+              onSecondaryTapDown: onFileSecondaryTap == null
+                  ? null
+                  : (_) => onFileSecondaryTap!(files[i]),
             ),
         ];
 

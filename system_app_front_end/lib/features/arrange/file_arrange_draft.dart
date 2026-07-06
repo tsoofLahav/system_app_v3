@@ -45,4 +45,20 @@ class FileArrangeDraft {
     additional = next.additional;
     return true;
   }
+
+  bool demoteFromMain(int mainIndex) {
+    if (mainIndex < 0 || mainIndex >= main.length) return false;
+
+    final next = applyPaneReorderDrop(
+      state: PaneReorderState(main: main, additional: additional),
+      file: main[mainIndex],
+      from: PaneReorderSection.main,
+      fromIndex: mainIndex,
+      to: PaneReorderSection.additional,
+      toIndex: 0,
+    );
+    main = next.main;
+    additional = next.additional;
+    return true;
+  }
 }

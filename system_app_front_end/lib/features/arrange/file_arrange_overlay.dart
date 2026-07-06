@@ -16,6 +16,7 @@ import '../../design_system/overlay_dialog_style.dart';
 import '../../design_system/overlay_file_preview_card.dart';
 import '../../design_system/horizontal_carousel.dart';
 import '../../shared/widgets/layout_picker_tile.dart';
+import '../bring_file/bring_file_preview.dart';
 import 'arrange_layout_preview.dart';
 import 'file_arrange_draft.dart';
 
@@ -59,7 +60,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   bool _saving = false;
   bool _tapCandidate = false;
   Offset? _tapDownPosition;
-  Map<int, List<String>> _previewLinesByFileId = {};
+  Map<int, OverlayFilePreviewData> _previewsByFileId = {};
   bool _previewsLoaded = false;
 
   @override
@@ -98,7 +99,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
       final previews = await widget.state.loadBringFilePreviews(files);
       if (!mounted) return;
       setState(() {
-        _previewLinesByFileId = previews;
+        _previewsByFileId = previews;
         _previewsLoaded = true;
       });
     } catch (_) {
@@ -139,6 +140,13 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
     final index = _draft.main.indexWhere((f) => f.id == file.id);
     if (index < 0) return;
     if (!_draft.moveMainToFirst(index)) return;
+    setState(() {});
+  }
+
+  void _onMainFileSecondaryTap(AppFile file) {
+    final index = _draft.main.indexWhere((f) => f.id == file.id);
+    if (index < 0) return;
+    if (!_draft.demoteFromMain(index)) return;
     setState(() {});
   }
 
@@ -225,11 +233,13 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
                           ),
                           files: _draft.main,
                           layoutId: _draft.layoutId,
+                          topic: widget.topic,
                           accent: accent,
                           fileNameFor: (file) =>
                               widget.state.fileDisplayName(file.name),
                           onFileTap: _onMainFileTap,
-                          previewLinesByFileId: _previewLinesByFileId,
+                          onFileSecondaryTap: _onMainFileSecondaryTap,
+                          previewsByFileId: _previewsByFileId,
                           previewsLoaded: _previewsLoaded,
                           strings: s,
                         ),
@@ -300,10 +310,12 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
                       width: _carouselItemWidth,
                       height: _carouselHeight,
                       child: OverlayFilePreviewCard(
+                        file: file,
+                        topic: widget.topic,
                         fileName: widget.state.fileDisplayName(file.name),
                         accent: accent,
-                        previewLines:
-                            _previewLinesByFileId[file.id] ?? const [],
+                        preview:
+                            _previewsByFileId[file.id] ?? OverlayFilePreviewData.empty,
                         previewsLoaded: _previewsLoaded,
                         strings: s,
                         padding: const EdgeInsets.all(12),

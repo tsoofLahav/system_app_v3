@@ -32,7 +32,7 @@ abstract final class AppIcons {
   static const bringFile = LucideIcons.folderInput200;
   static const drag = LucideIcons.gripVertical200;
   static const paneDrag = LucideIcons.gripHorizontal200;
-  static const arrange = paneDrag;
+  static const arrange = LucideIcons.layoutPanelTop200;
   static const close = LucideIcons.x200;
   static const trash = LucideIcons.trash2200;
   static const search = LucideIcons.search200;

@@ -189,7 +189,7 @@ class AppStrings {
     'bringFileFromTopicNamed': 'From {topic}',
     'bringFileDismiss': 'Dismiss brought file',
     'bringFilePreviewLoading': 'Loading preview…',
-    'bringFilePreviewEmpty': 'No preview text yet',
+    'bringFilePreviewEmpty': 'No content yet',
     'selectView': 'Select a view',
     'bySection': 'By section',
     'byTopic': 'By topic',

@@ -57,6 +57,18 @@ void main() {
     expect(draft.additional, isEmpty);
   });
 
+  test('demoteFromMain moves file to front of additional', () {
+    final draft = FileArrangeDraft(
+      main: [_file(1), _file(2)],
+      additional: [_file(3)],
+      layoutId: 'split',
+    );
+
+    expect(draft.demoteFromMain(1), isTrue);
+    expect(draft.main.map((f) => f.id), [1]);
+    expect(draft.additional.map((f) => f.id), [2, 3]);
+  });
+
   test('setLayoutId does not mutate order', () {
     final draft = FileArrangeDraft(
       main: [_file(1), _file(2)],

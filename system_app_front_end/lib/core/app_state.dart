@@ -198,19 +198,20 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  Future<Map<int, List<String>>> loadBringFilePreviews(List<AppFile> files) async {
-    final previews = <int, List<String>>{};
+  Future<Map<int, OverlayFilePreviewData>> loadBringFilePreviews(
+    List<AppFile> files,
+  ) async {
+    final previews = <int, OverlayFilePreviewData>{};
     await Future.wait(
       files.map((file) async {
         try {
           final blocks = await _blockService.listForFile(file.id);
-          previews[file.id] = await previewLinesForFile(
-            file,
+          previews[file.id] = await previewDataForFile(
             blocks,
             _taskService.listForBlock,
           );
         } catch (_) {
-          previews[file.id] = const [];
+          previews[file.id] = OverlayFilePreviewData.empty;
         }
       }),
     );

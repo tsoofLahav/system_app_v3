@@ -11,6 +11,7 @@ import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
 import '../../design_system/overlay_dialog_shell.dart';
 import '../../design_system/overlay_dialog_style.dart';
+import '../../features/bring_file/bring_file_preview.dart';
 import '../../design_system/overlay_file_preview_card.dart';
 import '../../design_system/horizontal_carousel.dart';
 
@@ -50,7 +51,7 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
 
   List<BrowseFileEntry> _entries = [];
   List<BrowseFileEntry> _filtered = [];
-  Map<int, List<String>> _previewLinesByFileId = {};
+  Map<int, OverlayFilePreviewData> _previewsByFileId = {};
   bool _loading = true;
   bool _previewsLoaded = false;
   String? _error;
@@ -114,7 +115,7 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
       );
       if (!mounted) return;
       setState(() {
-        _previewLinesByFileId = previews;
+        _previewsByFileId = previews;
         _previewsLoaded = true;
       });
     } catch (_) {
@@ -288,8 +289,8 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
                 );
                 final style = carouselEmphasisStyle(emphasis);
                 final accent = TopicAppearance.accentFor(entry.topic);
-                final previewLines =
-                    _previewLinesByFileId[entry.file.id] ?? const [];
+                final preview =
+                    _previewsByFileId[entry.file.id] ?? OverlayFilePreviewData.empty;
 
                 return IgnorePointer(
                   child: Transform.translate(
@@ -302,12 +303,14 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
                           width: _itemWidth,
                           height: _carouselHeight,
                           child: OverlayFilePreviewCard(
+                            file: entry.file,
+                            topic: entry.topic,
                             fileName: widget.state
                                 .fileDisplayName(entry.file.name),
                             topicLabel: widget.state
                                 .topicDisplayName(entry.topic),
                             accent: accent,
-                            previewLines: previewLines,
+                            preview: preview,
                             previewsLoaded: _previewsLoaded,
                             strings: widget.state.strings,
                           ),

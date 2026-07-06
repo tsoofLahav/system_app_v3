@@ -1,57 +1,41 @@
-import '../../core/models/app_file.dart';
 import '../../core/models/block.dart';
 import '../../core/models/task.dart';
 
-const bringFilePreviewMaxLines = 4;
+/// Blocks + task data used to render a read-only mini snapshot in overlay cards.
+class OverlayFilePreviewData {
+  const OverlayFilePreviewData({
+    required this.blocks,
+    required this.tasksByBlockId,
+  });
 
-List<String> previewLinesFromBlocks(
-  List<Block> blocks, {
-  int maxLines = bringFilePreviewMaxLines,
-}) {
-  final lines = <String>[];
+  final List<Block> blocks;
+  final Map<int, List<Task>> tasksByBlockId;
 
-  void addLine(String line) {
-    if (line.isEmpty || lines.length >= maxLines) return;
-    lines.add(line);
-  }
+  bool get isEmpty => blocks.isEmpty;
 
-  for (final block in blocks) {
-    if (lines.length >= maxLines) break;
-    switch (block.type) {
-      case 'header':
-        addLine(block.text.trim());
-      case 'text':
-      case 'summary':
-        for (final part in block.text.split('\n')) {
-          addLine(part.trim());
-          if (lines.length >= maxLines) break;
-        }
-      default:
-        continue;
-    }
-  }
-
-  return lines;
+  static const empty = OverlayFilePreviewData(
+    blocks: [],
+    tasksByBlockId: {},
+  );
 }
 
-Future<List<String>> previewLinesForFile(
-  AppFile file,
+/// How many top blocks to load tasks for and render in overlay snapshots.
+const overlayFilePreviewMaxBlocks = 8;
+
+Future<OverlayFilePreviewData> previewDataForFile(
   List<Block> blocks,
   Future<List<Task>> Function(int blockId) tasksForBlock,
 ) async {
-  final lines = previewLinesFromBlocks(blocks);
-  if (lines.isNotEmpty) return lines;
+  final previewBlocks = blocks.take(overlayFilePreviewMaxBlocks).toList();
+  final tasksByBlockId = <int, List<Task>>{};
 
-  for (final block in blocks) {
-    if (block.type != 'task_list') continue;
-    final tasks = await tasksForBlock(block.id);
-    for (final task in tasks) {
-      if (lines.length >= bringFilePreviewMaxLines) break;
-      final title = task.title.trim();
-      if (title.isNotEmpty) lines.add('• $title');
-    }
-    if (lines.isNotEmpty) break;
+  for (final block in previewBlocks) {
+    if (block.type != 'task' && block.type != 'task_list') continue;
+    tasksByBlockId[block.id] = await tasksForBlock(block.id);
   }
 
-  return lines;
+  return OverlayFilePreviewData(
+    blocks: blocks,
+    tasksByBlockId: tasksByBlockId,
+  );
 }

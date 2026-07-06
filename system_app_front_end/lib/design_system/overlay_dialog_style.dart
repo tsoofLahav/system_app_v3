@@ -5,7 +5,7 @@ abstract final class OverlayDialogStyle {
   /// Dark but not heavy — keeps frosted cards from looking muddy grey.
   static Color get barrierColor => Colors.black.withValues(alpha: 0.18);
 
-  static const fileCardTintOpacity = 0.24;
+  static const fileCardTintOpacity = 0.32;
   static const fileCardBorderRadius = 14.0;
 
   /// Bright lift glow for frosted cards on the dark overlay scrim.
