@@ -40,6 +40,8 @@ def run_action(rule, run=None):
         return rotate_daily_main_file(context)
     if action_type in {"process_refresh", "weekly_process_refresh"}:
         return process_refresh(context)
+    if action_type == "process_documentation_input":
+        return process_documentation_input(context)
     if action_type == "process_recap_update":
         return process_recap_update(context)
     if action_type == "project_summary_update":
@@ -169,6 +171,34 @@ def process_refresh(context):
 def weekly_process_refresh(context):
     """Deprecated alias for process_refresh."""
     return process_refresh(context)
+
+
+def process_documentation_input(context):
+    rule = context["rule"]
+    run = context["run"]
+    topic = context["topic"]
+    if topic is None:
+        raise ValueError("topic is required for process_documentation_input")
+
+    files_by_role = resolve_files_by_bindings(topic.id, context["params"])
+    doc_file = files_by_role.get("doc")
+    if doc_file is None:
+        result = {
+            "topic_id": topic.id,
+            "skipped": True,
+            "reason": "missing_doc_file",
+            "message": (
+                f"Cannot document process '{topic.name}': missing doc file."
+            ),
+        }
+    else:
+        result = {
+            "topic_id": topic.id,
+            "skipped": False,
+            "doc_file_id": doc_file.id,
+        }
+    _maybe_create_companion_task(rule, run, topic, result)
+    return result
 
 
 def process_recap_update(context):

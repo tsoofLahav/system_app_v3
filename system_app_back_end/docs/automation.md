@@ -60,6 +60,7 @@ Built-in automations are defined in code at `services/automation_definitions.py`
 | --- | --- | --- | --- | --- | --- |
 | `daily_rotation` | Main topic | `schedule`, `manual` | `daily` → type `main`, name `Daily` | — | — |
 | `process_refresh` | All `process` topics | `schedule`, `task`, `manual` | `plan`, `doc`, `tasks` | `process_update_review` in daily / Process updates | `smart_process_update` → `process_smart_update`, `process_refresh_skipped`; review `plan` + `tasks` |
+| `process_documentation_input` | All `process` topics | `task` | `doc` | `process_documentation_input` in daily / Process documentation | — |
 | `process_recap_update` | All `process` topics | `event`, `manual` | `plan`, `doc`, `tasks`, `overview` (write target) | — | `smart_process_recap_update` — direct write to recap |
 | `project_summary_update` | All `project` topics | `event`, `manual` | `plan`, `execution`, `tasks`, `doc`, `overview` (write target) | — | `smart_project_summary_update` — direct write to overview |
 | `view_task_reset` | Daily, weekly, monthly, and quarterly task views (configured by `params.view_resets`) | `schedule`, `manual` | — | one-time view acknowledgement | — |
@@ -130,6 +131,7 @@ The initial action library contains:
 - `archive_at_time`: archive a topic, file, block, or task at a configured time.
 - `rotate_daily_main_file`: archive the current main-topic `Daily` file and create a fresh `Daily` text file every day at 00:00.
 - `process_refresh`: for each process, locate plan/doc/tasks files by type order, call the smart process update AI action, and store a delta proposal. Finalize archives old files and recreates plan, empty documentation table, and tasks after user review.
+- `process_documentation_input`: for each process, stage a companion link on the trigger task when the user unchecks it. Opening the task launches a multi-process input dialog; saving writes `[date, text]` into the doc table (new row below any header) and appends the grade to a line graph. Missing doc table/graph blocks are created automatically. Skipping a process completes its companion link without writing.
 - `process_recap_update`: when plan, documentation, or tasks change in a process topic, regenerate the recap (`overview` file): AI-written summary, date-grouped update table, and a snapshot of flagged tasks. Writes blocks in place (no proposal or review).
 - `project_summary_update`: when plan, execution, documentation, or tasks change in a project topic, regenerate the overview from the project state and part structure. Writes directly to overview only (no proposal or review).
 - `view_task_reset`: for each configured task view schedule, turn completed tasks back to active, record tasks that were already active as missed, write an archived report file under the real `Automations` topic, and create a pending acknowledgement shown when the user next opens that view.
@@ -142,6 +144,15 @@ The initial action library contains:
 - **Run:** completed tasks in the target view are unchecked (`done` → `active`). Tasks that were already active are left unchanged and recorded as missed.
 - **Report:** each run creates an archived `doc` file in the `Automations` topic with reset/missed task details.
 - **Acknowledgement:** the run creates a pending `task_reset_acknowledgements` row; the frontend shows it once when opening the target view and marks it approved after the user confirms.
+
+### Process documentation input (`process_documentation_input`)
+
+- **Trigger:** `trigger_type=task`. User unchecks the configured trigger task to stage one pending companion link per process topic.
+- **Flow:** tapping the trigger task opens the `process_documentation_input` companion dialog. The user enters daily text and a 1–10 grade per process, or skips.
+- **Write API:** `POST /process_documentation_inputs` with `{ topic_id, text, grade, date?, timezone? }`.
+- **Doc table:** inserts `[date, text]` as a new row below any header row. Storage order is date-first so RTL tables show date on the right in Hebrew.
+- **Doc graph:** appends the date to `labels` and the grade to `values` on a line graph block, creating table/graph blocks when missing.
+- **Processes without a doc file:** staged as skipped companions; the dialog shows a warning and the user can skip without writing.
 
 ### Event recap (`process_recap_update`)
 

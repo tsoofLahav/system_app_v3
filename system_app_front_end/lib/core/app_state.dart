@@ -39,6 +39,7 @@ import 'services/block_service.dart';
 import 'services/bootstrap_service.dart';
 import 'services/file_service.dart';
 import 'services/image_service.dart';
+import 'services/process_documentation_input_service.dart';
 import 'services/task_service.dart';
 import 'services/task_reset_acknowledgement_service.dart';
 import 'services/task_view_service.dart';
@@ -103,6 +104,8 @@ class AppState extends ChangeNotifier {
       AutomationCompanionService(_api);
   late final TaskResetAcknowledgementService _taskResetAcknowledgementService =
       TaskResetAcknowledgementService(_api);
+  late final ProcessDocumentationInputService _processDocumentationInputService =
+      ProcessDocumentationInputService(_api);
 
   bool loading = true;
   bool appReady = false;
@@ -1176,6 +1179,37 @@ class AppState extends ChangeNotifier {
   Future<List<AutomationCompanionLink>> fetchPendingCompanionsForTask(
     int taskId,
   ) => _companionService.listPendingForTask(taskId);
+
+  Future<void> completeAutomationCompanion(int companionTaskId) =>
+      _completeCompanionTaskById(companionTaskId);
+
+  Future<void> submitProcessDocumentationInput({
+    required int topicId,
+    required String text,
+    required int grade,
+    int? companionTaskId,
+  }) async {
+    String? timezone;
+    for (final rule in automationRules) {
+      if (rule.key == 'process_documentation_input') {
+        timezone = rule.timezone;
+        break;
+      }
+    }
+    await _processDocumentationInputService.submit(
+      topicId: topicId,
+      text: text,
+      grade: grade,
+      timezone: timezone,
+    );
+    if (companionTaskId != null) {
+      await _completeCompanionTaskById(companionTaskId);
+    }
+    final topic = selectedTopic;
+    if (topic != null && topic.id == topicId) {
+      await selectTopic(topic, includeArchived: topic.isArchived);
+    }
+  }
 
   Future<bool> runCompanionTaskFlow(BuildContext context, Task task) =>
       AutomationFlowRegistry.run(context: context, state: this, task: task);

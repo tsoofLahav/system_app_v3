@@ -364,6 +364,14 @@ class AppStrings {
     'nextProcess': 'Next process',
     'processUpdateProgress': 'Process {current} of {total}',
     'processRefreshSkipped': 'Automatic process update skipped',
+    'processDocumentationInputLabel': 'Daily input',
+    'processDocumentationInputHint': 'What happened in this process today?',
+    'processDocumentationGradeLabel': 'Progress grade (1–10)',
+    'processDocumentationInputRequired':
+        'Enter daily input and choose a grade before saving.',
+    'processDocumentationMissingDoc':
+        'This process has no documentation file. Skip to continue.',
+    'skip': 'Skip',
     'dismiss': 'Dismiss',
     'unchanged': 'Unchanged',
     'suggestedChange': 'Suggested change',
@@ -603,6 +611,14 @@ class AppStrings {
     'nextProcess': 'תהליך הבא',
     'processUpdateProgress': 'תהליך {current} מתוך {total}',
     'processRefreshSkipped': 'עדכון תהליך אוטומטי דולג',
+    'processDocumentationInputLabel': 'קלט יומי',
+    'processDocumentationInputHint': 'מה קרה בתהליך הזה היום?',
+    'processDocumentationGradeLabel': 'ציון התקדמות (1–10)',
+    'processDocumentationInputRequired':
+        'יש להזין קלט יומי ולבחור ציון לפני השמירה.',
+    'processDocumentationMissingDoc':
+        'לתהליך זה אין קובץ תיעוד. דלג כדי להמשיך.',
+    'skip': 'דלג',
     'dismiss': 'סגור',
     'unchanged': 'ללא שינוי',
     'suggestedChange': 'שינוי מוצע',
@@ -664,6 +680,7 @@ class AppStrings {
     'process_recap_update': 'Update process recap',
     'project_summary_update': 'Update project summary',
     'view_task_reset': 'Reset view tasks',
+    'process_documentation_input': 'Process documentation input',
   };
 
   static const _automationNamesHe = {
@@ -672,6 +689,7 @@ class AppStrings {
     'process_recap_update': 'עדכון סיכום תהליך',
     'project_summary_update': 'עדכון סיכום פרויקט',
     'view_task_reset': 'איפוס משימות בתצוגה',
+    'process_documentation_input': 'קלט תיעוד תהליכים',
   };
 
   static const _automationDescriptionsEn = {
@@ -686,6 +704,8 @@ class AppStrings {
         'When project plan, execution, documentation, or tasks change, regenerate the project summary from its current structure.',
     'view_task_reset':
         'Manage daily, weekly, monthly, and quarterly schedules that uncheck completed tasks and record active tasks as missed.',
+    'process_documentation_input':
+        'For each process topic, collect daily documentation text and a progress grade, then write them into the doc table and graph.',
   };
 
   static const _automationDescriptionsHe = {
@@ -699,6 +719,8 @@ class AppStrings {
         'כשהתוכנית, הביצוע, התיעוד או המשימות של פרויקט משתנים, צור מחדש את סיכום הפרויקט לפי המבנה הנוכחי.',
     'view_task_reset':
         'נהל תזמונים יומיים, שבועיים, חודשיים ורבעוניים שמבטלים סימון משימות שהושלמו ורושמים משימות פעילות כמשימות שפוספסו.',
+    'process_documentation_input':
+        'עבור כל תהליך, אסוף קלט תיעוד יומי וציון התקדמות, וכתוב אותם לטבלת התיעוד ולגרף.',
   };
 
   static const _fileNamesEn = {

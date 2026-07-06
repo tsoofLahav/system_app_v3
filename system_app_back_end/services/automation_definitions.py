@@ -183,6 +183,32 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
         default_enabled=False,
         fan_out=True,
     ),
+    "process_documentation_input": AutomationDefinition(
+        key="process_documentation_input",
+        name="Process documentation input",
+        description=(
+            "For each process topic, collect daily documentation text and a "
+            "progress grade, then write them into the doc table and graph."
+        ),
+        action_type="process_documentation_input",
+        scope=ScopeConfig(
+            fixed={"kind": "topic_type", "topic_type": "process"},
+            allowed_kinds=("topic_type", "topic", "all"),
+        ),
+        activations=("task",),
+        bindings=(FileBinding(role="doc", match={"type": "doc"}),),
+        companion=CompanionConfig(
+            enabled=True,
+            flow_key="process_documentation_input",
+            title_template="Document processes",
+            default_view_type="daily",
+            default_section_name="Process documentation",
+        ),
+        ai=None,
+        default_schedule=None,
+        default_enabled=False,
+        fan_out=True,
+    ),
     "process_recap_update": AutomationDefinition(
         key="process_recap_update",
         name="Update process recap",

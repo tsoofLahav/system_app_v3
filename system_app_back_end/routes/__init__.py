@@ -6,6 +6,7 @@ from routes.automation_rules import automation_rules_bp
 from routes.automation_runs import automation_runs_bp
 from routes.blocks import blocks_bp
 from routes.files import files_bp
+from routes.process_documentation_inputs import process_documentation_inputs_bp
 from routes.task_views import task_views_bp
 from routes.task_reset_acknowledgements import task_reset_acknowledgements_bp
 from routes.tasks import tasks_bp
@@ -26,4 +27,5 @@ def register_blueprints(app):
     app.register_blueprint(tasks_bp)
     app.register_blueprint(task_views_bp)
     app.register_blueprint(task_reset_acknowledgements_bp)
+    app.register_blueprint(process_documentation_inputs_bp)
     app.register_blueprint(upload_bp)

@@ -66,6 +66,7 @@ Definitions drive the table below; see backend `docs/automation.md` for full reg
 | --- | --- | --- | --- |
 | `daily_rotation` | Every day at 00:00 | Main | Archive current main-topic `Daily` file and create a new `Daily` text file. |
 | `process_refresh` | User schedule (disabled by default) | All processes | For each process, refresh plan/doc/tasks via AI proposal; companion review task in daily view. |
+| `process_documentation_input` | Task trigger (disabled by default) | All processes | Uncheck trigger task to stage per-process companions; tap task to enter daily doc text and grade into each process documentation file. |
 | `process_recap_update` | On file change (enabled by default) | All processes | Regenerate process recap when plan, doc, or tasks change; direct AI write (no review). |
 | `project_summary_update` | On project file change (enabled by default) | All projects | Regenerate the project overview directly from project parts, execution, documentation, and tasks. |
 | `view_task_reset` | Per-view schedules (disabled by default) | Daily, weekly, monthly, quarterly task views | Uncheck completed tasks in each due view, record already-active tasks as missed, archive a report under Automations, and show a one-time acknowledgement when the view opens. |
@@ -102,6 +103,16 @@ The `process_smart_update` AI action reads plan, documentation, and tasks as fla
 
 Skipped processes create a `process_refresh_skipped` warning proposal on the process topic.
 
+## Process documentation input (`process_documentation_input`)
+
+Task-triggered companion flow separate from `process_refresh` and `process_recap_update`.
+
+- **Trigger:** user unchecks the configured automation trigger task to stage pending companion links for every process topic.
+- **Dialog:** tapping the trigger task opens `process_documentation_input_dialog.dart`, modeled after the process update batch dialog.
+- **Save:** `POST /process_documentation_inputs` writes `[date, text]` to the doc table and appends the grade to the doc line graph.
+- **Skip:** completes the companion link without writing.
+- **Registry:** `AutomationFlowRegistry` maps `flow_key=process_documentation_input` to the dialog.
+
 Change review UI lives in `lib/shared/change_review/` and works with any automation that produces a `change_set`.
 
 ## Archive
@@ -134,4 +145,6 @@ This automation is schedule-driven. The automation dialog keeps it as one main a
 - `lib/core/services/task_reset_acknowledgement_service.dart` — acknowledgement API client
 - `lib/features/task_view/task_view_pane.dart` — first-open acknowledgement dialog
 - `lib/core/registry/automation_flow_registry.dart` — companion `flow_key` → review dialog
+- `lib/features/shell/process_documentation_input_dialog.dart` — daily doc input batch dialog
+- `lib/core/services/process_documentation_input_service.dart` — write API client
 - `lib/features/shell/app_shell.dart` — completion snackbars
