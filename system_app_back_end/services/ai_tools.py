@@ -5,7 +5,9 @@ from urllib.request import urlopen
 
 from flask import current_app
 
-from models import Block, File, Task, Topic, db
+from models import Block, File, Topic, db
+from services.ai_interactive.smart_doc import run_smart_doc
+from services.ai_interactive.smart_list import run_smart_list
 from services.openai_service import chat_json, chat_text, generate_image
 
 
@@ -30,42 +32,6 @@ def _append_text_block(file_id: int, text: str) -> Block:
     db.session.add(block)
     db.session.flush()
     return block
-
-
-def _ensure_task_list_block(file_id: int) -> Block:
-    existing = (
-        Block.query.filter_by(file_id=file_id, type="task_list")
-        .order_by(Block.id)
-        .first()
-    )
-    if existing:
-        return existing
-    block = Block(
-        file_id=file_id,
-        type="task_list",
-        content={},
-        order_index=_next_order(file_id),
-    )
-    db.session.add(block)
-    db.session.flush()
-    return block
-
-
-def _add_task_to_file(file_id: int, title: str) -> Task:
-    list_block = _ensure_task_list_block(file_id)
-    task = Task(block_id=list_block.id, title=title, status="active")
-    db.session.add(task)
-    db.session.flush()
-    task_block = Block(
-        file_id=file_id,
-        type="task",
-        content={"task_id": task.id},
-        order_index=_next_order(file_id),
-    )
-    db.session.add(task_block)
-    db.session.flush()
-    return task
-
 
 
 def _save_image_bytes(data: bytes) -> str:
@@ -113,38 +79,6 @@ def _doc_candidates(files: list[File]) -> list[dict]:
     if not docs:
         docs = [f for f in files if f.type in ("overview", "protocol")]
     return [{"id": f.id, "name": f.name, "type": f.type} for f in docs]
-
-
-def _all_list_candidates() -> list[dict]:
-    """All task files across every topic (capture-first routing)."""
-    topics = Topic.query.filter(Topic.archived_at.is_(None)).order_by(Topic.id).all()
-    topic_by_id = {t.id: t for t in topics}
-
-    candidates: list[dict] = []
-
-    task_files = (
-        File.query.filter_by(type="tasks")
-        .filter(File.archived_at.is_(None))
-        .order_by(File.topic_id, File.order_index, File.id)
-        .all()
-    )
-    for f in task_files:
-        topic = topic_by_id.get(f.topic_id)
-        topic_name = topic.name if topic else "unknown"
-        candidates.append(
-            {
-                "kind": "tasks_file",
-                "file_id": f.id,
-                "topic_id": f.topic_id,
-                "topic_name": topic_name,
-                "topic_type": topic.type if topic else None,
-                "name": f.name,
-                "block_id": None,
-                "label": f"{topic_name} → {f.name}",
-            }
-        )
-
-    return candidates
 
 
 def _data_snippets(files: list[File], blocks: list[Block]) -> str:
@@ -211,40 +145,10 @@ def run_tool(tool: str, topic_id: int, context: dict, locale: str = "en") -> dic
         }
 
     if tool == "smart_list":
-        candidates = _all_list_candidates()
-        if not candidates:
-            raise ValueError("No lists found across topics")
+        return run_smart_list(text=text, source_topic_id=topic_id, locale=locale)
 
-        source_topic = topic.name
-        pick = chat_json(
-            "The user captured a thought in one topic and wants it added to the best "
-            "matching tasks file anywhere in the system. Lists may live in other topics "
-            "(e.g. grocery items → Home/Tasks, ideas → a project Tasks file). "
-            'Return JSON: {"kind": "tasks_file", "file_id": number, '
-            '"item_text": string, "reason": string}',
-            f"Captured in topic: {source_topic}\n"
-            f"Content to add:\n{text}\n\n"
-            f"All task file candidates (topic → file):\n"
-            f"{json.dumps(candidates, ensure_ascii=False)}",
-        )
-        item_text = (pick.get("item_text") or text).strip()
-        file_id = int(pick["file_id"])
-
-        task = _add_task_to_file(file_id, item_text)
-        db.session.commit()
-        f = File.query.get(file_id)
-        target_topic = Topic.query.get(f.topic_id) if f else None
-        return {
-            "tool": tool,
-            "action": "write",
-            "result": item_text,
-            "target_file_id": file_id,
-            "target_file_name": f.name if f else None,
-            "target_topic_id": target_topic.id if target_topic else None,
-            "target_topic_name": target_topic.name if target_topic else None,
-            "task_id": task.id,
-            "target_kind": "task",
-        }
+    if tool == "smart_doc":
+        return run_smart_doc(text=text, source_topic_id=topic_id, locale=locale)
 
     if tool == "create_image":
         prompt = chat_text(

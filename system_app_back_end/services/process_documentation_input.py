@@ -13,9 +13,9 @@ from services.automation_definitions import get_definition, resolve_files_by_bin
 from services.automation_dispatcher import dispatch_file_changed
 from services.automation_params import normalize_params
 from services.automation_schedule import DEFAULT_AUTOMATION_TIMEZONE
+from services.doc_table_rows import DEFAULT_TABLE_HEADER, insert_row_into_table_block
 
 _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_DEFAULT_TABLE_HEADER = ["Date", "Entry"]
 _DEFAULT_GRAPH_CONTENT = {
     "chart_type": "line",
     "title": "Progress",
@@ -64,7 +64,7 @@ def submit_process_documentation_input(
         doc_file,
         blocks,
         "table",
-        {"rows": [_DEFAULT_TABLE_HEADER[:], ["", ""]]},
+        {"rows": [DEFAULT_TABLE_HEADER[:], ["", ""]]},
         insert_before_types=("graph", "text"),
     )
     graph_block = _ensure_block(
@@ -75,7 +75,7 @@ def submit_process_documentation_input(
         insert_before_types=("text",),
     )
 
-    _insert_table_row(table_block, entry_date, cleaned_text)
+    insert_row_into_table_block(table_block, entry_date, cleaned_text)
     _append_graph_point(graph_block, entry_date, float(grade_value))
 
     db.session.flush()
@@ -133,45 +133,6 @@ def _ensure_block(file, blocks, block_type, default_content, insert_before_types
     db.session.add(new_block)
     db.session.flush()
     return new_block
-
-
-def _insert_table_row(table_block, entry_date: str, text: str) -> None:
-    content = dict(table_block.content or {})
-    rows = content.get("rows")
-    if not isinstance(rows, list):
-        rows = []
-
-    normalized_rows = []
-    for row in rows:
-        if isinstance(row, list):
-            normalized_rows.append([str(cell) for cell in row])
-        else:
-            normalized_rows.append([str(row)])
-
-    if not normalized_rows:
-        normalized_rows = [_DEFAULT_TABLE_HEADER[:], ["", ""]]
-    elif len(normalized_rows[0]) < 2:
-        first = normalized_rows[0]
-        normalized_rows[0] = [
-            str(first[0]) if first else "",
-            str(first[1]) if len(first) > 1 else "",
-        ]
-
-    insert_index = 1 if _looks_like_header_row(normalized_rows[0]) else 0
-    normalized_rows.insert(insert_index, [entry_date, text])
-
-    table_block.content = {"rows": normalized_rows}
-    flag_modified(table_block, "content")
-
-
-def _looks_like_header_row(row: list[str]) -> bool:
-    if not row:
-        return False
-    first = str(row[0]).strip()
-    if _ISO_DATE_RE.match(first):
-        return False
-    second = str(row[1]).strip() if len(row) > 1 else ""
-    return bool(first) or bool(second)
 
 
 def _append_graph_point(graph_block, entry_date: str, grade: float) -> None:

@@ -316,7 +316,7 @@ class AppState extends ChangeNotifier {
         hasDataForGraph) {
       ctx = ResolvedAiContext(
         text: '',
-        sourceType: AiSourceType.paragraph,
+        sourceType: AiSourceType.line,
         topicId: topic.id,
       );
     }
@@ -356,7 +356,7 @@ class AppState extends ChangeNotifier {
       tool,
       contextOverride: ResolvedAiContext(
         text: text.trim(),
-        sourceType: AiSourceType.paragraph,
+        sourceType: AiSourceType.line,
         topicId: topic.id,
         fileId: fileId,
         blockId: blockId,
@@ -381,7 +381,7 @@ class AppState extends ChangeNotifier {
         topicId: topic.id,
         context: ResolvedAiContext(
           text: prompt.trim(),
-          sourceType: AiSourceType.paragraph,
+          sourceType: AiSourceType.line,
           topicId: topic.id,
           fileId: file.id,
           blockId: boardBlock.id,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-enum AiSourceType { selection, paragraph, task }
+import '../text/line_range.dart';
+
+enum AiSourceType { selection, line, task }
 
 class AiFocus {
   const AiFocus({
@@ -41,25 +43,12 @@ class ResolvedAiContext {
       };
 }
 
-String? _selectedSubstring(String text, TextSelection? selection) {
-  if (selection == null || !selection.isValid || selection.isCollapsed) {
-    return null;
-  }
-  final start = selection.start.clamp(0, text.length);
-  final end = selection.end.clamp(0, text.length);
-  if (start >= end) return null;
-  final slice = text.substring(start, end).trim();
+String? _textFromSelection(String text, TextSelection? selection) {
+  if (selection == null || !selection.isValid) return null;
+  final range = LineRange.resolve(text, selection);
+  if (!range.isValid) return null;
+  final slice = text.substring(range.start, range.end).trim();
   return slice.isEmpty ? null : slice;
-}
-
-String? _lastParagraph(String text) {
-  final parts = text.split(RegExp(r'\n\s*\n'));
-  for (var i = parts.length - 1; i >= 0; i--) {
-    final p = parts[i].trim();
-    if (p.isNotEmpty) return p;
-  }
-  final lines = text.trim();
-  return lines.isEmpty ? null : lines;
 }
 
 abstract final class AiContextResolver {
@@ -71,29 +60,19 @@ abstract final class AiContextResolver {
   }) {
     if (topicId == null) return null;
 
-    if (focus != null) {
-      final selected = _selectedSubstring(focus.fullText, focus.selection);
+    if (focus != null && focus.selection != null) {
+      final selected = _textFromSelection(focus.fullText, focus.selection);
       if (selected != null) {
+        final sourceType = focus.selection!.isCollapsed
+            ? AiSourceType.line
+            : AiSourceType.selection;
         return ResolvedAiContext(
           text: selected,
-          sourceType: AiSourceType.selection,
+          sourceType: sourceType,
           topicId: topicId,
           fileId: focus.fileId,
           blockId: focus.blockId,
         );
-      }
-
-      if (!focus.isTaskInput && focus.fullText.trim().isNotEmpty) {
-        final paragraph = _lastParagraph(focus.fullText);
-        if (paragraph != null) {
-          return ResolvedAiContext(
-            text: paragraph,
-            sourceType: AiSourceType.paragraph,
-            topicId: topicId,
-            fileId: focus.fileId,
-            blockId: focus.blockId,
-          );
-        }
       }
     }
 
