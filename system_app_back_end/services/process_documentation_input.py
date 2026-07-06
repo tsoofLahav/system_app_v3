@@ -191,6 +191,9 @@ def _append_graph_point(graph_block, entry_date: str, grade: float) -> None:
         else:
             next_values.append(float(str(item)) if str(item).strip() else 0.0)
 
+    if entry_date in next_labels:
+        raise ValueError("A grade already exists for this date")
+
     next_labels.append(entry_date)
     next_values.append(grade)
 

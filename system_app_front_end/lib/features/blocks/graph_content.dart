@@ -100,3 +100,47 @@ Map<String, dynamic> graphContentWithColumns({
 
 int nextGraphPaletteIndex(Map<String, dynamic> content) =>
     (graphPaletteIndex(content) + 1) % kGraphColorPalettes.length;
+
+final _isoDatePattern = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$');
+final _shortDatePattern = RegExp(r'^(\d{2})-(\d{2})$');
+
+/// Chart axis label: drop the year for ISO dates, keep everything else as-is.
+String graphAxisLabel(String label) {
+  final trimmed = label.trim();
+  final iso = _isoDatePattern.firstMatch(trimmed);
+  if (iso != null) {
+    return '${iso.group(2)}-${iso.group(3)}';
+  }
+  return trimmed;
+}
+
+/// Canonical day key for duplicate detection. Non-date labels return null.
+String? graphDayKey(String label, {int? referenceYear}) {
+  final trimmed = label.trim();
+  final iso = _isoDatePattern.firstMatch(trimmed);
+  if (iso != null) {
+    return '${iso.group(1)}-${iso.group(2)}-${iso.group(3)}';
+  }
+  final short = _shortDatePattern.firstMatch(trimmed);
+  if (short != null) {
+    final year = referenceYear ?? DateTime.now().year;
+    return '$year-${short.group(1)}-${short.group(2)}';
+  }
+  return null;
+}
+
+bool graphDayKeyConflicts(
+  List<String> labels,
+  int index,
+  String candidate, {
+  int? referenceYear,
+}) {
+  final key = graphDayKey(candidate, referenceYear: referenceYear);
+  if (key == null) return false;
+  for (var i = 0; i < labels.length; i++) {
+    if (i == index) continue;
+    final other = graphDayKey(labels[i], referenceYear: referenceYear);
+    if (other != null && other == key) return true;
+  }
+  return false;
+}

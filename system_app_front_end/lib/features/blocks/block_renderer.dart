@@ -157,6 +157,7 @@ class BlockRenderer extends StatelessWidget {
         return GraphBlockWidget(
           block: block,
           emptyLabel: s['graphPlaceholder'],
+          duplicateDayMessage: s['graphDuplicateDay'],
           onChanged: (c) => state.updateBlockContent(block, c, notify: true),
         );
       case 'board':

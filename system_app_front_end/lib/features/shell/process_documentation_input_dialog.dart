@@ -157,8 +157,11 @@ class _ProcessDocumentationInputDialogState
       await _advanceQueue();
     } catch (error) {
       if (!mounted) return;
+      final message = error.toString();
       setState(() {
-        _error = error.toString();
+        _error = message.contains('grade already exists')
+            ? _strings['processDocumentationDuplicateGrade']
+            : message;
         _submitting = false;
       });
       return;

@@ -267,6 +267,7 @@ class AppStrings {
     'measurement': 'Measurement',
     'tableRows': 'Table: {count} rows',
     'graphPlaceholder': 'Enter values below',
+    'graphDuplicateDay': 'Only one grade per day is allowed',
     'unknownBlock': 'Unknown block: {type}',
     'searchEmoji': 'Search emoji',
     'chooseEmoji': 'Choose an emoji',
@@ -372,6 +373,8 @@ class AppStrings {
         'Enter daily input and choose a grade before saving.',
     'processDocumentationMissingDoc':
         'This process has no documentation file. Skip to continue.',
+    'processDocumentationDuplicateGrade':
+        'A grade already exists for this date. Change it in the graph.',
     'skip': 'Skip',
     'dismiss': 'Dismiss',
     'unchanged': 'Unchanged',
@@ -516,6 +519,7 @@ class AppStrings {
     'measurement': 'מדידה',
     'tableRows': 'טבלה: {count} שורות',
     'graphPlaceholder': 'הזן ערכים למטה',
+    'graphDuplicateDay': 'מותר ציון אחד בלבד ליום',
     'unknownBlock': 'בלוק לא ידוע: {type}',
     'searchEmoji': 'חפש אמוג\'י',
     'chooseEmoji': 'בחר אמוג\'י',
@@ -620,6 +624,8 @@ class AppStrings {
         'יש להזין קלט יומי ולבחור ציון לפני השמירה.',
     'processDocumentationMissingDoc':
         'לתהליך זה אין קובץ תיעוד. דלג כדי להמשיך.',
+    'processDocumentationDuplicateGrade':
+        'כבר קיים ציון לתאריך הזה. עדכן אותו בגרף.',
     'skip': 'דלג',
     'dismiss': 'סגור',
     'unchanged': 'ללא שינוי',

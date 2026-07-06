@@ -12,11 +12,38 @@ class GraphBlockWidget extends StatelessWidget {
     required this.block,
     required this.onChanged,
     this.emptyLabel = '',
+    this.duplicateDayMessage = '',
   });
 
   final Block block;
   final ValueChanged<Map<String, dynamic>> onChanged;
   final String emptyLabel;
+  final String duplicateDayMessage;
+
+  void _showDuplicateDayMessage(BuildContext context) {
+    final message = duplicateDayMessage.trim();
+    if (message.isEmpty) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  bool _commitLabel(
+    BuildContext context,
+    List<String> labels,
+    List<double> values,
+    int index,
+    String text,
+  ) {
+    if (graphDayKeyConflicts(labels, index, text)) {
+      _showDuplicateDayMessage(context);
+      return false;
+    }
+    final next = [...labels];
+    next[index] = text;
+    _emit(labels: next, values: values);
+    return true;
+  }
 
   void _emit({
     List<String>? labels,
@@ -81,11 +108,8 @@ class GraphBlockWidget extends StatelessWidget {
           _GraphDataGrid(
             labels: labels,
             values: values,
-            onLabelChanged: (index, text) {
-              final next = [...labels];
-              next[index] = text;
-              _emit(labels: next, values: values);
-            },
+            onLabelCommitted: (index, text) =>
+                _commitLabel(context, labels, values, index, text),
             onValueCommitted: (index, text) {
               final next = [...values];
               next[index] = double.tryParse(text.trim()) ?? 0;
@@ -106,13 +130,15 @@ class GraphBlockWidget extends StatelessWidget {
         sideTitles: SideTitles(
           showTitles: true,
           reservedSize: 22,
+          interval: 1,
           getTitlesWidget: (v, _) {
-            final i = v.toInt();
+            final i = v.round();
+            if ((v - i).abs() > 0.001) return const SizedBox.shrink();
             if (i < 0 || i >= labels.length) return const SizedBox.shrink();
             return Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                labels[i],
+                graphAxisLabel(labels[i]),
                 style: AppTypography.metaStyle.copyWith(fontSize: 10),
               ),
             );
@@ -130,7 +156,7 @@ class GraphBlockWidget extends StatelessWidget {
       getTooltipColor: (_) => AppColors.noteTop,
       getTooltipItem: (group, groupIndex, rod, rodIndex) {
         final i = group.x.toInt();
-        final label = i >= 0 && i < labels.length ? labels[i] : '';
+        final label = i >= 0 && i < labels.length ? graphAxisLabel(labels[i]) : '';
         return BarTooltipItem(
           '$label\n${rod.toY.toStringAsFixed(rod.toY.truncateToDouble() == rod.toY ? 0 : 1)}',
           AppTypography.metaStyle.copyWith(
@@ -181,8 +207,11 @@ class GraphBlockWidget extends StatelessWidget {
   Widget _lineChart(List<String> labels, List<double> values, List<Color> colors) {
     final maxY = values.fold<double>(1, (a, b) => a > b ? a : b) * 1.15;
     final lineColor = colors.isNotEmpty ? colors.first : AppColors.aiCyan;
+    final maxX = labels.isEmpty ? 0.0 : (labels.length - 1).toDouble();
     return LineChart(
       LineChartData(
+        minX: 0,
+        maxX: maxX,
         maxY: maxY,
         gridData: FlGridData(
           show: true,
@@ -203,7 +232,7 @@ class GraphBlockWidget extends StatelessWidget {
             getTooltipItems: (spots) => [
               for (final spot in spots)
                 LineTooltipItem(
-                  labels[spot.x.toInt()],
+                  graphAxisLabel(labels[spot.x.toInt()]),
                   AppTypography.metaStyle.copyWith(
                     color: AppColors.text,
                     fontSize: 11,
@@ -279,13 +308,13 @@ class _GraphDataGrid extends StatefulWidget {
   const _GraphDataGrid({
     required this.labels,
     required this.values,
-    required this.onLabelChanged,
+    required this.onLabelCommitted,
     required this.onValueCommitted,
   });
 
   final List<String> labels;
   final List<double> values;
-  final void Function(int index, String text) onLabelChanged;
+  final bool Function(int index, String text) onLabelCommitted;
   final void Function(int index, String text) onValueCommitted;
 
   @override
@@ -372,7 +401,7 @@ class _GraphDataGridState extends State<_GraphDataGrid> {
                         fontWeight: FontWeight.w500,
                       ),
                       hint: '—',
-                      onChanged: (v) => widget.onLabelChanged(i, v),
+                      onCommitted: (v) => widget.onLabelCommitted(i, v),
                     ),
                   ),
               ],
@@ -397,8 +426,10 @@ class _GraphDataGridState extends State<_GraphDataGrid> {
                         signed: true,
                       ),
                       hint: '0',
-                      commitOnChange: false,
-                      onCommitted: (v) => widget.onValueCommitted(i, v),
+                      onCommitted: (v) {
+                        widget.onValueCommitted(i, v);
+                        return true;
+                      },
                     ),
                   ),
               ],
@@ -426,17 +457,13 @@ class _GraphCell extends StatefulWidget {
     this.hint = '',
     this.keyboardType,
     this.nextFocus,
-    this.onChanged,
     this.onCommitted,
-    this.commitOnChange = true,
   });
 
   final String text;
   final FocusNode focusNode;
   final FocusNode? nextFocus;
-  final ValueChanged<String>? onChanged;
-  final ValueChanged<String>? onCommitted;
-  final bool commitOnChange;
+  final bool Function(String text)? onCommitted;
   final TextStyle style;
   final TextAlign align;
   final String hint;
@@ -471,10 +498,12 @@ class _GraphCellState extends State<_GraphCell> {
 
   void _commit({bool moveNext = false}) {
     final text = _controller.text;
-    if (widget.commitOnChange) {
-      widget.onChanged?.call(text);
-    } else {
-      widget.onCommitted?.call(text);
+    if (widget.onCommitted != null) {
+      final accepted = widget.onCommitted!(text);
+      if (!accepted) {
+        _controller.text = widget.text;
+        return;
+      }
     }
     if (moveNext) {
       final next = widget.nextFocus;
@@ -507,7 +536,6 @@ class _GraphCellState extends State<_GraphCell> {
           hint: widget.hint,
           fontSize: widget.style.fontSize ?? 12,
         ),
-        onChanged: widget.commitOnChange ? widget.onChanged : null,
         onSubmitted: (_) => _commit(moveNext: true),
         onEditingComplete: () => _commit(moveNext: false),
       ),
