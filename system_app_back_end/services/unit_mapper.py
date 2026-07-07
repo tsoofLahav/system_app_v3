@@ -81,6 +81,30 @@ def flatten_file_by_parts_for_ai(units, title):
     return "\n".join(lines).strip()
 
 
+def summarize_parts_for_mapping(units, max_essence_lines=4):
+    """Compact per-part essence for Step 0 overlap detection."""
+    lines = []
+    current_part = None
+    essence_count = 0
+
+    for unit in units:
+        kind = unit.get("kind")
+        text = (unit.get("text") or "").strip()
+        if kind == "header":
+            if current_part is not None:
+                lines.append("")
+            current_part = text or "(untitled)"
+            essence_count = 0
+            lines.append(f"PART: {current_part}")
+            continue
+        if not text or essence_count >= max_essence_lines:
+            continue
+        lines.append(f"  - {text}")
+        essence_count += 1
+
+    return "\n".join(lines).strip() or "(no parts)"
+
+
 def flatten_units_for_ai(units, title):
     return flatten_file_by_parts_for_ai(units, title)
 

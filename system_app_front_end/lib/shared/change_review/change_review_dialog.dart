@@ -170,11 +170,13 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
       _unitKeys.putIfAbsent(unitId, GlobalKey.new);
 
   List<ChangeItem> _orderedChanges(ChangeDocument document) {
-    final byUnit = document.changesByUnitId;
+    final byUnit = <String, List<ChangeItem>>{};
+    for (final change in document.changes) {
+      byUnit.putIfAbsent(change.unitId, () => []).add(change);
+    }
     final items = <ChangeItem>[];
     for (final unit in document.units) {
-      final change = byUnit[unit.id];
-      if (change != null) items.add(change);
+      items.addAll(byUnit[unit.id] ?? const []);
     }
     return items;
   }
@@ -356,6 +358,9 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
           groupByParts:
               widget.reviewMode == ChangeReviewMode.projectUpdate &&
               document.key != 'doc',
+          appendOnlyDoc:
+              widget.reviewMode == ChangeReviewMode.projectUpdate &&
+              document.key == 'doc',
         ),
       );
     }
@@ -396,6 +401,9 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
           groupByParts:
               widget.reviewMode == ChangeReviewMode.projectUpdate &&
               active.key != 'doc',
+          appendOnlyDoc:
+              widget.reviewMode == ChangeReviewMode.projectUpdate &&
+              active.key == 'doc',
         ),
         if (_awaitingHandoff) ...[
           const SizedBox(height: 12),
@@ -575,6 +583,7 @@ class _DocumentReview extends StatelessWidget {
     required this.activeChangeId,
     required this.keyForUnit,
     this.groupByParts = false,
+    this.appendOnlyDoc = false,
   });
 
   final ChangeDocument document;
@@ -582,9 +591,18 @@ class _DocumentReview extends StatelessWidget {
   final String? activeChangeId;
   final GlobalKey Function(String unitId) keyForUnit;
   final bool groupByParts;
+  final bool appendOnlyDoc;
 
   @override
   Widget build(BuildContext context) {
+    if (appendOnlyDoc) {
+      return _DocAppendOnlyReview(
+        document: document,
+        decisions: decisions,
+        activeChangeId: activeChangeId,
+        keyForUnit: keyForUnit,
+      );
+    }
     if (groupByParts) {
       return _PartGroupedDocumentReview(
         document: document,
@@ -594,7 +612,7 @@ class _DocumentReview extends StatelessWidget {
       );
     }
 
-    final changesByUnit = document.changesByUnitId;
+    final changesByUnit = _changesByUnitId(document.changes);
     if (document.units.isEmpty) {
       return Text('…', style: AppTypography.noteBodyStyle);
     }
@@ -603,31 +621,19 @@ class _DocumentReview extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final unit in document.units) ...[
-          if (_shouldShowUnit(unit, changesByUnit[unit.id], decisions))
-            _UnitRow(
-              unit: unit,
-              change: changesByUnit[unit.id],
-              decision: _decisionFor(changesByUnit[unit.id], decisions),
-              isActive: changesByUnit[unit.id]?.id == activeChangeId,
-              unitKey: keyForUnit(unit.id),
-            ),
-          if (_shouldShowAddition(unit, changesByUnit[unit.id], decisions))
-            _AddedUnitRow(
-              text: changesByUnit[unit.id]!.newText,
-              isHeader: changesByUnit[unit.id]!.newUnitKind == 'header',
-            ),
+          ..._rowsForUnit(
+            unit: unit,
+            changes: changesByUnit[unit.id] ?? const [],
+            decisions: decisions,
+            activeChangeId: activeChangeId,
+            keyForUnit: keyForUnit,
+          ),
         ],
       ],
     );
   }
 
-  bool? _decisionFor(ChangeItem? change, Map<String, bool> decisions) {
-    if (change == null) return null;
-    if (!decisions.containsKey(change.id)) return null;
-    return decisions[change.id];
-  }
-
-  static bool _shouldShowUnit(
+  static bool shouldShowUnit(
     ChangeUnit unit,
     ChangeItem? change,
     Map<String, bool> decisions,
@@ -638,13 +644,185 @@ class _DocumentReview extends StatelessWidget {
     return true;
   }
 
-  static bool _shouldShowAddition(
+  static bool shouldShowAddition(
     ChangeUnit unit,
-    ChangeItem? change,
+    ChangeItem change,
     Map<String, bool> decisions,
   ) {
-    if (change == null || decisions[change.id] != true) return false;
+    if (decisions[change.id] != true) return false;
     return change.action == 'add_after' || change.action == 'add_row';
+  }
+}
+
+Map<String, List<ChangeItem>> _changesByUnitId(List<ChangeItem> changes) {
+  final map = <String, List<ChangeItem>>{};
+  for (final change in changes) {
+    map.putIfAbsent(change.unitId, () => []).add(change);
+  }
+  return map;
+}
+
+List<Widget> _rowsForUnit({
+  required ChangeUnit unit,
+  required List<ChangeItem> changes,
+  required Map<String, bool> decisions,
+  required String? activeChangeId,
+  required GlobalKey Function(String unitId) keyForUnit,
+  bool isContext = false,
+}) {
+  final rows = <Widget>[];
+  if (changes.isEmpty) {
+    rows.add(
+      _UnitRow(
+        unit: unit,
+        change: null,
+        decision: null,
+        isActive: false,
+        unitKey: keyForUnit(unit.id),
+        emphasizeHeader: unit.kind == 'header',
+        isContext: isContext,
+      ),
+    );
+    return rows;
+  }
+
+  final hasReplaceOrRemove = changes.any(
+    (change) => change.action == 'replace' || change.action == 'remove',
+  );
+  if (hasReplaceOrRemove) {
+    final primary = changes.firstWhere(
+      (change) => change.action == 'replace' || change.action == 'remove',
+      orElse: () => changes.first,
+    );
+    if (_DocumentReview.shouldShowUnit(unit, primary, decisions)) {
+      rows.add(
+        _UnitRow(
+          unit: unit,
+          change: primary,
+          decision: _decisionFor(primary, decisions),
+          isActive: primary.id == activeChangeId,
+          unitKey: keyForUnit(unit.id),
+          emphasizeHeader: unit.kind == 'header',
+          isContext: isContext,
+        ),
+      );
+    }
+  } else if (isContext) {
+    rows.add(
+      _UnitRow(
+        unit: unit,
+        change: null,
+        decision: null,
+        isActive: false,
+        unitKey: keyForUnit(unit.id),
+        emphasizeHeader: unit.kind == 'header',
+        isContext: true,
+      ),
+    );
+  }
+
+  for (final change in changes) {
+    if (_DocumentReview.shouldShowAddition(unit, change, decisions)) {
+      rows.add(
+        _AddedUnitRow(
+          text: change.newText,
+          isHeader: change.newUnitKind == 'header',
+          unitKey: keyForUnit(unit.id),
+        ),
+      );
+    } else if (_showPendingAddition(change, decisions) &&
+        (change.action == 'add_after' || change.action == 'add_row')) {
+      rows.add(
+        _PendingAdditionRow(
+          text: change.newText,
+          isHeader: change.newUnitKind == 'header',
+          unitKey: keyForUnit(unit.id),
+          isActive: change.id == activeChangeId,
+        ),
+      );
+    }
+  }
+  return rows;
+}
+
+bool? _decisionFor(ChangeItem? change, Map<String, bool> decisions) {
+  if (change == null) return null;
+  if (!decisions.containsKey(change.id)) return null;
+  return decisions[change.id];
+}
+
+bool _showPendingAddition(ChangeItem change, Map<String, bool> decisions) {
+  if (decisions.containsKey(change.id)) return false;
+  return change.action == 'add_after' || change.action == 'add_row';
+}
+
+class _DocAppendOnlyReview extends StatelessWidget {
+  const _DocAppendOnlyReview({
+    required this.document,
+    required this.decisions,
+    required this.activeChangeId,
+    required this.keyForUnit,
+  });
+
+  final ChangeDocument document;
+  final Map<String, bool> decisions;
+  final String? activeChangeId;
+  final GlobalKey Function(String unitId) keyForUnit;
+
+  @override
+  Widget build(BuildContext context) {
+    final changesByUnit = _changesByUnitId(document.changes);
+    final anchorIds = changesByUnit.keys.toSet();
+    final children = <Widget>[];
+
+    for (final unit in document.units) {
+      final unitChanges = changesByUnit[unit.id] ?? const [];
+      final isAnchorOnly = anchorIds.contains(unit.id) && unitChanges.isNotEmpty;
+      if (isAnchorOnly && unit.text.trim().isEmpty) continue;
+
+      children.addAll(
+        _rowsForUnit(
+          unit: unit,
+          changes: const [],
+          decisions: decisions,
+          activeChangeId: activeChangeId,
+          keyForUnit: keyForUnit,
+          isContext: true,
+        ),
+      );
+    }
+
+    for (final change in document.changes) {
+      if (change.action != 'add_row') continue;
+      final anchor = document.units
+          .where((unit) => unit.id == change.unitId)
+          .firstOrNull;
+      if (anchor == null) continue;
+      if (_DocumentReview.shouldShowAddition(anchor, change, decisions)) {
+        children.add(
+          _AddedUnitRow(
+            text: change.newText,
+            unitKey: keyForUnit(change.unitId),
+          ),
+        );
+      } else if (_showPendingAddition(change, decisions)) {
+        children.add(
+          _PendingAdditionRow(
+            text: change.newText,
+            unitKey: keyForUnit(change.unitId),
+            isActive: change.id == activeChangeId,
+          ),
+        );
+      }
+    }
+
+    if (children.isEmpty) {
+      return Text('…', style: AppTypography.noteBodyStyle);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
   }
 }
 
@@ -681,77 +859,67 @@ class _PartGroupedDocumentReview extends StatelessWidget {
                 color: AppColors.noteBorder.withValues(alpha: 0.45),
               ),
             ),
-          _PartHeaderBanner(title: sections[i].title),
-          const SizedBox(height: 8),
+          if (sections[i].showTitle)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _PartSectionTitle(title: sections[i].title),
+            ),
           for (final entry in sections[i].entries) ...[
-            if (entry.showUnit)
-              _UnitRow(
-                unit: entry.unit,
-                change: entry.change,
-                decision: _decisionFor(entry.change),
-                isActive: entry.change?.id == activeChangeId,
-                unitKey: keyForUnit(entry.unit.id),
-                emphasizeHeader: entry.unit.kind == 'header',
-              )
-            else if (_showPendingAddition(entry))
-              _PendingAdditionRow(
-                text: entry.change!.newText,
-                isHeader: entry.change!.newUnitKind == 'header',
-                unitKey: keyForUnit(entry.unit.id),
-                isActive: entry.change?.id == activeChangeId,
-              ),
-            if (entry.showAddition)
-              _AddedUnitRow(
-                text: entry.change!.newText,
-                isHeader: entry.change!.newUnitKind == 'header',
-                unitKey: keyForUnit(entry.unit.id),
-              ),
+            ..._rowsForUnit(
+              unit: entry.unit,
+              changes: entry.changes,
+              decisions: decisions,
+              activeChangeId: activeChangeId,
+              keyForUnit: keyForUnit,
+              isContext: entry.isContext,
+            ),
           ],
         ],
       ],
     );
   }
-
-  bool? _decisionFor(ChangeItem? change) {
-    if (change == null) return null;
-    if (!decisions.containsKey(change.id)) return null;
-    return decisions[change.id];
-  }
-
-  bool _showPendingAddition(_PartEntryView entry) {
-    final change = entry.change;
-    if (change == null || entry.showUnit || entry.showAddition) return false;
-    if (decisions.containsKey(change.id)) return false;
-    return change.action == 'add_after' || change.action == 'add_row';
-  }
 }
 
 class _PartSectionView {
-  const _PartSectionView({required this.title, required this.entries});
+  const _PartSectionView({
+    required this.title,
+    required this.entries,
+    this.showTitle = true,
+  });
 
   final String title;
   final List<_PartEntryView> entries;
+  final bool showTitle;
 }
 
 class _PartEntryView {
   const _PartEntryView({
     required this.unit,
-    required this.change,
-    required this.showUnit,
-    required this.showAddition,
+    required this.changes,
+    this.isContext = false,
   });
 
   final ChangeUnit unit;
-  final ChangeItem? change;
-  final bool showUnit;
-  final bool showAddition;
+  final List<ChangeItem> changes;
+  final bool isContext;
+}
+
+bool _partHasChanges(
+  List<ChangeUnit> units,
+  Map<String, List<ChangeItem>> changesByUnit,
+) {
+  for (final unit in units) {
+    final changes = changesByUnit[unit.id] ?? const [];
+    if (changes.isNotEmpty) return true;
+  }
+  return false;
 }
 
 List<_PartSectionView> _partSectionsWithChanges(
   ChangeDocument document,
   Map<String, bool> decisions,
 ) {
-  final changesByUnit = document.changesByUnitId;
+  final changesByUnit = _changesByUnitId(document.changes);
   final partOrder = <String>[];
   final partUnits = <String, List<ChangeUnit>>{};
   var currentPart = '';
@@ -770,99 +938,144 @@ List<_PartSectionView> _partSectionsWithChanges(
   }
 
   final sections = <_PartSectionView>[];
-  final deferredNewParts = <_PartEntryView>[];
+  final consumedChangeIds = <String>{};
+  final deferredAnchorIds = <String>{};
 
   for (final partName in partOrder) {
     final units = partUnits[partName] ?? const [];
-    final entries = <_PartEntryView>[];
+    if (!_partHasChanges(units, changesByUnit)) continue;
 
+    var onlyDeferredHeader = true;
     for (final unit in units) {
-      final change = changesByUnit[unit.id];
-      final hasChange = change != null;
-      if (hasChange &&
-          change.action == 'add_after' &&
-          change.newUnitKind == 'header' &&
-          change.newText.trim().isNotEmpty &&
-          change.newText.trim() != partName.trim()) {
-        if (decisions[change.id] == false) continue;
-        final showAddition = _DocumentReview._shouldShowAddition(
-          unit,
-          change,
-          decisions,
-        );
-        deferredNewParts.add(
-          _PartEntryView(
-            unit: unit,
-            change: change,
-            showUnit: false,
-            showAddition: showAddition,
-          ),
-        );
-        continue;
+      for (final change in changesByUnit[unit.id] ?? const []) {
+        if (change.action == 'add_after' &&
+            change.newUnitKind == 'header' &&
+            change.newText.trim().isNotEmpty &&
+            change.newText.trim() != partName.trim()) {
+          if (decisions[change.id] != false) {
+            deferredAnchorIds.add(unit.id);
+          }
+          continue;
+        }
+        onlyDeferredHeader = false;
+      }
+    }
+    if (onlyDeferredHeader && deferredAnchorIds.isNotEmpty) {
+      continue;
+    }
+
+    final entries = <_PartEntryView>[];
+    for (final unit in units) {
+      final changes = changesByUnit[unit.id] ?? const [];
+      final keptChanges = <ChangeItem>[];
+
+      for (final change in changes) {
+        if (change.action == 'add_after' &&
+            change.newUnitKind == 'header' &&
+            change.newText.trim().isNotEmpty &&
+            change.newText.trim() != partName.trim()) {
+          continue;
+        }
+        keptChanges.add(change);
+        consumedChangeIds.add(change.id);
       }
 
-      final showUnit =
-          hasChange && _DocumentReview._shouldShowUnit(unit, change, decisions);
-      final showAddition = hasChange &&
-          _DocumentReview._shouldShowAddition(unit, change, decisions);
-
-      if (!showUnit && !showAddition) continue;
       entries.add(
         _PartEntryView(
           unit: unit,
-          change: change,
-          showUnit: showUnit,
-          showAddition: showAddition,
+          changes: keptChanges,
+          isContext: keptChanges.isEmpty,
         ),
       );
     }
 
     if (entries.isEmpty) continue;
-
     final title = partName.trim().isEmpty ? '…' : partName.trim();
-    sections.add(_PartSectionView(title: title, entries: entries));
+    sections.add(
+      _PartSectionView(
+        title: title,
+        entries: entries,
+        showTitle: !entries.any((entry) => entry.unit.kind == 'header'),
+      ),
+    );
   }
 
-  final deferredByPart = <String, List<_PartEntryView>>{};
-  for (final entry in deferredNewParts) {
-    final title = entry.change!.newText.trim();
-    deferredByPart.putIfAbsent(title, () => []).add(entry);
+  final deferredSections = _deferredNewPartSections(
+    document,
+    decisions,
+    consumedChangeIds,
+    deferredAnchorIds,
+  );
+  sections.addAll(deferredSections);
+
+  return sections;
+}
+
+List<_PartSectionView> _deferredNewPartSections(
+  ChangeDocument document,
+  Map<String, bool> decisions,
+  Set<String> consumedChangeIds,
+  Set<String> deferredAnchorIds,
+) {
+  final sections = <_PartSectionView>[];
+  final byAnchor = <String, List<ChangeItem>>{};
+  for (final change in document.changes) {
+    if (consumedChangeIds.contains(change.id)) continue;
+    if (change.action != 'add_after') continue;
+    if (decisions[change.id] == false) continue;
+    if (!deferredAnchorIds.contains(change.unitId)) continue;
+    byAnchor.putIfAbsent(change.unitId, () => []).add(change);
   }
-  for (final title in deferredByPart.keys) {
-    sections.add(_PartSectionView(title: title, entries: deferredByPart[title]!));
+
+  for (final entry in byAnchor.entries) {
+    final anchorId = entry.key;
+    final changes = entry.value;
+    if (changes.isEmpty) continue;
+
+    final headerChange = changes
+        .where((change) => change.newUnitKind == 'header')
+        .firstOrNull;
+    final title = headerChange?.newText.trim().isNotEmpty == true
+        ? headerChange!.newText.trim()
+        : '…';
+
+    final anchor = document.units
+        .where((unit) => unit.id == anchorId)
+        .firstOrNull;
+    if (anchor == null) continue;
+
+    final partEntries = <_PartEntryView>[];
+    for (final change in changes) {
+      partEntries.add(
+        _PartEntryView(
+          unit: anchor,
+          changes: [change],
+          isContext: false,
+        ),
+      );
+    }
+
+    if (partEntries.isEmpty) continue;
+    sections.add(
+      _PartSectionView(title: title, entries: partEntries, showTitle: true),
+    );
   }
 
   return sections;
 }
 
-class _PartHeaderBanner extends StatelessWidget {
-  const _PartHeaderBanner({required this.title});
+class _PartSectionTitle extends StatelessWidget {
+  const _PartSectionTitle({required this.title});
 
   final String title;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.aiCyan.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-        border: Border(
-          left: BorderSide(
-            color: AppColors.aiCyan.withValues(alpha: 0.85),
-            width: 3,
-          ),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        child: Text(
-          title,
-          style: AppTypography.metaStyle.copyWith(
-            color: AppColors.aiCyan.withValues(alpha: 0.95),
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.2,
-          ),
-        ),
+    return Text(
+      title,
+      style: AppTypography.blockHeaderStyle.copyWith(
+        fontWeight: FontWeight.w600,
+        color: AppColors.text,
       ),
     );
   }
@@ -876,6 +1089,7 @@ class _UnitRow extends StatelessWidget {
     required this.isActive,
     required this.unitKey,
     this.emphasizeHeader = false,
+    this.isContext = false,
   });
 
   final ChangeUnit unit;
@@ -884,6 +1098,7 @@ class _UnitRow extends StatelessWidget {
   final bool isActive;
   final GlobalKey unitKey;
   final bool emphasizeHeader;
+  final bool isContext;
 
   @override
   Widget build(BuildContext context) {
@@ -894,16 +1109,26 @@ class _UnitRow extends StatelessWidget {
 
     Widget text = Text(
       displayText,
-      style: (isHeader ? AppTypography.metaStyle : AppTypography.noteBodyStyle)
+      style: (isHeader ? AppTypography.blockHeaderStyle : AppTypography.noteBodyStyle)
           .copyWith(
-        color: isAccepted
+        color: isContext
+            ? AppColors.textHint.withValues(alpha: 0.85)
+            : isAccepted
             ? AppColors.aiCyan.withValues(alpha: 0.95)
             : isHeader
-            ? AppColors.noteMeta.withValues(alpha: 0.9)
+            ? AppColors.text
             : null,
         fontWeight: isHeader ? FontWeight.w600 : null,
       ),
     );
+
+    if (isContext) {
+      return Padding(
+        key: unitKey,
+        padding: const EdgeInsets.only(bottom: 10),
+        child: text,
+      );
+    }
 
     if (isPending && isActive) {
       text = DecoratedBox(
@@ -977,7 +1202,7 @@ class _PendingAdditionRow extends StatelessWidget {
     final display = text.trim().isEmpty ? '…' : text;
     Widget content = Text(
       display,
-      style: (isHeader ? AppTypography.metaStyle : AppTypography.noteBodyStyle)
+      style: (isHeader ? AppTypography.blockHeaderStyle : AppTypography.noteBodyStyle)
           .copyWith(
         color: AppColors.aiCyan.withValues(alpha: 0.95),
         fontWeight: isHeader ? FontWeight.w600 : null,
@@ -1025,16 +1250,8 @@ class _AddedUnitRow extends StatelessWidget {
       padding: EdgeInsets.only(left: isHeader ? 0 : 12, bottom: 12),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: AppColors.aiCyan.withValues(alpha: isHeader ? 0.12 : 0.06),
+          color: AppColors.aiCyan.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(8),
-          border: isHeader
-              ? Border(
-                  left: BorderSide(
-                    color: AppColors.aiCyan.withValues(alpha: 0.85),
-                    width: 3,
-                  ),
-                )
-              : null,
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
