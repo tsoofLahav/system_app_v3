@@ -136,6 +136,8 @@ class AppBottomBar extends StatelessWidget {
                   child: _AiToolGroup(
                     enabled: hasContext && !state.aiRunning,
                     graphEnabled: hasContext && !state.aiRunning,
+                    moveFileEnabled:
+                        state.canRunAiTool('move_file_to_topic') && !state.aiRunning,
                     running: state.aiRunning,
                     strings: s,
                     onTool: (tool) => _runTool(context, tool),
@@ -180,6 +182,28 @@ class AppBottomBar extends StatelessWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(s['aiReviewSoon'])));
+      return;
+    }
+
+    if (tool == 'move_file_to_topic') {
+      final topic = state.selectedTopic;
+      final file = state.fileForAiFocus();
+      if (topic == null || file == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s['aiNoFileContext'])),
+        );
+        return;
+      }
+      try {
+        final result = await state.runAiMoveFile(topic, file);
+        if (!context.mounted || result == null) return;
+        _showResult(context, result);
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
       return;
     }
 
@@ -303,6 +327,7 @@ class _AiToolGroup extends StatelessWidget {
     required this.strings,
     required this.enabled,
     required this.graphEnabled,
+    required this.moveFileEnabled,
     required this.running,
     required this.onTool,
   });
@@ -310,6 +335,7 @@ class _AiToolGroup extends StatelessWidget {
   final AppStrings strings;
   final bool enabled;
   final bool graphEnabled;
+  final bool moveFileEnabled;
   final bool running;
   final ValueChanged<String> onTool;
 
@@ -349,6 +375,12 @@ class _AiToolGroup extends StatelessWidget {
           icon: AppIcons.graph,
           enabled: graphEnabled,
           onPressed: () => onTool('create_graph'),
+        ),
+        _AiToolButton(
+          tooltip: s['aiMoveFileToTopic'],
+          icon: AppIcons.moveFileToTopic,
+          enabled: moveFileEnabled,
+          onPressed: () => onTool('move_file_to_topic'),
         ),
         _AiToolButton(
           tooltip: s['aiReview'],

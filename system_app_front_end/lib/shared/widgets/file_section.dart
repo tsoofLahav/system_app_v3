@@ -150,6 +150,10 @@ class _FileSectionState extends State<FileSection> {
                         child: Text(s['moveFileToTopic']),
                       ),
                       PopupMenuItem(
+                        value: 'moveToArchive',
+                        child: Text(s['moveToArchive']),
+                      ),
+                      PopupMenuItem(
                         value: 'delete',
                         child: Text(s['deleteFile']),
                       ),
@@ -265,6 +269,10 @@ class _FileSectionState extends State<FileSection> {
                       PopupMenuItem(
                         value: 'moveToTopic',
                         child: Text(s['moveFileToTopic']),
+                      ),
+                      PopupMenuItem(
+                        value: 'moveToArchive',
+                        child: Text(s['moveToArchive']),
                       ),
                       PopupMenuItem(
                         value: 'delete',
@@ -400,6 +408,8 @@ class _FileSectionState extends State<FileSection> {
       await widget.state.demoteFileToSecondary(widget.topic, widget.file);
     } else if (value == 'moveToTopic') {
       await _moveFileToTopic(context);
+    } else if (value == 'moveToArchive') {
+      await widget.state.archiveFile(widget.topic, widget.file);
     }
   }
 

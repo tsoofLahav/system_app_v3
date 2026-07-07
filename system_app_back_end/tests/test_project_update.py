@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 from services.automation_dispatcher import file_qualifies_as_moved_to_additional
-from services.ai_proposal_actions import build_project_update_change_set
+from services.ai_project_update_actions import build_project_update_change_set
 from services.diff_engine import build_doc_row_change_set
 
 
@@ -54,7 +54,7 @@ def test_build_project_update_change_set_includes_only_non_empty_documents(monke
     doc = _file(4, "Documentation", "doc")
 
     monkeypatch.setattr(
-        "services.ai_proposal_actions.units_from_file",
+        "services.ai_project_update_actions.units_from_file",
         lambda _file_id: [
             {
                 "id": "block:9:item:0",
@@ -64,7 +64,7 @@ def test_build_project_update_change_set_includes_only_non_empty_documents(monke
         ],
     )
     monkeypatch.setattr(
-        "services.ai_proposal_actions.units_from_doc_table",
+        "services.ai_project_update_actions.units_from_doc_table",
         lambda _doc_file: [],
     )
 

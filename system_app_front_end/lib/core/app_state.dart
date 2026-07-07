@@ -406,7 +406,18 @@ class AppState extends ChangeNotifier {
   bool canRunAiTool(String tool) {
     if (!canUseAiTools) return false;
     if (tool == 'review') return true;
+    if (tool == 'move_file_to_topic') return aiFocus?.fileId != null;
     return hasAiContext;
+  }
+
+  AppFile? fileForAiFocus() {
+    final fileId = aiFocus?.fileId;
+    final detail = selectedDetail;
+    if (fileId == null || detail == null) return null;
+    for (final file in detail.files) {
+      if (file.id == fileId) return file;
+    }
+    return null;
   }
 
   Future<AiRunResult?> runAiTool(
@@ -1758,6 +1769,13 @@ class AppState extends ChangeNotifier {
 
   Future<void> demoteFileToSecondary(Topic topic, AppFile file) async {
     await setFileMainVisibility(topic, file, isMain: false);
+  }
+
+  Future<void> archiveFile(Topic topic, AppFile file) async {
+    await _fileService.updateFile(file.id, {
+      'archived_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    await selectTopic(topic, includeArchived: topic.isArchived);
   }
 
   Future<void> createTopic({

@@ -4,9 +4,13 @@ from config import OPENAI_PROCESS_UPDATE_TEMPERATURE
 from models import AiProposal, File, db
 from services.diff_engine import (
     build_change_set,
-    build_doc_row_change_set,
     build_document_change_set,
     merge_document,
+)
+from services.ai_project_update_actions import (
+    build_project_update_change_set,
+    create_project_update_skipped_proposal,
+    create_smart_project_update_proposal,
 )
 from services.doc_table_rows import insert_row_into_table_block
 from services.openai_service import chat_json
@@ -15,8 +19,6 @@ from services.unit_mapper import (
     apply_units_to_file,
     detect_language,
     flatten_process_files_for_ai,
-    flatten_project_files_for_ai,
-    units_from_doc_table,
     units_from_file,
 )
 
@@ -60,49 +62,6 @@ Doc: practice feels too short; 5 min works better
 Tasks unit: [task:12] Evening stretch routine
 Plan now emphasizes morning mobility
 → {"op":"replace","unit_id":"task:12","text":"Morning mobility routine (10 min)"}
-
-Respond in the same language as the input files."""
-
-
-SMART_PROJECT_UPDATE_PROMPT = """You update a project from a daily log the user finished editing.
-
-## Files
-
-INPUT — Daily log (read only). Describes what happened on a certain day: progress, decisions, issues, future points.
-
-PLAN — Inner headers are project parts (sections). Each part has a concise essence. Edit only when a part must be added, removed, or its essence changed.
-
-EXECUTION — Concrete durable work points grouped under the same part headers. No dates, no narrative of what was done on a specific day, no exertion detail.
-
-TASKS — Calendar-sized missions under the same part headers. Simpler phrasing than execution. Group related small points into one task when they belong together and are not too large.
-
-DOCUMENTATION — Historical table (read only). Propose new dated rows for important events from the input.
-
-## What to do
-
-1. Read PLAN headers to understand parts. Read INPUT and map content to relevant part(s).
-2. Decide execution, task, documentation, and rare plan changes.
-3. Return only concrete edits using unit IDs from PLAN, EXECUTION, and TASKS.
-
-Execution text must be durable project state — not a diary entry.
-Documentation rows capture dated highlights from the input.
-Tasks should be respectful mission size — avoid many tiny tasks.
-
-Set plan_structure_changed true only when adding, removing, or renaming a part essence in PLAN.
-
-## Output
-
-JSON only:
-{"plan_structure_changed":false,"plan_ops":[],"execution_ops":[],"tasks_ops":[],"doc_ops":[]}
-
-plan_ops / execution_ops / tasks_ops entries:
-- op: "replace" | "remove" | "add_after"
-- unit_id: from the matching file input
-- text: required for replace and add_after
-
-doc_ops entries:
-- date: YYYY-MM-DD
-- text: entry text
 
 Respond in the same language as the input files."""
 
@@ -305,166 +264,6 @@ def _create_refresh_file(topic_id, name, file_type, order_index, is_main=True):
     db.session.add(file)
     db.session.flush()
     return file
-
-
-    db.session.flush()
-
-
-def build_project_update_change_set(
-    plan_file,
-    execution_file,
-    tasks_file,
-    doc_file,
-    ai_result,
-):
-    plan_units = units_from_file(plan_file.id)
-    execution_units = units_from_file(execution_file.id)
-    tasks_units = units_from_file(tasks_file.id)
-    doc_units = units_from_doc_table(doc_file)
-
-    documents = []
-    plan_ops = ai_result.get("plan_ops") or []
-    execution_ops = ai_result.get("execution_ops") or []
-    tasks_ops = ai_result.get("tasks_ops") or []
-    doc_ops = ai_result.get("doc_ops") or []
-
-    if plan_ops:
-        documents.append(
-            build_document_change_set(
-                "plan", plan_file.name, plan_units, plan_ops
-            )
-        )
-    if execution_ops:
-        documents.append(
-            build_document_change_set(
-                "execution", execution_file.name, execution_units, execution_ops
-            )
-        )
-    if tasks_ops:
-        documents.append(
-            build_document_change_set(
-                "tasks", tasks_file.name, tasks_units, tasks_ops
-            )
-        )
-    if doc_ops:
-        documents.append(
-            build_doc_row_change_set("doc", doc_file.name, doc_units, doc_ops)
-        )
-
-    return build_change_set(documents)
-
-
-def smart_project_update(
-    topic,
-    input_file,
-    plan_file,
-    execution_file,
-    tasks_file,
-    doc_file,
-):
-    flattened = flatten_project_files_for_ai(
-        input_file, plan_file, execution_file, tasks_file, doc_file
-    )
-    locale = detect_language(
-        flattened["input"],
-        flattened["plan"],
-        flattened["execution"],
-        flattened["tasks"],
-        flattened["documentation"],
-    )
-    lang_note = "Respond in Hebrew." if locale == "he" else "Respond in English."
-
-    user_prompt = (
-        f"Topic: {topic.name}\n\n"
-        f"{flattened['input']}\n\n"
-        f"{flattened['plan']}\n\n"
-        f"{flattened['execution']}\n\n"
-        f"{flattened['tasks']}\n\n"
-        f"{flattened['documentation']}"
-    )
-
-    ai_result = chat_json(
-        f"{SMART_PROJECT_UPDATE_PROMPT}\n\n{lang_note}",
-        user_prompt,
-        temperature=OPENAI_PROCESS_UPDATE_TEMPERATURE,
-    )
-
-    change_set = build_project_update_change_set(
-        plan_file,
-        execution_file,
-        tasks_file,
-        doc_file,
-        ai_result,
-    )
-
-    return {
-        "locale": locale,
-        "plan_structure_changed": bool(ai_result.get("plan_structure_changed")),
-        "source_files": {
-            "input": {
-                "id": input_file.id,
-                "name": input_file.name,
-                "type": input_file.type,
-            },
-            "plan": {"id": plan_file.id, "name": plan_file.name, "type": plan_file.type},
-            "execution": {
-                "id": execution_file.id,
-                "name": execution_file.name,
-                "type": execution_file.type,
-            },
-            "tasks": {
-                "id": tasks_file.id,
-                "name": tasks_file.name,
-                "type": tasks_file.type,
-            },
-            "doc": {"id": doc_file.id, "name": doc_file.name, "type": doc_file.type},
-        },
-        "change_set": change_set,
-    }
-
-
-def create_smart_project_update_proposal(
-    topic,
-    input_file,
-    plan_file,
-    execution_file,
-    tasks_file,
-    doc_file,
-):
-    payload = smart_project_update(
-        topic,
-        input_file,
-        plan_file,
-        execution_file,
-        tasks_file,
-        doc_file,
-    )
-    proposal = AiProposal(
-        topic_id=topic.id,
-        target_file_id=None,
-        proposal_type="project_smart_update",
-        payload=payload,
-        status="pending",
-    )
-    db.session.add(proposal)
-    db.session.flush()
-    return proposal
-
-
-def create_project_update_skipped_proposal(topic, missing_types, message):
-    proposal = AiProposal(
-        topic_id=topic.id,
-        target_file_id=None,
-        proposal_type="project_update_skipped",
-        payload={
-            "missing_types": missing_types,
-            "message": message,
-        },
-        status="pending",
-    )
-    db.session.add(proposal)
-    db.session.flush()
-    return proposal
 
 
 def finalize_project_update(proposal, decisions):
