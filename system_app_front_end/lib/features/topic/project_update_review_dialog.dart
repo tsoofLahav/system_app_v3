@@ -13,12 +13,16 @@ Future<void> showProjectUpdateReviewDialog({
   final raw = proposal.payload['change_set'];
   if (raw is! Map<String, dynamic>) return;
 
+  final reviewParts = parseReviewParts(proposal.payload['review_parts']);
+  if (reviewParts.isEmpty) return;
+
   final decisions = await showChangeReviewDialog(
     context: context,
     strings: state.strings,
     changeSet: ChangeSet.fromJson(raw),
     title: state.strings['projectUpdateReview'],
     reviewMode: ChangeReviewMode.projectUpdate,
+    reviewParts: reviewParts,
   );
   if (decisions == null) return;
 

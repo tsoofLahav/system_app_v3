@@ -109,6 +109,129 @@ def flatten_units_for_ai(units, title):
     return flatten_file_by_parts_for_ai(units, title)
 
 
+_PART_KEY_RE = re.compile(r"[^a-z0-9\u0590-\u05FF]+")
+
+
+def _part_key(title: str) -> str:
+    return _PART_KEY_RE.sub("", (title or "").strip().lower())
+
+
+def extract_log_sections(units):
+    """Split input units into sections by header blocks."""
+    sections = []
+    current = None
+    for unit in units:
+        if unit.get("kind") == "header":
+            if current is not None:
+                sections.append(current)
+            current = {
+                "header": (unit.get("text") or "").strip(),
+                "units": [unit],
+            }
+            continue
+        if current is None:
+            continue
+        current["units"].append(unit)
+    if current is not None:
+        sections.append(current)
+    return sections
+
+
+def flatten_log_section(section):
+    header = (section.get("header") or "").strip() or "(untitled)"
+    lines = [f"=== LOG SECTION: {header} ==="]
+    for unit in section.get("units") or []:
+        text = (unit.get("text") or "").strip()
+        if text:
+            lines.append(f"[{unit['id']}] {text}")
+    return "\n".join(lines).strip()
+
+
+def flatten_log_sections_for_mapping(log_sections, max_excerpt_lines=3):
+    lines = []
+    for section in log_sections:
+        header = (section.get("header") or "").strip() or "(untitled)"
+        lines.append(f"SECTION: {header}")
+        count = 0
+        for unit in section.get("units") or []:
+            if unit.get("kind") == "header":
+                continue
+            text = (unit.get("text") or "").strip()
+            if not text:
+                continue
+            lines.append(f"  - {text}")
+            count += 1
+            if count >= max_excerpt_lines:
+                break
+        lines.append("")
+    return "\n".join(lines).strip() or "(no sections)"
+
+
+def slice_units_by_part(units, part_name):
+    key = _part_key(part_name)
+    if not key:
+        return []
+    result = []
+    in_part = False
+    for unit in units:
+        if unit.get("kind") == "header":
+            title = (unit.get("text") or "").strip()
+            in_part = _part_key(title) == key
+            if in_part:
+                result.append(unit)
+            continue
+        if in_part:
+            result.append(unit)
+    return result
+
+
+def last_unit_id(units):
+    return units[-1]["id"] if units else None
+
+
+def flatten_single_part_for_ai(units, file_title, part_name):
+    slice_units = slice_units_by_part(units, part_name)
+    lines = [f"=== {file_title.upper()} — PART: {part_name} ==="]
+    if not slice_units:
+        anchor = last_unit_id(units)
+        lines.append("(this part does not exist in this file yet)")
+        if anchor:
+            lines.append(f"Anchor for add_after (last unit in file): [{anchor}]")
+        return "\n".join(lines).strip()
+    for unit in slice_units:
+        text = (unit.get("text") or "").strip()
+        if text:
+            lines.append(f"[{unit['id']}] {text}")
+    return "\n".join(lines).strip()
+
+
+def build_part_removal_ops(units, part_name):
+    return [
+        {"op": "remove", "unit_id": unit["id"]}
+        for unit in slice_units_by_part(units, part_name)
+    ]
+
+
+def flatten_doc_recent_rows_for_ai(doc_file, max_rows=5):
+    blocks = (
+        Block.query.filter_by(file_id=doc_file.id)
+        .filter(Block.archived_at.is_(None))
+        .order_by(Block.order_index, Block.id)
+        .all()
+    )
+    rows = []
+    for block in blocks:
+        if block.type != "table":
+            continue
+        for row in (block.content or {}).get("rows") or []:
+            cells = [str(cell).strip() for cell in row if str(cell).strip()]
+            if cells:
+                rows.append(" | ".join(cells))
+    recent = rows[-max_rows:] if max_rows else rows
+    body = "\n".join(recent) if recent else "(no rows yet)"
+    return f"=== RECENT DOCUMENTATION (last {len(recent)} rows) ===\n{body}".strip()
+
+
 def flatten_doc_file_for_ai(doc_file):
     blocks = (
         Block.query.filter_by(file_id=doc_file.id)

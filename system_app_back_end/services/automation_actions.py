@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import or_
 
 from models import Block, File, Task, TaskResetAcknowledgement, TaskView, Topic, db
+from services.ai_project_update_actions import input_log_has_part_headers
 from services.ai_proposal_actions import (
     create_process_refresh_skipped_proposal,
     create_project_update_skipped_proposal,
@@ -316,6 +317,26 @@ def project_update(context):
             "topic_id": topic.id,
             "skipped": True,
             "missing_types": missing,
+            "proposal_id": proposal.id,
+            "message": message,
+        }
+
+    if not input_log_has_part_headers(input_file):
+        message = (
+            f"Cannot automatically update project '{topic.name}': "
+            "the daily log has no part headers. "
+            "Add inner headers in the log (one section per part) to run project update."
+        )
+        proposal = create_project_update_skipped_proposal(
+            topic,
+            ["log_headers"],
+            message,
+            skip_reason="missing_log_headers",
+        )
+        return {
+            "topic_id": topic.id,
+            "skipped": True,
+            "missing_types": ["log_headers"],
             "proposal_id": proposal.id,
             "message": message,
         }

@@ -1,4 +1,4 @@
-"""Project update AI — part mapping then plan → execution → tasks → doc."""
+"""Project update AI — header-driven log sections, per-part updates, auto doc."""
 
 from __future__ import annotations
 
@@ -6,247 +6,130 @@ from datetime import date
 
 from config import OPENAI_PROCESS_UPDATE_TEMPERATURE
 from models import AiProposal, db
-from services.diff_engine import (
-    build_change_set,
-    build_doc_row_change_set,
-    build_document_change_set,
-)
+from services.diff_engine import build_change_set, build_document_change_set
 from services.openai_service import chat_json
 from services.unit_mapper import (
     annotate_units_with_parts,
+    build_part_removal_ops,
     detect_language,
-    flatten_project_files_for_ai,
+    extract_log_sections,
+    flatten_doc_recent_rows_for_ai,
+    flatten_log_section,
+    flatten_log_sections_for_mapping,
+    flatten_single_part_for_ai,
+    last_unit_id,
+    slice_units_by_part,
     summarize_parts_for_mapping,
-    units_from_doc_table,
     units_from_file,
 )
 
-# --- Step 0: Part mapping (classification only) --------------------------------
-
-PROJECT_UPDATE_PART_MAPPING_PROMPT = """You classify a project daily log against existing PLAN parts.
-
-## What is a part?
-
-Project parts are inner headers in PLAN. Each part has a short essence (bullets/text) describing that area of the project. The same part names appear in execution and tasks.
+PROJECT_UPDATE_SECTION_MAPPING_PROMPT = """You map sections of a daily log to project parts.
 
 ## Input
 
+- EXISTING PARTS — names and short essence summaries (read only)
+- LOG SECTIONS — each section has a header (as the user wrote it) and a short excerpt
+
+The log header text may **not** exactly match existing part names. Match by **meaning**.
+
+## Your job (classification only — no file edits)
+
+For each log section, decide:
+- `action: "update"` — maps to an existing part (`target_part` = canonical existing name)
+- `action: "create"` — describes a new project area (`target_part` = new canonical name)
+
+Also list `parts_to_remove` only when the log **explicitly** states a part/mission should be removed.
+
+Infer `log_date` (YYYY-MM-DD) from the log when possible.
+
+## Output
+
+JSON only:
+{
+  "sections": [
+    {
+      "log_header": "header text from log",
+      "action": "update",
+      "target_part": "Canonical Part Name",
+      "mapping_note": "why this match"
+    }
+  ],
+  "parts_to_remove": [],
+  "log_date": "YYYY-MM-DD"
+}"""
+
+PROJECT_UPDATE_PER_PART_PROMPT = """You update a **single project part** in PLAN, EXECUTION, and TASKS.
+
+You are updating one part only. Ignore anything outside this part. Do not reference other parts.
+
+## Scope
+
 You receive:
-- EXISTING PARTS with essence summaries
-- INPUT — the daily log (read only)
-- PLAN — part-grouped file for reference (read only)
+- The mapping for this part (log header → target part, update or create)
+- **One log section** only — what the user wrote for this part today
+- **Single-part slices** of PLAN, EXECUTION, and TASKS — only this part's content (or "part does not exist yet")
 
-## Your job (step 0 — no edits)
+## Three files (same part)
 
-Decide whether the log belongs to existing part(s), requires new part(s), or both.
+**PLAN** — part header + concise essence (list items / short text). Not execution detail.
 
-Create a **new part** when:
-- The log **explicitly** names or sections a new work area, OR
-- The log **implicitly** describes a coherent area that does **not** overlap existing part names or essences (different goals, deliverables, or subsystem).
+**EXECUTION** — durable work points under the part header. No dates, no diary tone.
 
-Do **not** force unrelated log content into an existing part to avoid creating a new one.
-
-## Output
-
-JSON only:
-{
-  "existing_parts_matched": ["Part A"],
-  "new_parts": [],
-  "primary_scope": "existing",
-  "mapping_reason": "2-4 sentences explaining the fit",
-  "new_part_signals": []
-}
-
-`primary_scope`: "existing" | "new" | "mixed"
-`new_parts`: part names to **create** — not in existing PLAN parts.
-`new_part_signals`: short bullets citing explicit/implicit signals (e.g. "mentions billing integration", "no overlap with API part essence")."""
-
-# --- Step 1: Plan ---------------------------------------------------------------
-
-PROJECT_UPDATE_PLAN_PROMPT = """You update the project PLAN from a daily log.
-
-## Binding part mapping (from step 0)
-
-You receive a PART MAPPING block. It is **binding**:
-- If `new_parts` is non-empty → you **must** bootstrap those parts in PLAN. Do **not** put that content under unrelated existing parts.
-- If `primary_scope` is "new" or "mixed" → set `plan_structure_changed` true and include all `new_parts`.
-- If only existing parts matched → edit only those parts.
-
-## Files (part-grouped)
-
-`PART LIST` lists existing part names. Sections use `--- PART: Name ---`.
-
-PLAN parts contain: header + concise essence (list items / short text). Not execution detail.
-
-## Two modes
-
-### A) Update existing part
-- `replace` / `add_after` / `remove` only inside the matched part block.
-
-### B) Bootstrap new part (when mapping lists new_parts)
-Create a **full part block** like existing ones:
-1. `add_after` on last unit of last existing part (or last file unit) with `kind: "header"` and part name
-2. 2–4 essence lines via further `add_after` on the **same anchor** with `kind: "list_item"` or `"paragraph"`
-
-Example existing part:
---- PART: API ---
-[header] API
-[list_item] Define REST contracts
-[list_item] Auth model
-
-Example new part bootstrap (ops):
-- add_after anchor_id kind=header text="Billing"
-- add_after anchor_id kind=list_item text="Payment provider integration"
-- add_after anchor_id kind=list_item text="Invoice schema"
-
-## Output
-
-JSON only:
-{
-  "existing_parts": ["Part A"],
-  "new_parts": [],
-  "parts_touched": ["Part name"],
-  "primary_part": "Part name",
-  "input_summary": "1-3 sentences",
-  "plan_structure_changed": false,
-  "plan_ops": []
-}
-
-`plan_ops` entries:
-- op: "replace" | "remove" | "add_after"
-- unit_id: from PLAN
-- text: full new line
-- kind: required for add_after — `"header"` for new part title; `"list_item"` / `"paragraph"` for essence"""
-
-# --- Step 2: Execution ----------------------------------------------------------
-
-PROJECT_UPDATE_EXECUTION_PROMPT = """You update project EXECUTION from a daily log.
-
-## Binding part mapping
-
-Follow the PART MAPPING block. If `new_parts` is listed, bootstrap matching sections in EXECUTION — do not dump that content into unrelated existing parts.
-
-## Files (part-grouped)
-
-Sections use `--- PART: Name ---`. EXECUTION holds durable work points (no dates, no diary tone).
-
-## For each new part in mapping
-
-1. `add_after` on last unit of last existing part with `kind: "header"` and part name
-2. Add 2+ durable points via `add_after` on same anchor (`list_item` / `paragraph`)
-
-## For existing parts
-
-Before adding, check for similar points — `replace` first to avoid duplicates.
-
-## Output
-
-JSON only: {"execution_ops":[]}
-
-Each op: op, unit_id, text, kind (use `"header"` for new part sections)"""
-
-# --- Step 3: Tasks --------------------------------------------------------------
-
-PROJECT_UPDATE_TASKS_PROMPT = """You update project TASKS from a daily log.
-
-## Binding part mapping
-
-Follow the PART MAPPING block. If `new_parts` is listed, bootstrap matching sections in TASKS.
-
-## Files (part-grouped)
-
-TASKS = calendar-sized missions under part headers. Simpler than execution.
-
-## For each new part
-
-1. `add_after` with `kind: "header"` for the part name
-2. Add 1–3 actionable tasks under it via further `add_after`
+**TASKS** — calendar-sized missions. Simpler and more actionable than execution.
 
 ## Rules
 
-- Group related points into one task when sensible.
-- Align with execution intent.
+### action: update
+- Edit only units in the provided part slices.
+- Replace similar existing points before adding duplicates.
+
+### action: create
+- Part does not exist yet. Bootstrap a full part block in each file:
+  1. `add_after` on the given anchor `unit_id` with `kind: "header"` and `text` = target part name
+  2. Further `add_after` on the **same anchor** for essence (plan), points (execution), tasks (tasks)
+- Set `plan_structure_changed` true.
 
 ## Output
 
-JSON only: {"tasks_ops":[]}
+JSON only:
+{
+  "target_part": "Part name",
+  "action": "update",
+  "plan_structure_changed": false,
+  "plan_ops": [],
+  "execution_ops": [],
+  "tasks_ops": []
+}
 
-Each op: op, unit_id, text, kind (use `"header"` for new part sections)"""
-
-# --- Step 4: Documentation (append-only) ----------------------------------------
+Each op: op (`replace` | `remove` | `add_after`), unit_id, text, kind (`header` | `list_item` | `paragraph` | `task` as needed)"""
 
 PROJECT_UPDATE_DOC_PROMPT = """You append documentation rows from a project daily log.
 
-## Files
+## Input
 
-INPUT — Daily log (read only).
+- LOG — section-grouped daily log (read only)
+- RECENT DOCUMENTATION — last few rows for tone reference only
 
-DOCUMENTATION — Existing table (read only). **Historical record — never modify existing rows.**
+## Rules
 
-## Rules (strict)
-
-- **Append only.** Each op adds a **new row**. Never replace, remove, or rewrite an existing row.
-- A row for 3.6 documents what happened on 3.6 forever. A log from 7.6 adds a **new** 7.6 row — it does not change old dates.
-- Extract dated highlights from this log only.
-- Multiple new rows for the same date are allowed.
-- Infer date from the log; otherwise use the default date in the user message.
+- **Append only.** Never modify existing rows.
+- Write what happened **this day**: progress per part, discussions, decisions, plan changes, new/removed parts, blockers.
+- Not execution-level bullet dumps. One focused highlight per row.
+- 1+ rows depending on log richness — add more rows only when the log has distinct events worth separate lines.
+- Use the provided default date when the log does not state one.
 
 ## Output
 
 JSON only: {"doc_ops":[]}
 
-Each entry (append only):
-- date: YYYY-MM-DD
-- text: entry text (no date prefix)
-
-Do **not** return unit_id, replace, remove, or any op that edits existing rows."""
+Each entry: date (YYYY-MM-DD), text (no date prefix in text)"""
 
 
 def _lang_note(locale: str) -> str:
     return "Respond in Hebrew." if locale == "he" else "Respond in English."
 
 
-def _format_ops_for_context(ops: list) -> str:
-    if not ops:
-        return "(none)"
-    lines = []
-    for op in ops:
-        action = op.get("op", "")
-        unit_id = op.get("unit_id", "")
-        text = (op.get("text") or "").strip()
-        lines.append(f"- {action} {unit_id}: {text}")
-    return "\n".join(lines)
-
-
-def _format_parts_context(flattened: dict) -> str:
-    plan_parts = flattened.get("plan_parts") or []
-    if not plan_parts:
-        return "Existing plan parts: (none)"
-    quoted = ", ".join(f'"{name}"' for name in plan_parts)
-    return f"Existing plan parts ({len(plan_parts)}): {quoted}"
-
-
-def _format_mapping_context(mapping: dict) -> str:
-    matched = mapping.get("existing_parts_matched") or []
-    new_parts = mapping.get("new_parts") or []
-    scope = mapping.get("primary_scope") or "existing"
-    reason = (mapping.get("mapping_reason") or "").strip()
-    signals = mapping.get("new_part_signals") or []
-    signals_line = ""
-    if signals:
-        signals_line = "Signals: " + "; ".join(str(s) for s in signals) + "\n"
-    return (
-        "PART MAPPING (binding):\n"
-        f"- Matched existing: {', '.join(matched) or '(none)'}\n"
-        f"- New parts to create: {', '.join(new_parts) or '(none)'}\n"
-        f"- Scope: {scope}\n"
-        f"- Reason: {reason or '(see mapping)'}\n"
-        f"{signals_line}"
-    ).strip()
-
-
 def _normalize_doc_ops(doc_ops: list) -> list:
-    """Keep append-only doc ops: {date, text} only."""
     normalized = []
     for op in doc_ops or []:
         if not isinstance(op, dict):
@@ -260,144 +143,95 @@ def _normalize_doc_ops(doc_ops: list) -> list:
     return normalized
 
 
-def _plan_has_new_part_ops(plan_result: dict, mapping: dict) -> bool:
-    new_parts = mapping.get("new_parts") or []
-    if not new_parts:
-        return True
-    result_new = plan_result.get("new_parts") or []
-    if result_new:
-        return True
-    for op in plan_result.get("plan_ops") or []:
-        if (op.get("op") or "").strip().lower() != "add_after":
-            continue
-        if (op.get("kind") or "").strip().lower() == "header":
-            return True
-    return False
+def _find_log_section(log_sections, log_header: str) -> dict | None:
+    key = (log_header or "").strip().lower()
+    for section in log_sections:
+        header = (section.get("header") or "").strip().lower()
+        if header == key:
+            return section
+    return None
 
 
-def _run_part_mapping_step(
-    topic_name: str, flattened: dict, plan_units: list, locale: str
+def _run_section_mapping_step(
+    topic_name: str,
+    plan_units: list,
+    log_sections: list,
+    locale: str,
 ) -> dict:
     essence = summarize_parts_for_mapping(plan_units)
+    sections_text = flatten_log_sections_for_mapping(log_sections)
     user_prompt = (
-        f"Topic: {topic_name}\n"
-        f"{_format_parts_context(flattened)}\n\n"
+        f"Topic: {topic_name}\n\n"
         f"=== EXISTING PARTS (essence) ===\n{essence}\n\n"
-        f"{flattened['input']}\n\n"
-        f"{flattened['plan']}"
+        f"=== LOG SECTIONS ===\n{sections_text}"
     )
     return chat_json(
-        f"{PROJECT_UPDATE_PART_MAPPING_PROMPT}\n\n{_lang_note(locale)}",
+        f"{PROJECT_UPDATE_SECTION_MAPPING_PROMPT}\n\n{_lang_note(locale)}",
         user_prompt,
         temperature=OPENAI_PROCESS_UPDATE_TEMPERATURE,
     )
 
 
-def _run_plan_step(
-    topic_name: str, flattened: dict, mapping: dict, locale: str
-) -> dict:
-    user_prompt = (
-        f"Topic: {topic_name}\n"
-        f"{_format_mapping_context(mapping)}\n\n"
-        f"{flattened['input']}\n\n"
-        f"{flattened['plan']}"
-    )
-    return chat_json(
-        f"{PROJECT_UPDATE_PLAN_PROMPT}\n\n{_lang_note(locale)}",
-        user_prompt,
-        temperature=OPENAI_PROCESS_UPDATE_TEMPERATURE,
-    )
-
-
-def _run_plan_step_with_correction(
-    topic_name: str, flattened: dict, mapping: dict, locale: str
-) -> dict:
-    new_parts = ", ".join(mapping.get("new_parts") or []) or "(see mapping)"
-    correction = (
-        f"CORRECTION: Step 0 requires new part(s): {new_parts}. "
-        "You must add them via plan_ops (header + essence lines). "
-        "Do not place this content under unrelated existing parts."
-    )
-    user_prompt = (
-        f"Topic: {topic_name}\n"
-        f"{_format_mapping_context(mapping)}\n\n"
-        f"{correction}\n\n"
-        f"{flattened['input']}\n\n"
-        f"{flattened['plan']}"
-    )
-    return chat_json(
-        f"{PROJECT_UPDATE_PLAN_PROMPT}\n\n{_lang_note(locale)}",
-        user_prompt,
-        temperature=OPENAI_PROCESS_UPDATE_TEMPERATURE,
-    )
-
-
-def _run_execution_step(
+def _run_per_part_step(
     topic_name: str,
-    flattened: dict,
-    mapping: dict,
-    plan_result: dict,
+    section_entry: dict,
+    log_section: dict,
+    plan_units: list,
+    execution_units: list,
+    tasks_units: list,
+    plan_name: str,
+    execution_name: str,
+    tasks_name: str,
     locale: str,
 ) -> dict:
-    summary = (plan_result.get("input_summary") or "").strip()
-    new_parts = plan_result.get("new_parts") or mapping.get("new_parts") or []
-    new_parts_line = (
-        f"New parts from plan: {', '.join(new_parts)}\n" if new_parts else ""
-    )
+    target_part = (section_entry.get("target_part") or "").strip()
+    action = (section_entry.get("action") or "update").strip()
+    log_header = (section_entry.get("log_header") or "").strip()
+    mapping_note = (section_entry.get("mapping_note") or "").strip()
+
+    plan_anchor = last_unit_id(plan_units)
+    execution_anchor = last_unit_id(execution_units)
+    tasks_anchor = last_unit_id(tasks_units)
+
     user_prompt = (
         f"Topic: {topic_name}\n"
-        f"{_format_mapping_context(mapping)}\n"
-        f"{new_parts_line}"
-        f"Input summary: {summary or '(see INPUT below)'}\n\n"
-        f"{flattened['input']}\n\n"
-        f"{flattened['execution']}"
+        f"Target part: {target_part}\n"
+        f"Action: {action}\n"
+        f"Log header: {log_header}\n"
+        f"Mapping note: {mapping_note or '(none)'}\n\n"
+        f"{flatten_log_section(log_section)}\n\n"
+        f"{flatten_single_part_for_ai(plan_units, plan_name, target_part)}\n\n"
+        f"{flatten_single_part_for_ai(execution_units, execution_name, target_part)}\n\n"
+        f"{flatten_single_part_for_ai(tasks_units, tasks_name, target_part)}\n\n"
+        f"Anchors for create add_after: plan={plan_anchor}, "
+        f"execution={execution_anchor}, tasks={tasks_anchor}"
     )
-    return chat_json(
-        f"{PROJECT_UPDATE_EXECUTION_PROMPT}\n\n{_lang_note(locale)}",
+    result = chat_json(
+        f"{PROJECT_UPDATE_PER_PART_PROMPT}\n\n{_lang_note(locale)}",
         user_prompt,
         temperature=OPENAI_PROCESS_UPDATE_TEMPERATURE,
     )
-
-
-def _run_tasks_step(
-    topic_name: str,
-    flattened: dict,
-    mapping: dict,
-    plan_result: dict,
-    execution_result: dict,
-    locale: str,
-) -> dict:
-    summary = (plan_result.get("input_summary") or "").strip()
-    new_parts = plan_result.get("new_parts") or mapping.get("new_parts") or []
-    new_parts_line = (
-        f"New parts from plan: {', '.join(new_parts)}\n" if new_parts else ""
-    )
-    execution_ops = execution_result.get("execution_ops") or []
-    user_prompt = (
-        f"Topic: {topic_name}\n"
-        f"{_format_mapping_context(mapping)}\n"
-        f"{new_parts_line}"
-        f"Input summary: {summary or '(see INPUT below)'}\n\n"
-        f"Proposed execution changes:\n"
-        f"{_format_ops_for_context(execution_ops)}\n\n"
-        f"{flattened['input']}\n\n"
-        f"{flattened['tasks']}"
-    )
-    return chat_json(
-        f"{PROJECT_UPDATE_TASKS_PROMPT}\n\n{_lang_note(locale)}",
-        user_prompt,
-        temperature=OPENAI_PROCESS_UPDATE_TEMPERATURE,
-    )
+    result.setdefault("target_part", target_part)
+    result.setdefault("action", action)
+    return result
 
 
 def _run_doc_step(
-    topic_name: str, flattened: dict, log_date_hint: str, locale: str
+    topic_name: str,
+    log_sections: list,
+    doc_file,
+    log_date_hint: str,
+    locale: str,
 ) -> dict:
+    log_text = flatten_log_sections_for_mapping(
+        log_sections, max_excerpt_lines=20
+    ).replace("SECTION:", "LOG SECTION:")
+    recent_doc = flatten_doc_recent_rows_for_ai(doc_file)
     user_prompt = (
         f"Topic: {topic_name}\n"
         f"Default date if not in log: {log_date_hint}\n\n"
-        f"{flattened['input']}\n\n"
-        f"{flattened['documentation']}"
+        f"=== LOG ===\n{log_text}\n\n"
+        f"{recent_doc}"
     )
     result = chat_json(
         f"{PROJECT_UPDATE_DOC_PROMPT}\n\n{_lang_note(locale)}",
@@ -408,23 +242,71 @@ def _run_doc_step(
     return result
 
 
+def _merge_ops(target: list, source: list) -> None:
+    if source:
+        target.extend(source)
+
+
+def build_review_parts(
+    per_part_results,
+    plan_units,
+    execution_units,
+    tasks_units,
+    plan_name,
+    execution_name,
+    tasks_name,
+):
+    review_parts = []
+    for result in per_part_results:
+        part_name = (result.get("target_part") or "").strip()
+        if not part_name:
+            continue
+        plan_ops = result.get("plan_ops") or []
+        execution_ops = result.get("execution_ops") or []
+        tasks_ops = result.get("tasks_ops") or []
+        if not plan_ops and not execution_ops and not tasks_ops:
+            continue
+
+        entry = {
+            "part_name": part_name,
+            "log_header": result.get("log_header") or part_name,
+            "action": result.get("action") or "update",
+        }
+        for key, title, units, ops in (
+            ("plan", plan_name, plan_units, plan_ops),
+            ("execution", execution_name, execution_units, execution_ops),
+            ("tasks", tasks_name, tasks_units, tasks_ops),
+        ):
+            slice_units = slice_units_by_part(units, part_name)
+            display_units = slice_units if slice_units else units
+            if not ops:
+                continue
+            doc = build_document_change_set(key, title, display_units, ops)
+            entry[key] = {
+                "key": key,
+                "title": title,
+                "units": doc["units"],
+                "changes": doc["changes"],
+            }
+        if any(entry.get(k) for k in ("plan", "execution", "tasks")):
+            review_parts.append(entry)
+    return review_parts
+
+
 def build_project_update_change_set(
     plan_file,
     execution_file,
     tasks_file,
-    doc_file,
     ai_result,
 ):
     plan_units = annotate_units_with_parts(units_from_file(plan_file.id))
     execution_units = annotate_units_with_parts(units_from_file(execution_file.id))
     tasks_units = annotate_units_with_parts(units_from_file(tasks_file.id))
-    doc_units = units_from_doc_table(doc_file)
 
     documents = []
     plan_ops = ai_result.get("plan_ops") or []
     execution_ops = ai_result.get("execution_ops") or []
     tasks_ops = ai_result.get("tasks_ops") or []
-    doc_ops = _normalize_doc_ops(ai_result.get("doc_ops") or [])
 
     if plan_ops:
         documents.append(
@@ -444,12 +326,15 @@ def build_project_update_change_set(
                 "tasks", tasks_file.name, tasks_units, tasks_ops
             )
         )
-    if doc_ops:
-        documents.append(
-            build_doc_row_change_set("doc", doc_file.name, doc_units, doc_ops)
-        )
 
     return build_change_set(documents)
+
+
+def input_log_has_part_headers(input_file) -> bool:
+    from services.unit_mapper import extract_part_names
+
+    units = units_from_file(input_file.id)
+    return bool(extract_part_names(units))
 
 
 def smart_project_update(
@@ -460,80 +345,107 @@ def smart_project_update(
     tasks_file,
     doc_file,
 ):
-    flattened = flatten_project_files_for_ai(
-        input_file, plan_file, execution_file, tasks_file, doc_file
-    )
+    input_units = units_from_file(input_file.id)
     plan_units = units_from_file(plan_file.id)
+    execution_units = units_from_file(execution_file.id)
+    tasks_units = units_from_file(tasks_file.id)
+    log_sections = extract_log_sections(input_units)
+
     locale = detect_language(
-        flattened["input"],
-        flattened["plan"],
-        flattened["execution"],
-        flattened["tasks"],
-        flattened["documentation"],
+        flatten_log_sections_for_mapping(log_sections),
+        summarize_parts_for_mapping(plan_units),
     )
 
     log_date_hint = date.today().isoformat()
 
-    mapping_result = _run_part_mapping_step(
-        topic.name, flattened, plan_units, locale
+    mapping_result = _run_section_mapping_step(
+        topic.name, plan_units, log_sections, locale
     )
-    plan_result = _run_plan_step(topic.name, flattened, mapping_result, locale)
-    if not _plan_has_new_part_ops(plan_result, mapping_result):
-        plan_result = _run_plan_step_with_correction(
-            topic.name, flattened, mapping_result, locale
-        )
 
-    execution_result = _run_execution_step(
-        topic.name, flattened, mapping_result, plan_result, locale
+    plan_ops: list = []
+    execution_ops: list = []
+    tasks_ops: list = []
+    plan_structure_changed = False
+    per_part_results = []
+
+    for section_entry in mapping_result.get("sections") or []:
+        log_header = (section_entry.get("log_header") or "").strip()
+        log_section = _find_log_section(log_sections, log_header)
+        if log_section is None:
+            continue
+
+        result = _run_per_part_step(
+            topic.name,
+            section_entry,
+            log_section,
+            plan_units,
+            execution_units,
+            tasks_units,
+            plan_file.name,
+            execution_file.name,
+            tasks_file.name,
+            locale,
+        )
+        result["log_header"] = log_header
+        per_part_results.append(result)
+        _merge_ops(plan_ops, result.get("plan_ops") or [])
+        _merge_ops(execution_ops, result.get("execution_ops") or [])
+        _merge_ops(tasks_ops, result.get("tasks_ops") or [])
+        if result.get("plan_structure_changed"):
+            plan_structure_changed = True
+
+    removals = []
+    for part_name in mapping_result.get("parts_to_remove") or []:
+        part_name = (part_name or "").strip()
+        if not part_name:
+            continue
+        removals.append({"part": part_name})
+        _merge_ops(plan_ops, build_part_removal_ops(plan_units, part_name))
+        _merge_ops(
+            execution_ops, build_part_removal_ops(execution_units, part_name)
+        )
+        _merge_ops(tasks_ops, build_part_removal_ops(tasks_units, part_name))
+        plan_structure_changed = True
+
+    doc_result = _run_doc_step(
+        topic.name, log_sections, doc_file, log_date_hint, locale
     )
-    tasks_result = _run_tasks_step(
-        topic.name,
-        flattened,
-        mapping_result,
-        plan_result,
-        execution_result,
-        locale,
-    )
-    doc_result = _run_doc_step(topic.name, flattened, log_date_hint, locale)
+    doc_ops = doc_result.get("doc_ops") or []
 
     ai_result = {
-        "part_mapping": {
-            "existing_parts_matched": mapping_result.get("existing_parts_matched")
-            or [],
-            "new_parts": mapping_result.get("new_parts") or [],
-            "primary_scope": mapping_result.get("primary_scope"),
-            "mapping_reason": mapping_result.get("mapping_reason"),
-        },
-        "existing_parts": plan_result.get("existing_parts") or [],
-        "new_parts": plan_result.get("new_parts")
-        or mapping_result.get("new_parts")
-        or [],
-        "parts_touched": plan_result.get("parts_touched") or [],
-        "primary_part": plan_result.get("primary_part"),
-        "input_summary": plan_result.get("input_summary"),
-        "plan_structure_changed": bool(plan_result.get("plan_structure_changed")),
-        "plan_ops": plan_result.get("plan_ops") or [],
-        "execution_ops": execution_result.get("execution_ops") or [],
-        "tasks_ops": tasks_result.get("tasks_ops") or [],
-        "doc_ops": doc_result.get("doc_ops") or [],
+        "plan_structure_changed": plan_structure_changed,
+        "plan_ops": plan_ops,
+        "execution_ops": execution_ops,
+        "tasks_ops": tasks_ops,
+        "doc_ops": doc_ops,
     }
 
     change_set = build_project_update_change_set(
         plan_file,
         execution_file,
         tasks_file,
-        doc_file,
         ai_result,
+    )
+
+    review_parts = build_review_parts(
+        per_part_results,
+        plan_units,
+        execution_units,
+        tasks_units,
+        plan_file.name,
+        execution_file.name,
+        tasks_file.name,
     )
 
     return {
         "locale": locale,
-        "plan_structure_changed": ai_result["plan_structure_changed"],
+        "plan_structure_changed": plan_structure_changed,
+        "doc_ops": doc_ops,
+        "review_parts": review_parts,
         "ai_steps": {
-            "part_mapping": mapping_result,
-            "plan": plan_result,
-            "execution": execution_result,
-            "tasks": tasks_result,
+            "section_mapping": mapping_result,
+            "per_part": per_part_results,
+            "removals": removals,
             "doc": doc_result,
         },
         "source_files": {
@@ -587,15 +499,18 @@ def create_smart_project_update_proposal(
     return proposal
 
 
-def create_project_update_skipped_proposal(topic, missing_types, message):
+def create_project_update_skipped_proposal(topic, missing_types, message, skip_reason=None):
+    payload = {
+        "missing_types": missing_types,
+        "message": message,
+    }
+    if skip_reason:
+        payload["skip_reason"] = skip_reason
     proposal = AiProposal(
         topic_id=topic.id,
         target_file_id=None,
         proposal_type="project_update_skipped",
-        payload={
-            "missing_types": missing_types,
-            "message": message,
-        },
+        payload=payload,
         status="pending",
     )
     db.session.add(proposal)

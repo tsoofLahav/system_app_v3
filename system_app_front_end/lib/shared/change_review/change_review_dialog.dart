@@ -34,6 +34,7 @@ Future<Map<String, bool>?> showChangeReviewDialog({
   required ChangeSet changeSet,
   String? title,
   ChangeReviewMode reviewMode = ChangeReviewMode.processUpdate,
+  List<PartReview> reviewParts = const [],
 }) {
   return showDialog<Map<String, bool>>(
     context: context,
@@ -43,6 +44,7 @@ Future<Map<String, bool>?> showChangeReviewDialog({
       changeSet: changeSet,
       title: title,
       reviewMode: reviewMode,
+      reviewParts: reviewParts,
     ),
   );
 }
@@ -54,6 +56,7 @@ class ChangeReviewDialog extends StatefulWidget {
     required this.changeSet,
     this.title,
     this.reviewMode = ChangeReviewMode.processUpdate,
+    this.reviewParts = const [],
     this.embedded = false,
     this.onComplete,
     this.onCancel,
@@ -63,6 +66,7 @@ class ChangeReviewDialog extends StatefulWidget {
   final ChangeSet changeSet;
   final String? title;
   final ChangeReviewMode reviewMode;
+  final List<PartReview> reviewParts;
   final bool embedded;
   final ValueChanged<Map<String, bool>>? onComplete;
   final VoidCallback? onCancel;
@@ -73,6 +77,8 @@ class ChangeReviewDialog extends StatefulWidget {
 
 class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   late final List<ChangeDocument> _documents;
+  late final List<PartReview> _reviewParts;
+  late final bool _byPart;
   late int _documentPhase;
   final _decisions = <String, bool>{};
   final _changeKeys = <String, GlobalKey>{};
@@ -87,6 +93,10 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   @override
   void initState() {
     super.initState();
+    _reviewParts = [...widget.reviewParts];
+    _byPart =
+        widget.reviewMode == ChangeReviewMode.projectUpdate &&
+        _reviewParts.isNotEmpty;
     final documentOrder = _documentOrderFor(widget.reviewMode);
     _documents = [...widget.changeSet.documents]
       ..sort(
@@ -111,8 +121,16 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
 
   ChangeDocument get _activeDocument => _documents[_documentPhase];
 
+  PartReview get _activePart => _reviewParts[_documentPhase];
+
   String get _dialogTitle {
     final s = widget.strings;
+    if (_byPart) {
+      final part = _activePart;
+      return part.partName.trim().isEmpty
+          ? (widget.title ?? s['projectUpdateReview'])
+          : part.partName;
+    }
     return switch (_activeDocument.key) {
       'plan' => s['reviewPlan'],
       'execution' => s['reviewExecution'],
@@ -124,6 +142,9 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
 
   String get _handoffCompleteMessage {
     final s = widget.strings;
+    if (_byPart) {
+      return s['partReviewComplete'];
+    }
     return switch (_activeDocument.key) {
       'plan' => s['planReviewComplete'],
       'execution' => s['executionReviewComplete'],
@@ -134,8 +155,11 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
 
   String get _continueToNextLabel {
     final s = widget.strings;
-    if (_documentPhase >= _documents.length - 1) {
+    if (_documentPhase >= (_byPart ? _reviewParts.length : _documents.length) - 1) {
       return s['finishReview'];
+    }
+    if (_byPart) {
+      return s['continueToNextPart'];
     }
     final nextKey = _documents[_documentPhase + 1].key;
     return switch (nextKey) {
@@ -148,6 +172,16 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
 
   bool get _allReviewed {
     if (!_unifiedScroll && _awaitingHandoff) return false;
+    if (_byPart) {
+      for (final part in _reviewParts) {
+        for (final document in part.documents) {
+          for (final change in _orderedChanges(document)) {
+            if (!_decisions.containsKey(change.id)) return false;
+          }
+        }
+      }
+      return true;
+    }
     for (final document in _documents) {
       for (final change in _orderedChanges(document)) {
         if (!_decisions.containsKey(change.id)) return false;
@@ -158,6 +192,16 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
 
   int get _pendingSuggestionCount {
     var count = 0;
+    if (_byPart) {
+      for (final part in _reviewParts) {
+        for (final document in part.documents) {
+          for (final change in _orderedChanges(document)) {
+            if (!_decisions.containsKey(change.id)) count++;
+          }
+        }
+      }
+      return count;
+    }
     for (final document in _documents) {
       for (final change in _orderedChanges(document)) {
         if (!_decisions.containsKey(change.id)) count++;
@@ -181,6 +225,14 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     return items;
   }
 
+  ChangeItem? _nextPendingChangeInPart(PartReview part) {
+    for (final document in part.documents) {
+      final next = _nextPendingChangeInDocument(document);
+      if (next != null) return next;
+    }
+    return null;
+  }
+
   ChangeItem? _nextPendingChangeInDocument(ChangeDocument document) {
     for (final change in _orderedChanges(document)) {
       if (!_decisions.containsKey(change.id)) return change;
@@ -189,6 +241,16 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   }
 
   ChangeItem? _nextPendingChangeGlobally() {
+    if (_byPart) {
+      for (final part in _reviewParts) {
+        for (final document in part.documents) {
+          for (final change in _orderedChanges(document)) {
+            if (!_decisions.containsKey(change.id)) return change;
+          }
+        }
+      }
+      return null;
+    }
     for (final document in _documents) {
       final next = _nextPendingChangeInDocument(document);
       if (next != null) return next;
@@ -212,7 +274,9 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
 
     final next = _unifiedScroll
         ? _nextPendingChangeGlobally()
-        : _nextPendingChangeInDocument(_activeDocument);
+        : (_byPart
+              ? _nextPendingChangeInPart(_activePart)
+              : _nextPendingChangeInDocument(_activeDocument));
     if (next == null) {
       _onDocumentPhaseComplete();
       return;
@@ -273,7 +337,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
       setState(() => _activeChangeId = null);
       return;
     }
-    if (_documentPhase < _documents.length - 1) {
+    if (_documentPhase < (_byPart ? _reviewParts.length : _documents.length) - 1) {
       setState(() {
         _activeChangeId = null;
         _awaitingHandoff = true;
@@ -372,8 +436,99 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     );
   }
 
+  Widget _buildPhasedPartReview() {
+    final s = widget.strings;
+    final part = _activePart;
+    var pendingCount = 0;
+    for (final document in part.documents) {
+      pendingCount += _orderedChanges(document)
+          .where((change) => !_decisions.containsKey(change.id))
+          .length;
+    }
+
+    final children = <Widget>[];
+    if (!_awaitingHandoff && pendingCount > 0) {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Text(
+            '${s['suggestedChange']} · $pendingCount',
+            style: AppTypography.metaStyle.copyWith(
+              color: AppColors.aiCyan.withValues(alpha: 0.9),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final subdocs = [
+      if (part.plan != null) part.plan!,
+      if (part.execution != null) part.execution!,
+      if (part.tasks != null) part.tasks!,
+    ];
+
+    for (var i = 0; i < subdocs.length; i++) {
+      final document = subdocs[i];
+      if (i > 0) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Divider(
+              height: 1,
+              thickness: 1,
+              color: AppColors.noteBorder.withValues(alpha: 0.35),
+            ),
+          ),
+        );
+      }
+      children.add(
+        Text(
+          _sectionTitle(document),
+          style: AppTypography.blockHeaderStyle.copyWith(
+            fontWeight: FontWeight.w600,
+            color: AppColors.text,
+          ),
+        ),
+      );
+      children.add(const SizedBox(height: 8));
+      children.add(
+        _DocumentReview(
+          document: document,
+          decisions: _decisions,
+          activeChangeId: _activeChangeId,
+          keyForChange: _keyForChange,
+          groupByParts: false,
+        ),
+      );
+    }
+
+    if (_awaitingHandoff) {
+      children.addAll([
+        const SizedBox(height: 12),
+        Text(_handoffCompleteMessage, style: AppTypography.noteBodyStyle),
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton(
+            onPressed: _continueToNextDocument,
+            child: Text(_continueToNextLabel),
+          ),
+        ),
+      ]);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    );
+  }
+
   Widget _buildPhasedDocument() {
     final s = widget.strings;
+    if (_byPart) {
+      return _buildPhasedPartReview();
+    }
     final active = _activeDocument;
     final pendingCount = _orderedChanges(
       active,

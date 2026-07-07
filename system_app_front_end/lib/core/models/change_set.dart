@@ -120,3 +120,53 @@ List<ChangeItem> _changes(dynamic raw) {
       .map((item) => ChangeItem.fromJson(Map<String, dynamic>.from(item)))
       .toList();
 }
+
+class PartReview {
+  const PartReview({
+    required this.partName,
+    this.logHeader,
+    this.plan,
+    this.execution,
+    this.tasks,
+  });
+
+  factory PartReview.fromJson(Map<String, dynamic> json) {
+    return PartReview(
+      partName: json['part_name'] as String? ?? '',
+      logHeader: json['log_header'] as String?,
+      plan: _optionalDocument(json['plan']),
+      execution: _optionalDocument(json['execution']),
+      tasks: _optionalDocument(json['tasks']),
+    );
+  }
+
+  final String partName;
+  final String? logHeader;
+  final ChangeDocument? plan;
+  final ChangeDocument? execution;
+  final ChangeDocument? tasks;
+
+  List<ChangeDocument> get documents => [
+    if (plan != null) plan!,
+    if (execution != null) execution!,
+    if (tasks != null) tasks!,
+  ];
+
+  bool get hasChanges => documents.any((doc) => doc.changes.isNotEmpty);
+}
+
+ChangeDocument? _optionalDocument(dynamic raw) {
+  if (raw is! Map) return null;
+  final doc = ChangeDocument.fromJson(Map<String, dynamic>.from(raw));
+  if (doc.changes.isEmpty && doc.units.isEmpty) return null;
+  return doc;
+}
+
+List<PartReview> parseReviewParts(dynamic raw) {
+  if (raw is! List) return const [];
+  return raw
+      .whereType<Map>()
+      .map((item) => PartReview.fromJson(Map<String, dynamic>.from(item)))
+      .where((part) => part.hasChanges)
+      .toList();
+}

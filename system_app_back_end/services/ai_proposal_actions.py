@@ -266,6 +266,18 @@ def _create_refresh_file(topic_id, name, file_type, order_index, is_main=True):
     return file
 
 
+def _normalize_payload_doc_ops(doc_ops):
+    rows = []
+    for op in doc_ops or []:
+        if not isinstance(op, dict):
+            continue
+        date_val = (op.get("date") or "").strip()
+        text = (op.get("text") or "").strip()
+        if date_val and text:
+            rows.append({"date": date_val, "text": text})
+    return rows
+
+
 def finalize_project_update(proposal, decisions):
     if proposal.proposal_type != "project_smart_update":
         raise ValueError("proposal is not a project smart update")
@@ -312,11 +324,21 @@ def finalize_project_update(proposal, decisions):
     )
 
     doc_changes = (documents.get("doc") or {}).get("changes") or []
+    payload_doc_ops = _normalize_payload_doc_ops(payload.get("doc_ops") or [])
     accepted_doc_rows = [
         change
         for change in doc_changes
         if change.get("action") == "add_row" and _decision(decisions, change.get("id"))
     ]
+    if not accepted_doc_rows and payload_doc_ops:
+        accepted_doc_rows = [
+            {
+                "action": "add_row",
+                "row_date": op.get("date", ""),
+                "row_text": op.get("text", ""),
+            }
+            for op in payload_doc_ops
+        ]
 
     now = datetime.utcnow()
     archived_ids = []

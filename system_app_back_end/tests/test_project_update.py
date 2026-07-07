@@ -63,16 +63,10 @@ def test_build_project_update_change_set_includes_only_non_empty_documents(monke
             }
         ],
     )
-    monkeypatch.setattr(
-        "services.ai_project_update_actions.units_from_doc_table",
-        lambda _doc_file: [],
-    )
-
     change_set = build_project_update_change_set(
         plan,
         execution,
         tasks,
-        doc,
         {
             "execution_ops": [
                 {
@@ -86,7 +80,7 @@ def test_build_project_update_change_set_includes_only_non_empty_documents(monke
     )
 
     keys = [document["key"] for document in change_set["documents"]]
-    assert keys == ["execution", "doc"]
+    assert keys == ["execution"]
     execution_doc = change_set["documents"][0]
     assert execution_doc["changes"][0]["new_text"] == "Finalize API contract"
 

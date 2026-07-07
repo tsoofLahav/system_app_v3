@@ -307,8 +307,11 @@ class _AiProposalRow extends StatelessWidget {
     final s = state.strings;
 
     if (proposal.proposalType == 'project_update_skipped') {
-      final message =
-          proposal.payload['message']?.toString() ?? s['projectUpdateSkipped'];
+      final skipReason = proposal.payload['skip_reason']?.toString();
+      final message = proposal.payload['message']?.toString() ??
+          (skipReason == 'missing_log_headers'
+              ? s['projectUpdateSkippedNoHeaders']
+              : s['projectUpdateSkipped']);
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Row(
