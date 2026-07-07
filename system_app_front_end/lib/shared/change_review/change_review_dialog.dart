@@ -898,18 +898,37 @@ List<Widget> _rowsForUnit({
         ),
       );
     }
-  } else if (isContext) {
-    rows.add(
-      _UnitRow(
-        unit: unit,
-        change: null,
-        decision: null,
-        isActive: false,
-        unitKey: null,
-        emphasizeHeader: unit.kind == 'header',
-        isContext: true,
-      ),
+  } else {
+    final hasPendingAdd = changes.any(
+      (change) =>
+          _showPendingAddition(change, decisions) &&
+          (change.action == 'add_after' || change.action == 'add_row'),
     );
+    if (hasPendingAdd && unit.text.trim().isNotEmpty) {
+      rows.add(
+        _UnitRow(
+          unit: unit,
+          change: null,
+          decision: null,
+          isActive: false,
+          unitKey: null,
+          emphasizeHeader: unit.kind == 'header',
+          isContext: true,
+        ),
+      );
+    } else if (isContext) {
+      rows.add(
+        _UnitRow(
+          unit: unit,
+          change: null,
+          decision: null,
+          isActive: false,
+          unitKey: null,
+          emphasizeHeader: unit.kind == 'header',
+          isContext: true,
+        ),
+      );
+    }
   }
 
   for (final change in changes) {
@@ -1308,6 +1327,12 @@ class _UnitRow extends StatelessWidget {
             ? AppColors.text
             : null,
         fontWeight: isHeader ? FontWeight.w600 : null,
+        decoration: isPending && change?.action == 'replace'
+            ? TextDecoration.lineThrough
+            : null,
+        decorationColor: isPending && change?.action == 'replace'
+            ? AppColors.textHint.withValues(alpha: 0.7)
+            : null,
       ),
     );
 
@@ -1389,13 +1414,32 @@ class _PendingAdditionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final display = text.trim().isEmpty ? '…' : text;
-    Widget content = Text(
-      display,
-      style: (isHeader ? AppTypography.blockHeaderStyle : AppTypography.noteBodyStyle)
-          .copyWith(
-        color: AppColors.aiCyan.withValues(alpha: 0.95),
-        fontWeight: isHeader ? FontWeight.w600 : null,
-      ),
+    Widget content = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2, right: 8),
+          child: Text(
+            '+',
+            style: AppTypography.blockHeaderStyle.copyWith(
+              color: AppColors.aiCyan.withValues(alpha: 0.95),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            display,
+            style: (isHeader
+                    ? AppTypography.blockHeaderStyle
+                    : AppTypography.noteBodyStyle)
+                .copyWith(
+              color: AppColors.aiCyan.withValues(alpha: 0.95),
+              fontWeight: isHeader ? FontWeight.w600 : null,
+            ),
+          ),
+        ),
+      ],
     );
 
     final decoration = BoxDecoration(
@@ -1441,15 +1485,32 @@ class _AddedUnitRow extends StatelessWidget {
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Text(
-            display,
-            style: (isHeader
-                    ? AppTypography.metaStyle
-                    : AppTypography.noteBodyStyle)
-                .copyWith(
-              color: AppColors.aiCyan.withValues(alpha: 0.95),
-              fontWeight: isHeader ? FontWeight.w600 : null,
-            ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 1, right: 8),
+                child: Text(
+                  '+',
+                  style: AppTypography.metaStyle.copyWith(
+                    color: AppColors.aiCyan.withValues(alpha: 0.95),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  display,
+                  style: (isHeader
+                          ? AppTypography.metaStyle
+                          : AppTypography.noteBodyStyle)
+                      .copyWith(
+                    color: AppColors.aiCyan.withValues(alpha: 0.95),
+                    fontWeight: isHeader ? FontWeight.w600 : null,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1472,10 +1533,19 @@ class _SuggestionCallout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isAddition =
+        change.action == 'add_after' || change.action == 'add_row';
+    final isReplace = change.action == 'replace';
     final suggestionText = switch (change.action) {
       'remove' => strings['delete'],
+      'add_after' || 'add_row' => '',
       _ => change.newText.trim().isEmpty ? '…' : change.newText,
     };
+    final title = isAddition
+        ? strings['reviewAddLine']
+        : isReplace
+        ? strings['suggestedChange']
+        : strings['suggestedChange'];
 
     return Material(
       color: Colors.transparent,
@@ -1493,9 +1563,19 @@ class _SuggestionCallout extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(strings['suggestedChange'], style: AppTypography.metaStyle),
+              Text(title, style: AppTypography.metaStyle),
               const SizedBox(height: 8),
-              Text(suggestionText, style: AppTypography.noteBodyStyle),
+              if (isAddition)
+                Text(
+                  '+',
+                  style: AppTypography.blockHeaderStyle.copyWith(
+                    color: AppColors.aiCyan,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 28,
+                  ),
+                )
+              else
+                Text(suggestionText, style: AppTypography.noteBodyStyle),
               if (change.reason != null && change.reason!.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(change.reason!, style: AppTypography.metaStyle),

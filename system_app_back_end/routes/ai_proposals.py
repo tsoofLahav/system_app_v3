@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, request
 
 from models import AiProposal, Block, db
 from routes.helpers import get_or_404
-from services.ai_proposal_actions import finalize_ai_proposal
+from services.ai_proposal_actions import finalize_ai_proposal as apply_ai_proposal_finalize
 
 ai_proposals_bp = Blueprint("ai_proposals", __name__)
 
@@ -89,7 +89,7 @@ def finalize_ai_proposal(proposal_id):
     proposal = get_or_404(AiProposal, proposal_id)
     data = request.get_json(silent=True) or {}
     try:
-        proposal = finalize_ai_proposal(proposal, data.get("decisions") or {})
+        proposal = apply_ai_proposal_finalize(proposal, data.get("decisions") or {})
         db.session.commit()
         return jsonify(proposal.to_dict())
     except ValueError as error:

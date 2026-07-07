@@ -422,6 +422,7 @@ class AppStrings {
     'dismiss': 'Dismiss',
     'unchanged': 'Unchanged',
     'suggestedChange': 'Suggested change',
+    'reviewAddLine': 'New line',
     'automationAbandonTitle': 'Discard suggested changes?',
     'automationAbandonBody':
         'Marking this task done will discard all pending updates from this automation run.',
@@ -709,6 +710,7 @@ class AppStrings {
     'dismiss': 'סגור',
     'unchanged': 'ללא שינוי',
     'suggestedChange': 'שינוי מוצע',
+    'reviewAddLine': 'שורה חדשה',
     'automationAbandonTitle': 'לבטל את השינויים שהוצעו?',
     'automationAbandonBody':
         'סימון המשימה כבוצעה יבטל את כל העדכונים הממתינים מהרצת האוטומציה.',
