@@ -15,6 +15,7 @@ import '../../design_system/note_widgets.dart';
 import '../../features/blocks/board_block_widget.dart';
 import '../../features/blocks/block_context_menu.dart';
 import '../../features/blocks/block_renderer.dart';
+import '../../shared/dialogs/move_file_topic_dialog.dart';
 import '../../shared/utils/local_image_picker.dart';
 
 class FileSection extends StatefulWidget {
@@ -146,6 +147,10 @@ class _FileSectionState extends State<FileSection> {
                           child: Text(s['moveToMoreFiles']),
                         ),
                       PopupMenuItem(
+                        value: 'duplicate',
+                        child: Text(s['duplicateFile']),
+                      ),
+                      PopupMenuItem(
                         value: 'moveToTopic',
                         child: Text(s['moveFileToTopic']),
                       ),
@@ -266,6 +271,10 @@ class _FileSectionState extends State<FileSection> {
                           value: 'moveToMoreFiles',
                           child: Text(s['moveToMoreFiles']),
                         ),
+                      PopupMenuItem(
+                        value: 'duplicate',
+                        child: Text(s['duplicateFile']),
+                      ),
                       PopupMenuItem(
                         value: 'moveToTopic',
                         child: Text(s['moveFileToTopic']),
@@ -404,34 +413,53 @@ class _FileSectionState extends State<FileSection> {
       if (ok == true) widget.onDelete();
     } else if (value == 'showOnMain') {
       await widget.state.promoteFileToMain(widget.topic, widget.file);
+    } else if (value == 'duplicate') {
+      await _duplicateFile(context);
     } else if (value == 'moveToMoreFiles') {
       await widget.state.demoteFileToSecondary(widget.topic, widget.file);
     } else if (value == 'moveToTopic') {
-      await _moveFileToTopic(context);
+      await _moveFileToTopicManual(context);
     } else if (value == 'moveToArchive') {
       await widget.state.archiveFile(widget.topic, widget.file);
     }
   }
 
-  Future<void> _moveFileToTopic(BuildContext context) async {
+  Future<void> _duplicateFile(BuildContext context) async {
     final s = widget.state.strings;
     try {
-      final result = await widget.state.runAiMoveFile(widget.topic, widget.file);
-      if (!context.mounted || result == null) return;
-      final targetTopic = result.targetTopicName ?? s['aiDone'];
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AppGlassDialog(
-          title: Text(s['aiDone']),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(s['ok']),
-            ),
-          ],
-          child: Text(
-            '${widget.file.name} → $targetTopic',
-            style: AppTypography.noteBodyStyle,
+      final copy = await widget.state.duplicateFile(widget.topic, widget.file);
+      if (!context.mounted || copy == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${s['duplicateFileDone']} · ${copy.name}')),
+      );
+    } on ApiException catch (e) {
+      _showUploadError(e.message);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
+  Future<void> _moveFileToTopicManual(BuildContext context) async {
+    final target = await showMoveFileTopicDialog(
+      context: context,
+      state: widget.state,
+      excludeTopicId: widget.topic.id,
+    );
+    if (target == null || !context.mounted) return;
+    try {
+      await widget.state.moveFileToTopicManual(
+        widget.topic,
+        widget.file,
+        target,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${widget.file.name} → ${widget.state.topicDisplayName(target)}',
           ),
         ),
       );

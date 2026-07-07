@@ -9,6 +9,8 @@ from services.automation_dispatcher import (
     file_qualifies_as_moved_to_additional,
 )
 from services.delete_cascade import delete_file_cascade
+from services.duplicate_file import duplicate_file
+from services.file_move import move_file_to_topic
 
 files_bp = Blueprint("files", __name__)
 
@@ -94,6 +96,29 @@ def update_file(file_id):
             meta={"source_topic_id": prev_topic_id},
         )
     dispatch_file_changed(file_id, "file_updated")
+    return jsonify(file.to_dict())
+
+
+@files_bp.route("/files/<int:file_id>/duplicate", methods=["POST"])
+def duplicate_file_route(file_id):
+    try:
+        file = duplicate_file(file_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    dispatch_file_changed(file.id, "file_duplicated", {"source_file_id": file_id})
+    return jsonify(file.to_dict()), 201
+
+
+@files_bp.route("/files/<int:file_id>/move", methods=["POST"])
+def move_file_route(file_id):
+    data = request.get_json(silent=True) or {}
+    topic_id = data.get("topic_id")
+    if topic_id is None:
+        return jsonify({"error": "topic_id is required"}), 400
+    try:
+        file = move_file_to_topic(file_id, int(topic_id))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify(file.to_dict())
 
 

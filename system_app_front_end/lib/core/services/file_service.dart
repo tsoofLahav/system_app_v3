@@ -73,4 +73,17 @@ class FileService {
     final data = await _api.patch('/files/$id', patch) as Map<String, dynamic>;
     return AppFile.fromJson(data);
   }
+
+  Future<AppFile> duplicateFile(int id) async {
+    final data =
+        await _api.post('/files/$id/duplicate', {}) as Map<String, dynamic>;
+    return AppFile.fromJson(data);
+  }
+
+  Future<AppFile> moveFileToTopic(int id, int topicId) async {
+    final data = await _api.post('/files/$id/move', {
+      'topic_id': topicId,
+    }) as Map<String, dynamic>;
+    return AppFile.fromJson(data);
+  }
 }

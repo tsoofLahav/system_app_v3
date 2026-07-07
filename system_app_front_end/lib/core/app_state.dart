@@ -1778,6 +1778,26 @@ class AppState extends ChangeNotifier {
     await selectTopic(topic, includeArchived: topic.isArchived);
   }
 
+  Future<AppFile?> duplicateFile(Topic topic, AppFile file) async {
+    final copy = await _fileService.duplicateFile(file.id);
+    await selectTopic(topic, includeArchived: topic.isArchived);
+    return copy;
+  }
+
+  Future<Topic?> moveFileToTopicManual(
+    Topic sourceTopic,
+    AppFile file,
+    Topic targetTopic,
+  ) async {
+    await _fileService.moveFileToTopic(file.id, targetTopic.id);
+    await refreshTopics();
+    await selectTopic(
+      sourceTopic,
+      includeArchived: sourceTopic.isArchived,
+    );
+    return targetTopic;
+  }
+
   Future<void> createTopic({
     required String name,
     required String type,
