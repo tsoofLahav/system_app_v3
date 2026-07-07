@@ -75,7 +75,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   late final List<ChangeDocument> _documents;
   late int _documentPhase;
   final _decisions = <String, bool>{};
-  final _unitKeys = <String, GlobalKey>{};
+  final _changeKeys = <String, GlobalKey>{};
   final _scrollController = ScrollController();
 
   OverlayEntry? _suggestionOverlay;
@@ -166,8 +166,8 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     return count;
   }
 
-  GlobalKey _keyForUnit(String unitId) =>
-      _unitKeys.putIfAbsent(unitId, GlobalKey.new);
+  GlobalKey _keyForChange(String changeId) =>
+      _changeKeys.putIfAbsent(changeId, GlobalKey.new);
 
   List<ChangeItem> _orderedChanges(ChangeDocument document) {
     final byUnit = <String, List<ChangeItem>>{};
@@ -224,7 +224,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
       if (!mounted || _activeChangeId != next.id) return;
       if (!_unifiedScroll && _awaitingHandoff) return;
 
-      final anchorKey = _keyForUnit(next.unitId);
+      final anchorKey = _keyForChange(next.id);
       final anchorContext = anchorKey.currentContext;
       if (anchorContext != null) {
         await Scrollable.ensureVisible(
@@ -251,7 +251,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
 
     _suggestionOverlay = OverlayEntry(
       builder: (overlayContext) => _SuggestionOverlay(
-        anchorKey: _keyForUnit(change.unitId),
+        anchorKey: _keyForChange(change.id),
         strings: widget.strings,
         change: change,
         onAccept: () => _resolveChange(change, accepted: true),
@@ -354,7 +354,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
           document: document,
           decisions: _decisions,
           activeChangeId: _activeChangeId,
-          keyForUnit: _keyForUnit,
+          keyForChange: _keyForChange,
           groupByParts:
               widget.reviewMode == ChangeReviewMode.projectUpdate &&
               document.key != 'doc',
@@ -397,7 +397,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
           document: active,
           decisions: _decisions,
           activeChangeId: _activeChangeId,
-          keyForUnit: _keyForUnit,
+          keyForChange: _keyForChange,
           groupByParts:
               widget.reviewMode == ChangeReviewMode.projectUpdate &&
               active.key != 'doc',
@@ -581,7 +581,7 @@ class _DocumentReview extends StatelessWidget {
     required this.document,
     required this.decisions,
     required this.activeChangeId,
-    required this.keyForUnit,
+    required this.keyForChange,
     this.groupByParts = false,
     this.appendOnlyDoc = false,
   });
@@ -589,7 +589,7 @@ class _DocumentReview extends StatelessWidget {
   final ChangeDocument document;
   final Map<String, bool> decisions;
   final String? activeChangeId;
-  final GlobalKey Function(String unitId) keyForUnit;
+  final GlobalKey Function(String changeId) keyForChange;
   final bool groupByParts;
   final bool appendOnlyDoc;
 
@@ -600,7 +600,7 @@ class _DocumentReview extends StatelessWidget {
         document: document,
         decisions: decisions,
         activeChangeId: activeChangeId,
-        keyForUnit: keyForUnit,
+        keyForChange: keyForChange,
       );
     }
     if (groupByParts) {
@@ -608,7 +608,7 @@ class _DocumentReview extends StatelessWidget {
         document: document,
         decisions: decisions,
         activeChangeId: activeChangeId,
-        keyForUnit: keyForUnit,
+        keyForChange: keyForChange,
       );
     }
 
@@ -626,7 +626,7 @@ class _DocumentReview extends StatelessWidget {
             changes: changesByUnit[unit.id] ?? const [],
             decisions: decisions,
             activeChangeId: activeChangeId,
-            keyForUnit: keyForUnit,
+            keyForChange: keyForChange,
           ),
         ],
       ],
@@ -667,7 +667,7 @@ List<Widget> _rowsForUnit({
   required List<ChangeItem> changes,
   required Map<String, bool> decisions,
   required String? activeChangeId,
-  required GlobalKey Function(String unitId) keyForUnit,
+  required GlobalKey Function(String changeId) keyForChange,
   bool isContext = false,
 }) {
   final rows = <Widget>[];
@@ -678,7 +678,7 @@ List<Widget> _rowsForUnit({
         change: null,
         decision: null,
         isActive: false,
-        unitKey: keyForUnit(unit.id),
+        unitKey: null,
         emphasizeHeader: unit.kind == 'header',
         isContext: isContext,
       ),
@@ -701,7 +701,7 @@ List<Widget> _rowsForUnit({
           change: primary,
           decision: _decisionFor(primary, decisions),
           isActive: primary.id == activeChangeId,
-          unitKey: keyForUnit(unit.id),
+          unitKey: keyForChange(primary.id),
           emphasizeHeader: unit.kind == 'header',
           isContext: isContext,
         ),
@@ -714,7 +714,7 @@ List<Widget> _rowsForUnit({
         change: null,
         decision: null,
         isActive: false,
-        unitKey: keyForUnit(unit.id),
+        unitKey: null,
         emphasizeHeader: unit.kind == 'header',
         isContext: true,
       ),
@@ -727,7 +727,6 @@ List<Widget> _rowsForUnit({
         _AddedUnitRow(
           text: change.newText,
           isHeader: change.newUnitKind == 'header',
-          unitKey: keyForUnit(unit.id),
         ),
       );
     } else if (_showPendingAddition(change, decisions) &&
@@ -736,7 +735,7 @@ List<Widget> _rowsForUnit({
         _PendingAdditionRow(
           text: change.newText,
           isHeader: change.newUnitKind == 'header',
-          unitKey: keyForUnit(unit.id),
+          unitKey: keyForChange(change.id),
           isActive: change.id == activeChangeId,
         ),
       );
@@ -761,13 +760,13 @@ class _DocAppendOnlyReview extends StatelessWidget {
     required this.document,
     required this.decisions,
     required this.activeChangeId,
-    required this.keyForUnit,
+    required this.keyForChange,
   });
 
   final ChangeDocument document;
   final Map<String, bool> decisions;
   final String? activeChangeId;
-  final GlobalKey Function(String unitId) keyForUnit;
+  final GlobalKey Function(String changeId) keyForChange;
 
   @override
   Widget build(BuildContext context) {
@@ -786,7 +785,7 @@ class _DocAppendOnlyReview extends StatelessWidget {
           changes: const [],
           decisions: decisions,
           activeChangeId: activeChangeId,
-          keyForUnit: keyForUnit,
+          keyForChange: keyForChange,
           isContext: true,
         ),
       );
@@ -802,14 +801,13 @@ class _DocAppendOnlyReview extends StatelessWidget {
         children.add(
           _AddedUnitRow(
             text: change.newText,
-            unitKey: keyForUnit(change.unitId),
           ),
         );
       } else if (_showPendingAddition(change, decisions)) {
         children.add(
           _PendingAdditionRow(
             text: change.newText,
-            unitKey: keyForUnit(change.unitId),
+            unitKey: keyForChange(change.id),
             isActive: change.id == activeChangeId,
           ),
         );
@@ -831,13 +829,13 @@ class _PartGroupedDocumentReview extends StatelessWidget {
     required this.document,
     required this.decisions,
     required this.activeChangeId,
-    required this.keyForUnit,
+    required this.keyForChange,
   });
 
   final ChangeDocument document;
   final Map<String, bool> decisions;
   final String? activeChangeId;
-  final GlobalKey Function(String unitId) keyForUnit;
+  final GlobalKey Function(String changeId) keyForChange;
 
   @override
   Widget build(BuildContext context) {
@@ -870,7 +868,7 @@ class _PartGroupedDocumentReview extends StatelessWidget {
               changes: entry.changes,
               decisions: decisions,
               activeChangeId: activeChangeId,
-              keyForUnit: keyForUnit,
+              keyForChange: keyForChange,
               isContext: entry.isContext,
             ),
           ],
@@ -1096,7 +1094,7 @@ class _UnitRow extends StatelessWidget {
   final ChangeItem? change;
   final bool? decision;
   final bool isActive;
-  final GlobalKey unitKey;
+  final GlobalKey? unitKey;
   final bool emphasizeHeader;
   final bool isContext;
 
@@ -1235,18 +1233,15 @@ class _AddedUnitRow extends StatelessWidget {
   const _AddedUnitRow({
     required this.text,
     this.isHeader = false,
-    this.unitKey,
   });
 
   final String text;
   final bool isHeader;
-  final GlobalKey? unitKey;
 
   @override
   Widget build(BuildContext context) {
     final display = text.trim().isEmpty ? '…' : text;
     return Padding(
-      key: unitKey,
       padding: EdgeInsets.only(left: isHeader ? 0 : 12, bottom: 12),
       child: DecoratedBox(
         decoration: BoxDecoration(
