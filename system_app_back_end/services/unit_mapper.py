@@ -31,14 +31,58 @@ def units_from_file(file_id):
     return units
 
 
-def flatten_units_for_ai(units, title):
-    lines = []
+def extract_part_names(units):
+    return [
+        (unit.get("text") or "").strip()
+        for unit in units
+        if unit.get("kind") == "header" and (unit.get("text") or "").strip()
+    ]
+
+
+def annotate_units_with_parts(units):
+    annotated = []
+    current_part = None
     for unit in units:
+        row = dict(unit)
+        if row.get("kind") == "header":
+            current_part = (row.get("text") or "").strip() or None
+        row["part"] = current_part
+        annotated.append(row)
+    return annotated
+
+
+def flatten_file_by_parts_for_ai(units, title):
+    part_names = extract_part_names(units)
+    lines = [f"=== {title.upper()} ==="]
+    if part_names:
+        lines.append(
+            "PART LIST: " + " | ".join(f'"{name}"' for name in part_names)
+        )
+    else:
+        lines.append("PART LIST: (none — no part headers in this file yet)")
+    lines.append("")
+
+    current_part = None
+    for unit in units:
+        kind = unit.get("kind")
         text = (unit.get("text") or "").strip()
+        if kind == "header":
+            current_part = text
+            lines.append(f"--- PART: {text or '(untitled)'} ---")
+            if text:
+                lines.append(f"[{unit['id']}] {text}")
+            continue
+        if current_part is None:
+            if not lines or lines[-1] != "--- BEFORE PARTS ---":
+                lines.append("--- BEFORE PARTS ---")
         if text:
             lines.append(f"[{unit['id']}] {text}")
-    body = "\n".join(lines)
-    return f"=== {title.upper()} ===\n{body}".strip()
+
+    return "\n".join(lines).strip()
+
+
+def flatten_units_for_ai(units, title):
+    return flatten_file_by_parts_for_ai(units, title)
 
 
 def flatten_doc_file_for_ai(doc_file):
@@ -74,14 +118,21 @@ def flatten_input_file_for_ai(input_file):
 
 
 def flatten_project_files_for_ai(input_file, plan_file, execution_file, tasks_file, doc_file):
+    plan_units = units_from_file(plan_file.id)
+    execution_units = units_from_file(execution_file.id)
+    tasks_units = units_from_file(tasks_file.id)
+    input_units = units_from_file(input_file.id)
     return {
-        "input": flatten_input_file_for_ai(input_file),
-        "plan": flatten_units_for_ai(units_from_file(plan_file.id), plan_file.name),
-        "execution": flatten_units_for_ai(
-            units_from_file(execution_file.id), execution_file.name
+        "input": flatten_file_by_parts_for_ai(input_units, input_file.name),
+        "plan": flatten_file_by_parts_for_ai(plan_units, plan_file.name),
+        "execution": flatten_file_by_parts_for_ai(
+            execution_units, execution_file.name
         ),
-        "tasks": flatten_units_for_ai(units_from_file(tasks_file.id), tasks_file.name),
+        "tasks": flatten_file_by_parts_for_ai(tasks_units, tasks_file.name),
         "documentation": flatten_doc_file_for_ai(doc_file),
+        "plan_parts": extract_part_names(plan_units),
+        "execution_parts": extract_part_names(execution_units),
+        "tasks_parts": extract_part_names(tasks_units),
     }
 
 

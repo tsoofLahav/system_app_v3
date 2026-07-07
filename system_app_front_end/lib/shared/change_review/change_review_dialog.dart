@@ -353,6 +353,9 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
           decisions: _decisions,
           activeChangeId: _activeChangeId,
           keyForUnit: _keyForUnit,
+          groupByParts:
+              widget.reviewMode == ChangeReviewMode.projectUpdate &&
+              document.key != 'doc',
         ),
       );
     }
@@ -390,6 +393,9 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
           decisions: _decisions,
           activeChangeId: _activeChangeId,
           keyForUnit: _keyForUnit,
+          groupByParts:
+              widget.reviewMode == ChangeReviewMode.projectUpdate &&
+              active.key != 'doc',
         ),
         if (_awaitingHandoff) ...[
           const SizedBox(height: 12),
@@ -568,15 +574,26 @@ class _DocumentReview extends StatelessWidget {
     required this.decisions,
     required this.activeChangeId,
     required this.keyForUnit,
+    this.groupByParts = false,
   });
 
   final ChangeDocument document;
   final Map<String, bool> decisions;
   final String? activeChangeId;
   final GlobalKey Function(String unitId) keyForUnit;
+  final bool groupByParts;
 
   @override
   Widget build(BuildContext context) {
+    if (groupByParts) {
+      return _PartGroupedDocumentReview(
+        document: document,
+        decisions: decisions,
+        activeChangeId: activeChangeId,
+        keyForUnit: keyForUnit,
+      );
+    }
+
     final changesByUnit = document.changesByUnitId;
     if (document.units.isEmpty) {
       return Text('…', style: AppTypography.noteBodyStyle);
@@ -586,16 +603,110 @@ class _DocumentReview extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final unit in document.units) ...[
-          if (_shouldShowUnit(unit, changesByUnit[unit.id]))
+          if (_shouldShowUnit(unit, changesByUnit[unit.id], decisions))
             _UnitRow(
               unit: unit,
               change: changesByUnit[unit.id],
-              decision: _decisionFor(changesByUnit[unit.id]),
+              decision: _decisionFor(changesByUnit[unit.id], decisions),
               isActive: changesByUnit[unit.id]?.id == activeChangeId,
               unitKey: keyForUnit(unit.id),
             ),
-          if (_shouldShowAddition(unit, changesByUnit[unit.id]))
-            _AddedUnitRow(text: changesByUnit[unit.id]!.newText),
+          if (_shouldShowAddition(unit, changesByUnit[unit.id], decisions))
+            _AddedUnitRow(
+              text: changesByUnit[unit.id]!.newText,
+              isHeader: changesByUnit[unit.id]!.newUnitKind == 'header',
+            ),
+        ],
+      ],
+    );
+  }
+
+  bool? _decisionFor(ChangeItem? change, Map<String, bool> decisions) {
+    if (change == null) return null;
+    if (!decisions.containsKey(change.id)) return null;
+    return decisions[change.id];
+  }
+
+  static bool _shouldShowUnit(
+    ChangeUnit unit,
+    ChangeItem? change,
+    Map<String, bool> decisions,
+  ) {
+    if (change?.action == 'remove' && decisions[change!.id] == true) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _shouldShowAddition(
+    ChangeUnit unit,
+    ChangeItem? change,
+    Map<String, bool> decisions,
+  ) {
+    if (change == null || decisions[change.id] != true) return false;
+    return change.action == 'add_after' || change.action == 'add_row';
+  }
+}
+
+class _PartGroupedDocumentReview extends StatelessWidget {
+  const _PartGroupedDocumentReview({
+    required this.document,
+    required this.decisions,
+    required this.activeChangeId,
+    required this.keyForUnit,
+  });
+
+  final ChangeDocument document;
+  final Map<String, bool> decisions;
+  final String? activeChangeId;
+  final GlobalKey Function(String unitId) keyForUnit;
+
+  @override
+  Widget build(BuildContext context) {
+    final sections = _partSectionsWithChanges(document, decisions);
+    if (sections.isEmpty) {
+      return Text('…', style: AppTypography.noteBodyStyle);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < sections.length; i++) ...[
+          if (i > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Divider(
+                height: 1,
+                thickness: 1,
+                color: AppColors.noteBorder.withValues(alpha: 0.45),
+              ),
+            ),
+          _PartHeaderBanner(title: sections[i].title),
+          const SizedBox(height: 8),
+          for (final entry in sections[i].entries) ...[
+            if (entry.showUnit)
+              _UnitRow(
+                unit: entry.unit,
+                change: entry.change,
+                decision: _decisionFor(entry.change),
+                isActive: entry.change?.id == activeChangeId,
+                unitKey: keyForUnit(entry.unit.id),
+                emphasizeHeader: entry.unit.kind == 'header',
+              )
+            else if (_showPendingAddition(entry))
+              _PendingAdditionRow(
+                text: entry.change!.newText,
+                isHeader: entry.change!.newUnitKind == 'header',
+                unitKey: keyForUnit(entry.unit.id),
+                isActive: entry.change?.id == activeChangeId,
+              ),
+            if (entry.showAddition)
+              _AddedUnitRow(
+                text: entry.change!.newText,
+                isHeader: entry.change!.newUnitKind == 'header',
+                unitKey: keyForUnit(entry.unit.id),
+              ),
+          ],
         ],
       ],
     );
@@ -607,16 +718,153 @@ class _DocumentReview extends StatelessWidget {
     return decisions[change.id];
   }
 
-  bool _shouldShowUnit(ChangeUnit unit, ChangeItem? change) {
-    if (change?.action == 'remove' && decisions[change!.id] == true) {
-      return false;
+  bool _showPendingAddition(_PartEntryView entry) {
+    final change = entry.change;
+    if (change == null || entry.showUnit || entry.showAddition) return false;
+    if (decisions.containsKey(change.id)) return false;
+    return change.action == 'add_after' || change.action == 'add_row';
+  }
+}
+
+class _PartSectionView {
+  const _PartSectionView({required this.title, required this.entries});
+
+  final String title;
+  final List<_PartEntryView> entries;
+}
+
+class _PartEntryView {
+  const _PartEntryView({
+    required this.unit,
+    required this.change,
+    required this.showUnit,
+    required this.showAddition,
+  });
+
+  final ChangeUnit unit;
+  final ChangeItem? change;
+  final bool showUnit;
+  final bool showAddition;
+}
+
+List<_PartSectionView> _partSectionsWithChanges(
+  ChangeDocument document,
+  Map<String, bool> decisions,
+) {
+  final changesByUnit = document.changesByUnitId;
+  final partOrder = <String>[];
+  final partUnits = <String, List<ChangeUnit>>{};
+  var currentPart = '';
+  for (final unit in document.units) {
+    if (unit.kind == 'header') {
+      currentPart = unit.text.trim();
+      partOrder.add(currentPart);
+      partUnits.putIfAbsent(currentPart, () => []).add(unit);
+      continue;
     }
-    return true;
+    if (!partUnits.containsKey(currentPart)) {
+      partOrder.add(currentPart);
+      partUnits[currentPart] = [];
+    }
+    partUnits[currentPart]!.add(unit);
   }
 
-  bool _shouldShowAddition(ChangeUnit unit, ChangeItem? change) {
-    if (change == null || decisions[change.id] != true) return false;
-    return change.action == 'add_after' || change.action == 'add_row';
+  final sections = <_PartSectionView>[];
+  final deferredNewParts = <_PartEntryView>[];
+
+  for (final partName in partOrder) {
+    final units = partUnits[partName] ?? const [];
+    final entries = <_PartEntryView>[];
+
+    for (final unit in units) {
+      final change = changesByUnit[unit.id];
+      final hasChange = change != null;
+      if (hasChange &&
+          change.action == 'add_after' &&
+          change.newUnitKind == 'header' &&
+          change.newText.trim().isNotEmpty &&
+          change.newText.trim() != partName.trim()) {
+        if (decisions[change.id] == false) continue;
+        final showAddition = _DocumentReview._shouldShowAddition(
+          unit,
+          change,
+          decisions,
+        );
+        deferredNewParts.add(
+          _PartEntryView(
+            unit: unit,
+            change: change,
+            showUnit: false,
+            showAddition: showAddition,
+          ),
+        );
+        continue;
+      }
+
+      final showUnit =
+          hasChange && _DocumentReview._shouldShowUnit(unit, change, decisions);
+      final showAddition = hasChange &&
+          _DocumentReview._shouldShowAddition(unit, change, decisions);
+
+      if (!showUnit && !showAddition) continue;
+      entries.add(
+        _PartEntryView(
+          unit: unit,
+          change: change,
+          showUnit: showUnit,
+          showAddition: showAddition,
+        ),
+      );
+    }
+
+    if (entries.isEmpty) continue;
+
+    final title = partName.trim().isEmpty ? '…' : partName.trim();
+    sections.add(_PartSectionView(title: title, entries: entries));
+  }
+
+  final deferredByPart = <String, List<_PartEntryView>>{};
+  for (final entry in deferredNewParts) {
+    final title = entry.change!.newText.trim();
+    deferredByPart.putIfAbsent(title, () => []).add(entry);
+  }
+  for (final title in deferredByPart.keys) {
+    sections.add(_PartSectionView(title: title, entries: deferredByPart[title]!));
+  }
+
+  return sections;
+}
+
+class _PartHeaderBanner extends StatelessWidget {
+  const _PartHeaderBanner({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.aiCyan.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border(
+          left: BorderSide(
+            color: AppColors.aiCyan.withValues(alpha: 0.85),
+            width: 3,
+          ),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Text(
+          title,
+          style: AppTypography.metaStyle.copyWith(
+            color: AppColors.aiCyan.withValues(alpha: 0.95),
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -627,6 +875,7 @@ class _UnitRow extends StatelessWidget {
     required this.decision,
     required this.isActive,
     required this.unitKey,
+    this.emphasizeHeader = false,
   });
 
   final ChangeUnit unit;
@@ -634,17 +883,25 @@ class _UnitRow extends StatelessWidget {
   final bool? decision;
   final bool isActive;
   final GlobalKey unitKey;
+  final bool emphasizeHeader;
 
   @override
   Widget build(BuildContext context) {
     final displayText = _displayText();
     final isPending = change != null && decision == null;
     final isAccepted = decision == true;
+    final isHeader = emphasizeHeader || unit.kind == 'header';
 
     Widget text = Text(
       displayText,
-      style: AppTypography.noteBodyStyle.copyWith(
-        color: isAccepted ? AppColors.aiCyan.withValues(alpha: 0.95) : null,
+      style: (isHeader ? AppTypography.metaStyle : AppTypography.noteBodyStyle)
+          .copyWith(
+        color: isAccepted
+            ? AppColors.aiCyan.withValues(alpha: 0.95)
+            : isHeader
+            ? AppColors.noteMeta.withValues(alpha: 0.9)
+            : null,
+        fontWeight: isHeader ? FontWeight.w600 : null,
       ),
     );
 
@@ -702,26 +959,93 @@ class _UnitRow extends StatelessWidget {
   }
 }
 
-class _AddedUnitRow extends StatelessWidget {
-  const _AddedUnitRow({required this.text});
+class _PendingAdditionRow extends StatelessWidget {
+  const _PendingAdditionRow({
+    required this.text,
+    required this.unitKey,
+    required this.isActive,
+    this.isHeader = false,
+  });
 
   final String text;
+  final GlobalKey unitKey;
+  final bool isActive;
+  final bool isHeader;
 
   @override
   Widget build(BuildContext context) {
+    final display = text.trim().isEmpty ? '…' : text;
+    Widget content = Text(
+      display,
+      style: (isHeader ? AppTypography.metaStyle : AppTypography.noteBodyStyle)
+          .copyWith(
+        color: AppColors.aiCyan.withValues(alpha: 0.95),
+        fontWeight: isHeader ? FontWeight.w600 : null,
+      ),
+    );
+
+    final decoration = BoxDecoration(
+      color: AppColors.aiCyan.withValues(alpha: isActive ? 0.16 : 0.08),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(
+        color: AppColors.aiCyan.withValues(alpha: isActive ? 0.65 : 0.35),
+      ),
+    );
+
     return Padding(
-      padding: const EdgeInsets.only(left: 12, bottom: 12),
+      key: unitKey,
+      padding: EdgeInsets.only(left: isHeader ? 0 : 12, bottom: 12),
+      child: DecoratedBox(
+        decoration: decoration,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: content,
+        ),
+      ),
+    );
+  }
+}
+
+class _AddedUnitRow extends StatelessWidget {
+  const _AddedUnitRow({
+    required this.text,
+    this.isHeader = false,
+    this.unitKey,
+  });
+
+  final String text;
+  final bool isHeader;
+  final GlobalKey? unitKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final display = text.trim().isEmpty ? '…' : text;
+    return Padding(
+      key: unitKey,
+      padding: EdgeInsets.only(left: isHeader ? 0 : 12, bottom: 12),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: AppColors.aiCyan.withValues(alpha: 0.06),
+          color: AppColors.aiCyan.withValues(alpha: isHeader ? 0.12 : 0.06),
           borderRadius: BorderRadius.circular(8),
+          border: isHeader
+              ? Border(
+                  left: BorderSide(
+                    color: AppColors.aiCyan.withValues(alpha: 0.85),
+                    width: 3,
+                  ),
+                )
+              : null,
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Text(
-            text.trim().isEmpty ? '…' : text,
-            style: AppTypography.noteBodyStyle.copyWith(
+            display,
+            style: (isHeader
+                    ? AppTypography.metaStyle
+                    : AppTypography.noteBodyStyle)
+                .copyWith(
               color: AppColors.aiCyan.withValues(alpha: 0.95),
+              fontWeight: isHeader ? FontWeight.w600 : null,
             ),
           ),
         ),

@@ -13,6 +13,7 @@ from services.diff_engine import (
 )
 from services.openai_service import chat_json
 from services.unit_mapper import (
+    annotate_units_with_parts,
     detect_language,
     flatten_project_files_for_ai,
     units_from_doc_table,
@@ -23,25 +24,33 @@ from services.unit_mapper import (
 
 PROJECT_UPDATE_PLAN_PROMPT = """You analyze a project daily log against the project PLAN.
 
-## Files
+## Files (part-grouped)
 
-INPUT — Daily log (read only). What happened on a certain day: progress, decisions, issues, future points.
+Each file is split into **parts** marked by `--- PART: Name ---` headers.
+`PART LIST` at the top lists existing part names only — do not invent parts that are not in PLAN unless INPUT requires a new one.
 
-PLAN — Inner headers are project **parts**. Each part has a concise essence (list items and text under that header).
+INPUT — Daily log (read only). May also use part sections if the user structured their log.
+
+PLAN — Inner headers are project **parts**. Under each part: concise essence (list items and text).
 
 ## Your job (step 1 of 4)
 
-1. Read PLAN headers to learn the existing parts.
-2. Read INPUT and map its content to part(s) — usually one primary part; side comments on others are possible.
-3. First try to fit the log into **existing** parts. If the content clearly belongs to a new area of the project, add a new part (new header and essence) via plan_ops.
-4. Return plan edits when a part must be added, removed, or its essence renamed/changed at the header or part-level summary — not for execution-level detail.
+1. Read `PART LIST` and each `--- PART: ... ---` block to learn existing parts.
+2. Read INPUT and decide which part(s) the log belongs to.
+3. **New part decision (important):**
+   - If INPUT describes a clearly distinct project area that does **not** match any existing PLAN part → you **must** add a new part.
+   - If INPUT only updates, refines, or extends work within an existing area → edit that existing part only.
+   - Do **not** force unrelated INPUT into the wrong existing part to avoid adding a part.
+4. Return plan edits when a part must be added, removed, or its essence renamed/changed — not for execution-level detail.
 
-Set `plan_structure_changed` true when parts are added, removed, or renamed/redefined at the plan level (including new parts).
+Set `plan_structure_changed` true when parts are added, removed, or renamed/redefined (including new parts).
 
 ## Output
 
 JSON only:
 {
+  "existing_parts": ["Part A", "Part B"],
+  "new_parts": [],
   "parts_touched": ["Part name"],
   "primary_part": "Part name",
   "input_summary": "1-3 sentences: what the log says, mapped to parts",
@@ -49,12 +58,15 @@ JSON only:
   "plan_ops": []
 }
 
+`new_parts`: names of parts you are **creating** that were not in PLAN `PART LIST`. Empty if only editing existing parts.
+
 `plan_ops` entries (when needed):
 - op: "replace" | "remove" | "add_after"
-- unit_id: from PLAN input (use the last header or list item in a part as anchor for add_after when adding a new part section)
-- text: full new line for replace/add_after — for a new part, the text is the new header title; follow with essence lines as needed via further add_after ops
+- unit_id: from PLAN input
+- text: full new line
+- kind: required for add_after when adding a **new part** — use `"header"` for the new part title; use `"list_item"` or `"paragraph"` for essence lines under that part
 
-New parts are valid when INPUT clearly does not fit any existing part. Do not force-fit unrelated content into the wrong part."""
+To add a new part at the end: `add_after` on the last unit of the last existing part (or last unit in file) with `kind: "header"` and `text` = new part name, then further `add_after` ops on that header for essence lines."""
 
 # --- Step 2: Execution -----------------------------------------------------------
 
@@ -62,9 +74,11 @@ PROJECT_UPDATE_EXECUTION_PROMPT = """You update project EXECUTION from a daily l
 
 ## Context
 
-You receive which parts the log concerns and a short summary from step 1.
+You receive which parts the log concerns, any **new parts** from step 1, and a short summary.
 
-## Files
+## Files (part-grouped)
+
+Each section is marked `--- PART: Name ---`. Match edits to the correct part block.
 
 INPUT — Daily log (read only).
 
@@ -76,9 +90,11 @@ EXECUTION — Durable concrete work points under the same part headers as PLAN.
 
 Using INPUT and the part mapping, return edits to EXECUTION only.
 
-Before adding a new point, check existing points in the relevant part. If INPUT overlaps a similar existing point, **replace** or refine that unit first to avoid near-duplicates. Add new points when the content is genuinely distinct.
+If step 1 added **new parts**, you must add matching `--- PART: ... ---` sections in EXECUTION:
+- First `add_after` on the last unit of the last existing part (or last file unit) with `kind: "header"` and the new part name
+- Then add durable points under that part via further `add_after` ops
 
-Removing or merging points is fine when it reduces redundancy.
+Before adding a new point in an existing part, check existing points there. If INPUT overlaps a similar point, **replace** or refine that unit first. Add new points when genuinely distinct.
 
 ## Output
 
@@ -89,8 +105,7 @@ Each op:
 - op: "replace" | "remove" | "add_after"
 - unit_id: from EXECUTION input
 - text: full new line
-
-Use replace to update similar existing points; use add_after for clearly new durable points under the right part."""
+- kind: use `"header"` when adding a new part section; otherwise omit or use list_item/paragraph/task as appropriate"""
 
 # --- Step 3: Tasks -------------------------------------------------------------
 
@@ -98,9 +113,11 @@ PROJECT_UPDATE_TASKS_PROMPT = """You update project TASKS from a daily log.
 
 ## Context
 
-You receive which parts the log concerns, a short summary, and the proposed EXECUTION changes from step 2.
+You receive which parts the log concerns, any **new parts** from step 1, a short summary, and proposed EXECUTION changes.
 
-## Files
+## Files (part-grouped)
+
+Sections are marked `--- PART: Name ---`. Keep task edits inside the correct part.
 
 INPUT — Daily log (read only).
 
@@ -109,9 +126,9 @@ TASKS — Calendar-sized missions under part headers. Simpler phrasing than exec
 ## Rules
 
 - Tasks are for organizing work the user can schedule — not a dump of every bullet.
-- Group related small points into one task when they belong together and are not too large.
+- Group related small points into one task when they belong together.
 - Align with execution intent but phrase more simply and actionably.
-- Avoid many tiny tasks.
+- If step 1 added new parts, add matching part headers in TASKS (`add_after` with `kind: "header"`) before adding tasks under them.
 
 ## Your job (step 3 of 4)
 
@@ -126,8 +143,7 @@ Each op:
 - op: "replace" | "remove" | "add_after"
 - unit_id: from TASKS input (e.g. task:12) or list item id
 - text: full new task title / line
-
-If execution changes imply new work but no matching task exists, use add_after on a sensible anchor in the same part."""
+- kind: use `"header"` when adding a new part section"""
 
 # --- Step 4: Documentation -----------------------------------------------------
 
@@ -172,9 +188,18 @@ def _format_ops_for_context(ops: list) -> str:
     return "\n".join(lines)
 
 
+def _format_parts_context(flattened: dict) -> str:
+    plan_parts = flattened.get("plan_parts") or []
+    if not plan_parts:
+        return "Existing plan parts: (none)"
+    quoted = ", ".join(f'"{name}"' for name in plan_parts)
+    return f"Existing plan parts ({len(plan_parts)}): {quoted}"
+
+
 def _run_plan_step(topic_name: str, flattened: dict, locale: str) -> dict:
     user_prompt = (
-        f"Topic: {topic_name}\n\n"
+        f"Topic: {topic_name}\n"
+        f"{_format_parts_context(flattened)}\n\n"
         f"{flattened['input']}\n\n"
         f"{flattened['plan']}"
     )
@@ -191,10 +216,18 @@ def _run_execution_step(
     parts_touched = plan_result.get("parts_touched") or []
     primary = plan_result.get("primary_part") or ""
     summary = (plan_result.get("input_summary") or "").strip()
+    new_parts = plan_result.get("new_parts") or []
+    new_parts_line = (
+        f"New parts to add in EXECUTION: {', '.join(new_parts)}\n"
+        if new_parts
+        else ""
+    )
     user_prompt = (
         f"Topic: {topic_name}\n"
+        f"{_format_parts_context(flattened)}\n"
         f"Parts touched: {', '.join(parts_touched) or primary or 'General'}\n"
         f"Primary part: {primary or 'General'}\n"
+        f"{new_parts_line}"
         f"Input summary: {summary or '(see INPUT below)'}\n\n"
         f"{flattened['input']}\n\n"
         f"{flattened['execution']}"
@@ -216,11 +249,19 @@ def _run_tasks_step(
     parts_touched = plan_result.get("parts_touched") or []
     primary = plan_result.get("primary_part") or ""
     summary = (plan_result.get("input_summary") or "").strip()
+    new_parts = plan_result.get("new_parts") or []
+    new_parts_line = (
+        f"New parts to add in TASKS: {', '.join(new_parts)}\n"
+        if new_parts
+        else ""
+    )
     execution_ops = execution_result.get("execution_ops") or []
     user_prompt = (
         f"Topic: {topic_name}\n"
+        f"{_format_parts_context(flattened)}\n"
         f"Parts touched: {', '.join(parts_touched) or primary or 'General'}\n"
         f"Primary part: {primary or 'General'}\n"
+        f"{new_parts_line}"
         f"Input summary: {summary or '(see INPUT below)'}\n\n"
         f"Proposed execution changes:\n"
         f"{_format_ops_for_context(execution_ops)}\n\n"
@@ -257,9 +298,9 @@ def build_project_update_change_set(
     doc_file,
     ai_result,
 ):
-    plan_units = units_from_file(plan_file.id)
-    execution_units = units_from_file(execution_file.id)
-    tasks_units = units_from_file(tasks_file.id)
+    plan_units = annotate_units_with_parts(units_from_file(plan_file.id))
+    execution_units = annotate_units_with_parts(units_from_file(execution_file.id))
+    tasks_units = annotate_units_with_parts(units_from_file(tasks_file.id))
     doc_units = units_from_doc_table(doc_file)
 
     documents = []
@@ -325,6 +366,8 @@ def smart_project_update(
     doc_result = _run_doc_step(topic.name, flattened, log_date_hint, locale)
 
     ai_result = {
+        "existing_parts": plan_result.get("existing_parts") or [],
+        "new_parts": plan_result.get("new_parts") or [],
         "parts_touched": plan_result.get("parts_touched") or [],
         "primary_part": plan_result.get("primary_part"),
         "input_summary": plan_result.get("input_summary"),

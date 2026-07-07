@@ -76,9 +76,15 @@ class ChangeItem {
     required this.oldText,
     required this.newText,
     this.reason,
+    this.newUnitKind,
   });
 
   factory ChangeItem.fromJson(Map<String, dynamic> json) {
+    final newUnit = json['new_unit'];
+    String? newUnitKind;
+    if (newUnit is Map) {
+      newUnitKind = newUnit['kind'] as String?;
+    }
     return ChangeItem(
       id: json['id'] as String? ?? '',
       action: json['action'] as String? ?? 'replace',
@@ -86,6 +92,7 @@ class ChangeItem {
       oldText: json['old_text'] as String? ?? '',
       newText: json['new_text'] as String? ?? '',
       reason: json['reason'] as String?,
+      newUnitKind: newUnitKind,
     );
   }
 
@@ -95,6 +102,7 @@ class ChangeItem {
   final String oldText;
   final String newText;
   final String? reason;
+  final String? newUnitKind;
 }
 
 List<ChangeUnit> _units(dynamic raw) {
