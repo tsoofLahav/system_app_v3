@@ -1,127 +1,138 @@
-"""Project update AI — header-driven log sections, per-part updates, auto doc."""
+"""Project update AI v2 — header map, content, diff, doc."""
 
 from __future__ import annotations
 
 from datetime import date
 
-from config import OPENAI_PROCESS_UPDATE_TEMPERATURE
+from config import OPENAI_PROCESS_UPDATE_TEMPERATURE, OPENAI_PROJECT_UPDATE_TEMPERATURE
 from models import AiProposal, db
 from services.diff_engine import build_change_set, build_document_change_set
 from services.openai_service import chat_json
+from services.part_diff import build_create_part_ops, sanitize_diff_ops
 from services.unit_mapper import (
     annotate_units_with_parts,
+    attach_mapped_log_content,
     build_part_removal_ops,
     detect_language,
     extract_log_sections,
     flatten_doc_recent_rows_for_ai,
-    flatten_log_section,
+    flatten_log_content,
     flatten_log_sections_for_mapping,
-    flatten_single_part_for_ai,
-    last_unit_id,
+    flatten_part_content_for_update,
+    flatten_part_units_with_ids,
+    list_log_sections_for_map,
+    list_plan_headers,
+    normalize_content_payload,
+    resolve_plan_part_name,
     slice_units_by_part,
     summarize_parts_for_mapping,
+    synthesize_create_part_units,
     units_from_file,
 )
 
-PROJECT_UPDATE_SECTION_MAPPING_PROMPT = """You map sections of a daily log to project parts.
+PROJECT_UPDATE_HEADER_MAP_PROMPT = """You map daily log section headers to project plan parts.
 
 ## Input
+- PLAN_HEADERS — canonical existing part names (from plan file)
+- LOG_SECTIONS — indexed header text only (no body)
 
-- EXISTING PARTS — names and short essence summaries (read only)
-- LOG SECTIONS — each section has a header (as the user wrote it) and a short excerpt
+## Rules
+For each log section:
+- Header matches an existing plan part (by meaning) → action: update, part_name = exact string from PLAN_HEADERS
+- Header does not match any plan part → action: create, part_name = verbatim log header text
+- Header explicitly retires/cancels an existing plan part → action: remove, part_name = exact plan header being retired
 
-The log header text may **not** exactly match existing part names. Match by **meaning**.
-
-## Your job (classification only — no file edits)
-
-For each log section, decide:
-- `action: "update"` — maps to an existing part (`target_part` = canonical existing name)
-- `action: "create"` — describes a new project area (`target_part` = new canonical name)
-
-Also list `parts_to_remove` only when the log **explicitly** states a part/mission should be removed.
-
-Infer `log_date` (YYYY-MM-DD) from the log when possible.
+Never invent part names from log body text or comments. Use header text only.
 
 ## Output
-
 JSON only:
 {
-  "sections": [
+  "parts": [
     {
-      "log_header": "header text from log",
+      "part_name": "Exact Name",
       "action": "update",
-      "target_part": "Canonical Part Name",
-      "mapping_note": "why this match"
+      "log_section_index": 0,
+      "log_header": "verbatim log header"
     }
   ],
   "parts_to_remove": [],
   "log_date": "YYYY-MM-DD"
 }"""
 
-PROJECT_UPDATE_PER_PART_PROMPT = """You update a **single project part** in PLAN, EXECUTION, and TASKS.
+PROJECT_UPDATE_CREATE_CONTENT_PROMPT = """You write initial content for a new project part.
 
-You are updating one part only. Ignore anything outside this part. Do not reference other parts.
+## File roles
+- PLAN — concise essence (what this part is about). Short list items.
+- EXECUTION — durable work points. No dates, no diary tone.
+- TASKS — calendar-sized missions. Actionable and simple.
 
-## Scope
+## Input
+One log section (header + today's notes for this area).
 
-You receive:
-- The mapping for this part (log header → target part, update or create)
-- **One log section** only — what the user wrote for this part today
-- **Single-part slices** of PLAN, EXECUTION, and TASKS — only this part's content (or "part does not exist yet")
-
-## Three files (same part)
-
-**PLAN** — part header + concise essence (list items / short text). Not execution detail.
-
-**EXECUTION** — durable work points under the part header. No dates, no diary tone.
-
-**TASKS** — calendar-sized missions. Simpler and more actionable than execution.
-
-## Rules
-
-### action: update
-- Edit only units in the provided part slices.
-- Replace similar existing points before adding duplicates.
-
-### action: create
-- Part does not exist yet. Bootstrap a full part block in each file:
-  1. `add_after` on the given anchor `unit_id` with `kind: "header"` and `text` = target part name
-  2. Further `add_after` on the **same anchor** for essence (plan), points (execution), tasks (tasks)
-- Set `plan_structure_changed` true.
+## Job
+Write initial plan, execution, and tasks content for this new part from the log.
 
 ## Output
-
 JSON only:
 {
-  "target_part": "Part name",
-  "action": "update",
-  "plan_structure_changed": false,
-  "plan_ops": [],
-  "execution_ops": [],
-  "tasks_ops": []
-}
+  "content": {
+    "plan": ["..."],
+    "execution": ["..."],
+    "tasks": ["..."]
+  }
+}"""
 
-Each op: op (`replace` | `remove` | `add_after`), unit_id, text, kind (`header` | `list_item` | `paragraph` | `task` as needed)"""
+PROJECT_UPDATE_UPDATE_CONTENT_PROMPT = """You revise existing part content using today's log section.
+
+## File roles
+- PLAN — concise essence. Short list items.
+- EXECUTION — durable work points. No dates, no diary tone.
+- TASKS — calendar-sized missions. Actionable and simple.
+
+## Input
+- Log section (today's notes)
+- Current plan, execution, and tasks content for this part (text only, no IDs)
+
+## Job
+Return full updated content arrays that integrate the log. Prefer updating similar lines over duplicating.
+
+## Output
+JSON only:
+{
+  "content": {
+    "plan": ["..."],
+    "execution": ["..."],
+    "tasks": ["..."]
+  }
+}"""
+
+PROJECT_UPDATE_DIFF_PROMPT = """You suggest minimal edit ops to transform OLD content into NEW content.
+
+## Input
+- OLD — lines with unit_id prefixes like [block:1:item:0] text
+- NEW — target text lines (array)
+
+## Job
+Return ops on OLD only: replace, add_after, remove.
+- replace — change an existing line
+- add_after — insert after a unit_id (include kind: list_item or task)
+- remove — delete a unit
+
+Keep ops minimal. Do not duplicate lines already matching NEW.
+
+## Output
+JSON only: {"ops":[]}"""
 
 PROJECT_UPDATE_DOC_PROMPT = """You append documentation rows from a project daily log.
 
-## Input
-
-- LOG — section-grouped daily log (read only)
-- RECENT DOCUMENTATION — last few rows for tone reference only
-
 ## Rules
-
-- **Append only.** Never modify existing rows.
-- Write what happened **this day**: progress per part, discussions, decisions, plan changes, new/removed parts, blockers.
-- Not execution-level bullet dumps. One focused highlight per row.
-- 1+ rows depending on log richness — add more rows only when the log has distinct events worth separate lines.
+- Append only. Never modify existing rows.
+- Write what happened this day: progress, decisions, blockers, new/removed parts.
+- One focused highlight per row. 1+ rows when the log has distinct events.
 - Use the provided default date when the log does not state one.
 
 ## Output
-
 JSON only: {"doc_ops":[]}
-
 Each entry: date (YYYY-MM-DD), text (no date prefix in text)"""
 
 
@@ -143,86 +154,164 @@ def _normalize_doc_ops(doc_ops: list) -> list:
     return normalized
 
 
-def _find_log_section(log_sections, log_header: str) -> dict | None:
-    key = (log_header or "").strip().lower()
-    for section in log_sections:
-        header = (section.get("header") or "").strip().lower()
-        if header == key:
-            return section
-    return None
+def _normalize_header_map_result(result, plan_units, log_sections):
+    plan_headers = list_plan_headers(plan_units)
+    normalized_parts = []
+
+    for entry in result.get("parts") or result.get("sections") or []:
+        if not isinstance(entry, dict):
+            continue
+        action = (entry.get("action") or "update").strip().lower()
+        part_name = (
+            entry.get("part_name")
+            or entry.get("target_part")
+            or entry.get("log_header")
+            or ""
+        ).strip()
+        log_header = (entry.get("log_header") or "").strip()
+
+        part_entry = {
+            "part_name": part_name,
+            "action": action,
+            "log_section_index": entry.get("log_section_index"),
+            "log_header": log_header,
+        }
+        attach_mapped_log_content(part_entry, log_sections)
+
+        if action == "create" and part_entry.get("log_header"):
+            part_entry["part_name"] = part_entry["log_header"]
+        elif action == "update":
+            part_entry["part_name"] = resolve_plan_part_name(
+                plan_units, part_entry.get("part_name") or part_entry.get("log_header")
+            )
+        elif action == "remove":
+            part_entry["part_name"] = resolve_plan_part_name(
+                plan_units, part_entry.get("part_name") or part_entry.get("log_header")
+            )
+
+        if action in ("update", "create") and part_entry.get("log_content") is None:
+            continue
+        if action in ("update", "create", "remove") and part_entry.get("part_name"):
+            normalized_parts.append(part_entry)
+
+    parts_to_remove = []
+    for name in result.get("parts_to_remove") or []:
+        resolved = resolve_plan_part_name(plan_units, name)
+        if resolved and resolved not in parts_to_remove:
+            parts_to_remove.append(resolved)
+
+    for entry in normalized_parts:
+        if entry.get("action") == "remove":
+            name = entry.get("part_name")
+            if name and name not in parts_to_remove:
+                parts_to_remove.append(name)
+
+    content_parts = [
+        entry
+        for entry in normalized_parts
+        if entry.get("action") in ("update", "create")
+    ]
+
+    return {
+        "parts": content_parts,
+        "parts_to_remove": parts_to_remove,
+        "log_date": (result.get("log_date") or "").strip(),
+    }
 
 
-def _run_section_mapping_step(
-    topic_name: str,
-    plan_units: list,
-    log_sections: list,
-    locale: str,
-) -> dict:
-    essence = summarize_parts_for_mapping(plan_units)
-    sections_text = flatten_log_sections_for_mapping(log_sections)
+def _run_header_map_step(topic_name, plan_units, log_sections, locale):
     user_prompt = (
         f"Topic: {topic_name}\n\n"
-        f"=== EXISTING PARTS (essence) ===\n{essence}\n\n"
-        f"=== LOG SECTIONS ===\n{sections_text}"
+        f"=== PLAN_HEADERS ===\n"
+        f"{chr(10).join(f'- {name}' for name in list_plan_headers(plan_units)) or '(none)'}\n\n"
+        f"=== LOG_SECTIONS ===\n"
+        f"{list_log_sections_for_map(log_sections)}"
     )
-    return chat_json(
-        f"{PROJECT_UPDATE_SECTION_MAPPING_PROMPT}\n\n{_lang_note(locale)}",
+    raw = chat_json(
+        f"{PROJECT_UPDATE_HEADER_MAP_PROMPT}\n\n{_lang_note(locale)}",
         user_prompt,
-        temperature=OPENAI_PROCESS_UPDATE_TEMPERATURE,
+        temperature=OPENAI_PROJECT_UPDATE_TEMPERATURE,
     )
+    return _normalize_header_map_result(raw, plan_units, log_sections)
 
 
-def _run_per_part_step(
-    topic_name: str,
-    section_entry: dict,
-    log_section: dict,
-    plan_units: list,
-    execution_units: list,
-    tasks_units: list,
-    plan_name: str,
-    execution_name: str,
-    tasks_name: str,
-    locale: str,
-) -> dict:
-    target_part = (section_entry.get("target_part") or "").strip()
-    action = (section_entry.get("action") or "update").strip()
-    log_header = (section_entry.get("log_header") or "").strip()
-    mapping_note = (section_entry.get("mapping_note") or "").strip()
-
-    plan_anchor = last_unit_id(plan_units)
-    execution_anchor = last_unit_id(execution_units)
-    tasks_anchor = last_unit_id(tasks_units)
-
+def _run_create_content_step(topic_name, part_entry, locale):
     user_prompt = (
         f"Topic: {topic_name}\n"
-        f"Target part: {target_part}\n"
-        f"Action: {action}\n"
-        f"Log header: {log_header}\n"
-        f"Mapping note: {mapping_note or '(none)'}\n\n"
-        f"{flatten_log_section(log_section)}\n\n"
-        f"{flatten_single_part_for_ai(plan_units, plan_name, target_part)}\n\n"
-        f"{flatten_single_part_for_ai(execution_units, execution_name, target_part)}\n\n"
-        f"{flatten_single_part_for_ai(tasks_units, tasks_name, target_part)}\n\n"
-        f"Anchors for create add_after: plan={plan_anchor}, "
-        f"execution={execution_anchor}, tasks={tasks_anchor}"
+        f"Part: {part_entry.get('part_name')}\n"
+        f"Log header: {part_entry.get('log_header')}\n\n"
+        f"=== LOG CONTENT ===\n"
+        f"{part_entry.get('log_content') or '(empty)'}"
     )
     result = chat_json(
-        f"{PROJECT_UPDATE_PER_PART_PROMPT}\n\n{_lang_note(locale)}",
+        f"{PROJECT_UPDATE_CREATE_CONTENT_PROMPT}\n\n{_lang_note(locale)}",
         user_prompt,
-        temperature=OPENAI_PROCESS_UPDATE_TEMPERATURE,
+        temperature=OPENAI_PROJECT_UPDATE_TEMPERATURE,
     )
-    result.setdefault("target_part", target_part)
-    result.setdefault("action", action)
-    return result
+    return normalize_content_payload(result.get("content"))
 
 
-def _run_doc_step(
-    topic_name: str,
-    log_sections: list,
-    doc_file,
-    log_date_hint: str,
-    locale: str,
-) -> dict:
+def _run_update_content_step(
+    topic_name,
+    part_entry,
+    plan_units,
+    execution_units,
+    tasks_units,
+    plan_name,
+    execution_name,
+    tasks_name,
+    locale,
+):
+    part_name = part_entry.get("part_name") or ""
+    user_prompt = (
+        f"Topic: {topic_name}\n"
+        f"Part: {part_name}\n"
+        f"Log header: {part_entry.get('log_header')}\n\n"
+        f"=== LOG CONTENT ===\n"
+        f"{part_entry.get('log_content') or '(empty)'}\n\n"
+        f"{flatten_part_content_for_update(plan_units, plan_name, part_name)}\n\n"
+        f"{flatten_part_content_for_update(execution_units, execution_name, part_name)}\n\n"
+        f"{flatten_part_content_for_update(tasks_units, tasks_name, part_name)}"
+    )
+    result = chat_json(
+        f"{PROJECT_UPDATE_UPDATE_CONTENT_PROMPT}\n\n{_lang_note(locale)}",
+        user_prompt,
+        temperature=OPENAI_PROJECT_UPDATE_TEMPERATURE,
+    )
+    return normalize_content_payload(result.get("content"))
+
+
+def _run_diff_step(
+    file_key,
+    file_title,
+    part_name,
+    units,
+    new_items,
+    locale,
+):
+    old_text = flatten_part_units_with_ids(units, part_name)
+    new_lines = "\n".join(f"- {item}" for item in new_items) or "(empty)"
+    user_prompt = (
+        f"File: {file_title}\n"
+        f"Part: {part_name}\n\n"
+        f"=== OLD ===\n{old_text}\n\n"
+        f"=== NEW ===\n{new_lines}"
+    )
+    result = chat_json(
+        f"{PROJECT_UPDATE_DIFF_PROMPT}\n\n{_lang_note(locale)}",
+        user_prompt,
+        temperature=OPENAI_PROJECT_UPDATE_TEMPERATURE,
+    )
+    return sanitize_diff_ops(
+        result.get("ops") or [],
+        units,
+        part_name,
+        new_items,
+        file_key,
+    )
+
+
+def _run_doc_step(topic_name, log_sections, doc_file, log_date_hint, locale):
     log_text = flatten_log_sections_for_mapping(
         log_sections, max_excerpt_lines=20
     ).replace("SECTION:", "LOG SECTION:")
@@ -247,6 +336,15 @@ def _merge_ops(target: list, source: list) -> None:
         target.extend(source)
 
 
+def _units_with_part(doc_units, part_name):
+    rows = []
+    for unit in doc_units:
+        row = dict(unit)
+        row.setdefault("part", part_name)
+        rows.append(row)
+    return rows
+
+
 def build_review_parts(
     per_part_results,
     plan_units,
@@ -258,9 +356,10 @@ def build_review_parts(
 ):
     review_parts = []
     for result in per_part_results:
-        part_name = (result.get("target_part") or "").strip()
+        part_name = (result.get("part_name") or "").strip()
         if not part_name:
             continue
+        action = (result.get("action") or "update").strip()
         plan_ops = result.get("plan_ops") or []
         execution_ops = result.get("execution_ops") or []
         tasks_ops = result.get("tasks_ops") or []
@@ -270,22 +369,32 @@ def build_review_parts(
         entry = {
             "part_name": part_name,
             "log_header": result.get("log_header") or part_name,
-            "action": result.get("action") or "update",
+            "action": action,
         }
-        for key, title, units, ops in (
-            ("plan", plan_name, plan_units, plan_ops),
-            ("execution", execution_name, execution_units, execution_ops),
-            ("tasks", tasks_name, tasks_units, tasks_ops),
+        annotated_plan = annotate_units_with_parts(plan_units)
+        annotated_execution = annotate_units_with_parts(execution_units)
+        annotated_tasks = annotate_units_with_parts(tasks_units)
+
+        for key, title, units, annotated, ops in (
+            ("plan", plan_name, plan_units, annotated_plan, plan_ops),
+            ("execution", execution_name, execution_units, annotated_execution, execution_ops),
+            ("tasks", tasks_name, tasks_units, annotated_tasks, tasks_ops),
         ):
-            slice_units = slice_units_by_part(units, part_name)
-            display_units = slice_units if slice_units else units
             if not ops:
                 continue
+            slice_units = slice_units_by_part(annotated, part_name)
+            if slice_units:
+                display_units = slice_units
+            elif action == "create":
+                display_units = synthesize_create_part_units(part_name, ops, key)
+            else:
+                display_units = slice_units
+
             doc = build_document_change_set(key, title, display_units, ops)
             entry[key] = {
                 "key": key,
                 "title": title,
-                "units": doc["units"],
+                "units": _units_with_part(doc["units"], part_name),
                 "changes": doc["changes"],
             }
         if any(entry.get(k) for k in ("plan", "execution", "tasks")):
@@ -331,10 +440,8 @@ def build_project_update_change_set(
 
 
 def input_log_has_part_headers(input_file) -> bool:
-    from services.unit_mapper import extract_part_names
-
     units = units_from_file(input_file.id)
-    return bool(extract_part_names(units))
+    return bool(list_plan_headers(units))
 
 
 def smart_project_update(
@@ -358,44 +465,99 @@ def smart_project_update(
 
     log_date_hint = date.today().isoformat()
 
-    mapping_result = _run_section_mapping_step(
-        topic.name, plan_units, log_sections, locale
-    )
+    header_map = _run_header_map_step(topic.name, plan_units, log_sections, locale)
+    if header_map.get("log_date"):
+        log_date_hint = header_map["log_date"]
 
     plan_ops: list = []
     execution_ops: list = []
     tasks_ops: list = []
     plan_structure_changed = False
     per_part_results = []
+    ai_part_steps = []
 
-    for section_entry in mapping_result.get("sections") or []:
-        log_header = (section_entry.get("log_header") or "").strip()
-        log_section = _find_log_section(log_sections, log_header)
-        if log_section is None:
+    for part_entry in header_map.get("parts") or []:
+        action = (part_entry.get("action") or "update").strip().lower()
+        part_name = (part_entry.get("part_name") or "").strip()
+        if not part_name:
             continue
 
-        result = _run_per_part_step(
-            topic.name,
-            section_entry,
-            log_section,
-            plan_units,
-            execution_units,
-            tasks_units,
-            plan_file.name,
-            execution_file.name,
-            tasks_file.name,
-            locale,
-        )
-        result["log_header"] = log_header
-        per_part_results.append(result)
-        _merge_ops(plan_ops, result.get("plan_ops") or [])
-        _merge_ops(execution_ops, result.get("execution_ops") or [])
-        _merge_ops(tasks_ops, result.get("tasks_ops") or [])
-        if result.get("plan_structure_changed"):
+        step_record = {
+            "part_name": part_name,
+            "action": action,
+            "log_header": part_entry.get("log_header"),
+            "log_section_index": part_entry.get("log_section_index"),
+            "log_content": part_entry.get("log_content"),
+            "content": {},
+            "ops": {"plan": [], "execution": [], "tasks": []},
+        }
+
+        if action == "create":
+            content = _run_create_content_step(topic.name, part_entry, locale)
+            step_record["content"] = content
+            part_plan_ops = build_create_part_ops(
+                plan_units, part_name, content.get("plan"), "plan"
+            )
+            part_execution_ops = build_create_part_ops(
+                execution_units, part_name, content.get("execution"), "execution"
+            )
+            part_tasks_ops = build_create_part_ops(
+                tasks_units, part_name, content.get("tasks"), "tasks"
+            )
             plan_structure_changed = True
+        elif action == "update":
+            content = _run_update_content_step(
+                topic.name,
+                part_entry,
+                plan_units,
+                execution_units,
+                tasks_units,
+                plan_file.name,
+                execution_file.name,
+                tasks_file.name,
+                locale,
+            )
+            step_record["content"] = content
+            part_plan_ops = _run_diff_step(
+                "plan", plan_file.name, part_name, plan_units, content.get("plan"), locale
+            )
+            part_execution_ops = _run_diff_step(
+                "execution",
+                execution_file.name,
+                part_name,
+                execution_units,
+                content.get("execution"),
+                locale,
+            )
+            part_tasks_ops = _run_diff_step(
+                "tasks", tasks_file.name, part_name, tasks_units, content.get("tasks"), locale
+            )
+        else:
+            continue
+
+        step_record["ops"] = {
+            "plan": part_plan_ops,
+            "execution": part_execution_ops,
+            "tasks": part_tasks_ops,
+        }
+        ai_part_steps.append(step_record)
+
+        result = {
+            "part_name": part_name,
+            "log_header": part_entry.get("log_header") or part_name,
+            "action": action,
+            "content": content,
+            "plan_ops": part_plan_ops,
+            "execution_ops": part_execution_ops,
+            "tasks_ops": part_tasks_ops,
+        }
+        per_part_results.append(result)
+        _merge_ops(plan_ops, part_plan_ops)
+        _merge_ops(execution_ops, part_execution_ops)
+        _merge_ops(tasks_ops, part_tasks_ops)
 
     removals = []
-    for part_name in mapping_result.get("parts_to_remove") or []:
+    for part_name in header_map.get("parts_to_remove") or []:
         part_name = (part_name or "").strip()
         if not part_name:
             continue
@@ -406,6 +568,16 @@ def smart_project_update(
         )
         _merge_ops(tasks_ops, build_part_removal_ops(tasks_units, part_name))
         plan_structure_changed = True
+        per_part_results.append(
+            {
+                "part_name": part_name,
+                "log_header": part_name,
+                "action": "remove",
+                "plan_ops": build_part_removal_ops(plan_units, part_name),
+                "execution_ops": build_part_removal_ops(execution_units, part_name),
+                "tasks_ops": build_part_removal_ops(tasks_units, part_name),
+            }
+        )
 
     doc_result = _run_doc_step(
         topic.name, log_sections, doc_file, log_date_hint, locale
@@ -443,8 +615,8 @@ def smart_project_update(
         "doc_ops": doc_ops,
         "review_parts": review_parts,
         "ai_steps": {
-            "section_mapping": mapping_result,
-            "per_part": per_part_results,
+            "header_map": header_map,
+            "parts": ai_part_steps,
             "removals": removals,
             "doc": doc_result,
         },

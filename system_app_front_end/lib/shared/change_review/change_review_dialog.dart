@@ -225,6 +225,26 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     return items;
   }
 
+  int _pendingCountInPart(PartReview part) {
+    var count = 0;
+    for (final document in part.documents) {
+      for (final change in _orderedChanges(document)) {
+        if (!_decisions.containsKey(change.id)) count++;
+      }
+    }
+    return count;
+  }
+
+  String? _partActionLabel(PartReview part) {
+    final s = widget.strings;
+    return switch ((part.action ?? '').toLowerCase()) {
+      'create' => s['reviewPartCreate'],
+      'update' => s['reviewPartUpdate'],
+      'remove' => s['reviewPartRemove'],
+      _ => null,
+    };
+  }
+
   ChangeItem? _nextPendingChangeInPart(PartReview part) {
     for (final document in part.documents) {
       final next = _nextPendingChangeInDocument(document);
@@ -447,6 +467,20 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     }
 
     final children = <Widget>[];
+    final actionLabel = _partActionLabel(part);
+    if (actionLabel != null) {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            actionLabel,
+            style: AppTypography.metaStyle.copyWith(
+              color: AppColors.text.withValues(alpha: 0.7),
+            ),
+          ),
+        ),
+      );
+    }
     if (!_awaitingHandoff && pendingCount > 0) {
       children.add(
         Padding(
@@ -582,7 +616,9 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   @override
   Widget build(BuildContext context) {
     final s = widget.strings;
-    final pendingCount = _pendingSuggestionCount;
+    final pendingCount = _byPart && !_unifiedScroll
+        ? _pendingCountInPart(_activePart)
+        : _pendingSuggestionCount;
 
     final content = ConstrainedBox(
       constraints: BoxConstraints(

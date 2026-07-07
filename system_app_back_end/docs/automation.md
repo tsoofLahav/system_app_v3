@@ -182,10 +182,14 @@ Unchecking only dispatches the automation when `trigger_type=task`. Scheduled ru
 ### Project update (`project_update`)
 
 - **Trigger:** `trigger_type=event` (UI: **By changes**) with `params.event=file_moved_to_additional`. Fires immediately (change trigger disabled) when a `text` file is demoted to additional or moved into a project topic as additional. Does not fire when a file is created directly in additional.
-- **Input:** the moved `text` daily log (`event_context.file_id`).
-- **Run:** `smart_project_update` reads the input log plus main `plan`, `execution`, `tasks`, and `doc` files, then stores a `project_smart_update` proposal with a four-document `change_set` when needed.
-- **Review:** no companion task. When the user opens the project topic, the frontend auto-opens the change-review dialog. Skipped runs create `project_update_skipped` on the topic (dismiss only).
-- **Finalize:** archives and recreates changed `plan` / `execution` / `tasks` files; appends accepted rows to the existing doc table in place; leaves the input log in additional. When `plan_structure_changed` is true, `services/project_part_sync.py` aligns execution and tasks part headers to the plan.
+- **Input:** the moved `text` daily log (`event_context.file_id`). The log must contain inner `header` blocks (one section per part); otherwise a `project_update_skipped` proposal is created.
+- **Run:** `smart_project_update` uses four focused AI steps:
+  1. **Header map** — match `PLAN_HEADERS` to log section headers (index-based). New parts use the verbatim log header; removals are detected from headers that retire a part.
+  2. **Content** — per part: create initial plan/execution/tasks content (new parts) or revise existing content (updates). Returns structured text arrays only.
+  3. **Diff** — per file, for updates only: compare old unit lines to new content and emit ops. New parts skip diff; adds are built in code.
+  4. **Doc** — append-only narrative rows; auto-applied on finalize (not in review).
+- **Review:** no companion task. Frontend opens a part-first dialog: each part shows stacked Plan → Execution → Tasks changes. `review_parts` in the proposal payload drives navigation; `change_set` holds merged ops for finalize.
+- **Finalize:** archives and recreates changed `plan` / `execution` / `tasks` files; appends doc rows from `payload.doc_ops`; leaves the input log in additional. When `plan_structure_changed` is true, `services/project_part_sync.py` aligns execution and tasks part headers to the plan.
 
 ## Scheduling
 

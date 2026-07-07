@@ -53,19 +53,26 @@ class ChangeDocument {
 }
 
 class ChangeUnit {
-  const ChangeUnit({required this.id, required this.kind, required this.text});
+  const ChangeUnit({
+    required this.id,
+    required this.kind,
+    required this.text,
+    this.partName,
+  });
 
   factory ChangeUnit.fromJson(Map<String, dynamic> json) {
     return ChangeUnit(
       id: json['id'] as String? ?? '',
       kind: json['kind'] as String? ?? 'paragraph',
       text: json['text'] as String? ?? '',
+      partName: json['part'] as String?,
     );
   }
 
   final String id;
   final String kind;
   final String text;
+  final String? partName;
 }
 
 class ChangeItem {
@@ -125,6 +132,7 @@ class PartReview {
   const PartReview({
     required this.partName,
     this.logHeader,
+    this.action,
     this.plan,
     this.execution,
     this.tasks,
@@ -134,6 +142,7 @@ class PartReview {
     return PartReview(
       partName: json['part_name'] as String? ?? '',
       logHeader: json['log_header'] as String?,
+      action: json['action'] as String?,
       plan: _optionalDocument(json['plan']),
       execution: _optionalDocument(json['execution']),
       tasks: _optionalDocument(json['tasks']),
@@ -142,6 +151,7 @@ class PartReview {
 
   final String partName;
   final String? logHeader;
+  final String? action;
   final ChangeDocument? plan;
   final ChangeDocument? execution;
   final ChangeDocument? tasks;

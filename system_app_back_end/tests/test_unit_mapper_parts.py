@@ -4,18 +4,27 @@ from types import SimpleNamespace
 
 from services.ai_project_update_actions import (
     _normalize_doc_ops,
+    _normalize_header_map_result,
     build_project_update_change_set,
     build_review_parts,
     input_log_has_part_headers,
 )
 from services.unit_mapper import (
+    attach_mapped_log_content,
     build_part_removal_ops,
     extract_log_sections,
     extract_part_names,
     flatten_file_by_parts_for_ai,
+    flatten_log_content,
+    list_log_sections_for_map,
+    list_plan_headers,
+    normalize_content_payload,
+    resolve_plan_part_name,
     slice_units_by_part,
     summarize_parts_for_mapping,
+    synthesize_create_part_units,
 )
+from services.part_diff import build_create_part_ops as create_ops
 
 
 def test_extract_part_names_from_headers():
@@ -25,6 +34,82 @@ def test_extract_part_names_from_headers():
         {"id": "h2", "kind": "header", "text": "Frontend"},
     ]
     assert extract_part_names(units) == ["Backend", "Frontend"]
+
+
+def test_list_plan_headers_and_log_sections_for_map():
+    plan_units = [{"id": "h1", "kind": "header", "text": "API"}]
+    log_sections = extract_log_sections(
+        [
+            {"id": "lh1", "kind": "header", "text": "API work"},
+            {"id": "p1", "kind": "paragraph", "text": "Did things"},
+        ]
+    )
+    assert list_plan_headers(plan_units) == ["API"]
+    assert list_log_sections_for_map(log_sections) == "[0] API work"
+
+
+def test_attach_mapped_log_content_uses_index():
+    sections = extract_log_sections(
+        [
+            {"id": "h1", "kind": "header", "text": "Billing"},
+            {"id": "p1", "kind": "paragraph", "text": "Started billing work"},
+        ]
+    )
+    entry = attach_mapped_log_content(
+        {"log_section_index": 0, "part_name": "Billing", "action": "create"},
+        sections,
+    )
+    assert entry["log_header"] == "Billing"
+    assert "billing work" in entry["log_content"]
+
+
+def test_normalize_header_map_create_uses_log_header_as_part_name():
+    plan_units = [{"id": "h1", "kind": "header", "text": "API"}]
+    sections = extract_log_sections(
+        [
+            {"id": "h1", "kind": "header", "text": "Billing"},
+            {"id": "p1", "kind": "paragraph", "text": "note"},
+        ]
+    )
+    result = _normalize_header_map_result(
+        {
+            "parts": [
+                {
+                    "action": "create",
+                    "log_section_index": 0,
+                    "log_header": "Billing",
+                }
+            ]
+        },
+        plan_units,
+        sections,
+    )
+    assert result["parts"][0]["part_name"] == "Billing"
+
+
+def test_normalize_header_map_update_resolves_plan_header():
+    plan_units = [{"id": "h1", "kind": "header", "text": "API Integration"}]
+    sections = extract_log_sections(
+        [
+            {"id": "h1", "kind": "header", "text": "API"},
+            {"id": "p1", "kind": "paragraph", "text": "work"},
+        ]
+    )
+    result = _normalize_header_map_result(
+        {
+            "parts": [
+                {
+                    "action": "update",
+                    "part_name": "API",
+                    "log_section_index": 0,
+                    "log_header": "API",
+                }
+            ]
+        },
+        plan_units,
+        sections,
+    )
+    assert result["parts"][0]["part_name"] == "API Integration"
 
 
 def test_extract_log_sections_splits_by_header():
@@ -37,7 +122,7 @@ def test_extract_log_sections_splits_by_header():
     sections = extract_log_sections(units)
     assert len(sections) == 2
     assert sections[0]["header"] == "API"
-    assert sections[1]["header"] == "Mobile"
+    assert flatten_log_content(sections[0]) == "Worked on API"
 
 
 def test_slice_units_by_part():
@@ -76,7 +161,7 @@ def test_build_review_parts_groups_by_part():
     ]
     per_part = [
         {
-            "target_part": "API",
+            "part_name": "API",
             "log_header": "API work",
             "action": "update",
             "plan_ops": [
@@ -95,7 +180,46 @@ def test_build_review_parts_groups_by_part():
     )
     assert len(review) == 1
     assert review[0]["part_name"] == "API"
+    assert review[0]["action"] == "update"
     assert review[0]["plan"]["changes"][0]["new_text"] == "Updated"
+
+
+def test_build_review_parts_create_uses_synthetic_units():
+    plan_units = [{"id": "a1", "kind": "list_item", "text": "Existing"}]
+    ops = create_ops(plan_units, "Billing", ["Essence"], "plan")
+    per_part = [
+        {
+            "part_name": "Billing",
+            "log_header": "Billing",
+            "action": "create",
+            "plan_ops": ops,
+            "execution_ops": [],
+            "tasks_ops": [],
+        }
+    ]
+    review = build_review_parts(
+        per_part, plan_units, plan_units, plan_units, "Plan", "Execution", "Tasks"
+    )
+    assert review[0]["plan"]["units"][0]["text"] == "Billing"
+    assert any(unit.get("part") == "Billing" for unit in review[0]["plan"]["units"])
+
+
+def test_synthesize_create_part_units():
+    ops = create_ops([{"id": "a1", "kind": "list_item", "text": "x"}], "API", ["Point"], "plan")
+    units = synthesize_create_part_units("API", ops, "plan")
+    assert units[0]["kind"] == "header"
+    assert units[1]["text"] == "Point"
+
+
+def test_normalize_content_payload():
+    assert normalize_content_payload(
+        {"plan": [" a "], "execution": "bad", "tasks": []}
+    ) == {"plan": ["a"], "execution": [], "tasks": []}
+
+
+def test_resolve_plan_part_name():
+    plan_units = [{"id": "h1", "kind": "header", "text": "API Integration"}]
+    assert resolve_plan_part_name(plan_units, "api integration") == "API Integration"
 
 
 def test_flatten_file_by_parts_for_ai_groups_units():
@@ -127,7 +251,6 @@ def test_build_project_update_change_set_excludes_doc(monkeypatch):
     plan = SimpleNamespace(id=1, name="Plan", type="plan")
     execution = SimpleNamespace(id=2, name="Execution", type="execution")
     tasks = SimpleNamespace(id=3, name="Tasks", type="tasks")
-    doc = SimpleNamespace(id=4, name="Documentation", type="doc")
 
     monkeypatch.setattr(
         "services.ai_project_update_actions.units_from_file",

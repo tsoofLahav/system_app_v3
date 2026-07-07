@@ -212,6 +212,142 @@ def build_part_removal_ops(units, part_name):
     ]
 
 
+def list_plan_headers(plan_units):
+    return extract_part_names(plan_units)
+
+
+def list_log_sections_for_map(log_sections):
+    lines = []
+    for index, section in enumerate(log_sections):
+        header = (section.get("header") or "").strip() or "(untitled)"
+        lines.append(f"[{index}] {header}")
+    return "\n".join(lines) or "(none)"
+
+
+def flatten_log_content(section):
+    lines = []
+    for unit in section.get("units") or []:
+        if unit.get("kind") == "header":
+            continue
+        text = (unit.get("text") or "").strip()
+        if text:
+            lines.append(text)
+    return "\n".join(lines)
+
+
+def attach_mapped_log_content(part_entry, log_sections):
+    idx = part_entry.get("log_section_index")
+    if idx is None:
+        return part_entry
+    try:
+        idx = int(idx)
+    except (TypeError, ValueError):
+        return part_entry
+    if 0 <= idx < len(log_sections):
+        section = log_sections[idx]
+        part_entry["log_header"] = (
+            section.get("header") or part_entry.get("log_header") or ""
+        )
+        part_entry["log_content"] = flatten_log_content(section)
+    return part_entry
+
+
+def resolve_plan_part_name(plan_units, part_name):
+    key = _part_key(part_name)
+    if not key:
+        return (part_name or "").strip()
+    headers = extract_part_names(plan_units)
+    for header in headers:
+        if _part_key(header) == key:
+            return header
+    for header in headers:
+        header_key = _part_key(header)
+        if header_key.startswith(key) or key.startswith(header_key):
+            return header
+    return (part_name or "").strip()
+
+
+def extract_part_content_items(units, part_name):
+    items = []
+    for unit in slice_units_by_part(units, part_name):
+        if unit.get("kind") == "header":
+            continue
+        text = (unit.get("text") or "").strip()
+        if text:
+            items.append(text)
+    return items
+
+
+def flatten_part_content_for_update(units, file_title, part_name):
+    items = extract_part_content_items(units, part_name)
+    lines = [f"=== {file_title.upper()} — PART: {part_name} ==="]
+    if not items:
+        lines.append("(empty)")
+    else:
+        for item in items:
+            lines.append(f"- {item}")
+    return "\n".join(lines)
+
+
+def flatten_part_units_with_ids(units, part_name):
+    slice_units = slice_units_by_part(units, part_name)
+    lines = []
+    for unit in slice_units:
+        text = (unit.get("text") or "").strip()
+        if text:
+            lines.append(f"[{unit['id']}] {text}")
+    return "\n".join(lines) or "(empty)"
+
+
+def synthesize_create_part_units(part_name, ops, file_key):
+    default_kind = "task" if file_key == "tasks" else "list_item"
+    units = [
+        {
+            "id": f"preview:{file_key}:header",
+            "kind": "header",
+            "text": part_name,
+            "part": part_name,
+        }
+    ]
+    index = 0
+    for op in ops or []:
+        if (op.get("op") or "").strip().lower() != "add_after":
+            continue
+        text = (op.get("text") or "").strip()
+        kind = (op.get("kind") or default_kind).strip()
+        if kind == "header":
+            continue
+        if not text:
+            continue
+        units.append(
+            {
+                "id": f"preview:{file_key}:item:{index}",
+                "kind": kind,
+                "text": text,
+                "part": part_name,
+            }
+        )
+        index += 1
+    return units
+
+
+def normalize_content_payload(content):
+    if not isinstance(content, dict):
+        return {"plan": [], "execution": [], "tasks": []}
+
+    def _lines(key):
+        raw = content.get(key) or []
+        if not isinstance(raw, list):
+            return []
+        return [str(item).strip() for item in raw if str(item).strip()]
+
+    return {
+        "plan": _lines("plan"),
+        "execution": _lines("execution"),
+        "tasks": _lines("tasks"),
+    }
+
+
 def flatten_doc_recent_rows_for_ai(doc_file, max_rows=5):
     blocks = (
         Block.query.filter_by(file_id=doc_file.id)
