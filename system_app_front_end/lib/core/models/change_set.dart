@@ -27,6 +27,7 @@ class ChangeDocument {
     required this.title,
     required this.units,
     required this.changes,
+    this.reviewBundle = false,
   });
 
   factory ChangeDocument.fromJson(Map<String, dynamic> json) {
@@ -35,6 +36,7 @@ class ChangeDocument {
       title: json['title'] as String? ?? '',
       units: _units(json['units']),
       changes: _changes(json['changes']),
+      reviewBundle: json['review_bundle'] as bool? ?? false,
     );
   }
 
@@ -42,6 +44,7 @@ class ChangeDocument {
   final String title;
   final List<ChangeUnit> units;
   final List<ChangeItem> changes;
+  final bool reviewBundle;
 
   Map<String, ChangeItem> get changesByUnitId {
     final map = <String, ChangeItem>{};

@@ -5,11 +5,12 @@ def build_change_set(documents):
     return {"version": CHANGE_SET_VERSION, "documents": documents}
 
 
-def build_document_change_set(key, title, units, ops):
+def build_document_change_set(key, title, units, ops, id_prefix=None):
     unit_by_id = {unit["id"]: unit for unit in units}
     valid_unit_ids = set(unit_by_id)
     changes = []
     change_index = 0
+    change_prefix = (id_prefix or key).strip() or key
 
     for op in ops or []:
         op_type = (op.get("op") or "").strip().lower()
@@ -24,7 +25,7 @@ def build_document_change_set(key, title, units, ops):
             if old_text == text:
                 continue
             change_index += 1
-            change_id = f"{key}:c{change_index}"
+            change_id = f"{change_prefix}:c{change_index}"
             changes.append(
                 {
                     "id": change_id,
@@ -40,7 +41,7 @@ def build_document_change_set(key, title, units, ops):
                 continue
             old_text = (unit_by_id[unit_id].get("text") or "").strip()
             change_index += 1
-            change_id = f"{key}:c{change_index}"
+            change_id = f"{change_prefix}:c{change_index}"
             changes.append(
                 {
                     "id": change_id,
@@ -57,7 +58,7 @@ def build_document_change_set(key, title, units, ops):
             anchor = unit_by_id[unit_id]
             kind = op.get("kind") or anchor.get("kind") or "list_item"
             change_index += 1
-            change_id = f"{key}:c{change_index}"
+            change_id = f"{change_prefix}:c{change_index}"
             changes.append(
                 {
                     "id": change_id,

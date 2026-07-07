@@ -67,22 +67,26 @@ def test_build_project_update_change_set_includes_only_non_empty_documents(monke
         plan,
         execution,
         tasks,
-        {
-            "execution_ops": [
-                {
-                    "op": "add_after",
-                    "unit_id": "block:9:item:0",
-                    "text": "Finalize API contract",
-                }
-            ],
-            "doc_ops": [{"date": "2026-07-06", "text": "Reviewed API draft"}],
-        },
+        [
+            {
+                "part_name": "API",
+                "action": "update",
+                "execution_ops": [
+                    {
+                        "op": "add_after",
+                        "unit_id": "block:9:item:0",
+                        "text": "Finalize API contract",
+                    }
+                ],
+            }
+        ],
     )
 
     keys = [document["key"] for document in change_set["documents"]]
     assert keys == ["execution"]
     execution_doc = change_set["documents"][0]
     assert execution_doc["changes"][0]["new_text"] == "Finalize API contract"
+    assert execution_doc["changes"][0]["id"] == "execution:api:c1"
 
 
 def test_file_qualifies_as_moved_to_additional_demotion(monkeypatch):

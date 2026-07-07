@@ -20,7 +20,6 @@ Future<void> showProjectUpdateReviewDialog({
     context: context,
     strings: state.strings,
     changeSet: ChangeSet.fromJson(raw),
-    title: state.strings['projectUpdateReview'],
     reviewMode: ChangeReviewMode.projectUpdate,
     reviewParts: reviewParts,
   );

@@ -4,7 +4,6 @@ from types import SimpleNamespace
 
 from services.ai_project_update_actions import (
     _normalize_doc_ops,
-    _normalize_header_map_result,
     build_project_update_change_set,
     build_review_parts,
     input_log_has_part_headers,
@@ -16,13 +15,18 @@ from services.unit_mapper import (
     extract_part_names,
     flatten_file_by_parts_for_ai,
     flatten_log_content,
+    format_numbered_plan_headers,
     list_log_sections_for_map,
     list_plan_headers,
+    match_plan_header_exact,
     normalize_content_payload,
+    parse_header_map_instructions,
+    part_change_id_prefix,
+    resolve_plan_index,
     resolve_plan_part_name,
     slice_units_by_part,
     summarize_parts_for_mapping,
-    synthesize_create_part_units,
+    synthesize_create_preview_from_content,
 )
 from services.part_diff import build_create_part_ops as create_ops
 
@@ -48,6 +52,58 @@ def test_list_plan_headers_and_log_sections_for_map():
     assert list_log_sections_for_map(log_sections) == "[0] API work"
 
 
+def test_format_numbered_plan_headers():
+    plan_units = [
+        {"id": "h1", "kind": "header", "text": "API"},
+        {"id": "h2", "kind": "header", "text": "Mobile"},
+    ]
+    formatted = format_numbered_plan_headers(plan_units)
+    assert "[1] API" in formatted
+    assert "[2] Mobile" in formatted
+
+
+def test_parse_header_map_instructions_sparse_mapping():
+    plan_units = [
+        {"id": "h1", "kind": "header", "text": "X"},
+        {"id": "h2", "kind": "header", "text": "Y"},
+        {"id": "h3", "kind": "header", "text": "Z"},
+    ]
+    sections = extract_log_sections(
+        [
+            {"id": "h1", "kind": "header", "text": "A"},
+            {"id": "p1", "kind": "paragraph", "text": "new area notes"},
+            {"id": "h2", "kind": "header", "text": "B"},
+            {"id": "p2", "kind": "paragraph", "text": "maps to Z"},
+            {"id": "h3", "kind": "header", "text": "C"},
+            {"id": "p3", "kind": "paragraph", "text": "retire X"},
+        ]
+    )
+    result = parse_header_map_instructions(
+        {
+            "instructions": [
+                {"action": "remove", "plan_index": 1},
+                {"action": "update", "plan_index": 3, "log_section_index": 1},
+                {"action": "create", "log_section_index": 0, "part_name": "A"},
+            ]
+        },
+        plan_units,
+        sections,
+    )
+    assert result["parts_to_remove"] == ["X"]
+    assert len(result["parts"]) == 2
+    create_part = next(item for item in result["parts"] if item["action"] == "create")
+    update_part = next(item for item in result["parts"] if item["action"] == "update")
+    assert create_part["part_name"] == "A"
+    assert update_part["part_name"] == "Z"
+    assert update_part["log_header"] == "B"
+
+
+def test_resolve_plan_index():
+    plan_units = [{"id": "h1", "kind": "header", "text": "API Integration"}]
+    assert resolve_plan_index(plan_units, 1) == "API Integration"
+    assert resolve_plan_index(plan_units, 9) == ""
+
+
 def test_attach_mapped_log_content_uses_index():
     sections = extract_log_sections(
         [
@@ -63,56 +119,7 @@ def test_attach_mapped_log_content_uses_index():
     assert "billing work" in entry["log_content"]
 
 
-def test_normalize_header_map_create_uses_log_header_as_part_name():
-    plan_units = [{"id": "h1", "kind": "header", "text": "API"}]
-    sections = extract_log_sections(
-        [
-            {"id": "h1", "kind": "header", "text": "Billing"},
-            {"id": "p1", "kind": "paragraph", "text": "note"},
-        ]
-    )
-    result = _normalize_header_map_result(
-        {
-            "parts": [
-                {
-                    "action": "create",
-                    "log_section_index": 0,
-                    "log_header": "Billing",
-                }
-            ]
-        },
-        plan_units,
-        sections,
-    )
-    assert result["parts"][0]["part_name"] == "Billing"
-
-
-def test_normalize_header_map_update_resolves_plan_header():
-    plan_units = [{"id": "h1", "kind": "header", "text": "API Integration"}]
-    sections = extract_log_sections(
-        [
-            {"id": "h1", "kind": "header", "text": "API"},
-            {"id": "p1", "kind": "paragraph", "text": "work"},
-        ]
-    )
-    result = _normalize_header_map_result(
-        {
-            "parts": [
-                {
-                    "action": "update",
-                    "part_name": "API",
-                    "log_section_index": 0,
-                    "log_header": "API",
-                }
-            ]
-        },
-        plan_units,
-        sections,
-    )
-    assert result["parts"][0]["part_name"] == "API Integration"
-
-
-def test_extract_log_sections_splits_by_header():
+def test_build_review_parts_create_uses_preview_units():
     units = [
         {"id": "h1", "kind": "header", "text": "API"},
         {"id": "p1", "kind": "paragraph", "text": "Worked on API"},
@@ -154,37 +161,44 @@ def test_input_log_has_part_headers(monkeypatch):
     assert input_log_has_part_headers(SimpleNamespace(id=1))
 
 
-def test_build_review_parts_groups_by_part():
+def test_build_review_parts_scopes_change_ids_per_part():
     plan_units = [
         {"id": "h1", "kind": "header", "text": "API"},
         {"id": "i1", "kind": "list_item", "text": "Old"},
+        {"id": "h2", "kind": "header", "text": "Mobile"},
+        {"id": "i2", "kind": "list_item", "text": "Shell"},
     ]
     per_part = [
         {
             "part_name": "API",
-            "log_header": "API work",
+            "log_header": "API",
+            "action": "update",
+            "plan_ops": [{"op": "replace", "unit_id": "i1", "text": "Updated API"}],
+            "execution_ops": [],
+            "tasks_ops": [],
+        },
+        {
+            "part_name": "Mobile",
+            "log_header": "Mobile",
             "action": "update",
             "plan_ops": [
-                {
-                    "op": "replace",
-                    "unit_id": "i1",
-                    "text": "Updated",
-                }
+                {"op": "add_after", "unit_id": "i2", "text": "New mobile line", "kind": "list_item"}
             ],
             "execution_ops": [],
             "tasks_ops": [],
-        }
+        },
     ]
     review = build_review_parts(
         per_part, plan_units, plan_units, plan_units, "Plan", "Execution", "Tasks"
     )
-    assert len(review) == 1
-    assert review[0]["part_name"] == "API"
-    assert review[0]["action"] == "update"
-    assert review[0]["plan"]["changes"][0]["new_text"] == "Updated"
+    api_id = review[0]["plan"]["changes"][0]["id"]
+    mobile_id = review[1]["plan"]["changes"][0]["id"]
+    assert api_id != mobile_id
+    assert api_id.startswith("plan:api:")
+    assert mobile_id.startswith("plan:mobile:")
 
 
-def test_build_review_parts_create_uses_synthetic_units():
+def test_build_review_parts_create_includes_scoped_changes():
     plan_units = [{"id": "a1", "kind": "list_item", "text": "Existing"}]
     ops = create_ops(plan_units, "Billing", ["Essence"], "plan")
     per_part = [
@@ -200,15 +214,60 @@ def test_build_review_parts_create_uses_synthetic_units():
     review = build_review_parts(
         per_part, plan_units, plan_units, plan_units, "Plan", "Execution", "Tasks"
     )
-    assert review[0]["plan"]["units"][0]["text"] == "Billing"
-    assert any(unit.get("part") == "Billing" for unit in review[0]["plan"]["units"])
+    changes = review[0]["plan"]["changes"]
+    assert len(changes) == 2
+    assert changes[0]["id"].startswith("plan:billing:")
+    assert changes[0]["action"] == "add_after"
 
 
-def test_synthesize_create_part_units():
-    ops = create_ops([{"id": "a1", "kind": "list_item", "text": "x"}], "API", ["Point"], "plan")
-    units = synthesize_create_part_units("API", ops, "plan")
-    assert units[0]["kind"] == "header"
-    assert units[1]["text"] == "Point"
+def test_build_review_parts_create_uses_synthetic_units():
+    plan_units = [{"id": "a1", "kind": "list_item", "text": "Existing"}]
+    ops = create_ops(plan_units, "Billing", ["Essence"], "plan")
+    per_part = [
+        {
+            "part_name": "Billing",
+            "log_header": "Billing",
+            "action": "create",
+            "content": {"plan": ["Essence"], "execution": [], "tasks": []},
+            "plan_ops": ops,
+            "execution_ops": [],
+            "tasks_ops": [],
+        }
+    ]
+    review = build_review_parts(
+        per_part, plan_units, plan_units, plan_units, "Plan", "Execution", "Tasks"
+    )
+    assert review[0]["plan"]["units"][0]["text"] == "Essence"
+    assert review[0]["plan"]["review_bundle"] is True
+
+
+def test_build_review_parts_remove_bundles_sections():
+    plan_units = [
+        {"id": "h1", "kind": "header", "text": "API"},
+        {"id": "i1", "kind": "list_item", "text": "Point"},
+    ]
+    ops = build_part_removal_ops(plan_units, "API")
+    per_part = [
+        {
+            "part_name": "API",
+            "log_header": "API",
+            "action": "remove",
+            "plan_ops": ops,
+            "execution_ops": ops,
+            "tasks_ops": [],
+        }
+    ]
+    review = build_review_parts(
+        per_part, plan_units, plan_units, plan_units, "Plan", "Execution", "Tasks"
+    )
+    assert review[0]["action"] == "remove"
+    assert review[0]["plan"]["review_bundle"] is True
+    assert review[0]["plan"]["units"][0]["text"] == "Point"
+
+
+def test_synthesize_create_preview_from_content():
+    units = synthesize_create_preview_from_content("API", ["Point"], "plan")
+    assert units[0]["text"] == "Point"
 
 
 def test_normalize_content_payload():
@@ -217,7 +276,8 @@ def test_normalize_content_payload():
     ) == {"plan": ["a"], "execution": [], "tasks": []}
 
 
-def test_resolve_plan_part_name():
+def test_part_change_id_prefix_scopes_by_part():
+    assert part_change_id_prefix("plan", "API Work") == "plan:apiwork"
     plan_units = [{"id": "h1", "kind": "header", "text": "API Integration"}]
     assert resolve_plan_part_name(plan_units, "api integration") == "API Integration"
 
@@ -247,6 +307,12 @@ def test_normalize_doc_ops_append_only():
     ]
 
 
+def test_resolve_plan_part_name():
+    plan_units = [{"id": "h1", "kind": "header", "text": "API Integration"}]
+    assert match_plan_header_exact(plan_units, "api integration") == "API Integration"
+    assert match_plan_header_exact(plan_units, "API") == ""
+
+
 def test_build_project_update_change_set_excludes_doc(monkeypatch):
     plan = SimpleNamespace(id=1, name="Plan", type="plan")
     execution = SimpleNamespace(id=2, name="Execution", type="execution")
@@ -267,16 +333,19 @@ def test_build_project_update_change_set_excludes_doc(monkeypatch):
         plan,
         execution,
         tasks,
-        {
-            "execution_ops": [
-                {
-                    "op": "add_after",
-                    "unit_id": "block:9:item:0",
-                    "text": "Finalize API contract",
-                }
-            ],
-            "doc_ops": [{"date": "2026-07-06", "text": "Reviewed API draft"}],
-        },
+        [
+            {
+                "part_name": "API",
+                "action": "update",
+                "execution_ops": [
+                    {
+                        "op": "add_after",
+                        "unit_id": "block:9:item:0",
+                        "text": "Finalize API contract",
+                    }
+                ],
+            }
+        ],
     )
 
     keys = [document["key"] for document in change_set["documents"]]

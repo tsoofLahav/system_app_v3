@@ -20,43 +20,43 @@ from services.unit_mapper import (
     flatten_log_sections_for_mapping,
     flatten_part_content_for_update,
     flatten_part_units_with_ids,
+    format_numbered_plan_headers,
     list_log_sections_for_map,
     list_plan_headers,
     normalize_content_payload,
-    resolve_plan_part_name,
+    parse_header_map_instructions,
+    part_change_id_prefix,
     slice_units_by_part,
     summarize_parts_for_mapping,
-    synthesize_create_part_units,
+    synthesize_create_preview_from_content,
     units_from_file,
 )
 
-PROJECT_UPDATE_HEADER_MAP_PROMPT = """You map daily log section headers to project plan parts.
+PROJECT_UPDATE_HEADER_MAP_PROMPT = """You map a daily log to numbered project plan parts.
 
 ## Input
-- PLAN_HEADERS — canonical existing part names (from plan file)
-- LOG_SECTIONS — indexed header text only (no body)
+- PLAN_HEADERS — numbered canonical plan parts: [1] Name, [2] Name, …
+- LOG_SECTIONS — indexed log section headers only: [0] Header, [1] Header, …
 
 ## Rules
-For each log section:
-- Header matches an existing plan part (by meaning) → action: update, part_name = exact string from PLAN_HEADERS
-- Header does not match any plan part → action: create, part_name = verbatim log header text
-- Header explicitly retires/cancels an existing plan part → action: remove, part_name = exact plan header being retired
+Return ONLY parts that need action. Omit plan indices with nothing to do.
 
-Never invent part names from log body text or comments. Use header text only.
+Each instruction uses exactly one action:
+- remove — retire a plan part. Requires plan_index only.
+- update — apply a log section to an existing plan part. Requires plan_index + log_section_index. Use when the log section belongs to that plan part, even if the header wording differs.
+- create — add a new plan part from a log section. Requires log_section_index + part_name (verbatim log header text).
+
+Never invent part names from log body text. Use log header text only for create part_name.
 
 ## Output
 JSON only:
 {
-  "parts": [
-    {
-      "part_name": "Exact Name",
-      "action": "update",
-      "log_section_index": 0,
-      "log_header": "verbatim log header"
-    }
+  "instructions": [
+    {"action": "remove", "plan_index": 1},
+    {"action": "update", "plan_index": 3, "log_section_index": 1},
+    {"action": "create", "log_section_index": 0, "part_name": "A"}
   ],
-  "parts_to_remove": [],
-  "log_date": "YYYY-MM-DD"
+  "log_date": "YYYY-MM-DD or empty"
 }"""
 
 PROJECT_UPDATE_CREATE_CONTENT_PROMPT = """You write initial content for a new project part.
@@ -154,76 +154,11 @@ def _normalize_doc_ops(doc_ops: list) -> list:
     return normalized
 
 
-def _normalize_header_map_result(result, plan_units, log_sections):
-    plan_headers = list_plan_headers(plan_units)
-    normalized_parts = []
-
-    for entry in result.get("parts") or result.get("sections") or []:
-        if not isinstance(entry, dict):
-            continue
-        action = (entry.get("action") or "update").strip().lower()
-        part_name = (
-            entry.get("part_name")
-            or entry.get("target_part")
-            or entry.get("log_header")
-            or ""
-        ).strip()
-        log_header = (entry.get("log_header") or "").strip()
-
-        part_entry = {
-            "part_name": part_name,
-            "action": action,
-            "log_section_index": entry.get("log_section_index"),
-            "log_header": log_header,
-        }
-        attach_mapped_log_content(part_entry, log_sections)
-
-        if action == "create" and part_entry.get("log_header"):
-            part_entry["part_name"] = part_entry["log_header"]
-        elif action == "update":
-            part_entry["part_name"] = resolve_plan_part_name(
-                plan_units, part_entry.get("part_name") or part_entry.get("log_header")
-            )
-        elif action == "remove":
-            part_entry["part_name"] = resolve_plan_part_name(
-                plan_units, part_entry.get("part_name") or part_entry.get("log_header")
-            )
-
-        if action in ("update", "create") and part_entry.get("log_content") is None:
-            continue
-        if action in ("update", "create", "remove") and part_entry.get("part_name"):
-            normalized_parts.append(part_entry)
-
-    parts_to_remove = []
-    for name in result.get("parts_to_remove") or []:
-        resolved = resolve_plan_part_name(plan_units, name)
-        if resolved and resolved not in parts_to_remove:
-            parts_to_remove.append(resolved)
-
-    for entry in normalized_parts:
-        if entry.get("action") == "remove":
-            name = entry.get("part_name")
-            if name and name not in parts_to_remove:
-                parts_to_remove.append(name)
-
-    content_parts = [
-        entry
-        for entry in normalized_parts
-        if entry.get("action") in ("update", "create")
-    ]
-
-    return {
-        "parts": content_parts,
-        "parts_to_remove": parts_to_remove,
-        "log_date": (result.get("log_date") or "").strip(),
-    }
-
-
 def _run_header_map_step(topic_name, plan_units, log_sections, locale):
     user_prompt = (
         f"Topic: {topic_name}\n\n"
         f"=== PLAN_HEADERS ===\n"
-        f"{chr(10).join(f'- {name}' for name in list_plan_headers(plan_units)) or '(none)'}\n\n"
+        f"{format_numbered_plan_headers(plan_units)}\n\n"
         f"=== LOG_SECTIONS ===\n"
         f"{list_log_sections_for_map(log_sections)}"
     )
@@ -232,7 +167,7 @@ def _run_header_map_step(topic_name, plan_units, log_sections, locale):
         user_prompt,
         temperature=OPENAI_PROJECT_UPDATE_TEMPERATURE,
     )
-    return _normalize_header_map_result(raw, plan_units, log_sections)
+    return parse_header_map_instructions(raw, plan_units, log_sections)
 
 
 def _run_create_content_step(topic_name, part_entry, locale):
@@ -345,6 +280,32 @@ def _units_with_part(doc_units, part_name):
     return rows
 
 
+def _append_document_changes(documents_by_key, key, title, units, ops, part_name):
+    if not ops:
+        return
+    prefix = part_change_id_prefix(key, part_name)
+    partial = build_document_change_set(key, title, units, ops, id_prefix=prefix)
+    if key not in documents_by_key:
+        documents_by_key[key] = {
+            "key": key,
+            "title": title,
+            "units": units,
+            "changes": [],
+        }
+    documents_by_key[key]["changes"].extend(partial["changes"])
+
+
+def _display_units_for_part(action, part_name, key, units, annotated, ops, content_items):
+    slice_units = slice_units_by_part(annotated, part_name)
+    if action == "create":
+        return synthesize_create_preview_from_content(part_name, content_items, key)
+    if action == "remove":
+        return [unit for unit in slice_units if unit.get("kind") != "header"]
+    if slice_units:
+        return [unit for unit in slice_units if unit.get("kind") != "header"]
+    return slice_units
+
+
 def build_review_parts(
     per_part_results,
     plan_units,
@@ -363,6 +324,7 @@ def build_review_parts(
         plan_ops = result.get("plan_ops") or []
         execution_ops = result.get("execution_ops") or []
         tasks_ops = result.get("tasks_ops") or []
+        content = result.get("content") or {}
         if not plan_ops and not execution_ops and not tasks_ops:
             continue
 
@@ -375,27 +337,36 @@ def build_review_parts(
         annotated_execution = annotate_units_with_parts(execution_units)
         annotated_tasks = annotate_units_with_parts(tasks_units)
 
-        for key, title, units, annotated, ops in (
-            ("plan", plan_name, plan_units, annotated_plan, plan_ops),
-            ("execution", execution_name, execution_units, annotated_execution, execution_ops),
-            ("tasks", tasks_name, tasks_units, annotated_tasks, tasks_ops),
+        for key, title, units, annotated, ops, content_key in (
+            ("plan", plan_name, plan_units, annotated_plan, plan_ops, "plan"),
+            ("execution", execution_name, execution_units, annotated_execution, execution_ops, "execution"),
+            ("tasks", tasks_name, tasks_units, annotated_tasks, tasks_ops, "tasks"),
         ):
             if not ops:
                 continue
-            slice_units = slice_units_by_part(annotated, part_name)
-            if slice_units:
-                display_units = slice_units
-            elif action == "create":
-                display_units = synthesize_create_part_units(part_name, ops, key)
-            else:
-                display_units = slice_units
+            display_units = _display_units_for_part(
+                action,
+                part_name,
+                key,
+                units,
+                annotated,
+                ops,
+                content.get(content_key),
+            )
 
-            doc = build_document_change_set(key, title, display_units, ops)
+            doc = build_document_change_set(
+                key,
+                title,
+                units,
+                ops,
+                id_prefix=part_change_id_prefix(key, part_name),
+            )
             entry[key] = {
                 "key": key,
                 "title": title,
-                "units": _units_with_part(doc["units"], part_name),
+                "units": _units_with_part(display_units, part_name),
                 "changes": doc["changes"],
+                "review_bundle": action in ("create", "remove"),
             }
         if any(entry.get(k) for k in ("plan", "execution", "tasks")):
             review_parts.append(entry)
@@ -406,37 +377,32 @@ def build_project_update_change_set(
     plan_file,
     execution_file,
     tasks_file,
-    ai_result,
+    per_part_results,
 ):
     plan_units = annotate_units_with_parts(units_from_file(plan_file.id))
     execution_units = annotate_units_with_parts(units_from_file(execution_file.id))
     tasks_units = annotate_units_with_parts(units_from_file(tasks_file.id))
 
-    documents = []
-    plan_ops = ai_result.get("plan_ops") or []
-    execution_ops = ai_result.get("execution_ops") or []
-    tasks_ops = ai_result.get("tasks_ops") or []
+    documents_by_key = {}
+    for result in per_part_results or []:
+        part_name = (result.get("part_name") or "").strip()
+        if not part_name:
+            continue
+        for key, title, units, ops_field in (
+            ("plan", plan_file.name, plan_units, "plan_ops"),
+            ("execution", execution_file.name, execution_units, "execution_ops"),
+            ("tasks", tasks_file.name, tasks_units, "tasks_ops"),
+        ):
+            _append_document_changes(
+                documents_by_key,
+                key,
+                title,
+                units,
+                result.get(ops_field) or [],
+                part_name,
+            )
 
-    if plan_ops:
-        documents.append(
-            build_document_change_set(
-                "plan", plan_file.name, plan_units, plan_ops
-            )
-        )
-    if execution_ops:
-        documents.append(
-            build_document_change_set(
-                "execution", execution_file.name, execution_units, execution_ops
-            )
-        )
-    if tasks_ops:
-        documents.append(
-            build_document_change_set(
-                "tasks", tasks_file.name, tasks_units, tasks_ops
-            )
-        )
-
-    return build_change_set(documents)
+    return build_change_set(list(documents_by_key.values()))
 
 
 def input_log_has_part_headers(input_file) -> bool:
@@ -596,7 +562,7 @@ def smart_project_update(
         plan_file,
         execution_file,
         tasks_file,
-        ai_result,
+        per_part_results,
     )
 
     review_parts = build_review_parts(

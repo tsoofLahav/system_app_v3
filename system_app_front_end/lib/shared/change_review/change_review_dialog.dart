@@ -175,6 +175,10 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     if (_byPart) {
       for (final part in _reviewParts) {
         for (final document in part.documents) {
+          if (document.reviewBundle) {
+            if (_documentHasPending(document)) return false;
+            continue;
+          }
           for (final change in _orderedChanges(document)) {
             if (!_decisions.containsKey(change.id)) return false;
           }
@@ -195,6 +199,10 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     if (_byPart) {
       for (final part in _reviewParts) {
         for (final document in part.documents) {
+          if (document.reviewBundle) {
+            if (_documentHasPending(document)) count++;
+            continue;
+          }
           for (final change in _orderedChanges(document)) {
             if (!_decisions.containsKey(change.id)) count++;
           }
@@ -228,9 +236,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   int _pendingCountInPart(PartReview part) {
     var count = 0;
     for (final document in part.documents) {
-      for (final change in _orderedChanges(document)) {
-        if (!_decisions.containsKey(change.id)) count++;
-      }
+      if (_documentHasPending(document)) count++;
     }
     return count;
   }
@@ -247,6 +253,10 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
 
   ChangeItem? _nextPendingChangeInPart(PartReview part) {
     for (final document in part.documents) {
+      if (!_documentHasPending(document)) continue;
+      if (document.reviewBundle) {
+        return document.changes.first;
+      }
       final next = _nextPendingChangeInDocument(document);
       if (next != null) return next;
     }
@@ -264,6 +274,12 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     if (_byPart) {
       for (final part in _reviewParts) {
         for (final document in part.documents) {
+          if (document.reviewBundle) {
+            if (_documentHasPending(document)) {
+              return document.changes.first;
+            }
+            continue;
+          }
           for (final change in _orderedChanges(document)) {
             if (!_decisions.containsKey(change.id)) return change;
           }
@@ -338,6 +354,8 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
         anchorKey: _keyForChange(change.id),
         strings: widget.strings,
         change: change,
+        partAction: _partActionForChange(change),
+        reviewBundle: _bundledChangesFor(change) != null,
         onAccept: () => _resolveChange(change, accepted: true),
         onReject: () => _resolveChange(change, accepted: false),
       ),
@@ -347,8 +365,54 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   }
 
   void _resolveChange(ChangeItem change, {required bool accepted}) {
-    setState(() => _decisions[change.id] = accepted);
+    final bundled = _bundledChangesFor(change);
+    if (bundled != null) {
+      for (final item in bundled) {
+        _decisions[item.id] = accepted;
+      }
+    } else {
+      _decisions[change.id] = accepted;
+    }
+    setState(() {});
     _presentNextSuggestion();
+  }
+
+  List<ChangeItem>? _bundledChangesFor(ChangeItem change) {
+    if (_byPart) {
+      for (final part in _reviewParts) {
+        for (final document in part.documents) {
+          if (!document.reviewBundle) continue;
+          if (document.changes.any((item) => item.id == change.id)) {
+            return document.changes;
+          }
+        }
+      }
+      return null;
+    }
+    for (final document in _documents) {
+      if (!document.reviewBundle) continue;
+      if (document.changes.any((item) => item.id == change.id)) {
+        return document.changes;
+      }
+    }
+    return null;
+  }
+
+  bool _documentHasPending(ChangeDocument document) {
+    if (document.changes.isEmpty) return false;
+    return document.changes.any((item) => !_decisions.containsKey(item.id));
+  }
+
+  String? _partActionForChange(ChangeItem change) {
+    if (!_byPart) return null;
+    for (final part in _reviewParts) {
+      for (final document in part.documents) {
+        if (document.changes.any((item) => item.id == change.id)) {
+          return part.action;
+        }
+      }
+    }
+    return null;
   }
 
   void _onDocumentPhaseComplete() {
@@ -532,6 +596,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
           activeChangeId: _activeChangeId,
           keyForChange: _keyForChange,
           groupByParts: false,
+          partAction: part.action,
         ),
       );
     }
@@ -691,6 +756,8 @@ class _SuggestionOverlay extends StatelessWidget {
     required this.anchorKey,
     required this.strings,
     required this.change,
+    this.partAction,
+    this.reviewBundle = false,
     required this.onAccept,
     required this.onReject,
   });
@@ -698,6 +765,8 @@ class _SuggestionOverlay extends StatelessWidget {
   final GlobalKey anchorKey;
   final AppStrings strings;
   final ChangeItem change;
+  final String? partAction;
+  final bool reviewBundle;
   final VoidCallback onAccept;
   final VoidCallback onReject;
 
@@ -739,6 +808,8 @@ class _SuggestionOverlay extends StatelessWidget {
           child: _SuggestionCallout(
             strings: strings,
             change: change,
+            partAction: partAction,
+            reviewBundle: reviewBundle,
             onAccept: onAccept,
             onReject: onReject,
           ),
@@ -775,6 +846,7 @@ class _DocumentReview extends StatelessWidget {
     required this.keyForChange,
     this.groupByParts = false,
     this.appendOnlyDoc = false,
+    this.partAction,
   });
 
   final ChangeDocument document;
@@ -783,6 +855,7 @@ class _DocumentReview extends StatelessWidget {
   final GlobalKey Function(String changeId) keyForChange;
   final bool groupByParts;
   final bool appendOnlyDoc;
+  final String? partAction;
 
   @override
   Widget build(BuildContext context) {
@@ -801,6 +874,25 @@ class _DocumentReview extends StatelessWidget {
         activeChangeId: activeChangeId,
         keyForChange: keyForChange,
       );
+    }
+    if (document.reviewBundle) {
+      final action = (partAction ?? '').toLowerCase();
+      if (action == 'create') {
+        return _BundledCreateDocumentReview(
+          document: document,
+          decisions: decisions,
+          activeChangeId: activeChangeId,
+          keyForChange: keyForChange,
+        );
+      }
+      if (action == 'remove') {
+        return _BundledRemoveDocumentReview(
+          document: document,
+          decisions: decisions,
+          activeChangeId: activeChangeId,
+          keyForChange: keyForChange,
+        );
+      }
     }
 
     final changesByUnit = _changesByUnitId(document.changes);
@@ -1522,26 +1614,38 @@ class _SuggestionCallout extends StatelessWidget {
   const _SuggestionCallout({
     required this.strings,
     required this.change,
+    this.partAction,
+    this.reviewBundle = false,
     required this.onAccept,
     required this.onReject,
   });
 
   final AppStrings strings;
   final ChangeItem change;
+  final String? partAction;
+  final bool reviewBundle;
   final VoidCallback onAccept;
   final VoidCallback onReject;
 
   @override
   Widget build(BuildContext context) {
+    final action = (partAction ?? '').toLowerCase();
+    final isBundledCreate = reviewBundle && action == 'create';
+    final isBundledRemove = reviewBundle && action == 'remove';
     final isAddition =
-        change.action == 'add_after' || change.action == 'add_row';
+        !isBundledCreate &&
+        (change.action == 'add_after' || change.action == 'add_row');
     final isReplace = change.action == 'replace';
     final suggestionText = switch (change.action) {
       'remove' => strings['delete'],
       'add_after' || 'add_row' => '',
       _ => change.newText.trim().isEmpty ? '…' : change.newText,
     };
-    final title = isAddition
+    final title = isBundledCreate
+        ? strings['reviewApproveNewSection']
+        : isBundledRemove
+        ? strings['reviewConfirmRemoveSection']
+        : isAddition
         ? strings['reviewAddLine']
         : isReplace
         ? strings['suggestedChange']
@@ -1554,7 +1658,9 @@ class _SuggestionCallout extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         blurSigma: 18,
         tintOpacity: 0.9,
-        tintColor: const Color(0xFFDDF6F2),
+        tintColor: isBundledRemove
+            ? const Color(0xFFF8E8E8)
+            : const Color(0xFFDDF6F2),
         elevation: 10,
         padding: const EdgeInsets.fromLTRB(14, 12, 10, 10),
         child: SizedBox(
@@ -1565,7 +1671,9 @@ class _SuggestionCallout extends StatelessWidget {
             children: [
               Text(title, style: AppTypography.metaStyle),
               const SizedBox(height: 8),
-              if (isAddition)
+              if (isBundledCreate || isBundledRemove)
+                const SizedBox.shrink()
+              else if (isAddition)
                 Text(
                   '+',
                   style: AppTypography.blockHeaderStyle.copyWith(
@@ -1645,6 +1753,132 @@ class _CalloutActionButton extends StatelessWidget {
             ),
           ),
           child: Icon(icon, size: 18, color: color),
+        ),
+      ),
+    );
+  }
+}
+
+class _BundledCreateDocumentReview extends StatelessWidget {
+  const _BundledCreateDocumentReview({
+    required this.document,
+    required this.decisions,
+    required this.activeChangeId,
+    required this.keyForChange,
+  });
+
+  final ChangeDocument document;
+  final Map<String, bool> decisions;
+  final String? activeChangeId;
+  final GlobalKey Function(String changeId) keyForChange;
+
+  @override
+  Widget build(BuildContext context) {
+    final anchorChange = document.changes.isNotEmpty ? document.changes.first : null;
+    final isPending = anchorChange != null && !decisions.containsKey(anchorChange.id);
+    final isAccepted = anchorChange != null && decisions[anchorChange.id] == true;
+    final isRejected = anchorChange != null && decisions[anchorChange.id] == false;
+
+    if (document.units.isEmpty) {
+      return Text('…', style: AppTypography.noteBodyStyle);
+    }
+
+    return DecoratedBox(
+      key: anchorChange == null ? null : keyForChange(anchorChange.id),
+      decoration: BoxDecoration(
+        color: isPending && anchorChange.id == activeChangeId
+            ? AppColors.aiCyan.withValues(alpha: 0.12)
+            : isAccepted
+            ? AppColors.aiCyan.withValues(alpha: 0.08)
+            : isRejected
+            ? AppColors.noteTop.withValues(alpha: 0.5)
+            : AppColors.aiCyan.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isPending && anchorChange.id == activeChangeId
+              ? AppColors.aiCyan.withValues(alpha: 0.65)
+              : isAccepted
+              ? AppColors.aiCyan.withValues(alpha: 0.45)
+              : AppColors.noteBorder.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final unit in document.units)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  unit.text.trim().isEmpty ? '…' : unit.text,
+                  style: AppTypography.noteBodyStyle.copyWith(
+                    color: isRejected
+                        ? AppColors.textHint.withValues(alpha: 0.7)
+                        : AppColors.aiCyan.withValues(alpha: 0.95),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BundledRemoveDocumentReview extends StatelessWidget {
+  const _BundledRemoveDocumentReview({
+    required this.document,
+    required this.decisions,
+    required this.activeChangeId,
+    required this.keyForChange,
+  });
+
+  final ChangeDocument document;
+  final Map<String, bool> decisions;
+  final String? activeChangeId;
+  final GlobalKey Function(String changeId) keyForChange;
+
+  @override
+  Widget build(BuildContext context) {
+    final anchorChange = document.changes.isNotEmpty ? document.changes.first : null;
+    final isPending = anchorChange != null && !decisions.containsKey(anchorChange.id);
+
+    if (document.units.isEmpty) {
+      return Text('…', style: AppTypography.noteBodyStyle);
+    }
+
+    return DecoratedBox(
+      key: anchorChange == null ? null : keyForChange(anchorChange.id),
+      decoration: BoxDecoration(
+        color: isPending && anchorChange.id == activeChangeId
+            ? const Color(0x26D64545)
+            : const Color(0x14D64545),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isPending && anchorChange.id == activeChangeId
+              ? const Color(0x99D64545)
+              : AppColors.noteBorder.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final unit in document.units)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  unit.text.trim().isEmpty ? '…' : unit.text,
+                  style: AppTypography.noteBodyStyle.copyWith(
+                    decoration: TextDecoration.lineThrough,
+                    decorationColor: AppColors.textHint.withValues(alpha: 0.75),
+                    color: AppColors.textHint.withValues(alpha: 0.85),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

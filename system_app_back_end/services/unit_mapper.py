@@ -216,6 +216,84 @@ def list_plan_headers(plan_units):
     return extract_part_names(plan_units)
 
 
+def numbered_plan_headers(plan_units):
+    return [
+        (index + 1, header)
+        for index, header in enumerate(list_plan_headers(plan_units))
+    ]
+
+
+def format_numbered_plan_headers(plan_units):
+    lines = [
+        f"[{index}] {header}" for index, header in numbered_plan_headers(plan_units)
+    ]
+    return "\n".join(lines) or "(none)"
+
+
+def resolve_plan_index(plan_units, plan_index):
+    headers = list_plan_headers(plan_units)
+    try:
+        index = int(plan_index) - 1
+    except (TypeError, ValueError):
+        return ""
+    if 0 <= index < len(headers):
+        return headers[index]
+    return ""
+
+
+def parse_header_map_instructions(result, plan_units, log_sections):
+    """Turn sparse numbered instructions into part entries for orchestration."""
+    content_parts = []
+    parts_to_remove = []
+    raw_instructions = []
+
+    for entry in result.get("instructions") or []:
+        if not isinstance(entry, dict):
+            continue
+        raw_instructions.append(entry)
+        action = (entry.get("action") or "").strip().lower()
+        if action == "edit":
+            action = "update"
+
+        if action == "remove":
+            part_name = resolve_plan_index(plan_units, entry.get("plan_index"))
+            if part_name and part_name not in parts_to_remove:
+                parts_to_remove.append(part_name)
+            continue
+
+        if action == "update":
+            part_name = resolve_plan_index(plan_units, entry.get("plan_index"))
+            part_entry = {
+                "part_name": part_name,
+                "action": "update",
+                "log_section_index": entry.get("log_section_index"),
+                "plan_index": entry.get("plan_index"),
+            }
+            attach_mapped_log_content(part_entry, log_sections)
+            if part_name and part_entry.get("log_content") is not None:
+                content_parts.append(part_entry)
+            continue
+
+        if action == "create":
+            part_entry = {
+                "part_name": (entry.get("part_name") or "").strip(),
+                "action": "create",
+                "log_section_index": entry.get("log_section_index"),
+            }
+            attach_mapped_log_content(part_entry, log_sections)
+            if not part_entry.get("part_name") and part_entry.get("log_header"):
+                part_entry["part_name"] = part_entry["log_header"]
+            if part_entry.get("part_name") and part_entry.get("log_content") is not None:
+                content_parts.append(part_entry)
+
+    return {
+        "parts": content_parts,
+        "parts_to_remove": parts_to_remove,
+        "log_date": (result.get("log_date") or "").strip(),
+        "instructions": raw_instructions,
+    }
+
+
 def list_log_sections_for_map(log_sections):
     lines = []
     for index, section in enumerate(log_sections):
@@ -250,6 +328,51 @@ def attach_mapped_log_content(part_entry, log_sections):
         )
         part_entry["log_content"] = flatten_log_content(section)
     return part_entry
+
+
+def match_plan_header_exact(plan_units, part_name):
+    key = _part_key(part_name)
+    if not key:
+        return ""
+    for header in extract_part_names(plan_units):
+        if _part_key(header) == key:
+            return header
+    return ""
+
+
+def part_change_id_prefix(file_key, part_name):
+    slug = _part_key(part_name) or "part"
+    return f"{file_key}:{slug[:48]}"
+
+
+def build_code_header_map(plan_units, log_sections):
+    plan_headers = list_plan_headers(plan_units)
+    plan_by_key = {_part_key(header): header for header in plan_headers}
+    parts = []
+    for index, section in enumerate(log_sections):
+        log_header = (section.get("header") or "").strip()
+        if not log_header:
+            continue
+        key = _part_key(log_header)
+        if key in plan_by_key:
+            parts.append(
+                {
+                    "part_name": plan_by_key[key],
+                    "action": "update",
+                    "log_section_index": index,
+                    "log_header": log_header,
+                }
+            )
+        else:
+            parts.append(
+                {
+                    "part_name": log_header,
+                    "action": "create",
+                    "log_section_index": index,
+                    "log_header": log_header,
+                }
+            )
+    return parts
 
 
 def resolve_plan_part_name(plan_units, part_name):
@@ -299,7 +422,27 @@ def flatten_part_units_with_ids(units, part_name):
     return "\n".join(lines) or "(empty)"
 
 
-def synthesize_create_part_units(part_name, ops, file_key):
+def synthesize_create_preview_from_content(part_name, items, file_key):
+    default_kind = "task" if file_key == "tasks" else "list_item"
+    units = []
+    index = 0
+    for item in items or []:
+        text = str(item).strip()
+        if not text:
+            continue
+        units.append(
+            {
+                "id": f"preview:{file_key}:item:{index}",
+                "kind": default_kind,
+                "text": text,
+                "part": part_name,
+            }
+        )
+        index += 1
+    return units
+
+
+def synthesize_create_part_units(part_name, ops, file_key, anchor_unit=None):
     default_kind = "task" if file_key == "tasks" else "list_item"
     units = [
         {
@@ -328,6 +471,10 @@ def synthesize_create_part_units(part_name, ops, file_key):
             }
         )
         index += 1
+    if anchor_unit:
+        anchor = dict(anchor_unit)
+        anchor["part"] = part_name
+        units.append(anchor)
     return units
 
 
