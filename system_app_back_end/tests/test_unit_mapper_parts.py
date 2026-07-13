@@ -216,8 +216,8 @@ def test_build_review_parts_create_includes_scoped_changes():
     )
     changes = review[0]["plan"]["changes"]
     assert len(changes) == 2
-    assert changes[0]["id"].startswith("plan:billing:")
-    assert changes[0]["action"] == "add_after"
+    assert changes[1]["action"] == "add_after"
+    assert review[0]["plan"]["review_bundle"] is False
 
 
 def test_build_review_parts_create_uses_synthetic_units():
@@ -237,8 +237,9 @@ def test_build_review_parts_create_uses_synthetic_units():
     review = build_review_parts(
         per_part, plan_units, plan_units, plan_units, "Plan", "Execution", "Tasks"
     )
-    assert review[0]["plan"]["units"][0]["text"] == "Essence"
-    assert review[0]["plan"]["review_bundle"] is True
+    assert review[0]["plan"]["units"][0]["id"] == "a1"
+    assert review[0]["plan"]["changes"][0]["action"] == "add_after"
+    assert review[0]["plan"]["review_bundle"] is False
 
 
 def test_build_review_parts_remove_bundles_sections():

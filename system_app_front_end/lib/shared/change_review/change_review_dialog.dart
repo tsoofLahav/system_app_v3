@@ -105,6 +105,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
         ),
       );
     _documentPhase = 0;
+    _autoApproveCreateHeaders();
     _scrollController.addListener(_markOverlayDirty);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _presentNextSuggestion(),
@@ -179,7 +180,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
             if (_documentHasPending(document)) return false;
             continue;
           }
-          for (final change in _orderedChanges(document)) {
+          for (final change in _reviewableChanges(document, part)) {
             if (!_decisions.containsKey(change.id)) return false;
           }
         }
@@ -203,7 +204,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
             if (_documentHasPending(document)) count++;
             continue;
           }
-          for (final change in _orderedChanges(document)) {
+          for (final change in _reviewableChanges(document, part)) {
             if (!_decisions.containsKey(change.id)) count++;
           }
         }
@@ -236,9 +237,54 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   int _pendingCountInPart(PartReview part) {
     var count = 0;
     for (final document in part.documents) {
-      if (_documentHasPending(document)) count++;
+      if (document.reviewBundle) {
+        if (_documentHasPending(document)) count++;
+        continue;
+      }
+      for (final change in _reviewableChanges(document, part)) {
+        if (!_decisions.containsKey(change.id)) count++;
+      }
     }
     return count;
+  }
+
+  List<ChangeItem> _reviewableChanges(ChangeDocument document, PartReview part) {
+    if ((part.action ?? '').toLowerCase() == 'create') {
+      return document.changes
+          .where((change) => change.newUnitKind != 'header')
+          .toList();
+    }
+    return _orderedChanges(document);
+  }
+
+  bool _documentHasReviewablePending(
+    ChangeDocument document,
+    PartReview part,
+  ) {
+    return _reviewableChanges(document, part)
+        .any((change) => !_decisions.containsKey(change.id));
+  }
+
+  void _autoApproveCreateHeaders() {
+    if (!_byPart) return;
+    for (final part in _reviewParts) {
+      if ((part.action ?? '').toLowerCase() != 'create') continue;
+      for (final document in part.documents) {
+        for (final change in document.changes) {
+          if (change.newUnitKind == 'header') {
+            _decisions[change.id] = true;
+          }
+        }
+      }
+    }
+  }
+
+  void _acceptAllInSection(ChangeDocument document, PartReview part) {
+    for (final change in _reviewableChanges(document, part)) {
+      _decisions[change.id] = true;
+    }
+    setState(() {});
+    _presentNextSuggestion();
   }
 
   String? _partActionLabel(PartReview part) {
@@ -253,12 +299,15 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
 
   ChangeItem? _nextPendingChangeInPart(PartReview part) {
     for (final document in part.documents) {
-      if (!_documentHasPending(document)) continue;
       if (document.reviewBundle) {
-        return document.changes.first;
+        if (_documentHasPending(document)) {
+          return document.changes.first;
+        }
+        continue;
       }
-      final next = _nextPendingChangeInDocument(document);
-      if (next != null) return next;
+      for (final change in _reviewableChanges(document, part)) {
+        if (!_decisions.containsKey(change.id)) return change;
+      }
     }
     return null;
   }
@@ -280,7 +329,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
             }
             continue;
           }
-          for (final change in _orderedChanges(document)) {
+          for (final change in _reviewableChanges(document, part)) {
             if (!_decisions.containsKey(change.id)) return change;
           }
         }
@@ -523,12 +572,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   Widget _buildPhasedPartReview() {
     final s = widget.strings;
     final part = _activePart;
-    var pendingCount = 0;
-    for (final document in part.documents) {
-      pendingCount += _orderedChanges(document)
-          .where((change) => !_decisions.containsKey(change.id))
-          .length;
-    }
+    final pendingCount = _pendingCountInPart(part);
 
     final children = <Widget>[];
     final actionLabel = _partActionLabel(part);
@@ -580,12 +624,23 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
         );
       }
       children.add(
-        Text(
-          _sectionTitle(document),
-          style: AppTypography.blockHeaderStyle.copyWith(
-            fontWeight: FontWeight.w600,
-            color: AppColors.text,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _sectionTitle(document),
+                style: AppTypography.blockHeaderStyle.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.text,
+                ),
+              ),
+            ),
+            if (_documentHasReviewablePending(document, part))
+              TextButton(
+                onPressed: () => _acceptAllInSection(document, part),
+                child: Text(s['acceptAllInSection']),
+              ),
+          ],
         ),
       );
       children.add(const SizedBox(height: 8));
@@ -910,6 +965,7 @@ class _DocumentReview extends StatelessWidget {
             decisions: decisions,
             activeChangeId: activeChangeId,
             keyForChange: keyForChange,
+            showPlusPrefix: (partAction ?? '').toLowerCase() != 'create',
           ),
         ],
       ],
@@ -952,6 +1008,7 @@ List<Widget> _rowsForUnit({
   required String? activeChangeId,
   required GlobalKey Function(String changeId) keyForChange,
   bool isContext = false,
+  bool showPlusPrefix = true,
 }) {
   final rows = <Widget>[];
   if (changes.isEmpty) {
@@ -1024,11 +1081,13 @@ List<Widget> _rowsForUnit({
   }
 
   for (final change in changes) {
+    if (change.newUnitKind == 'header') continue;
     if (_DocumentReview.shouldShowAddition(unit, change, decisions)) {
       rows.add(
         _AddedUnitRow(
           text: change.newText,
           isHeader: change.newUnitKind == 'header',
+          showPlusPrefix: showPlusPrefix,
         ),
       );
     } else if (_showPendingAddition(change, decisions) &&
@@ -1039,6 +1098,7 @@ List<Widget> _rowsForUnit({
           isHeader: change.newUnitKind == 'header',
           unitKey: keyForChange(change.id),
           isActive: change.id == activeChangeId,
+          showPlusPrefix: showPlusPrefix,
         ),
       );
     }
@@ -1496,12 +1556,14 @@ class _PendingAdditionRow extends StatelessWidget {
     required this.unitKey,
     required this.isActive,
     this.isHeader = false,
+    this.showPlusPrefix = true,
   });
 
   final String text;
   final GlobalKey unitKey;
   final bool isActive;
   final bool isHeader;
+  final bool showPlusPrefix;
 
   @override
   Widget build(BuildContext context) {
@@ -1509,16 +1571,17 @@ class _PendingAdditionRow extends StatelessWidget {
     Widget content = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 2, right: 8),
-          child: Text(
-            '+',
-            style: AppTypography.blockHeaderStyle.copyWith(
-              color: AppColors.aiCyan.withValues(alpha: 0.95),
-              fontWeight: FontWeight.w700,
+        if (showPlusPrefix)
+          Padding(
+            padding: const EdgeInsets.only(top: 2, right: 8),
+            child: Text(
+              '+',
+              style: AppTypography.blockHeaderStyle.copyWith(
+                color: AppColors.aiCyan.withValues(alpha: 0.95),
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-        ),
         Expanded(
           child: Text(
             display,
@@ -1560,10 +1623,12 @@ class _AddedUnitRow extends StatelessWidget {
   const _AddedUnitRow({
     required this.text,
     this.isHeader = false,
+    this.showPlusPrefix = true,
   });
 
   final String text;
   final bool isHeader;
+  final bool showPlusPrefix;
 
   @override
   Widget build(BuildContext context) {
@@ -1580,16 +1645,17 @@ class _AddedUnitRow extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 1, right: 8),
-                child: Text(
-                  '+',
-                  style: AppTypography.metaStyle.copyWith(
-                    color: AppColors.aiCyan.withValues(alpha: 0.95),
-                    fontWeight: FontWeight.w700,
+              if (showPlusPrefix)
+                Padding(
+                  padding: const EdgeInsets.only(top: 1, right: 8),
+                  child: Text(
+                    '+',
+                    style: AppTypography.metaStyle.copyWith(
+                      color: AppColors.aiCyan.withValues(alpha: 0.95),
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
               Expanded(
                 child: Text(
                   display,

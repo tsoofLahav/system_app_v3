@@ -8,7 +8,7 @@ from config import OPENAI_PROCESS_UPDATE_TEMPERATURE, OPENAI_PROJECT_UPDATE_TEMP
 from models import AiProposal, db
 from services.diff_engine import build_change_set, build_document_change_set
 from services.openai_service import chat_json
-from services.part_diff import build_create_part_ops, sanitize_diff_ops
+from services.part_diff import build_create_part_ops, build_update_part_ops
 from services.unit_mapper import (
     annotate_units_with_parts,
     attach_mapped_log_content,
@@ -19,8 +19,8 @@ from services.unit_mapper import (
     flatten_log_content,
     flatten_log_sections_for_mapping,
     flatten_part_content_for_update,
-    flatten_part_units_with_ids,
     format_numbered_plan_headers,
+    last_unit_id,
     list_log_sections_for_map,
     list_plan_headers,
     normalize_content_payload,
@@ -28,7 +28,6 @@ from services.unit_mapper import (
     part_change_id_prefix,
     slice_units_by_part,
     summarize_parts_for_mapping,
-    synthesize_create_preview_from_content,
     units_from_file,
 )
 
@@ -94,7 +93,12 @@ PROJECT_UPDATE_UPDATE_CONTENT_PROMPT = """You revise existing part content using
 - Current plan, execution, and tasks content for this part (text only, no IDs)
 
 ## Job
-Return full updated content arrays that integrate the log. Prefer updating similar lines over duplicating.
+Return the full updated content arrays for this part.
+
+Line rules:
+- Keep an existing point unchanged when the log does not affect it.
+- Update an existing point in place when the log revises that same point — return the revised text in the same array position, not as a duplicate line.
+- Add a new line only for genuinely new points that are not updates to an existing point.
 
 ## Output
 JSON only:
@@ -106,19 +110,19 @@ JSON only:
   }
 }"""
 
-PROJECT_UPDATE_DIFF_PROMPT = """You suggest minimal edit ops to transform OLD content into NEW content.
+PROJECT_UPDATE_DIFF_PROMPT = """You map OLD lines to NEW lines with minimal edit ops.
 
 ## Input
-- OLD — lines with unit_id prefixes like [block:1:item:0] text
-- NEW — target text lines (array)
+- OLD — existing lines with unit_id prefixes like [block:1:item:0] text
+- NEW — full target line list for this part after the log update
 
-## Job
-Return ops on OLD only: replace, add_after, remove.
-- replace — change an existing line
-- add_after — insert after a unit_id (include kind: list_item or task)
-- remove — delete a unit
+## Rules
+- A NEW point (not an update to an existing line) → add_after after the nearest preceding OLD unit_id. Include kind: list_item or task.
+- An UPDATED point (same meaning/slot, revised text) → replace on that OLD unit_id. Never use add_after for updates.
+- A dropped point → remove on that OLD unit_id.
+- Unchanged lines → no op.
 
-Keep ops minimal. Do not duplicate lines already matching NEW.
+Prefer replace for revisions. Use add_after only for genuinely new lines.
 
 ## Output
 JSON only: {"ops":[]}"""
@@ -224,26 +228,7 @@ def _run_diff_step(
     new_items,
     locale,
 ):
-    old_text = flatten_part_units_with_ids(units, part_name)
-    new_lines = "\n".join(f"- {item}" for item in new_items) or "(empty)"
-    user_prompt = (
-        f"File: {file_title}\n"
-        f"Part: {part_name}\n\n"
-        f"=== OLD ===\n{old_text}\n\n"
-        f"=== NEW ===\n{new_lines}"
-    )
-    result = chat_json(
-        f"{PROJECT_UPDATE_DIFF_PROMPT}\n\n{_lang_note(locale)}",
-        user_prompt,
-        temperature=OPENAI_PROJECT_UPDATE_TEMPERATURE,
-    )
-    return sanitize_diff_ops(
-        result.get("ops") or [],
-        units,
-        part_name,
-        new_items,
-        file_key,
-    )
+    return build_update_part_ops(units, part_name, new_items, file_key)
 
 
 def _run_doc_step(topic_name, log_sections, doc_file, log_date_hint, locale):
@@ -295,10 +280,25 @@ def _append_document_changes(documents_by_key, key, title, units, ops, part_name
     documents_by_key[key]["changes"].extend(partial["changes"])
 
 
+def _anchor_unit_for_create(full_units, part_name):
+    anchor_id = last_unit_id(full_units)
+    if not anchor_id:
+        return None
+    for unit in full_units:
+        if unit.get("id") == anchor_id:
+            return dict(unit)
+    return {"id": anchor_id, "kind": "list_item", "text": ""}
+
+
 def _display_units_for_part(action, part_name, key, units, annotated, ops, content_items):
     slice_units = slice_units_by_part(annotated, part_name)
     if action == "create":
-        return synthesize_create_preview_from_content(part_name, content_items, key)
+        anchor = _anchor_unit_for_create(units, part_name)
+        if anchor:
+            anchor = dict(anchor)
+            anchor["text"] = ""
+            return [anchor]
+        return []
     if action == "remove":
         return [unit for unit in slice_units if unit.get("kind") != "header"]
     if slice_units:
@@ -366,7 +366,7 @@ def build_review_parts(
                 "title": title,
                 "units": _units_with_part(display_units, part_name),
                 "changes": doc["changes"],
-                "review_bundle": action in ("create", "remove"),
+                "review_bundle": action == "remove",
             }
         if any(entry.get(k) for k in ("plan", "execution", "tasks")):
             review_parts.append(entry)

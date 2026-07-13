@@ -3,6 +3,7 @@
 from services.part_diff import (
     align_content_to_ops,
     build_create_part_ops,
+    build_update_part_ops,
     sanitize_diff_ops,
 )
 
@@ -23,6 +24,43 @@ def test_build_create_part_ops_uses_task_kind_for_tasks_file():
     ops = build_create_part_ops(units, "API", ["Ship endpoint"], "tasks")
 
     assert ops[1]["kind"] == "task"
+
+
+def test_build_update_part_ops_replaces_revised_line():
+    units = [
+        {"id": "h1", "kind": "header", "text": "API"},
+        {"id": "i1", "kind": "list_item", "text": "Define contracts"},
+        {"id": "i2", "kind": "list_item", "text": "Ship UI"},
+    ]
+    ops = build_update_part_ops(
+        units,
+        "API",
+        ["Define API contracts", "Ship UI"],
+        "plan",
+    )
+
+    assert len(ops) == 1
+    assert ops[0]["op"] == "replace"
+    assert ops[0]["unit_id"] == "i1"
+
+
+def test_build_update_part_ops_adds_new_line_without_replacing_last():
+    units = [
+        {"id": "h1", "kind": "header", "text": "API"},
+        {"id": "i1", "kind": "list_item", "text": "Define contracts"},
+        {"id": "i2", "kind": "list_item", "text": "Ship UI"},
+    ]
+    ops = build_update_part_ops(
+        units,
+        "API",
+        ["Define contracts", "Ship UI", "Add monitoring"],
+        "plan",
+    )
+
+    assert len(ops) == 1
+    assert ops[0]["op"] == "add_after"
+    assert ops[0]["unit_id"] == "i2"
+    assert ops[0]["text"] == "Add monitoring"
 
 
 def test_align_content_to_ops_replaces_similar_line():
