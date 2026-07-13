@@ -351,3 +351,52 @@ def test_build_project_update_change_set_excludes_doc(monkeypatch):
 
     keys = [document["key"] for document in change_set["documents"]]
     assert keys == ["execution"]
+
+
+def test_review_parts_and_change_set_share_change_ids(monkeypatch):
+    plan = SimpleNamespace(id=1, name="Plan", type="plan")
+    execution = SimpleNamespace(id=2, name="Execution", type="execution")
+    tasks = SimpleNamespace(id=3, name="Tasks", type="tasks")
+    plan_units = [
+        {"id": "h1", "kind": "header", "text": "API"},
+        {"id": "i1", "kind": "list_item", "text": "Old line"},
+        {"id": "i2", "kind": "list_item", "text": "Anchor"},
+    ]
+    monkeypatch.setattr(
+        "services.ai_project_update_actions.units_from_file",
+        lambda _file_id: plan_units,
+    )
+    per_part = [
+        {
+            "part_name": "API",
+            "log_header": "API",
+            "action": "update",
+            "plan_ops": [
+                {"op": "replace", "unit_id": "i1", "text": "Revised line"},
+                {
+                    "op": "add_after",
+                    "unit_id": "i2",
+                    "text": "Brand new",
+                    "kind": "list_item",
+                },
+            ],
+            "execution_ops": [],
+            "tasks_ops": [],
+        }
+    ]
+
+    review = build_review_parts(
+        per_part, plan_units, plan_units, plan_units, "Plan", "Execution", "Tasks"
+    )
+    change_set = build_project_update_change_set(plan, execution, tasks, per_part)
+
+    review_changes = review[0]["plan"]["changes"]
+    finalize_changes = next(
+        doc["changes"] for doc in change_set["documents"] if doc["key"] == "plan"
+    )
+    assert [change["id"] for change in review_changes] == [
+        change["id"] for change in finalize_changes
+    ]
+    assert [change["action"] for change in review_changes] == [
+        change["action"] for change in finalize_changes
+    ]
