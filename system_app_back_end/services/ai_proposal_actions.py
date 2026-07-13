@@ -14,6 +14,7 @@ from services.ai_project_update_actions import (
 )
 from services.doc_table_rows import insert_row_into_table_block
 from services.openai_service import chat_json
+from services.part_edit_ops import EDIT_OPS_RULES
 from services.project_part_sync import sync_execution_and_tasks_to_plan
 from services.unit_mapper import (
     apply_units_to_file,
@@ -23,7 +24,7 @@ from services.unit_mapper import (
 )
 
 
-SMART_PROCESS_UPDATE_PROMPT = """You update a personal process from weekly documentation.
+SMART_PROCESS_UPDATE_PROMPT = f"""You update a personal process from weekly documentation.
 
 ## Files
 
@@ -39,29 +40,22 @@ DOCUMENTATION — User notes (read only). May state routine changes explicitly o
 2. Decide what in PLAN and TASKS should change based on the documentation.
 3. Return only edits to existing units, using the unit IDs provided.
 
-For each edit, `text` is the new line as it should appear in the file — a direct replacement for that unit, not a suggestion about what to do.
+{EDIT_OPS_RULES}
 
 ## Output
 
 JSON only:
-{"plan_ops":[],"tasks_ops":[]}
-
-Each op:
-- op: "replace" | "remove" | "add_after"
-- unit_id: from PLAN or TASKS input
-- text: required for replace and add_after — the full new line
-
-Prefer replace and edit over remove and add. Use remove or merge when it helps the plan stay organized and concise. Use add_after only when a new point is clearly needed.
+{{"plan_ops":[],"tasks_ops":[]}}
 
 ## Examples
 
 Plan unit: [block:3:item:1] Practice 3 minutes daily
 Doc: practice feels too short; 5 min works better
-→ {"op":"replace","unit_id":"block:3:item:1","text":"Practice 5 minutes daily"}
+→ {{"op":"replace","unit_id":"block:3:item:1","text":"Practice 5 minutes daily"}}
 
 Tasks unit: [task:12] Evening stretch routine
 Plan now emphasizes morning mobility
-→ {"op":"replace","unit_id":"task:12","text":"Morning mobility routine (10 min)"}
+→ {{"op":"replace","unit_id":"task:12","text":"Morning mobility routine (10 min)"}}
 
 Respond in the same language as the input files."""
 

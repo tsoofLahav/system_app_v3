@@ -1,4 +1,4 @@
-"""Project update AI v2 — header map, content, diff, doc."""
+"""Project update AI — header map, per-part flows (create / update / remove), doc."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ from config import OPENAI_PROCESS_UPDATE_TEMPERATURE, OPENAI_PROJECT_UPDATE_TEMP
 from models import AiProposal, db
 from services.diff_engine import build_change_set, build_document_change_set
 from services.openai_service import chat_json
-from services.part_diff import build_create_part_ops, build_update_part_ops
+from services.part_diff import build_create_part_ops
+from services.part_edit_ops import EDIT_OPS_RULES, sanitize_part_edit_ops, summarize_ops
 from services.unit_mapper import (
     annotate_units_with_parts,
     attach_mapped_log_content,
@@ -18,7 +19,7 @@ from services.unit_mapper import (
     flatten_doc_recent_rows_for_ai,
     flatten_log_content,
     flatten_log_sections_for_mapping,
-    flatten_part_content_for_update,
+    flatten_part_units_with_ids,
     format_numbered_plan_headers,
     last_unit_id,
     list_log_sections_for_map,
@@ -30,6 +31,16 @@ from services.unit_mapper import (
     summarize_parts_for_mapping,
     units_from_file,
 )
+
+# Part-level flows (after header map)
+PART_ACTION_CREATE = "create"
+PART_ACTION_UPDATE = "update"
+PART_ACTION_REMOVE = "remove"
+
+# Line-level ops inside an update flow (same contract as process update)
+LINE_OP_REPLACE = "replace"   # edit existing line
+LINE_OP_ADD = "add_after"     # new line
+LINE_OP_REMOVE = "remove"     # drop line
 
 PROJECT_UPDATE_HEADER_MAP_PROMPT = """You map a daily log to numbered project plan parts.
 
@@ -58,7 +69,7 @@ JSON only:
   "log_date": "YYYY-MM-DD or empty"
 }"""
 
-PROJECT_UPDATE_CREATE_CONTENT_PROMPT = """You write initial content for a new project part.
+PROJECT_UPDATE_PART_CREATE_PROMPT = """You write initial content for a new project part.
 
 ## File roles
 - PLAN — concise essence (what this part is about). Short list items.
@@ -81,51 +92,28 @@ JSON only:
   }
 }"""
 
-PROJECT_UPDATE_UPDATE_CONTENT_PROMPT = """You revise existing part content using today's log section.
+PROJECT_UPDATE_PART_EDIT_PROMPT = f"""You update one existing project part using today's log section.
 
-## File roles
+This flow matches process update: return unit-level edit ops directly — not full rewritten arrays.
+
+## File roles (this part only)
 - PLAN — concise essence. Short list items.
 - EXECUTION — durable work points. No dates, no diary tone.
 - TASKS — calendar-sized missions. Actionable and simple.
 
 ## Input
-- Log section (today's notes)
-- Current plan, execution, and tasks content for this part (text only, no IDs)
+- LOG CONTENT — today's notes for this part
+- PLAN / EXECUTION / TASKS — current lines with unit_id prefixes like [block:1:item:0]
 
 ## Job
-Return the full updated content arrays for this part.
+1. Read the log section and the current lines for this part in each file.
+2. Return only the edits needed in that part.
 
-Line rules:
-- Keep an existing point unchanged when the log does not affect it.
-- Update an existing point in place when the log revises that same point — return the revised text in the same array position, not as a duplicate line.
-- Add a new line only for genuinely new points that are not updates to an existing point.
+{EDIT_OPS_RULES}
 
 ## Output
 JSON only:
-{
-  "content": {
-    "plan": ["..."],
-    "execution": ["..."],
-    "tasks": ["..."]
-  }
-}"""
-
-PROJECT_UPDATE_DIFF_PROMPT = """You map OLD lines to NEW lines with minimal edit ops.
-
-## Input
-- OLD — existing lines with unit_id prefixes like [block:1:item:0] text
-- NEW — full target line list for this part after the log update
-
-## Rules
-- A NEW point (not an update to an existing line) → add_after after the nearest preceding OLD unit_id. Include kind: list_item or task.
-- An UPDATED point (same meaning/slot, revised text) → replace on that OLD unit_id. Never use add_after for updates.
-- A dropped point → remove on that OLD unit_id.
-- Unchanged lines → no op.
-
-Prefer replace for revisions. Use add_after only for genuinely new lines.
-
-## Output
-JSON only: {"ops":[]}"""
+{{"plan_ops":[],"execution_ops":[],"tasks_ops":[]}}"""
 
 PROJECT_UPDATE_DOC_PROMPT = """You append documentation rows from a project daily log.
 
@@ -174,7 +162,8 @@ def _run_header_map_step(topic_name, plan_units, log_sections, locale):
     return parse_header_map_instructions(raw, plan_units, log_sections)
 
 
-def _run_create_content_step(topic_name, part_entry, locale):
+def _run_part_create_flow(topic_name, part_entry, plan_units, execution_units, tasks_units, locale):
+    """CREATE flow — AI writes content arrays; code builds add_after ops."""
     user_prompt = (
         f"Topic: {topic_name}\n"
         f"Part: {part_entry.get('part_name')}\n"
@@ -183,14 +172,33 @@ def _run_create_content_step(topic_name, part_entry, locale):
         f"{part_entry.get('log_content') or '(empty)'}"
     )
     result = chat_json(
-        f"{PROJECT_UPDATE_CREATE_CONTENT_PROMPT}\n\n{_lang_note(locale)}",
+        f"{PROJECT_UPDATE_PART_CREATE_PROMPT}\n\n{_lang_note(locale)}",
         user_prompt,
         temperature=OPENAI_PROJECT_UPDATE_TEMPERATURE,
     )
-    return normalize_content_payload(result.get("content"))
+    content = normalize_content_payload(result.get("content"))
+    part_name = part_entry.get("part_name") or ""
+    plan_ops = build_create_part_ops(plan_units, part_name, content.get("plan"), "plan")
+    execution_ops = build_create_part_ops(
+        execution_units, part_name, content.get("execution"), "execution"
+    )
+    tasks_ops = build_create_part_ops(
+        tasks_units, part_name, content.get("tasks"), "tasks"
+    )
+    return {
+        "content": content,
+        "plan_ops": plan_ops,
+        "execution_ops": execution_ops,
+        "tasks_ops": tasks_ops,
+        "op_summary": {
+            "plan": summarize_ops(plan_ops),
+            "execution": summarize_ops(execution_ops),
+            "tasks": summarize_ops(tasks_ops),
+        },
+    }
 
 
-def _run_update_content_step(
+def _run_part_update_flow(
     topic_name,
     part_entry,
     plan_units,
@@ -201,6 +209,7 @@ def _run_update_content_step(
     tasks_name,
     locale,
 ):
+    """UPDATE flow — like process update: one AI call returns unit-level ops per file."""
     part_name = part_entry.get("part_name") or ""
     user_prompt = (
         f"Topic: {topic_name}\n"
@@ -208,27 +217,52 @@ def _run_update_content_step(
         f"Log header: {part_entry.get('log_header')}\n\n"
         f"=== LOG CONTENT ===\n"
         f"{part_entry.get('log_content') or '(empty)'}\n\n"
-        f"{flatten_part_content_for_update(plan_units, plan_name, part_name)}\n\n"
-        f"{flatten_part_content_for_update(execution_units, execution_name, part_name)}\n\n"
-        f"{flatten_part_content_for_update(tasks_units, tasks_name, part_name)}"
+        f"=== {plan_name.upper()} — PART: {part_name} ===\n"
+        f"{flatten_part_units_with_ids(plan_units, part_name)}\n\n"
+        f"=== {execution_name.upper()} — PART: {part_name} ===\n"
+        f"{flatten_part_units_with_ids(execution_units, part_name)}\n\n"
+        f"=== {tasks_name.upper()} — PART: {part_name} ===\n"
+        f"{flatten_part_units_with_ids(tasks_units, part_name)}"
     )
     result = chat_json(
-        f"{PROJECT_UPDATE_UPDATE_CONTENT_PROMPT}\n\n{_lang_note(locale)}",
+        f"{PROJECT_UPDATE_PART_EDIT_PROMPT}\n\n{_lang_note(locale)}",
         user_prompt,
-        temperature=OPENAI_PROJECT_UPDATE_TEMPERATURE,
+        temperature=OPENAI_PROCESS_UPDATE_TEMPERATURE,
     )
-    return normalize_content_payload(result.get("content"))
+    plan_ops = sanitize_part_edit_ops(result.get("plan_ops"), plan_units, part_name)
+    execution_ops = sanitize_part_edit_ops(
+        result.get("execution_ops"), execution_units, part_name
+    )
+    tasks_ops = sanitize_part_edit_ops(result.get("tasks_ops"), tasks_units, part_name)
+    return {
+        "content": {},
+        "plan_ops": plan_ops,
+        "execution_ops": execution_ops,
+        "tasks_ops": tasks_ops,
+        "op_summary": {
+            "plan": summarize_ops(plan_ops),
+            "execution": summarize_ops(execution_ops),
+            "tasks": summarize_ops(tasks_ops),
+        },
+    }
 
 
-def _run_diff_step(
-    file_key,
-    file_title,
-    part_name,
-    units,
-    new_items,
-    locale,
-):
-    return build_update_part_ops(units, part_name, new_items, file_key)
+def _run_part_remove_flow(plan_units, execution_units, tasks_units, part_name):
+    """REMOVE flow — no AI; programmatic removal ops."""
+    plan_ops = build_part_removal_ops(plan_units, part_name)
+    execution_ops = build_part_removal_ops(execution_units, part_name)
+    tasks_ops = build_part_removal_ops(tasks_units, part_name)
+    return {
+        "content": {},
+        "plan_ops": plan_ops,
+        "execution_ops": execution_ops,
+        "tasks_ops": tasks_ops,
+        "op_summary": {
+            "plan": summarize_ops(plan_ops),
+            "execution": summarize_ops(execution_ops),
+            "tasks": summarize_ops(tasks_ops),
+        },
+    }
 
 
 def _run_doc_step(topic_name, log_sections, doc_file, log_date_hint, locale):
@@ -265,21 +299,6 @@ def _units_with_part(doc_units, part_name):
     return rows
 
 
-def _append_document_changes(documents_by_key, key, title, units, ops, part_name):
-    if not ops:
-        return
-    prefix = part_change_id_prefix(key, part_name)
-    partial = build_document_change_set(key, title, units, ops, id_prefix=prefix)
-    if key not in documents_by_key:
-        documents_by_key[key] = {
-            "key": key,
-            "title": title,
-            "units": units,
-            "changes": [],
-        }
-    documents_by_key[key]["changes"].extend(partial["changes"])
-
-
 def _anchor_unit_for_create(full_units, part_name):
     anchor_id = last_unit_id(full_units)
     if not anchor_id:
@@ -304,6 +323,38 @@ def _display_units_for_part(action, part_name, key, units, annotated, ops, conte
     if slice_units:
         return [unit for unit in slice_units if unit.get("kind") != "header"]
     return slice_units
+
+
+def _build_part_file_document(
+    action,
+    part_name,
+    key,
+    title,
+    full_units,
+    annotated_units,
+    ops,
+    content_items,
+):
+    """Build change + review slices from the same ops (single source of truth)."""
+    if not ops:
+        return None
+    id_prefix = part_change_id_prefix(key, part_name)
+    change_doc = build_document_change_set(
+        key, title, full_units, ops, id_prefix=id_prefix
+    )
+    display_units = _display_units_for_part(
+        action, part_name, key, full_units, annotated_units, ops, content_items
+    )
+    return {
+        "finalize": change_doc,
+        "review": {
+            "key": key,
+            "title": title,
+            "units": _units_with_part(display_units, part_name),
+            "changes": change_doc["changes"],
+            "review_bundle": action == PART_ACTION_REMOVE,
+        },
+    }
 
 
 def build_review_parts(
@@ -342,32 +393,18 @@ def build_review_parts(
             ("execution", execution_name, execution_units, annotated_execution, execution_ops, "execution"),
             ("tasks", tasks_name, tasks_units, annotated_tasks, tasks_ops, "tasks"),
         ):
-            if not ops:
-                continue
-            display_units = _display_units_for_part(
+            built = _build_part_file_document(
                 action,
                 part_name,
                 key,
+                title,
                 units,
                 annotated,
                 ops,
                 content.get(content_key),
             )
-
-            doc = build_document_change_set(
-                key,
-                title,
-                units,
-                ops,
-                id_prefix=part_change_id_prefix(key, part_name),
-            )
-            entry[key] = {
-                "key": key,
-                "title": title,
-                "units": _units_with_part(display_units, part_name),
-                "changes": doc["changes"],
-                "review_bundle": action == "remove",
-            }
+            if built:
+                entry[key] = built["review"]
         if any(entry.get(k) for k in ("plan", "execution", "tasks")):
             review_parts.append(entry)
     return review_parts
@@ -388,19 +425,35 @@ def build_project_update_change_set(
         part_name = (result.get("part_name") or "").strip()
         if not part_name:
             continue
+        action = (result.get("action") or PART_ACTION_UPDATE).strip()
+        content = result.get("content") or {}
         for key, title, units, ops_field in (
             ("plan", plan_file.name, plan_units, "plan_ops"),
             ("execution", execution_file.name, execution_units, "execution_ops"),
             ("tasks", tasks_file.name, tasks_units, "tasks_ops"),
         ):
-            _append_document_changes(
-                documents_by_key,
+            ops = result.get(ops_field) or []
+            built = _build_part_file_document(
+                action,
+                part_name,
                 key,
                 title,
                 units,
-                result.get(ops_field) or [],
-                part_name,
+                units,
+                ops,
+                content.get(key),
             )
+            if not built:
+                continue
+            finalize_doc = built["finalize"]
+            if key not in documents_by_key:
+                documents_by_key[key] = {
+                    "key": key,
+                    "title": title,
+                    "units": units,
+                    "changes": [],
+                }
+            documents_by_key[key]["changes"].extend(finalize_doc["changes"])
 
     return build_change_set(list(documents_by_key.values()))
 
@@ -443,7 +496,7 @@ def smart_project_update(
     ai_part_steps = []
 
     for part_entry in header_map.get("parts") or []:
-        action = (part_entry.get("action") or "update").strip().lower()
+        action = (part_entry.get("action") or PART_ACTION_UPDATE).strip().lower()
         part_name = (part_entry.get("part_name") or "").strip()
         if not part_name:
             continue
@@ -456,23 +509,16 @@ def smart_project_update(
             "log_content": part_entry.get("log_content"),
             "content": {},
             "ops": {"plan": [], "execution": [], "tasks": []},
+            "op_summary": {},
         }
 
-        if action == "create":
-            content = _run_create_content_step(topic.name, part_entry, locale)
-            step_record["content"] = content
-            part_plan_ops = build_create_part_ops(
-                plan_units, part_name, content.get("plan"), "plan"
-            )
-            part_execution_ops = build_create_part_ops(
-                execution_units, part_name, content.get("execution"), "execution"
-            )
-            part_tasks_ops = build_create_part_ops(
-                tasks_units, part_name, content.get("tasks"), "tasks"
+        if action == PART_ACTION_CREATE:
+            flow = _run_part_create_flow(
+                topic.name, part_entry, plan_units, execution_units, tasks_units, locale
             )
             plan_structure_changed = True
-        elif action == "update":
-            content = _run_update_content_step(
+        elif action == PART_ACTION_UPDATE:
+            flow = _run_part_update_flow(
                 topic.name,
                 part_entry,
                 plan_units,
@@ -483,65 +529,51 @@ def smart_project_update(
                 tasks_file.name,
                 locale,
             )
-            step_record["content"] = content
-            part_plan_ops = _run_diff_step(
-                "plan", plan_file.name, part_name, plan_units, content.get("plan"), locale
-            )
-            part_execution_ops = _run_diff_step(
-                "execution",
-                execution_file.name,
-                part_name,
-                execution_units,
-                content.get("execution"),
-                locale,
-            )
-            part_tasks_ops = _run_diff_step(
-                "tasks", tasks_file.name, part_name, tasks_units, content.get("tasks"), locale
-            )
         else:
             continue
 
+        step_record["content"] = flow.get("content") or {}
         step_record["ops"] = {
-            "plan": part_plan_ops,
-            "execution": part_execution_ops,
-            "tasks": part_tasks_ops,
+            "plan": flow.get("plan_ops") or [],
+            "execution": flow.get("execution_ops") or [],
+            "tasks": flow.get("tasks_ops") or [],
         }
+        step_record["op_summary"] = flow.get("op_summary") or {}
         ai_part_steps.append(step_record)
 
         result = {
             "part_name": part_name,
             "log_header": part_entry.get("log_header") or part_name,
             "action": action,
-            "content": content,
-            "plan_ops": part_plan_ops,
-            "execution_ops": part_execution_ops,
-            "tasks_ops": part_tasks_ops,
+            "content": flow.get("content") or {},
+            "plan_ops": flow.get("plan_ops") or [],
+            "execution_ops": flow.get("execution_ops") or [],
+            "tasks_ops": flow.get("tasks_ops") or [],
         }
         per_part_results.append(result)
-        _merge_ops(plan_ops, part_plan_ops)
-        _merge_ops(execution_ops, part_execution_ops)
-        _merge_ops(tasks_ops, part_tasks_ops)
+        _merge_ops(plan_ops, result["plan_ops"])
+        _merge_ops(execution_ops, result["execution_ops"])
+        _merge_ops(tasks_ops, result["tasks_ops"])
 
     removals = []
     for part_name in header_map.get("parts_to_remove") or []:
         part_name = (part_name or "").strip()
         if not part_name:
             continue
+        flow = _run_part_remove_flow(plan_units, execution_units, tasks_units, part_name)
         removals.append({"part": part_name})
-        _merge_ops(plan_ops, build_part_removal_ops(plan_units, part_name))
-        _merge_ops(
-            execution_ops, build_part_removal_ops(execution_units, part_name)
-        )
-        _merge_ops(tasks_ops, build_part_removal_ops(tasks_units, part_name))
+        _merge_ops(plan_ops, flow.get("plan_ops") or [])
+        _merge_ops(execution_ops, flow.get("execution_ops") or [])
+        _merge_ops(tasks_ops, flow.get("tasks_ops") or [])
         plan_structure_changed = True
         per_part_results.append(
             {
                 "part_name": part_name,
                 "log_header": part_name,
-                "action": "remove",
-                "plan_ops": build_part_removal_ops(plan_units, part_name),
-                "execution_ops": build_part_removal_ops(execution_units, part_name),
-                "tasks_ops": build_part_removal_ops(tasks_units, part_name),
+                "action": PART_ACTION_REMOVE,
+                "plan_ops": flow.get("plan_ops") or [],
+                "execution_ops": flow.get("execution_ops") or [],
+                "tasks_ops": flow.get("tasks_ops") or [],
             }
         )
 
