@@ -8,6 +8,7 @@ from services.diff_engine import (
     merge_document,
 )
 from services.ai_project_update_actions import (
+    aggregate_review_changes,
     build_project_update_change_set,
     create_project_update_skipped_proposal,
     create_smart_project_update_proposal,
@@ -299,21 +300,30 @@ def finalize_project_update(proposal, decisions):
     documents = {
         doc.get("key"): doc for doc in change_set.get("documents") or [] if doc.get("key")
     }
+    reviewed_changes = aggregate_review_changes(payload.get("review_parts") or [])
+
+    def _finalize_changes(file_key):
+        """Apply only changes the user saw in review_parts."""
+        reviewed = reviewed_changes.get(file_key) or []
+        if reviewed:
+            return reviewed
+        doc = documents.get(file_key) or {}
+        return doc.get("changes") or []
 
     final_plan_units = merge_document(
         (documents.get("plan") or {}).get("units") or units_from_file(plan_source.id),
-        (documents.get("plan") or {}).get("changes") or [],
+        _finalize_changes("plan"),
         decisions or {},
     )
     final_execution_units = merge_document(
         (documents.get("execution") or {}).get("units")
         or units_from_file(execution_source.id),
-        (documents.get("execution") or {}).get("changes") or [],
+        _finalize_changes("execution"),
         decisions or {},
     )
     final_tasks_units = merge_document(
         (documents.get("tasks") or {}).get("units") or units_from_file(tasks_source.id),
-        (documents.get("tasks") or {}).get("changes") or [],
+        _finalize_changes("tasks"),
         decisions or {},
     )
 

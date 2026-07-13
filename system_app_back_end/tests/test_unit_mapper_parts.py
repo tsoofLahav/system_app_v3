@@ -4,6 +4,8 @@ from types import SimpleNamespace
 
 from services.ai_project_update_actions import (
     _normalize_doc_ops,
+    aggregate_review_changes,
+    build_change_set_from_review_parts,
     build_project_update_change_set,
     build_review_parts,
     input_log_has_part_headers,
@@ -400,3 +402,48 @@ def test_review_parts_and_change_set_share_change_ids(monkeypatch):
     assert [change["action"] for change in review_changes] == [
         change["action"] for change in finalize_changes
     ]
+
+
+def test_build_change_set_from_review_parts_uses_review_changes(monkeypatch):
+    plan = SimpleNamespace(id=1, name="Plan", type="plan")
+    execution = SimpleNamespace(id=2, name="Execution", type="execution")
+    tasks = SimpleNamespace(id=3, name="Tasks", type="tasks")
+    plan_units = [
+        {"id": "h1", "kind": "header", "text": "API"},
+        {"id": "i1", "kind": "list_item", "text": "Old line"},
+    ]
+    monkeypatch.setattr(
+        "services.ai_project_update_actions.units_from_file",
+        lambda _file_id: plan_units,
+    )
+    review_parts = [
+        {
+            "part_name": "API",
+            "action": "update",
+            "plan": {
+                "key": "plan",
+                "title": "Plan",
+                "units": [{"id": "i1", "kind": "list_item", "text": "Old line"}],
+                "changes": [
+                    {
+                        "id": "plan:api:c1",
+                        "action": "add_after",
+                        "unit_id": "i1",
+                        "old_text": "",
+                        "new_text": "Inserted",
+                        "new_unit": {
+                            "id": "new:plan:api:c1",
+                            "kind": "list_item",
+                            "text": "Inserted",
+                        },
+                    }
+                ],
+            },
+        }
+    ]
+    change_set = build_change_set_from_review_parts(
+        review_parts, plan, execution, tasks
+    )
+    plan_doc = next(doc for doc in change_set["documents"] if doc["key"] == "plan")
+    assert plan_doc["changes"][0]["action"] == "add_after"
+    assert aggregate_review_changes(review_parts)["plan"][0]["id"] == "plan:api:c1"

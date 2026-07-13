@@ -319,10 +319,25 @@ def _display_units_for_part(action, part_name, key, units, annotated, ops, conte
             return [anchor]
         return []
     if action == "remove":
-        return [unit for unit in slice_units if unit.get("kind") != "header"]
-    if slice_units:
-        return [unit for unit in slice_units if unit.get("kind") != "header"]
-    return slice_units
+        display = [unit for unit in slice_units if unit.get("kind") != "header"]
+    elif slice_units:
+        display = [unit for unit in slice_units if unit.get("kind") != "header"]
+    else:
+        display = list(slice_units)
+
+    # Keep any unit referenced by an op visible in review (e.g. header anchors).
+    referenced_ids = {
+        op.get("unit_id")
+        for op in ops or []
+        if isinstance(op, dict) and op.get("unit_id")
+    }
+    display_ids = {unit.get("id") for unit in display}
+    for unit in slice_units:
+        unit_id = unit.get("id")
+        if unit_id in referenced_ids and unit_id not in display_ids:
+            display.append(dict(unit))
+            display_ids.add(unit_id)
+    return display
 
 
 def _build_part_file_document(
@@ -408,6 +423,83 @@ def build_review_parts(
         if any(entry.get(k) for k in ("plan", "execution", "tasks")):
             review_parts.append(entry)
     return review_parts
+
+
+def aggregate_review_changes(review_parts):
+    """Collect per-file changes exactly as shown in review_parts."""
+    changes_by_key = {}
+    for part in review_parts or []:
+        if isinstance(part, dict):
+            part_docs = (
+                ("plan", part.get("plan")),
+                ("execution", part.get("execution")),
+                ("tasks", part.get("tasks")),
+            )
+        else:
+            part_docs = (
+                ("plan", getattr(part, "plan", None)),
+                ("execution", getattr(part, "execution", None)),
+                ("tasks", getattr(part, "tasks", None)),
+            )
+        for fallback_key, doc in part_docs:
+            if not doc:
+                continue
+            if isinstance(doc, dict):
+                key = (doc.get("key") or fallback_key).strip()
+                changes = doc.get("changes") or []
+            else:
+                key = (doc.key or fallback_key).strip()
+                changes = [
+                    {
+                        "id": change.id,
+                        "action": change.action,
+                        "unit_id": change.unitId,
+                        "old_text": change.oldText,
+                        "new_text": change.newText,
+                        "reason": change.reason,
+                    }
+                    for change in doc.changes
+                ]
+            if not changes:
+                continue
+            changes_by_key.setdefault(key, []).extend(changes)
+    return changes_by_key
+
+
+def build_change_set_from_review_parts(
+    review_parts,
+    plan_file,
+    execution_file,
+    tasks_file,
+):
+    """Build finalize change_set from review_parts — same changes the user reviewed."""
+    plan_units = annotate_units_with_parts(units_from_file(plan_file.id))
+    execution_units = annotate_units_with_parts(units_from_file(execution_file.id))
+    tasks_units = annotate_units_with_parts(units_from_file(tasks_file.id))
+    units_by_key = {
+        "plan": plan_units,
+        "execution": execution_units,
+        "tasks": tasks_units,
+    }
+    titles_by_key = {
+        "plan": plan_file.name,
+        "execution": execution_file.name,
+        "tasks": tasks_file.name,
+    }
+    changes_by_key = aggregate_review_changes(review_parts)
+    documents = []
+    for key, changes in changes_by_key.items():
+        if not changes:
+            continue
+        documents.append(
+            {
+                "key": key,
+                "title": titles_by_key[key],
+                "units": units_by_key[key],
+                "changes": changes,
+            }
+        )
+    return build_change_set(documents)
 
 
 def build_project_update_change_set(
@@ -590,13 +682,6 @@ def smart_project_update(
         "doc_ops": doc_ops,
     }
 
-    change_set = build_project_update_change_set(
-        plan_file,
-        execution_file,
-        tasks_file,
-        per_part_results,
-    )
-
     review_parts = build_review_parts(
         per_part_results,
         plan_units,
@@ -605,6 +690,13 @@ def smart_project_update(
         plan_file.name,
         execution_file.name,
         tasks_file.name,
+    )
+
+    change_set = build_change_set_from_review_parts(
+        review_parts,
+        plan_file,
+        execution_file,
+        tasks_file,
     )
 
     return {

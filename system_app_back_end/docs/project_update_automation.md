@@ -226,7 +226,9 @@ flowchart LR
 
 `_build_part_file_document` calls `build_document_change_set` **once** per part per file. Review uses different **display units** (create anchor, remove slice) but identical **changes** (ids, actions, unit_ids).
 
-**Rule:** `review_parts[*].plan.changes[].id` and `action` must match `change_set.documents[].changes[]` exactly.
+**Finalize uses `review_parts` changes, not a separate re-aggregation.** `change_set` is built from `review_parts` so both payloads stay identical.
+
+**Rule:** `review_parts[*].plan.changes[].id` and `action` must match what finalize merges.
 
 ---
 
