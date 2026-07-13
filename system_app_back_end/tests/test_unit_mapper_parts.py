@@ -15,6 +15,7 @@ from services.unit_mapper import (
     build_part_removal_ops,
     extract_log_sections,
     extract_part_names,
+    filter_parts_to_remove,
     flatten_file_by_parts_for_ai,
     flatten_log_content,
     format_numbered_plan_headers,
@@ -98,6 +99,26 @@ def test_parse_header_map_instructions_sparse_mapping():
     assert create_part["part_name"] == "A"
     assert update_part["part_name"] == "Z"
     assert update_part["log_header"] == "B"
+
+
+def test_filter_parts_to_remove_requires_explicit_log_signal():
+    sections = extract_log_sections(
+        [
+            {"id": "h1", "kind": "header", "text": "API"},
+            {"id": "p1", "kind": "paragraph", "text": "Worked on API today"},
+        ]
+    )
+    assert filter_parts_to_remove(["API", "Mobile"], sections) == []
+
+
+def test_filter_parts_to_remove_keeps_explicit_retire():
+    sections = extract_log_sections(
+        [
+            {"id": "h1", "kind": "header", "text": "Retire API"},
+            {"id": "p1", "kind": "paragraph", "text": "Drop API from the plan"},
+        ]
+    )
+    assert filter_parts_to_remove(["API", "Mobile"], sections) == ["API"]
 
 
 def test_resolve_plan_index():
@@ -265,7 +286,8 @@ def test_build_review_parts_remove_bundles_sections():
     )
     assert review[0]["action"] == "remove"
     assert review[0]["plan"]["review_bundle"] is True
-    assert review[0]["plan"]["units"][0]["text"] == "Point"
+    unit_texts = [unit["text"] for unit in review[0]["plan"]["units"]]
+    assert unit_texts == ["API", "Point"]
 
 
 def test_synthesize_create_preview_from_content():

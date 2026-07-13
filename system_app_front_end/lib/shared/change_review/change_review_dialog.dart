@@ -175,6 +175,10 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     if (!_unifiedScroll && _awaitingHandoff) return false;
     if (_byPart) {
       for (final part in _reviewParts) {
+        if (_isPartRemoveAction(part)) {
+          if (_pendingChangesForPart(part).isNotEmpty) return false;
+          continue;
+        }
         for (final document in part.documents) {
           if (document.reviewBundle) {
             if (_documentHasPending(document)) return false;
@@ -199,6 +203,10 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     var count = 0;
     if (_byPart) {
       for (final part in _reviewParts) {
+        if (_isPartRemoveAction(part)) {
+          if (_pendingChangesForPart(part).isNotEmpty) count++;
+          continue;
+        }
         for (final document in part.documents) {
           if (document.reviewBundle) {
             if (_documentHasPending(document)) count++;
@@ -235,6 +243,9 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   }
 
   int _pendingCountInPart(PartReview part) {
+    if (_isPartRemoveAction(part)) {
+      return _pendingChangesForPart(part).isEmpty ? 0 : 1;
+    }
     var count = 0;
     for (final document in part.documents) {
       if (document.reviewBundle) {
@@ -298,6 +309,10 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   }
 
   ChangeItem? _nextPendingChangeInPart(PartReview part) {
+    if (_isPartRemoveAction(part)) {
+      final pending = _pendingChangesForPart(part);
+      return pending.isEmpty ? null : pending.first;
+    }
     for (final document in part.documents) {
       if (document.reviewBundle) {
         if (_documentHasPending(document)) {
@@ -322,6 +337,11 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   ChangeItem? _nextPendingChangeGlobally() {
     if (_byPart) {
       for (final part in _reviewParts) {
+        if (_isPartRemoveAction(part)) {
+          final pending = _pendingChangesForPart(part);
+          if (pending.isNotEmpty) return pending.first;
+          continue;
+        }
         for (final document in part.documents) {
           if (document.reviewBundle) {
             if (_documentHasPending(document)) {
@@ -429,6 +449,13 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   List<ChangeItem>? _bundledChangesFor(ChangeItem change) {
     if (_byPart) {
       for (final part in _reviewParts) {
+        if (_isPartRemoveAction(part)) {
+          final partChanges = part.documents.expand((document) => document.changes);
+          if (partChanges.any((item) => item.id == change.id)) {
+            return partChanges.toList();
+          }
+          continue;
+        }
         for (final document in part.documents) {
           if (!document.reviewBundle) continue;
           if (document.changes.any((item) => item.id == change.id)) {
@@ -462,6 +489,27 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
       }
     }
     return null;
+  }
+
+  bool _isPartRemoveAction(PartReview part) =>
+      (part.action ?? '').toLowerCase() == 'remove';
+
+  List<ChangeItem> _pendingChangesForPart(PartReview part) {
+    return part.documents
+        .expand((document) => document.changes)
+        .where((change) => !_decisions.containsKey(change.id))
+        .toList();
+  }
+
+  ChangeItem? get _activePendingChange {
+    if (_activeChangeId == null) return null;
+    if (_byPart && !_unifiedScroll) {
+      return _nextPendingChangeInPart(_activePart);
+    }
+    if (_unifiedScroll) {
+      return _nextPendingChangeGlobally();
+    }
+    return _nextPendingChangeInDocument(_activeDocument);
   }
 
   void _onDocumentPhaseComplete() {
@@ -763,6 +811,19 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
                 ),
               ),
             if (_unifiedScroll) _buildUnifiedDocuments() else _buildPhasedDocument(),
+            if (!_unifiedScroll && _activePendingChange != null) ...[
+              const SizedBox(height: 14),
+              _SuggestionCallout(
+                strings: widget.strings,
+                change: _activePendingChange!,
+                partAction: _partActionForChange(_activePendingChange!),
+                reviewBundle: _bundledChangesFor(_activePendingChange!) != null,
+                onAccept: () =>
+                    _resolveChange(_activePendingChange!, accepted: true),
+                onReject: () =>
+                    _resolveChange(_activePendingChange!, accepted: false),
+              ),
+            ],
           ],
         ),
       ),
@@ -776,6 +837,16 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
         onPressed: _cancelReview,
         child: Text(s['cancel']),
       ),
+      if (_activePendingChange != null) ...[
+        TextButton(
+          onPressed: () => _resolveChange(_activePendingChange!, accepted: false),
+          child: Text(s['reject']),
+        ),
+        FilledButton(
+          onPressed: () => _resolveChange(_activePendingChange!, accepted: true),
+          child: Text(s['approve']),
+        ),
+      ],
       TextButton(
         onPressed: _allReviewed ? _completeReview : null,
         child: Text(finishLabel),
@@ -1846,7 +1917,22 @@ class _BundledCreateDocumentReview extends StatelessWidget {
     final isRejected = anchorChange != null && decisions[anchorChange.id] == false;
 
     if (document.units.isEmpty) {
-      return Text('…', style: AppTypography.noteBodyStyle);
+      return DecoratedBox(
+        key: anchorChange == null ? null : keyForChange(anchorChange.id),
+        decoration: BoxDecoration(
+          color: isPending && anchorChange?.id == activeChangeId
+              ? AppColors.aiCyan.withValues(alpha: 0.12)
+              : AppColors.aiCyan.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: AppColors.noteBorder.withValues(alpha: 0.45),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Text('…', style: AppTypography.noteBodyStyle),
+        ),
+      );
     }
 
     return DecoratedBox(
@@ -1911,7 +1997,22 @@ class _BundledRemoveDocumentReview extends StatelessWidget {
     final isPending = anchorChange != null && !decisions.containsKey(anchorChange.id);
 
     if (document.units.isEmpty) {
-      return Text('…', style: AppTypography.noteBodyStyle);
+      return DecoratedBox(
+        key: anchorChange == null ? null : keyForChange(anchorChange.id),
+        decoration: BoxDecoration(
+          color: isPending && anchorChange?.id == activeChangeId
+              ? const Color(0x26D64545)
+              : const Color(0x14D64545),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: AppColors.noteBorder.withValues(alpha: 0.5),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Text('…', style: AppTypography.noteBodyStyle),
+        ),
+      );
     }
 
     return DecoratedBox(

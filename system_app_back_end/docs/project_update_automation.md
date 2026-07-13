@@ -65,6 +65,8 @@ flowchart TB
 | **Part** | `create` | 1× content prompt | `build_create_part_ops` — every line is `add_after` |
 | **Part** | `update` | 1× part edit prompt | AI returns `plan_ops` / `execution_ops` / `tasks_ops` directly |
 | **Part** | `remove` | none | `build_part_removal_ops` — every unit in part is `remove` |
+
+**Remove is strict:** header map may suggest remove, but orchestration drops it unless a log section explicitly retires that part (`filter_parts_to_remove`).
 | **Line** (update only) | edit | — | `replace` on existing `unit_id` |
 | **Line** (update only) | add | — | `add_after` after anchor `unit_id` |
 | **Line** (update only) | drop | — | `remove` on `unit_id` |

@@ -19,6 +19,7 @@ from services.unit_mapper import (
     flatten_doc_recent_rows_for_ai,
     flatten_log_content,
     flatten_log_sections_for_mapping,
+    filter_parts_to_remove,
     flatten_part_units_with_ids,
     format_numbered_plan_headers,
     last_unit_id,
@@ -52,7 +53,9 @@ PROJECT_UPDATE_HEADER_MAP_PROMPT = """You map a daily log to numbered project pl
 Return ONLY parts that need action. Omit plan indices with nothing to do.
 
 Each instruction uses exactly one action:
-- remove — retire a plan part. Requires plan_index only.
+- remove — ONLY when a log section explicitly states this plan part is retired, removed, or dropped. Requires plan_index. Never remove because today's log omits a part or you think it is inactive.
+
+Never infer remove from a plan part that simply has no log section today.
 - update — apply a log section to an existing plan part. Requires plan_index + log_section_index. Use when the log section belongs to that plan part, even if the header wording differs.
 - create — add a new plan part from a log section. Requires log_section_index + part_name (verbatim log header text).
 
@@ -62,7 +65,6 @@ Never invent part names from log body text. Use log header text only for create 
 JSON only:
 {
   "instructions": [
-    {"action": "remove", "plan_index": 1},
     {"action": "update", "plan_index": 3, "log_section_index": 1},
     {"action": "create", "log_section_index": 0, "part_name": "A"}
   ],
@@ -319,7 +321,7 @@ def _display_units_for_part(action, part_name, key, units, annotated, ops, conte
             return [anchor]
         return []
     if action == "remove":
-        display = [unit for unit in slice_units if unit.get("kind") != "header"]
+        display = [dict(unit) for unit in slice_units]
     elif slice_units:
         display = [unit for unit in slice_units if unit.get("kind") != "header"]
     else:
@@ -577,6 +579,10 @@ def smart_project_update(
     log_date_hint = date.today().isoformat()
 
     header_map = _run_header_map_step(topic.name, plan_units, log_sections, locale)
+    header_map["parts_to_remove"] = filter_parts_to_remove(
+        header_map.get("parts_to_remove") or [],
+        log_sections,
+    )
     if header_map.get("log_date"):
         log_date_hint = header_map["log_date"]
 

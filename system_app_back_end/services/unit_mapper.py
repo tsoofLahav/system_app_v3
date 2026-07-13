@@ -241,6 +241,61 @@ def resolve_plan_index(plan_units, plan_index):
     return ""
 
 
+_PART_KEY_RE = re.compile(r"[^a-z0-9\u0590-\u05FF]+")
+_REMOVAL_MARKERS = (
+    "remove",
+    "removed",
+    "retire",
+    "retired",
+    "drop",
+    "dropped",
+    "deprecate",
+    "deprecated",
+    "discontinue",
+    "discontinued",
+    "no longer",
+    "הסר",
+    "הוסר",
+    "הוצא",
+    "בוטל",
+    "הורד",
+    "לא רלוונטי",
+)
+
+
+def _normalized_part_key(title: str) -> str:
+    return _PART_KEY_RE.sub("", (title or "").strip().lower())
+
+
+def log_explicitly_removes_part(part_name, log_sections):
+    """True only when a log section clearly retires this plan part."""
+    part_key = _normalized_part_key(part_name)
+    if not part_key:
+        return False
+    for section in log_sections or []:
+        header = (section.get("header") or "").strip()
+        body = flatten_log_content(section)
+        combined = f"{header}\n{body}".strip().lower()
+        if not combined:
+            continue
+        if not any(marker in combined for marker in _REMOVAL_MARKERS):
+            continue
+        header_key = _normalized_part_key(header)
+        if header_key and (header_key == part_key or part_key in header_key):
+            return True
+        if part_name.lower() in combined or part_key in _normalized_part_key(combined):
+            return True
+    return False
+
+
+def filter_parts_to_remove(parts_to_remove, log_sections):
+    return [
+        part_name
+        for part_name in parts_to_remove or []
+        if log_explicitly_removes_part(part_name, log_sections)
+    ]
+
+
 def parse_header_map_instructions(result, plan_units, log_sections):
     """Turn sparse numbered instructions into part entries for orchestration."""
     content_parts = []
