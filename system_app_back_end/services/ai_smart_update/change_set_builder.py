@@ -43,9 +43,11 @@ def build_chained_add_after_changes(
     anchor_unit_id: str,
     items: list[str],
     kind: str,
+    item_kinds: list[str] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Build anchor-only units and approval-gated add_after proposals for a new part."""
-    units = [{"id": anchor_unit_id, "kind": kind, "text": ""}]
+    anchor_kind = item_kinds[0] if item_kinds else kind
+    units = [{"id": anchor_unit_id, "kind": anchor_kind, "text": ""}]
     changes = []
     anchor_id = anchor_unit_id
 
@@ -53,6 +55,7 @@ def build_chained_add_after_changes(
         text = str(raw_text).strip()
         if not text:
             continue
+        item_kind = item_kinds[index] if item_kinds and index < len(item_kinds) else kind
         change_id = f"{key}:c{len(changes) + 1}"
         new_unit_id = f"new:{change_id}"
         changes.append(
@@ -62,7 +65,7 @@ def build_chained_add_after_changes(
                 "unit_id": anchor_id,
                 "old_text": "",
                 "new_text": text,
-                "new_unit": {"id": new_unit_id, "kind": kind, "text": text},
+                "new_unit": {"id": new_unit_id, "kind": item_kind, "text": text},
             }
         )
         anchor_id = new_unit_id

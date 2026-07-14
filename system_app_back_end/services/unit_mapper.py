@@ -3,6 +3,28 @@ import re
 from models import Block, Task, db
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
+_LIST_ITEM_PREFIX = re.compile(r"^\s*(?:[•\-\*]|\d+[\.\)])\s*")
+
+
+def content_units_from_merged(units: list[dict]) -> list[dict]:
+    result = []
+    for unit in units or []:
+        unit = dict(unit)
+        kind = unit.get("kind")
+        text = _sanitize_unit_text(unit.get("text") or "", kind)
+        if not text:
+            continue
+        unit["text"] = text
+        result.append(unit)
+    return result
+
+
+def _sanitize_unit_text(text: str, kind) -> str:
+    text = str(text or "").replace("\r\n", "\n").strip()
+    if kind == "list_item":
+        text = text.lstrip("\n")
+        text = _LIST_ITEM_PREFIX.sub("", text).strip()
+    return text
 
 
 def units_from_file(file_id):
@@ -358,7 +380,7 @@ def apply_units_to_part_in_file(file, part_id: int, units: list[dict]):
 
     denormalized = []
     prefix = f"part:{part_id}:"
-    for unit in units:
+    for unit in content_units_from_merged(units):
         unit = dict(unit)
         unit_id = unit.get("id") or ""
         if unit_id.startswith(prefix):
@@ -396,13 +418,19 @@ def _apply_units_at_order(file, units, start_order: int, part_id: int | None):
 
     def flush_list():
         nonlocal order, list_items
-        if not list_items:
+        non_empty = [
+            item
+            for item in list_items
+            if (item.get("text") or "").strip()
+        ]
+        if not non_empty:
+            list_items.clear()
             return
         db.session.add(
             Block(
                 file_id=file.id,
                 type="list",
-                content={"items": list_items, "list_style": "bullet"},
+                content={"items": non_empty, "list_style": "bullet"},
                 order_index=order,
                 part_id=part_id,
             )
@@ -432,7 +460,7 @@ def _apply_units_at_order(file, units, start_order: int, part_id: int | None):
 
     for unit in units:
         kind = unit.get("kind")
-        text = (unit.get("text") or "").strip()
+        text = _sanitize_unit_text(unit.get("text") or "", kind)
 
         if kind in ("paragraph", "text", "summary"):
             flush_list()

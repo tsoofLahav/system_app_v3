@@ -41,13 +41,15 @@ class PointsListBlockWidget extends StatelessWidget {
 
   static List<String> _itemsFrom(Object? value) {
     if (value is! List || value.isEmpty) return [''];
-    return [
+    final lines = [
       for (final item in value)
         if (item is Map)
           item['text']?.toString() ?? ''
         else
           item?.toString() ?? '',
     ];
+    final nonEmpty = [for (final line in lines) if (line.trim().isNotEmpty) line];
+    return nonEmpty.isEmpty ? [''] : nonEmpty;
   }
 
   static List<Map<String, dynamic>> _toContentItems(List<String> items) => [

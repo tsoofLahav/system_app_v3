@@ -150,6 +150,62 @@ def test_part_change_prefix_is_unique_per_new_part_name():
     assert _part_change_prefix(5, "Auth", 0) == "part:5"
 
 
+def test_execution_items_split_overview_and_bullets():
+    from services.ai_smart_update.project_update import (
+        _execution_item_kinds,
+        _new_part_to_documents,
+    )
+
+    ordered, kinds = _execution_item_kinds(
+        [
+            "Overview paragraph about vision metrics.",
+            "Build tools",
+            "Develop formula",
+        ]
+    )
+    assert ordered[0].startswith("Overview")
+    assert kinds == ["paragraph", "list_item", "list_item"]
+
+    documents = _new_part_to_documents(
+        "Part",
+        {
+            "plan_items": ["Goal"],
+            "execution_items": ordered,
+            "task_items": ["Task"],
+        },
+    )
+    execution = next(doc for doc in documents if doc["key"] == "execution")
+    assert execution["units"][0]["kind"] == "paragraph"
+    assert execution["changes"][0]["new_unit"]["kind"] == "paragraph"
+    assert execution["changes"][1]["new_unit"]["kind"] == "list_item"
+
+
+def test_execution_merge_produces_text_and_single_list():
+    from services.ai_smart_update.project_update import _new_part_to_documents
+    from services.unit_mapper import content_units_from_merged
+
+    documents = _new_part_to_documents(
+        "Part",
+        {
+            "execution_items": [
+                "Overview paragraph about vision metrics.",
+                "Build tools",
+                "Develop formula",
+            ],
+        },
+    )
+    execution = next(doc for doc in documents if doc["key"] == "execution")
+    decisions = {change["id"]: True for change in execution["changes"]}
+    merged = merge_document(execution["units"], execution["changes"], decisions)
+    units = content_units_from_merged(merged)
+
+    assert units[0]["kind"] == "paragraph"
+    assert [unit["text"] for unit in units if unit["kind"] == "list_item"] == [
+        "Build tools",
+        "Develop formula",
+    ]
+
+
 def test_prefixed_new_part_changes_merge_independently():
     from services.ai_smart_update.project_update import (
         _new_part_to_documents,

@@ -76,7 +76,9 @@ NEW_PART_PROMPT = f"""You create initial content for a new project part from a w
 JSON only:
 {{"plan_items":[],"execution_items":[],"task_items":[]}}
 
-Each item is a string line as it should appear in the file. Respond in the same language as the log."""
+Each item is a string line as it should appear in the file.
+For execution_items: put the overview paragraph first, then sub-bullet lines.
+Respond in the same language as the log."""
 
 
 def _part_change_prefix(part_id, part_name: str, section_index: int) -> str:
@@ -103,19 +105,43 @@ def _prefix_changes(documents: list[dict], prefix: str) -> list[dict]:
     return result
 
 
+def _split_execution_items(items: list) -> tuple[list[str], list[str]]:
+    """First line is overview prose; remaining lines are sub-bullets."""
+    cleaned = [str(item).strip() for item in items if str(item).strip()]
+    if not cleaned:
+        return [], []
+    if len(cleaned) == 1:
+        text = cleaned[0]
+        if len(text) > 80 or ". " in text or text.endswith("."):
+            return [text], []
+        return [], cleaned
+    return [cleaned[0]], cleaned[1:]
+
+
+def _execution_item_kinds(items: list) -> tuple[list[str], list[str]]:
+    paragraphs, bullets = _split_execution_items(items)
+    ordered = [*paragraphs, *bullets]
+    kinds = ["paragraph"] * len(paragraphs) + ["list_item"] * len(bullets)
+    return ordered, kinds
+
+
 def _new_part_to_documents(part_name: str, ai_result: dict) -> list[dict]:
     documents = []
+    execution_items, execution_kinds = _execution_item_kinds(
+        ai_result.get("execution_items") or []
+    )
     specs = [
-        ("plan", "Plan", ai_result.get("plan_items") or [], "list_item"),
-        ("execution", "Execution", ai_result.get("execution_items") or [], "list_item"),
-        ("tasks", "Tasks", ai_result.get("task_items") or [], "task"),
+        ("plan", "Plan", ai_result.get("plan_items") or [], "list_item", None),
+        ("execution", "Execution", execution_items, "list_item", execution_kinds or None),
+        ("tasks", "Tasks", ai_result.get("task_items") or [], "task", None),
     ]
-    for key, title, items, kind in specs:
+    for key, title, items, kind, item_kinds in specs:
         units, changes = build_chained_add_after_changes(
             key=key,
             anchor_unit_id=f"anchor:{key}",
             items=items,
             kind=kind,
+            item_kinds=item_kinds,
         )
         documents.append({"key": key, "title": title, "units": units, "changes": changes})
     return documents

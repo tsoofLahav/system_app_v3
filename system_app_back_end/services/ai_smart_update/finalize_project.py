@@ -9,7 +9,7 @@ from services.diff_engine import merge_document
 from services.doc_table_rows import insert_row_into_table_block
 from services.part_placement import create_part_for_topic, part_ids_in_file, place_part_in_file
 from services.part_resolver import blocks_for_part_in_file, part_by_id
-from services.unit_mapper import apply_units_to_part_in_file
+from services.unit_mapper import apply_units_to_part_in_file, content_units_from_merged
 
 
 def finalize_project_update(proposal, decisions):
@@ -66,8 +66,9 @@ def finalize_project_update(proposal, decisions):
                     doc.get("changes") or [],
                     normalized_decisions,
                 )
-                if merged:
-                    apply_units_to_part_in_file(target, part_id, merged)
+                content_units = content_units_from_merged(merged)
+                if content_units:
+                    apply_units_to_part_in_file(target, part_id, content_units)
         applied_part_ids.append(part_id)
 
     doc_rows_added = _apply_doc_append(doc_file, change_set.get("doc_append") or {})
@@ -140,7 +141,7 @@ def _place_new_part_content(
             doc.get("changes") or [],
             decisions,
         )
-        content_units = [u for u in merged if (u.get("text") or "").strip()]
+        content_units = content_units_from_merged(merged)
         pending.append((target, content_units))
 
     if not any(content_units for _, content_units in pending):
