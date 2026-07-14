@@ -140,6 +140,15 @@ def _index_of_unit_id(units, unit_id):
 def _decision(decisions, change_id):
     if not decisions or change_id is None:
         return False
+    raw = None
     if str(change_id) in decisions:
-        return bool(decisions[str(change_id)])
-    return bool(decisions.get(change_id))
+        raw = decisions[str(change_id)]
+    else:
+        raw = decisions.get(change_id)
+    if raw is None:
+        return False
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        return raw.strip().lower() in {"1", "true", "yes"}
+    return bool(raw)

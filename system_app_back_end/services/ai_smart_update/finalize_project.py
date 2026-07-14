@@ -7,8 +7,8 @@ from datetime import datetime
 from models import Block, File, Part, db
 from services.diff_engine import merge_document
 from services.doc_table_rows import insert_row_into_table_block
-from services.part_placement import create_part_for_topic, place_part_in_file
-from services.part_resolver import part_by_id
+from services.part_placement import create_part_for_topic, part_ids_in_file, place_part_in_file
+from services.part_resolver import blocks_for_part_in_file, part_by_id
 from services.unit_mapper import apply_units_to_part_in_file
 
 
@@ -31,6 +31,7 @@ def finalize_project_update(proposal, decisions):
         raise ValueError("source files no longer exist")
 
     applied_part_ids = []
+    normalized_decisions = _normalize_decisions(decisions)
     for part_entry in change_set.get("parts") or []:
         part_id = part_entry.get("part_id")
         part_name = part_entry.get("part_name") or "Part"
@@ -47,7 +48,7 @@ def finalize_project_update(proposal, decisions):
                 execution_file=execution_file,
                 tasks_file=tasks_file,
                 documents=documents,
-                decisions=decisions or {},
+                decisions=normalized_decisions,
             )
         else:
             part_id = int(part_id)
@@ -63,7 +64,7 @@ def finalize_project_update(proposal, decisions):
                 merged = merge_document(
                     doc.get("units") or [],
                     doc.get("changes") or [],
-                    decisions or {},
+                    normalized_decisions,
                 )
                 if merged:
                     apply_units_to_part_in_file(target, part_id, merged)
@@ -99,6 +100,20 @@ def _ensure_part(topic_id: int, part_id, part_name: str) -> Part:
     return db.session.get(Part, int(result["part"]["id"]))
 
 
+def _normalize_decisions(decisions) -> dict:
+    if not decisions:
+        return {}
+    normalized = {}
+    for key, value in decisions.items():
+        if isinstance(value, bool):
+            normalized[str(key)] = value
+        elif isinstance(value, str):
+            normalized[str(key)] = value.strip().lower() in {"1", "true", "yes"}
+        else:
+            normalized[str(key)] = bool(value)
+    return normalized
+
+
 def _place_new_part_content(
     *,
     topic_id,
@@ -109,20 +124,15 @@ def _place_new_part_content(
     documents,
     decisions,
 ):
-    from models import Topic
-
-    topic = db.session.get(Topic, topic_id)
-    files = [plan_file, execution_file, tasks_file]
-    for file in files:
-        place_part_in_file(file, part=part)
-
+    doc_targets = {
+        "plan": plan_file,
+        "execution": execution_file,
+        "tasks": tasks_file,
+    }
+    pending = []
     for doc in documents:
         key = doc.get("key")
-        target = {
-            "plan": plan_file,
-            "execution": execution_file,
-            "tasks": tasks_file,
-        }.get(key)
+        target = doc_targets.get(key)
         if target is None:
             continue
         merged = merge_document(
@@ -131,8 +141,28 @@ def _place_new_part_content(
             decisions,
         )
         content_units = [u for u in merged if (u.get("text") or "").strip()]
+        pending.append((target, content_units))
+
+    if not any(content_units for _, content_units in pending):
+        return
+
+    for target in doc_targets.values():
+        if part.id not in part_ids_in_file(target.id):
+            place_part_in_file(target, part=part)
+
+    for target, content_units in pending:
         if content_units:
             apply_units_to_part_in_file(target, part.id, content_units)
+        else:
+            _clear_part_non_header_content(target, part.id)
+
+
+def _clear_part_non_header_content(file, part_id: int):
+    for block in blocks_for_part_in_file(file.id, part_id):
+        if block.type == "header":
+            continue
+        db.session.delete(block)
+    db.session.flush()
 
 
 def _apply_doc_append(doc_file, doc_append: dict) -> int:

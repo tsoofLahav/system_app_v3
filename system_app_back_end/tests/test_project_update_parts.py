@@ -143,6 +143,44 @@ def test_merge_document_orders_multiple_add_after_on_same_anchor():
     assert texts == ["Existing", "First", "Second"]
 
 
+def test_part_change_prefix_is_unique_per_new_part_name():
+    from services.ai_smart_update.project_update import _part_change_prefix
+
+    assert _part_change_prefix(None, "Auth", 0) != _part_change_prefix(None, "Billing", 1)
+    assert _part_change_prefix(5, "Auth", 0) == "part:5"
+
+
+def test_prefixed_new_part_changes_merge_independently():
+    from services.ai_smart_update.project_update import (
+        _new_part_to_documents,
+        _part_change_prefix,
+        _prefix_changes,
+    )
+
+    docs_a = _prefix_changes(
+        _new_part_to_documents("Part A", {"plan_items": ["A1"]}),
+        _part_change_prefix(None, "Part A", 0),
+    )
+    docs_b = _prefix_changes(
+        _new_part_to_documents("Part B", {"plan_items": ["B1"]}),
+        _part_change_prefix(None, "Part B", 1),
+    )
+    plan_a = next(doc for doc in docs_a if doc["key"] == "plan")
+    plan_b = next(doc for doc in docs_b if doc["key"] == "plan")
+
+    assert plan_a["changes"][0]["id"] != plan_b["changes"][0]["id"]
+
+    decisions = {
+        plan_a["changes"][0]["id"]: True,
+        plan_b["changes"][0]["id"]: True,
+    }
+    merged_a = merge_document(plan_a["units"], plan_a["changes"], decisions)
+    merged_b = merge_document(plan_b["units"], plan_b["changes"], decisions)
+
+    assert [u["text"] for u in merged_a if u.get("text")] == ["A1"]
+    assert [u["text"] for u in merged_b if u.get("text")] == ["B1"]
+
+
 def test_existing_part_add_after_op_produces_reviewable_change():
     units = [
         {"id": "u1", "kind": "list_item", "text": "Existing"},

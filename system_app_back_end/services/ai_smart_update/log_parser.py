@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from services.part_resolver import part_by_id, part_id_for_block, parts_for_topic
+from services.part_resolver import part_by_id, part_id_for_block, parts_for_topic, resolve_part_name_to_id
 from services.unit_mapper import _block_to_units, _table_rows_to_lines
 
 
@@ -82,6 +82,10 @@ def parse_log_parts(log_file, topic_id: int) -> list[dict]:
     result = []
     for section in sections:
         part_id = section.get("part_id")
+        if part_id is not None and part_id not in project_parts:
+            resolved = resolve_part_name_to_id(topic_id, section["part_name"])
+            if resolved is not None:
+                part_id = resolved
         text = _flatten_blocks_to_text(section["content_blocks"])
         if not text.strip():
             continue

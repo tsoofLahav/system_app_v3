@@ -19,7 +19,11 @@ from services.ai_smart_update.prompts import (
 from services.ai_smart_update.unit_ops import normalize_ops
 from services.diff_engine import build_document_change_set
 from services.openai_service import chat_json
-from services.part_resolver import files_containing_part
+from services.part_resolver import (
+    files_containing_part,
+    parts_for_topic,
+    resolve_part_name_to_id,
+)
 from services.unit_mapper import (
     detect_language,
     flatten_part_files_for_ai,
@@ -75,15 +79,24 @@ JSON only:
 Each item is a string line as it should appear in the file. Respond in the same language as the log."""
 
 
-def _prefix_changes(documents: list[dict], part_id: int | None) -> list[dict]:
-    prefix = f"part:{part_id or 'new'}:"
+def _part_change_prefix(part_id, part_name: str, section_index: int) -> str:
+    if part_id is not None:
+        return f"part:{int(part_id)}"
+    from services.part_resolver import _part_key
+
+    slug = _part_key(part_name) or f"section{section_index + 1}"
+    return f"part:new:{slug}"
+
+
+def _prefix_changes(documents: list[dict], prefix: str) -> list[dict]:
+    label = f"{prefix}:"
     result = []
     for doc in documents:
         doc = dict(doc)
         changes = []
         for change in doc.get("changes") or []:
             change = dict(change)
-            change["id"] = f"{prefix}{change['id']}"
+            change["id"] = f"{label}{change['id']}"
             changes.append(change)
         doc["changes"] = changes
         result.append(doc)
@@ -160,10 +173,16 @@ def _update_existing_part(
             normalize_ops(ai_result.get("tasks_ops")),
         ),
     ]
-    return _prefix_changes(docs, part_id)
+    return _prefix_changes(docs, f"part:{part_id}")
 
 
-def _create_new_part(*, topic, part_name: str, log_text: str) -> list[dict]:
+def _create_new_part(
+    *,
+    topic,
+    part_name: str,
+    log_text: str,
+    change_prefix: str,
+) -> list[dict]:
     locale = detect_language(log_text)
     lang_note = "Respond in Hebrew." if locale == "he" else "Respond in English."
     ai_result = chat_json(
@@ -171,7 +190,7 @@ def _create_new_part(*, topic, part_name: str, log_text: str) -> list[dict]:
         f"Topic: {topic.name}\nNew part: {part_name}\n\n=== LOG ===\n{log_text}",
         temperature=OPENAI_PROCESS_UPDATE_TEMPERATURE,
     )
-    return _prefix_changes(_new_part_to_documents(part_name, ai_result), None)
+    return _prefix_changes(_new_part_to_documents(part_name, ai_result), change_prefix)
 
 
 def smart_project_update(topic, log_file, plan_file, execution_file, tasks_file, doc_file):
@@ -183,20 +202,29 @@ def smart_project_update(topic, log_file, plan_file, execution_file, tasks_file,
     full_log_text = "\n\n".join(
         f"=== {s['part_name']} ===\n{s['log_text']}" for s in sections
     )
+    topic_parts = {part.id: part for part in parts_for_topic(topic.id)}
 
-    for section in sections:
+    for index, section in enumerate(sections):
         part_id = section.get("part_id")
         part_name = section["part_name"]
         log_text = section["log_text"]
-        is_new = section["is_new"] or (
+        if part_id is not None and part_id not in topic_parts:
+            resolved = resolve_part_name_to_id(topic.id, part_name)
+            if resolved is not None:
+                part_id = resolved
+        is_new = part_id is None or part_id not in topic_parts
+        is_new = is_new or (
             part_id is not None and "plan" not in files_containing_part(topic.id, part_id)
         )
+
+        change_prefix = _part_change_prefix(part_id, part_name, index)
 
         if is_new:
             documents = _create_new_part(
                 topic=topic,
                 part_name=part_name,
                 log_text=log_text,
+                change_prefix=change_prefix,
             )
             part_payloads.append(
                 {
