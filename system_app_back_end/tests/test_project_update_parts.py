@@ -15,3 +15,15 @@ def test_parts_topic_id_falls_back_to_file_topic():
     file = SimpleNamespace(topic_id=7, anchor_topic_id=None)
 
     assert parts_topic_id_for_file(file) == 7
+
+
+def test_project_update_event_is_forced_to_file_moved():
+    from services.automation_definitions import apply_definition_to_params
+
+    params = apply_definition_to_params(
+        {"version": 2, "event": "file_moved_to_additional"},
+        "project_update",
+        "project_update",
+    )
+
+    assert params["event"] == "file_moved"

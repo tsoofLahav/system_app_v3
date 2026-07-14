@@ -608,7 +608,18 @@ def apply_definition_to_params(
         if legacy_key in raw:
             merged[legacy_key] = raw[legacy_key]
 
+    if definition is not None:
+        _apply_canonical_event_params(definition.key, merged)
+
     return merged
+
+
+def _apply_canonical_event_params(definition_key: str, merged: dict[str, Any]) -> None:
+    """Lock event names for automations with a fixed trigger contract."""
+    if definition_key == "project_update":
+        merged["event"] = "file_moved"
+    elif definition_key in ("process_recap_update", "project_summary_update"):
+        merged["event"] = "file_changed"
 
 
 def binding_roles(definition: AutomationDefinition) -> list[str]:
