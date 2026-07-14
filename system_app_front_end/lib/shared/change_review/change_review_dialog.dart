@@ -36,6 +36,7 @@ class ChangeReviewDialog extends StatefulWidget {
     required this.strings,
     required this.changeSet,
     this.title,
+    this.isNewPart = false,
     this.embedded = false,
     this.onComplete,
     this.onCancel,
@@ -44,6 +45,7 @@ class ChangeReviewDialog extends StatefulWidget {
   final AppStrings strings;
   final ChangeSet changeSet;
   final String? title;
+  final bool isNewPart;
   final bool embedded;
   final ValueChanged<Map<String, bool>>? onComplete;
   final VoidCallback? onCancel;
@@ -336,6 +338,8 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
           document: document,
           decisions: _decisions,
           activeChangeId: _activeChangeId,
+          isNewPart: widget.isNewPart,
+          strings: widget.strings,
           keyForUnit: _keyForUnit,
           keyForChange: _keyForChange,
         ),
@@ -363,17 +367,33 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
         if (!_awaitingHandoff && pendingCount > 0)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: Text(
-              '${s['suggestedChange']} · $pendingCount',
-              style: AppTypography.metaStyle.copyWith(
-                color: AppColors.aiCyan.withValues(alpha: 0.9),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${s['suggestedChange']} · $pendingCount',
+                  style: AppTypography.metaStyle.copyWith(
+                    color: AppColors.aiCyan.withValues(alpha: 0.9),
+                  ),
+                ),
+                if (!widget.isNewPart) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    s['reviewContextNote'],
+                    style: AppTypography.metaStyle.copyWith(
+                      color: AppColors.noteMeta.withValues(alpha: 0.75),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         _DocumentReview(
           document: active,
           decisions: _decisions,
           activeChangeId: _activeChangeId,
+          isNewPart: widget.isNewPart,
+          strings: widget.strings,
           keyForUnit: _keyForUnit,
           keyForChange: _keyForChange,
         ),
@@ -416,11 +436,25 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
             if (_unifiedScroll && pendingCount > 0)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: Text(
-                  '${s['suggestedChange']} · $pendingCount',
-                  style: AppTypography.metaStyle.copyWith(
-                    color: AppColors.aiCyan.withValues(alpha: 0.9),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${s['suggestedChange']} · $pendingCount',
+                      style: AppTypography.metaStyle.copyWith(
+                        color: AppColors.aiCyan.withValues(alpha: 0.9),
+                      ),
+                    ),
+                    if (!widget.isNewPart) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        s['reviewContextNote'],
+                        style: AppTypography.metaStyle.copyWith(
+                          color: AppColors.noteMeta.withValues(alpha: 0.75),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             if (_unifiedScroll) _buildUnifiedDocuments() else _buildPhasedDocument(),
@@ -437,7 +471,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
         onPressed: _cancelReview,
         child: Text(s['cancel']),
       ),
-      if (_pendingChangesInScope().isNotEmpty)
+      if (widget.isNewPart && _pendingChangesInScope().isNotEmpty)
         TextButton(
           onPressed: _approveAllPending,
           child: Text(s['approveAll']),
@@ -558,6 +592,8 @@ class _DocumentReview extends StatelessWidget {
     required this.document,
     required this.decisions,
     required this.activeChangeId,
+    required this.isNewPart,
+    required this.strings,
     required this.keyForUnit,
     required this.keyForChange,
   });
@@ -565,17 +601,21 @@ class _DocumentReview extends StatelessWidget {
   final ChangeDocument document;
   final Map<String, bool> decisions;
   final String? activeChangeId;
+  final bool isNewPart;
+  final AppStrings strings;
   final GlobalKey Function(String unitId) keyForUnit;
   final GlobalKey Function(String changeId) keyForChange;
 
   @override
   Widget build(BuildContext context) {
-    final changesByUnit = document.changesByUnitId;
-    final addAfterByAnchor = document.addAfterChangesByAnchorId;
     if (document.units.isEmpty && document.changes.isEmpty) {
       return Text('…', style: AppTypography.noteBodyStyle);
     }
+    return isNewPart ? _buildNewPartReview() : _buildExistingPartReview();
+  }
 
+  Widget _buildNewPartReview() {
+    final addAfterByAnchor = document.addAfterChangesByAnchorId;
     final children = <Widget>[];
 
     void renderAddAfterChain(String anchorId) {
@@ -606,6 +646,54 @@ class _DocumentReview extends StatelessWidget {
     }
 
     for (final unit in document.units) {
+      renderAddAfterChain(unit.id);
+    }
+
+    if (children.isEmpty) {
+      return Text('…', style: AppTypography.noteBodyStyle);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
+  Widget _buildExistingPartReview() {
+    final changesByUnit = document.changesByUnitId;
+    final addAfterByAnchor = document.addAfterChangesByAnchorId;
+    final children = <Widget>[];
+
+    void renderAddAfterChain(String anchorId) {
+      for (final change in addAfterByAnchor[anchorId] ?? const <ChangeItem>[]) {
+        final decision = _decisionFor(change);
+        if (decision == true) {
+          children.add(
+            _AddedUnitRow(
+              text: change.newText,
+              rowKey: keyForChange(change.id),
+              prefix: '+ ',
+            ),
+          );
+        } else {
+          children.add(
+            _ExistingAdditionRow(
+              strings: strings,
+              change: change,
+              decision: decision,
+              isActive: change.id == activeChangeId,
+              rowKey: keyForChange(change.id),
+            ),
+          );
+        }
+        final nextAnchor = change.proposedUnitId;
+        if (nextAnchor != null && nextAnchor.isNotEmpty) {
+          renderAddAfterChain(nextAnchor);
+        }
+      }
+    }
+
+    for (final unit in document.units) {
       final change = changesByUnit[unit.id];
       if (_shouldShowUnit(unit, change)) {
         children.add(
@@ -614,6 +702,7 @@ class _DocumentReview extends StatelessWidget {
             change: change,
             decision: _decisionFor(change),
             isActive: change?.id == activeChangeId,
+            contextOnly: change == null,
             unitKey: keyForUnit(unit.id),
           ),
         );
@@ -651,6 +740,7 @@ class _UnitRow extends StatelessWidget {
     required this.decision,
     required this.isActive,
     required this.unitKey,
+    this.contextOnly = false,
   });
 
   final ChangeUnit unit;
@@ -658,17 +748,25 @@ class _UnitRow extends StatelessWidget {
   final bool? decision;
   final bool isActive;
   final GlobalKey unitKey;
+  final bool contextOnly;
 
   @override
   Widget build(BuildContext context) {
     final displayText = _displayText();
-    final isPending = change != null && decision == null;
-    final isAccepted = decision == true;
+    final isPending = !contextOnly && change != null && decision == null;
+    final isAccepted = !contextOnly && decision == true;
 
     Widget text = Text(
       displayText,
       style: AppTypography.noteBodyStyle.copyWith(
-        color: isAccepted ? AppColors.aiCyan.withValues(alpha: 0.95) : null,
+        color: contextOnly
+            ? AppColors.noteMeta.withValues(alpha: 0.88)
+            : isAccepted
+                ? AppColors.aiCyan.withValues(alpha: 0.95)
+                : null,
+        decoration: change?.action == 'remove' && isPending
+            ? TextDecoration.lineThrough
+            : null,
       ),
     );
 
@@ -749,6 +847,92 @@ class _UnitRow extends StatelessWidget {
   }
 }
 
+class _ExistingAdditionRow extends StatelessWidget {
+  const _ExistingAdditionRow({
+    required this.strings,
+    required this.change,
+    required this.decision,
+    required this.isActive,
+    required this.rowKey,
+  });
+
+  final AppStrings strings;
+  final ChangeItem change;
+  final bool? decision;
+  final bool isActive;
+  final GlobalKey rowKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayText =
+        change.newText.trim().isEmpty ? '…' : change.newText;
+    final isPending = decision == null;
+    final isRejected = decision == false;
+
+    Widget text = Text(
+      displayText,
+      style: AppTypography.noteBodyStyle.copyWith(
+        color: isRejected
+            ? AppColors.text.withValues(alpha: 0.45)
+            : AppColors.aiCyan.withValues(alpha: 0.95),
+        decoration: isRejected ? TextDecoration.lineThrough : null,
+      ),
+    );
+
+    text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          strings['suggestedNewPoint'],
+          style: AppTypography.metaStyle.copyWith(
+            color: AppColors.aiCyan.withValues(alpha: 0.8),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('+ ', style: AppTypography.noteBodyStyle),
+            Expanded(child: text),
+          ],
+        ),
+      ],
+    );
+
+    if (isPending && isActive) {
+      text = DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.aiCyan.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.aiCyan.withValues(alpha: 0.65)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: text,
+        ),
+      );
+    } else if (isPending) {
+      text = DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.aiCyan.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.aiCyan.withValues(alpha: 0.28)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: text,
+        ),
+      );
+    }
+
+    return Padding(
+      key: rowKey,
+      padding: const EdgeInsets.only(left: 12, bottom: 12),
+      child: text,
+    );
+  }
+}
+
 class _ProposedChangeRow extends StatelessWidget {
   const _ProposedChangeRow({
     required this.change,
@@ -824,10 +1008,11 @@ class _ProposedChangeRow extends StatelessWidget {
 }
 
 class _AddedUnitRow extends StatelessWidget {
-  const _AddedUnitRow({required this.text, this.rowKey});
+  const _AddedUnitRow({required this.text, this.rowKey, this.prefix = '• '});
 
   final String text;
   final Key? rowKey;
+  final String prefix;
 
   @override
   Widget build(BuildContext context) {
@@ -841,11 +1026,19 @@ class _AddedUnitRow extends StatelessWidget {
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: Text(
-            text.trim().isEmpty ? '…' : text,
-            style: AppTypography.noteBodyStyle.copyWith(
-              color: AppColors.aiCyan.withValues(alpha: 0.95),
-            ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(prefix, style: AppTypography.noteBodyStyle),
+              Expanded(
+                child: Text(
+                  text.trim().isEmpty ? '…' : text,
+                  style: AppTypography.noteBodyStyle.copyWith(
+                    color: AppColors.aiCyan.withValues(alpha: 0.95),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -872,6 +1065,12 @@ class _SuggestionCallout extends StatelessWidget {
       'remove' => strings['delete'],
       _ => change.newText.trim().isEmpty ? '…' : change.newText,
     };
+    final suggestionLabel = switch (change.action) {
+      'replace' => strings['replaceWith'],
+      'add_after' => strings['suggestedNewPoint'],
+      'remove' => strings['delete'],
+      _ => strings['suggestedChange'],
+    };
 
     return Material(
       color: Colors.transparent,
@@ -889,7 +1088,7 @@ class _SuggestionCallout extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(strings['suggestedChange'], style: AppTypography.metaStyle),
+              Text(suggestionLabel, style: AppTypography.metaStyle),
               const SizedBox(height: 8),
               Text(suggestionText, style: AppTypography.noteBodyStyle),
               if (change.reason != null && change.reason!.isNotEmpty) ...[

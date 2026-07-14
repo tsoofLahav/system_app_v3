@@ -98,6 +98,7 @@ class _PartChangeReviewDialogState extends State<PartChangeReviewDialog> {
       key: ValueKey('part-review-${part.partId ?? part.partName}-$_partIndex'),
       strings: widget.strings,
       changeSet: part.toDocumentChangeSet(),
+      isNewPart: part.isNew,
       embedded: true,
       onComplete: _onPartComplete,
       onCancel: widget.onCancel,

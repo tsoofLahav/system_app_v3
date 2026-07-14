@@ -108,6 +108,16 @@ def test_merge_document_with_no_approvals_yields_empty_content():
     assert content_units == []
 
 
+def test_existing_part_prompt_requires_minimal_ops():
+    from services.ai_smart_update.project_update import EXISTING_PART_PROMPT
+
+    assert "only" in EXISTING_PART_PROMPT.lower()
+    assert "replace" in EXISTING_PART_PROMPT
+    assert "add_after" in EXISTING_PART_PROMPT
+    assert "remove" in EXISTING_PART_PROMPT
+    assert "unchanged" in EXISTING_PART_PROMPT.lower()
+
+
 def test_merge_document_orders_multiple_add_after_on_same_anchor():
     units = [{"id": "u1", "kind": "list_item", "text": "Existing"}]
     changes = [

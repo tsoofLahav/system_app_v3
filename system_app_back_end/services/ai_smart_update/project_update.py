@@ -41,8 +41,11 @@ EXISTING_PART_PROMPT = f"""You update a project part from a work log.
 ## What to do
 
 1. Read the LOG, then current PLAN, EXECUTION, and TASKS for this part.
-2. Decide what should change in each file based on the log.
-3. Apply what the log requires: **replace** existing points, **remove** obsolete ones, or **add_after** new points (use a real `unit_id` from the list as anchor).
+2. Return **only** ops for content the log actually changes. Omit unchanged units entirely.
+3. Use **replace** when correcting or updating an existing unit (must use that unit's `unit_id`).
+4. Use **add_after** only for genuinely new points that are not already in the file.
+5. Use **remove** when a point is obsolete.
+6. Never recreate the full document as new `add_after` lines — preserve unchanged content.
 
 ## Output
 
