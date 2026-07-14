@@ -146,6 +146,9 @@ abstract final class FileBehaviorRegistry {
   static bool showsTaskInputForFileType(String fileType) =>
       profileForFileType(fileType).id == 'tasks';
 
+  static bool supportsPartPlacement(String fileType) =>
+      const {'plan', 'execution', 'tasks'}.contains(fileType);
+
   static Map<String, dynamic> defaultContentForBlockType(String blockType) {
     for (final profile in _profiles.values) {
       for (final spec in profile.defaultBlocks) {

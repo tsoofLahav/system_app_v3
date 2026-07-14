@@ -127,6 +127,9 @@ Recap files:
 - `overview` files compose the editable file title with `table`, `task_list`, and `list` blocks.
 - Recap blocks use the same widgets as every other file.
 
+Project parts:
+- See [`PARTS.md`](PARTS.md) for the `parts` entity, placement UX, and automation contract.
+
 Boundaries:
 - Persistence lives in `AppState` + `core/services`; this folder owns UI behavior.
 - Keep cross-feature widgets in `lib/shared/widgets`.

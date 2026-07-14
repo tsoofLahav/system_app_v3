@@ -8,6 +8,16 @@ What this module owns:
 - The main automation menu for user-visible automations, including enable/disable and schedule editing.
 - Visual framing that is shared across topic and task-view modes.
 
+| File | Role |
+|---|---|
+| `app_shell.dart` | Shell layout: sidebar + content pane + bottom bar |
+| `app_bottom_bar.dart` | Bottom bar controls and mode indicators |
+| `automation_dialog.dart` | Automation menu and schedule editing |
+| `automation_abandon_dialog.dart` | Confirm abandoning in-progress automation |
+| `preferences_dialog.dart` | App preferences |
+| `process_documentation_input_dialog.dart` | Process documentation input flow |
+| `process_update_batch_dialog.dart` | Batch process update review |
+
 Inputs and dependencies:
 - `AppState` mode flags (`isViewMode`, `paneDragMode`, selected context).
 - Feature panes from `topic/` and `task_view/`.

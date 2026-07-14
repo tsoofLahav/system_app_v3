@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
 import '../../core/ai/ai_context.dart';
-import '../../design_system/app_colors.dart';
 import '../../design_system/app_typography.dart';
 import '../../core/models/block.dart';
 import 'block_text_focus.dart';
@@ -19,6 +18,7 @@ class HeaderBlockWidget extends StatefulWidget {
     this.hint = 'Header',
     this.aiState,
     this.aiFileId,
+    this.hasContentAbove = false,
   });
 
   final Block block;
@@ -26,6 +26,7 @@ class HeaderBlockWidget extends StatefulWidget {
   final String hint;
   final AppState? aiState;
   final int? aiFileId;
+  final bool hasContentAbove;
 
   @override
   State<HeaderBlockWidget> createState() => _HeaderBlockWidgetState();
@@ -91,32 +92,18 @@ class _HeaderBlockWidgetState extends State<HeaderBlockWidget> {
   @override
   Widget build(BuildContext context) {
     final level = widget.block.content['level'] as int? ?? 2;
-    final isCurrentPart = widget.block.content['is_current_part'] == true;
     final style = switch (level) {
       1 => AppTypography.blockHeaderStyle.copyWith(fontSize: 15),
       2 => AppTypography.blockHeaderStyle,
       _ => AppTypography.blockHeaderStyle.copyWith(fontSize: 12),
     };
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 160),
-      padding: isCurrentPart
-          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
-          : EdgeInsets.zero,
-      decoration: isCurrentPart
-          ? BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: AppColors.primary.withValues(alpha: 0.24),
-                width: 0.8,
-              ),
-            )
-          : null,
+    return Padding(
+      padding: EdgeInsets.only(top: widget.hasContentAbove ? 16 : 0),
       child: FormattedTextField(
         controller: _controller,
         focusNode: _focusNode,
-        style: isCurrentPart ? style.copyWith(color: AppColors.primary) : style,
+        style: style,
         blockContent: widget.block.content,
         hintText: widget.hint,
         onChanged: (_) {

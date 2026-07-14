@@ -68,6 +68,7 @@ class Block(db.Model):
     type = db.Column(db.Text, nullable=False)
     content = db.Column(JSONB, nullable=False, default=dict)
     order_index = db.Column(db.Integer)
+    part_id = db.Column(db.Integer, db.ForeignKey("parts.id"))
     archived_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -77,6 +78,28 @@ class Block(db.Model):
             "file_id": self.file_id,
             "type": self.type,
             "content": self.content if self.content is not None else {},
+            "order_index": self.order_index,
+            "part_id": self.part_id,
+            "archived_at": _iso(self.archived_at),
+            "created_at": _iso(self.created_at),
+        }
+
+
+class Part(db.Model):
+    __tablename__ = "parts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"), nullable=False)
+    name = db.Column(db.Text, nullable=False)
+    order_index = db.Column(db.Integer, nullable=False, default=0)
+    archived_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "topic_id": self.topic_id,
+            "name": self.name,
             "order_index": self.order_index,
             "archived_at": _iso(self.archived_at),
             "created_at": _iso(self.created_at),

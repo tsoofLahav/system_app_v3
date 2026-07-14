@@ -5,6 +5,8 @@ Use these runbooks when you need to reconstruct major frontend flows from docs.
 - [`rebuild-topic-view.md`](rebuild-topic-view.md)
 - [`rebuild-reorder-mode.md`](rebuild-reorder-mode.md)
 - [`rebuild-task-view-mode.md`](rebuild-task-view-mode.md)
+- [`automation-mechanism.md`](automation-mechanism.md)
+- [`file-block-behavior.md`](file-block-behavior.md)
 
 Each runbook follows the same structure:
 - Scope and expected outcome

@@ -19,11 +19,32 @@ class BlockContextMenu {
     required String fileType,
     Block? targetBlock,
     bool includeTextActions = true,
+    bool supportsParts = false,
+    bool hasAvailableParts = false,
   }) {
     final entries = <AppContextMenuEntry>[];
+    if (supportsParts) {
+      entries.add(
+        AppContextMenuSubmenu(
+          label: strings['addPart'],
+          children: [
+            AppContextMenuItem(
+              value: 'part:new',
+              label: strings['addNewPart'],
+            ),
+            AppContextMenuItem(
+              value: 'part:existing',
+              label: strings['addExistingPart'],
+              enabled: hasAvailableParts,
+            ),
+          ],
+        ),
+      );
+    }
     final insertTypes =
         FileBehaviorRegistry.contextMenuForFileType(fileType);
     if (insertTypes.isNotEmpty) {
+      if (entries.isNotEmpty) entries.add(const AppContextMenuDivider());
       entries.add(
         AppContextMenuSubmenu(
           label: strings['addBlock'],
@@ -58,6 +79,8 @@ class BlockContextMenu {
     required String fileType,
     required int orderIndex,
     Block? targetBlock,
+    bool supportsParts = false,
+    bool hasAvailableParts = false,
     BlockMenuHandler? onAction,
   }) async {
     AppContextMenu.dismissActive();
@@ -71,6 +94,8 @@ class BlockContextMenu {
         strings: strings,
         fileType: fileType,
         targetBlock: targetBlock,
+        supportsParts: supportsParts,
+        hasAvailableParts: hasAvailableParts,
       );
 
       final value = await AppContextMenu.show(

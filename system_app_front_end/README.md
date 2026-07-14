@@ -4,11 +4,13 @@ Frontend (Flutter desktop) for `system_app`.
 
 ## Before Working
 
-- Read [`AGENTS.md`](AGENTS.md) first.
+- Read [`../AGENTS.md`](../AGENTS.md) first (monorepo entry).
+- Read [`AGENTS.md`](AGENTS.md) for frontend workflow and guardrails.
 - For product direction, read [`../CONSTITUTION.md`](../CONSTITUTION.md) before planning large changes.
 
 ## Agent Start Path
 
+0. Read [`../AGENTS.md`](../AGENTS.md) for task routing.
 1. Read [`AGENTS.md`](AGENTS.md) for workflow and guardrails.
 2. Read [`lib/README.md`](lib/README.md) for architecture and placement rules.
 3. Read the local folder `README.md` before editing code in that folder.

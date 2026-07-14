@@ -19,6 +19,7 @@ import 'models/block.dart';
 import 'models/brought_file_snapshot.dart';
 import '../features/blocks/board_content.dart';
 import '../features/blocks/block_text_focus.dart';
+import 'models/part.dart';
 import 'models/task.dart';
 import 'models/task_reset_acknowledgement.dart';
 import 'models/task_view_membership.dart';
@@ -42,6 +43,7 @@ import 'services/block_service.dart';
 import 'services/bootstrap_service.dart';
 import 'services/file_service.dart';
 import 'services/image_service.dart';
+import 'services/part_service.dart';
 import 'services/process_documentation_input_service.dart';
 import 'services/task_service.dart';
 import 'services/task_reset_acknowledgement_service.dart';
@@ -54,12 +56,14 @@ class TopicDetail {
     required this.files,
     required this.blocksByFileId,
     required this.tasksByBlockId,
+    required this.parts,
   });
 
   final Topic topic;
   final List<AppFile> files;
   final Map<int, List<Block>> blocksByFileId;
   final Map<int, List<Task>> tasksByBlockId;
+  final List<Part> parts;
 }
 
 class _ViewSnapshot {
@@ -107,6 +111,7 @@ class AppState extends ChangeNotifier {
       AutomationCompanionService(_api);
   late final TaskResetAcknowledgementService _taskResetAcknowledgementService =
       TaskResetAcknowledgementService(_api);
+  late final PartService _partService = PartService(_api);
   late final ProcessDocumentationInputService _processDocumentationInputService =
       ProcessDocumentationInputService(_api);
 
@@ -1486,6 +1491,9 @@ class AppState extends ChangeNotifier {
       );
       final blocksByFileId = <int, List<Block>>{};
       final tasksByBlockId = <int, List<Task>>{};
+      final parts = topic.type == 'project'
+          ? await _partService.listForTopic(topic.id)
+          : <Part>[];
 
       for (final file in files) {
         final loaded = await _blockService.listForFile(
@@ -1514,6 +1522,7 @@ class AppState extends ChangeNotifier {
         files: files,
         blocksByFileId: blocksByFileId,
         tasksByBlockId: tasksByBlockId,
+        parts: parts,
       );
       pendingAiProposals = await _aiProposalService.listPending(
         topicId: topic.id,
@@ -1648,6 +1657,7 @@ class AppState extends ChangeNotifier {
       files: files,
       blocksByFileId: detail.blocksByFileId,
       tasksByBlockId: detail.tasksByBlockId,
+      parts: detail.parts,
     );
     notifyListeners();
   }
@@ -2088,6 +2098,84 @@ class AppState extends ChangeNotifier {
       orderIndex: blocks.length,
     );
     await _refreshAfterFileMutation(file);
+  }
+
+  bool supportsPartPlacement(Topic? topic, AppFile file) =>
+      topic?.type == 'project' &&
+      FileBehaviorRegistry.supportsPartPlacement(file.type);
+
+  List<Part> get topicParts => selectedDetail?.parts ?? const [];
+
+  Set<int> partIdsPlacedInFile(AppFile file) {
+    final ids = <int>{};
+    for (final block in _blocksForFile(file)) {
+      if (block.type != 'header') continue;
+      final partId = block.partId ?? block.content['part_id'] as int?;
+      if (partId != null) ids.add(partId);
+    }
+    return ids;
+  }
+
+  List<Part> partsAvailableForFile(AppFile file) {
+    final placed = partIdsPlacedInFile(file);
+    return topicParts.where((part) => !placed.contains(part.id)).toList();
+  }
+
+  ({int? insertAfterBlockId, int? insertIndex}) _partPlacementArgs(
+    AppFile file,
+    int orderIndex,
+  ) {
+    final blocks = _blocksForFile(file);
+    final target = orderIndex.clamp(0, blocks.length).toInt();
+    if (target <= 0) return (insertAfterBlockId: null, insertIndex: 0);
+    if (target >= blocks.length) {
+      return (insertAfterBlockId: blocks.last.id, insertIndex: null);
+    }
+    return (insertAfterBlockId: blocks[target - 1].id, insertIndex: null);
+  }
+
+  Future<void> addNewPartToFile(
+    AppFile file, {
+    required String name,
+    required int orderIndex,
+  }) async {
+    final topic = selectedTopic;
+    if (topic == null || !supportsPartPlacement(topic, file)) return;
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    final placement = _partPlacementArgs(file, orderIndex);
+    await _partService.placePartInFile(
+      fileId: file.id,
+      name: trimmed,
+      insertAfterBlockId: placement.insertAfterBlockId,
+      insertIndex: placement.insertIndex,
+    );
+    await _refreshAfterFileMutation(file);
+  }
+
+  Future<void> addExistingPartToFile(
+    AppFile file, {
+    required int partId,
+    required int orderIndex,
+  }) async {
+    final topic = selectedTopic;
+    if (topic == null || !supportsPartPlacement(topic, file)) return;
+    final placement = _partPlacementArgs(file, orderIndex);
+    await _partService.placePartInFile(
+      fileId: file.id,
+      partId: partId,
+      insertAfterBlockId: placement.insertAfterBlockId,
+      insertIndex: placement.insertIndex,
+    );
+    await _refreshAfterFileMutation(file);
+  }
+
+  Future<void> renamePart(int partId, String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    await _partService.updatePart(partId, {'name': trimmed});
+    final topic = selectedTopic;
+    if (topic != null) await selectTopic(topic);
   }
 
   void scheduleBlockSave(Block block, Map<String, dynamic> content) {

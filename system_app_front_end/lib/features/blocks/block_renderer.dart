@@ -29,6 +29,7 @@ class BlockRenderer extends StatelessWidget {
     this.isMainTopic = false,
     this.onBlockMenuAction,
     this.onTableCellSecondaryTapDown,
+    this.blockIndex = 0,
   });
 
   final AppFile file;
@@ -39,6 +40,7 @@ class BlockRenderer extends StatelessWidget {
   final bool isMainTopic;
   final BlockMenuHandler? onBlockMenuAction;
   final TableCellSecondaryTapCallback? onTableCellSecondaryTapDown;
+  final int blockIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +63,7 @@ class BlockRenderer extends StatelessWidget {
           hint: s['headerHint'],
           aiState: state,
           aiFileId: file.id,
+          hasContentAbove: blockIndex > 0,
           onChanged: (c) => state.updateBlockContent(block, c, notify: true),
         );
       case 'summary':

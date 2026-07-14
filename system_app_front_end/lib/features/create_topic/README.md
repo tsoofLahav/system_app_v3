@@ -17,11 +17,8 @@ File choices:
 - Initial blocks for each selected file come from `core/registry/file_behavior_registry.dart`.
 
 Project structure:
-- Project work is split into ordered **parts**.
-- Parts are inner `header` blocks synchronized across `plan`, `execution`, and
-  `tasks`.
-- `overview` is a generated status surface, not the source of the part
-  structure.
+- Project work is split into ordered **parts** — see [`../features/blocks/PARTS.md`](../features/blocks/PARTS.md).
+- `overview` is a generated status surface, not the source of the part structure.
 
 Guidelines:
 - Use `core/registry` for file catalogs, defaults, and behavior profiles.

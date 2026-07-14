@@ -6,7 +6,7 @@ Current modules:
 - `shell/`: app frame and global controls.
 - `sidebar/`: topic/view navigation.
 - `topic/`: topic canvas and file panes.
-- `archive/`: read-only archive browse mode (grouped sidebar, file grid, spotlight preview, paginated loading, hybrid search).
+- `archive/`: read-only archive browse mode — see [`archive/README.md`](archive/README.md).
 - `task_view/`: view-centric task boards.
 - `blocks/`: block editors and block interactions.
 - `create_topic/`: create/edit topic dialogs.

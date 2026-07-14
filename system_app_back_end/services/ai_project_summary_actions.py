@@ -6,8 +6,14 @@ from sqlalchemy import or_
 from sqlalchemy.orm.attributes import flag_modified
 
 from config import OPENAI_PROCESS_UPDATE_TEMPERATURE
-from models import Block, File, Task, TaskView, Topic, db
+from models import Block, File, Part, Task, TaskView, Topic, db
 from services.openai_service import chat_json
+from services.part_resolver import (
+    parts_for_topic,
+    resolve_part_id_to_name,
+    resolve_part_name_to_id,
+    task_part_id_map,
+)
 from services.task_view_flags import IMPORTANT_SECTION_FLAG
 from services.unit_mapper import (
     detect_language,
@@ -19,13 +25,14 @@ from services.unit_mapper import (
 PROJECT_SUMMARY_UPDATE_PROMPT = """You update a project overview from project source files.
 
 ## Project parts
-Project parts are ordered inner headers shared by plan, execution, and tasks.
-Infer the ordered part list from all inputs for display in the overview only.
+Project parts are ordered topic entities with stable ids shared across plan,
+execution, and tasks. Use the provided parts list as the canonical order.
 Do not propose edits to source files.
 
 ## Current part
 Infer the current main part in progress from recent documentation, execution
-details, flagged tasks, and wording in the source files.
+details, flagged tasks, and wording in the source files. Return the part name
+that matches one of the provided parts.
 
 ## Overview output
 Write a compact overview that surfaces the current state first. Return:
@@ -55,7 +62,6 @@ JSON only:
 Respond in the same language as the input files."""
 
 GENERATED_BY = "project_summary_update"
-CORE_PART_FILE_ROLES = ("plan", "execution", "tasks")
 
 
 def smart_project_summary_update(
@@ -68,12 +74,13 @@ def smart_project_summary_update(
     *,
     max_date_groups: int = 3,
 ):
-    core_files = {
-        "plan": plan_file,
-        "execution": execution_file,
-        "tasks": tasks_file,
-    }
-    existing_parts = _ordered_existing_parts(core_files.values())
+    topic_parts = parts_for_topic(topic.id)
+    existing_parts_payload = [
+        {"id": part.id, "name": part.name, "order_index": part.order_index}
+        for part in topic_parts
+    ]
+    existing_part_names = [part.name for part in topic_parts]
+
     previous_overview = _overview_text(overview_file)
     plan_text = flatten_units_for_ai(units_from_file(plan_file.id), plan_file.name)
     execution_text = flatten_units_for_ai(
@@ -92,7 +99,7 @@ def smart_project_summary_update(
         tasks_text,
         doc_text,
         flagged_lines,
-        "\n".join(existing_parts),
+        "\n".join(existing_part_names),
     )
     if locale == "he":
         lang_note = (
@@ -105,7 +112,8 @@ def smart_project_summary_update(
     user_prompt = (
         f"Project: {topic.name}\n"
         f"Max recent_rows: {max_date_groups}\n"
-        f"Existing parts by first-seen order: {json.dumps(existing_parts, ensure_ascii=False)}\n\n"
+        f"Existing parts (canonical order): "
+        f"{json.dumps(existing_parts_payload, ensure_ascii=False)}\n\n"
         f"=== PREVIOUS OVERVIEW ===\n{previous_overview or '(empty)'}\n\n"
         f"{plan_text}\n\n"
         f"{execution_text}\n\n"
@@ -120,15 +128,21 @@ def smart_project_summary_update(
         temperature=OPENAI_PROCESS_UPDATE_TEMPERATURE,
     )
 
-    parts = _normalize_parts(ai_result.get("parts"), existing_parts)
-    current_part = _match_part(ai_result.get("current_part"), parts) or (
-        parts[0] if parts else ""
+    parts = _normalize_parts(ai_result.get("parts"), topic.id, topic_parts)
+    current_part_id = _resolve_current_part_id(
+        topic.id,
+        ai_result.get("current_part"),
+        parts,
     )
-    task_part_map = _task_part_map(tasks_file)
+    current_part_name = (
+        resolve_part_id_to_name(topic.id, current_part_id)
+        or (parts[0].name if parts else "")
+    )
+    task_part_map = task_part_id_map(tasks_file)
     current_tasks, other_tasks = _split_flagged_tasks(
         flagged,
         task_part_map,
-        current_part,
+        current_part_id,
     )
 
     summary_text = str(ai_result.get("summary_text") or "").strip()
@@ -142,7 +156,8 @@ def smart_project_summary_update(
         overview_file,
         locale=locale,
         summary_text=summary_text,
-        current_part=current_part,
+        current_part_name=current_part_name,
+        current_part_id=current_part_id,
         current_part_update=current_part_update,
         current_tasks=current_tasks,
         other_tasks=other_tasks,
@@ -154,7 +169,8 @@ def smart_project_summary_update(
         "topic_id": topic.id,
         "overview_file_id": overview_file.id,
         "part_count": len(parts),
-        "current_part": current_part,
+        "current_part": current_part_name,
+        "current_part_id": current_part_id,
         "current_flagged_task_count": len(current_tasks),
         "other_flagged_task_count": len(other_tasks),
         "recent_row_count": len(recent_rows),
@@ -170,106 +186,63 @@ def _overview_text(overview_file: File) -> str:
     return "\n".join(lines)
 
 
-def _ordered_existing_parts(files) -> list[str]:
-    seen = set()
-    parts = []
-    for file in files:
-        for section in _sections_for_file(file)["sections"]:
-            key = _part_key(section["title"])
-            if not key or key in seen:
-                continue
-            seen.add(key)
-            parts.append(section["title"])
-    return parts
+def _normalize_parts(
+    raw_parts,
+    topic_id: int,
+    topic_parts: list[Part],
+) -> list[Part]:
+    ordered: list[Part] = []
+    seen: set[int] = set()
 
-
-def _normalize_parts(raw_parts, existing_parts: list[str]) -> list[str]:
-    parts = []
-    seen = set()
-
-    def add(title):
-        title = str(title or "").strip()
-        key = _part_key(title)
-        if not key or key in seen:
+    def add_by_name(title):
+        part_id = resolve_part_name_to_id(topic_id, str(title or "").strip())
+        if part_id is None:
             return
-        seen.add(key)
-        parts.append(title)
+        for part in topic_parts:
+            if part.id == part_id and part.id not in seen:
+                seen.add(part.id)
+                ordered.append(part)
+                return
 
     for item in raw_parts or []:
         if isinstance(item, dict):
-            add(item.get("title") or item.get("name"))
+            add_by_name(item.get("title") or item.get("name"))
         else:
-            add(item)
-    for title in existing_parts:
-        add(title)
-    if not parts:
-        parts.append("General")
-    return parts
+            add_by_name(item)
+
+    for part in topic_parts:
+        if part.id not in seen:
+            seen.add(part.id)
+            ordered.append(part)
+
+    return ordered
 
 
-def _match_part(value, parts: list[str]) -> str | None:
-    key = _part_key(value)
-    if not key:
-        return None
-    for part in parts:
-        if _part_key(part) == key:
-            return part
-    return None
+def _resolve_current_part_id(
+    topic_id: int,
+    raw_current_part,
+    parts: list[Part],
+) -> int | None:
+    part_id = resolve_part_name_to_id(topic_id, raw_current_part)
+    if part_id is not None:
+        return part_id
+    return parts[0].id if parts else None
 
 
-def _sections_for_file(file: File) -> dict:
-    blocks = _active_blocks(file.id)
-    preamble = []
-    sections = []
-    current = None
-    for block in blocks:
-        if block.type == "header" and _header_text(block):
-            current = {
-                "title": _header_text(block),
-                "header": block,
-                "blocks": [block],
-            }
-            sections.append(current)
-            continue
-        if current is None:
-            preamble.append(block)
-        else:
-            current["blocks"].append(block)
-    return {"preamble": preamble, "sections": sections}
-
-def _part_header_content(title: str, is_current: bool = False) -> dict:
-    content = {"text": title, "level": 2}
-    if is_current:
-        content["is_current_part"] = True
-    return content
-
-
-def _task_part_map(tasks_file: File) -> dict[int, str]:
-    result = {}
-    current_part = None
-    for block in _active_blocks(tasks_file.id):
-        if block.type == "header" and _header_text(block):
-            current_part = _header_text(block)
-            continue
-        if block.type != "task":
-            continue
-        task_id = (block.content or {}).get("task_id")
-        if task_id is not None and current_part:
-            result[int(task_id)] = current_part
-    return result
+def _part_header_content(title: str) -> dict:
+    return {"text": title, "level": 2}
 
 
 def _split_flagged_tasks(
     flagged_tasks: list[Task],
-    task_part_map: dict[int, str],
-    current_part: str,
+    task_part_map: dict[int, int],
+    current_part_id: int | None,
 ) -> tuple[list[Task], list[Task]]:
     current = []
     other = []
-    current_key = _part_key(current_part)
     for task in flagged_tasks:
-        part = task_part_map.get(task.id)
-        if part and _part_key(part) == current_key:
+        part_id = task_part_map.get(task.id)
+        if current_part_id is not None and part_id == current_part_id:
             current.append(task)
         else:
             other.append(task)
@@ -281,17 +254,22 @@ def _apply_project_overview(
     *,
     locale: str,
     summary_text: str,
-    current_part: str,
+    current_part_name: str,
+    current_part_id: int | None,
     current_part_update: str,
     current_tasks: list[Task],
     other_tasks: list[Task],
     recent_rows: list[dict],
-    parts: list[str],
+    parts: list[Part],
 ):
     labels = _overview_labels(locale)
+    summary_content = {"text": summary_text}
+    if current_part_id is not None:
+        summary_content["current_part_id"] = current_part_id
+
     role_specs = [
-        ("summary", "summary", {"text": summary_text}),
-        ("current_part_header", "header", _part_header_content(current_part, True)),
+        ("summary", "summary", summary_content),
+        ("current_part_header", "header", _part_header_content(current_part_name)),
         ("current_part_update", "text", {"text": current_part_update}),
     ]
     if current_tasks:
@@ -324,7 +302,7 @@ def _apply_project_overview(
                 {"rows": _recent_table_rows(recent_rows, labels)},
             ),
             ("parts_header", "header", {"text": labels["parts"], "level": 3}),
-            ("parts", "list", {"items": _part_items(parts, current_part)}),
+            ("parts", "list", {"items": _part_items(parts)}),
         ]
     )
     blocks = _active_blocks(overview_file.id)
@@ -485,15 +463,8 @@ def _recent_table_rows(recent_rows: list[dict], labels: dict[str, str]) -> list[
     return rows
 
 
-def _part_items(parts: list[str], current_part: str) -> list[dict]:
-    current_key = _part_key(current_part)
-    return [
-        {
-            "text": part,
-            "is_current_part": _part_key(part) == current_key,
-        }
-        for part in parts
-    ] or [{"text": ""}]
+def _part_items(parts: list[Part]) -> list[dict]:
+    return [{"text": part.name} for part in parts] or [{"text": ""}]
 
 
 def _overview_labels(locale: str) -> dict[str, str]:
@@ -576,11 +547,3 @@ def _block_text(block: Block) -> str:
             for row in content.get("rows") or []
         )
     return ""
-
-
-def _header_text(block: Block) -> str:
-    return str((block.content or {}).get("text") or "").strip()
-
-
-def _part_key(value) -> str:
-    return " ".join(str(value or "").strip().casefold().split())

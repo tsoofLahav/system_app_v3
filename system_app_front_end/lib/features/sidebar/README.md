@@ -9,6 +9,10 @@ What this module owns:
 - A resizable sidebar width with clipped/ellipsis labels when space is tight.
 - A soft-glass sidebar surface that matches app dialogs and floating controls.
 
+| File | Role |
+|---|---|
+| `app_sidebar.dart` | Sidebar layout, view/topic lists, selection, row actions |
+
 Inputs and dependencies:
 - `AppState.topics`, `selectedTopic`, `selectedViewType`, and localized labels.
 - View definitions from `core/registry`.

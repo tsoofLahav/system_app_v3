@@ -15,6 +15,7 @@ import '../../design_system/note_widgets.dart';
 import '../../features/blocks/board_block_widget.dart';
 import '../../features/blocks/block_context_menu.dart';
 import '../../features/blocks/block_renderer.dart';
+import '../../features/blocks/part_dialogs.dart';
 import '../../shared/utils/local_image_picker.dart';
 
 class FileSection extends StatefulWidget {
@@ -295,6 +296,7 @@ class _FileSectionState extends State<FileSection> {
                             block: widget.blocks[i],
                             tasks: tasks,
                             state: widget.state,
+                            blockIndex: i,
                             onBlockMenuAction: (action) => _handleBlockMenuAction(
                               action,
                               orderIndex: i + 1,
@@ -312,6 +314,7 @@ class _FileSectionState extends State<FileSection> {
                             block: widget.blocks[i],
                             tasks: tasks,
                             state: widget.state,
+                            blockIndex: i,
                             onTableCellSecondaryTapDown: (position, row, column) =>
                                 _showBlockMenu(
                               position,
@@ -345,6 +348,7 @@ class _FileSectionState extends State<FileSection> {
                               block: widget.blocks[i],
                               tasks: tasks,
                               state: widget.state,
+                              blockIndex: i,
                             ),
                           ),
                         ),
@@ -504,6 +508,12 @@ class _FileSectionState extends State<FileSection> {
       fileType: widget.file.type,
       orderIndex: orderIndex,
       targetBlock: targetBlock,
+      supportsParts: widget.state.supportsPartPlacement(
+        widget.topic,
+        widget.file,
+      ),
+      hasAvailableParts:
+          widget.state.partsAvailableForFile(widget.file).isNotEmpty,
       onAction: (action) => _handleBlockMenuAction(
         action,
         orderIndex: orderIndex,
@@ -531,6 +541,32 @@ class _FileSectionState extends State<FileSection> {
   }) async {
     if (action.startsWith('insert:')) {
       await _insertBlock(action.substring(7), orderIndex: orderIndex);
+      return;
+    }
+    if (action == 'part:new') {
+      final name = await PartNameDialog.show(context, widget.state.strings);
+      if (name != null) {
+        await widget.state.addNewPartToFile(
+          widget.file,
+          name: name,
+          orderIndex: orderIndex,
+        );
+      }
+      return;
+    }
+    if (action == 'part:existing') {
+      final part = await ExistingPartPickerDialog.show(
+        context,
+        strings: widget.state.strings,
+        parts: widget.state.partsAvailableForFile(widget.file),
+      );
+      if (part != null) {
+        await widget.state.addExistingPartToFile(
+          widget.file,
+          partId: part.id,
+          orderIndex: orderIndex,
+        );
+      }
       return;
     }
     final block = targetBlock;

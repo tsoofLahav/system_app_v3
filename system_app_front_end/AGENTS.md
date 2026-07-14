@@ -1,6 +1,6 @@
 # system_app Frontend Guide
 
-Read this before making frontend changes.
+Read this before making frontend changes. Start at [`../AGENTS.md`](../AGENTS.md) for monorepo orientation and the full task-routing table.
 
 ## Read First
 
@@ -14,7 +14,7 @@ Read this before making frontend changes.
   2. Implement code to match the updated docs.
 - Keep docs concise and current. Prefer replacing stale lines over appending new ones.
 - Avoid repeating the same guidance across files; link to the most local doc instead.
-- Commit after a small set of coherent changes for safer rollback when debugging.
+- Commit after each feature is done — see [`../AGENTS.md`](../AGENTS.md) git workflow.
 
 ## Definition Of Done For Docs
 
@@ -22,6 +22,30 @@ Read this before making frontend changes.
 - Any changed behavior has exactly one source-of-truth description.
 - Cross-links point to the right local docs.
 - Stale statements are removed, not preserved for history.
+
+## Task routing (frontend)
+
+| If you are changing… | Read first | Key code |
+|---|---|---|
+| Project parts | [`lib/features/blocks/PARTS.md`](lib/features/blocks/PARTS.md) | `part_service.dart`, `part_dialogs.dart`, `app_state.dart` |
+| Block editing/rendering | [`lib/features/blocks/README.md`](lib/features/blocks/README.md) | `block_renderer.dart`, `app_state.dart` |
+| Task rows / zones | [`lib/features/tasks/README.md`](lib/features/tasks/README.md) | `task_lines_editor.dart`, `app_state.dart` |
+| Task views / sections | [`lib/features/task_view/README.md`](lib/features/task_view/README.md) | `task_view_pane.dart`, `app_state.dart` |
+| Topic layout / reorder | [`lib/features/topic/README.md`](lib/features/topic/README.md) + runbooks | `topic_view.dart`, `file_layout_board.dart` |
+| Archive browse | [`lib/features/archive/README.md`](lib/features/archive/README.md) | `archive_topic_view.dart`, `archive_file_grid.dart` |
+| Shell / global controls | [`lib/features/shell/README.md`](lib/features/shell/README.md) | `app_shell.dart`, `app_state.dart` |
+| Sidebar navigation | [`lib/features/sidebar/README.md`](lib/features/sidebar/README.md) | `app_sidebar.dart`, `app_state.dart` |
+| Bilingual / RTL | [`lib/core/l10n/BILINGUAL.md`](lib/core/l10n/BILINGUAL.md) | `app_strings.dart` |
+
+## Subsystem index
+
+| Topic | Doc |
+|-------|-----|
+| AI context and tool requests | [`lib/core/ai/README.md`](lib/core/ai/README.md) |
+| Automation UI and companion flows | [`docs/runbooks/automation-mechanism.md`](docs/runbooks/automation-mechanism.md) |
+| Change review dialog | [`lib/shared/change_review/README.md`](lib/shared/change_review/README.md) |
+| Backend automation (execution) | [`../system_app_back_end/docs/automation.md`](../system_app_back_end/docs/automation.md) |
+| Backend API | [`../system_app_back_end/docs/API.md`](../system_app_back_end/docs/API.md) |
 
 ## Documentation Map
 
@@ -51,7 +75,8 @@ Use folder-local `README.md` files as the source of truth for that folder.
 
 ## Related
 
-- Backend API and contracts: [`../AGENTS.md`](../AGENTS.md)
+- Monorepo entry: [`../AGENTS.md`](../AGENTS.md)
+- Backend workflow and domain model: [`../system_app_back_end/AGENTS.md`](../system_app_back_end/AGENTS.md)
 
 ## Local Run
 

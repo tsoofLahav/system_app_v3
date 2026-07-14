@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from models import Block, db
+from models import Block, File, db
 from routes.helpers import active_query, apply_updates, get_or_404
 from services.automation_dispatcher import dispatch_file_changed
 
@@ -47,6 +47,7 @@ def create_block():
         type=data["type"],
         content=data.get("content", {}),
         order_index=data.get("order_index"),
+        part_id=data.get("part_id"),
     )
     db.session.add(block)
     db.session.commit()
@@ -61,7 +62,7 @@ def update_block(block_id):
     apply_updates(
         block,
         data,
-        {"file_id", "type", "content", "order_index", "archived_at"},
+        {"file_id", "type", "content", "order_index", "part_id", "archived_at"},
         datetime_fields={"archived_at"},
     )
     db.session.commit()

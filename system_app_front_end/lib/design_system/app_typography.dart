@@ -67,7 +67,8 @@ abstract final class AppTypography {
   );
 
   /// Section headers inside file content.
-  static TextStyle get blockHeaderStyle => _style(size: 14, height: 1.4);
+  static TextStyle get blockHeaderStyle =>
+      _style(size: 14, height: 1.4, fontWeight: FontWeight.w600);
 
   /// Body, inputs, tasks, checklist items — smaller.
   static TextStyle get noteBodyStyle => _style(size: 12.5, height: 1.55);

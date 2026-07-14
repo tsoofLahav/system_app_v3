@@ -64,36 +64,14 @@ Main section limit: `FileRegistry.maxMainFilesPerTopic` (3). Reorder and promote
 
 ## Project Parts
 
-Projects are organized into ordered **parts**. A part is represented by an inner
-`header` block with the same text in the project `plan`, `execution`, and
-`tasks` files. The three files should keep the same parts in the same order.
+Projects use a first-class **`parts` entity** (see [`../features/blocks/PARTS.md`](../features/blocks/PARTS.md)).
 
-Project file roles:
-- `plan`: macro view of the project. It contains all parts with short
-  descriptions and should change rarely.
-- `execution`: detailed working memory for each part. It accumulates important
-  implementation and decision details as the project moves.
-- `tasks`: concrete missions split under the same part headers.
-- `overview`: generated status surface for the project. It should summarize the
-  current state rather than hold primary source content.
-- `doc`: chronological documentation and progress notes that can inform the
-  generated overview.
+- A part is a topic-scoped row in `parts` with stable `id` and `order_index`.
+- Placement in a file is a `header` block plus default blocks below, all linked via `blocks.part_id`.
+- New parts are created in the current file; existing parts can be added to other files later.
+- `plan`, `execution`, and `tasks` support placement. `overview` is generated only.
 
-The current main part in progress may be represented as metadata on generated
-overview headers/list items, such as `is_current_part: true`, so renderers can
-highlight it while keeping the visible text stable.
-
-Future project-structure automation can own synchronization:
-- If a part exists in one of `plan`, `execution`, or `tasks`, the part header
-  should exist in all three files.
-- The order of parts should be consistent across the three files.
-- Existing content under a part should be preserved. Automation should recreate
-  missing headers rather than silently deleting content.
-
-The project summary automation reads the current part structure and only writes
-the generated `overview`: current project state, current part, flagged tasks for
-the current part, flagged tasks from other parts, recent progress dates, and the
-ordered part list.
+The project summary automation reads `parts` by id and writes overview without `is_current_part` highlighting.
 
 How to use it:
 - Add/adjust rules here first, then adapt UI behavior in features.

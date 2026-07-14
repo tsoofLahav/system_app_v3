@@ -5,6 +5,7 @@ class Block {
     required this.type,
     required this.content,
     this.orderIndex,
+    this.partId,
     this.archivedAt,
     this.createdAt,
   });
@@ -14,6 +15,7 @@ class Block {
   final String type;
   final Map<String, dynamic> content;
   final int? orderIndex;
+  final int? partId;
   final String? archivedAt;
   final String? createdAt;
 
@@ -25,6 +27,7 @@ class Block {
     String? type,
     Map<String, dynamic>? content,
     int? orderIndex,
+    int? partId,
     String? archivedAt,
     String? createdAt,
   }) {
@@ -34,6 +37,7 @@ class Block {
       type: type ?? this.type,
       content: content ?? this.content,
       orderIndex: orderIndex ?? this.orderIndex,
+      partId: partId ?? this.partId,
       archivedAt: archivedAt ?? this.archivedAt,
       createdAt: createdAt ?? this.createdAt,
     );
@@ -49,6 +53,7 @@ class Block {
           ? Map<String, dynamic>.from(raw)
           : <String, dynamic>{},
       orderIndex: json['order_index'] as int?,
+      partId: json['part_id'] as int?,
       archivedAt: json['archived_at'] as String?,
       createdAt: json['created_at'] as String?,
     );
@@ -59,6 +64,7 @@ class Block {
     'type': type,
     'content': content,
     if (orderIndex != null) 'order_index': orderIndex,
+    if (partId != null) 'part_id': partId,
     if (archivedAt != null) 'archived_at': archivedAt,
   };
 }
