@@ -59,6 +59,22 @@ def build_document_change_set(key, title, units, ops, id_prefix=None):
             kind = op.get("kind") or anchor.get("kind") or "list_item"
             change_index += 1
             change_id = f"{change_prefix}:c{change_index}"
+            new_unit = {
+                "id": f"new:{change_id}",
+                "kind": kind,
+                "text": text,
+            }
+            if anchor.get("block_id") is not None:
+                new_unit["block_id"] = anchor["block_id"]
+            if kind == "list_item" and anchor.get("path"):
+                path = anchor["path"]
+                if (
+                    isinstance(path, list)
+                    and len(path) >= 2
+                    and path[0] == "items"
+                    and isinstance(path[1], int)
+                ):
+                    new_unit["path"] = ["items", path[1] + 1]
             changes.append(
                 {
                     "id": change_id,
@@ -67,11 +83,7 @@ def build_document_change_set(key, title, units, ops, id_prefix=None):
                     "old_text": "",
                     "new_text": text,
                     "reason": reason,
-                    "new_unit": {
-                        "id": f"new:{change_id}",
-                        "kind": kind,
-                        "text": text,
-                    },
+                    "new_unit": new_unit,
                 }
             )
 
@@ -120,6 +132,7 @@ def merge_document(units, changes, decisions):
     replace = {}
     remove = set()
     add_after = {}
+    unit_by_id = {unit["id"]: unit for unit in units or []}
 
     for change in changes or []:
         if not _decision(decisions, change.get("id")):
@@ -131,11 +144,30 @@ def merge_document(units, changes, decisions):
         elif action == "remove":
             remove.add(unit_id)
         elif action == "add_after":
-            new_unit = change.get("new_unit") or {
-                "id": change.get("id"),
-                "kind": "list_item",
-                "text": change.get("new_text", ""),
-            }
+            anchor = unit_by_id.get(unit_id) or {}
+            new_unit = dict(
+                change.get("new_unit")
+                or {
+                    "id": change.get("id"),
+                    "kind": "list_item",
+                    "text": change.get("new_text", ""),
+                }
+            )
+            if anchor.get("block_id") is not None and new_unit.get("block_id") is None:
+                new_unit["block_id"] = anchor["block_id"]
+            if (
+                new_unit.get("kind") == "list_item"
+                and anchor.get("path")
+                and not new_unit.get("path")
+            ):
+                path = anchor["path"]
+                if (
+                    isinstance(path, list)
+                    and len(path) >= 2
+                    and path[0] == "items"
+                    and isinstance(path[1], int)
+                ):
+                    new_unit["path"] = ["items", path[1] + 1]
             add_after.setdefault(unit_id, []).append(new_unit)
 
     merged = []

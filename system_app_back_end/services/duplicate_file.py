@@ -74,46 +74,15 @@ def duplicate_file(file_id: int) -> File:
     db.session.add(new_file)
     db.session.flush()
 
+    source_blocks = _active_blocks(source.id)
     block_map: dict[int, Block] = {}
     task_map: dict[int, int] = {}
+    new_task_list_id: int | None = None
     order = 0
 
-    for source_block in _active_blocks(source.id):
+    for source_block in source_blocks:
         if source_block.type == "task":
-            old_task_id = (source_block.content or {}).get("task_id")
-            old_task = (
-                db.session.get(Task, int(old_task_id))
-                if old_task_id is not None
-                else None
-            )
-            new_block = Block(
-                file_id=new_file.id,
-                type="task",
-                content={},
-                order_index=order,
-            )
-            db.session.add(new_block)
-            db.session.flush()
-            block_map[source_block.id] = new_block
-
-            if old_task is not None:
-                new_task = Task(
-                    block_id=new_block.id,
-                    title=old_task.title,
-                    status=old_task.status,
-                    due_date=old_task.due_date,
-                )
-                db.session.add(new_task)
-                db.session.flush()
-                task_map[int(old_task.id)] = int(new_task.id)
-                content = _clone_content(source_block.content)
-                content["task_id"] = new_task.id
-                new_block.content = content
-            else:
-                new_block.content = _clone_content(source_block.content)
-            order += 1
             continue
-
         new_block = Block(
             file_id=new_file.id,
             type=source_block.type,
@@ -123,9 +92,61 @@ def duplicate_file(file_id: int) -> File:
         db.session.add(new_block)
         db.session.flush()
         block_map[source_block.id] = new_block
+        if source_block.type == "task_list":
+            new_task_list_id = new_block.id
         order += 1
 
-    for source_block in _active_blocks(source.id):
+    if new_task_list_id is None and any(
+        block.type == "task" for block in source_blocks
+    ):
+        task_list_block = Block(
+            file_id=new_file.id,
+            type="task_list",
+            content={},
+            order_index=0,
+        )
+        db.session.add(task_list_block)
+        db.session.flush()
+        new_task_list_id = task_list_block.id
+        for mapped in block_map.values():
+            if mapped.order_index is not None:
+                mapped.order_index = mapped.order_index + 1
+
+    for source_block in source_blocks:
+        if source_block.type != "task":
+            continue
+        old_task_id = (source_block.content or {}).get("task_id")
+        old_task = (
+            db.session.get(Task, int(old_task_id)) if old_task_id is not None else None
+        )
+        new_block = Block(
+            file_id=new_file.id,
+            type="task",
+            content={},
+            order_index=order,
+        )
+        db.session.add(new_block)
+        db.session.flush()
+        block_map[source_block.id] = new_block
+
+        if old_task is not None and new_task_list_id is not None:
+            new_task = Task(
+                block_id=new_task_list_id,
+                title=old_task.title,
+                status=old_task.status,
+                due_date=old_task.due_date,
+            )
+            db.session.add(new_task)
+            db.session.flush()
+            task_map[int(old_task.id)] = int(new_task.id)
+            content = _clone_content(source_block.content)
+            content["task_id"] = new_task.id
+            new_block.content = content
+        else:
+            new_block.content = _clone_content(source_block.content)
+        order += 1
+
+    for source_block in source_blocks:
         if source_block.type != "task":
             continue
         new_block = block_map.get(source_block.id)

@@ -677,6 +677,7 @@ def apply_units_to_file(file, units):
 
     order = 0
     list_items = []
+    current_list_block_id = None
     task_list_block = None
     has_tasks = any(unit.get("kind") == "task" for unit in units)
 
@@ -695,9 +696,10 @@ def apply_units_to_file(file, units):
     prose_kind = None
     prose_block_id = None
 
-    def flush_list():
-        nonlocal order, list_items
+    def flush_list(block_id=None):
+        nonlocal order, list_items, current_list_block_id
         if not list_items:
+            current_list_block_id = None
             return
         db.session.add(
             Block(
@@ -709,6 +711,7 @@ def apply_units_to_file(file, units):
         )
         order += 1
         list_items = []
+        current_list_block_id = block_id
 
     def flush_prose():
         nonlocal order, prose_buffer, prose_kind, prose_block_id
@@ -775,6 +778,16 @@ def apply_units_to_file(file, units):
 
         flush_prose()
         if kind == "list_item":
+            item_block_id = unit.get("block_id")
+            if (
+                list_items
+                and item_block_id is not None
+                and current_list_block_id is not None
+                and item_block_id != current_list_block_id
+            ):
+                flush_list()
+            if item_block_id is not None:
+                current_list_block_id = item_block_id
             if text:
                 list_items.append({"text": text})
             continue
