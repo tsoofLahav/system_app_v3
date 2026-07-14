@@ -1,10 +1,53 @@
 class ChangeSet {
-  const ChangeSet({required this.version, required this.documents});
+  const ChangeSet({required this.version, required this.documents, this.parts});
 
   factory ChangeSet.fromJson(Map<String, dynamic> json) {
     final rawDocs = json['documents'];
+    final rawParts = json['parts'];
     return ChangeSet(
       version: json['version'] as int? ?? 1,
+      documents: rawDocs is List
+          ? rawDocs
+                .whereType<Map>()
+                .map(
+                  (doc) =>
+                      ChangeDocument.fromJson(Map<String, dynamic>.from(doc)),
+                )
+                .toList()
+          : const [],
+      parts: rawParts is List
+          ? rawParts
+                .whereType<Map>()
+                .map(
+                  (part) =>
+                      PartChangeEntry.fromJson(Map<String, dynamic>.from(part)),
+                )
+                .toList()
+          : null,
+    );
+  }
+
+  final int version;
+  final List<ChangeDocument> documents;
+  final List<PartChangeEntry>? parts;
+
+  bool get isPartBased => (parts ?? []).isNotEmpty;
+}
+
+class PartChangeEntry {
+  const PartChangeEntry({
+    required this.partId,
+    required this.partName,
+    required this.isNew,
+    required this.documents,
+  });
+
+  factory PartChangeEntry.fromJson(Map<String, dynamic> json) {
+    final rawDocs = json['documents'];
+    return PartChangeEntry(
+      partId: json['part_id'] as int?,
+      partName: json['part_name'] as String? ?? '',
+      isNew: json['is_new'] as bool? ?? false,
       documents: rawDocs is List
           ? rawDocs
                 .whereType<Map>()
@@ -17,8 +60,15 @@ class ChangeSet {
     );
   }
 
-  final int version;
+  final int? partId;
+  final String partName;
+  final bool isNew;
   final List<ChangeDocument> documents;
+
+  ChangeSet toDocumentChangeSet() => ChangeSet(
+        version: 1,
+        documents: documents,
+      );
 }
 
 class ChangeDocument {

@@ -270,6 +270,43 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
         fan_out=False,
         change_trigger=ChangeTriggerConfig(idle_seconds=30),
     ),
+    "project_update": AutomationDefinition(
+        key="project_update",
+        name="Project update from log",
+        description=(
+            "When a log file is moved into a project, propose per-part updates "
+            "to plan, execution, and tasks from the log content."
+        ),
+        action_type="project_update",
+        scope=ScopeConfig(
+            fixed={"kind": "topic_type", "topic_type": "project"},
+            allowed_kinds=("topic_type", "topic", "all"),
+        ),
+        activations=("event",),
+        bindings=(
+            FileBinding(role="log", match={"type": "log"}),
+            FileBinding(role="plan", match={"type": "plan"}),
+            FileBinding(role="execution", match={"type": "execution"}),
+            FileBinding(role="tasks", match={"type": "tasks"}),
+            FileBinding(role="doc", match={"type": "doc"}),
+        ),
+        companion=CompanionConfig(
+            enabled=True,
+            flow_key="project_update_review",
+            title_template="Review project update: {topic_name}",
+            default_view_type="daily",
+            default_section_name="Project updates",
+        ),
+        ai=AiConfig(
+            action_key="smart_project_update",
+            proposal_types=("project_smart_update", "project_update_skipped"),
+            review_documents=("plan", "execution", "tasks"),
+        ),
+        default_schedule=None,
+        default_enabled=False,
+        fan_out=False,
+        change_trigger=ChangeTriggerConfig(idle_seconds=30),
+    ),
     "view_task_reset": AutomationDefinition(
         key="view_task_reset",
         name="Reset view tasks",
@@ -422,6 +459,8 @@ def default_params(key: str) -> dict[str, Any]:
     if definition.key == "project_summary_update":
         result["event"] = "file_changed"
         result["project_summary"] = {"max_date_groups": 3}
+    if definition.key == "project_update":
+        result["event"] = "file_moved"
     if definition.key == "view_task_reset":
         result["target_view"] = "weekly"
         result["view_resets"] = {

@@ -65,14 +65,20 @@ def file_matches_binding(file, binding, topic_id):
     return True
 
 
-def rule_matches_file_event(rule, file):
+def rule_matches_file_event(rule, file, event_context=None):
     if rule.trigger_type != "event":
         return False
     if file.type == "overview":
         return False
     params = normalize_params(rule.params, rule.key, rule.action_type)
     event_name = params.get("event") or params.get("trigger", {}).get("event")
-    if event_name and event_name != "file_changed":
+    change = (event_context or {}).get("change")
+    if event_name == "file_moved":
+        if change != "file_moved":
+            return False
+    elif event_name and event_name not in ("file_changed", "file_moved"):
+        return False
+    elif event_name == "file_changed" and change == "file_moved":
         return False
     if not topic_in_scope(rule, file.topic_id):
         return False
@@ -237,8 +243,6 @@ def dispatch_file_changed(file_id, change, meta=None):
     rules = AutomationRule.query.filter_by(enabled=True, trigger_type="event").all()
     run_ids = []
     for rule in rules:
-        if not rule_matches_file_event(rule, file):
-            continue
         context = {
             "event": "file_changed",
             "file_id": file.id,
@@ -247,6 +251,8 @@ def dispatch_file_changed(file_id, change, meta=None):
         }
         if meta:
             context.update(meta)
+        if not rule_matches_file_event(rule, file, context):
+            continue
 
         if change_trigger_config_for_rule(rule) is not None:
             record_change_event(rule, context, app=app)

@@ -50,6 +50,17 @@ def run_move_file_to_topic(
 
     db.session.commit()
 
+    from services.automation_dispatcher import dispatch_file_changed
+
+    dispatch_file_changed(
+        file.id,
+        "file_moved",
+        {
+            "previous_topic_id": int(source_topic_id),
+            "topic_id": int(target_topic_id),
+        },
+    )
+
     return {
         "tool": "move_file_to_topic",
         "action": "write",

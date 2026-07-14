@@ -50,6 +50,7 @@ class FileService {
     required int topicId,
     required String name,
     required String type,
+    int? anchorTopicId,
     int? orderIndex,
     bool? isMain,
   }) async {
@@ -58,6 +59,7 @@ class FileService {
               'topic_id': topicId,
               'name': name,
               'type': type,
+              if (anchorTopicId != null) 'anchor_topic_id': anchorTopicId,
               if (orderIndex != null) 'order_index': orderIndex,
               if (isMain != null) 'is_main': isMain,
             })

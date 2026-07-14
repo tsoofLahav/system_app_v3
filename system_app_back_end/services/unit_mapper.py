@@ -288,3 +288,171 @@ def _block_to_units(block, tasks_by_id):
             }
         ]
     return []
+
+
+def units_for_part_in_file(file_id: int, part_id: int) -> list[dict]:
+    from services.part_resolver import blocks_for_part_in_file
+
+    blocks = blocks_for_part_in_file(file_id, part_id)
+    task_ids = []
+    for block in blocks:
+        if block.type == "task":
+            task_id = (block.content or {}).get("task_id")
+            if task_id:
+                task_ids.append(int(task_id))
+    tasks_by_id = {}
+    if task_ids:
+        for task in Task.query.filter(Task.id.in_(task_ids)).all():
+            tasks_by_id[task.id] = task.title
+
+    units = []
+    for block in blocks:
+        if block.type in ("header", "task_list"):
+            continue
+        for unit in _block_to_units(block, tasks_by_id):
+            unit = dict(unit)
+            unit["id"] = f"part:{part_id}:{unit['id']}"
+            units.append(unit)
+    return units
+
+
+def flatten_part_files_for_ai(
+    *,
+    part_name: str,
+    log_text: str,
+    plan_units,
+    execution_units,
+    tasks_units,
+) -> str:
+    sections = [
+        f"=== LOG ({part_name}) ===\n{log_text.strip()}",
+        flatten_units_for_ai(plan_units, f"Plan — {part_name}"),
+        flatten_units_for_ai(execution_units, f"Execution — {part_name}"),
+        flatten_units_for_ai(tasks_units, f"Tasks — {part_name}"),
+    ]
+    return "\n\n".join(section for section in sections if section.strip())
+
+
+def apply_units_to_part_in_file(file, part_id: int, units: list[dict]):
+    from services.part_resolver import blocks_for_part_in_file
+
+    part_blocks = blocks_for_part_in_file(file.id, part_id)
+    content_blocks = [b for b in part_blocks if b.type != "header"]
+    for block in content_blocks:
+        db.session.delete(block)
+    db.session.flush()
+
+    denormalized = []
+    prefix = f"part:{part_id}:"
+    for unit in units:
+        unit = dict(unit)
+        unit_id = unit.get("id") or ""
+        if unit_id.startswith(prefix):
+            unit["id"] = unit_id[len(prefix) :]
+        denormalized.append(unit)
+
+    start_order = 0
+    if part_blocks:
+        header = part_blocks[0]
+        start_order = (header.order_index or 0) + 1
+
+    _apply_units_at_order(file, denormalized, start_order, part_id)
+
+
+def _apply_units_at_order(file, units, start_order: int, part_id: int | None):
+    order = start_order
+    list_items = []
+    task_list_block = None
+    has_tasks = any(unit.get("kind") == "task" for unit in units)
+
+    if has_tasks:
+        task_list_block = Block(
+            file_id=file.id,
+            type="task_list",
+            content={},
+            order_index=order,
+            part_id=part_id,
+        )
+        db.session.add(task_list_block)
+        db.session.flush()
+        order += 1
+
+    prose_buffer = []
+    prose_kind = None
+
+    def flush_list():
+        nonlocal order, list_items
+        if not list_items:
+            return
+        db.session.add(
+            Block(
+                file_id=file.id,
+                type="list",
+                content={"items": list_items, "list_style": "bullet"},
+                order_index=order,
+                part_id=part_id,
+            )
+        )
+        order += 1
+        list_items.clear()
+
+    def flush_prose():
+        nonlocal order, prose_buffer, prose_kind
+        if not prose_buffer:
+            prose_kind = None
+            return
+        text = " ".join(prose_buffer).strip()
+        if text:
+            db.session.add(
+                Block(
+                    file_id=file.id,
+                    type=prose_kind or "text",
+                    content={"text": text},
+                    order_index=order,
+                    part_id=part_id,
+                )
+            )
+            order += 1
+        prose_buffer = []
+        prose_kind = None
+
+    for unit in units:
+        kind = unit.get("kind")
+        text = (unit.get("text") or "").strip()
+
+        if kind in ("paragraph", "text", "summary"):
+            flush_list()
+            if text:
+                if not prose_kind:
+                    prose_kind = "text"
+                prose_buffer.append(text)
+            continue
+
+        flush_prose()
+        if kind == "list_item":
+            if text:
+                list_items.append({"text": text})
+            continue
+        flush_list()
+        if kind == "task" and text and task_list_block is not None:
+            task = Task(
+                block_id=task_list_block.id,
+                title=text,
+                status="active",
+            )
+            db.session.add(task)
+            db.session.flush()
+            db.session.add(
+                Block(
+                    file_id=file.id,
+                    type="task",
+                    content={"task_id": task.id},
+                    order_index=order,
+                    part_id=part_id,
+                )
+            )
+            order += 1
+
+    flush_list()
+    flush_prose()
+    db.session.flush()

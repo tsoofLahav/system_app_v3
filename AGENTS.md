@@ -49,6 +49,7 @@ Read [`CONSTITUTION.md`](CONSTITUTION.md) before large changes. Key principles:
 | API / persistence | [`system_app_back_end/AGENTS.md`](system_app_back_end/AGENTS.md) | `models.py`, `routes/` |
 | Automation (backend) | [`system_app_back_end/docs/automation.md`](system_app_back_end/docs/automation.md) | `services/automation_*.py` |
 | Automation (UI) | [`system_app_front_end/docs/runbooks/automation-mechanism.md`](system_app_front_end/docs/runbooks/automation-mechanism.md) | `automation_service.dart`, shell automation menu |
+| Project update from log | [`system_app_front_end/docs/runbooks/project-update-automation.md`](system_app_front_end/docs/runbooks/project-update-automation.md) | `ai_smart_update/`, `project_update_batch_dialog.dart` |
 | AI proposals / context | [`system_app_front_end/lib/core/ai/README.md`](system_app_front_end/lib/core/ai/README.md) | `ai_proposal_service.dart`, `routes/ai*.py` |
 | Change review UI | [`system_app_front_end/lib/shared/change_review/README.md`](system_app_front_end/lib/shared/change_review/README.md) | `change_review_dialog.dart` |
 | Bilingual / RTL | [`system_app_front_end/lib/core/l10n/BILINGUAL.md`](system_app_front_end/lib/core/l10n/BILINGUAL.md) | `app_strings.dart` |

@@ -124,6 +124,14 @@ class AppStrings {
           .replaceAll('{current}', '$current')
           .replaceAll('{total}', '$total');
 
+  String projectUpdateProgress(int current, int total) =>
+      this['projectUpdateProgress']
+          .replaceAll('{current}', '$current')
+          .replaceAll('{total}', '$total');
+
+  String docRowsAdded(int count) =>
+      this['docRowsAdded'].replaceAll('{count}', '$count');
+
   String automationScopeLabel(String scope) =>
       this['automationScope'].replaceAll('{scope}', scope);
 
@@ -388,8 +396,13 @@ class AppStrings {
     'reject': 'Reject',
     'pendingSuggestions': 'Pending suggestions',
     'processUpdateReview': 'Review process update',
+    'projectUpdateReview': 'Review project update',
     'reviewPlan': 'Plan',
+    'reviewExecution': 'Execution',
     'reviewTasks': 'Tasks',
+    'reviewPart': 'Part',
+    'reviewNewPart': 'New part',
+    'reviewProjectUpdate': 'Review project update',
     'planReviewComplete': 'Plan review complete',
     'continueToTasks': 'Continue to tasks',
     'applySuggestion': 'Apply',
@@ -397,8 +410,16 @@ class AppStrings {
     'finishUpdate': 'Finish update',
     'previousProcess': 'Previous process',
     'nextProcess': 'Next process',
+    'previousProject': 'Previous project',
+    'nextProject': 'Next project',
     'processUpdateProgress': 'Process {current} of {total}',
+    'projectUpdateProgress': 'Project {current} of {total}',
     'processRefreshSkipped': 'Automatic process update skipped',
+    'projectUpdateSkipped': 'Automatic project update skipped',
+    'logForProject': 'Log for project…',
+    'attachToProject': 'Attach to project…',
+    'noProjectsAvailable': 'No projects available.',
+    'docRowsAdded': 'Added {count} documentation row(s)',
     'processDocumentationInputLabel': 'Daily input',
     'processDocumentationInputHint': 'What happened in this process today?',
     'processDocumentationGradeLabel': 'Progress grade (1–10)',
@@ -665,8 +686,13 @@ class AppStrings {
     'reject': 'דחה',
     'pendingSuggestions': 'הצעות ממתינות',
     'processUpdateReview': 'סקירת עדכון תהליך',
+    'projectUpdateReview': 'סקירת עדכון פרויקט',
     'reviewPlan': 'תכנית',
+    'reviewExecution': 'ביצוע',
     'reviewTasks': 'משימות',
+    'reviewPart': 'חלק',
+    'reviewNewPart': 'חלק חדש',
+    'reviewProjectUpdate': 'סקירת עדכון פרויקט',
     'planReviewComplete': 'סקירת התכנית הושלמה',
     'continueToTasks': 'המשך למשימות',
     'applySuggestion': 'החל',
@@ -674,8 +700,16 @@ class AppStrings {
     'finishUpdate': 'סיים עדכון',
     'previousProcess': 'תהליך קודם',
     'nextProcess': 'תהליך הבא',
+    'previousProject': 'פרויקט קודם',
+    'nextProject': 'פרויקט הבא',
     'processUpdateProgress': 'תהליך {current} מתוך {total}',
+    'projectUpdateProgress': 'פרויקט {current} מתוך {total}',
     'processRefreshSkipped': 'עדכון תהליך אוטומטי דולג',
+    'projectUpdateSkipped': 'עדכון פרויקט אוטומטי דולג',
+    'logForProject': 'יומן לפרויקט…',
+    'attachToProject': 'שייך לפרויקט…',
+    'noProjectsAvailable': 'אין פרויקטים זמינים.',
+    'docRowsAdded': 'נוספו {count} שורות תיעוד',
     'processDocumentationInputLabel': 'קלט יומי',
     'processDocumentationInputHint': 'מה קרה בתהליך הזה היום?',
     'processDocumentationGradeLabel': 'ציון התקדמות (1–10)',
@@ -746,6 +780,7 @@ class AppStrings {
     'process_refresh': 'Update all processes',
     'process_recap_update': 'Update process recap',
     'project_summary_update': 'Update project summary',
+    'project_update': 'Project update from log',
     'view_task_reset': 'Reset view tasks',
     'process_documentation_input': 'Process documentation input',
   };
@@ -755,6 +790,7 @@ class AppStrings {
     'process_refresh': 'עדכון כל התהליכים',
     'process_recap_update': 'עדכון סיכום תהליך',
     'project_summary_update': 'עדכון סיכום פרויקט',
+    'project_update': 'עדכון פרויקט מיומן',
     'view_task_reset': 'איפוס משימות בתצוגה',
     'process_documentation_input': 'קלט תיעוד תהליכים',
   };
@@ -769,6 +805,8 @@ class AppStrings {
         'recap with an AI summary and recent update notes.',
     'project_summary_update':
         'When project plan, execution, documentation, or tasks change, regenerate the project summary from its current structure.',
+    'project_update':
+        'When a log file is moved into a project, propose per-part updates to plan, execution, and tasks from the log content.',
     'view_task_reset':
         'Manage daily, weekly, monthly, and quarterly schedules that uncheck completed tasks and record active tasks as missed.',
     'process_documentation_input':
@@ -784,6 +822,8 @@ class AppStrings {
         'עם סיכום AI והערות עדכון אחרונות.',
     'project_summary_update':
         'כשהתוכנית, הביצוע, התיעוד או המשימות של פרויקט משתנים, צור מחדש את סיכום הפרויקט לפי המבנה הנוכחי.',
+    'project_update':
+        'כשקובץ יומן מועבר לפרויקט, הצע עדכונים לכל חלק בתוכנית, ביצוע ומשימות לפי תוכן היומן.',
     'view_task_reset':
         'נהל תזמונים יומיים, שבועיים, חודשיים ורבעוניים שמבטלים סימון משימות שהושלמו ורושמים משימות פעילות כמשימות שפוספסו.',
     'process_documentation_input':
@@ -801,6 +841,7 @@ class AppStrings {
     'Documentation': 'Documentation',
     'Board': 'Board',
     'Execution': 'Execution',
+    'Log': 'Log',
     'Data': 'Data',
     'Protocol': 'Protocol',
   };
@@ -816,6 +857,7 @@ class AppStrings {
     'Documentation': 'תיעוד',
     'Board': 'לוח',
     'Execution': 'ביצוע',
+    'Log': 'יומן',
     'Data': 'נתונים',
     'Protocol': 'פרוטוקול',
   };
@@ -829,6 +871,7 @@ class AppStrings {
     'doc': 'doc',
     'board': 'board',
     'execution': 'execution',
+    'log': 'log',
     'data': 'data',
     'protocol': 'protocol',
   };
@@ -842,6 +885,7 @@ class AppStrings {
     'doc': 'תיעוד',
     'board': 'לוח',
     'execution': 'ביצוע',
+    'log': 'יומן',
     'data': 'נתונים',
     'protocol': 'פרוטוקול',
   };

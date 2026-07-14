@@ -72,11 +72,16 @@ Successful DELETE returns `204` with empty body.
   "name": "Project plan",
   "type": "plan",
   "order_index": 0,
-  "is_main": true
+  "is_main": true,
+  "anchor_topic_id": 12
 }
 ```
 
-**PATCH body** — any subset of: `topic_id`, `name`, `type`, `order_index`, `is_main`
+Optional `anchor_topic_id` (project topic only) lets a file on **main** use another project's part list — used by `log` files created via "Log for project…".
+
+**PATCH body** — any subset of: `topic_id`, `name`, `type`, `order_index`, `is_main`, `anchor_topic_id`
+
+Moving a file to another topic (`topic_id` change) dispatches `file_moved` for event automations such as `project_update`.
 
 ---
 

@@ -1,6 +1,6 @@
 """Default blocks inserted below a part header per file type."""
 
-PART_PLACEMENT_FILE_TYPES = frozenset({"plan", "execution", "tasks"})
+PART_PLACEMENT_FILE_TYPES = frozenset({"plan", "execution", "tasks", "log"})
 
 
 def part_default_block_specs(file_type: str) -> list[tuple[str, dict]]:
@@ -27,4 +27,6 @@ def part_default_block_specs(file_type: str) -> list[tuple[str, dict]]:
         ]
     if file_type == "tasks":
         return []
+    if file_type == "log":
+        return [("text", {"text": ""})]
     return []

@@ -4,6 +4,7 @@ class AppFile {
     required this.topicId,
     required this.name,
     required this.type,
+    this.anchorTopicId,
     this.orderIndex,
     this.isMain,
     this.archivedAt,
@@ -12,6 +13,7 @@ class AppFile {
 
   final int id;
   final int? topicId;
+  final int? anchorTopicId;
   final String name;
   final String type;
   final int? orderIndex;
@@ -24,6 +26,7 @@ class AppFile {
     return AppFile(
       id: json['id'] as int,
       topicId: json['topic_id'] as int?,
+      anchorTopicId: json['anchor_topic_id'] as int?,
       name: json['name'] as String,
       type: json['type'] as String,
       orderIndex: json['order_index'] as int?,
@@ -36,6 +39,7 @@ class AppFile {
   AppFile copyWith({
     int? id,
     int? topicId,
+    int? anchorTopicId,
     String? name,
     String? type,
     int? orderIndex,
@@ -46,6 +50,7 @@ class AppFile {
     return AppFile(
       id: id ?? this.id,
       topicId: topicId ?? this.topicId,
+      anchorTopicId: anchorTopicId ?? this.anchorTopicId,
       name: name ?? this.name,
       type: type ?? this.type,
       orderIndex: orderIndex ?? this.orderIndex,
@@ -57,6 +62,7 @@ class AppFile {
 
   Map<String, dynamic> toJson() => {
     if (topicId != null) 'topic_id': topicId,
+    if (anchorTopicId != null) 'anchor_topic_id': anchorTopicId,
     'name': name,
     'type': type,
     if (orderIndex != null) 'order_index': orderIndex,

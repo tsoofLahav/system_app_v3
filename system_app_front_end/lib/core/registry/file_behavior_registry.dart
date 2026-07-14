@@ -87,6 +87,14 @@ abstract final class FileBehaviorRegistry {
       ],
       inlineInsertDefault: 'text',
     ),
+    'log': FileBehaviorProfile(
+      id: 'log',
+      defaultBlocks: [
+        DefaultBlockSpec('text', {'text': ''}),
+      ],
+      contextMenuBlocks: ['header', 'text', 'summary', 'list'],
+      inlineInsertDefault: 'text',
+    ),
     'board': FileBehaviorProfile(
       id: 'board',
       defaultBlocks: [DefaultBlockSpec('board', {'items': []})],
@@ -127,6 +135,7 @@ abstract final class FileBehaviorRegistry {
     'board': 'board',
     'execution': 'execution',
     'data': 'text',
+    'log': 'log',
   };
 
   static FileBehaviorProfile profileForFileType(String fileType) {
@@ -147,7 +156,7 @@ abstract final class FileBehaviorRegistry {
       profileForFileType(fileType).id == 'tasks';
 
   static bool supportsPartPlacement(String fileType) =>
-      const {'plan', 'execution', 'tasks'}.contains(fileType);
+      const {'plan', 'execution', 'tasks', 'log'}.contains(fileType);
 
   static Map<String, dynamic> defaultContentForBlockType(String blockType) {
     for (final profile in _profiles.values) {

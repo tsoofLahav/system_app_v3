@@ -1,13 +1,23 @@
 from flask import Blueprint, jsonify, request
 
-from models import File, db
+from models import File, Topic, db
 from routes.helpers import active_query, apply_updates, get_or_404
 from services.archive_files import list_archived_files_for_topic
 from services.automation_dispatcher import dispatch_file_changed
 from services.delete_cascade import delete_file_cascade
 from services.duplicate_file import duplicate_file as duplicate_file_record
+from services.file_anchor import validate_anchor_topic_id
 
 files_bp = Blueprint("files", __name__)
+
+
+def _validate_anchor(data: dict) -> str | None:
+    if "anchor_topic_id" not in data:
+        return None
+    raw = data.get("anchor_topic_id")
+    if raw is None:
+        return None
+    return validate_anchor_topic_id(int(raw))
 
 
 @files_bp.route("/files", methods=["GET"])
@@ -54,9 +64,13 @@ def create_file():
     data = request.get_json(silent=True) or {}
     if not data.get("name") or not data.get("type"):
         return jsonify({"error": "name and type are required"}), 400
+    anchor_error = _validate_anchor(data)
+    if anchor_error:
+        return jsonify({"error": anchor_error}), 400
 
     file = File(
         topic_id=data.get("topic_id"),
+        anchor_topic_id=data.get("anchor_topic_id"),
         name=data["name"],
         type=data["type"],
         order_index=data.get("order_index"),
@@ -71,14 +85,44 @@ def create_file():
 def update_file(file_id):
     file = get_or_404(File, file_id)
     data = request.get_json(silent=True) or {}
+    anchor_error = _validate_anchor(data)
+    if anchor_error:
+        return jsonify({"error": anchor_error}), 400
+
+    previous_topic_id = file.topic_id
     apply_updates(
         file,
         data,
-        {"topic_id", "name", "type", "order_index", "is_main", "archived_at"},
+        {
+            "topic_id",
+            "anchor_topic_id",
+            "name",
+            "type",
+            "order_index",
+            "is_main",
+            "archived_at",
+        },
         datetime_fields={"archived_at"},
     )
     db.session.commit()
-    dispatch_file_changed(file_id, "file_updated")
+
+    moved = (
+        "topic_id" in data
+        and previous_topic_id is not None
+        and file.topic_id is not None
+        and int(previous_topic_id) != int(file.topic_id)
+    )
+    if moved:
+        dispatch_file_changed(
+            file_id,
+            "file_moved",
+            {
+                "previous_topic_id": int(previous_topic_id),
+                "topic_id": int(file.topic_id),
+            },
+        )
+    else:
+        dispatch_file_changed(file_id, "file_updated")
     return jsonify(file.to_dict())
 
 

@@ -11,6 +11,7 @@ from services.part_placement import (
     part_ids_in_file,
     place_part_in_file,
 )
+from services.file_anchor import parts_topic_id_for_file
 from services.part_resolver import part_by_id
 
 parts_bp = Blueprint("parts", __name__)
@@ -113,10 +114,12 @@ def place_part_in_file_route(file_id):
     part_id = data.get("part_id")
     name = data.get("name")
 
+    parts_topic_id = parts_topic_id_for_file(file)
+
     try:
         if part_id is not None:
             part = part_by_id(int(part_id))
-            if part is None or part.topic_id != file.topic_id:
+            if part is None or part.topic_id != parts_topic_id:
                 return jsonify({"error": "part not found for topic"}), 404
             result = place_part_in_file(
                 file,
@@ -127,7 +130,7 @@ def place_part_in_file_route(file_id):
         else:
             if not name or not str(name).strip():
                 return jsonify({"error": "name is required when part_id is omitted"}), 400
-            topic = get_or_404(Topic, file.topic_id)
+            topic = get_or_404(Topic, parts_topic_id)
             result = create_part_for_topic(
                 topic,
                 name=str(name).strip(),

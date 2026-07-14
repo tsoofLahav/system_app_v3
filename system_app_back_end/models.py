@@ -40,6 +40,7 @@ class File(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"))
+    anchor_topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"))
     name = db.Column(db.Text, nullable=False)
     type = db.Column(db.Text, nullable=False)
     order_index = db.Column(db.Integer)
@@ -51,6 +52,7 @@ class File(db.Model):
         return {
             "id": self.id,
             "topic_id": self.topic_id,
+            "anchor_topic_id": self.anchor_topic_id,
             "name": self.name,
             "type": self.type,
             "order_index": self.order_index,

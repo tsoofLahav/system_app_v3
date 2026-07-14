@@ -18,7 +18,9 @@ import '../../shared/widgets/files_section_divider.dart';
 import '../../shared/widgets/topic_emoji.dart';
 import '../create_topic/add_file_dialog.dart';
 import '../bring_file/bring_file_picker_dialog.dart';
+import '../shell/log_for_project_dialog.dart';
 import 'process_update_review_dialog.dart';
+import 'project_update_review_dialog.dart';
 
 class TopicView extends StatelessWidget {
   const TopicView({super.key, required this.state});
@@ -175,12 +177,16 @@ class TopicView extends StatelessWidget {
               state: state,
               addEnabled: !stale && detail != null,
               bringFileEnabled: !stale && detail != null && topic.isMain,
+              logForProjectEnabled: !stale && detail != null && topic.isMain,
               onAddFile: detail == null
                   ? () {}
                   : () => _addFile(context, topic, detail.files),
               onBringFile: detail == null
                   ? () {}
                   : () => _bringFile(context, state),
+              onLogForProject: detail == null
+                  ? () {}
+                  : () => _createLogForProject(context, state, topic),
             ),
           ),
         ],
@@ -209,6 +215,16 @@ class TopicView extends StatelessWidget {
     final entry = await showBringFilePickerDialog(context, state);
     if (entry == null) return;
     await state.bringFile(entry.topic, entry.file);
+  }
+
+  Future<void> _createLogForProject(
+    BuildContext context,
+    AppState state,
+    Topic mainTopic,
+  ) async {
+    final project = await showLogForProjectDialog(context: context, state: state);
+    if (project == null) return;
+    await state.createLogForProject(mainTopic: mainTopic, project: project);
   }
 }
 
@@ -295,6 +311,62 @@ class _AiProposalRow extends StatelessWidget {
       );
     }
 
+    if (proposal.proposalType == 'project_update_skipped') {
+      final message =
+          proposal.payload['message']?.toString() ?? s['projectUpdateSkipped'];
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: Text(message, style: AppTypography.noteBodyStyle)),
+            TextButton(
+              onPressed: () => state.rejectAiProposal(proposal),
+              child: Text(s['dismiss']),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (proposal.proposalType == 'project_smart_update') {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                s['projectUpdateReview'],
+                style: AppTypography.noteBodyStyle,
+              ),
+            ),
+            TextButton(
+              onPressed: () => state.rejectAiProposal(proposal),
+              child: Text(s['reject']),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: () async {
+                final updated = await showProjectUpdateReviewDialog(
+                  context: context,
+                  state: state,
+                  proposal: proposal,
+                );
+                if (!context.mounted || updated == null) return;
+                final count = updated.payload['doc_rows_added'];
+                if (count is int && count > 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(s.docRowsAdded(count))),
+                  );
+                }
+              },
+              child: Text(s['projectUpdateReview']),
+            ),
+          ],
+        ),
+      );
+    }
+
     final source = proposal.payload['source_file_name']?.toString();
     final target = proposal.payload['target_file_name']?.toString();
     final suggestion =
@@ -344,8 +416,10 @@ class _TopicHeader extends StatelessWidget {
     required this.state,
     required this.onAddFile,
     required this.onBringFile,
+    required this.onLogForProject,
     this.addEnabled = true,
     this.bringFileEnabled = false,
+    this.logForProjectEnabled = false,
   });
 
   final Topic topic;
@@ -353,8 +427,10 @@ class _TopicHeader extends StatelessWidget {
   final AppState state;
   final VoidCallback onAddFile;
   final VoidCallback onBringFile;
+  final VoidCallback onLogForProject;
   final bool addEnabled;
   final bool bringFileEnabled;
+  final bool logForProjectEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -425,6 +501,17 @@ class _TopicHeader extends StatelessWidget {
                         tooltip: s['bringFile'],
                         icon: AppIcons.bringFile,
                         onPressed: bringFileEnabled ? onBringFile : () {},
+                        size: AppTopicHeaderMetrics.addButtonSize,
+                        iconSize: 15,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Opacity(
+                      opacity: logForProjectEnabled ? 1 : 0.35,
+                      child: GlassCircleButton(
+                        tooltip: s['logForProject'],
+                        icon: AppIcons.logForProject,
+                        onPressed: logForProjectEnabled ? onLogForProject : () {},
                         size: AppTopicHeaderMetrics.addButtonSize,
                         iconSize: 15,
                       ),

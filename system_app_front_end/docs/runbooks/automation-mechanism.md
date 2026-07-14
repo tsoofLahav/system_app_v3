@@ -69,6 +69,7 @@ Definitions drive the table below; see backend `docs/automation.md` for full reg
 | `process_documentation_input` | User schedule or task trigger (disabled by default) | All processes | On schedule or uncheck, stage doc-input companions; tap task(s) to enter daily text and grade per process. |
 | `process_recap_update` | On file change (enabled by default) | All processes | Regenerate process recap when plan, doc, or tasks change; direct AI write (no review). |
 | `project_summary_update` | On project file change (enabled by default) | All projects | Regenerate the project overview directly from project parts, execution, documentation, and tasks. |
+| `project_update` | On log file move into project (disabled by default) | All projects | When a log lands in a project, propose per-part plan/execution/tasks updates; companion review in daily view. |
 | `view_task_reset` | Per-view schedules (disabled by default) | Daily, weekly, monthly, quarterly task views | Uncheck completed tasks in each due view, record already-active tasks as missed, archive a report under Automations, and show a one-time acknowledgement when the view opens. |
 
 ## Process recap (`process_recap_update`)
@@ -95,13 +96,39 @@ directly to `overview`, like process recap.
 - **No companion task** and no change-review dialog; the automation is a
   direct-write overview/recap flow.
 
+## Project update from log (`project_update`)
+
+When a **log** file is moved into a project topic, this automation proposes
+per-part updates to `plan`, `execution`, and `tasks` from the log's part
+sections. Documentation rows are generated separately and applied automatically
+on finalize (no doc review page).
+
+- **Trigger:** `file_moved` — log file `topic_id` changes into a project.
+- **Log on main:** Create via **Log for project…** on the main topic; the file
+  keeps `anchor_topic_id` so part pickers use the anchored project's parts
+  before the move.
+- **Review:** Companion task opens `project_update_batch_dialog.dart` with one
+  page per part (`PartChangeReviewDialog`), then plan → execution → tasks within
+  each part.
+- **Finalize:** In-place part edits (not archive/recreate). Doc table rows from
+  `change_set.doc_append.rows` are inserted automatically.
+- **Shared AI:** `services/ai_smart_update/` — same unit/diff primitives as
+  `process_refresh`.
+
+See also: [`project-update-automation.md`](project-update-automation.md).
+
 ## AI Proposals
 
 AI proposal generation is an AI concern, not a general automation concern. Automation creates the moment when proposals are requested; the proposal layer stores suggested content and exposes review/finalize actions.
 
 The `process_smart_update` AI action reads plan, documentation, and tasks as flattened units with stable IDs, returns edit operations, and stores a reusable `change_set`. Finalize archives the old files and creates fresh plan, empty documentation table, and tasks files after review.
 
+The `project_smart_update` AI action reads a part-structured log and proposes
+per-part `change_set` v2 updates (`version: 2`, `parts[]`, `doc_append.rows`).
+Finalize applies accepted edits in place to each part and auto-appends doc rows.
+
 Skipped processes create a `process_refresh_skipped` warning proposal on the process topic.
+Skipped project updates create `project_update_skipped` on the project topic.
 
 ## Process documentation input (`process_documentation_input`)
 
@@ -146,5 +173,8 @@ This automation is schedule-driven. The automation dialog keeps it as one main a
 - `lib/features/task_view/task_view_pane.dart` — first-open acknowledgement dialog
 - `lib/core/registry/automation_flow_registry.dart` — companion `flow_key` → review dialog
 - `lib/features/shell/process_documentation_input_dialog.dart` — daily doc input batch dialog
+- `lib/features/shell/project_update_batch_dialog.dart` — project update review batch dialog
+- `lib/features/shell/log_for_project_dialog.dart` — create anchored log on main
+- `lib/shared/change_review/part_change_review_dialog.dart` — per-part review pages
 - `lib/core/services/process_documentation_input_service.dart` — write API client
 - `lib/features/shell/app_shell.dart` — completion snackbars

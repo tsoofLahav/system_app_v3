@@ -5,7 +5,9 @@ from sqlalchemy import or_
 from models import Block, File, Task, TaskResetAcknowledgement, TaskView, Topic, db
 from services.ai_proposal_actions import (
     create_process_refresh_skipped_proposal,
+    create_project_update_skipped_proposal,
     create_smart_process_update_proposal,
+    create_smart_project_update_proposal,
 )
 from services.ai_recap_actions import smart_process_recap_update
 from services.ai_project_summary_actions import smart_project_summary_update
@@ -46,6 +48,8 @@ def run_action(rule, run=None):
         return process_recap_update(context)
     if action_type == "project_summary_update":
         return project_summary_update(context)
+    if action_type == "project_update":
+        return project_update(context)
     if action_type == "reset_view_tasks":
         return reset_view_tasks(context)
     raise ValueError(f"Unknown automation action: {action_type}")
@@ -281,6 +285,35 @@ def project_summary_update(context):
     )
 
 
+def project_update(context):
+    rule = context["rule"]
+    run = context["run"]
+    topic = context["topic"]
+    if topic is None:
+        raise ValueError("topic is required for project_update")
+
+    event_context = context.get("event_context") or {}
+    if event_context.get("change") != "file_moved":
+        return {
+            "topic_id": topic.id if topic else None,
+            "skipped": True,
+            "reason": "not_file_moved",
+        }
+
+    trigger_file_id = event_context.get("file_id")
+    log_file = db.session.get(File, int(trigger_file_id)) if trigger_file_id else None
+    if log_file is None or log_file.type != "log":
+        return {
+            "topic_id": topic.id,
+            "skipped": True,
+            "reason": "missing_log_file",
+        }
+
+    result = _project_update_from_log(topic, log_file, context["params"])
+    _maybe_create_companion_task(rule, run, topic, result)
+    return result
+
+
 def reset_view_tasks(context):
     rule = context["rule"]
     run = context["run"]
@@ -509,6 +542,63 @@ def _refresh_process(topic, params):
             "plan": plan_file.id,
             "doc": doc_file.id,
             "tasks": tasks_file.id,
+        },
+    }
+
+
+def _project_update_from_log(topic, log_file, params):
+    files_by_role = resolve_files_by_bindings(topic.id, params)
+    definition = get_definition(action_type="project_update")
+    required_roles = (
+        [binding.role for binding in definition.bindings if binding.role != "log"]
+        if definition is not None
+        else ["plan", "execution", "tasks", "doc"]
+    )
+    missing = [role for role in required_roles if role not in files_by_role]
+    if missing:
+        message = (
+            f"Cannot update project '{topic.name}' from log: "
+            f"missing {', '.join(missing)} file(s)."
+        )
+        proposal = create_project_update_skipped_proposal(topic, message, missing)
+        return {
+            "topic_id": topic.id,
+            "skipped": True,
+            "missing_types": missing,
+            "proposal_id": proposal.id,
+            "message": message,
+        }
+
+    try:
+        proposal = create_smart_project_update_proposal(
+            topic,
+            log_file,
+            files_by_role["plan"],
+            files_by_role["execution"],
+            files_by_role["tasks"],
+            files_by_role["doc"],
+        )
+    except ValueError as error:
+        message = str(error).strip() or "Project update could not be generated."
+        proposal = create_project_update_skipped_proposal(topic, message)
+        return {
+            "topic_id": topic.id,
+            "skipped": True,
+            "proposal_id": proposal.id,
+            "message": message,
+        }
+
+    return {
+        "topic_id": topic.id,
+        "skipped": False,
+        "proposal_id": proposal.id,
+        "log_file_id": log_file.id,
+        "source_file_ids": {
+            "log": log_file.id,
+            "plan": files_by_role["plan"].id,
+            "execution": files_by_role["execution"].id,
+            "tasks": files_by_role["tasks"].id,
+            "doc": files_by_role["doc"].id,
         },
     }
 

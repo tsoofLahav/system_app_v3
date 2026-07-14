@@ -16,6 +16,7 @@ import '../../features/blocks/board_block_widget.dart';
 import '../../features/blocks/block_context_menu.dart';
 import '../../features/blocks/block_renderer.dart';
 import '../../features/blocks/part_dialogs.dart';
+import '../../features/shell/log_for_project_dialog.dart';
 import '../../shared/dialogs/move_file_topic_dialog.dart';
 import '../../shared/utils/local_image_picker.dart';
 
@@ -72,6 +73,9 @@ class _FileSectionState extends State<FileSection> {
   }
 
   static const _guestHeaderEndReserve = 148.0;
+
+  bool get _canAttachToProject =>
+      widget.file.type == 'log' && widget.topic.isMain;
 
   Widget _buildTitleField() {
     final field = TextField(
@@ -155,6 +159,11 @@ class _FileSectionState extends State<FileSection> {
                         value: 'moveToTopic',
                         child: Text(s['moveFileToTopic']),
                       ),
+                      if (_canAttachToProject)
+                        PopupMenuItem(
+                          value: 'attachToProject',
+                          child: Text(s['attachToProject']),
+                        ),
                       PopupMenuItem(
                         value: 'delete',
                         child: Text(s['deleteFile']),
@@ -276,6 +285,11 @@ class _FileSectionState extends State<FileSection> {
                         value: 'moveToTopic',
                         child: Text(s['moveFileToTopic']),
                       ),
+                      if (_canAttachToProject)
+                        PopupMenuItem(
+                          value: 'attachToProject',
+                          child: Text(s['attachToProject']),
+                        ),
                       PopupMenuItem(
                         value: 'delete',
                         child: Text(s['deleteFile']),
@@ -415,7 +429,22 @@ class _FileSectionState extends State<FileSection> {
       await widget.state.duplicateFile(widget.topic, widget.file);
     } else if (value == 'moveToTopic') {
       await _moveFileToTopic(context);
+    } else if (value == 'attachToProject') {
+      await _attachToProject(context);
     }
+  }
+
+  Future<void> _attachToProject(BuildContext context) async {
+    final project = await showLogForProjectDialog(
+      context: context,
+      state: widget.state,
+    );
+    if (!context.mounted || project == null) return;
+    await widget.state.attachLogToProject(
+      topic: widget.topic,
+      file: widget.file,
+      project: project,
+    );
   }
 
   Future<void> _moveFileToTopic(BuildContext context) async {

@@ -20,7 +20,10 @@ Header content shape:
 
 ## Supported files
 
-Part placement is enabled for `plan`, `execution`, and `tasks` files only.
+Part placement is enabled for `plan`, `execution`, `tasks`, and `log` files.
+
+For `log` files on **main** with `anchor_topic_id`, parts come from the anchored
+project (not main). Use **Log for project…** or **Attach to project…**.
 
 Default blocks inserted after the header:
 
@@ -29,6 +32,7 @@ Default blocks inserted after the header:
 | `plan` | empty `list` |
 | `execution` | empty `text` + empty `list` |
 | `tasks` | one empty `task` row |
+| `log` | empty `text` |
 
 When the file still has only factory placeholder blocks, the first part placement replaces them instead of appending below.
 
@@ -41,7 +45,7 @@ Right-click in a supported file → **Add part**:
 
 Registry: `FileBehaviorRegistry.supportsPartPlacement(fileType)`.
 
-State: `AppState.addNewPartToFile`, `addExistingPartToFile`, `partsAvailableForFile`.
+State: `AppState.addNewPartToFile`, `addExistingPartToFile`, `partsAvailableForFile`, `createLogForProject`, `attachLogToProject`.
 
 API: `POST /files/<file_id>/parts`.
 
@@ -54,6 +58,8 @@ Generated overview headers use the same style — no `is_current_part` highlight
 ## Automation
 
 `project_summary_update` reads parts from the `parts` table via `part_resolver.py`. Flagged tasks split by `task.block.part_id`. Overview output does not emit `is_current_part`.
+
+`project_update` reads a moved `log` file's part sections and proposes updates via `services/ai_smart_update/`. See [`../../docs/runbooks/project-update-automation.md`](../../docs/runbooks/project-update-automation.md).
 
 ## Related
 

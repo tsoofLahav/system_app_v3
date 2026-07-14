@@ -63,6 +63,7 @@ Built-in automations are defined in code at `services/automation_definitions.py`
 | `process_documentation_input` | All `process` topics | `schedule`, `task` | `doc` | `process_documentation_input` in daily / Process documentation | — |
 | `process_recap_update` | All `process` topics | `event`, `manual` | `plan`, `doc`, `tasks`, `overview` (write target) | — | `smart_process_recap_update` — direct write to recap |
 | `project_summary_update` | All `project` topics | `event`, `manual` | `plan`, `execution`, `tasks`, `doc`, `overview` (write target) | — | `smart_project_summary_update` — direct write to overview |
+| `project_update` | All `project` topics | `event`, `manual` | `log`, `plan`, `execution`, `tasks`, `doc` | `project_update_review` in daily / Project updates | `smart_project_update` → `project_smart_update`, `project_update_skipped`; review `plan` + `execution` + `tasks` (per part) |
 | `view_task_reset` | Daily, weekly, monthly, and quarterly task views (configured by `params.view_resets`) | `schedule`, `manual` | — | one-time view acknowledgement | — |
 
 ### Instance vs definition

@@ -46,6 +46,7 @@ system_app_back_end/
 |-------|-----|
 | REST endpoints, config, deployment | [`docs/API.md`](docs/API.md) |
 | Automation rules, runs, definitions | [`docs/automation.md`](docs/automation.md) |
+| Shared AI smart update (process + project) | [`services/ai_smart_update/`](services/ai_smart_update/) |
 
 ---
 

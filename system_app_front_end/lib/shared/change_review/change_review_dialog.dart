@@ -11,7 +11,7 @@ const _calloutWidth = 280.0;
 const _calloutHeight = 180.0;
 const _calloutGap = 18.0;
 
-const _documentOrder = {'plan': 0, 'tasks': 1};
+const _documentOrder = {'plan': 0, 'execution': 1, 'tasks': 2};
 
 Future<Map<String, bool>?> showChangeReviewDialog({
   required BuildContext context,
@@ -95,6 +95,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
     final s = widget.strings;
     return switch (_activeDocument.key) {
       'plan' => s['reviewPlan'],
+      'execution' => s['reviewExecution'],
       'tasks' => s['reviewTasks'],
       _ => _activeDocument.title,
     };
@@ -598,6 +599,29 @@ class _UnitRow extends StatelessWidget {
         color: isAccepted ? AppColors.aiCyan.withValues(alpha: 0.95) : null,
       ),
     );
+
+    if (unit.kind == 'list_item') {
+      text = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('• ', style: AppTypography.noteBodyStyle),
+          Expanded(child: text),
+        ],
+      );
+    } else if (unit.kind == 'task') {
+      text = DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: AppColors.noteBorder.withValues(alpha: 0.55),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: text,
+        ),
+      );
+    }
 
     if (isPending && isActive) {
       text = DecoratedBox(

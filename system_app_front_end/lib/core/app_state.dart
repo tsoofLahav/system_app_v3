@@ -127,6 +127,7 @@ class AppState extends ChangeNotifier {
   List<ViewSection> viewSections = [];
   TaskResetAcknowledgement? pendingTaskResetAcknowledgement;
   final Map<String, _ViewSnapshot> _viewCache = {};
+  final Map<int, List<Part>> _partsCache = {};
   bool _showViewPaneDuringLoad = false;
   bool _loadingTopicFromView = false;
   TaskViewDisplayMode viewDisplayMode = TaskViewDisplayMode.bySection;
@@ -1265,6 +1266,39 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<AiProposal> finalizeProjectUpdate(
+    AiProposal proposal,
+    Map<String, bool> decisions, {
+    int? companionTaskId,
+    bool refreshTopicBanner = true,
+  }) async {
+    final updated = await _aiProposalService.finalize(
+      proposal.id,
+      Map<String, dynamic>.from(decisions),
+    );
+    pendingAiProposals = pendingAiProposals
+        .where((item) => item.id != proposal.id)
+        .toList();
+    if (companionTaskId != null) {
+      await _completeCompanionTaskById(companionTaskId);
+      if (refreshTopicBanner) {
+        await refreshPendingProposalsForTopics(_topicIdsForProposal(proposal));
+      } else {
+        notifyListeners();
+      }
+      return updated;
+    }
+    final topic = selectedTopic;
+    if (topic != null) {
+      await selectTopic(topic, includeArchived: topic.isArchived);
+    } else {
+      await refreshTopics();
+      await loadArchive();
+      notifyListeners();
+    }
+    return updated;
+  }
+
   Future<void> rejectAiProposal(
     AiProposal proposal, {
     int? companionTaskId,
@@ -1538,6 +1572,7 @@ class AppState extends ChangeNotifier {
         tasksByBlockId: tasksByBlockId,
         parts: parts,
       );
+      await _ensurePartsCachedForFiles(files, topicParts: parts, topic: topic);
       pendingAiProposals = await _aiProposalService.listPending(
         topicId: topic.id,
       );
@@ -1869,6 +1904,58 @@ class AppState extends ChangeNotifier {
     await selectTopic(topic);
   }
 
+  Future<void> createLogForProject({
+    required Topic mainTopic,
+    required Topic project,
+    String? name,
+  }) async {
+    if (!mainTopic.isMain) return;
+    final file = await _fileService.createFile(
+      topicId: mainTopic.id,
+      name: name ?? FileRegistry.defaultNameForType('log'),
+      type: 'log',
+      anchorTopicId: project.id,
+      isMain: false,
+    );
+    await _createDefaultBlocks(file);
+    await _refreshPartsCache(project.id);
+    await selectTopic(mainTopic);
+  }
+
+  Future<void> attachLogToProject({
+    required Topic topic,
+    required AppFile file,
+    required Topic project,
+  }) async {
+    if (file.type != 'log') return;
+    await _fileService.updateFile(file.id, {'anchor_topic_id': project.id});
+    await _refreshPartsCache(project.id);
+    await selectTopic(topic);
+  }
+
+  Future<void> _refreshPartsCache(int topicId) async {
+    _partsCache[topicId] = await _partService.listForTopic(topicId);
+    notifyListeners();
+  }
+
+  Future<void> _ensurePartsCachedForFiles(
+    List<AppFile> files, {
+    required List<Part> topicParts,
+    required Topic topic,
+  }) async {
+    if (topic.type == 'project') {
+      _partsCache[topic.id] = topicParts;
+    }
+    final anchorIds = files
+        .map((file) => file.anchorTopicId)
+        .whereType<int>()
+        .toSet();
+    for (final anchorId in anchorIds) {
+      if (_partsCache.containsKey(anchorId)) continue;
+      _partsCache[anchorId] = await _partService.listForTopic(anchorId);
+    }
+  }
+
   Future<void> updateFileName(Topic topic, AppFile file, String name) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty || trimmed == file.name) return;
@@ -2143,9 +2230,24 @@ class AppState extends ChangeNotifier {
     await _refreshAfterFileMutation(file);
   }
 
-  bool supportsPartPlacement(Topic? topic, AppFile file) =>
-      topic?.type == 'project' &&
-      FileBehaviorRegistry.supportsPartPlacement(file.type);
+  bool supportsPartPlacement(Topic? topic, AppFile file) {
+    if (!FileBehaviorRegistry.supportsPartPlacement(file.type)) return false;
+    if (topic?.type == 'project') return true;
+    if (topic?.isMain == true && file.anchorTopicId != null) return true;
+    return false;
+  }
+
+  int? partsTopicIdForFile(AppFile file) =>
+      file.anchorTopicId ?? selectedTopic?.id;
+
+  List<Part> partsForFile(AppFile file) {
+    final topicId = partsTopicIdForFile(file);
+    if (topicId == null) return const [];
+    if (selectedTopic?.type == 'project' && selectedTopic?.id == topicId) {
+      return topicParts;
+    }
+    return _partsCache[topicId] ?? const [];
+  }
 
   List<Part> get topicParts => selectedDetail?.parts ?? const [];
 
@@ -2161,7 +2263,7 @@ class AppState extends ChangeNotifier {
 
   List<Part> partsAvailableForFile(AppFile file) {
     final placed = partIdsPlacedInFile(file);
-    return topicParts.where((part) => !placed.contains(part.id)).toList();
+    return partsForFile(file).where((part) => !placed.contains(part.id)).toList();
   }
 
   ({int? insertAfterBlockId, int? insertIndex}) _partPlacementArgs(
@@ -2193,6 +2295,10 @@ class AppState extends ChangeNotifier {
       insertAfterBlockId: placement.insertAfterBlockId,
       insertIndex: placement.insertIndex,
     );
+    final anchorId = file.anchorTopicId;
+    if (anchorId != null) {
+      await _refreshPartsCache(anchorId);
+    }
     await _refreshAfterFileMutation(file);
   }
 
@@ -2210,6 +2316,10 @@ class AppState extends ChangeNotifier {
       insertAfterBlockId: placement.insertAfterBlockId,
       insertIndex: placement.insertIndex,
     );
+    final anchorId = file.anchorTopicId;
+    if (anchorId != null) {
+      await _refreshPartsCache(anchorId);
+    }
     await _refreshAfterFileMutation(file);
   }
 

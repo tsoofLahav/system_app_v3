@@ -52,6 +52,12 @@ class FileRegistry {
       isMain: false,
       orderIndex: 6,
     ),
+    RecommendedFile(
+      name: 'Log',
+      type: 'log',
+      isMain: false,
+      orderIndex: 7,
+    ),
   ];
 
   static const projectFiles = [
