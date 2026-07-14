@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from models import Block, File, Part, Task, Topic, db
+from services.file_defaults import clear_file_blocks, file_has_only_empty_defaults
 from services.part_defaults import PART_PLACEMENT_FILE_TYPES, part_default_block_specs
 
 
@@ -92,15 +93,22 @@ def place_part_in_file(
         raise ValueError("part is already placed in this file")
 
     blocks = _active_blocks(file.id)
-    insert_at = _resolve_insert_index(
-        blocks,
-        insert_after_block_id,
-        insert_index=insert_index,
-    )
+    replace_defaults = file_has_only_empty_defaults(file.type, blocks)
+    if replace_defaults:
+        clear_file_blocks(file.id, blocks)
+        blocks = []
+        insert_at = 0
+    else:
+        insert_at = _resolve_insert_index(
+            blocks,
+            insert_after_block_id,
+            insert_index=insert_index,
+        )
     default_specs = list(part_default_block_specs(file.type))
     task_slot = 1 if file.type == "tasks" else 0
     insert_count = 1 + len(default_specs) + task_slot
-    _shift_blocks_from(file.id, insert_at, insert_count)
+    if not replace_defaults:
+        _shift_blocks_from(file.id, insert_at, insert_count)
 
     created_blocks: list[Block] = []
     order = insert_at

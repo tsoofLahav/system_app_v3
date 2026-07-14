@@ -405,12 +405,26 @@ class AppState extends ChangeNotifier {
     return ctx != null && ctx.text.trim().isNotEmpty;
   }
 
+  AppFile? get aiFocusedFile {
+    final detail = selectedDetail;
+    final focus = aiFocus;
+    if (detail == null || focus == null) return null;
+    for (final file in detail.files) {
+      if (file.id == focus.fileId) return file;
+    }
+    return null;
+  }
+
   bool get canUseAiTools =>
       !isArchiveMode && !isViewMode && selectedDetail != null;
 
   bool canRunAiTool(String tool) {
     if (!canUseAiTools) return false;
     if (tool == 'review') return true;
+    if (tool == 'move_file_to_topic') {
+      final file = aiFocusedFile;
+      return file != null && !isGuestFile(file);
+    }
     return hasAiContext;
   }
 
@@ -1749,6 +1763,30 @@ class AppState extends ChangeNotifier {
     await setFileMainVisibility(topic, file, isMain: false);
   }
 
+  Future<void> moveFileToTopic(
+    Topic sourceTopic,
+    AppFile file,
+    Topic targetTopic,
+  ) async {
+    final targetFiles = await _fileService.listForTopic(targetTopic.id);
+    final secondary = secondaryFilesFor(targetTopic, targetFiles);
+    final orderIndex = secondary.isEmpty
+        ? 0
+        : (secondary.last.orderIndex ?? secondary.length - 1) + 1;
+
+    await _fileService.updateFile(file.id, {
+      'topic_id': targetTopic.id,
+      'is_main': false,
+      'order_index': orderIndex,
+    });
+
+    if (selectedTopic?.id == sourceTopic.id) {
+      await selectTopic(sourceTopic);
+    } else {
+      await refreshTopics();
+    }
+  }
+
   Future<void> createTopic({
     required String name,
     required String type,
@@ -1918,6 +1956,11 @@ class AppState extends ChangeNotifier {
 
   Future<void> deleteFile(Topic topic, AppFile file) async {
     await _fileService.deleteFile(file.id);
+    await selectTopic(topic);
+  }
+
+  Future<void> duplicateFile(Topic topic, AppFile file) async {
+    await _fileService.duplicateFile(file.id);
     await selectTopic(topic);
   }
 

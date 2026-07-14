@@ -136,6 +136,9 @@ class AppBottomBar extends StatelessWidget {
                   child: _AiToolGroup(
                     enabled: hasContext && !state.aiRunning,
                     graphEnabled: hasContext && !state.aiRunning,
+                    moveFileEnabled:
+                        state.canRunAiTool('move_file_to_topic') &&
+                        !state.aiRunning,
                     running: state.aiRunning,
                     strings: s,
                     onTool: (tool) => _runTool(context, tool),
@@ -169,6 +172,29 @@ class AppBottomBar extends StatelessWidget {
 
   Future<void> _runTool(BuildContext context, String tool) async {
     final s = state.strings;
+    if (tool == 'move_file_to_topic') {
+      if (!state.canRunAiTool(tool)) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s['aiNoFileFocus'])));
+        return;
+      }
+      final file = state.aiFocusedFile;
+      final topic = state.selectedTopic;
+      if (file == null || topic == null) return;
+      try {
+        final result = await state.runAiMoveFile(topic, file);
+        if (!context.mounted || result == null) return;
+        _showResult(context, result);
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+      return;
+    }
+
     if (!state.canRunAiTool(tool)) {
       ScaffoldMessenger.of(
         context,
@@ -303,6 +329,7 @@ class _AiToolGroup extends StatelessWidget {
     required this.strings,
     required this.enabled,
     required this.graphEnabled,
+    required this.moveFileEnabled,
     required this.running,
     required this.onTool,
   });
@@ -310,6 +337,7 @@ class _AiToolGroup extends StatelessWidget {
   final AppStrings strings;
   final bool enabled;
   final bool graphEnabled;
+  final bool moveFileEnabled;
   final bool running;
   final ValueChanged<String> onTool;
 
@@ -349,6 +377,12 @@ class _AiToolGroup extends StatelessWidget {
           icon: AppIcons.graph,
           enabled: graphEnabled,
           onPressed: () => onTool('create_graph'),
+        ),
+        _AiToolButton(
+          tooltip: s['aiMoveFile'],
+          icon: AppIcons.moveFileAi,
+          enabled: moveFileEnabled,
+          onPressed: () => onTool('move_file_to_topic'),
         ),
         _AiToolButton(
           tooltip: s['aiReview'],

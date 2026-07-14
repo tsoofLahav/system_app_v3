@@ -61,6 +61,7 @@ Successful DELETE returns `204` with empty body.
 | GET | `/files/<id>` | Get one |
 | GET | `/topics/<topic_id>/files` | Files for a topic |
 | POST | `/files` | Create |
+| POST | `/files/<id>/duplicate` | Deep-copy file, blocks, and tasks |
 | PATCH | `/files/<id>` | Partial update |
 | DELETE | `/files/<id>` | Delete |
 

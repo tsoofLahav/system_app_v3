@@ -6,7 +6,6 @@ PART_PLACEMENT_FILE_TYPES = frozenset({"plan", "execution", "tasks"})
 def part_default_block_specs(file_type: str) -> list[tuple[str, dict]]:
     if file_type == "plan":
         return [
-            ("text", {"text": ""}),
             (
                 "list",
                 {

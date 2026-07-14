@@ -26,9 +26,11 @@ Default blocks inserted after the header:
 
 | File type | Blocks |
 |-----------|--------|
-| `plan` | empty `text` + empty `list` |
+| `plan` | empty `list` |
 | `execution` | empty `text` + empty `list` |
 | `tasks` | one empty `task` row |
+
+When the file still has only factory placeholder blocks, the first part placement replaces them instead of appending below.
 
 ## UI flows
 

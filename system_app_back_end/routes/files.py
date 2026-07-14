@@ -5,6 +5,7 @@ from routes.helpers import active_query, apply_updates, get_or_404
 from services.archive_files import list_archived_files_for_topic
 from services.automation_dispatcher import dispatch_file_changed
 from services.delete_cascade import delete_file_cascade
+from services.duplicate_file import duplicate_file as duplicate_file_record
 
 files_bp = Blueprint("files", __name__)
 
@@ -79,6 +80,20 @@ def update_file(file_id):
     db.session.commit()
     dispatch_file_changed(file_id, "file_updated")
     return jsonify(file.to_dict())
+
+
+@files_bp.route("/files/<int:file_id>/duplicate", methods=["POST"])
+def duplicate_file(file_id):
+    source = get_or_404(File, file_id)
+    data = request.get_json(silent=True) or {}
+    name = data.get("name")
+    try:
+        duplicate = duplicate_file_record(source, name=name)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    db.session.commit()
+    dispatch_file_changed(duplicate.id, "file_duplicated", {"source_file_id": file_id})
+    return jsonify(duplicate.to_dict()), 201
 
 
 @files_bp.route("/files/<int:file_id>", methods=["DELETE"])

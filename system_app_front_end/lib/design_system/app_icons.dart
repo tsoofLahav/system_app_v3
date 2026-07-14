@@ -18,6 +18,7 @@ abstract final class AppIcons {
   static const image = LucideIcons.image200;
   static const graph = LucideIcons.chartColumn200;
   static const review = LucideIcons.scanSearch200;
+  static const moveFileAi = LucideIcons.folderOutput200;
   static const crop = LucideIcons.crop200;
 
   // General UI

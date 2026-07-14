@@ -16,6 +16,7 @@ import '../../features/blocks/board_block_widget.dart';
 import '../../features/blocks/block_context_menu.dart';
 import '../../features/blocks/block_renderer.dart';
 import '../../features/blocks/part_dialogs.dart';
+import '../../shared/dialogs/move_file_topic_dialog.dart';
 import '../../shared/utils/local_image_picker.dart';
 
 class FileSection extends StatefulWidget {
@@ -147,6 +148,10 @@ class _FileSectionState extends State<FileSection> {
                           child: Text(s['moveToMoreFiles']),
                         ),
                       PopupMenuItem(
+                        value: 'duplicate',
+                        child: Text(s['duplicateFile']),
+                      ),
+                      PopupMenuItem(
                         value: 'moveToTopic',
                         child: Text(s['moveFileToTopic']),
                       ),
@@ -263,6 +268,10 @@ class _FileSectionState extends State<FileSection> {
                           value: 'moveToMoreFiles',
                           child: Text(s['moveToMoreFiles']),
                         ),
+                      PopupMenuItem(
+                        value: 'duplicate',
+                        child: Text(s['duplicateFile']),
+                      ),
                       PopupMenuItem(
                         value: 'moveToTopic',
                         child: Text(s['moveFileToTopic']),
@@ -402,33 +411,23 @@ class _FileSectionState extends State<FileSection> {
       await widget.state.promoteFileToMain(widget.topic, widget.file);
     } else if (value == 'moveToMoreFiles') {
       await widget.state.demoteFileToSecondary(widget.topic, widget.file);
+    } else if (value == 'duplicate') {
+      await widget.state.duplicateFile(widget.topic, widget.file);
     } else if (value == 'moveToTopic') {
       await _moveFileToTopic(context);
     }
   }
 
   Future<void> _moveFileToTopic(BuildContext context) async {
-    final s = widget.state.strings;
+    final target = await showMoveFileTopicDialog(
+      context: context,
+      state: widget.state,
+      currentTopicId: widget.topic.id,
+    );
+    if (!context.mounted || target == null) return;
+
     try {
-      final result = await widget.state.runAiMoveFile(widget.topic, widget.file);
-      if (!context.mounted || result == null) return;
-      final targetTopic = result.targetTopicName ?? s['aiDone'];
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AppGlassDialog(
-          title: Text(s['aiDone']),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(s['ok']),
-            ),
-          ],
-          child: Text(
-            '${widget.file.name} → $targetTopic',
-            style: AppTypography.noteBodyStyle,
-          ),
-        ),
-      );
+      await widget.state.moveFileToTopic(widget.topic, widget.file, target);
     } on ApiException catch (e) {
       _showUploadError(e.message);
     } catch (e) {
