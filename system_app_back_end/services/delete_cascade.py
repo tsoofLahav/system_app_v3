@@ -21,6 +21,20 @@ def delete_task_cascade(task_id):
         synchronize_session=False
     )
     TaskView.query.filter_by(task_id=task_id).delete(synchronize_session=False)
+
+    for block in Block.query.filter_by(type="task").filter(
+        Block.archived_at.is_(None)
+    ).all():
+        content = block.content or {}
+        raw_task_id = content.get("task_id")
+        if raw_task_id is None:
+            continue
+        try:
+            if int(raw_task_id) == int(task_id):
+                db.session.delete(block)
+        except (TypeError, ValueError):
+            continue
+
     db.session.delete(task)
 
 

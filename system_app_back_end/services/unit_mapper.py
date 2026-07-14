@@ -290,6 +290,19 @@ def _block_to_units(block, tasks_by_id):
     return []
 
 
+def _tasks_by_id_for_part_blocks(blocks, tasks_by_id_from_blocks: dict[int, str] | None = None):
+    """Tasks linked to this part's task_list blocks — matches the file editor."""
+    list_ids = [int(block.id) for block in blocks if block.type == "task_list"]
+    if list_ids:
+        tasks = (
+            Task.query.filter(Task.block_id.in_(list_ids))
+            .filter(Task.archived_at.is_(None))
+            .all()
+        )
+        return {task.id: task.title for task in tasks}
+    return tasks_by_id_from_blocks or {}
+
+
 def units_for_part_in_file(file_id: int, part_id: int) -> list[dict]:
     from services.part_resolver import blocks_for_part_in_file
 
@@ -300,10 +313,11 @@ def units_for_part_in_file(file_id: int, part_id: int) -> list[dict]:
             task_id = (block.content or {}).get("task_id")
             if task_id:
                 task_ids.append(int(task_id))
-    tasks_by_id = {}
+    fallback_tasks_by_id = {}
     if task_ids:
         for task in Task.query.filter(Task.id.in_(task_ids)).all():
-            tasks_by_id[task.id] = task.title
+            fallback_tasks_by_id[task.id] = task.title
+    tasks_by_id = _tasks_by_id_for_part_blocks(blocks, fallback_tasks_by_id)
 
     units = []
     for block in blocks:

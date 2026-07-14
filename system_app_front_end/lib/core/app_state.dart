@@ -2396,6 +2396,8 @@ class AppState extends ChangeNotifier {
         try {
           await _taskService.deleteTask(taskId);
         } catch (_) {}
+        await _refreshAfterFileMutation(file);
+        return;
       }
     }
     await _blockService.deleteBlock(block.id);
@@ -2453,9 +2455,6 @@ class AppState extends ChangeNotifier {
     final topic = selectedTopic;
     if (topic == null) return;
     await _taskService.deleteTask(task.id);
-    if (taskBlock != null) {
-      await _blockService.deleteBlock(taskBlock.id);
-    }
     final guest = broughtFile?.file;
     if (guest != null && taskBlock?.fileId == guest.id) {
       await _refreshAfterFileMutation(guest);
