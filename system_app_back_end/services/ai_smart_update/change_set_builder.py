@@ -71,3 +71,59 @@ def build_chained_add_after_changes(
         anchor_id = new_unit_id
 
     return units, changes
+
+
+def build_segment_change_set(*, key: str, title: str, segments: list[dict]) -> dict:
+    """Build a change document from ordered text/list/task segments."""
+    all_items = []
+    all_kinds = []
+    all_segment_ids = []
+
+    for segment in segments or []:
+        segment_id = segment.get("segment_id")
+        items = segment.get("items") or []
+        item_kinds = segment.get("item_kinds") or []
+        block_kind = segment.get("block_kind") or "list"
+        default_kind = _default_kind(block_kind)
+        for index, raw_text in enumerate(items):
+            text = str(raw_text).strip()
+            if not text:
+                continue
+            all_items.append(text)
+            all_kinds.append(
+                item_kinds[index] if index < len(item_kinds) else default_kind
+            )
+            all_segment_ids.append(segment_id)
+
+    if not all_items:
+        return {"key": key, "title": title, "units": [], "changes": []}
+
+    default_kind = all_kinds[0]
+    units, changes = build_chained_add_after_changes(
+        key=key,
+        anchor_unit_id=f"anchor:{key}",
+        items=all_items,
+        kind=default_kind,
+        item_kinds=all_kinds,
+    )
+
+    item_index = 0
+    for change in changes:
+        if item_index < len(all_segment_ids) and all_segment_ids[item_index]:
+            segment_id = all_segment_ids[item_index]
+            change["new_unit"]["segment_id"] = segment_id
+            new_unit_id = change["new_unit"]["id"]
+            for unit in units:
+                if unit.get("id") == new_unit_id:
+                    unit["segment_id"] = segment_id
+        item_index += 1
+
+    return {"key": key, "title": title, "units": units, "changes": changes}
+
+
+def _default_kind(block_kind: str) -> str:
+    if block_kind == "text":
+        return "paragraph"
+    if block_kind == "task":
+        return "task"
+    return "list_item"

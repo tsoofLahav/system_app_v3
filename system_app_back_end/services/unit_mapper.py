@@ -326,6 +326,10 @@ def _tasks_by_id_for_part_blocks(blocks, tasks_by_id_from_blocks: dict[int, str]
 
 
 def units_for_part_in_file(file_id: int, part_id: int) -> list[dict]:
+    from services.ai_smart_update.document_segments import (
+        segments_from_part_blocks,
+        segments_to_units,
+    )
     from services.part_resolver import blocks_for_part_in_file
 
     blocks = blocks_for_part_in_file(file_id, part_id)
@@ -341,15 +345,14 @@ def units_for_part_in_file(file_id: int, part_id: int) -> list[dict]:
             fallback_tasks_by_id[task.id] = task.title
     tasks_by_id = _tasks_by_id_for_part_blocks(blocks, fallback_tasks_by_id)
 
-    units = []
-    for block in blocks:
-        if block.type in ("header", "task_list"):
-            continue
-        for unit in _block_to_units(block, tasks_by_id):
-            unit = dict(unit)
-            unit["id"] = f"part:{part_id}:{unit['id']}"
-            units.append(unit)
-    return units
+    segments = segments_from_part_blocks(blocks, tasks_by_id=tasks_by_id)
+    units = segments_to_units(segments)
+    result = []
+    for unit in units:
+        unit = dict(unit)
+        unit["id"] = f"part:{part_id}:{unit['id']}"
+        result.append(unit)
+    return result
 
 
 def flatten_part_files_for_ai(
@@ -415,6 +418,7 @@ def _apply_units_at_order(file, units, start_order: int, part_id: int | None):
 
     prose_buffer = []
     prose_kind = None
+    prose_segment_id = None
 
     def flush_list():
         nonlocal order, list_items
@@ -439,9 +443,10 @@ def _apply_units_at_order(file, units, start_order: int, part_id: int | None):
         list_items.clear()
 
     def flush_prose():
-        nonlocal order, prose_buffer, prose_kind
+        nonlocal order, prose_buffer, prose_kind, prose_segment_id
         if not prose_buffer:
             prose_kind = None
+            prose_segment_id = None
             return
         text = " ".join(prose_buffer).strip()
         if text:
@@ -457,16 +462,27 @@ def _apply_units_at_order(file, units, start_order: int, part_id: int | None):
             order += 1
         prose_buffer = []
         prose_kind = None
+        prose_segment_id = None
 
     for unit in units:
         kind = unit.get("kind")
         text = _sanitize_unit_text(unit.get("text") or "", kind)
+        segment_key = unit.get("segment_id") or unit.get("block_id")
 
         if kind in ("paragraph", "text", "summary"):
             flush_list()
             if text:
+                if (
+                    prose_buffer
+                    and prose_segment_id is not None
+                    and segment_key is not None
+                    and str(prose_segment_id) != str(segment_key)
+                ):
+                    flush_prose()
                 if not prose_kind:
                     prose_kind = "text"
+                if prose_segment_id is None and segment_key is not None:
+                    prose_segment_id = segment_key
                 prose_buffer.append(text)
             continue
 

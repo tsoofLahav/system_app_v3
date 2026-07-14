@@ -113,19 +113,26 @@ class ChangeDocument {
 }
 
 class ChangeUnit {
-  const ChangeUnit({required this.id, required this.kind, required this.text});
+  const ChangeUnit({
+    required this.id,
+    required this.kind,
+    required this.text,
+    this.segmentId,
+  });
 
   factory ChangeUnit.fromJson(Map<String, dynamic> json) {
     return ChangeUnit(
       id: json['id'] as String? ?? '',
       kind: json['kind'] as String? ?? 'paragraph',
       text: json['text'] as String? ?? '',
+      segmentId: json['segment_id'] as String?,
     );
   }
 
   final String id;
   final String kind;
   final String text;
+  final String? segmentId;
 }
 
 class ChangeItem {
@@ -137,13 +144,19 @@ class ChangeItem {
     required this.newText,
     this.reason,
     this.proposedUnitId,
+    this.proposedUnitKind,
+    this.segmentId,
   });
 
   factory ChangeItem.fromJson(Map<String, dynamic> json) {
     final rawNewUnit = json['new_unit'];
     String? proposedUnitId;
+    String? proposedUnitKind;
+    String? segmentId;
     if (rawNewUnit is Map) {
       proposedUnitId = rawNewUnit['id'] as String?;
+      proposedUnitKind = rawNewUnit['kind'] as String?;
+      segmentId = rawNewUnit['segment_id'] as String?;
     }
     return ChangeItem(
       id: json['id'] as String? ?? '',
@@ -153,6 +166,8 @@ class ChangeItem {
       newText: json['new_text'] as String? ?? '',
       reason: json['reason'] as String?,
       proposedUnitId: proposedUnitId,
+      proposedUnitKind: proposedUnitKind,
+      segmentId: segmentId,
     );
   }
 
@@ -163,6 +178,8 @@ class ChangeItem {
   final String newText;
   final String? reason;
   final String? proposedUnitId;
+  final String? proposedUnitKind;
+  final String? segmentId;
 }
 
 List<ChangeUnit> _units(dynamic raw) {

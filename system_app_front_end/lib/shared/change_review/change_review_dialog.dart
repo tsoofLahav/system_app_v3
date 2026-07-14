@@ -617,15 +617,43 @@ class _DocumentReview extends StatelessWidget {
   Widget _buildNewPartReview() {
     final addAfterByAnchor = document.addAfterChangesByAnchorId;
     final children = <Widget>[];
+    String? lastSegmentId;
+
+    void maybeAddSegmentDivider(String? segmentId) {
+      if (segmentId == null || segmentId.isEmpty) return;
+      if (lastSegmentId != null && lastSegmentId != segmentId) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Divider(
+              height: 1,
+              thickness: 1,
+              color: AppColors.noteBorder.withValues(alpha: 0.3),
+            ),
+          ),
+        );
+      }
+      lastSegmentId = segmentId;
+    }
 
     void renderAddAfterChain(String anchorId) {
       for (final change in addAfterByAnchor[anchorId] ?? const <ChangeItem>[]) {
+        if (change.newText.trim().isEmpty) {
+          final nextAnchor = change.proposedUnitId;
+          if (nextAnchor != null && nextAnchor.isNotEmpty) {
+            renderAddAfterChain(nextAnchor);
+          }
+          continue;
+        }
+        maybeAddSegmentDivider(change.segmentId);
         final decision = _decisionFor(change);
+        final kind = change.proposedUnitKind ?? 'list_item';
         if (decision == true) {
           children.add(
             _AddedUnitRow(
               text: change.newText,
               rowKey: keyForChange(change.id),
+              kind: kind,
             ),
           );
         } else {
@@ -635,6 +663,7 @@ class _DocumentReview extends StatelessWidget {
               decision: decision,
               isActive: change.id == activeChangeId,
               rowKey: keyForChange(change.id),
+              unitKind: kind,
             ),
           );
         }
@@ -663,16 +692,44 @@ class _DocumentReview extends StatelessWidget {
     final changesByUnit = document.changesByUnitId;
     final addAfterByAnchor = document.addAfterChangesByAnchorId;
     final children = <Widget>[];
+    String? lastSegmentId;
+
+    void maybeAddSegmentDivider(String? segmentId) {
+      if (segmentId == null || segmentId.isEmpty) return;
+      if (lastSegmentId != null && lastSegmentId != segmentId) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Divider(
+              height: 1,
+              thickness: 1,
+              color: AppColors.noteBorder.withValues(alpha: 0.3),
+            ),
+          ),
+        );
+      }
+      lastSegmentId = segmentId;
+    }
 
     void renderAddAfterChain(String anchorId) {
       for (final change in addAfterByAnchor[anchorId] ?? const <ChangeItem>[]) {
+        if (change.newText.trim().isEmpty) {
+          final nextAnchor = change.proposedUnitId;
+          if (nextAnchor != null && nextAnchor.isNotEmpty) {
+            renderAddAfterChain(nextAnchor);
+          }
+          continue;
+        }
+        maybeAddSegmentDivider(change.segmentId);
         final decision = _decisionFor(change);
+        final kind = change.proposedUnitKind ?? 'list_item';
         if (decision == true) {
           children.add(
             _AddedUnitRow(
               text: change.newText,
               rowKey: keyForChange(change.id),
-              prefix: '+ ',
+              prefix: kind == 'list_item' ? '+ ' : '',
+              kind: kind,
             ),
           );
         } else {
@@ -683,6 +740,7 @@ class _DocumentReview extends StatelessWidget {
               decision: decision,
               isActive: change.id == activeChangeId,
               rowKey: keyForChange(change.id),
+              unitKind: kind,
             ),
           );
         }
@@ -694,6 +752,7 @@ class _DocumentReview extends StatelessWidget {
     }
 
     for (final unit in document.units) {
+      maybeAddSegmentDivider(unit.segmentId);
       final change = changesByUnit[unit.id];
       if (_shouldShowUnit(unit, change)) {
         children.add(
@@ -854,6 +913,7 @@ class _ExistingAdditionRow extends StatelessWidget {
     required this.decision,
     required this.isActive,
     required this.rowKey,
+    this.unitKind,
   });
 
   final AppStrings strings;
@@ -861,6 +921,7 @@ class _ExistingAdditionRow extends StatelessWidget {
   final bool? decision;
   final bool isActive;
   final GlobalKey rowKey;
+  final String? unitKind;
 
   @override
   Widget build(BuildContext context) {
@@ -889,12 +950,10 @@ class _ExistingAdditionRow extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('+ ', style: AppTypography.noteBodyStyle),
-            Expanded(child: text),
-          ],
+        _kindAwareTextRow(
+          text: displayText,
+          kind: unitKind ?? change.proposedUnitKind,
+          pendingPrefix: '+ ',
         ),
       ],
     );
@@ -939,12 +998,14 @@ class _ProposedChangeRow extends StatelessWidget {
     required this.decision,
     required this.isActive,
     required this.rowKey,
+    this.unitKind,
   });
 
   final ChangeItem change;
   final bool? decision;
   final bool isActive;
   final GlobalKey rowKey;
+  final String? unitKind;
 
   @override
   Widget build(BuildContext context) {
@@ -964,12 +1025,10 @@ class _ProposedChangeRow extends StatelessWidget {
     );
 
     if (change.action == 'add_after') {
-      text = Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('• ', style: AppTypography.noteBodyStyle),
-          Expanded(child: text),
-        ],
+      text = _kindAwareTextRow(
+        text: displayText,
+        kind: unitKind ?? change.proposedUnitKind,
+        pendingPrefix: '• ',
       );
     }
 
@@ -1008,14 +1067,22 @@ class _ProposedChangeRow extends StatelessWidget {
 }
 
 class _AddedUnitRow extends StatelessWidget {
-  const _AddedUnitRow({required this.text, this.rowKey, this.prefix = '• '});
+  const _AddedUnitRow({
+    required this.text,
+    this.rowKey,
+    this.prefix,
+    this.kind,
+  });
 
   final String text;
   final Key? rowKey;
-  final String prefix;
+  final String? prefix;
+  final String? kind;
 
   @override
   Widget build(BuildContext context) {
+    final resolvedKind = kind ?? 'list_item';
+    final resolvedPrefix = prefix ?? (resolvedKind == 'list_item' ? '• ' : '');
     return Padding(
       key: rowKey,
       padding: const EdgeInsets.only(left: 12, bottom: 12),
@@ -1026,24 +1093,51 @@ class _AddedUnitRow extends StatelessWidget {
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(prefix, style: AppTypography.noteBodyStyle),
-              Expanded(
-                child: Text(
+          child: resolvedPrefix.isEmpty
+              ? Text(
                   text.trim().isEmpty ? '…' : text,
                   style: AppTypography.noteBodyStyle.copyWith(
                     color: AppColors.aiCyan.withValues(alpha: 0.95),
                   ),
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(resolvedPrefix, style: AppTypography.noteBodyStyle),
+                    Expanded(
+                      child: Text(
+                        text.trim().isEmpty ? '…' : text,
+                        style: AppTypography.noteBodyStyle.copyWith(
+                          color: AppColors.aiCyan.withValues(alpha: 0.95),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );
   }
+}
+
+Widget _kindAwareTextRow({
+  required String text,
+  required String? kind,
+  required String pendingPrefix,
+}) {
+  final resolvedKind = kind ?? 'list_item';
+  final showBullet = resolvedKind == 'list_item';
+  final prefix = showBullet ? pendingPrefix : '';
+  if (prefix.isEmpty) {
+    return Text(text, style: AppTypography.noteBodyStyle);
+  }
+  return Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(prefix, style: AppTypography.noteBodyStyle),
+      Expanded(child: Text(text, style: AppTypography.noteBodyStyle)),
+    ],
+  );
 }
 
 class _SuggestionCallout extends StatelessWidget {
