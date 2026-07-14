@@ -57,6 +57,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   late int _documentPhase;
   final _decisions = <String, bool>{};
   final _unitKeys = <String, GlobalKey>{};
+  final _changeKeys = <String, GlobalKey>{};
   final _scrollController = ScrollController();
 
   OverlayEntry? _suggestionOverlay;
@@ -124,14 +125,44 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
   GlobalKey _keyForUnit(String unitId) =>
       _unitKeys.putIfAbsent(unitId, GlobalKey.new);
 
-  List<ChangeItem> _orderedChanges(ChangeDocument document) {
-    final byUnit = document.changesByUnitId;
-    final items = <ChangeItem>[];
-    for (final unit in document.units) {
-      final change = byUnit[unit.id];
-      if (change != null) items.add(change);
+  GlobalKey _keyForChange(String changeId) =>
+      _changeKeys.putIfAbsent(changeId, GlobalKey.new);
+
+  List<ChangeItem> _orderedChanges(ChangeDocument document) =>
+      [...document.changes];
+
+  GlobalKey _anchorKeyForChange(ChangeItem change) {
+    if (change.action == 'add_after') {
+      return _keyForChange(change.id);
     }
-    return items;
+    return _keyForUnit(change.unitId);
+  }
+
+  List<ChangeItem> _pendingChangesInScope() {
+    if (_unifiedScroll) {
+      return [
+        for (final document in _documents)
+          ..._orderedChanges(document).where(
+            (change) => !_decisions.containsKey(change.id),
+          ),
+      ];
+    }
+    return _orderedChanges(_activeDocument)
+        .where((change) => !_decisions.containsKey(change.id))
+        .toList();
+  }
+
+  void _approveAllPending() {
+    final pending = _pendingChangesInScope();
+    if (pending.isEmpty) return;
+    setState(() {
+      for (final change in pending) {
+        _decisions[change.id] = true;
+      }
+      _activeChangeId = null;
+    });
+    _removeSuggestionOverlay();
+    _presentNextSuggestion();
   }
 
   ChangeItem? _nextPendingChangeInDocument(ChangeDocument document) {
@@ -177,7 +208,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
       if (!mounted || _activeChangeId != next.id) return;
       if (!_unifiedScroll && _awaitingHandoff) return;
 
-      final anchorKey = _keyForUnit(next.unitId);
+      final anchorKey = _anchorKeyForChange(next);
       final anchorContext = anchorKey.currentContext;
       if (anchorContext != null) {
         await Scrollable.ensureVisible(
@@ -204,7 +235,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
 
     _suggestionOverlay = OverlayEntry(
       builder: (overlayContext) => _SuggestionOverlay(
-        anchorKey: _keyForUnit(change.unitId),
+        anchorKey: _anchorKeyForChange(change),
         strings: widget.strings,
         change: change,
         onAccept: () => _resolveChange(change, accepted: true),
@@ -306,6 +337,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
           decisions: _decisions,
           activeChangeId: _activeChangeId,
           keyForUnit: _keyForUnit,
+          keyForChange: _keyForChange,
         ),
       );
     }
@@ -343,6 +375,7 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
           decisions: _decisions,
           activeChangeId: _activeChangeId,
           keyForUnit: _keyForUnit,
+          keyForChange: _keyForChange,
         ),
         if (_awaitingHandoff) ...[
           const SizedBox(height: 12),
@@ -404,6 +437,11 @@ class _ChangeReviewDialogState extends State<ChangeReviewDialog> {
         onPressed: _cancelReview,
         child: Text(s['cancel']),
       ),
+      if (_pendingChangesInScope().isNotEmpty)
+        TextButton(
+          onPressed: _approveAllPending,
+          child: Text(s['approveAll']),
+        ),
       TextButton(
         onPressed: _allReviewed ? _completeReview : null,
         child: Text(finishLabel),
@@ -521,36 +559,71 @@ class _DocumentReview extends StatelessWidget {
     required this.decisions,
     required this.activeChangeId,
     required this.keyForUnit,
+    required this.keyForChange,
   });
 
   final ChangeDocument document;
   final Map<String, bool> decisions;
   final String? activeChangeId;
   final GlobalKey Function(String unitId) keyForUnit;
+  final GlobalKey Function(String changeId) keyForChange;
 
   @override
   Widget build(BuildContext context) {
     final changesByUnit = document.changesByUnitId;
-    if (document.units.isEmpty) {
+    final addAfterByAnchor = document.addAfterChangesByAnchorId;
+    if (document.units.isEmpty && document.changes.isEmpty) {
       return Text('…', style: AppTypography.noteBodyStyle);
+    }
+
+    final children = <Widget>[];
+
+    void renderAddAfterChain(String anchorId) {
+      for (final change in addAfterByAnchor[anchorId] ?? const <ChangeItem>[]) {
+        final decision = _decisionFor(change);
+        if (decision == true) {
+          children.add(
+            _AddedUnitRow(
+              text: change.newText,
+              rowKey: keyForChange(change.id),
+            ),
+          );
+        } else {
+          children.add(
+            _ProposedChangeRow(
+              change: change,
+              decision: decision,
+              isActive: change.id == activeChangeId,
+              rowKey: keyForChange(change.id),
+            ),
+          );
+        }
+        final nextAnchor = change.proposedUnitId;
+        if (nextAnchor != null && nextAnchor.isNotEmpty) {
+          renderAddAfterChain(nextAnchor);
+        }
+      }
+    }
+
+    for (final unit in document.units) {
+      final change = changesByUnit[unit.id];
+      if (_shouldShowUnit(unit, change)) {
+        children.add(
+          _UnitRow(
+            unit: unit,
+            change: change,
+            decision: _decisionFor(change),
+            isActive: change?.id == activeChangeId,
+            unitKey: keyForUnit(unit.id),
+          ),
+        );
+      }
+      renderAddAfterChain(unit.id);
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final unit in document.units) ...[
-          if (_shouldShowUnit(unit, changesByUnit[unit.id]))
-            _UnitRow(
-              unit: unit,
-              change: changesByUnit[unit.id],
-              decision: _decisionFor(changesByUnit[unit.id]),
-              isActive: changesByUnit[unit.id]?.id == activeChangeId,
-              unitKey: keyForUnit(unit.id),
-            ),
-          if (_shouldShowAddition(unit, changesByUnit[unit.id]))
-            _AddedUnitRow(text: changesByUnit[unit.id]!.newText),
-        ],
-      ],
+      children: children,
     );
   }
 
@@ -564,11 +637,10 @@ class _DocumentReview extends StatelessWidget {
     if (change?.action == 'remove' && decisions[change!.id] == true) {
       return false;
     }
+    if (unit.text.trim().isEmpty && change == null) {
+      return false;
+    }
     return true;
-  }
-
-  bool _shouldShowAddition(ChangeUnit unit, ChangeItem? change) {
-    return change?.action == 'add_after' && decisions[change!.id] == true;
   }
 }
 
@@ -677,14 +749,90 @@ class _UnitRow extends StatelessWidget {
   }
 }
 
+class _ProposedChangeRow extends StatelessWidget {
+  const _ProposedChangeRow({
+    required this.change,
+    required this.decision,
+    required this.isActive,
+    required this.rowKey,
+  });
+
+  final ChangeItem change;
+  final bool? decision;
+  final bool isActive;
+  final GlobalKey rowKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayText =
+        change.newText.trim().isEmpty ? '…' : change.newText;
+    final isPending = decision == null;
+    final isRejected = decision == false;
+
+    Widget text = Text(
+      displayText,
+      style: AppTypography.noteBodyStyle.copyWith(
+        color: isRejected
+            ? AppColors.text.withValues(alpha: 0.45)
+            : null,
+        decoration: isRejected ? TextDecoration.lineThrough : null,
+      ),
+    );
+
+    if (change.action == 'add_after') {
+      text = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('• ', style: AppTypography.noteBodyStyle),
+          Expanded(child: text),
+        ],
+      );
+    }
+
+    if (isPending && isActive) {
+      text = DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.aiCyan.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.aiCyan.withValues(alpha: 0.65)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: text,
+        ),
+      );
+    } else if (isPending) {
+      text = DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.aiCyan.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.aiCyan.withValues(alpha: 0.28)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: text,
+        ),
+      );
+    }
+
+    return Padding(
+      key: rowKey,
+      padding: const EdgeInsets.only(left: 12, bottom: 12),
+      child: text,
+    );
+  }
+}
+
 class _AddedUnitRow extends StatelessWidget {
-  const _AddedUnitRow({required this.text});
+  const _AddedUnitRow({required this.text, this.rowKey});
 
   final String text;
+  final Key? rowKey;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
+      key: rowKey,
       padding: const EdgeInsets.only(left: 12, bottom: 12),
       child: DecoratedBox(
         decoration: BoxDecoration(

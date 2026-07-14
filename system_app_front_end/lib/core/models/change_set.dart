@@ -96,7 +96,17 @@ class ChangeDocument {
   Map<String, ChangeItem> get changesByUnitId {
     final map = <String, ChangeItem>{};
     for (final change in changes) {
+      if (change.action == 'add_after') continue;
       map[change.unitId] = change;
+    }
+    return map;
+  }
+
+  Map<String, List<ChangeItem>> get addAfterChangesByAnchorId {
+    final map = <String, List<ChangeItem>>{};
+    for (final change in changes) {
+      if (change.action != 'add_after') continue;
+      map.putIfAbsent(change.unitId, () => []).add(change);
     }
     return map;
   }
@@ -126,9 +136,15 @@ class ChangeItem {
     required this.oldText,
     required this.newText,
     this.reason,
+    this.proposedUnitId,
   });
 
   factory ChangeItem.fromJson(Map<String, dynamic> json) {
+    final rawNewUnit = json['new_unit'];
+    String? proposedUnitId;
+    if (rawNewUnit is Map) {
+      proposedUnitId = rawNewUnit['id'] as String?;
+    }
     return ChangeItem(
       id: json['id'] as String? ?? '',
       action: json['action'] as String? ?? 'replace',
@@ -136,6 +152,7 @@ class ChangeItem {
       oldText: json['old_text'] as String? ?? '',
       newText: json['new_text'] as String? ?? '',
       reason: json['reason'] as String?,
+      proposedUnitId: proposedUnitId,
     );
   }
 
@@ -145,6 +162,7 @@ class ChangeItem {
   final String oldText;
   final String newText;
   final String? reason;
+  final String? proposedUnitId;
 }
 
 List<ChangeUnit> _units(dynamic raw) {

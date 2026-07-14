@@ -1,6 +1,6 @@
 """Shared role descriptions for smart update automations."""
 
-ROLE_PLAN = """PLAN — Concise bullet roadmap per project part: durable goals and milestones. Prefer editing existing points over adding new ones. You may remove or merge points when it keeps the plan organized without losing important information."""
+ROLE_PLAN = """PLAN — Concise bullet roadmap per project part: durable goals and milestones. Edit existing points when the log corrects them; add new points when the log introduces them; remove or merge points when it keeps the plan organized without losing important information."""
 
 ROLE_EXECUTION = """EXECUTION — Elaborates plan points with working detail: short text plus sub-bullets for current implementation state. More concrete than plan; less granular than tasks."""
 

@@ -54,6 +54,10 @@ Existing logs can use file menu → **Attach to project…** to set `anchor_topi
 
 Doc rows are **not** shown in the review dialog; they apply on finalize.
 
+## Finalize behavior
+
+Project update edits plan, execution, and tasks **in place** — it does **not** archive or recreate those files (unlike process refresh). Only the matching part blocks are replaced with approved content.
+
 ## Backend modules
 
 | Module | Role |

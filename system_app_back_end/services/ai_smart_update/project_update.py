@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from config import OPENAI_PROCESS_UPDATE_TEMPERATURE
-from services.ai_smart_update.change_set_builder import build_part_change_set
+from services.ai_smart_update.change_set_builder import (
+    build_chained_add_after_changes,
+    build_part_change_set,
+)
 from services.ai_smart_update.doc_journey import generate_doc_journey_rows
 from services.ai_smart_update.log_parser import log_file_date, parse_log_parts
 from services.ai_smart_update.prompts import (
@@ -39,7 +42,7 @@ EXISTING_PART_PROMPT = f"""You update a project part from a work log.
 
 1. Read the LOG, then current PLAN, EXECUTION, and TASKS for this part.
 2. Decide what should change in each file based on the log.
-3. Return only edits to existing units using the unit IDs provided.
+3. Apply what the log requires: **replace** existing points, **remove** obsolete ones, or **add_after** new points (use a real `unit_id` from the list as anchor).
 
 ## Output
 
@@ -92,26 +95,12 @@ def _new_part_to_documents(part_name: str, ai_result: dict) -> list[dict]:
         ("tasks", "Tasks", ai_result.get("task_items") or [], "task"),
     ]
     for key, title, items, kind in specs:
-        units = []
-        changes = []
-        for index, text in enumerate(items):
-            text = str(text).strip()
-            if not text:
-                continue
-            change_id = f"{key}:c{index + 1}"
-            units.append({"id": f"new:{change_id}", "kind": kind, "text": text})
-            changes.append(
-                {
-                    "id": change_id,
-                    "action": "add_after",
-                    "unit_id": f"anchor:{key}",
-                    "old_text": "",
-                    "new_text": text,
-                    "new_unit": {"id": f"new:{change_id}", "kind": kind, "text": text},
-                }
-            )
-        if not units:
-            units = [{"id": f"anchor:{key}", "kind": kind, "text": ""}]
+        units, changes = build_chained_add_after_changes(
+            key=key,
+            anchor_unit_id=f"anchor:{key}",
+            items=items,
+            kind=kind,
+        )
         documents.append({"key": key, "title": title, "units": units, "changes": changes})
     return documents
 

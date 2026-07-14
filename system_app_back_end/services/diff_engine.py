@@ -80,7 +80,6 @@ def build_document_change_set(key, title, units, ops):
 def merge_document(units, changes, decisions):
     replace = {}
     remove = set()
-    add_after = {}
 
     for change in changes or []:
         if not _decision(decisions, change.get("id")):
@@ -91,13 +90,6 @@ def merge_document(units, changes, decisions):
             replace[unit_id] = change.get("new_text", "")
         elif action == "remove":
             remove.add(unit_id)
-        elif action == "add_after":
-            new_unit = change.get("new_unit") or {
-                "id": change.get("id"),
-                "kind": "list_item",
-                "text": change.get("new_text", ""),
-            }
-            add_after.setdefault(unit_id, []).append(new_unit)
 
     merged = []
     for unit in units:
@@ -108,8 +100,41 @@ def merge_document(units, changes, decisions):
         if unit_id in replace:
             next_unit["text"] = replace[unit_id]
         merged.append(next_unit)
-        merged.extend(add_after.get(unit_id, []))
+
+    inserted_ids = set()
+    for change in changes or []:
+        if change.get("action") != "add_after":
+            continue
+        if not _decision(decisions, change.get("id")):
+            continue
+        new_unit = change.get("new_unit") or {
+            "id": change.get("id"),
+            "kind": "list_item",
+            "text": change.get("new_text", ""),
+        }
+        new_unit = dict(new_unit)
+        anchor_id = change.get("unit_id")
+        idx = _index_of_unit_id(merged, anchor_id)
+        if idx is None:
+            merged.append(new_unit)
+        else:
+            insert_at = idx + 1
+            while insert_at < len(merged) and merged[insert_at].get("id") in inserted_ids:
+                insert_at += 1
+            merged.insert(insert_at, new_unit)
+        inserted_id = new_unit.get("id")
+        if inserted_id:
+            inserted_ids.add(inserted_id)
     return merged
+
+
+def _index_of_unit_id(units, unit_id):
+    if not unit_id:
+        return None
+    for index, unit in enumerate(units):
+        if unit.get("id") == unit_id:
+            return index
+    return None
 
 
 def _decision(decisions, change_id):
