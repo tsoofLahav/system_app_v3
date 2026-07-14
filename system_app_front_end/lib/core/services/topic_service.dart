@@ -40,4 +40,13 @@ class TopicService {
     final data = await _api.patch('/topics/$id', body) as Map<String, dynamic>;
     return Topic.fromJson(data);
   }
+
+  Future<Topic> duplicateTopic(int id, {String? name}) async {
+    final data =
+        await _api.post('/topics/$id/duplicate', {
+              if (name != null) 'name': name,
+            })
+            as Map<String, dynamic>;
+    return Topic.fromJson(data);
+  }
 }

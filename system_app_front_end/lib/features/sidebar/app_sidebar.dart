@@ -491,6 +491,9 @@ class _TopicSectionState extends State<_TopicSection> {
               state: widget.state,
               onTap: () => widget.onSelect(topic),
               onEdit: () => _editTopic(context, topic),
+              onDuplicate: topic.isMain
+                  ? null
+                  : () => widget.state.duplicateTopic(topic),
               onDelete: topic.isMain
                   ? null
                   : () => _confirmDelete(context, topic),
@@ -548,6 +551,7 @@ class _TopicTile extends StatelessWidget {
     required this.state,
     required this.onTap,
     required this.onEdit,
+    this.onDuplicate,
     this.onDelete,
   });
 
@@ -557,6 +561,7 @@ class _TopicTile extends StatelessWidget {
   final AppState state;
   final VoidCallback onTap;
   final VoidCallback onEdit;
+  final Future<void> Function()? onDuplicate;
   final VoidCallback? onDelete;
 
   Future<void> _showContextMenu(
@@ -575,12 +580,15 @@ class _TopicTile extends StatelessWidget {
       position: position,
       items: [
         PopupMenuItem(value: 'edit', child: Text(s['edit'])),
+        if (onDuplicate != null)
+          PopupMenuItem(value: 'duplicate', child: Text(s['duplicateTopic'])),
         if (onDelete != null)
           PopupMenuItem(value: 'delete', child: Text(s['delete'])),
       ],
     );
 
     if (action == 'edit') onEdit();
+    if (action == 'duplicate') await onDuplicate?.call();
     if (action == 'delete') onDelete?.call();
   }
 

@@ -586,7 +586,8 @@ class _FileSectionState extends State<FileSection> {
       final part = await ExistingPartPickerDialog.show(
         context,
         strings: widget.state.strings,
-        parts: widget.state.partsAvailableForFile(widget.file),
+        state: widget.state,
+        file: widget.file,
       );
       if (part != null) {
         await widget.state.addExistingPartToFile(

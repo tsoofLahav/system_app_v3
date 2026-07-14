@@ -36,6 +36,7 @@ Successful DELETE returns `204` with empty body.
 | GET | `/topics/<id>` | Get one |
 | POST | `/topics` | Create |
 | PATCH | `/topics/<id>` | Partial update |
+| POST | `/topics/<id>/duplicate` | Deep-copy topic, parts, files, blocks, and tasks |
 | DELETE | `/topics/<id>` | Delete |
 
 **POST body** (required: `name`, `type`):

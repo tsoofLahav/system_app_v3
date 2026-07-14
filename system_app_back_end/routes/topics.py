@@ -50,6 +50,21 @@ def update_topic(topic_id):
     return jsonify(topic.to_dict())
 
 
+@topics_bp.route("/topics/<int:topic_id>/duplicate", methods=["POST"])
+def duplicate_topic_route(topic_id):
+    topic = get_or_404(Topic, topic_id)
+    data = request.get_json(silent=True) or {}
+    name = data.get("name")
+    try:
+        from services.duplicate_topic import duplicate_topic
+
+        duplicate = duplicate_topic(topic, name=name)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    db.session.commit()
+    return jsonify(duplicate.to_dict()), 201
+
+
 @topics_bp.route("/topics/<int:topic_id>", methods=["DELETE"])
 def delete_topic(topic_id):
     get_or_404(Topic, topic_id)

@@ -85,6 +85,9 @@ class AppStrings {
   String deleteTopicMessage(String name) =>
       this['deleteTopicBody'].replaceAll('{name}', name);
 
+  String deletePartMessage(String name) =>
+      this['deletePartBody'].replaceAll('{name}', name);
+
   String deleteFileMessage(String name) =>
       this['deleteFileBody'].replaceAll('{name}', name);
 
@@ -190,6 +193,7 @@ class AppStrings {
     'moveToMoreFiles': 'Move to more files',
     'moveFileToTopic': 'Move file to topic',
     'duplicateFile': 'Duplicate file',
+    'duplicateTopic': 'Duplicate topic',
     'moveFileNoOtherTopics': 'No other topics to move this file to.',
     'aiMoveFile': 'Move file to topic (AI)',
     'aiNoFileFocus': 'Place the caret in the file you want to move.',
@@ -243,6 +247,10 @@ class AppStrings {
     'addExistingPart': 'Existing part…',
     'partName': 'Part name',
     'partNameHint': 'e.g. Auth flow',
+    'editPart': 'Rename part',
+    'deletePart': 'Delete part',
+    'deletePartBody': 'Delete "{name}"? It will be removed from the part list. Placed headers in files are kept.',
+    'partAlreadyInFile': 'Already in this file',
     'noPartsAvailable': 'No other parts to add',
     'addText': 'Add text',
     'addHeader': 'Add header',
@@ -485,6 +493,7 @@ class AppStrings {
     'moveToMoreFiles': 'העבר לקבצים נוספים',
     'moveFileToTopic': 'העבר קובץ לנושא',
     'duplicateFile': 'שכפל קובץ',
+    'duplicateTopic': 'שכפל נושא',
     'moveFileNoOtherTopics': 'אין נושאים אחרים להעברת הקובץ.',
     'aiMoveFile': 'העבר קובץ לנושא (AI)',
     'aiNoFileFocus': 'מקם את הסמן בקובץ שברצונך להעביר.',
@@ -538,6 +547,10 @@ class AppStrings {
     'addExistingPart': 'חלק קיים…',
     'partName': 'שם החלק',
     'partNameHint': 'לדוגמה: זרימת הרשמה',
+    'editPart': 'שנה שם חלק',
+    'deletePart': 'מחק חלק',
+    'deletePartBody': 'למחוק את "{name}"? החלק יוסר מהרשימה. כותרות שכבר הוצבו בקבצים יישארו.',
+    'partAlreadyInFile': 'כבר בקובץ זה',
     'noPartsAvailable': 'אין חלקים נוספים להוספה',
     'addText': 'הוסף טקסט',
     'addHeader': 'הוסף כותרת',

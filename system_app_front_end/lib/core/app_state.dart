@@ -2041,6 +2041,14 @@ class AppState extends ChangeNotifier {
     await goHome();
   }
 
+  Future<Topic?> duplicateTopic(Topic topic) async {
+    if (topic.isMain) return null;
+    final copy = await _topicService.duplicateTopic(topic.id);
+    await refreshTopics();
+    await selectTopic(copy);
+    return copy;
+  }
+
   Future<void> deleteFile(Topic topic, AppFile file) async {
     await _fileService.deleteFile(file.id);
     await selectTopic(topic);
@@ -2327,6 +2335,12 @@ class AppState extends ChangeNotifier {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
     await _partService.updatePart(partId, {'name': trimmed});
+    final topic = selectedTopic;
+    if (topic != null) await selectTopic(topic);
+  }
+
+  Future<void> archivePart(int partId) async {
+    await _partService.archivePart(partId);
     final topic = selectedTopic;
     if (topic != null) await selectTopic(topic);
   }

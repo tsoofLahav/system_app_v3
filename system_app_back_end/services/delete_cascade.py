@@ -3,6 +3,7 @@ from models import (
     AutomationCompanionTask,
     Block,
     File,
+    Part,
     Task,
     TaskResetAcknowledgement,
     TaskView,
@@ -62,6 +63,8 @@ def delete_topic_cascade(topic_id):
     files = File.query.filter_by(topic_id=topic_id).all()
     for file in files:
         delete_file_cascade(file.id)
+
+    Part.query.filter_by(topic_id=topic_id).delete(synchronize_session=False)
 
     Topic.query.filter_by(parent_id=topic_id).update(
         {Topic.parent_id: None},

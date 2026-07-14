@@ -41,4 +41,8 @@ class PartService {
         await _api.patch('/parts/$partId', patch) as Map<String, dynamic>;
     return Part.fromJson(data);
   }
+
+  Future<void> archivePart(int partId) async {
+    await _api.delete('/parts/$partId');
+  }
 }
