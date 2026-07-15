@@ -110,6 +110,16 @@ class FileRegistry {
     ),
   ];
 
+  static const othersFiles = [
+    RecommendedFile(name: 'Text', type: 'text', isMain: true, orderIndex: 0),
+    RecommendedFile(
+      name: 'Documentation',
+      type: 'doc',
+      isMain: false,
+      orderIndex: 1,
+    ),
+  ];
+
   static List<RecommendedFile> recommendedForTopicType(String type) {
     switch (type) {
       case 'project':
@@ -118,8 +128,10 @@ class FileRegistry {
         return processFiles;
       case 'area':
         return areaFiles;
+      case 'others':
+        return othersFiles;
       default:
-        return areaFiles;
+        return othersFiles;
     }
   }
 

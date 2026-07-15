@@ -12,6 +12,7 @@ File choices:
   with `doc` and `plan` available as additional project files.
 - Process topics start with `overview`, `plan`, `tasks`, and `doc`.
 - Area topics start with `tasks` and `doc`.
+- Others topics start with `text` and `doc` (minimal structure).
 - The add-file dialog offers every file type for every topic type.
 - File names, order, and main/additional placement come from `core/registry/file_registry.dart` (main topic uses `allFileTypes`; main section capped at 3 files).
 - Initial blocks for each selected file come from `core/registry/file_behavior_registry.dart`.

@@ -49,6 +49,9 @@ import 'services/task_service.dart';
 import 'services/task_reset_acknowledgement_service.dart';
 import 'services/task_view_service.dart';
 import 'services/topic_service.dart';
+import 'shortcuts/main_file_cycle.dart';
+import 'shortcuts/shortcut_binding.dart';
+import 'shortcuts/shortcut_bindings_store.dart';
 
 class TopicDetail {
   TopicDetail({
@@ -160,6 +163,8 @@ class AppState extends ChangeNotifier {
   bool moreFilesExpanded = false;
   final Map<int, String> _layoutByTopicId = {};
   AppLanguage language = AppLanguage.en;
+  ShortcutBindingsStore shortcutBindings = ShortcutBindingsStore();
+  final shortcutRebuildListenable = ValueNotifier<int>(0);
   AiFocus? aiFocus;
   int? pendingFocusBlockId;
   bool aiRunning = false;
@@ -350,10 +355,56 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setShortcutBinding(
+    String actionId,
+    ShortcutBinding binding,
+  ) async {
+    await shortcutBindings.setBinding(actionId, binding);
+    _notifyShortcutRebuild();
+    notifyListeners();
+  }
+
+  Future<void> resetShortcut(String actionId) async {
+    await shortcutBindings.resetBinding(actionId);
+    _notifyShortcutRebuild();
+    notifyListeners();
+  }
+
+  Future<void> resetAllShortcuts() async {
+    await shortcutBindings.resetAll();
+    _notifyShortcutRebuild();
+    notifyListeners();
+  }
+
+  void _notifyShortcutRebuild() {
+    shortcutRebuildListenable.value++;
+  }
+
+  void _setAiRunning(bool value) {
+    if (aiRunning == value) return;
+    aiRunning = value;
+    _notifyShortcutRebuild();
+  }
+
+  static bool _aiContextEmpty(AiFocus? focus) {
+    return focus == null || focus.fullText.trim().isEmpty;
+  }
+
+  bool _aiFocusShortcutContextChanged(AiFocus? prev, AiFocus next) {
+    return prev?.fileId != next.fileId ||
+        prev?.blockId != next.blockId ||
+        _aiContextEmpty(prev) != _aiContextEmpty(next);
+  }
+
   bool _aiFocusNotifyScheduled = false;
 
   void setAiFocus(AiFocus focus) {
+    final prev = aiFocus;
+    final shortcutContextChanged = _aiFocusShortcutContextChanged(prev, focus);
     aiFocus = focus;
+    if (shortcutContextChanged) {
+      _notifyShortcutRebuild();
+    }
     if (_aiFocusNotifyScheduled) return;
     _aiFocusNotifyScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -440,7 +491,7 @@ class AppState extends ChangeNotifier {
     if (ctx == null) return null;
     if (ctx.text.trim().isEmpty) return null;
 
-    aiRunning = true;
+    _setAiRunning(true);
     error = null;
     notifyListeners();
     try {
@@ -456,7 +507,7 @@ class AppState extends ChangeNotifier {
       error = e.toString();
       rethrow;
     } finally {
-      aiRunning = false;
+      _setAiRunning(false);
       notifyListeners();
     }
   }
@@ -464,7 +515,7 @@ class AppState extends ChangeNotifier {
   Future<AiRunResult?> runAiMoveFile(Topic topic, AppFile file) async {
     if (!canUseAiTools) return null;
 
-    aiRunning = true;
+    _setAiRunning(true);
     error = null;
     notifyListeners();
     try {
@@ -485,7 +536,7 @@ class AppState extends ChangeNotifier {
       error = e.toString();
       rethrow;
     } finally {
-      aiRunning = false;
+      _setAiRunning(false);
       notifyListeners();
     }
   }
@@ -518,7 +569,7 @@ class AppState extends ChangeNotifier {
     final topic = selectedTopic;
     if (topic == null || prompt.trim().isEmpty) return null;
 
-    aiRunning = true;
+    _setAiRunning(true);
     error = null;
     notifyListeners();
     try {
@@ -571,7 +622,7 @@ class AppState extends ChangeNotifier {
       error = e.toString();
       rethrow;
     } finally {
-      aiRunning = false;
+      _setAiRunning(false);
       notifyListeners();
     }
   }
@@ -591,6 +642,10 @@ class AppState extends ChangeNotifier {
 
   List<Topic> get areas => topics
       .where((t) => t.type == 'area' && !t.isMain && !t.isArchived)
+      .toList();
+
+  List<Topic> get others => topics
+      .where((t) => t.type == 'others' && !t.isMain && !t.isArchived)
       .toList();
 
   bool get isViewMode => selectedViewType != null;
@@ -640,6 +695,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       await _loadLanguage();
+      shortcutBindings = await ShortcutBindingsStore.load();
       mainTopic = await _bootstrap.ensureMainTopic();
       await refreshTopics();
       await refreshAutomationRules();
@@ -731,6 +787,7 @@ class AppState extends ChangeNotifier {
     final projectEntries = <ArchiveTopicEntry>[];
     final processEntries = <ArchiveTopicEntry>[];
     final areaEntries = <ArchiveTopicEntry>[];
+    final othersEntries = <ArchiveTopicEntry>[];
     final archive = <int, List<AppFile>>{};
 
     for (final topic in topics) {
@@ -756,6 +813,8 @@ class AppState extends ChangeNotifier {
             processEntries.add(entry);
           case 'area':
             areaEntries.add(entry);
+          case 'others':
+            othersEntries.add(entry);
         }
       }
     }
@@ -765,6 +824,7 @@ class AppState extends ChangeNotifier {
       projects: projectEntries,
       processes: processEntries,
       areas: areaEntries,
+      others: othersEntries,
     );
     archivedFilesByTopicId = archive;
     notifyListeners();
@@ -911,6 +971,7 @@ class AppState extends ChangeNotifier {
     pendingAiProposals = [];
     _clearArchiveMode();
     selectedArchiveTopic = topic;
+    _notifyShortcutRebuild();
     notifyListeners();
 
     try {
@@ -1585,6 +1646,7 @@ class AppState extends ChangeNotifier {
       if (switchingTopic) {
         moreFilesExpanded = false;
       }
+      _notifyShortcutRebuild();
       notifyListeners();
     }
   }
@@ -1633,6 +1695,7 @@ class AppState extends ChangeNotifier {
       loading = false;
       _showViewPaneDuringLoad = false;
       moreFilesExpanded = false;
+      _notifyShortcutRebuild();
       notifyListeners();
     }
   }
@@ -1740,6 +1803,25 @@ class AppState extends ChangeNotifier {
       return null;
     } catch (e) {
       return e.toString();
+    }
+  }
+
+  Future<void> cycleMainFilesForward() async {
+    final detail = selectedDetail;
+    final topic = selectedTopic;
+    if (detail == null || topic == null) return;
+    if (isArchiveMode || isViewMode) return;
+
+    final main = mainFilesFor(topic, detail.files);
+    if (main.length < 2) return;
+
+    final rotated = rotateMainFilesLeft(main);
+    final secondary = secondaryFilesFor(topic, detail.files);
+    final ordered = [...rotated, ...secondary];
+    final err = await reorderTopicFiles(topic, ordered, rotated.length);
+    if (err != null) {
+      error = err;
+      notifyListeners();
     }
   }
 

@@ -5,6 +5,12 @@ from models import Block, File, Task, TaskView, Topic, db
 from routes.helpers import active_query, apply_updates, get_or_404
 from services.automation_dispatcher import dispatch_file_changed
 from services.automation_topics import AUTOMATIONS_TOPIC_KEY
+from services.automation_definitions import (
+    eager_companion_trigger_task,
+    get_definition,
+    uses_companion_trigger_task,
+)
+from services.automation_params import normalize_params, trigger_config
 from services.automation_trigger import handle_task_status_change
 from services.automation_trigger_lookup import (
     rule_keys_for_trigger_task,
@@ -118,6 +124,26 @@ def _referenced_task_ids_for_list_block(list_block):
     return ids
 
 
+def _is_idle_event_companion_trigger(task, companions):
+    if companions:
+        return False
+    if task.status != "done":
+        return False
+    from models import AutomationRule
+
+    for rule in AutomationRule.query.all():
+        definition = get_definition(rule.key, rule.action_type)
+        if not uses_companion_trigger_task(definition):
+            continue
+        if eager_companion_trigger_task(definition):
+            continue
+        params = normalize_params(rule.params, rule.key, rule.action_type)
+        trigger = trigger_config(params) or {}
+        if int(trigger.get("task_id") or 0) == int(task.id):
+            return True
+    return False
+
+
 @tasks_bp.route("/tasks/view/<view_type>", methods=["GET"])
 def list_tasks_by_view(view_type):
     from services.task_view_flags import IMPORTANT_SECTION_FLAG
@@ -153,16 +179,25 @@ def list_tasks_by_view(view_type):
     task_ids = [task.id for task, _, _ in rows]
     companions_by_task = pending_companions_by_task_ids(task_ids)
     trigger_ids = trigger_task_ids()
+    visible_rows = []
+    for task, task_view, topic in rows:
+        companions = companions_by_task.get(task.id, [])
+        if _is_idle_event_companion_trigger(task, companions):
+            from services.automation_trigger import hide_idle_companion_trigger_from_view
+
+            hide_idle_companion_trigger_from_view(task.id)
+            continue
+        visible_rows.append((task, task_view, topic, companions))
     return jsonify(
         [
             _enrich_task_row(
                 task,
                 task_view,
                 topic,
-                companions_by_task.get(task.id, []),
+                companions,
                 trigger_ids,
             )
-            for task, task_view, topic in rows
+            for task, task_view, topic, companions in visible_rows
         ]
     )
 

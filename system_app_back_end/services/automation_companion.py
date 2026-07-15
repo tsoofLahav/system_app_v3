@@ -1,7 +1,12 @@
 from datetime import datetime
 
 from models import AutomationCompanionTask, AutomationRun, AutomationRule, Task, TaskView, Topic, db
-from services.automation_definitions import get_definition, rule_uses_companion_trigger_task, topic_in_scope
+from services.automation_definitions import (
+    get_definition,
+    rule_uses_shared_companion_trigger_task,
+    topic_in_scope,
+)
+from services.task_view_sections import resolve_task_section_name
 from services.automation_params import companion_config, normalize_params
 from services.automation_topics import AUTOMATIONS_TOPIC_KEY
 
@@ -16,7 +21,8 @@ def create_companion_task(rule, run, flow_key, payload, title=None, section_name
         return None
 
     definition = get_definition(rule.key, rule.action_type)
-    if rule_uses_companion_trigger_task(rule):
+    uses_shared_trigger = rule_uses_shared_companion_trigger_task(rule)
+    if uses_shared_trigger:
         from services.automation_trigger import ensure_trigger_task
 
         task = ensure_trigger_task(rule)
@@ -36,7 +42,10 @@ def create_companion_task(rule, run, flow_key, payload, title=None, section_name
         return link
 
     view_type = companion.get("view_type", "daily")
-    section = section_name or companion.get("section_name", "Automations")
+    section = resolve_task_section_name(
+        view_type,
+        section_name or companion.get("section_name"),
+    )
     resolved_title = title or rule.name
 
     task = Task(block_id=None, title=resolved_title, status="active")
@@ -86,6 +95,26 @@ def _upsert_companion_link(task, rule_key, run_id, flow_key, topic_id, payload):
     return link.to_dict()
 
 
+def _hide_completed_companion_from_view(task_id: int) -> None:
+    """Drop view membership for finished companion work; keep standing triggers."""
+    from services.automation_params import rule_params_snapshot, trigger_config
+
+    task = db.session.get(Task, task_id)
+    if task is None or task.status != "done":
+        return
+    if pending_companions_for_task(task_id):
+        return
+    for rule in AutomationRule.query.all():
+        if not rule_uses_shared_companion_trigger_task(rule):
+            continue
+        params = rule_params_snapshot(rule)
+        trigger = trigger_config(params) or {}
+        if int(trigger.get("task_id") or 0) == int(task_id):
+            return
+    TaskView.query.filter_by(task_id=task_id).delete(synchronize_session=False)
+    db.session.flush()
+
+
 def complete_companion_task(companion_id):
     link = db.session.get(AutomationCompanionTask, companion_id)
     if link is None:
@@ -100,6 +129,7 @@ def complete_companion_task(companion_id):
     if task is not None and not pending_companions_for_task(task_id):
         task.status = "done"
         task_marked_done = True
+        _hide_completed_companion_from_view(task_id)
     db.session.flush()
 
     result = link.to_dict()
@@ -110,6 +140,7 @@ def complete_companion_task(companion_id):
 
 
 def _ensure_task_view(task, view_type, section_name):
+    section_name = resolve_task_section_name(view_type, section_name)
     membership = (
         TaskView.query.filter_by(task_id=task.id, view_type=view_type)
         .order_by(TaskView.id)

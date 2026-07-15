@@ -5,6 +5,7 @@ import '../../core/models/block.dart';
 import '../../core/registry/file_behavior_registry.dart';
 import '../../shared/widgets/app_context_menu.dart';
 import 'block_text_focus.dart';
+import 'block_text_actions.dart';
 import 'format_range.dart';
 
 typedef BlockMenuHandler = Future<void> Function(String action);
@@ -106,7 +107,7 @@ class BlockContextMenu {
       );
       if (value == null) return null;
       if (value.startsWith('text:')) {
-        await _handleTextAction(value);
+        await runBlockTextAction(value);
         return value;
       }
       await onAction?.call(value);
@@ -204,23 +205,6 @@ class BlockContextMenu {
         AppContextMenuItem(value: 'text:size_up', label: strings['textSizeUp']),
         AppContextMenuItem(value: 'text:size_down', label: strings['textSizeDown']),
       ];
-
-  static Future<void> _handleTextAction(String value) async {
-    switch (value) {
-      case 'text:cut':
-        await BlockTextFocusRegistry.cut();
-      case 'text:copy':
-        await BlockTextFocusRegistry.copy();
-      case 'text:paste':
-        await BlockTextFocusRegistry.paste();
-      case 'text:bold':
-      case 'text:italic':
-      case 'text:underline':
-      case 'text:size_up':
-      case 'text:size_down':
-        BlockTextFocusRegistry.applyTextFormat(value);
-    }
-  }
 
   static String _insertLabel(String type, AppStrings s) {
     switch (type) {

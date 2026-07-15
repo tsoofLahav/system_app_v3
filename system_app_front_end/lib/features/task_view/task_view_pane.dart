@@ -297,8 +297,15 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     }
     grouped.putIfAbsent(_uncategorizedKey, () => []);
 
+    final firstSectionName = sections.isNotEmpty ? sections.first.name : null;
+
     for (final task in tasks) {
-      final key = task.sectionName ?? _uncategorizedKey;
+      var key = task.sectionName;
+      if (key == null ||
+          key.isEmpty ||
+          (sections.isNotEmpty && !sections.any((s) => s.name == key))) {
+        key = firstSectionName ?? _uncategorizedKey;
+      }
       grouped.putIfAbsent(key, () => []);
       grouped[key]!.add(task);
     }
@@ -337,23 +344,6 @@ class _TaskViewPaneState extends State<TaskViewPane> {
           state: widget.state,
           viewType: viewType,
           displayMode: TaskViewDisplayMode.bySection,
-        ),
-      );
-    }
-
-    for (final entry in grouped.entries) {
-      if (entry.key == _uncategorizedKey) continue;
-      if (sections.any((s) => s.name == entry.key)) continue;
-      if (entry.value.isEmpty) continue;
-      panes.add(
-        _TaskGroupPane(
-          key: ValueKey('section-extra-${entry.key}'),
-          title: entry.key,
-          tasks: sortTasksById(entry.value),
-          state: widget.state,
-          viewType: viewType,
-          displayMode: TaskViewDisplayMode.bySection,
-          sectionName: entry.key,
         ),
       );
     }

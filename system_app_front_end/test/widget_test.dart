@@ -13,6 +13,13 @@ void main() {
     expect(files.where((f) => f.isMain).length, 3);
   });
 
+  test('others registry includes text and doc only', () {
+    final files = FileRegistry.recommendedForTopicType('others');
+    expect(files.map((f) => f.type), ['text', 'doc']);
+    expect(files.first.isMain, isTrue);
+    expect(files.last.isMain, isFalse);
+  });
+
   test('execution profile seeds header and list', () {
     final blocks = FileBehaviorRegistry.defaultBlocksForFileType('execution');
     expect(blocks.map((b) => b.type), ['header', 'list', 'text']);

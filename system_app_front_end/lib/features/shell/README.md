@@ -15,6 +15,7 @@ What this module owns:
 | `automation_dialog.dart` | Automation menu and schedule editing |
 | `automation_abandon_dialog.dart` | Confirm abandoning in-progress automation |
 | `preferences_dialog.dart` | App preferences |
+| `shortcut_preferences_section.dart` | Editable keyboard shortcut rebinding UI |
 | `process_documentation_input_dialog.dart` | Process documentation input flow |
 | `process_update_batch_dialog.dart` | Batch process update review |
 
@@ -33,6 +34,7 @@ Side effects and persistence:
 
 Extension rules:
 - Add global controls here only if they affect multiple features.
+- **Keyboard shortcuts:** register new actions in `lib/core/shortcuts/shortcut_catalog.dart` (id, label key, default binding, context gate). `AppShortcutsScope` in `app_shell.dart` builds the global `Shortcuts` map from `AppState.shortcutBindings`; `ShortcutDispatcher` invokes the matching `AppState` / feature API. User overrides persist in SharedPreferences (`shortcut_bindings`) and are edited in Preferences.
 - Show only main user-facing automations in the automation menu; primitive helper actions stay internal.
 - Keep the automation menu as an overview: current timing, enable/disable, edit time, and run now.
 - Edit automation timing in a separate dialog with structured controls: frequency, calendar day when needed, month placement when needed, and 24-hour time.

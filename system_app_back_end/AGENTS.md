@@ -55,7 +55,7 @@ system_app_back_end/
 The app organizes work as a hierarchy:
 
 ```
-Topic (project / process / area)
+Topic (project / process / area / others)
   └── File (overview / plan / doc / data / tasks / protocol …)
         └── Block (text / task / header / image / table / measurement …)
               └── Task (optional; task-type blocks link here)
@@ -80,7 +80,7 @@ task_views.task_id → tasks.id
 |--------|------|-------|
 | id | SERIAL PK | |
 | name | TEXT NOT NULL | |
-| type | TEXT NOT NULL | `project`, `process`, or `area` |
+| type | TEXT NOT NULL | `project`, `process`, `area`, or `others` |
 | icon | TEXT | optional |
 | color | TEXT | optional |
 | parent_id | INTEGER FK → topics | optional; enables nesting |

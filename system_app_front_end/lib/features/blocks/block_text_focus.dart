@@ -22,6 +22,8 @@ class BlockTextFocusRegistry {
   static FormatRange? _frozenRange;
   static final ValueNotifier<int> menuSessionListenable = ValueNotifier(0);
 
+  static final ValueNotifier<int> focusListenable = ValueNotifier(0);
+
   static bool get hasFocus => activeController != null;
   static bool get isInMenuSession => _menuSessionDepth > 0;
   static FormatRange? get frozenFormatRange => _frozenRange;
@@ -40,6 +42,11 @@ class BlockTextFocusRegistry {
     activeFocusNode = focusNode;
     activeBlockId = blockId;
     if (fontSize != null) baseFontSize = fontSize;
+    _bumpFocus();
+  }
+
+  static void _bumpFocus() {
+    focusListenable.value++;
   }
 
   static void unregister(TextEditingController controller) {
@@ -50,6 +57,7 @@ class BlockTextFocusRegistry {
     activeBlockContent = null;
     activeFocusNode = null;
     activeBlockId = null;
+    _bumpFocus();
   }
 
   /// Clears focus registry before a structural reload (e.g. block insert).
@@ -59,6 +67,7 @@ class BlockTextFocusRegistry {
     activeBlockContent = null;
     activeFocusNode = null;
     activeBlockId = null;
+    _bumpFocus();
   }
 
   static void openMenuSession() {

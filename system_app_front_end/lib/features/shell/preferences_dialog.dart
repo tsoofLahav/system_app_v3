@@ -4,6 +4,7 @@ import '../../core/app_state.dart';
 import '../../core/l10n/app_language.dart';
 import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
+import 'shortcut_preferences_section.dart';
 
 Future<void> showPreferencesDialog({
   required BuildContext context,
@@ -36,7 +37,7 @@ class PreferencesDialog extends StatelessWidget {
             ),
           ],
           child: SizedBox(
-            width: 320,
+            width: 480,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -59,6 +60,8 @@ class PreferencesDialog extends StatelessWidget {
                     state.setLanguage(selection.first);
                   },
                 ),
+                const SizedBox(height: 24),
+                ShortcutPreferencesSection(state: state),
               ],
             ),
           ),

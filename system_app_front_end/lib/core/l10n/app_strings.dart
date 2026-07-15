@@ -94,6 +94,9 @@ class AppStrings {
   String archiveDeleteBody(int count) =>
       this['archiveDeleteBody'].replaceAll('{count}', '$count');
 
+  String shortcutConflict(String actionLabel) =>
+      this['shortcutConflict'].replaceAll('{action}', actionLabel);
+
   String moreFiles(int count) =>
       this['moreFiles'].replaceAll('{count}', count.toString());
 
@@ -171,6 +174,7 @@ class AppStrings {
     'projects': 'Projects',
     'processes': 'Processes',
     'areas': 'Areas',
+    'others': 'Others',
     'newTopic': 'New topic',
     'edit': 'Edit',
     'delete': 'Delete',
@@ -325,6 +329,21 @@ class AppStrings {
     'choose': 'Choose',
     'language': 'Language',
     'preferences': 'Preferences',
+    'shortcuts': 'Shortcuts',
+    'shortcutHint': 'Shortcuts work when not typing in a dialog.',
+    'shortcutPressKeys': 'Press shortcut…',
+    'shortcutConflict': 'Already used by {action}',
+    'shortcutChange': 'Change',
+    'shortcutReset': 'Reset',
+    'shortcutResetAll': 'Reset all defaults',
+    'shortcutGoHome': 'Go home',
+    'shortcutBringFile': 'Bring file',
+    'shortcutOpenArrange': 'Arrange files',
+    'shortcutCycleMainFiles': 'Cycle main files',
+    'shortcutCategoryNavigation': 'Navigation',
+    'shortcutCategoryAi': 'AI tools',
+    'shortcutCategoryText': 'Text formatting',
+    'shortcutCategoryBlocks': 'Insert block',
     'english': 'English',
     'hebrew': 'עברית',
     'ai': 'AI',
@@ -471,6 +490,7 @@ class AppStrings {
     'projects': 'פרויקטים',
     'processes': 'תהליכים',
     'areas': 'תחומים',
+    'others': 'שונות',
     'newTopic': 'נושא חדש',
     'edit': 'עריכה',
     'delete': 'מחיקה',
@@ -625,6 +645,21 @@ class AppStrings {
     'choose': 'בחר',
     'language': 'שפה',
     'preferences': 'העדפות',
+    'shortcuts': 'קיצורי מקלדת',
+    'shortcutHint': 'קיצורי מקלדת פועלים כשאינך מקליד בתוך דו-שיח.',
+    'shortcutPressKeys': 'הקש קיצור…',
+    'shortcutConflict': 'כבר בשימוש עבור {action}',
+    'shortcutChange': 'שנה',
+    'shortcutReset': 'איפוס',
+    'shortcutResetAll': 'איפוס לברירת מחדל',
+    'shortcutGoHome': 'חזרה לבית',
+    'shortcutBringFile': 'הבא קובץ',
+    'shortcutOpenArrange': 'סידור קבצים',
+    'shortcutCycleMainFiles': 'מעבר בין קבצים ראשיים',
+    'shortcutCategoryNavigation': 'ניווט',
+    'shortcutCategoryAi': 'כלי AI',
+    'shortcutCategoryText': 'עיצוב טקסט',
+    'shortcutCategoryBlocks': 'הוספת בלוק',
     'english': 'English',
     'hebrew': 'עברית',
     'ai': 'AI',
@@ -788,12 +823,14 @@ class AppStrings {
     'project': 'Project',
     'process': 'Process',
     'area': 'Area',
+    'others': 'Others',
   };
 
   static const _topicTypesHe = {
     'project': 'פרויקט',
     'process': 'תהליך',
     'area': 'תחום',
+    'others': 'שונות',
   };
 
   static const _automationNamesEn = {

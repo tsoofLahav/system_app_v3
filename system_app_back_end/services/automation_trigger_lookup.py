@@ -1,7 +1,7 @@
 from models import AutomationRule
 from services.automation_definitions import (
+    eager_companion_trigger_task,
     get_definition,
-    uses_companion_trigger_task,
 )
 from services.automation_params import normalize_params, trigger_config
 
@@ -10,7 +10,7 @@ def trigger_task_ids():
     ids = set()
     for rule in AutomationRule.query.all():
         definition = get_definition(rule.key, rule.action_type)
-        if not uses_companion_trigger_task(definition) and rule.trigger_type != "task":
+        if rule.trigger_type != "task" and not eager_companion_trigger_task(definition):
             continue
         params = normalize_params(rule.params, rule.key, rule.action_type)
         trigger = trigger_config(params) or {}

@@ -380,7 +380,9 @@ class _AutomationConfigDialogState extends State<_AutomationConfigDialog> {
 
   Future<void> _ensureCompanionTriggerTask() async {
     final definition = widget.state.definitionForKey(widget.rule.key);
-    if (definition?.companion?.enabled != true || !widget.rule.enabled) return;
+    if (definition?.eagerCompanionTrigger != true || !widget.rule.enabled) {
+      return;
+    }
     final trigger =
         (widget.rule.params['trigger'] as Map?)?.cast<String, dynamic>() ??
         <String, dynamic>{};
@@ -513,7 +515,11 @@ class _AutomationConfigDialogState extends State<_AutomationConfigDialog> {
                 ),
                 const SizedBox(height: 6),
               ],
-              _TaskTriggerFields(state: widget.state, rule: rule),
+              _TaskTriggerFields(
+                state: widget.state,
+                rule: rule,
+                sectionOptional: triggerType == 'event',
+              ),
             ] else if (triggerType == 'task')
               _TaskTriggerFields(state: widget.state, rule: rule),
           ],
@@ -1297,10 +1303,15 @@ List<String> _digitsFromTime(String time) {
 }
 
 class _TaskTriggerFields extends StatefulWidget {
-  const _TaskTriggerFields({required this.state, required this.rule});
+  const _TaskTriggerFields({
+    required this.state,
+    required this.rule,
+    this.sectionOptional = false,
+  });
 
   final AppState state;
   final AutomationRule rule;
+  final bool sectionOptional;
 
   @override
   State<_TaskTriggerFields> createState() => _TaskTriggerFieldsState();
@@ -1375,14 +1386,21 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
   }
 
   Future<void> _save() async {
-    if (_sectionName == null || _sectionName!.isEmpty) return;
+    if (!widget.sectionOptional &&
+        (_sectionName == null || _sectionName!.isEmpty)) {
+      return;
+    }
     final params = Map<String, dynamic>.from(widget.rule.params);
     final trigger = Map<String, dynamic>.from(
       (params['trigger'] as Map?)?.cast<String, dynamic>() ??
           <String, dynamic>{},
     );
     trigger['view_type'] = _viewType;
-    trigger['section_name'] = _sectionName;
+    if (widget.sectionOptional) {
+      trigger.remove('section_name');
+    } else {
+      trigger['section_name'] = _sectionName;
+    }
     params['version'] = 2;
     params['trigger'] = trigger;
     final companion = Map<String, dynamic>.from(
@@ -1390,7 +1408,11 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
           <String, dynamic>{},
     );
     companion.putIfAbsent('view_type', () => _viewType);
-    companion.putIfAbsent('section_name', () => _sectionName);
+    if (widget.sectionOptional) {
+      companion.remove('section_name');
+    } else {
+      companion.putIfAbsent('section_name', () => _sectionName);
+    }
     params['companion_task'] = companion;
     final ok = await widget.state.updateAutomationRule(
       widget.rule,
@@ -1439,10 +1461,11 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
             },
           ),
         ),
-        const SizedBox(height: 10),
-        if (_loading)
-          const Center(child: CircularProgressIndicator(strokeWidth: 2))
-        else if (_sections.isEmpty) ...[
+        if (!widget.sectionOptional) ...[
+          const SizedBox(height: 10),
+          if (_loading)
+            const Center(child: CircularProgressIndicator(strokeWidth: 2))
+          else if (_sections.isEmpty) ...[
           Text(
             s['automationTriggerSectionHelp'],
             style: AppTypography.noteBodyStyle,
@@ -1490,6 +1513,7 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
               },
             ),
           ),
+        ],
       ],
     );
   }

@@ -295,7 +295,7 @@ AUTOMATION_DEFINITIONS: dict[str, AutomationDefinition] = {
             flow_key="project_update_review",
             title_template="Review project update: {topic_name}",
             default_view_type="daily",
-            default_section_name="Project updates",
+            default_section_name="",
         ),
         ai=AiConfig(
             action_key="smart_project_update",
@@ -393,8 +393,27 @@ def uses_companion_trigger_task(
     )
 
 
+def eager_companion_trigger_task(
+    definition: AutomationDefinition | None,
+) -> bool:
+    """Standing trigger tasks are only needed for schedule/task companion automations."""
+    if not uses_companion_trigger_task(definition):
+        return False
+    activations = definition.activations
+    return "schedule" in activations or "task" in activations
+
+
 def rule_uses_companion_trigger_task(rule) -> bool:
     return uses_companion_trigger_task(get_definition(rule.key, rule.action_type))
+
+
+def rule_eager_companion_trigger_task(rule) -> bool:
+    return eager_companion_trigger_task(get_definition(rule.key, rule.action_type))
+
+
+def rule_uses_shared_companion_trigger_task(rule) -> bool:
+    """Standing trigger tasks are only for schedule/task companion automations."""
+    return rule_eager_companion_trigger_task(rule) or rule.trigger_type == "task"
 
 
 def allowed_trigger_types(key: str | None, action_type: str | None = None) -> tuple[str, ...]:
@@ -423,10 +442,13 @@ def companion_params(definition: AutomationDefinition) -> dict[str, Any] | None:
     return {
         "enabled": companion.enabled,
         "view_type": companion.default_view_type,
-        "section_name": companion.default_section_name,
         "flow_key": companion.flow_key,
         "title_template": companion.title_template,
-    }
+    } | (
+        {"section_name": companion.default_section_name}
+        if companion.default_section_name
+        else {}
+    )
 
 
 def _default_trigger_params(definition: AutomationDefinition) -> dict[str, Any] | None:
@@ -436,11 +458,13 @@ def _default_trigger_params(definition: AutomationDefinition) -> dict[str, Any] 
     title = companion.title_template
     if "{topic_name}" in title:
         title = definition.name
-    return {
+    result = {
         "view_type": companion.default_view_type,
-        "section_name": companion.default_section_name,
         "title": title or definition.name,
     }
+    if companion.default_section_name:
+        result["section_name"] = companion.default_section_name
+    return result
 
 
 def default_params(key: str) -> dict[str, Any]:

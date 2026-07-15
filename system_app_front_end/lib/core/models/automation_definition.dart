@@ -38,6 +38,10 @@ class AutomationDefinition {
     return triggerType == 'manual';
   }
 
+  bool get eagerCompanionTrigger =>
+      companion?.enabled == true &&
+      (activations.contains('schedule') || activations.contains('task'));
+
   String get scopeLabel {
     final kind = scopeFixed['kind'] as String? ?? 'all';
     return switch (kind) {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/app_state.dart';
+import '../../core/shortcuts/app_shortcuts.dart';
 import '../archive/archive_topic_view.dart';
 import '../sidebar/app_sidebar.dart';
 import '../task_view/task_view_pane.dart';
@@ -18,26 +18,13 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Shortcuts(
-      shortcuts: {
-        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyH):
-            const _GoHomeIntent(),
-      },
-      child: Actions(
-        actions: {
-          _GoHomeIntent: CallbackAction<_GoHomeIntent>(
-            onInvoke: (_) {
-              state.goHome();
-              return null;
-            },
-          ),
-        },
-        child: _AutomationNoticeHost(
-          state: state,
-          child: Scaffold(
-            backgroundColor: AppColors.canvasNeutralBottom,
-            body: _AppShellBody(state: state),
-          ),
+    return AppShortcutsScope(
+      state: state,
+      child: _AutomationNoticeHost(
+        state: state,
+        child: Scaffold(
+          backgroundColor: AppColors.canvasNeutralBottom,
+          body: _AppShellBody(state: state),
         ),
       ),
     );
@@ -180,10 +167,6 @@ class _AutomationNoticeHostState extends State<_AutomationNoticeHost> {
 
   @override
   Widget build(BuildContext context) => widget.child;
-}
-
-class _GoHomeIntent extends Intent {
-  const _GoHomeIntent();
 }
 
 /// Single full-window canvas: gradient + ambient floor shadow stay in sync

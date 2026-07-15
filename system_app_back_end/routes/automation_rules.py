@@ -9,6 +9,7 @@ from routes.helpers import apply_updates, get_or_404, parse_datetime
 from services.automation_definitions import (
     default_create_payload,
     get_definition,
+    rule_eager_companion_trigger_task,
     rule_uses_companion_trigger_task,
     uses_companion_trigger_task,
     validate_rule_update,
@@ -112,7 +113,7 @@ def create_automation_rule():
     db.session.add(rule)
     db.session.flush()
     if rule.enabled and (
-        rule.trigger_type == "task" or rule_uses_companion_trigger_task(rule)
+        rule.trigger_type == "task" or rule_eager_companion_trigger_task(rule)
     ):
         from services.automation_trigger import ensure_trigger_task
 
@@ -163,8 +164,12 @@ def update_automation_rule(rule_id):
     from services.automation_trigger import ensure_trigger_task, hide_trigger_task
 
     uses_shared = rule_uses_companion_trigger_task(rule)
-    if rule.enabled and (uses_shared or rule.trigger_type == "task"):
+    if rule.enabled and (rule_eager_companion_trigger_task(rule) or rule.trigger_type == "task"):
         ensure_trigger_task(rule)
+    elif rule.enabled and uses_shared and not (
+        rule_eager_companion_trigger_task(rule) or rule.trigger_type == "task"
+    ):
+        hide_trigger_task(rule)
     elif not rule.enabled and (uses_shared or previous_trigger_type == "task"):
         hide_trigger_task(rule)
 

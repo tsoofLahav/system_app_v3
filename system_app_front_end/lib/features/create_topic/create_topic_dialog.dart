@@ -270,6 +270,12 @@ class _CreateTopicDialogState extends State<CreateTopicDialog> {
                           value: 'area',
                           child: _DialogDropdownItem(s.topicTypeLabel('area')),
                         ),
+                        DropdownMenuItem(
+                          value: 'others',
+                          child: _DialogDropdownItem(
+                            s.topicTypeLabel('others'),
+                          ),
+                        ),
                       ],
                       onChanged: _onTypeChanged,
                     ),

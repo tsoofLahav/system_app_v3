@@ -143,6 +143,14 @@ class _AppSidebarState extends State<AppSidebar> {
                           state: state,
                           onSelect: state.selectTopic,
                         ),
+                        _TopicSection(
+                          title: s['others'],
+                          topics: state.others,
+                          selected: state.selectedTopic,
+                          isViewMode: state.isViewMode,
+                          state: state,
+                          onSelect: state.selectTopic,
+                        ),
                         const _SidebarDivider(),
                         _ArchiveSection(state: state),
                       ],
@@ -301,6 +309,7 @@ class _ArchiveSectionState extends State<_ArchiveSection> {
   var _projectsExpanded = true;
   var _processesExpanded = true;
   var _areasExpanded = true;
+  var _othersExpanded = true;
 
   @override
   Widget build(BuildContext context) {
@@ -365,6 +374,15 @@ class _ArchiveSectionState extends State<_ArchiveSection> {
               expanded: _areasExpanded,
               onToggle: () => setState(() => _areasExpanded = !_areasExpanded),
               entries: index.areas,
+              state: widget.state,
+            ),
+          if (index.others.isNotEmpty)
+            _ArchiveTopicGroup(
+              title: s['others'],
+              expanded: _othersExpanded,
+              onToggle: () =>
+                  setState(() => _othersExpanded = !_othersExpanded),
+              entries: index.others,
               state: widget.state,
             ),
         ],

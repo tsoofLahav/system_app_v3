@@ -145,6 +145,7 @@ Current topic types:
 * Projects
 * Processes
 * Areas
+* Others
 
 Examples:
 

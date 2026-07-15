@@ -58,7 +58,6 @@ class FormattedTextField extends StatefulWidget {
 class _FormattedTextFieldState extends State<FormattedTextField> {
   late FocusNode _focusNode;
   bool _ownsFocus = false;
-  bool _listeningKeys = false;
 
   @override
   void initState() {
@@ -70,11 +69,12 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       _ownsFocus = true;
     }
     _focusNode.addListener(_onFocusChanged);
+    _focusNode.onKeyEvent = _onFocusKeyEvent;
   }
 
   @override
   void dispose() {
-    _stopListeningKeys();
+    _focusNode.onKeyEvent = null;
     _focusNode.removeListener(_onFocusChanged);
     BlockTextFocusRegistry.unregister(widget.controller);
     if (_ownsFocus) _focusNode.dispose();
@@ -83,7 +83,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
 
   void _onFocusChanged() {
     if (_focusNode.hasFocus) {
-      _startListeningKeys();
       BlockTextFocusRegistry.register(
         controller: widget.controller,
         changed: _notifyChanged,
@@ -93,7 +92,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         blockId: widget.blockId,
       );
     } else {
-      _stopListeningKeys();
       if (BlockTextFocusRegistry.isInMenuSession &&
           BlockTextFocusRegistry.activeController == widget.controller) {
         return;
@@ -110,21 +108,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     widget.onChanged?.call(controller.text);
   }
 
-  void _startListeningKeys() {
-    if (_listeningKeys) return;
-    HardwareKeyboard.instance.addHandler(_handleKey);
-    _listeningKeys = true;
-  }
-
-  void _stopListeningKeys() {
-    if (!_listeningKeys) return;
-    HardwareKeyboard.instance.removeHandler(_handleKey);
-    _listeningKeys = false;
-  }
-
-  bool _handleKey(KeyEvent event) {
-    if (!_focusNode.hasFocus) return false;
-    if (event is! KeyDownEvent) return false;
+  KeyEventResult _onFocusKeyEvent(FocusNode node, KeyEvent event) {
+    if (!_focusNode.hasFocus) return KeyEventResult.ignored;
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     final isMeta = HardwareKeyboard.instance.isMetaPressed;
     if (isMeta && event.logicalKey == LogicalKeyboardKey.keyA) {
@@ -133,14 +119,14 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         baseOffset: 0,
         extentOffset: widget.controller.text.length,
       );
-      return true;
+      return KeyEventResult.handled;
     }
 
     if (event.logicalKey == LogicalKeyboardKey.enter &&
         !HardwareKeyboard.instance.isShiftPressed &&
         widget.onEnter != null) {
       widget.onEnter!();
-      return true;
+      return KeyEventResult.handled;
     }
 
     if (event.logicalKey == LogicalKeyboardKey.backspace &&
@@ -148,10 +134,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         widget.controller.selection.baseOffset == 0 &&
         widget.onBackspaceAtStart != null) {
       widget.onBackspaceAtStart!();
-      return true;
+      return KeyEventResult.handled;
     }
 
-    return false;
+    return KeyEventResult.ignored;
   }
 
   @override

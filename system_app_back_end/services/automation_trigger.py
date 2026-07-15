@@ -1,4 +1,4 @@
-from models import Task, TaskView, db
+from models import AutomationRule, Task, TaskView, db
 from services.automation_definitions import get_definition, rule_uses_companion_trigger_task
 from services.automation_dispatcher import dispatch_task_triggered
 from services.automation_params import (
@@ -7,6 +7,7 @@ from services.automation_params import (
     trigger_config,
 )
 from services.automation_topics import AUTOMATIONS_TOPIC_KEY
+from services.task_view_sections import resolve_task_section_name
 
 
 def _trigger_from_params(params):
@@ -20,6 +21,36 @@ def stored_trigger_task_id(rule, params=None):
     trigger = trigger_config(params) or {}
     task_id = trigger.get("task_id")
     return int(task_id) if task_id else None
+
+
+def hide_idle_companion_trigger_from_view(task_id: int) -> None:
+    """Drop view membership for done event-companion triggers with no pending work."""
+    from services.automation_companion import pending_companions_for_task
+    from services.automation_definitions import (
+        eager_companion_trigger_task,
+        get_definition,
+        uses_companion_trigger_task,
+    )
+
+    task = db.session.get(Task, task_id)
+    if task is None or task.status != "done":
+        return
+    if pending_companions_for_task(task_id):
+        return
+
+    for rule in AutomationRule.query.all():
+        definition = get_definition(rule.key, rule.action_type)
+        if not uses_companion_trigger_task(definition):
+            continue
+        if eager_companion_trigger_task(definition):
+            continue
+        params = rule_params_snapshot(rule)
+        trigger = trigger_config(params) or {}
+        if int(trigger.get("task_id") or 0) != int(task_id):
+            continue
+        TaskView.query.filter_by(task_id=task_id).delete(synchronize_session=False)
+        db.session.flush()
+        return
 
 
 def hide_trigger_task(rule):
@@ -47,7 +78,10 @@ def ensure_trigger_task(rule):
     params = rule_params_snapshot(rule)
     trigger, params = _trigger_from_params(params)
     view_type = trigger.get("view_type")
-    section_name = trigger.get("section_name")
+    section_name = resolve_task_section_name(
+        view_type,
+        trigger.get("section_name"),
+    )
     if not view_type:
         raise ValueError("trigger.view_type is required for task-triggered rules")
 
@@ -92,6 +126,8 @@ def ensure_trigger_task(rule):
     trigger["view_type"] = view_type
     if section_name is not None:
         trigger["section_name"] = section_name
+    elif "section_name" in trigger:
+        del trigger["section_name"]
     params["trigger"] = trigger
     persist_rule_params(rule, params)
     db.session.flush()

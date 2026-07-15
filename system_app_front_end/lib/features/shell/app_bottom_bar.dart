@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../core/l10n/app_strings.dart';
 import '../../core/app_state.dart';
+import '../../core/l10n/app_strings.dart';
+import '../../core/shortcuts/app_shortcuts.dart';
+import '../../core/shortcuts/shortcut_catalog.dart';
 import '../../core/services/ai_service.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
@@ -134,6 +136,7 @@ class AppBottomBar extends StatelessWidget {
                   label: 'AI',
                   labelOnBorder: true,
                   child: _AiToolGroup(
+                    state: state,
                     enabled: hasContext && !state.aiRunning,
                     graphEnabled: hasContext && !state.aiRunning,
                     moveFileEnabled:
@@ -326,6 +329,7 @@ class _BarIconButton extends StatelessWidget {
 
 class _AiToolGroup extends StatelessWidget {
   const _AiToolGroup({
+    required this.state,
     required this.strings,
     required this.enabled,
     required this.graphEnabled,
@@ -334,6 +338,7 @@ class _AiToolGroup extends StatelessWidget {
     required this.onTool,
   });
 
+  final AppState state;
   final AppStrings strings;
   final bool enabled;
   final bool graphEnabled;
@@ -349,37 +354,37 @@ class _AiToolGroup extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _AiToolButton(
-          tooltip: s['aiConsult'],
+          tooltip: _tooltip(s['aiConsult'], ShortcutActionIds.aiConsult),
           icon: AppIcons.consult,
           enabled: enabled && !running,
           onPressed: () => onTool('consult'),
         ),
         _AiToolButton(
-          tooltip: s['aiSummarize'],
+          tooltip: _tooltip(s['aiSummarize'], ShortcutActionIds.aiSummarize),
           icon: AppIcons.summarize,
           enabled: enabled && !running,
           onPressed: () => onTool('summarize_to_doc'),
         ),
         _AiToolButton(
-          tooltip: s['aiSmartList'],
+          tooltip: _tooltip(s['aiSmartList'], ShortcutActionIds.aiSmartList),
           icon: AppIcons.smartList,
           enabled: enabled && !running,
           onPressed: () => onTool('smart_list'),
         ),
         _AiToolButton(
-          tooltip: s['aiImage'],
+          tooltip: _tooltip(s['aiImage'], ShortcutActionIds.aiImage),
           icon: AppIcons.image,
           enabled: enabled && !running,
           onPressed: () => onTool('create_image'),
         ),
         _AiToolButton(
-          tooltip: s['aiGraph'],
+          tooltip: _tooltip(s['aiGraph'], ShortcutActionIds.aiGraph),
           icon: AppIcons.graph,
           enabled: graphEnabled,
           onPressed: () => onTool('create_graph'),
         ),
         _AiToolButton(
-          tooltip: s['aiMoveFile'],
+          tooltip: _tooltip(s['aiMoveFile'], ShortcutActionIds.aiMoveFile),
           icon: AppIcons.moveFileAi,
           enabled: moveFileEnabled,
           onPressed: () => onTool('move_file_to_topic'),
@@ -392,6 +397,12 @@ class _AiToolGroup extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  String _tooltip(String label, String actionId) {
+    final suffix = shortcutTooltipSuffix(state, actionId);
+    if (suffix == null) return label;
+    return '$label ($suffix)';
   }
 }
 

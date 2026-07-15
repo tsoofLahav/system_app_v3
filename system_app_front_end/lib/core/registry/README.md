@@ -58,6 +58,7 @@ Topic defaults:
 - Projects: `overview` (Summary), `tasks`, `execution` (main); `doc`, `plan` (additional)
 - Processes: `overview`, `plan`, `tasks`, `doc`
 - Areas: `tasks`, `doc`
+- Others: `text`, `doc` (minimal structure — free writing + documentation)
 - When adding a file to a topic, every file type is available regardless of topic type.
 
 Main section limit: `FileRegistry.maxMainFilesPerTopic` (3). Reorder and promote-to-main evict the last main file when full.
