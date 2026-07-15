@@ -6,6 +6,8 @@ import '../../features/arrange/file_arrange_overlay.dart';
 import '../../features/blocks/block_text_actions.dart';
 import '../../features/blocks/block_text_focus.dart';
 import '../../features/bring_file/bring_file_picker_dialog.dart';
+import '../../features/create_topic/add_file_dialog.dart';
+import '../../features/create_topic/create_topic_dialog.dart';
 import '../app_state.dart';
 import '../models/app_file.dart';
 import '../registry/file_behavior_registry.dart';
@@ -68,6 +70,40 @@ class ShortcutDispatcher {
         return;
       case ShortcutActionIds.cycleMainFiles:
         await state.cycleMainFilesForward();
+        return;
+      case ShortcutActionIds.addFile:
+        final topic = state.selectedTopic;
+        final detail = state.selectedDetail;
+        if (topic == null || detail == null) return;
+        final result = await showDialog<AddFileResult>(
+          context: context,
+          builder: (_) => AddFileDialog(
+            state: state,
+            topic: topic,
+            existingTypes:
+                detail.files.map((f) => f.type).toList(growable: false),
+          ),
+        );
+        if (result == null || !context.mounted) return;
+        await state.addFile(
+          topic: topic,
+          type: result.type,
+          name: result.name,
+        );
+        return;
+      case ShortcutActionIds.addTopic:
+        final result = await showDialog<CreateTopicResult>(
+          context: context,
+          builder: (_) => CreateTopicDialog(state: state),
+        );
+        if (result == null || !context.mounted) return;
+        await state.createTopic(
+          name: result.name,
+          type: result.type,
+          icon: result.icon,
+          color: result.color,
+          selectedFileTypes: result.selectedFileTypes,
+        );
         return;
     }
 

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/app_state.dart';
 import '../../core/models/archive_index.dart';
 import '../../core/models/topic.dart';
+import '../../core/shortcuts/app_shortcuts.dart';
+import '../../core/shortcuts/shortcut_catalog.dart';
 import '../../core/registry/view_registry.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
@@ -158,19 +160,25 @@ class _AppSidebarState extends State<AppSidebar> {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-                    child: TextButton.icon(
-                      onPressed: () => _createTopic(context),
-                      icon: const AppIcon(AppIcons.add, size: 18),
-                      label: Text(
+                    child: Tooltip(
+                      message: _shortcutTooltip(
                         s['newTopic'],
-                        overflow: TextOverflow.ellipsis,
+                        ShortcutActionIds.addTopic,
                       ),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.text,
-                        alignment: AlignmentDirectional.centerStart,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 10,
+                      child: TextButton.icon(
+                        onPressed: () => _createTopic(context),
+                        icon: const AppIcon(AppIcons.add, size: 18),
+                        label: Text(
+                          s['newTopic'],
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.text,
+                          alignment: AlignmentDirectional.centerStart,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 10,
+                          ),
                         ),
                       ),
                     ),
@@ -213,6 +221,12 @@ class _AppSidebarState extends State<AppSidebar> {
       color: result.color,
       selectedFileTypes: result.selectedFileTypes,
     );
+  }
+
+  String _shortcutTooltip(String label, String actionId) {
+    final suffix = shortcutTooltipSuffix(widget.state, actionId);
+    if (suffix == null) return label;
+    return '$label ($suffix)';
   }
 }
 

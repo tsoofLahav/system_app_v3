@@ -31,4 +31,9 @@ void main() {
     main = rotateMainFilesLeft(main);
     expect(main.map((f) => f.id), [1, 2, 3]);
   });
+
+  test('rotateMainFilesRight moves last file to front', () {
+    final rotated = rotateMainFilesRight([_file(1), _file(2), _file(3)]);
+    expect(rotated.map((f) => f.id), [3, 1, 2]);
+  });
 }

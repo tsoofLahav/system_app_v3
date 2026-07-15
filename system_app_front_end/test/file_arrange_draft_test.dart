@@ -80,4 +80,26 @@ void main() {
     expect(draft.ordered.map((f) => f.id), [1, 2, 3]);
     expect(draft.layoutId, 'single');
   });
+
+  test('rotateMainLeft cycles main order', () {
+    final draft = FileArrangeDraft(
+      main: [_file(1), _file(2), _file(3)],
+      additional: const [],
+      layoutId: 'hero_left',
+    );
+
+    expect(draft.rotateMainLeft(), isTrue);
+    expect(draft.main.map((f) => f.id), [2, 3, 1]);
+  });
+
+  test('rotateMainRight cycles main order backwards', () {
+    final draft = FileArrangeDraft(
+      main: [_file(1), _file(2), _file(3)],
+      additional: const [],
+      layoutId: 'hero_left',
+    );
+
+    expect(draft.rotateMainRight(), isTrue);
+    expect(draft.main.map((f) => f.id), [3, 1, 2]);
+  });
 }

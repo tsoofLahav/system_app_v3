@@ -15,7 +15,7 @@ What this module owns:
 | `automation_dialog.dart` | Automation menu and schedule editing |
 | `automation_abandon_dialog.dart` | Confirm abandoning in-progress automation |
 | `preferences_dialog.dart` | App preferences |
-| `shortcut_preferences_section.dart` | Editable keyboard shortcut rebinding UI |
+| `shortcut_preferences_dialog.dart` | Paginated keyboard shortcut rebinding dialog |
 | `process_documentation_input_dialog.dart` | Process documentation input flow |
 | `process_update_batch_dialog.dart` | Batch process update review |
 

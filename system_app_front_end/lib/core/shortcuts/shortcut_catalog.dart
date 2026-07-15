@@ -45,6 +45,8 @@ abstract final class ShortcutActionIds {
   static const bringFile = 'bring_file';
   static const openArrange = 'open_arrange';
   static const cycleMainFiles = 'cycle_main_files';
+  static const addFile = 'add_file';
+  static const addTopic = 'add_topic';
 
   static const aiConsult = 'ai_consult';
   static const aiSummarize = 'ai_summarize';
@@ -111,6 +113,19 @@ final List<ShortcutAction> kShortcutCatalog = [
     labelKey: 'shortcutCycleMainFiles',
     defaultBinding: _m(LogicalKeyboardKey.bracketRight),
     context: ShortcutContextRequirement.topicMode,
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.addFile,
+    category: ShortcutCategory.navigation,
+    labelKey: 'shortcutAddFile',
+    defaultBinding: _m(LogicalKeyboardKey.keyF, shift: true),
+    context: ShortcutContextRequirement.topicMode,
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.addTopic,
+    category: ShortcutCategory.navigation,
+    labelKey: 'shortcutAddTopic',
+    defaultBinding: _m(LogicalKeyboardKey.keyN, shift: true),
   ),
   ShortcutAction(
     id: ShortcutActionIds.aiConsult,

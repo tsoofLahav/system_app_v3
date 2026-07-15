@@ -14,6 +14,7 @@ import '../../design_system/overlay_dialog_style.dart';
 import '../../features/bring_file/bring_file_preview.dart';
 import '../../design_system/overlay_file_preview_card.dart';
 import '../../design_system/horizontal_carousel.dart';
+import '../arrange/file_arrange_keyboard.dart';
 
 Future<BrowseFileEntry?> showBringFilePickerDialog(
   BuildContext context,
@@ -57,6 +58,7 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
   String? _error;
   bool _tapCandidate = false;
   Offset? _tapDownPosition;
+  double _carouselViewportWidth = 800;
 
   static const _tapSlop = 12.0;
 
@@ -73,6 +75,7 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
       scrollController: _scrollController,
       onChanged: () => setState(() {}),
     );
+    _searchFocusNode.onKeyEvent = _onSearchKeyEvent;
     _loadCatalog();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _searchFocusNode.requestFocus();
@@ -81,6 +84,7 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
 
   @override
   void dispose() {
+    _searchFocusNode.onKeyEvent = null;
     _carousel.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
@@ -158,6 +162,52 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
     _selectEntry(_filtered[index]);
   }
 
+  void _scrollCarousel(int delta, double viewportWidth) {
+    if (_filtered.isEmpty) return;
+    final current = _centeredIndex(viewportWidth) ?? 0;
+    final next = stepCarouselIndex(
+      currentIndex: current,
+      itemCount: _filtered.length,
+      delta: delta,
+    );
+    _carousel.scrollToIndex(
+      index: next,
+      itemCount: _filtered.length,
+      viewportWidth: viewportWidth,
+    );
+  }
+
+  KeyEventResult _onSearchKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final carouselWidth = _carouselViewportWidth;
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowLeft:
+        _scrollCarousel(
+          spatialHorizontalDelta(
+            isRtl: widget.state.isRtl,
+            isLeftArrow: true,
+          ),
+          carouselWidth,
+        );
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowRight:
+        _scrollCarousel(
+          spatialHorizontalDelta(
+            isRtl: widget.state.isRtl,
+            isLeftArrow: false,
+          ),
+          carouselWidth,
+        );
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.escape:
+        _close();
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
   void _onCarouselPointerDown(PointerDownEvent event) {
     _tapCandidate = true;
     _tapDownPosition = event.position;
@@ -188,6 +238,7 @@ class _BringFilePickerDialogState extends State<BringFilePickerDialog> {
   Widget build(BuildContext context) {
     final s = widget.state.strings;
     final carouselWidth = _carouselWidth(context);
+    _carouselViewportWidth = carouselWidth;
 
     return CallbackShortcuts(
       bindings: {

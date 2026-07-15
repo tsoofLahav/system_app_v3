@@ -4,6 +4,8 @@ import '../../core/app_state.dart';
 import '../../core/models/ai_proposal.dart';
 import '../../core/models/app_file.dart';
 import '../../core/models/topic.dart';
+import '../../core/shortcuts/app_shortcuts.dart';
+import '../../core/shortcuts/shortcut_catalog.dart';
 import '../../core/registry/topic_appearance.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
@@ -498,7 +500,10 @@ class _TopicHeader extends StatelessWidget {
                     Opacity(
                       opacity: bringFileEnabled ? 1 : 0.35,
                       child: GlassCircleButton(
-                        tooltip: s['bringFile'],
+                        tooltip: _shortcutTooltip(
+                          s['bringFile'],
+                          ShortcutActionIds.bringFile,
+                        ),
                         icon: AppIcons.bringFile,
                         onPressed: bringFileEnabled ? onBringFile : () {},
                         size: AppTopicHeaderMetrics.addButtonSize,
@@ -521,7 +526,10 @@ class _TopicHeader extends StatelessWidget {
                   Opacity(
                     opacity: addEnabled ? 1 : 0.35,
                     child: GlassCircleButton(
-                      tooltip: s['addFile'],
+                      tooltip: _shortcutTooltip(
+                        s['addFile'],
+                        ShortcutActionIds.addFile,
+                      ),
                       icon: AppIcons.add,
                       onPressed: addEnabled ? onAddFile : () {},
                       size: AppTopicHeaderMetrics.addButtonSize,
@@ -539,5 +547,11 @@ class _TopicHeader extends StatelessWidget {
 
   String _headerTitle(AppState state, Topic topic) {
     return state.topicDisplayName(topic);
+  }
+
+  String _shortcutTooltip(String label, String actionId) {
+    final suffix = shortcutTooltipSuffix(state, actionId);
+    if (suffix == null) return label;
+    return '$label ($suffix)';
   }
 }

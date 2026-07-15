@@ -1,4 +1,5 @@
 import '../../core/models/app_file.dart';
+import '../../core/shortcuts/main_file_cycle.dart';
 import '../../shared/widgets/pane_reorder_logic.dart';
 
 class FileArrangeDraft {
@@ -59,6 +60,18 @@ class FileArrangeDraft {
     );
     main = next.main;
     additional = next.additional;
+    return true;
+  }
+
+  bool rotateMainLeft() {
+    if (main.length < 2) return false;
+    main = rotateMainFilesLeft(main);
+    return true;
+  }
+
+  bool rotateMainRight() {
+    if (main.length < 2) return false;
+    main = rotateMainFilesRight(main);
     return true;
   }
 }

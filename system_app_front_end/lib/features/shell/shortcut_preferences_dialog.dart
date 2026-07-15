@@ -6,59 +6,113 @@ import '../../core/l10n/app_strings.dart';
 import '../../core/shortcuts/shortcut_binding.dart';
 import '../../core/shortcuts/shortcut_catalog.dart';
 import '../../design_system/app_typography.dart';
+import '../../design_system/glass_surface.dart';
 
-class ShortcutPreferencesSection extends StatefulWidget {
-  const ShortcutPreferencesSection({super.key, required this.state});
+Future<void> showShortcutPreferencesDialog({
+  required BuildContext context,
+  required AppState state,
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (_) => ShortcutPreferencesDialog(state: state),
+  );
+}
+
+class ShortcutPreferencesDialog extends StatefulWidget {
+  const ShortcutPreferencesDialog({super.key, required this.state});
 
   final AppState state;
 
   @override
-  State<ShortcutPreferencesSection> createState() =>
-      _ShortcutPreferencesSectionState();
+  State<ShortcutPreferencesDialog> createState() =>
+      _ShortcutPreferencesDialogState();
 }
 
-class _ShortcutPreferencesSectionState extends State<ShortcutPreferencesSection> {
+class _ShortcutPreferencesDialogState extends State<ShortcutPreferencesDialog>
+    with SingleTickerProviderStateMixin {
   String? _capturingActionId;
   String? _captureError;
+  late final TabController _tabController;
 
   AppState get state => widget.state;
 
   @override
-  Widget build(BuildContext context) {
-    final s = state.strings;
+  void initState() {
+    super.initState();
+    _tabController = TabController(
+      length: ShortcutCategory.values.length,
+      vsync: this,
+    );
+  }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(s['shortcuts'], style: AppTypography.metaStyle),
-        const SizedBox(height: 4),
-        Text(s['shortcutHint'], style: AppTypography.noteBodyStyle),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 320,
-          child: ListView(
-            children: [
-              for (final category in ShortcutCategory.values)
-                _CategoryGroup(
-                  state: state,
-                  category: category,
-                  capturingActionId: _capturingActionId,
-                  captureError: _captureError,
-                  onStartCapture: _startCapture,
-                  onCancelCapture: _cancelCapture,
-                  onBindingCaptured: _handleBindingCaptured,
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: state,
+      builder: (context, _) {
+        final s = state.strings;
+
+        return AppGlassDialog(
+          title: Text(s['shortcuts']),
+          actions: [
+            TextButton(
+              onPressed: () => state.resetAllShortcuts(),
+              child: Text(s['shortcutResetAll']),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(s['ok']),
+            ),
+          ],
+          child: SizedBox(
+            width: 560,
+            height: 420,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(s['shortcutHint'], style: AppTypography.noteBodyStyle),
+                const SizedBox(height: 12),
+                TabBar(
+                  controller: _tabController,
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  labelStyle: AppTypography.metaStyle.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                  tabs: [
+                    for (final category in ShortcutCategory.values)
+                      Tab(text: s[shortcutCategoryLabelKey(category)]),
+                  ],
                 ),
-            ],
+                const SizedBox(height: 8),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      for (final category in ShortcutCategory.values)
+                        _ShortcutCategoryPage(
+                          state: state,
+                          category: category,
+                          capturingActionId: _capturingActionId,
+                          captureError: _captureError,
+                          onStartCapture: _startCapture,
+                          onCancelCapture: _cancelCapture,
+                          onBindingCaptured: _handleBindingCaptured,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        Align(
-          alignment: AlignmentDirectional.centerEnd,
-          child: TextButton(
-            onPressed: () => state.resetAllShortcuts(),
-            child: Text(s['shortcutResetAll']),
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -97,8 +151,8 @@ class _ShortcutPreferencesSectionState extends State<ShortcutPreferencesSection>
   }
 }
 
-class _CategoryGroup extends StatelessWidget {
-  const _CategoryGroup({
+class _ShortcutCategoryPage extends StatelessWidget {
+  const _ShortcutCategoryPage({
     required this.state,
     required this.category,
     required this.capturingActionId,
@@ -123,20 +177,19 @@ class _CategoryGroup extends StatelessWidget {
     final actions = kShortcutCatalog
         .where((action) => action.category == category)
         .toList();
-    if (actions.isEmpty) return const SizedBox.shrink();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 4),
-          child: Text(
-            s[shortcutCategoryLabelKey(category)],
-            style: AppTypography.metaStyle.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+    if (actions.isEmpty) {
+      return Center(
+        child: Text(
+          s['shortcutHint'],
+          style: AppTypography.noteBodyStyle,
         ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.only(top: 4, bottom: 8),
+      children: [
         for (final action in actions)
           _ShortcutRow(
             state: state,

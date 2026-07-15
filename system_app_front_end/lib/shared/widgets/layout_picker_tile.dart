@@ -15,6 +15,7 @@ class LayoutPickerTile extends StatelessWidget {
     this.compact = false,
     this.iconWidth = 56,
     this.iconHeight = 40,
+    this.focused = false,
   });
 
   final String layoutId;
@@ -25,6 +26,7 @@ class LayoutPickerTile extends StatelessWidget {
   final bool compact;
   final double iconWidth;
   final double iconHeight;
+  final bool focused;
 
   @override
   Widget build(BuildContext context) {
@@ -37,40 +39,57 @@ class LayoutPickerTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: EdgeInsets.all(compact ? 4 : 6),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                LayoutPreviewIcon(
-                  layoutId: layoutId,
-                  selected: selected,
-                  enabled: enabled,
-                  width: iconWidth,
-                  height: iconHeight,
-                ),
-                if (!compact) ...[
-                  const SizedBox(height: 6),
-                  SizedBox(
-                    width: 72,
-                    child: Text(
-                      label,
-                      style: AppTypography.metaStyle.copyWith(
-                        fontSize: 10,
-                        color: enabled
-                            ? (selected
-                                ? Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.92)
-                                : AppColors.text.withValues(alpha: 0.72))
-                            : AppColors.textHint.withValues(alpha: 0.45),
+            child: DecoratedBox(
+              decoration: focused
+                  ? BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.9),
+                        width: 1.5,
                       ),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    )
+                  : const BoxDecoration(),
+              child: Padding(
+                padding: focused ? const EdgeInsets.all(2) : EdgeInsets.zero,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    LayoutPreviewIcon(
+                      layoutId: layoutId,
+                      selected: selected,
+                      enabled: enabled,
+                      width: iconWidth,
+                      height: iconHeight,
                     ),
-                  ),
-                ],
-              ],
+                    if (!compact) ...[
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        width: 72,
+                        child: Text(
+                          label,
+                          style: AppTypography.metaStyle.copyWith(
+                            fontSize: 10,
+                            color: enabled
+                                ? (selected
+                                    ? Theme.of(context)
+                                        .colorScheme
+                                        .primary
+                                        .withValues(alpha: 0.92)
+                                    : AppColors.text.withValues(alpha: 0.72))
+                                : AppColors.textHint.withValues(alpha: 0.45),
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),

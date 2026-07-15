@@ -4,7 +4,7 @@ import '../../core/app_state.dart';
 import '../../core/l10n/app_language.dart';
 import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
-import 'shortcut_preferences_section.dart';
+import 'shortcut_preferences_dialog.dart';
 
 Future<void> showPreferencesDialog({
   required BuildContext context,
@@ -61,7 +61,20 @@ class PreferencesDialog extends StatelessWidget {
                   },
                 ),
                 const SizedBox(height: 24),
-                ShortcutPreferencesSection(state: state),
+                Text(s['shortcuts'], style: AppTypography.metaStyle),
+                const SizedBox(height: 4),
+                Text(s['shortcutHint'], style: AppTypography.noteBodyStyle),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: OutlinedButton(
+                    onPressed: () => showShortcutPreferencesDialog(
+                      context: context,
+                      state: state,
+                    ),
+                    child: Text(s['shortcutManage']),
+                  ),
+                ),
               ],
             ),
           ),

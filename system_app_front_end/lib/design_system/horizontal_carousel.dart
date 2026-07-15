@@ -102,9 +102,24 @@ class HorizontalCarouselController {
       scrollOffset: position.pixels,
       itemCount: itemCount,
     );
-    final target = metrics.snapTargetOffset(
+    scrollToIndex(
       index: bestIndex,
+      itemCount: itemCount,
       viewportWidth: viewport,
+    );
+  }
+
+  void scrollToIndex({
+    required int index,
+    required int itemCount,
+    required double viewportWidth,
+  }) {
+    if (!_scrollController.hasClients || itemCount <= 0) return;
+
+    final position = _scrollController.position;
+    final target = metrics.snapTargetOffset(
+      index: index.clamp(0, itemCount - 1),
+      viewportWidth: viewportWidth,
       maxScrollExtent: position.maxScrollExtent,
     );
     if ((target - position.pixels).abs() < metrics.snapEpsilon) return;
@@ -118,6 +133,8 @@ class HorizontalCarouselController {
         )
         .whenComplete(() {
           isSnapping = false;
+          scrollOffset = _scrollController.offset;
+          _onChanged();
         });
   }
 }
