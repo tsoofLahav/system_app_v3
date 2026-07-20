@@ -378,7 +378,7 @@ AppContextMenuSubmenu _viewSubmenu({
       AppContextMenuItem(
         value: 'view:$viewType:toggle',
         label: membership != null
-            ? strings['removeFromView']
+            ? '${strings['assignedToView']} ✓'
             : strings['addToViewLabel'].replaceAll('{view}', viewLabel),
       ),
     );
@@ -430,27 +430,25 @@ Future<void> _handleViewAction({
 
   if (action == 'toggle') {
     if (existing != null) {
-      await state.removeTaskFromView(existing);
+      await state.assignTaskView(task, null);
     } else {
-      await state.addTaskToView(task, viewType);
+      await state.assignTaskView(task, viewType);
     }
     return;
   }
 
   if (action == 'remove') {
-    if (existing != null) {
-      await state.removeTaskFromView(existing);
-    }
+    await state.assignTaskView(task, null);
     return;
   }
 
   if (action == 'section' && parts.length >= 4) {
     final sectionName = parts.sublist(3).join(':');
     if (existing != null && existing.sectionName == sectionName) {
-      await state.removeTaskFromView(existing);
+      await state.assignTaskView(task, null);
       return;
     }
-    await state.addTaskToView(task, viewType, sectionName: sectionName);
+    await state.assignTaskView(task, viewType, sectionName: sectionName);
   }
 }
 

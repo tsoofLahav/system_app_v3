@@ -7,6 +7,7 @@ from services.automation_params import (
     trigger_config,
 )
 from services.automation_topics import AUTOMATIONS_TOPIC_KEY
+from services.task_view_assign import assign_task_view
 from services.task_view_sections import resolve_task_section_name
 
 
@@ -103,23 +104,13 @@ def ensure_trigger_task(rule):
         if task.status not in {"done", "active"}:
             task.status = "done"
 
-    membership = (
-        TaskView.query.filter_by(task_id=task.id, view_type=view_type)
-        .order_by(TaskView.id)
-        .first()
+    assign_task_view(
+        task.id,
+        view_type,
+        section_name=section_name,
+        topic_key=AUTOMATIONS_TOPIC_KEY,
+        order_index=_next_view_order(view_type, section_name),
     )
-    if membership is None:
-        membership = TaskView(
-            task_id=task.id,
-            view_type=view_type,
-            section_name=section_name,
-            topic_key=AUTOMATIONS_TOPIC_KEY,
-            order_index=_next_view_order(view_type, section_name),
-        )
-        db.session.add(membership)
-    else:
-        membership.section_name = section_name
-        membership.topic_key = AUTOMATIONS_TOPIC_KEY
 
     trigger["task_id"] = task.id
     trigger["rule_id"] = rule.id

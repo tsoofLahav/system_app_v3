@@ -9,6 +9,7 @@ class AppFile {
     this.isMain,
     this.archivedAt,
     this.createdAt,
+    this.settings = const {},
   });
 
   final int id;
@@ -20,9 +21,13 @@ class AppFile {
   final bool? isMain;
   final String? archivedAt;
   final String? createdAt;
+  final Map<String, dynamic> settings;
   bool get isArchived => archivedAt != null;
 
+  bool get tasksFlipByView => settings['tasks_flip_by_view'] == true;
+
   factory AppFile.fromJson(Map<String, dynamic> json) {
+    final rawSettings = json['settings'];
     return AppFile(
       id: json['id'] as int,
       topicId: json['topic_id'] as int?,
@@ -33,6 +38,9 @@ class AppFile {
       isMain: json['is_main'] as bool?,
       archivedAt: json['archived_at'] as String?,
       createdAt: json['created_at'] as String?,
+      settings: rawSettings is Map<String, dynamic>
+          ? Map<String, dynamic>.from(rawSettings)
+          : const {},
     );
   }
 
@@ -46,6 +54,7 @@ class AppFile {
     bool? isMain,
     String? archivedAt,
     String? createdAt,
+    Map<String, dynamic>? settings,
   }) {
     return AppFile(
       id: id ?? this.id,
@@ -57,6 +66,7 @@ class AppFile {
       isMain: isMain ?? this.isMain,
       archivedAt: archivedAt ?? this.archivedAt,
       createdAt: createdAt ?? this.createdAt,
+      settings: settings ?? this.settings,
     );
   }
 
@@ -68,5 +78,6 @@ class AppFile {
     if (orderIndex != null) 'order_index': orderIndex,
     if (isMain != null) 'is_main': isMain,
     if (archivedAt != null) 'archived_at': archivedAt,
+    if (settings.isNotEmpty) 'settings': settings,
   };
 }

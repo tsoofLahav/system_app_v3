@@ -55,6 +55,42 @@ def create_block():
     return jsonify(block.to_dict()), 201
 
 
+@blocks_bp.route("/files/<int:file_id>/blocks/reorder", methods=["POST"])
+def reorder_blocks(file_id):
+    get_or_404(File, file_id)
+    data = request.get_json(silent=True) or {}
+    updates = data.get("updates")
+    if not isinstance(updates, list) or not updates:
+        return jsonify({"error": "updates must be a non-empty list"}), 400
+
+    block_ids = []
+    order_by_id = {}
+    for item in updates:
+        if not isinstance(item, dict):
+            return jsonify({"error": "each update must be an object"}), 400
+        block_id = item.get("id")
+        order_index = item.get("order_index")
+        if block_id is None or order_index is None:
+            return jsonify({"error": "each update requires id and order_index"}), 400
+        block_ids.append(int(block_id))
+        order_by_id[int(block_id)] = int(order_index)
+
+    blocks = (
+        active_query(Block)
+        .filter(Block.id.in_(block_ids), Block.file_id == file_id)
+        .all()
+    )
+    if len(blocks) != len(set(block_ids)):
+        return jsonify({"error": "invalid block ids for file"}), 400
+
+    for block in blocks:
+        block.order_index = order_by_id[block.id]
+
+    db.session.commit()
+    dispatch_file_changed(file_id, "blocks_reordered")
+    return jsonify({"updated": len(blocks)})
+
+
 @blocks_bp.route("/blocks/<int:block_id>", methods=["PATCH"])
 def update_block(block_id):
     block = get_or_404(Block, block_id)

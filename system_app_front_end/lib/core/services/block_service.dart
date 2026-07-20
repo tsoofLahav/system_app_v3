@@ -48,4 +48,13 @@ class BlockService {
   Future<void> deleteBlock(int id) async {
     await _api.delete('/blocks/$id');
   }
+
+  Future<void> reorderBlocks(
+    int fileId,
+    List<Map<String, int>> updates,
+  ) async {
+    await _api.post('/files/$fileId/blocks/reorder', {
+      'updates': updates,
+    });
+  }
 }

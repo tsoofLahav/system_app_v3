@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from models import Block, File, Task, TaskView, db
 from services.doc_table_rows import DEFAULT_TABLE_HEADER, insert_row_into_table_block
-from services.task_view_flags import apply_section_flag_to_membership
+from services.task_view_assign import assign_task_view
 
 
 def _next_order(file_id: int) -> int:
@@ -80,25 +80,13 @@ def add_task_view_membership(
     view_type: str,
     section_name: str | None = None,
 ) -> TaskView:
-    existing = (
-        TaskView.query.filter_by(task_id=int(task_id), view_type=view_type)
-        .first()
-    )
-    if existing is not None:
-        if section_name is not None and existing.section_name != section_name:
-            existing.section_name = section_name
-            apply_section_flag_to_membership(existing)
-            db.session.flush()
-        return existing
-
-    membership = TaskView(
-        task_id=int(task_id),
-        view_type=view_type,
+    membership = assign_task_view(
+        task_id,
+        view_type,
         section_name=section_name,
     )
-    apply_section_flag_to_membership(membership)
-    db.session.add(membership)
-    db.session.flush()
+    if membership is None:
+        raise RuntimeError("failed to assign task view membership")
     return membership
 
 

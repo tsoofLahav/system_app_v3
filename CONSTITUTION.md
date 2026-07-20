@@ -206,7 +206,7 @@ Additional block types may be added when needed.
 
 Tasks represent actionable items.
 
-Tasks may appear in multiple views while remaining a single underlying task.
+Each task is assigned to at most one view while remaining a single underlying task.
 
 Examples of views:
 

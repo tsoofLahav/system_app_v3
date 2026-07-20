@@ -46,6 +46,7 @@ class File(db.Model):
     order_index = db.Column(db.Integer)
     is_main = db.Column(db.Boolean)
     archived_at = db.Column(db.DateTime)
+    settings = db.Column(JSONB, nullable=False, default=dict)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -58,6 +59,7 @@ class File(db.Model):
             "order_index": self.order_index,
             "is_main": self.is_main,
             "archived_at": _iso(self.archived_at),
+            "settings": self.settings if self.settings is not None else {},
             "created_at": _iso(self.created_at),
         }
 

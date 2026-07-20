@@ -6,6 +6,7 @@ from services.task_view_flags import (
     apply_section_flag_to_membership,
     propagate_section_flag,
 )
+from services.task_view_assign import assign_task_view
 
 task_views_bp = Blueprint("task_views", __name__)
 
@@ -75,16 +76,18 @@ def create_task_view():
             order_index=data.get("order_index", max_order + 1),
             section_flag=data.get("section_flag"),
         )
+        db.session.add(view)
     else:
-        view = TaskView(
-            task_id=task_id,
-            view_type=view_type,
+        view = assign_task_view(
+            int(task_id),
+            view_type,
             section_name=section_name,
             topic_key=data.get("topic_key"),
+            order_index=data.get("order_index"),
         )
-        apply_section_flag_to_membership(view)
+        if view is None:
+            return jsonify({"error": "failed to assign view"}), 400
 
-    db.session.add(view)
     db.session.commit()
     return jsonify(view.to_dict()), 201
 

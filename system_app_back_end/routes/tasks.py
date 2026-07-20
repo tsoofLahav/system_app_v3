@@ -4,6 +4,7 @@ from sqlalchemy import or_
 from models import Block, File, Task, TaskView, Topic, db
 from routes.helpers import active_query, apply_updates, get_or_404
 from services.automation_dispatcher import dispatch_file_changed
+from services.task_view_assign import assign_task_view
 from services.automation_topics import AUTOMATIONS_TOPIC_KEY
 from services.automation_definitions import (
     eager_companion_trigger_task,
@@ -273,6 +274,46 @@ def update_task(task_id):
         elif not rule_keys_for_trigger_task(task.id):
             payload["automation_trigger_skipped"] = "not_trigger_task"
     return jsonify(payload)
+
+
+@tasks_bp.route("/tasks/<int:task_id>/view", methods=["PUT"])
+def assign_task_view_route(task_id):
+    task = get_or_404(Task, task_id)
+    data = request.get_json(silent=True) or {}
+    view_type = data.get("view_type")
+    if view_type is not None and not isinstance(view_type, str):
+        return jsonify({"error": "view_type must be a string or null"}), 400
+
+    clear_section = bool(data.get("clear_section"))
+    section_name = data.get("section_name")
+    if clear_section:
+        section_name = None
+    elif "section_name" not in data and view_type is not None:
+        existing = (
+            TaskView.query.filter_by(task_id=task.id)
+            .order_by(TaskView.id)
+            .first()
+        )
+        if existing is not None and existing.view_type == view_type:
+            section_name = existing.section_name
+
+    membership = assign_task_view(
+        task.id,
+        view_type,
+        section_name=section_name,
+        topic_key=data.get("topic_key"),
+        order_index=data.get("order_index"),
+        clear_section=clear_section,
+    )
+    db.session.commit()
+    dispatch_file_changed(
+        _file_id_for_task(task),
+        "task_view_assigned",
+        {"task_id": task.id, "view_type": view_type},
+    )
+    if membership is None:
+        return jsonify({"task_id": task.id, "view_type": None}), 200
+    return jsonify(membership.to_dict())
 
 
 @tasks_bp.route("/tasks/<int:task_id>", methods=["DELETE"])

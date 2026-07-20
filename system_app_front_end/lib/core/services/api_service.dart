@@ -44,6 +44,15 @@ class ApiService {
     return _decode(response);
   }
 
+  Future<dynamic> put(String path, Map<String, dynamic> body) async {
+    final response = await _client.put(
+      _uri(path),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    return _decode(response);
+  }
+
   Future<void> delete(String path) async {
     final response = await _client.delete(_uri(path));
     if (response.statusCode == 204) return;

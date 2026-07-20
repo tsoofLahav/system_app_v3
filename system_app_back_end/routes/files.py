@@ -101,6 +101,7 @@ def update_file(file_id):
             "order_index",
             "is_main",
             "archived_at",
+            "settings",
         },
         datetime_fields={"archived_at"},
     )

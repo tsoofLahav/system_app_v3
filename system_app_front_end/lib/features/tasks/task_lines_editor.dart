@@ -34,6 +34,10 @@ class TaskLinesEditor extends StatelessWidget {
     this.onReadOnlyAction,
     this.viewMenuContext,
     this.file,
+    this.listBlock,
+    this.enableReorder = false,
+    this.enableCrossListDrag = false,
+    this.flipViewType,
   });
 
   final List<Task> tasks;
@@ -48,11 +52,16 @@ class TaskLinesEditor extends StatelessWidget {
   final VoidCallback? onReadOnlyAction;
   final TaskViewMenuContext? viewMenuContext;
   final AppFile? file;
+  final Block? listBlock;
+  final bool enableReorder;
+  final bool enableCrossListDrag;
+  final String? flipViewType;
 
   @override
   Widget build(BuildContext context) {
-    final parts = partitionTasksById(tasks);
+    final parts = partitionTasks(tasks);
     final showDone = parts.done.isNotEmpty;
+    final canMutate = !readOnlyTaskRefs && file != null && listBlock != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -71,6 +80,10 @@ class TaskLinesEditor extends StatelessWidget {
           onReadOnlyAction: onReadOnlyAction,
           viewMenuContext: viewMenuContext,
           file: file,
+          listBlock: listBlock,
+          enableReorder: enableReorder && canMutate,
+          enableCrossListDrag: enableCrossListDrag && canMutate,
+          flipViewType: flipViewType,
           onCreateAfter: handlersFor(false).onCreateAfter,
           onCreateAtEnd: handlersFor(false).onCreateAtEnd,
           onTitleChanged: handlersFor(false).onTitleChanged,
@@ -99,6 +112,10 @@ class TaskLinesEditor extends StatelessWidget {
             onReadOnlyAction: onReadOnlyAction,
             viewMenuContext: viewMenuContext,
             file: file,
+            listBlock: listBlock,
+            enableReorder: enableReorder && canMutate,
+            enableCrossListDrag: enableCrossListDrag && canMutate,
+            flipViewType: flipViewType,
             onCreateAfter: handlersFor(true).onCreateAfter,
             onCreateAtEnd: handlersFor(true).onCreateAtEnd,
             onTitleChanged: handlersFor(true).onTitleChanged,

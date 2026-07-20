@@ -73,7 +73,7 @@ class _TasksConnectedEditorState extends State<TasksConnectedEditor> {
         }
       },
       onCreateAtEnd: (title, _) async {
-        final parts = partitionTasksById(
+        final parts = partitionTasks(
           widget.state.orderedTasksForFile(widget.file, widget.listBlock),
         );
         final zone = done ? parts.done : parts.active;
@@ -114,6 +114,12 @@ class _TasksConnectedEditorState extends State<TasksConnectedEditor> {
       widget.file,
       widget.listBlock,
     );
+    final blocks =
+        widget.state.selectedDetail?.blocksByFileId[widget.file.id] ??
+        widget.state.broughtFile?.blocks ??
+        const <Block>[];
+    final taskListCount = blocks.where((b) => b.type == 'task_list').length;
+    final canMutate = !_isGeneratedProjectSummaryList;
 
     return TaskLinesEditor(
       tasks: tasks,
@@ -132,6 +138,9 @@ class _TasksConnectedEditorState extends State<TasksConnectedEditor> {
       readOnlyTaskRefs: _isGeneratedProjectSummaryList,
       onReadOnlyAction: _showReadOnlyReferenceMessage,
       file: widget.file,
+      listBlock: widget.listBlock,
+      enableReorder: canMutate,
+      enableCrossListDrag: canMutate && taskListCount > 1,
       handlersFor: _handlers,
     );
   }

@@ -79,4 +79,23 @@ class TaskViewService {
   Future<void> updateOrderIndex(int id, int orderIndex) async {
     await _api.patch('/task_views/$id', {'order_index': orderIndex});
   }
+
+  Future<TaskViewMembership?> assignView({
+    required int taskId,
+    required String? viewType,
+    String? sectionName,
+    bool clearSection = false,
+  }) async {
+    final body = <String, dynamic>{
+      'view_type': viewType,
+      if (clearSection) 'clear_section': true,
+      if (sectionName != null) 'section_name': sectionName,
+    };
+    final data = await _api.put('/tasks/$taskId/view', body);
+    if (data == null) return null;
+    if (data is Map<String, dynamic> && data['view_type'] == null) {
+      return null;
+    }
+    return TaskViewMembership.fromJson(data as Map<String, dynamic>);
+  }
 }

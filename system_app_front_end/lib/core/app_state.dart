@@ -51,6 +51,8 @@ import 'services/task_service.dart';
 import 'services/task_reset_acknowledgement_service.dart';
 import 'services/task_view_service.dart';
 import 'services/topic_service.dart';
+import 'task_file_layout.dart';
+import 'task_list_order.dart';
 import 'shortcuts/main_file_cycle.dart';
 import 'shortcuts/shortcut_binding.dart';
 import 'shortcuts/shortcut_bindings_store.dart';
@@ -311,6 +313,9 @@ class AppState extends ChangeNotifier {
     if (isGuestFile(file)) return broughtFile!.tasksByBlockId;
     return selectedDetail?.tasksByBlockId ?? {};
   }
+
+  Map<int, List<Task>> tasksByBlockIdForFile(AppFile file) =>
+      _tasksByBlockIdForFile(file);
 
   Future<void> _refreshAfterFileMutation(AppFile file) async {
     final topic = selectedTopic;
@@ -797,6 +802,15 @@ class AppState extends ChangeNotifier {
     }
     return null;
   }
+
+  TaskViewMembership? primaryMembershipForTask(int taskId) {
+    for (final m in _taskViewMemberships) {
+      if (m.taskId == taskId) return m;
+    }
+    return null;
+  }
+
+  String? viewTypeForTask(int taskId) => primaryMembershipForTask(taskId)?.viewType;
 
   List<ViewSection> sectionsForViewType(String viewType) {
     return viewSections.where((s) => s.viewType == viewType).toList()
@@ -2347,20 +2361,11 @@ class AppState extends ChangeNotifier {
   }
 
   int _listInsertIndexAfterBlock(List<Block> blocks, Block afterBlock) {
-    for (var i = 0; i < blocks.length; i++) {
-      if (blocks[i].id == afterBlock.id) return i + 1;
-    }
-    return blocks.length;
+    return listInsertIndexAfterTaskBlock(blocks, afterBlock);
   }
 
   int _listInsertIndexForNewTask(AppFile file, Block listBlock) {
-    final blocks = _blocksForFile(file);
-    var lastTaskListIndex = -1;
-    for (var i = 0; i < blocks.length; i++) {
-      if (blocks[i].type == 'task') lastTaskListIndex = i;
-    }
-    if (lastTaskListIndex >= 0) return lastTaskListIndex + 1;
-    return _listInsertIndexAfterBlock(blocks, listBlock);
+    return listInsertIndexForNewTask(_blocksForFile(file), listBlock);
   }
 
   Future<int> _shiftBlocksForInsert(AppFile file, int listInsertIndex) async {
@@ -2670,22 +2675,11 @@ class AppState extends ChangeNotifier {
   }
 
   List<Task> orderedTasksForFile(AppFile file, Block listBlock) {
-    final blocks = List<Block>.from(_blocksForFile(file))
-      ..sort((a, b) => (a.orderIndex ?? 0).compareTo(b.orderIndex ?? 0));
-    final taskById = {
-      for (final task in _tasksByBlockIdForFile(file)[listBlock.id] ?? const <Task>[])
-        task.id: task,
-    };
-    final ordered = <Task>[];
-    for (final block in blocks) {
-      if (block.type != 'task') continue;
-      final taskId = block.content['task_id'] as int?;
-      if (taskId == null) continue;
-      final task = taskById[taskId];
-      if (task != null) ordered.add(task);
-    }
-    ordered.sort((a, b) => a.id.compareTo(b.id));
-    return ordered;
+    return orderedTasksForListBlock(
+      _blocksForFile(file),
+      listBlock,
+      _tasksByBlockIdForFile(file),
+    );
   }
 
   Block? taskRowBlockInFile(AppFile file, Task task) {
@@ -2764,6 +2758,218 @@ class AppState extends ChangeNotifier {
         status: status,
       );
     }
+  }
+
+  void _patchFileInCaches(AppFile file) {
+    final detail = selectedDetail;
+    if (detail != null) {
+      _applyOptimisticFiles(
+        detail.files.map((f) => f.id == file.id ? file : f).toList(),
+      );
+    } else if (broughtFile?.file.id == file.id) {
+      broughtFile = broughtFile!.copyWith(file: file);
+      notifyListeners();
+    }
+  }
+
+  Future<void> setFileTasksFlipByView(AppFile file, bool enabled) async {
+    final nextSettings = Map<String, dynamic>.from(file.settings);
+    if (enabled) {
+      nextSettings['tasks_flip_by_view'] = true;
+    } else {
+      nextSettings.remove('tasks_flip_by_view');
+    }
+    final updated = await _fileService.updateFile(file.id, {
+      'settings': nextSettings,
+    });
+    _patchFileInCaches(updated);
+  }
+
+  void _applyBlockOrderUpdates(AppFile file, List<Map<String, int>> updates) {
+    final byId = {for (final item in updates) item['id']!: item['order_index']!};
+    void patchBlocks(List<Block> blocks) {
+      for (var i = 0; i < blocks.length; i++) {
+        final nextOrder = byId[blocks[i].id];
+        if (nextOrder != null) {
+          blocks[i] = blocks[i].copyWith(orderIndex: nextOrder);
+        }
+      }
+      blocks.sort(
+        (a, b) => (a.orderIndex ?? 0).compareTo(b.orderIndex ?? 0),
+      );
+    }
+
+    if (broughtFile?.file.id == file.id) {
+      final guest = broughtFile!;
+      final nextBlocks = List<Block>.from(guest.blocks);
+      patchBlocks(nextBlocks);
+      broughtFile = guest.copyWith(blocks: nextBlocks);
+      return;
+    }
+
+    final detail = selectedDetail;
+    if (detail == null) return;
+    final blocks = List<Block>.from(detail.blocksByFileId[file.id] ?? []);
+    patchBlocks(blocks);
+    detail.blocksByFileId[file.id] = blocks;
+  }
+
+  Future<void> reorderTasksInListBlock(
+    AppFile file,
+    Block listBlock,
+    List<int> orderedTaskIds,
+  ) async {
+    final blocks = sortedBlocksForFile(_blocksForFile(file));
+    final region = taskListRegion(blocks, listBlock);
+    final tasks = _tasksByBlockIdForFile(file)[listBlock.id] ?? const <Task>[];
+    final taskIdsInBlock = tasks.map((t) => t.id).toSet();
+    if (orderedTaskIds.length != taskIdsInBlock.length ||
+        !orderedTaskIds.every(taskIdsInBlock.contains)) {
+      return;
+    }
+
+    final rowByTaskId = <int, Block>{};
+    for (var i = region.startIndex + 1; i < region.endIndex; i++) {
+      final block = blocks[i];
+      if (block.type != 'task') continue;
+      final taskId = block.content['task_id'] as int?;
+      if (taskId != null) rowByTaskId[taskId] = block;
+    }
+
+    final anchorOrder =
+        blocks[region.startIndex].orderIndex ?? region.startIndex;
+    final updates = <Map<String, int>>[];
+    for (var i = 0; i < orderedTaskIds.length; i++) {
+      final row = rowByTaskId[orderedTaskIds[i]];
+      if (row == null) continue;
+      updates.add({'id': row.id, 'order_index': anchorOrder + i + 1});
+    }
+    if (updates.isEmpty) return;
+
+    await _blockService.reorderBlocks(file.id, updates);
+    _applyBlockOrderUpdates(file, updates);
+    notifyListeners();
+  }
+
+  Future<void> reorderTasksInListZone(
+    AppFile file,
+    Block listBlock, {
+    required bool done,
+    required int oldIndex,
+    required int newIndex,
+  }) async {
+    final all = orderedTasksForFile(file, listBlock);
+    final parts = partitionTasks(all);
+    final zone = done
+        ? List<Task>.from(parts.done)
+        : List<Task>.from(parts.active);
+    if (oldIndex < 0 ||
+        oldIndex >= zone.length ||
+        newIndex < 0 ||
+        newIndex > zone.length) {
+      return;
+    }
+    var target = newIndex;
+    if (target > oldIndex) target -= 1;
+    if (target < 0 || target >= zone.length) return;
+    final moved = zone.removeAt(oldIndex);
+    zone.insert(target, moved);
+    final mergedIds = done
+        ? [...parts.active.map((t) => t.id), ...zone.map((t) => t.id)]
+        : [...zone.map((t) => t.id), ...parts.done.map((t) => t.id)];
+    await reorderTasksInListBlock(file, listBlock, mergedIds);
+  }
+
+  Future<void> moveTaskToListBlock(
+    AppFile file,
+    Task task,
+    Block targetListBlock, {
+    Task? afterTask,
+  }) async {
+    if (task.blockId == targetListBlock.id && afterTask == null) return;
+
+    final sourceListId = task.blockId;
+    final rowBlock = taskRowBlockInFile(file, task);
+    if (rowBlock == null) return;
+
+    final updatedTask = await _taskService.updateTask(task.id, {
+      'block_id': targetListBlock.id,
+    });
+
+    var blocks = List<Block>.from(sortedBlocksForFile(_blocksForFile(file)));
+    final fromIndex = blocks.indexWhere((b) => b.id == rowBlock.id);
+    if (fromIndex >= 0) blocks.removeAt(fromIndex);
+
+    final targetRegion = taskListRegion(blocks, targetListBlock);
+    var insertAt = afterTask != null
+        ? listInsertIndexAfterTaskBlock(
+            blocks,
+            taskRowBlockInFile(file, afterTask)!,
+          )
+        : listInsertIndexForNewTask(blocks, targetListBlock);
+    insertAt = insertAt.clamp(
+      targetRegion.startIndex + 1,
+      targetRegion.endIndex,
+    );
+
+    blocks.insert(insertAt, rowBlock);
+
+    final nextRegion = taskListRegion(blocks, targetListBlock);
+    final anchorOrder =
+        blocks[nextRegion.startIndex].orderIndex ?? nextRegion.startIndex;
+    final updates = <Map<String, int>>[];
+    for (var i = nextRegion.startIndex + 1; i < nextRegion.endIndex; i++) {
+      if (blocks[i].type != 'task') continue;
+      updates.add({
+        'id': blocks[i].id,
+        'order_index': anchorOrder + updates.length + 1,
+      });
+    }
+
+    if (updates.isNotEmpty) {
+      await _blockService.reorderBlocks(file.id, updates);
+      _applyBlockOrderUpdates(file, updates);
+    }
+
+    _moveTaskBetweenListCaches(
+      file: file,
+      task: updatedTask,
+      sourceListId: sourceListId,
+      targetListBlock: targetListBlock,
+    );
+    notifyListeners();
+  }
+
+  void _moveTaskBetweenListCaches({
+    required AppFile file,
+    required Task task,
+    required int? sourceListId,
+    required Block targetListBlock,
+  }) {
+    void patchMap(Map<int, List<Task>> tasksByBlockId) {
+      if (sourceListId != null) {
+        tasksByBlockId[sourceListId] = (tasksByBlockId[sourceListId] ?? [])
+            .where((t) => t.id != task.id)
+            .toList();
+      }
+      tasksByBlockId[targetListBlock.id] = [
+        ...(tasksByBlockId[targetListBlock.id] ?? [])
+            .where((t) => t.id != task.id),
+        task,
+      ];
+    }
+
+    if (broughtFile?.file.id == file.id) {
+      final guest = broughtFile!;
+      final nextMap = Map<int, List<Task>>.from(guest.tasksByBlockId);
+      patchMap(nextMap);
+      broughtFile = guest.copyWith(tasksByBlockId: nextMap);
+      return;
+    }
+
+    final detail = selectedDetail;
+    if (detail == null) return;
+    patchMap(detail.tasksByBlockId);
   }
 
   Future<Task?> createTaskInViewZoneAfter({
@@ -3315,44 +3521,85 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addTaskToView(
+  Future<void> assignTaskView(
     Task task,
-    String viewType, {
+    String? viewType, {
     String? sectionName,
+    bool clearSection = false,
   }) async {
-    final existing = membershipForTaskInView(task.id, viewType);
-    if (existing != null) {
-      await updateTaskViewSection(
-        existing,
-        sectionName: sectionName,
-        task: task,
-        clearSection: sectionName == null,
-      );
-      return;
-    }
-
-    final membership = await _taskViewService.createMembership(
+    final previous = primaryMembershipForTask(task.id);
+    final membership = await _taskViewService.assignView(
       taskId: task.id,
       viewType: viewType,
       sectionName: sectionName,
+      clearSection: clearSection,
     );
-    _taskViewMemberships = [..._taskViewMemberships, membership];
 
-    if (selectedViewType == viewType) {
+    _taskViewMemberships = [
+      ..._taskViewMemberships.where((m) => m.taskId != task.id),
+      if (membership != null) membership,
+    ];
+
+    if (previous != null && selectedViewType == previous.viewType) {
+      viewTasks = viewTasks.where((t) => t.id != task.id).toList();
+    }
+    if (membership != null && selectedViewType == membership.viewType) {
       final alreadyListed = viewTasks.any((t) => t.id == task.id);
       if (!alreadyListed) {
         viewTasks = [
           ...viewTasks,
           task.copyWith(
             taskViewId: membership.id,
-            viewType: viewType,
-            sectionName: sectionName,
+            viewType: membership.viewType,
+            sectionName: membership.sectionName,
             sectionFlag: membership.sectionFlag,
           ),
         ];
+      } else {
+        viewTasks = viewTasks
+            .map(
+              (t) => t.id == task.id
+                  ? t.copyWith(
+                      taskViewId: membership.id,
+                      viewType: membership.viewType,
+                      sectionName: membership.sectionName,
+                      sectionFlag: membership.sectionFlag,
+                    )
+                  : t,
+            )
+            .toList();
+      }
+      _cacheCurrentView();
+    }
+
+    final detail = selectedDetail;
+    if (detail != null) {
+      for (final entry in detail.tasksByBlockId.entries) {
+        detail.tasksByBlockId[entry.key] = entry.value
+            .map(
+              (t) => t.id == task.id
+                  ? t.copyWith(
+                      taskViewId: membership?.id,
+                      viewType: membership?.viewType,
+                      sectionName: membership?.sectionName,
+                      sectionFlag: membership?.sectionFlag,
+                      clearSection: membership?.sectionName == null,
+                      clearSectionFlag: membership?.sectionFlag == null,
+                    )
+                  : t,
+            )
+            .toList();
       }
     }
     notifyListeners();
+  }
+
+  Future<void> addTaskToView(
+    Task task,
+    String viewType, {
+    String? sectionName,
+  }) async {
+    await assignTaskView(task, viewType, sectionName: sectionName);
   }
 
   Future<void> updateTaskViewSection(
@@ -3417,9 +3664,30 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> removeTaskFromView(TaskViewMembership membership) async {
-    await _taskViewService.delete(membership.id);
+    Task? task;
+    final detail = selectedDetail;
+    if (detail != null) {
+      for (final tasks in detail.tasksByBlockId.values) {
+        for (final candidate in tasks) {
+          if (candidate.id == membership.taskId) {
+            task = candidate;
+            break;
+          }
+        }
+        if (task != null) break;
+      }
+    }
+    if (task != null) {
+      await assignTaskView(task, null);
+      return;
+    }
+
+    await _taskViewService.assignView(
+      taskId: membership.taskId,
+      viewType: null,
+    );
     _taskViewMemberships = _taskViewMemberships
-        .where((m) => m.id != membership.id)
+        .where((m) => m.taskId != membership.taskId)
         .toList();
 
     if (selectedViewType == membership.viewType) {

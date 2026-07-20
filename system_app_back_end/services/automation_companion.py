@@ -9,6 +9,7 @@ from services.automation_definitions import (
 from services.task_view_sections import resolve_task_section_name
 from services.automation_params import companion_config, normalize_params
 from services.automation_topics import AUTOMATIONS_TOPIC_KEY
+from services.task_view_assign import assign_task_view
 
 
 def create_companion_task(rule, run, flow_key, payload, title=None, section_name=None):
@@ -141,23 +142,13 @@ def complete_companion_task(companion_id):
 
 def _ensure_task_view(task, view_type, section_name):
     section_name = resolve_task_section_name(view_type, section_name)
-    membership = (
-        TaskView.query.filter_by(task_id=task.id, view_type=view_type)
-        .order_by(TaskView.id)
-        .first()
+    assign_task_view(
+        task.id,
+        view_type,
+        section_name=section_name,
+        topic_key=AUTOMATIONS_TOPIC_KEY,
+        order_index=_next_view_order(view_type, section_name),
     )
-    if membership is None:
-        membership = TaskView(
-            task_id=task.id,
-            view_type=view_type,
-            section_name=section_name,
-            topic_key=AUTOMATIONS_TOPIC_KEY,
-            order_index=_next_view_order(view_type, section_name),
-        )
-        db.session.add(membership)
-    else:
-        membership.section_name = section_name
-        membership.topic_key = AUTOMATIONS_TOPIC_KEY
 
 
 def _next_view_order(view_type, section_name):

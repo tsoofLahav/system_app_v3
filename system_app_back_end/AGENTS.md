@@ -61,7 +61,7 @@ Topic (project / process / area / others)
               └── Task (optional; task-type blocks link here)
 ```
 
-Tasks can also appear in multiple **views** via the `task_views` join table.
+Tasks are assigned to at most one **view** via the `task_views` join table (one row per task).
 
 ### Entity relationships
 
