@@ -6,6 +6,7 @@ import '../../core/ai/ai_context.dart';
 import '../../core/models/block.dart';
 import '../../core/models/task.dart';
 import '../../core/models/task_view_menu_context.dart';
+import '../../design_system/app_icons.dart';
 import '../../design_system/app_typography.dart';
 import '../../features/blocks/formatted_text_field.dart';
 import '../../core/registry/automation_flow_registry.dart';
@@ -39,6 +40,8 @@ class TaskZoneList extends StatefulWidget {
     this.enableReorder = false,
     this.enableCrossListDrag = false,
     this.flipViewType,
+    this.flipGroupTasks,
+    this.listBlockByTaskId,
   });
 
   final List<Task> tasks;
@@ -67,14 +70,73 @@ class TaskZoneList extends StatefulWidget {
   final bool enableReorder;
   final bool enableCrossListDrag;
   final String? flipViewType;
+  final List<Task>? flipGroupTasks;
+  final Map<int, Block>? listBlockByTaskId;
 
   @override
   State<TaskZoneList> createState() => _TaskZoneListState();
 }
 
 class _TaskZoneListState extends State<TaskZoneList> {
+  bool get _canMutate =>
+      !widget.readOnlyTaskRefs && widget.file != null && widget.listBlock != null;
+
+  bool get _showGrip =>
+      _canMutate &&
+      ((widget.enableReorder && widget.tasks.length > 1) ||
+          widget.enableCrossListDrag);
+
+  bool get _showDropTargets =>
+      _canMutate &&
+      ((widget.enableReorder && widget.tasks.length > 1) ||
+          widget.enableCrossListDrag);
+
+  bool _isSameZone(TaskDragPayload payload) {
+    return payload.sourceListBlock.id == widget.listBlock?.id &&
+        payload.sourceDone == widget.done &&
+        payload.sourceViewType == widget.flipViewType;
+  }
+
+  bool _willAcceptDrop(TaskDragPayload payload, int targetIndex) {
+    if (!_showDropTargets) return false;
+    final fromIndex = widget.tasks.indexWhere((t) => t.id == payload.task.id);
+    if (_isSameZone(payload)) {
+      if (fromIndex < 0) return false;
+      if (fromIndex == targetIndex) return false;
+      return true;
+    }
+    if (payload.sourceListBlock.id == widget.listBlock?.id &&
+        payload.sourceViewType == widget.flipViewType) {
+      return widget.enableReorder;
+    }
+    return widget.enableCrossListDrag;
+  }
+
+  Widget _dragHandle() {
+    return MouseRegion(
+      cursor: SystemMouseCursors.grab,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.only(top: 2, end: 4),
+        child: SizedBox(
+          width: 20,
+          height: AppTypography.taskRowLineHeight,
+          child: Center(
+            child: AppIcon(
+              AppIcons.drag,
+              size: 16,
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.35),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildTaskRow(Task task, List<String> titles) {
-    final row = TaskRow(
+    return TaskRow(
       key: ValueKey(task.id),
       task: task,
       state: widget.state,
@@ -127,59 +189,107 @@ class _TaskZoneListState extends State<TaskZoneList> {
           : null,
       aiFileId: widget.file?.id,
     );
+  }
 
-    if (!widget.enableCrossListDrag ||
-        widget.readOnlyTaskRefs ||
-        widget.file == null) {
-      return row;
-    }
+  Future<void> _handleDrop(TaskDragPayload payload, int targetIndex) async {
+    final file = widget.file;
+    final listBlock = widget.listBlock;
+    if (file == null || listBlock == null) return;
 
-    return LongPressDraggable<TaskDragData>(
-      data: TaskDragData(
-        task: task,
-        sourceListBlock: widget.listBlock,
-        done: widget.done,
-        flipViewType: widget.flipViewType,
-      ),
+    final sourceIndex = _isSameZone(payload)
+        ? widget.tasks.indexWhere((t) => t.id == payload.task.id)
+        : -1;
+
+    await widget.state.applyTaskDrop(
+      file: file,
+      payload: payload,
+      targetListBlock: listBlock,
+      targetViewType: widget.flipViewType,
+      targetDone: widget.done,
+      insertIndex: targetIndex,
+      sourceIndexInZone: sourceIndex,
+      isFlipMode: widget.flipViewType != null,
+      allowCrossBoundary: widget.enableCrossListDrag,
+      listBlockByTaskId: widget.listBlockByTaskId,
+      flipGroupTasks: widget.flipGroupTasks,
+    );
+  }
+
+  Widget _buildDragHandle(Task task) {
+    final payload = TaskDragPayload(
+      task: task,
+      sourceListBlock: widget.listBlock!,
+      sourceDone: widget.done,
+      sourceViewType: widget.flipViewType,
+    );
+
+    return Draggable<TaskDragPayload>(
+      data: payload,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: Material(
         elevation: 4,
-        child: SizedBox(width: 280, child: row),
+        color: Theme.of(context).colorScheme.surface,
+        child: SizedBox(
+          width: 280,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _dragHandle(),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    task.title,
+                    style: AppTypography.taskRowStyle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
-      childWhenDragging: Opacity(opacity: 0.35, child: row),
-      child: row,
+      childWhenDragging: Opacity(opacity: 0.25, child: _dragHandle()),
+      child: _dragHandle(),
     );
   }
 
-  Future<void> _handleReorder(int oldIndex, int newIndex) async {
-    final file = widget.file;
-    final listBlock = widget.listBlock;
-    if (file == null || listBlock == null) return;
-    await widget.state.reorderTasksInListZone(
-      file,
-      listBlock,
-      done: widget.done,
-      oldIndex: oldIndex,
-      newIndex: newIndex,
-    );
-  }
-
-  Future<void> _handleAcceptDrag(TaskDragData data) async {
-    final file = widget.file;
-    final listBlock = widget.listBlock;
-    if (file == null || listBlock == null) return;
-
-    if (widget.flipViewType != null) {
-      if (data.flipViewType == widget.flipViewType) return;
-      await widget.state.assignTaskView(data.task, widget.flipViewType);
-      return;
+  Widget _buildListItem(Task task, List<String> titles, int index) {
+    Widget rowContent = _buildTaskRow(task, titles);
+    if (_showGrip) {
+      rowContent = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildDragHandle(task),
+          Expanded(child: rowContent),
+        ],
+      );
     }
 
-    if (data.sourceListBlock?.id == listBlock.id) return;
-    await widget.state.moveTaskToListBlock(
-      file,
-      data.task,
-      listBlock,
-      afterTask: widget.tasks.isEmpty ? null : widget.tasks.last,
+    if (!_showDropTargets) return rowContent;
+
+    return DragTarget<TaskDragPayload>(
+      onWillAcceptWithDetails: (details) =>
+          _willAcceptDrop(details.data, index),
+      onAcceptWithDetails: (details) => _handleDrop(details.data, index),
+      builder: (context, candidate, rejected) {
+        final active = candidate.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          decoration: BoxDecoration(
+            border: active
+                ? Border(
+                    top: BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: 2,
+                    ),
+                  )
+                : null,
+          ),
+          child: rowContent,
+        );
+      },
     );
   }
 
@@ -190,40 +300,24 @@ class _TaskZoneListState extends State<TaskZoneList> {
         widget.readOnlyTaskRefs ||
         widget.tasks.any((task) => task.isAutomationsTopic);
 
-    Widget content;
-    if (widget.enableReorder &&
-        !widget.readOnlyTaskRefs &&
-        widget.tasks.length > 1) {
-      content = ReorderableListView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        buildDefaultDragHandles: false,
-        onReorder: (from, to) => _handleReorder(from, to),
-        itemCount: widget.tasks.length,
-        itemBuilder: (context, index) {
-          final task = widget.tasks[index];
-          return ReorderableDragStartListener(
-            key: ValueKey(task.id),
-            index: index,
-            child: _buildTaskRow(task, titles),
-          );
-        },
-      );
-    } else {
-      content = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final task in widget.tasks) _buildTaskRow(task, titles),
-        ],
-      );
-    }
-
-    final body = Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        content,
+        for (var i = 0; i < widget.tasks.length; i++)
+          _buildListItem(widget.tasks[i], titles, i),
+        if (_showDropTargets)
+          DragTarget<TaskDragPayload>(
+            onWillAcceptWithDetails: (details) =>
+                _willAcceptDrop(details.data, widget.tasks.length),
+            onAcceptWithDetails: (details) =>
+                _handleDrop(details.data, widget.tasks.length),
+            builder: (context, candidate, rejected) {
+              return SizedBox(
+                height: candidate.isNotEmpty ? 8 : 0,
+              );
+            },
+          ),
         if (!hideDraft)
           _DraftTaskRow(
             done: widget.done,
@@ -236,34 +330,6 @@ class _TaskZoneListState extends State<TaskZoneList> {
                 widget.onCreateAtEnd(title, position),
           ),
       ],
-    );
-
-    if (!widget.enableCrossListDrag || widget.readOnlyTaskRefs) {
-      return body;
-    }
-
-    return DragTarget<TaskDragData>(
-      onWillAcceptWithDetails: (details) {
-        final data = details.data;
-        if (widget.flipViewType != null) {
-          return data.flipViewType != widget.flipViewType;
-        }
-        return data.sourceListBlock?.id != widget.listBlock?.id;
-      },
-      onAcceptWithDetails: (details) => _handleAcceptDrag(details.data),
-      builder: (context, candidate, rejected) {
-        final active = candidate.isNotEmpty;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: active
-                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.06)
-                : null,
-          ),
-          child: body,
-        );
-      },
     );
   }
 }

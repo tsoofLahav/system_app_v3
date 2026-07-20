@@ -52,6 +52,7 @@ import 'services/task_reset_acknowledgement_service.dart';
 import 'services/task_view_service.dart';
 import 'services/topic_service.dart';
 import 'task_file_layout.dart';
+import '../features/tasks/task_drag_data.dart';
 import 'task_list_order.dart';
 import 'shortcuts/main_file_cycle.dart';
 import 'shortcuts/shortcut_binding.dart';
@@ -811,6 +812,9 @@ class AppState extends ChangeNotifier {
   }
 
   String? viewTypeForTask(int taskId) => primaryMembershipForTask(taskId)?.viewType;
+
+  int orderIndexForTask(int taskId) =>
+      primaryMembershipForTask(taskId)?.orderIndex ?? 0;
 
   List<ViewSection> sectionsForViewType(String viewType) {
     return viewSections.where((s) => s.viewType == viewType).toList()
@@ -2846,9 +2850,14 @@ class AppState extends ChangeNotifier {
     }
     if (updates.isEmpty) return;
 
-    await _blockService.reorderBlocks(file.id, updates);
     _applyBlockOrderUpdates(file, updates);
     notifyListeners();
+    try {
+      await _blockService.reorderBlocks(file.id, updates);
+    } catch (_) {
+      await _refreshAfterFileMutation(file);
+      rethrow;
+    }
   }
 
   Future<void> reorderTasksInListZone(
@@ -2880,64 +2889,331 @@ class AppState extends ChangeNotifier {
     await reorderTasksInListBlock(file, listBlock, mergedIds);
   }
 
+  Future<void> reorderTasksInFlipGroup(
+    AppFile file,
+    String? viewType,
+    Map<int, Block> listBlockByTaskId, {
+    required List<Task> groupTasks,
+    required bool done,
+    required int oldIndex,
+    required int newIndex,
+  }) async {
+    final parts = partitionTasks(groupTasks);
+    final zone = done
+        ? List<Task>.from(parts.done)
+        : List<Task>.from(parts.active);
+    if (oldIndex < 0 ||
+        oldIndex >= zone.length ||
+        newIndex < 0 ||
+        newIndex > zone.length) {
+      return;
+    }
+    var target = newIndex;
+    if (target > oldIndex) target -= 1;
+    if (target < 0 || target >= zone.length) return;
+    final moved = zone.removeAt(oldIndex);
+    zone.insert(target, moved);
+    final merged = done
+        ? [...parts.active, ...zone]
+        : [...zone, ...parts.done];
+
+    if (viewType != null) {
+      for (var i = 0; i < merged.length; i++) {
+        final membership = primaryMembershipForTask(merged[i].id);
+        if (membership == null) continue;
+        await _taskViewService.updateOrderIndex(membership.id, i);
+        _taskViewMemberships = _taskViewMemberships
+            .map(
+              (m) => m.id == membership.id ? m.copyWith(orderIndex: i) : m,
+            )
+            .toList();
+      }
+      notifyListeners();
+      return;
+    }
+
+    final byListBlock = <int, List<int>>{};
+    for (final task in merged) {
+      final listBlock = listBlockByTaskId[task.id];
+      if (listBlock == null) continue;
+      byListBlock.putIfAbsent(listBlock.id, () => []).add(task.id);
+    }
+    for (final entry in byListBlock.entries) {
+      final listBlock = listBlockByTaskId[entry.value.first];
+      if (listBlock == null) continue;
+      await reorderTasksInListBlock(file, listBlock, entry.value);
+    }
+  }
+
   Future<void> moveTaskToListBlock(
     AppFile file,
     Task task,
     Block targetListBlock, {
     Task? afterTask,
   }) async {
-    if (task.blockId == targetListBlock.id && afterTask == null) return;
+    final all = orderedTasksForFile(file, targetListBlock);
+    final parts = partitionTasks(all);
+    final targetDone = afterTask != null ? afterTask.isDone : false;
+    final zone = targetDone ? parts.done : parts.active;
+    final insertIndex = afterTask != null
+        ? zone.indexWhere((t) => t.id == afterTask.id) + 1
+        : zone.length;
+    await moveTaskToListBlockAtIndex(
+      file,
+      task,
+      targetListBlock,
+      targetDone: targetDone,
+      insertIndexInZone: insertIndex.clamp(0, zone.length),
+    );
+  }
 
+  Future<void> moveTaskToListBlockAtIndex(
+    AppFile file,
+    Task task,
+    Block targetListBlock, {
+    required bool targetDone,
+    required int insertIndexInZone,
+  }) async {
     final sourceListId = task.blockId;
     final rowBlock = taskRowBlockInFile(file, task);
     if (rowBlock == null) return;
 
-    final updatedTask = await _taskService.updateTask(task.id, {
-      'block_id': targetListBlock.id,
-    });
+    Task currentTask = task;
+    if (task.blockId != targetListBlock.id) {
+      currentTask = await _taskService.updateTask(task.id, {
+        'block_id': targetListBlock.id,
+      });
+      _moveTaskBetweenListCaches(
+        file: file,
+        task: currentTask,
+        sourceListId: sourceListId,
+        targetListBlock: targetListBlock,
+      );
+    }
+
+    final listTasks = orderedTasksForFile(file, targetListBlock);
+    final tasksForMerge = listTasks.any((t) => t.id == currentTask.id)
+        ? listTasks
+        : [...listTasks, currentTask];
+    final mergedIds = mergedTaskIdsAfterZoneInsert(
+      listTasks: tasksForMerge,
+      task: currentTask,
+      targetDone: targetDone,
+      insertIndexInZone: insertIndexInZone,
+    );
 
     var blocks = List<Block>.from(sortedBlocksForFile(_blocksForFile(file)));
     final fromIndex = blocks.indexWhere((b) => b.id == rowBlock.id);
     if (fromIndex >= 0) blocks.removeAt(fromIndex);
 
-    final targetRegion = taskListRegion(blocks, targetListBlock);
-    var insertAt = afterTask != null
-        ? listInsertIndexAfterTaskBlock(
-            blocks,
-            taskRowBlockInFile(file, afterTask)!,
-          )
-        : listInsertIndexForNewTask(blocks, targetListBlock);
-    insertAt = insertAt.clamp(
-      targetRegion.startIndex + 1,
-      targetRegion.endIndex,
-    );
+    final region = taskListRegion(blocks, targetListBlock);
+    final rowByTaskId = <int, Block>{};
+    for (var i = region.startIndex + 1; i < region.endIndex; i++) {
+      final block = blocks[i];
+      if (block.type != 'task') continue;
+      final taskId = block.content['task_id'] as int?;
+      if (taskId != null) rowByTaskId[taskId] = block;
+    }
+
+    final insertAt = blockInsertIndexForTaskInList(
+      fileBlocks: blocks,
+      listBlock: targetListBlock,
+      mergedTaskIds: mergedIds,
+      taskId: currentTask.id,
+      rowBlockByTaskId: rowByTaskId,
+    ).clamp(region.startIndex + 1, region.endIndex);
 
     blocks.insert(insertAt, rowBlock);
+    _replaceBlocksForFile(file, blocks);
 
-    final nextRegion = taskListRegion(blocks, targetListBlock);
-    final anchorOrder =
-        blocks[nextRegion.startIndex].orderIndex ?? nextRegion.startIndex;
-    final updates = <Map<String, int>>[];
-    for (var i = nextRegion.startIndex + 1; i < nextRegion.endIndex; i++) {
-      if (blocks[i].type != 'task') continue;
-      updates.add({
-        'id': blocks[i].id,
-        'order_index': anchorOrder + updates.length + 1,
-      });
-    }
+    await reorderTasksInListBlock(file, targetListBlock, mergedIds);
+    await _ensureTaskStatusForDrop(currentTask, targetDone);
+  }
 
-    if (updates.isNotEmpty) {
-      await _blockService.reorderBlocks(file.id, updates);
-      _applyBlockOrderUpdates(file, updates);
-    }
-
-    _moveTaskBetweenListCaches(
-      file: file,
-      task: updatedTask,
-      sourceListId: sourceListId,
-      targetListBlock: targetListBlock,
+  Future<void> reorderTaskAcrossZonesInListBlock(
+    AppFile file,
+    Block listBlock,
+    Task task, {
+    required bool targetDone,
+    required int insertIndexInZone,
+  }) async {
+    final listTasks = orderedTasksForFile(file, listBlock);
+    final mergedIds = mergedTaskIdsAfterZoneInsert(
+      listTasks: listTasks,
+      task: task,
+      targetDone: targetDone,
+      insertIndexInZone: insertIndexInZone,
     );
+    await reorderTasksInListBlock(file, listBlock, mergedIds);
+    await _ensureTaskStatusForDrop(task, targetDone);
+  }
+
+  Future<void> insertTaskInFlipGroupAt(
+    AppFile file,
+    Task task,
+    String? targetViewType,
+    Map<int, Block> listBlockByTaskId, {
+    required List<Task> groupTasks,
+    required bool targetDone,
+    required int insertIndexInZone,
+  }) async {
+    final parts = partitionTasks(groupTasks);
+    final active = List<Task>.from(parts.active)
+      ..removeWhere((t) => t.id == task.id);
+    final done = List<Task>.from(parts.done)..removeWhere((t) => t.id == task.id);
+    final zone = targetDone ? done : active;
+    zone.insert(insertIndexInZone.clamp(0, zone.length), task);
+    final merged = [...active, ...done];
+    final globalIndex = merged.indexWhere((t) => t.id == task.id);
+
+    final currentView = viewTypeForTask(task.id);
+    if (currentView != targetViewType) {
+      await assignTaskView(
+        task,
+        targetViewType,
+        orderIndex: targetViewType != null ? globalIndex : null,
+      );
+    }
+
+    if (targetViewType != null) {
+      for (var i = 0; i < merged.length; i++) {
+        final membership = primaryMembershipForTask(merged[i].id);
+        if (membership == null) continue;
+        if (membership.orderIndex == i) continue;
+        await _taskViewService.updateOrderIndex(membership.id, i);
+        _taskViewMemberships = _taskViewMemberships
+            .map((m) => m.id == membership.id ? m.copyWith(orderIndex: i) : m)
+            .toList();
+      }
+      notifyListeners();
+    } else {
+      final byListBlock = <int, List<int>>{};
+      for (final entry in merged) {
+        final listBlock = listBlockByTaskId[entry.id];
+        if (listBlock == null) continue;
+        byListBlock.putIfAbsent(listBlock.id, () => []).add(entry.id);
+      }
+      for (final entry in byListBlock.entries) {
+        final listBlock = listBlockByTaskId[entry.value.first];
+        if (listBlock == null) continue;
+        await reorderTasksInListBlock(file, listBlock, entry.value);
+      }
+    }
+
+    await _ensureTaskStatusForDrop(task, targetDone);
+  }
+
+  Future<void> applyTaskDrop({
+    required AppFile file,
+    required TaskDragPayload payload,
+    required Block targetListBlock,
+    required String? targetViewType,
+    required bool targetDone,
+    required int insertIndex,
+    required int sourceIndexInZone,
+    required bool isFlipMode,
+    required bool allowCrossBoundary,
+    Map<int, Block>? listBlockByTaskId,
+    List<Task>? flipGroupTasks,
+  }) async {
+    final action = resolveTaskDrop(
+      payload: payload,
+      sourceIndexInZone: sourceIndexInZone,
+      target: TaskDropTarget(
+        listBlockId: targetListBlock.id,
+        viewType: targetViewType,
+        done: targetDone,
+        insertIndex: insertIndex,
+      ),
+      isFlipMode: isFlipMode,
+      allowCrossBoundary: allowCrossBoundary,
+    );
+
+    switch (action.kind) {
+      case TaskDropKind.noop:
+        return;
+      case TaskDropKind.reorder:
+        if (isFlipMode &&
+            flipGroupTasks != null &&
+            listBlockByTaskId != null) {
+          await reorderTasksInFlipGroup(
+            file,
+            targetViewType,
+            listBlockByTaskId,
+            groupTasks: flipGroupTasks,
+            done: payload.sourceDone,
+            oldIndex: action.oldIndex!,
+            newIndex: action.newIndex!,
+          );
+        } else {
+          await reorderTasksInListZone(
+            file,
+            targetListBlock,
+            done: payload.sourceDone,
+            oldIndex: action.oldIndex!,
+            newIndex: action.newIndex!,
+          );
+        }
+      case TaskDropKind.moveAcrossZones:
+        if (isFlipMode && flipGroupTasks != null && listBlockByTaskId != null) {
+          await insertTaskInFlipGroupAt(
+            file,
+            payload.task,
+            targetViewType,
+            listBlockByTaskId,
+            groupTasks: flipGroupTasks,
+            targetDone: targetDone,
+            insertIndexInZone: insertIndex,
+          );
+        } else {
+          await reorderTaskAcrossZonesInListBlock(
+            file,
+            targetListBlock,
+            payload.task,
+            targetDone: targetDone,
+            insertIndexInZone: insertIndex,
+          );
+        }
+      case TaskDropKind.moveToListBlock:
+        await moveTaskToListBlockAtIndex(
+          file,
+          payload.task,
+          targetListBlock,
+          targetDone: targetDone,
+          insertIndexInZone: insertIndex,
+        );
+      case TaskDropKind.assignView:
+        if (listBlockByTaskId == null || flipGroupTasks == null) return;
+        await insertTaskInFlipGroupAt(
+          file,
+          payload.task,
+          targetViewType,
+          listBlockByTaskId,
+          groupTasks: flipGroupTasks,
+          targetDone: targetDone,
+          insertIndexInZone: insertIndex,
+        );
+    }
+  }
+
+  Future<void> _ensureTaskStatusForDrop(Task task, bool targetDone) async {
+    if (task.isDone == targetDone) return;
+    final data = await _taskService.updateTaskRaw(task.id, {
+      'status': targetDone ? 'done' : 'active',
+    });
+    final updated = Task.fromJson(data);
+    _applyTaskUpdate(updated);
     notifyListeners();
+  }
+
+  void _replaceBlocksForFile(AppFile file, List<Block> blocks) {
+    if (broughtFile?.file.id == file.id) {
+      broughtFile = broughtFile!.copyWith(blocks: blocks);
+      return;
+    }
+    final detail = selectedDetail;
+    if (detail == null) return;
+    detail.blocksByFileId[file.id] = blocks;
   }
 
   void _moveTaskBetweenListCaches({
@@ -3526,6 +3802,7 @@ class AppState extends ChangeNotifier {
     String? viewType, {
     String? sectionName,
     bool clearSection = false,
+    int? orderIndex,
   }) async {
     final previous = primaryMembershipForTask(task.id);
     final membership = await _taskViewService.assignView(
@@ -3533,6 +3810,7 @@ class AppState extends ChangeNotifier {
       viewType: viewType,
       sectionName: sectionName,
       clearSection: clearSection,
+      orderIndex: orderIndex,
     );
 
     _taskViewMemberships = [

@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'format_range.dart';
 import 'span_text_editing_controller.dart';
 import '../../shared/utils/platform_text.dart';
-import '../../shared/utils/platform_text.dart';
 import 'text_formatting.dart';
 
 /// Active block text field for context-menu clipboard/format actions.
@@ -62,7 +61,11 @@ class BlockTextFocusRegistry {
   }
 
   static void _bumpFocus() {
-    focusListenable.value++;
+    // Defer so listeners (e.g. AppShortcutsScope) are not rebuilt while the
+    // widget tree is locked during dispose/unmount (task reorder, block reload).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      focusListenable.value++;
+    });
   }
 
   static void unregister(TextEditingController controller) {

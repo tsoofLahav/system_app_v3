@@ -38,6 +38,8 @@ class TaskLinesEditor extends StatelessWidget {
     this.enableReorder = false,
     this.enableCrossListDrag = false,
     this.flipViewType,
+    this.flipGroupTasks,
+    this.listBlockByTaskId,
   });
 
   final List<Task> tasks;
@@ -56,6 +58,8 @@ class TaskLinesEditor extends StatelessWidget {
   final bool enableReorder;
   final bool enableCrossListDrag;
   final String? flipViewType;
+  final List<Task>? flipGroupTasks;
+  final Map<int, Block>? listBlockByTaskId;
 
   @override
   Widget build(BuildContext context) {
@@ -84,6 +88,8 @@ class TaskLinesEditor extends StatelessWidget {
           enableReorder: enableReorder && canMutate,
           enableCrossListDrag: enableCrossListDrag && canMutate,
           flipViewType: flipViewType,
+          flipGroupTasks: flipGroupTasks,
+          listBlockByTaskId: listBlockByTaskId,
           onCreateAfter: handlersFor(false).onCreateAfter,
           onCreateAtEnd: handlersFor(false).onCreateAtEnd,
           onTitleChanged: handlersFor(false).onTitleChanged,
@@ -116,6 +122,8 @@ class TaskLinesEditor extends StatelessWidget {
             enableReorder: enableReorder && canMutate,
             enableCrossListDrag: enableCrossListDrag && canMutate,
             flipViewType: flipViewType,
+            flipGroupTasks: flipGroupTasks,
+            listBlockByTaskId: listBlockByTaskId,
             onCreateAfter: handlersFor(true).onCreateAfter,
             onCreateAtEnd: handlersFor(true).onCreateAtEnd,
             onTitleChanged: handlersFor(true).onTitleChanged,

@@ -5,6 +5,7 @@ class TaskViewMembership {
     required this.viewType,
     this.sectionName,
     this.sectionFlag,
+    this.orderIndex = 0,
   });
 
   final int id;
@@ -12,6 +13,7 @@ class TaskViewMembership {
   final String viewType;
   final String? sectionName;
   final String? sectionFlag;
+  final int orderIndex;
 
   factory TaskViewMembership.fromJson(Map<String, dynamic> json) {
     return TaskViewMembership(
@@ -20,6 +22,18 @@ class TaskViewMembership {
       viewType: json['view_type'] as String,
       sectionName: json['section_name'] as String?,
       sectionFlag: json['section_flag'] as String?,
+      orderIndex: json['order_index'] as int? ?? 0,
+    );
+  }
+
+  TaskViewMembership copyWith({int? orderIndex}) {
+    return TaskViewMembership(
+      id: id,
+      taskId: taskId,
+      viewType: viewType,
+      sectionName: sectionName,
+      sectionFlag: sectionFlag,
+      orderIndex: orderIndex ?? this.orderIndex,
     );
   }
 }

@@ -85,11 +85,13 @@ class TaskViewService {
     required String? viewType,
     String? sectionName,
     bool clearSection = false,
+    int? orderIndex,
   }) async {
     final body = <String, dynamic>{
       'view_type': viewType,
       if (clearSection) 'clear_section': true,
       if (sectionName != null) 'section_name': sectionName,
+      if (orderIndex != null) 'order_index': orderIndex,
     };
     final data = await _api.put('/tasks/$taskId/view', body);
     if (data == null) return null;
