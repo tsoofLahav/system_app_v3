@@ -7,7 +7,6 @@ import '../../core/models/task.dart';
 import '../../core/task_file_layout.dart';
 import '../../design_system/app_typography.dart';
 import '../blocks/block_context_menu.dart';
-import 'task_drag_data.dart';
 import 'task_lines_editor.dart';
 
 /// Virtual task editor grouped by view assignment (flip mode).
@@ -33,14 +32,16 @@ class _TasksFlipEditorState extends State<TasksFlipEditor> {
   int? _focusTaskId;
 
   List<Task> _allTasks() {
-    final entries = allTasksInFile(
+    return allTasksInFile(
       widget.blocks,
       widget.state.tasksByBlockIdForFile(widget.file),
-    );
-    return entries.map((entry) => entry.task).toList();
+    ).map((entry) => entry.task).toList();
   }
 
-  TaskZoneHandlers _handlers(Block listBlock) {
+  TaskZoneHandlers _handlers(
+    Block listBlock,
+    Map<int, Block> listBlockByTaskId,
+  ) {
     return (
       onCreateAfter: (afterTask, _) async {
         final created = await widget.state.createTaskInFileAfter(
@@ -70,10 +71,7 @@ class _TasksFlipEditorState extends State<TasksFlipEditor> {
           widget.state.updateTaskTitle(task, title),
       onDelete: (task) => widget.state.deleteTaskInFile(widget.file, task),
       onPasteAfter: (afterTask, lines, position) async {
-        final listBlocks = widget.blocks
-            .where((block) => block.type == 'task_list')
-            .toList();
-        final target = listBlocks.isNotEmpty ? listBlocks.first : listBlock;
+        final target = listBlockByTaskId[afterTask.id] ?? listBlock;
         await widget.state.pasteTasksInFileAfter(
           file: widget.file,
           listBlock: target,
@@ -95,9 +93,22 @@ class _TasksFlipEditorState extends State<TasksFlipEditor> {
   @override
   Widget build(BuildContext context) {
     final strings = widget.state.strings;
+    final taskEntries = allTasksInFile(
+      widget.blocks,
+      widget.state.tasksByBlockIdForFile(widget.file),
+    );
+    final listBlockByTaskId = {
+      for (final entry in taskEntries) entry.task.id: entry.listBlock,
+    };
+    final blockOrderForTask = {
+      for (var index = 0; index < taskEntries.length; index++)
+        taskEntries[index].task.id: index,
+    };
     final groups = groupTasksByView(
       _allTasks(),
       widget.state.viewTypeForTask,
+      membershipOrderForTask: widget.state.orderIndexForTask,
+      blockOrderForTask: (taskId) => blockOrderForTask[taskId] ?? 0,
       unassignedLabel: strings['unassignedView'],
     );
     final fallbackListBlock = _fallbackListBlock();
@@ -114,66 +125,25 @@ class _TasksFlipEditorState extends State<TasksFlipEditor> {
               style: AppTypography.blockHeaderStyle,
             ),
           ),
-          _FlipViewDropZone(
-            viewType: group.viewType,
-            onAccept: (data) => widget.state.assignTaskView(
-              data.task,
-              group.viewType,
-            ),
-            child: TaskLinesEditor(
-              tasks: group.tasks,
-              state: widget.state,
-              handlersFor: (_) => _handlers(fallbackListBlock),
-              focusTaskId: _focusTaskId,
-              onFocusHandled: () => setState(() => _focusTaskId = null),
-              contextMenuFileType: widget.file.type,
-              contextMenuTargetBlock: fallbackListBlock,
-              onBlockMenuAction: widget.onBlockMenuAction,
-              file: widget.file,
-              enableReorder: false,
-              enableCrossListDrag: true,
-              flipViewType: group.viewType,
-              listBlock: fallbackListBlock,
-            ),
+          TaskLinesEditor(
+            tasks: group.tasks,
+            state: widget.state,
+            handlersFor: (_) => _handlers(fallbackListBlock, listBlockByTaskId),
+            focusTaskId: _focusTaskId,
+            onFocusHandled: () => setState(() => _focusTaskId = null),
+            contextMenuFileType: widget.file.type,
+            contextMenuTargetBlock: fallbackListBlock,
+            onBlockMenuAction: widget.onBlockMenuAction,
+            file: widget.file,
+            listBlock: fallbackListBlock,
+            enableReorder: true,
+            enableCrossListDrag: true,
+            flipViewType: group.viewType,
+            flipGroupTasks: group.tasks,
+            listBlockByTaskId: listBlockByTaskId,
           ),
         ],
       ],
-    );
-  }
-}
-
-class _FlipViewDropZone extends StatelessWidget {
-  const _FlipViewDropZone({
-    required this.viewType,
-    required this.onAccept,
-    required this.child,
-  });
-
-  final String? viewType;
-  final Future<void> Function(TaskDragData data) onAccept;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return DragTarget<TaskDragData>(
-      onWillAcceptWithDetails: (details) {
-        final data = details.data;
-        return data.flipViewType != viewType;
-      },
-      onAcceptWithDetails: (details) => onAccept(details.data),
-      builder: (context, candidate, rejected) {
-        final active = candidate.isNotEmpty;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: active
-                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)
-                : null,
-          ),
-          child: child,
-        );
-      },
     );
   }
 }

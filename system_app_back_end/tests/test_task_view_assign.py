@@ -1,6 +1,8 @@
 """Tests for single-view task assignment."""
 
-from services.task_view_assign import VIEW_PRIORITY, view_priority
+import inspect
+
+from services.task_view_assign import VIEW_PRIORITY, assign_task_view, view_priority
 
 
 def test_view_priority_order():
@@ -18,3 +20,9 @@ def test_view_priority_matches_registry_order():
         "arrangements",
         "missions",
     ]
+
+
+def test_assign_task_view_accepts_order_index():
+    params = inspect.signature(assign_task_view).parameters
+    assert "order_index" in params
+    assert params["order_index"].default is None

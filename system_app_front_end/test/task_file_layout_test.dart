@@ -19,8 +19,8 @@ Block _block({
   );
 }
 
-Task _task({required int id, required int blockId, String title = 't'}) {
-  return Task(id: id, blockId: blockId, title: title, status: 'active');
+Task _task({required int id, required int blockId, String title = 't', String status = 'active'}) {
+  return Task(id: id, blockId: blockId, title: title, status: status);
 }
 
 void main() {
@@ -74,5 +74,20 @@ void main() {
     expect(groups[0].tasks.map((t) => t.id).toList(), [1, 4]);
     expect(groups[1].tasks.map((t) => t.id).toList(), [2]);
     expect(groups[2].tasks.map((t) => t.id).toList(), [3]);
+  });
+
+  test('mergedTaskIdsAfterZoneInsert keeps active before done', () {
+    final tasks = [
+      _task(id: 1, blockId: 2),
+      _task(id: 2, blockId: 2, status: 'done'),
+      _task(id: 3, blockId: 2),
+    ];
+    final merged = mergedTaskIdsAfterZoneInsert(
+      listTasks: tasks,
+      task: tasks[0],
+      targetDone: true,
+      insertIndexInZone: 1,
+    );
+    expect(merged, [3, 2, 1]);
   });
 }

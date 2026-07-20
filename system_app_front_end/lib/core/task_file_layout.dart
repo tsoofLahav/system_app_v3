@@ -1,6 +1,7 @@
 import 'models/block.dart';
 import 'models/task.dart';
 import 'registry/view_registry.dart';
+import 'task_list_order.dart';
 
 List<Block> sortedBlocksForFile(List<Block> blocks) {
   final copy = List<Block>.from(blocks);
@@ -123,6 +124,8 @@ class TaskViewGroup {
 List<TaskViewGroup> groupTasksByView(
   Iterable<Task> tasks,
   String? Function(int taskId) membershipViewForTask, {
+  int Function(int taskId)? membershipOrderForTask,
+  int Function(int taskId)? blockOrderForTask,
   String unassignedLabel = 'Unassigned',
 }) {
   final byView = <String?, List<Task>>{};
@@ -131,10 +134,26 @@ List<TaskViewGroup> groupTasksByView(
     byView.putIfAbsent(viewType, () => []).add(task);
   }
 
+  void sortGroup(List<Task> group, {required bool useBlockOrder}) {
+    if (useBlockOrder && blockOrderForTask != null) {
+      group.sort(
+        (a, b) => blockOrderForTask(a.id).compareTo(blockOrderForTask(b.id)),
+      );
+      return;
+    }
+    if (membershipOrderForTask == null) return;
+    group.sort(
+      (a, b) => membershipOrderForTask(a.id).compareTo(
+        membershipOrderForTask(b.id),
+      ),
+    );
+  }
+
   final groups = <TaskViewGroup>[];
   for (final view in ViewRegistry.views) {
     final viewTasks = byView.remove(view.type);
     if (viewTasks == null || viewTasks.isEmpty) continue;
+    sortGroup(viewTasks, useBlockOrder: false);
     groups.add(
       TaskViewGroup(
         viewType: view.type,
@@ -146,6 +165,7 @@ List<TaskViewGroup> groupTasksByView(
 
   final unassigned = byView.remove(null);
   if (unassigned != null && unassigned.isNotEmpty) {
+    sortGroup(unassigned, useBlockOrder: true);
     groups.add(
       TaskViewGroup(
         viewType: null,
@@ -172,4 +192,37 @@ int listInsertIndexAfterTaskBlock(List<Block> fileBlocks, Block afterTaskBlock) 
     if (blocks[i].id == afterTaskBlock.id) return i + 1;
   }
   return blocks.length;
+}
+
+/// Build merged task ids (active then done) after inserting [task] in a zone.
+List<int> mergedTaskIdsAfterZoneInsert({
+  required List<Task> listTasks,
+  required Task task,
+  required bool targetDone,
+  required int insertIndexInZone,
+}) {
+  final parts = partitionTasks(listTasks);
+  final active = List<Task>.from(parts.active)
+    ..removeWhere((t) => t.id == task.id);
+  final done = List<Task>.from(parts.done)..removeWhere((t) => t.id == task.id);
+  final zone = targetDone ? done : active;
+  zone.insert(insertIndexInZone.clamp(0, zone.length), task);
+  return [...active, ...done].map((t) => t.id).toList();
+}
+
+int blockInsertIndexForTaskInList({
+  required List<Block> fileBlocks,
+  required Block listBlock,
+  required List<int> mergedTaskIds,
+  required int taskId,
+  required Map<int, Block> rowBlockByTaskId,
+}) {
+  final blocks = sortedBlocksForFile(fileBlocks);
+  final region = taskListRegion(blocks, listBlock);
+  final position = mergedTaskIds.indexOf(taskId);
+  if (position <= 0) return region.startIndex + 1;
+  final beforeTaskId = mergedTaskIds[position - 1];
+  final beforeRow = rowBlockByTaskId[beforeTaskId];
+  if (beforeRow == null) return region.startIndex + 1;
+  return listInsertIndexAfterTaskBlock(blocks, beforeRow);
 }

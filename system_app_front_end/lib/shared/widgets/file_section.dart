@@ -314,54 +314,55 @@ class _FileSectionState extends State<FileSection> {
             const SizedBox(height: 4),
             Expanded(
               child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _InlineInsertGap(
-                      onSecondaryTapDown: (details) =>
-                          _showBlockMenu(details.globalPosition, orderIndex: 0),
-                    ),
-                    for (var i = 0; i < widget.blocks.length; i++) ...[
-                      if (widget.blocks[i].type == 'task_list') ...[
-                        if (flipByView && i == firstTaskListIndex)
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              bottom: AppSpacing.blockGap,
-                            ),
-                            child: TasksFlipEditor(
-                              file: widget.file,
-                              blocks: widget.blocks,
-                              state: widget.state,
-                              onBlockMenuAction: (action) =>
-                                  _handleBlockMenuAction(
-                                action,
-                                orderIndex: i + 1,
-                                targetBlock: widget.blocks[i],
-                              ),
-                            ),
-                          )
-                        else if (!flipByView)
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              bottom: AppSpacing.blockGap,
-                            ),
-                            child: BlockRenderer(
-                              topicAccent: widget.accent,
-                              isMainTopic: topic.isMain,
-                              file: widget.file,
-                              block: widget.blocks[i],
-                              tasks: tasks,
-                              state: widget.state,
-                              blockIndex: i,
-                              onBlockMenuAction: (action) =>
-                                  _handleBlockMenuAction(
-                                action,
-                                orderIndex: i + 1,
-                                targetBlock: widget.blocks[i],
-                              ),
+                child: flipByView
+                    ? Padding(
+                        padding: const EdgeInsets.only(
+                          bottom: AppSpacing.blockGap,
+                        ),
+                        child: TasksFlipEditor(
+                          file: widget.file,
+                          blocks: widget.blocks,
+                          state: widget.state,
+                          onBlockMenuAction: (action) =>
+                              _handleBlockMenuAction(
+                            action,
+                            orderIndex: firstTaskListIndex + 1,
+                            targetBlock: widget.blocks[firstTaskListIndex],
+                          ),
+                        ),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _InlineInsertGap(
+                            onSecondaryTapDown: (details) => _showBlockMenu(
+                              details.globalPosition,
+                              orderIndex: 0,
                             ),
                           ),
-                      ] else if (widget.blocks[i].type == 'table')
+                          for (var i = 0; i < widget.blocks.length; i++) ...[
+                            if (widget.blocks[i].type == 'task_list')
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: AppSpacing.blockGap,
+                                ),
+                                child: BlockRenderer(
+                                  topicAccent: widget.accent,
+                                  isMainTopic: topic.isMain,
+                                  file: widget.file,
+                                  block: widget.blocks[i],
+                                  tasks: tasks,
+                                  state: widget.state,
+                                  blockIndex: i,
+                                  onBlockMenuAction: (action) =>
+                                      _handleBlockMenuAction(
+                                    action,
+                                    orderIndex: i + 1,
+                                    targetBlock: widget.blocks[i],
+                                  ),
+                                ),
+                              )
+                            else if (widget.blocks[i].type == 'table')
                         Padding(
                           padding: const EdgeInsets.only(bottom: AppSpacing.blockGap),
                           child: BlockRenderer(
