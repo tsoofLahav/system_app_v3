@@ -1,4 +1,5 @@
 import 'package:characters/characters.dart';
+import 'package:flutter/services.dart';
 
 /// Removes unpaired UTF-16 surrogates so Flutter platform channels can encode text.
 String sanitizePlatformText(String input) {
@@ -27,6 +28,93 @@ String sanitizePlatformText(String input) {
     out.add(unit);
   }
   return String.fromCharCodes(out);
+}
+
+/// Snaps a selection start out of the middle of a surrogate pair.
+int normalizeUtf16Start(String text, int offset) {
+  final pos = offset.clamp(0, text.length);
+  if (pos >= text.length) return pos;
+
+  final units = text.codeUnits;
+  final unit = units[pos];
+
+  if (unit >= 0xDC00 && unit <= 0xDFFF) {
+    if (pos > 0 &&
+        units[pos - 1] >= 0xD800 &&
+        units[pos - 1] <= 0xDBFF) {
+      return pos - 1;
+    }
+    return pos + 1;
+  }
+
+  return pos;
+}
+
+/// Snaps a selection end out of the middle of a surrogate pair.
+int normalizeUtf16End(String text, int offset) {
+  final pos = offset.clamp(0, text.length);
+  if (pos <= 0) return pos;
+
+  final units = text.codeUnits;
+  if (pos < units.length &&
+      units[pos] >= 0xDC00 &&
+      units[pos] <= 0xDFFF &&
+      pos > 0 &&
+      units[pos - 1] >= 0xD800 &&
+      units[pos - 1] <= 0xDBFF) {
+    return pos + 1;
+  }
+
+  if (pos > 0 &&
+      units[pos - 1] >= 0xD800 &&
+      units[pos - 1] <= 0xDBFF &&
+      (pos >= units.length ||
+          units[pos] < 0xDC00 ||
+          units[pos] > 0xDFFF)) {
+    return pos - 1;
+  }
+
+  return pos;
+}
+
+(int, int) normalizeUtf16Range(String text, int start, int end) {
+  var rangeStart = start.clamp(0, text.length);
+  var rangeEnd = end.clamp(0, text.length);
+  if (rangeEnd < rangeStart) {
+    final swap = rangeStart;
+    rangeStart = rangeEnd;
+    rangeEnd = swap;
+  }
+  rangeStart = normalizeUtf16Start(text, rangeStart);
+  rangeEnd = normalizeUtf16End(text, rangeEnd);
+  if (rangeEnd < rangeStart) rangeEnd = rangeStart;
+  return (rangeStart, rangeEnd);
+}
+
+TextSelection normalizeTextSelection(String text, TextSelection selection) {
+  if (!selection.isValid) return selection;
+  final (start, end) = normalizeUtf16Range(
+    text,
+    selection.start,
+    selection.end,
+  );
+  if (selection.isCollapsed) {
+    final caret = normalizeUtf16End(text, start);
+    return TextSelection.collapsed(offset: caret);
+  }
+  return TextSelection(baseOffset: start, extentOffset: end);
+}
+
+String safeSubstring(String text, int start, int end) {
+  final (rangeStart, rangeEnd) = normalizeUtf16Range(text, start, end);
+  if (rangeEnd <= rangeStart) return '';
+  return sanitizePlatformText(text.substring(rangeStart, rangeEnd));
+}
+
+Future<void> setClipboardText(String text) async {
+  final safe = sanitizePlatformText(text);
+  if (safe.isEmpty) return;
+  await Clipboard.setData(ClipboardData(text: safe));
 }
 
 bool looksLikeEmojiGrapheme(String grapheme) {

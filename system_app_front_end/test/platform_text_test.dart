@@ -14,6 +14,21 @@ void main() {
     });
   });
 
+  group('safeSubstring', () {
+    test('expands partial emoji selection to full emoji', () {
+      const text = 'a🔥b';
+      final units = text.codeUnits;
+      final emojiStart = text.indexOf('🔥');
+      final partialEnd = emojiStart + 1;
+      expect(safeSubstring(text, emojiStart, partialEnd), '🔥');
+    });
+
+    test('never returns lone surrogate', () {
+      const broken = 'a\uD83Db';
+      expect(safeSubstring(broken, 1, 2), '');
+    });
+  });
+
   group('insertableEmojis', () {
     test('returns first grapheme from reply', () {
       expect(insertableEmojis('  🎯 extra '), '🎯');

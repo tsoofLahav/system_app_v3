@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
+import '../../shared/utils/platform_text.dart';
 import 'block_text_focus.dart';
 import 'format_range.dart';
 import 'frozen_selection_painter.dart';
@@ -63,6 +64,7 @@ class FormattedTextField extends StatefulWidget {
 class _FormattedTextFieldState extends State<FormattedTextField> {
   late FocusNode _focusNode;
   bool _ownsFocus = false;
+  bool _normalizingSelection = false;
 
   @override
   void initState() {
@@ -75,10 +77,12 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     }
     _focusNode.addListener(_onFocusChanged);
     _focusNode.onKeyEvent = _onFocusKeyEvent;
+    widget.controller.addListener(_normalizeSelectionIfNeeded);
   }
 
   @override
   void dispose() {
+    widget.controller.removeListener(_normalizeSelectionIfNeeded);
     _focusNode.onKeyEvent = null;
     _focusNode.removeListener(_onFocusChanged);
     BlockTextFocusRegistry.unregister(widget.controller);
@@ -114,6 +118,55 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     widget.onChanged?.call(controller.text);
   }
 
+  void _normalizeSelectionIfNeeded() {
+    if (_normalizingSelection) return;
+    final controller = widget.controller;
+    final normalized = normalizeTextSelection(controller.text, controller.selection);
+    if (normalized == controller.selection) return;
+    _normalizingSelection = true;
+    controller.selection = normalized;
+    _normalizingSelection = false;
+  }
+
+  Future<void> _copySelection() async {
+    final controller = widget.controller;
+    final selection = controller.selection;
+    if (!selection.isValid || selection.isCollapsed) return;
+    await setClipboardText(
+      safeSubstring(controller.text, selection.start, selection.end),
+    );
+  }
+
+  Future<void> _cutSelection() async {
+    final controller = widget.controller;
+    final selection = controller.selection;
+    if (!selection.isValid || selection.isCollapsed) return;
+    final copied = safeSubstring(
+      controller.text,
+      selection.start,
+      selection.end,
+    );
+    if (copied.isEmpty) return;
+    await setClipboardText(copied);
+    final (start, end) = normalizeUtf16Range(
+      controller.text,
+      selection.start,
+      selection.end,
+    );
+    final next = sanitizePlatformText(
+      controller.text.replaceRange(start, end, ''),
+    );
+    controller.value = controller.value.copyWith(
+      text: next,
+      selection: TextSelection.collapsed(offset: start),
+      composing: TextRange.empty,
+    );
+    if (controller is SpanTextEditingController) {
+      controller.ensureSpansMatchText();
+    }
+    _notifyChanged();
+  }
+
   KeyEventResult _onFocusKeyEvent(FocusNode node, KeyEvent event) {
     if (!_focusNode.hasFocus) return KeyEventResult.ignored;
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -122,6 +175,18 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     if (isMeta && event.logicalKey == LogicalKeyboardKey.keyE &&
         HardwareKeyboard.instance.isShiftPressed) {
       _openEmojiPicker();
+      return KeyEventResult.handled;
+    }
+
+    if (isMeta && !HardwareKeyboard.instance.isShiftPressed &&
+        event.logicalKey == LogicalKeyboardKey.keyC) {
+      _copySelection();
+      return KeyEventResult.handled;
+    }
+
+    if (isMeta && !HardwareKeyboard.instance.isShiftPressed &&
+        event.logicalKey == LogicalKeyboardKey.keyX) {
+      _cutSelection();
       return KeyEventResult.handled;
     }
 

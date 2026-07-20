@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/app_state.dart';
 import '../../core/ai/ai_context.dart';
 import '../../core/models/block.dart';
+import '../../shared/utils/platform_text.dart';
 import '../../core/models/task.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_typography.dart';
@@ -68,12 +69,14 @@ class TaskRow extends StatefulWidget {
 class _TaskRowState extends State<TaskRow> {
   late final TextEditingController _controller;
   final _focusNode = FocusNode();
+  bool _normalizingSelection = false;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.task.title);
     _controller.addListener(_reportAiFocus);
+    _controller.addListener(_normalizeSelectionIfNeeded);
     _focusNode.addListener(_reportAiFocus);
     _requestAutofocus();
   }
@@ -101,10 +104,20 @@ class _TaskRowState extends State<TaskRow> {
   @override
   void dispose() {
     _controller.removeListener(_reportAiFocus);
+    _controller.removeListener(_normalizeSelectionIfNeeded);
     _focusNode.removeListener(_reportAiFocus);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _normalizeSelectionIfNeeded() {
+    if (_normalizingSelection) return;
+    final normalized = normalizeTextSelection(_controller.text, _controller.selection);
+    if (normalized == _controller.selection) return;
+    _normalizingSelection = true;
+    _controller.selection = normalized;
+    _normalizingSelection = false;
   }
 
   void _reportAiFocus() {
@@ -143,34 +156,31 @@ class _TaskRowState extends State<TaskRow> {
   void _copySelectionOrTitle() {
     final selection = _controller.selection;
     if (selection.isValid && !selection.isCollapsed) {
-      Clipboard.setData(
-        ClipboardData(
-          text: _controller.text.substring(selection.start, selection.end),
-        ),
+      setClipboardText(
+        safeSubstring(_controller.text, selection.start, selection.end),
       );
       return;
     }
-    Clipboard.setData(ClipboardData(text: _controller.text));
+    setClipboardText(_controller.text);
   }
 
   void _cutSelectionOrTitle() {
     final selection = _controller.selection;
     if (selection.isValid && !selection.isCollapsed) {
-      Clipboard.setData(
-        ClipboardData(
-          text: _controller.text.substring(selection.start, selection.end),
-        ),
+      setClipboardText(
+        safeSubstring(_controller.text, selection.start, selection.end),
       );
-      final next = _controller.text.replaceRange(
+      final (start, end) = normalizeUtf16Range(
+        _controller.text,
         selection.start,
         selection.end,
-        '',
       );
-      _controller.text = next;
-      widget.onTitleChanged?.call(next);
+      final next = _controller.text.replaceRange(start, end, '');
+      _controller.text = sanitizePlatformText(next);
+      widget.onTitleChanged?.call(_controller.text);
       return;
     }
-    Clipboard.setData(ClipboardData(text: _controller.text));
+    setClipboardText(_controller.text);
     _controller.clear();
     widget.onTitleChanged?.call('');
   }
@@ -178,7 +188,7 @@ class _TaskRowState extends State<TaskRow> {
   void _copyAllTitles() {
     final titles = widget.allTaskTitles;
     if (titles == null || titles.isEmpty) return;
-    Clipboard.setData(ClipboardData(text: titles.join('\n')));
+    setClipboardText(titles.join('\n'));
   }
 
   Future<void> _showContextMenu(Offset globalPosition) async {

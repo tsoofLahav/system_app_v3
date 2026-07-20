@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'format_range.dart';
 import 'span_text_editing_controller.dart';
 import '../../shared/utils/platform_text.dart';
+import '../../shared/utils/platform_text.dart';
 import 'text_formatting.dart';
 
 /// Active block text field for context-menu clipboard/format actions.
@@ -254,9 +255,7 @@ class BlockTextFocusRegistry {
     if (c == null) return;
     final range = _effectiveRange(c);
     if (!range.isValid) return;
-    await Clipboard.setData(
-      ClipboardData(text: c.text.substring(range.start, range.end)),
-    );
+    await setClipboardText(safeSubstring(c.text, range.start, range.end));
     _replaceSelection('');
   }
 
@@ -265,9 +264,7 @@ class BlockTextFocusRegistry {
     if (c == null) return;
     final range = _effectiveRange(c);
     if (!range.isValid) return;
-    await Clipboard.setData(
-      ClipboardData(text: c.text.substring(range.start, range.end)),
-    );
+    await setClipboardText(safeSubstring(c.text, range.start, range.end));
   }
 
   static Future<void> paste() async {
@@ -276,7 +273,7 @@ class BlockTextFocusRegistry {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text;
     if (text == null) return;
-    _replaceSelection(text);
+    _replaceSelection(sanitizePlatformText(text));
   }
 
   static void insertText(String text) {
@@ -301,7 +298,7 @@ class BlockTextFocusRegistry {
     final start = selection.start.clamp(0, controller.text.length);
     final end = selection.end.clamp(0, controller.text.length);
     if (end <= start) return null;
-    final text = controller.text.substring(start, end).trim();
+    final text = safeSubstring(controller.text, start, end).trim();
     return text.isEmpty ? null : text;
   }
 
@@ -344,10 +341,12 @@ class BlockTextFocusRegistry {
   ) {
     final safeText = sanitizePlatformText(text);
     if (safeText.isEmpty) return;
-    final next = controller.text.replaceRange(start, end, safeText);
+    final (rangeStart, rangeEnd) =
+        normalizeUtf16Range(controller.text, start, end);
+    final next = controller.text.replaceRange(rangeStart, rangeEnd, safeText);
     controller.value = controller.value.copyWith(
       text: sanitizePlatformText(next),
-      selection: TextSelection.collapsed(offset: start + safeText.length),
+      selection: TextSelection.collapsed(offset: rangeStart + safeText.length),
       composing: TextRange.empty,
     );
     if (controller is SpanTextEditingController) {
@@ -358,21 +357,11 @@ class BlockTextFocusRegistry {
 
   static void _replaceSelection(String replacement) {
     final c = activeController;
-    if (c == null) return;
+    final changed = onChanged;
+    if (c == null || changed == null) return;
     final range = _effectiveRange(c);
     if (!range.isValid) return;
-    final next = c.text.replaceRange(range.start, range.end, replacement);
-    c.value = c.value.copyWith(
-      text: next,
-      selection: TextSelection.collapsed(
-        offset: range.start + replacement.length,
-      ),
-      composing: TextRange.empty,
-    );
-    if (c is SpanTextEditingController) {
-      c.ensureSpansMatchText();
-    }
-    onChanged?.call();
+    _applyInsert(c, changed, range.start, range.end, replacement);
   }
 
   static void applyTextFormat(String action) {
