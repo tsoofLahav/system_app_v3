@@ -90,4 +90,20 @@ void main() {
     );
     expect(merged, [3, 2, 1]);
   });
+
+  test('fileBlocksWithTaskRowOrder reorders rows inside list region', () {
+    final list = _block(id: 10, type: 'task_list', orderIndex: 0);
+    final blocks = [
+      list,
+      _block(id: 11, type: 'task', orderIndex: 1, content: {'task_id': 1}),
+      _block(id: 12, type: 'task', orderIndex: 2, content: {'task_id': 2}),
+      _block(id: 13, type: 'task', orderIndex: 3, content: {'task_id': 3}),
+    ];
+    final next = fileBlocksWithTaskRowOrder(blocks, list, [3, 1, 2]);
+    expect(next, isNotNull);
+    expect(
+      next!.where((b) => b.type == 'task').map((b) => b.content['task_id']).toList(),
+      [3, 1, 2],
+    );
+  });
 }

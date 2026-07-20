@@ -258,47 +258,48 @@ class _TaskZoneListState extends State<TaskZoneList> {
 
   Widget _buildListItem(Task task, List<String> titles, int index) {
     Widget rowContent = _buildTaskRow(task, titles);
-    if (_showGrip) {
-      rowContent = Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildDragHandle(task),
-          Expanded(child: rowContent),
-        ],
+
+    if (_showDropTargets) {
+      rowContent = DragTarget<TaskDragPayload>(
+        onWillAcceptWithDetails: (details) =>
+            _willAcceptDrop(details.data, index),
+        onAcceptWithDetails: (details) => _handleDrop(details.data, index),
+        builder: (context, candidate, rejected) {
+          final active = candidate.isNotEmpty;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            decoration: BoxDecoration(
+              border: active
+                  ? Border(
+                      top: BorderSide(
+                        color: Theme.of(context).colorScheme.primary,
+                        width: 2,
+                      ),
+                    )
+                  : null,
+            ),
+            child: rowContent,
+          );
+        },
       );
-    } else if (_showDropTargets) {
-      rowContent = Row(
+    }
+
+    if (!_showGrip) {
+      return Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 20, child: _dragHandle()),
+          if (_showDropTargets) SizedBox(width: 20, child: _dragHandle()),
           Expanded(child: rowContent),
         ],
       );
     }
 
-    if (!_showDropTargets) return rowContent;
-
-    return DragTarget<TaskDragPayload>(
-      onWillAcceptWithDetails: (details) =>
-          _willAcceptDrop(details.data, index),
-      onAcceptWithDetails: (details) => _handleDrop(details.data, index),
-      builder: (context, candidate, rejected) {
-        final active = candidate.isNotEmpty;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          decoration: BoxDecoration(
-            border: active
-                ? Border(
-                    top: BorderSide(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: 2,
-                    ),
-                  )
-                : null,
-          ),
-          child: rowContent,
-        );
-      },
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildDragHandle(task),
+        Expanded(child: rowContent),
+      ],
     );
   }
 

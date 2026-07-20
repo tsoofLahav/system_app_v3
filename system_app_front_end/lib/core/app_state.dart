@@ -2825,13 +2825,6 @@ class AppState extends ChangeNotifier {
   ) async {
     final blocks = sortedBlocksForFile(_blocksForFile(file));
     final region = taskListRegion(blocks, listBlock);
-    final tasks = _tasksByBlockIdForFile(file)[listBlock.id] ?? const <Task>[];
-    final taskIdsInBlock = tasks.map((t) => t.id).toSet();
-    if (orderedTaskIds.length != taskIdsInBlock.length ||
-        !orderedTaskIds.every(taskIdsInBlock.contains)) {
-      return;
-    }
-
     final rowByTaskId = <int, Block>{};
     for (var i = region.startIndex + 1; i < region.endIndex; i++) {
       final block = blocks[i];
@@ -2840,16 +2833,31 @@ class AppState extends ChangeNotifier {
       if (taskId != null) rowByTaskId[taskId] = block;
     }
 
-    final anchorOrder =
-        blocks[region.startIndex].orderIndex ?? region.startIndex;
-    final updates = <Map<String, int>>[];
-    for (var i = 0; i < orderedTaskIds.length; i++) {
-      final row = rowByTaskId[orderedTaskIds[i]];
-      if (row == null) continue;
-      updates.add({'id': row.id, 'order_index': anchorOrder + i + 1});
+    final tasks = _tasksByBlockIdForFile(file)[listBlock.id] ?? const <Task>[];
+    final taskIdsInBlock = {
+      ...tasks.map((t) => t.id),
+      ...rowByTaskId.keys,
+    };
+    if (orderedTaskIds.length != taskIdsInBlock.length ||
+        !orderedTaskIds.every(taskIdsInBlock.contains)) {
+      return;
     }
+
+    final nextBlocks = fileBlocksWithTaskRowOrder(
+      blocks,
+      listBlock,
+      orderedTaskIds,
+    );
+    if (nextBlocks == null) return;
+
+    final updates = taskRowOrderUpdatesForList(
+      nextBlocks,
+      listBlock,
+      orderedTaskIds,
+    );
     if (updates.isEmpty) return;
 
+    _replaceBlocksForFile(file, nextBlocks);
     _applyBlockOrderUpdates(file, updates);
     notifyListeners();
     try {

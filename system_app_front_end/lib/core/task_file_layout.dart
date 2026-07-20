@@ -226,3 +226,60 @@ int blockInsertIndexForTaskInList({
   if (beforeRow == null) return region.startIndex + 1;
   return listInsertIndexAfterTaskBlock(blocks, beforeRow);
 }
+
+/// Reorder task row blocks inside a list region to match [orderedTaskIds].
+/// Returns null when row blocks cannot be matched to the requested order.
+List<Block>? fileBlocksWithTaskRowOrder(
+  List<Block> fileBlocks,
+  Block listBlock,
+  List<int> orderedTaskIds,
+) {
+  final blocks = List<Block>.from(sortedBlocksForFile(fileBlocks));
+  final region = taskListRegion(blocks, listBlock);
+  final rowByTaskId = <int, Block>{};
+  for (var i = region.startIndex + 1; i < region.endIndex; i++) {
+    final block = blocks[i];
+    if (block.type != 'task') continue;
+    final taskId = block.content['task_id'] as int?;
+    if (taskId != null) rowByTaskId[taskId] = block;
+  }
+
+  final orderedRows = <Block>[];
+  for (final taskId in orderedTaskIds) {
+    final row = rowByTaskId[taskId];
+    if (row == null) return null;
+    orderedRows.add(row);
+  }
+
+  return [
+    ...blocks.sublist(0, region.startIndex + 1),
+    ...orderedRows,
+    ...blocks.sublist(region.endIndex),
+  ];
+}
+
+List<Map<String, int>> taskRowOrderUpdatesForList(
+  List<Block> fileBlocks,
+  Block listBlock,
+  List<int> orderedTaskIds,
+) {
+  final blocks = sortedBlocksForFile(fileBlocks);
+  final region = taskListRegion(blocks, listBlock);
+  final rowByTaskId = <int, Block>{};
+  for (var i = region.startIndex + 1; i < region.endIndex; i++) {
+    final block = blocks[i];
+    if (block.type != 'task') continue;
+    final taskId = block.content['task_id'] as int?;
+    if (taskId != null) rowByTaskId[taskId] = block;
+  }
+
+  final anchorOrder =
+      blocks[region.startIndex].orderIndex ?? region.startIndex;
+  final updates = <Map<String, int>>[];
+  for (var i = 0; i < orderedTaskIds.length; i++) {
+    final row = rowByTaskId[orderedTaskIds[i]];
+    if (row == null) continue;
+    updates.add({'id': row.id, 'order_index': anchorOrder + i + 1});
+  }
+  return updates;
+}
