@@ -69,12 +69,17 @@ TaskDropAction resolveTaskDrop({
   required TaskDropTarget target,
   required bool isFlipMode,
   required bool allowCrossBoundary,
+  required int zoneLength,
 }) {
   if (isFlipMode) {
     final sameView = payload.sourceViewType == target.viewType;
     if (sameView) {
       if (payload.sourceDone == target.done) {
-        return _reorderAction(sourceIndexInZone, target.insertIndex);
+        return _reorderAction(
+          sourceIndexInZone,
+          target.insertIndex,
+          zoneLength: zoneLength,
+        );
       }
       return const TaskDropAction.moveAcrossZones();
     }
@@ -85,7 +90,11 @@ TaskDropAction resolveTaskDrop({
   final sameBlock = payload.sourceListBlock.id == target.listBlockId;
   if (sameBlock) {
     if (payload.sourceDone == target.done) {
-      return _reorderAction(sourceIndexInZone, target.insertIndex);
+      return _reorderAction(
+        sourceIndexInZone,
+        target.insertIndex,
+        zoneLength: zoneLength,
+      );
     }
     return const TaskDropAction.moveAcrossZones();
   }
@@ -93,9 +102,20 @@ TaskDropAction resolveTaskDrop({
   return const TaskDropAction.moveToListBlock();
 }
 
-TaskDropAction _reorderAction(int sourceIndexInZone, int insertIndex) {
+TaskDropAction _reorderAction(
+  int sourceIndexInZone,
+  int insertIndex, {
+  required int zoneLength,
+}) {
   if (sourceIndexInZone < 0) return const TaskDropAction.noop();
   if (sourceIndexInZone == insertIndex) return const TaskDropAction.noop();
+  if (insertIndex >= zoneLength) {
+    if (sourceIndexInZone == zoneLength - 1) return const TaskDropAction.noop();
+    return TaskDropAction.reorder(
+      oldIndex: sourceIndexInZone,
+      newIndex: zoneLength,
+    );
+  }
   final newIndex =
       sourceIndexInZone < insertIndex ? insertIndex + 1 : insertIndex;
   return TaskDropAction.reorder(

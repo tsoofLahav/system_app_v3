@@ -3111,6 +3111,7 @@ class AppState extends ChangeNotifier {
     required bool targetDone,
     required int insertIndex,
     required int sourceIndexInZone,
+    required int targetZoneLength,
     required bool isFlipMode,
     required bool allowCrossBoundary,
     Map<int, Block>? listBlockByTaskId,
@@ -3127,6 +3128,7 @@ class AppState extends ChangeNotifier {
       ),
       isFlipMode: isFlipMode,
       allowCrossBoundary: allowCrossBoundary,
+      zoneLength: targetZoneLength,
     );
 
     switch (action.kind) {
@@ -3154,6 +3156,7 @@ class AppState extends ChangeNotifier {
             newIndex: action.newIndex!,
           );
         }
+        return;
       case TaskDropKind.moveAcrossZones:
         if (isFlipMode && flipGroupTasks != null && listBlockByTaskId != null) {
           await insertTaskInFlipGroupAt(
@@ -3174,6 +3177,7 @@ class AppState extends ChangeNotifier {
             insertIndexInZone: insertIndex,
           );
         }
+        return;
       case TaskDropKind.moveToListBlock:
         await moveTaskToListBlockAtIndex(
           file,
@@ -3182,6 +3186,7 @@ class AppState extends ChangeNotifier {
           targetDone: targetDone,
           insertIndexInZone: insertIndex,
         );
+        return;
       case TaskDropKind.assignView:
         if (listBlockByTaskId == null || flipGroupTasks == null) return;
         await insertTaskInFlipGroupAt(
@@ -3193,6 +3198,7 @@ class AppState extends ChangeNotifier {
           targetDone: targetDone,
           insertIndexInZone: insertIndex,
         );
+        return;
     }
   }
 

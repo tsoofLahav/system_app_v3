@@ -47,9 +47,23 @@ void main() {
         target: _target(insertIndex: 2),
         isFlipMode: false,
         allowCrossBoundary: true,
+        zoneLength: 4,
       );
       expect(action.kind, TaskDropKind.reorder);
       expect(action.oldIndex, 0);
+      expect(action.newIndex, 3);
+    });
+
+    test('drop at end uses zone length not length plus one', () {
+      final action = resolveTaskDrop(
+        payload: _payload(task: _task(1)),
+        sourceIndexInZone: 0,
+        target: _target(insertIndex: 3),
+        isFlipMode: false,
+        allowCrossBoundary: true,
+        zoneLength: 3,
+      );
+      expect(action.kind, TaskDropKind.reorder);
       expect(action.newIndex, 3);
     });
 
@@ -60,6 +74,7 @@ void main() {
         target: _target(done: true, insertIndex: 0),
         isFlipMode: false,
         allowCrossBoundary: true,
+        zoneLength: 2,
       );
       expect(action.kind, TaskDropKind.moveAcrossZones);
     });
@@ -71,6 +86,7 @@ void main() {
         target: _target(listBlockId: 2, insertIndex: 1),
         isFlipMode: false,
         allowCrossBoundary: true,
+        zoneLength: 2,
       );
       expect(action.kind, TaskDropKind.moveToListBlock);
     });
@@ -82,6 +98,7 @@ void main() {
         target: _target(listBlockId: 2),
         isFlipMode: false,
         allowCrossBoundary: false,
+        zoneLength: 2,
       );
       expect(action.kind, TaskDropKind.noop);
     });
@@ -93,6 +110,7 @@ void main() {
         target: _target(done: true, insertIndex: 0),
         isFlipMode: false,
         allowCrossBoundary: false,
+        zoneLength: 2,
       );
       expect(action.kind, TaskDropKind.moveAcrossZones);
     });
@@ -106,6 +124,7 @@ void main() {
         target: _target(viewType: 'daily', insertIndex: 0),
         isFlipMode: true,
         allowCrossBoundary: true,
+        zoneLength: 3,
       );
       expect(action.kind, TaskDropKind.reorder);
     });
@@ -121,6 +140,7 @@ void main() {
         target: _target(viewType: 'daily', done: true, insertIndex: 0),
         isFlipMode: true,
         allowCrossBoundary: true,
+        zoneLength: 2,
       );
       expect(action.kind, TaskDropKind.moveAcrossZones);
     });
@@ -132,6 +152,7 @@ void main() {
         target: _target(viewType: 'weekly', insertIndex: 0),
         isFlipMode: true,
         allowCrossBoundary: true,
+        zoneLength: 2,
       );
       expect(action.kind, TaskDropKind.assignView);
     });
