@@ -19,6 +19,7 @@ from services.automation_trigger_lookup import (
     rule_keys_for_trigger_task,
     trigger_task_ids,
 )
+from services.delete_cascade import delete_task_cascade
 from services.task_list_order import (
     move_task_to_list_block,
     next_list_order_index,
