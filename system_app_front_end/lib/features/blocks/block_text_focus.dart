@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'format_range.dart';
 import 'span_text_editing_controller.dart';
+import '../../shared/utils/platform_text.dart';
 import 'text_formatting.dart';
 
 /// Active block text field for context-menu clipboard/format actions.
@@ -24,6 +25,10 @@ class BlockTextFocusRegistry {
 
   static int _emojiPickerSessionDepth = 0;
   static _EmojiPickerTarget? _emojiPickerTarget;
+
+  static int _aiInsertSessionDepth = 0;
+  static _AiInsertTarget? _aiInsertTarget;
+  static _RecentTextTarget? _recentTarget;
 
   static final ValueNotifier<int> focusListenable = ValueNotifier(0);
 
@@ -47,6 +52,11 @@ class BlockTextFocusRegistry {
     activeFocusNode = focusNode;
     activeBlockId = blockId;
     if (fontSize != null) baseFontSize = fontSize;
+    _recentTarget = _RecentTextTarget(
+      controller: controller,
+      onChanged: changed,
+      focusNode: focusNode,
+    );
     _bumpFocus();
   }
 
@@ -55,7 +65,11 @@ class BlockTextFocusRegistry {
   }
 
   static void unregister(TextEditingController controller) {
-    if (_menuSessionDepth > 0 || _emojiPickerSessionDepth > 0) return;
+    if (_menuSessionDepth > 0 ||
+        _emojiPickerSessionDepth > 0 ||
+        _aiInsertSessionDepth > 0) {
+      return;
+    }
     if (activeController != controller) return;
     activeController = null;
     onChanged = null;
@@ -72,6 +86,7 @@ class BlockTextFocusRegistry {
     activeBlockContent = null;
     activeFocusNode = null;
     activeBlockId = null;
+    _recentTarget = null;
     _bumpFocus();
   }
 
@@ -159,6 +174,75 @@ class BlockTextFocusRegistry {
     });
   }
 
+  static void beginAiInsertSession({int? fallbackInsertOffset}) {
+    if (_aiInsertSessionDepth == 0) {
+      _aiInsertTarget = _insertTargetForOffset(fallbackInsertOffset);
+    }
+    if (_aiInsertTarget == null) return;
+    _aiInsertSessionDepth++;
+  }
+
+  static void endAiInsertSession() {
+    if (_aiInsertSessionDepth > 0) _aiInsertSessionDepth--;
+    if (_aiInsertSessionDepth > 0) return;
+
+    final target = _aiInsertTarget;
+    _aiInsertTarget = null;
+    if (target == null) return;
+
+    final restoreController = target.controller;
+    final restoreNode = target.focusNode;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        if (restoreNode != null &&
+            !restoreNode.hasFocus &&
+            restoreNode.canRequestFocus) {
+          restoreNode.requestFocus();
+        }
+        restoreController.selection = TextSelection.collapsed(
+          offset: target.insertOffset.clamp(0, restoreController.text.length),
+        );
+      } catch (_) {
+        // Controller or focus node may have been disposed after a reload.
+      }
+    });
+  }
+
+  static bool get hasAiInsertTarget => _aiInsertTarget != null;
+
+  static void insertAiEmoji(String text) {
+    final target = _aiInsertTarget;
+    if (target == null || text.isEmpty) return;
+    final index = target.insertOffset.clamp(0, target.controller.text.length);
+    _applyInsert(target.controller, target.onChanged, index, index, text);
+    target.insertOffset = index + text.length;
+  }
+
+  static _AiInsertTarget? _insertTargetForOffset(int? fallbackInsertOffset) {
+    final controller = activeController ?? _recentTarget?.controller;
+    final changed = onChanged ?? _recentTarget?.onChanged;
+    if (controller == null || changed == null) return null;
+
+    final offset = insertOffsetFor(controller) ?? fallbackInsertOffset;
+    if (offset == null) return null;
+
+    return _AiInsertTarget(
+      controller: controller,
+      onChanged: changed,
+      focusNode: activeFocusNode ?? _recentTarget?.focusNode,
+      insertOffset: offset,
+    );
+  }
+
+  static int? insertOffsetFor(TextEditingController controller) {
+    final selection = controller.selection;
+    if (!selection.isValid) return null;
+    if (!selection.isCollapsed) {
+      return selection.end.clamp(0, controller.text.length);
+    }
+    return selection.baseOffset.clamp(0, controller.text.length);
+  }
+
   static FormatRange _effectiveRange(TextEditingController controller) {
     final frozen = _frozenRange;
     if (frozen != null && frozen.isValid) return frozen;
@@ -231,22 +315,21 @@ class BlockTextFocusRegistry {
 
   /// Caret after a highlight, or at the caret when suggesting from a line.
   static int? emojiInsertOffset() {
-    final controller = activeController;
+    final controller = activeController ?? _recentTarget?.controller;
     if (controller == null) return null;
-    final selection = controller.selection;
-    if (!selection.isValid) return null;
-    if (!selection.isCollapsed) {
-      return selection.end.clamp(0, controller.text.length);
-    }
-    return selection.baseOffset.clamp(0, controller.text.length);
+    return insertOffsetFor(controller);
   }
 
   static bool get hasMarkedText => markedText() != null;
 
   static void insertTextAtOffset(int offset, String text) {
     if (text.isEmpty) return;
-    final controller = activeController;
-    final changed = onChanged;
+    if (_aiInsertTarget != null) {
+      insertAiEmoji(text);
+      return;
+    }
+    final controller = activeController ?? _recentTarget?.controller;
+    final changed = onChanged ?? _recentTarget?.onChanged;
     if (controller == null || changed == null) return;
     final index = offset.clamp(0, controller.text.length);
     _applyInsert(controller, changed, index, index, text);
@@ -259,10 +342,12 @@ class BlockTextFocusRegistry {
     int end,
     String text,
   ) {
-    final next = controller.text.replaceRange(start, end, text);
+    final safeText = sanitizePlatformText(text);
+    if (safeText.isEmpty) return;
+    final next = controller.text.replaceRange(start, end, safeText);
     controller.value = controller.value.copyWith(
-      text: next,
-      selection: TextSelection.collapsed(offset: start + text.length),
+      text: sanitizePlatformText(next),
+      selection: TextSelection.collapsed(offset: start + safeText.length),
       composing: TextRange.empty,
     );
     if (controller is SpanTextEditingController) {
@@ -338,4 +423,30 @@ class _EmojiPickerTarget {
   final VoidCallback onChanged;
   final FocusNode? focusNode;
   final TextSelection selection;
+}
+
+class _RecentTextTarget {
+  const _RecentTextTarget({
+    required this.controller,
+    required this.onChanged,
+    required this.focusNode,
+  });
+
+  final TextEditingController controller;
+  final VoidCallback onChanged;
+  final FocusNode? focusNode;
+}
+
+class _AiInsertTarget {
+  _AiInsertTarget({
+    required this.controller,
+    required this.onChanged,
+    required this.focusNode,
+    required this.insertOffset,
+  });
+
+  final TextEditingController controller;
+  final VoidCallback onChanged;
+  final FocusNode? focusNode;
+  int insertOffset;
 }

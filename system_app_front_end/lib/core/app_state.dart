@@ -20,6 +20,7 @@ import 'models/block.dart';
 import 'models/brought_file_snapshot.dart';
 import '../features/blocks/board_content.dart';
 import '../features/blocks/block_text_focus.dart';
+import '../shared/utils/platform_text.dart';
 import 'models/part.dart';
 import 'models/task.dart';
 import 'models/task_reset_acknowledgement.dart';
@@ -491,9 +492,6 @@ class AppState extends ChangeNotifier {
   bool canRunAiTool(String tool) {
     if (!canUseAiTools) return false;
     if (tool == 'review') return true;
-    if (tool == 'suggest_emoji') {
-      return hasAiContext && BlockTextFocusRegistry.hasFocus;
-    }
     if (tool == 'move_file_to_topic') {
       final file = aiFocusedFile;
       return file != null && !isGuestFile(file);
@@ -503,12 +501,16 @@ class AppState extends ChangeNotifier {
 
   Future<bool> runSuggestEmoji() async {
     final ctx = resolveAiContext();
-    final insertOffset = BlockTextFocusRegistry.emojiInsertOffset();
     final topic = selectedTopic;
-    if (ctx == null ||
-        ctx.text.trim().isEmpty ||
-        insertOffset == null ||
-        topic == null) {
+    if (ctx == null || ctx.text.trim().isEmpty || topic == null) {
+      return false;
+    }
+
+    final fallbackOffset = _insertOffsetFromAiFocus(aiFocus);
+    BlockTextFocusRegistry.beginAiInsertSession(
+      fallbackInsertOffset: fallbackOffset,
+    );
+    if (!BlockTextFocusRegistry.hasAiInsertTarget) {
       return false;
     }
 
@@ -522,17 +524,28 @@ class AppState extends ChangeNotifier {
         context: ctx,
         locale: language.name,
       );
-      final emoji = result.result?.trim();
-      if (emoji == null || emoji.isEmpty) return false;
-      BlockTextFocusRegistry.insertTextAtOffset(insertOffset, emoji);
+      final emoji = insertableEmojis(result.result ?? '');
+      if (emoji == null) return false;
+      BlockTextFocusRegistry.insertAiEmoji(emoji);
       return true;
     } catch (e) {
       error = e.toString();
       rethrow;
     } finally {
+      BlockTextFocusRegistry.endAiInsertSession();
       _setAiRunning(false);
       notifyListeners();
     }
+  }
+
+  static int? _insertOffsetFromAiFocus(AiFocus? focus) {
+    final selection = focus?.selection;
+    if (selection == null || !selection.isValid) return null;
+    final length = focus!.fullText.length;
+    if (!selection.isCollapsed) {
+      return selection.end.clamp(0, length);
+    }
+    return selection.baseOffset.clamp(0, length);
   }
 
   Future<AiRunResult?> runAiTool(
