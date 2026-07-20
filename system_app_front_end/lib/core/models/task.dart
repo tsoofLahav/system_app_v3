@@ -7,6 +7,7 @@ class Task {
     required this.blockId,
     required this.title,
     required this.status,
+    this.listOrderIndex = 0,
     this.dueDate,
     this.archivedAt,
     this.createdAt,
@@ -31,6 +32,7 @@ class Task {
   final int? blockId;
   final String title;
   final String status;
+  final int listOrderIndex;
   final String? dueDate;
   final String? archivedAt;
   final String? createdAt;
@@ -82,6 +84,7 @@ class Task {
     int? blockId,
     String? title,
     String? status,
+    int? listOrderIndex,
     String? dueDate,
     String? archivedAt,
     String? createdAt,
@@ -108,6 +111,7 @@ class Task {
       blockId: blockId ?? this.blockId,
       title: title ?? this.title,
       status: status ?? this.status,
+      listOrderIndex: listOrderIndex ?? this.listOrderIndex,
       dueDate: dueDate ?? this.dueDate,
       archivedAt: archivedAt ?? this.archivedAt,
       createdAt: createdAt ?? this.createdAt,
@@ -138,6 +142,7 @@ class Task {
       blockId: json['block_id'] as int?,
       title: json['title'] as String,
       status: json['status'] as String? ?? 'active',
+      listOrderIndex: json['list_order_index'] as int? ?? 0,
       dueDate: json['due_date'] as String?,
       archivedAt: json['archived_at'] as String?,
       createdAt: json['created_at'] as String?,
@@ -168,6 +173,7 @@ class Task {
     if (blockId != null) 'block_id': blockId,
     'title': title,
     'status': status,
+    if (listOrderIndex != 0) 'list_order_index': listOrderIndex,
     if (dueDate != null) 'due_date': dueDate,
     if (archivedAt != null) 'archived_at': archivedAt,
   };

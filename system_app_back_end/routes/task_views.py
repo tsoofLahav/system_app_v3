@@ -7,6 +7,7 @@ from services.task_view_flags import (
     propagate_section_flag,
 )
 from services.task_view_assign import assign_task_view
+from services.task_view_order import reorder_task_views
 
 task_views_bp = Blueprint("task_views", __name__)
 
@@ -109,6 +110,36 @@ def update_task_view(view_id):
 
     db.session.commit()
     return jsonify(view.to_dict())
+
+
+@task_views_bp.route("/task_views/reorder", methods=["POST"])
+def reorder_task_views_route():
+    data = request.get_json(silent=True) or {}
+    view_type = data.get("view_type")
+    if not view_type:
+        return jsonify({"error": "view_type is required"}), 400
+
+    task_ids = data.get("task_ids")
+    if not isinstance(task_ids, list) or not task_ids:
+        return jsonify({"error": "task_ids must be a non-empty list"}), 400
+    if not all(isinstance(task_id, int) for task_id in task_ids):
+        return jsonify({"error": "task_ids must be integers"}), 400
+
+    section_name = data.get("section_name")
+    if section_name is not None and not isinstance(section_name, str):
+        return jsonify({"error": "section_name must be a string or null"}), 400
+
+    try:
+        memberships = reorder_task_views(
+            view_type,
+            task_ids,
+            section_name=section_name,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    db.session.commit()
+    return jsonify([membership.to_dict() for membership in memberships])
 
 
 @task_views_bp.route("/task_views/<int:view_id>", methods=["DELETE"])

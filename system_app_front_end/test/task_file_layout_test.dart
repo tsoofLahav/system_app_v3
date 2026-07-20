@@ -19,8 +19,20 @@ Block _block({
   );
 }
 
-Task _task({required int id, required int blockId, String title = 't', String status = 'active'}) {
-  return Task(id: id, blockId: blockId, title: title, status: status);
+Task _task({
+  required int id,
+  required int blockId,
+  String title = 't',
+  String status = 'active',
+  int listOrderIndex = 0,
+}) {
+  return Task(
+    id: id,
+    blockId: blockId,
+    title: title,
+    status: status,
+    listOrderIndex: listOrderIndex,
+  );
 }
 
 void main() {
@@ -38,7 +50,7 @@ void main() {
     expect(region.endIndex, 3);
   });
 
-  test('orderedTasksForListBlock follows block order not task id', () {
+  test('orderedTasksForListBlock sorts by list_order_index not task id', () {
     final list = _block(id: 2, type: 'task_list', orderIndex: 1);
     final blocks = [
       list,
@@ -46,11 +58,27 @@ void main() {
       _block(id: 4, type: 'task', orderIndex: 3, content: {'task_id': 3}),
     ];
     final tasksByBlockId = {
-      2: [_task(id: 3, blockId: 2), _task(id: 11, blockId: 2)],
+      2: [
+        _task(id: 3, blockId: 2, listOrderIndex: 1),
+        _task(id: 11, blockId: 2, listOrderIndex: 0),
+      ],
     };
 
     final ordered = orderedTasksForListBlock(blocks, list, tasksByBlockId);
     expect(ordered.map((t) => t.id).toList(), [11, 3]);
+  });
+
+  test('orderedTasksForListBlock sorts active before done', () {
+    final list = _block(id: 2, type: 'task_list', orderIndex: 0);
+    final tasksByBlockId = {
+      2: [
+        _task(id: 1, blockId: 2, listOrderIndex: 0, status: 'done'),
+        _task(id: 2, blockId: 2, listOrderIndex: 1),
+      ],
+    };
+
+    final ordered = orderedTasksForListBlock([list], list, tasksByBlockId);
+    expect(ordered.map((t) => t.id).toList(), [2, 1]);
   });
 
   test('groupTasksByView orders registry views then unassigned', () {
@@ -91,19 +119,78 @@ void main() {
     expect(merged, [3, 2, 1]);
   });
 
-  test('fileBlocksWithTaskRowOrder reorders rows inside list region', () {
-    final list = _block(id: 10, type: 'task_list', orderIndex: 0);
+  test('orderedTasksForListBlock ignores file row block order', () {
+    final listA = _block(id: 10, type: 'task_list', orderIndex: 0);
+    final listB = _block(id: 20, type: 'task_list', orderIndex: 2);
+    final blocks = [
+      listA,
+      _block(id: 11, type: 'task', orderIndex: 1, content: {'task_id': 1}),
+      listB,
+      _block(id: 12, type: 'task', orderIndex: 3, content: {'task_id': 2}),
+    ];
+    final tasksByBlockId = {
+      10: [
+        _task(id: 1, blockId: 10, listOrderIndex: 1),
+        _task(id: 2, blockId: 10, listOrderIndex: 0),
+      ],
+    };
+    final ordered = orderedTasksForListBlock(blocks, listA, tasksByBlockId);
+    expect(ordered.map((t) => t.id).toList(), [2, 1]);
+  });
+
+  test('orderedTasksForListBlock includes cache tasks without row blocks', () {
+    final list = _block(id: 2, type: 'task_list', orderIndex: 0);
     final blocks = [
       list,
-      _block(id: 11, type: 'task', orderIndex: 1, content: {'task_id': 1}),
-      _block(id: 12, type: 'task', orderIndex: 2, content: {'task_id': 2}),
-      _block(id: 13, type: 'task', orderIndex: 3, content: {'task_id': 3}),
+      _block(id: 3, type: 'task', orderIndex: 1, content: {'task_id': 1}),
     ];
-    final next = fileBlocksWithTaskRowOrder(blocks, list, [3, 1, 2]);
-    expect(next, isNotNull);
-    expect(
-      next!.where((b) => b.type == 'task').map((b) => b.content['task_id']).toList(),
-      [3, 1, 2],
+    final tasksByBlockId = {
+      2: [
+        _task(id: 1, blockId: 2, listOrderIndex: 0),
+        _task(id: 99, blockId: 2, listOrderIndex: 1),
+      ],
+    };
+
+    final ordered = orderedTasksForListBlock(blocks, list, tasksByBlockId);
+    expect(ordered.map((t) => t.id).toList(), [1, 99]);
+  });
+
+  test('allTasksInFile includes tasks without row blocks', () {
+    final list = _block(id: 2, type: 'task_list', orderIndex: 0);
+    final blocks = [
+      list,
+      _block(id: 3, type: 'task', orderIndex: 1, content: {'task_id': 1}),
+    ];
+    final tasksByBlockId = {
+      2: [
+        _task(id: 1, blockId: 2, listOrderIndex: 0),
+        _task(id: 99, blockId: 2, listOrderIndex: 1),
+      ],
+    };
+
+    final entries = allTasksInFile(blocks, tasksByBlockId);
+    expect(entries.map((e) => e.task.id).toList(), [1, 99]);
+    expect(entries[0].rowBlock, isNotNull);
+    expect(entries[1].rowBlock, isNull);
+  });
+
+  test('groupTasksByView unassigned uses list order callback', () {
+    final tasks = [
+      _task(id: 1, blockId: 10, listOrderIndex: 2),
+      _task(id: 2, blockId: 10, listOrderIndex: 0),
+      _task(id: 3, blockId: 20, listOrderIndex: 0),
+    ];
+    final groups = groupTasksByView(
+      tasks,
+      (_) => null,
+      blockOrderForTask: (taskId) => switch (taskId) {
+        1 => 100002,
+        2 => 100000,
+        3 => 200000,
+        _ => 0,
+      },
+      unassignedLabel: 'Unassigned',
     );
+    expect(groups.single.tasks.map((t) => t.id).toList(), [2, 1, 3]);
   });
 }

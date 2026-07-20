@@ -44,4 +44,42 @@ class TaskService {
   Future<void> deleteTask(int id) async {
     await _api.delete('/tasks/$id');
   }
+
+  Future<List<Task>> reorderTasksInListBlock(
+    int blockId,
+    List<int> taskIds,
+  ) async {
+    final data = await _api.post('/blocks/$blockId/tasks/reorder', {
+      'task_ids': taskIds,
+    }) as List<dynamic>;
+    return data.map((e) => Task.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<({
+    Task task,
+    List<Task> targetTasks,
+    List<Task> sourceTasks,
+    int? sourceBlockId,
+  })> moveTaskToListBlock({
+    required int blockId,
+    required int taskId,
+    required int insertIndex,
+    required bool targetDone,
+  }) async {
+    final data = await _api.post('/blocks/$blockId/tasks/move', {
+      'task_id': taskId,
+      'insert_index': insertIndex,
+      'target_done': targetDone,
+    }) as Map<String, dynamic>;
+    return (
+      task: Task.fromJson(data['task'] as Map<String, dynamic>),
+      targetTasks: (data['target_tasks'] as List<dynamic>)
+          .map((e) => Task.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      sourceTasks: (data['source_tasks'] as List<dynamic>)
+          .map((e) => Task.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      sourceBlockId: data['source_block_id'] as int?,
+    );
+  }
 }

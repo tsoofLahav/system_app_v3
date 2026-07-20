@@ -2789,33 +2789,20 @@ class AppState extends ChangeNotifier {
     _patchFileInCaches(updated);
   }
 
-  void _applyBlockOrderUpdates(AppFile file, List<Map<String, int>> updates) {
-    final byId = {for (final item in updates) item['id']!: item['order_index']!};
-    void patchBlocks(List<Block> blocks) {
-      for (var i = 0; i < blocks.length; i++) {
-        final nextOrder = byId[blocks[i].id];
-        if (nextOrder != null) {
-          blocks[i] = blocks[i].copyWith(orderIndex: nextOrder);
-        }
-      }
-      blocks.sort(
-        (a, b) => (a.orderIndex ?? 0).compareTo(b.orderIndex ?? 0),
-      );
-    }
-
-    if (broughtFile?.file.id == file.id) {
+  void _replaceTasksForListBlock(int listBlockId, List<Task> tasks) {
+    if (broughtFile != null) {
       final guest = broughtFile!;
-      final nextBlocks = List<Block>.from(guest.blocks);
-      patchBlocks(nextBlocks);
-      broughtFile = guest.copyWith(blocks: nextBlocks);
+      broughtFile = guest.copyWith(
+        tasksByBlockId: {
+          ...guest.tasksByBlockId,
+          listBlockId: tasks,
+        },
+      );
       return;
     }
-
     final detail = selectedDetail;
     if (detail == null) return;
-    final blocks = List<Block>.from(detail.blocksByFileId[file.id] ?? []);
-    patchBlocks(blocks);
-    detail.blocksByFileId[file.id] = blocks;
+    detail.tasksByBlockId[listBlockId] = tasks;
   }
 
   Future<void> reorderTasksInListBlock(
@@ -2823,45 +2810,14 @@ class AppState extends ChangeNotifier {
     Block listBlock,
     List<int> orderedTaskIds,
   ) async {
-    final blocks = sortedBlocksForFile(_blocksForFile(file));
-    final region = taskListRegion(blocks, listBlock);
-    final rowByTaskId = <int, Block>{};
-    for (var i = region.startIndex + 1; i < region.endIndex; i++) {
-      final block = blocks[i];
-      if (block.type != 'task') continue;
-      final taskId = block.content['task_id'] as int?;
-      if (taskId != null) rowByTaskId[taskId] = block;
-    }
-
-    final tasks = _tasksByBlockIdForFile(file)[listBlock.id] ?? const <Task>[];
-    final taskIdsInBlock = {
-      ...tasks.map((t) => t.id),
-      ...rowByTaskId.keys,
-    };
-    if (orderedTaskIds.length != taskIdsInBlock.length ||
-        !orderedTaskIds.every(taskIdsInBlock.contains)) {
-      return;
-    }
-
-    final nextBlocks = fileBlocksWithTaskRowOrder(
-      blocks,
-      listBlock,
-      orderedTaskIds,
-    );
-    if (nextBlocks == null) return;
-
-    final updates = taskRowOrderUpdatesForList(
-      nextBlocks,
-      listBlock,
-      orderedTaskIds,
-    );
-    if (updates.isEmpty) return;
-
-    _replaceBlocksForFile(file, nextBlocks);
-    _applyBlockOrderUpdates(file, updates);
-    notifyListeners();
+    if (orderedTaskIds.isEmpty) return;
     try {
-      await _blockService.reorderBlocks(file.id, updates);
+      final updated = await _taskService.reorderTasksInListBlock(
+        listBlock.id,
+        orderedTaskIds,
+      );
+      _replaceTasksForListBlock(listBlock.id, updated);
+      notifyListeners();
     } catch (_) {
       await _refreshAfterFileMutation(file);
       rethrow;
@@ -2926,13 +2882,17 @@ class AppState extends ChangeNotifier {
         : [...zone, ...parts.done];
 
     if (viewType != null) {
-      for (var i = 0; i < merged.length; i++) {
-        final membership = primaryMembershipForTask(merged[i].id);
-        if (membership == null) continue;
-        await _taskViewService.updateOrderIndex(membership.id, i);
+      final taskIds = merged.map((t) => t.id).toList();
+      final updated = await _taskViewService.reorderViewGroup(
+        viewType: viewType,
+        taskIds: taskIds,
+      );
+      for (final membership in updated) {
         _taskViewMemberships = _taskViewMemberships
             .map(
-              (m) => m.id == membership.id ? m.copyWith(orderIndex: i) : m,
+              (m) => m.id == membership.id
+                  ? m.copyWith(orderIndex: membership.orderIndex)
+                  : m,
             )
             .toList();
       }
@@ -2982,60 +2942,23 @@ class AppState extends ChangeNotifier {
     required bool targetDone,
     required int insertIndexInZone,
   }) async {
-    final sourceListId = task.blockId;
-    final rowBlock = taskRowBlockInFile(file, task);
-    if (rowBlock == null) return;
-
-    Task currentTask = task;
-    if (task.blockId != targetListBlock.id) {
-      currentTask = await _taskService.updateTask(task.id, {
-        'block_id': targetListBlock.id,
-      });
-      _moveTaskBetweenListCaches(
-        file: file,
-        task: currentTask,
-        sourceListId: sourceListId,
-        targetListBlock: targetListBlock,
+    try {
+      final result = await _taskService.moveTaskToListBlock(
+        blockId: targetListBlock.id,
+        taskId: task.id,
+        insertIndex: insertIndexInZone,
+        targetDone: targetDone,
       );
+      _replaceTasksForListBlock(targetListBlock.id, result.targetTasks);
+      final sourceBlockId = result.sourceBlockId;
+      if (sourceBlockId != null && sourceBlockId != targetListBlock.id) {
+        _replaceTasksForListBlock(sourceBlockId, result.sourceTasks);
+      }
+      notifyListeners();
+    } catch (_) {
+      await _refreshAfterFileMutation(file);
+      rethrow;
     }
-
-    final listTasks = orderedTasksForFile(file, targetListBlock);
-    final tasksForMerge = listTasks.any((t) => t.id == currentTask.id)
-        ? listTasks
-        : [...listTasks, currentTask];
-    final mergedIds = mergedTaskIdsAfterZoneInsert(
-      listTasks: tasksForMerge,
-      task: currentTask,
-      targetDone: targetDone,
-      insertIndexInZone: insertIndexInZone,
-    );
-
-    var blocks = List<Block>.from(sortedBlocksForFile(_blocksForFile(file)));
-    final fromIndex = blocks.indexWhere((b) => b.id == rowBlock.id);
-    if (fromIndex >= 0) blocks.removeAt(fromIndex);
-
-    final region = taskListRegion(blocks, targetListBlock);
-    final rowByTaskId = <int, Block>{};
-    for (var i = region.startIndex + 1; i < region.endIndex; i++) {
-      final block = blocks[i];
-      if (block.type != 'task') continue;
-      final taskId = block.content['task_id'] as int?;
-      if (taskId != null) rowByTaskId[taskId] = block;
-    }
-
-    final insertAt = blockInsertIndexForTaskInList(
-      fileBlocks: blocks,
-      listBlock: targetListBlock,
-      mergedTaskIds: mergedIds,
-      taskId: currentTask.id,
-      rowBlockByTaskId: rowByTaskId,
-    ).clamp(region.startIndex + 1, region.endIndex);
-
-    blocks.insert(insertAt, rowBlock);
-    _replaceBlocksForFile(file, blocks);
-
-    await reorderTasksInListBlock(file, targetListBlock, mergedIds);
-    await _ensureTaskStatusForDrop(currentTask, targetDone);
   }
 
   Future<void> reorderTaskAcrossZonesInListBlock(
@@ -3045,15 +2968,13 @@ class AppState extends ChangeNotifier {
     required bool targetDone,
     required int insertIndexInZone,
   }) async {
-    final listTasks = orderedTasksForFile(file, listBlock);
-    final mergedIds = mergedTaskIdsAfterZoneInsert(
-      listTasks: listTasks,
-      task: task,
+    await moveTaskToListBlockAtIndex(
+      file,
+      task,
+      listBlock,
       targetDone: targetDone,
       insertIndexInZone: insertIndexInZone,
     );
-    await reorderTasksInListBlock(file, listBlock, mergedIds);
-    await _ensureTaskStatusForDrop(task, targetDone);
   }
 
   Future<void> insertTaskInFlipGroupAt(
@@ -3084,13 +3005,18 @@ class AppState extends ChangeNotifier {
     }
 
     if (targetViewType != null) {
-      for (var i = 0; i < merged.length; i++) {
-        final membership = primaryMembershipForTask(merged[i].id);
-        if (membership == null) continue;
-        if (membership.orderIndex == i) continue;
-        await _taskViewService.updateOrderIndex(membership.id, i);
+      final taskIds = merged.map((t) => t.id).toList();
+      final updated = await _taskViewService.reorderViewGroup(
+        viewType: targetViewType,
+        taskIds: taskIds,
+      );
+      for (final membership in updated) {
         _taskViewMemberships = _taskViewMemberships
-            .map((m) => m.id == membership.id ? m.copyWith(orderIndex: i) : m)
+            .map(
+              (m) => m.id == membership.id
+                  ? m.copyWith(orderIndex: membership.orderIndex)
+                  : m,
+            )
             .toList();
       }
       notifyListeners();
@@ -3218,48 +3144,6 @@ class AppState extends ChangeNotifier {
     final updated = Task.fromJson(data);
     _applyTaskUpdate(updated);
     notifyListeners();
-  }
-
-  void _replaceBlocksForFile(AppFile file, List<Block> blocks) {
-    if (broughtFile?.file.id == file.id) {
-      broughtFile = broughtFile!.copyWith(blocks: blocks);
-      return;
-    }
-    final detail = selectedDetail;
-    if (detail == null) return;
-    detail.blocksByFileId[file.id] = blocks;
-  }
-
-  void _moveTaskBetweenListCaches({
-    required AppFile file,
-    required Task task,
-    required int? sourceListId,
-    required Block targetListBlock,
-  }) {
-    void patchMap(Map<int, List<Task>> tasksByBlockId) {
-      if (sourceListId != null) {
-        tasksByBlockId[sourceListId] = (tasksByBlockId[sourceListId] ?? [])
-            .where((t) => t.id != task.id)
-            .toList();
-      }
-      tasksByBlockId[targetListBlock.id] = [
-        ...(tasksByBlockId[targetListBlock.id] ?? [])
-            .where((t) => t.id != task.id),
-        task,
-      ];
-    }
-
-    if (broughtFile?.file.id == file.id) {
-      final guest = broughtFile!;
-      final nextMap = Map<int, List<Task>>.from(guest.tasksByBlockId);
-      patchMap(nextMap);
-      broughtFile = guest.copyWith(tasksByBlockId: nextMap);
-      return;
-    }
-
-    final detail = selectedDetail;
-    if (detail == null) return;
-    patchMap(detail.tasksByBlockId);
   }
 
   Future<Task?> createTaskInViewZoneAfter({
@@ -3792,7 +3676,29 @@ class AppState extends ChangeNotifier {
       title: updated.title,
       status: updated.status,
       blockId: updated.blockId,
+      listOrderIndex: updated.listOrderIndex,
     );
+
+    void patchTasksByBlockId(Map<int, List<Task>> tasksByBlockId) {
+      for (final entry in tasksByBlockId.entries.toList()) {
+        if (entry.key != updated.blockId) {
+          final filtered = entry.value.where((t) => t.id != updated.id).toList();
+          if (filtered.length != entry.value.length) {
+            tasksByBlockId[entry.key] = filtered;
+          }
+        }
+      }
+      final blockId = updated.blockId;
+      if (blockId == null) return;
+      final tasks = List<Task>.from(tasksByBlockId[blockId] ?? []);
+      final index = tasks.indexWhere((t) => t.id == updated.id);
+      if (index >= 0) {
+        tasks[index] = merge(tasks[index]);
+      } else {
+        tasks.add(updated);
+      }
+      tasksByBlockId[blockId] = tasks;
+    }
 
     if (selectedViewType != null) {
       viewTasks = viewTasks
@@ -3800,13 +3706,17 @@ class AppState extends ChangeNotifier {
           .toList();
       _cacheCurrentView();
     }
+
+    if (broughtFile != null) {
+      final guest = broughtFile!;
+      final nextMap = Map<int, List<Task>>.from(guest.tasksByBlockId);
+      patchTasksByBlockId(nextMap);
+      broughtFile = guest.copyWith(tasksByBlockId: nextMap);
+    }
+
     final detail = selectedDetail;
     if (detail != null) {
-      for (final entry in detail.tasksByBlockId.entries) {
-        detail.tasksByBlockId[entry.key] = entry.value
-            .map((t) => t.id == updated.id ? merge(t) : t)
-            .toList();
-      }
+      patchTasksByBlockId(detail.tasksByBlockId);
     }
     notifyListeners();
   }

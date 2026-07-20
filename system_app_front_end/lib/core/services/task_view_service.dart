@@ -80,6 +80,21 @@ class TaskViewService {
     await _api.patch('/task_views/$id', {'order_index': orderIndex});
   }
 
+  Future<List<TaskViewMembership>> reorderViewGroup({
+    required String viewType,
+    required List<int> taskIds,
+    String? sectionName,
+  }) async {
+    final data = await _api.post('/task_views/reorder', {
+      'view_type': viewType,
+      'task_ids': taskIds,
+      if (sectionName != null) 'section_name': sectionName,
+    }) as List<dynamic>;
+    return data
+        .map((e) => TaskViewMembership.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<TaskViewMembership?> assignView({
     required int taskId,
     required String? viewType,

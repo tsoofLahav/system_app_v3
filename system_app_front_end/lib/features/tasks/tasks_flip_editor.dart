@@ -100,15 +100,24 @@ class _TasksFlipEditorState extends State<TasksFlipEditor> {
     final listBlockByTaskId = {
       for (final entry in taskEntries) entry.task.id: entry.listBlock,
     };
-    final blockOrderForTask = {
-      for (var index = 0; index < taskEntries.length; index++)
-        taskEntries[index].task.id: index,
+    final listBlocks = sortedBlocksForFile(widget.blocks)
+        .where((block) => block.type == 'task_list')
+        .toList();
+    final listBlockOrderIndex = {
+      for (var i = 0; i < listBlocks.length; i++) listBlocks[i].id: i,
     };
+    final taskById = {for (final entry in taskEntries) entry.task.id: entry.task};
+    int listOrderForTask(int taskId) {
+      final task = taskById[taskId];
+      if (task == null) return 0;
+      final listIndex = listBlockOrderIndex[task.blockId] ?? 0;
+      return listIndex * 100000 + task.listOrderIndex;
+    }
     final groups = groupTasksByView(
       _allTasks(),
       widget.state.viewTypeForTask,
       membershipOrderForTask: widget.state.orderIndexForTask,
-      blockOrderForTask: (taskId) => blockOrderForTask[taskId] ?? 0,
+      blockOrderForTask: listOrderForTask,
       unassignedLabel: strings['unassignedView'],
     );
     final fallbackListBlock = _fallbackListBlock();

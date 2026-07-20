@@ -256,40 +256,37 @@ class _TaskZoneListState extends State<TaskZoneList> {
     );
   }
 
-  Widget _buildListItem(Task task, List<String> titles, int index) {
-    Widget rowContent = _buildTaskRow(task, titles);
+  Widget _buildInsertTarget(int insertIndex) {
+    return DragTarget<TaskDragPayload>(
+      onWillAcceptWithDetails: (details) =>
+          _willAcceptDrop(details.data, insertIndex),
+      onAcceptWithDetails: (details) => _handleDrop(details.data, insertIndex),
+      builder: (context, candidate, rejected) {
+        final active = candidate.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          height: active ? 10 : 2,
+          alignment: Alignment.centerLeft,
+          child: active
+              ? Container(
+                  height: 2,
+                  color: Theme.of(context).colorScheme.primary,
+                )
+              : null,
+        );
+      },
+    );
+  }
 
-    if (_showDropTargets) {
-      rowContent = DragTarget<TaskDragPayload>(
-        onWillAcceptWithDetails: (details) =>
-            _willAcceptDrop(details.data, index),
-        onAcceptWithDetails: (details) => _handleDrop(details.data, index),
-        builder: (context, candidate, rejected) {
-          final active = candidate.isNotEmpty;
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            decoration: BoxDecoration(
-              border: active
-                  ? Border(
-                      top: BorderSide(
-                        color: Theme.of(context).colorScheme.primary,
-                        width: 2,
-                      ),
-                    )
-                  : null,
-            ),
-            child: rowContent,
-          );
-        },
-      );
-    }
+  Widget _buildListItem(Task task, List<String> titles) {
+    final taskRow = _buildTaskRow(task, titles);
 
     if (!_showGrip) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (_showDropTargets) SizedBox(width: 20, child: _dragHandle()),
-          Expanded(child: rowContent),
+          Expanded(child: taskRow),
         ],
       );
     }
@@ -298,7 +295,7 @@ class _TaskZoneListState extends State<TaskZoneList> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildDragHandle(task),
-        Expanded(child: rowContent),
+        Expanded(child: taskRow),
       ],
     );
   }
@@ -314,20 +311,11 @@ class _TaskZoneListState extends State<TaskZoneList> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (var i = 0; i < widget.tasks.length; i++)
-          _buildListItem(widget.tasks[i], titles, i),
-        if (_showDropTargets)
-          DragTarget<TaskDragPayload>(
-            onWillAcceptWithDetails: (details) =>
-                _willAcceptDrop(details.data, widget.tasks.length),
-            onAcceptWithDetails: (details) =>
-                _handleDrop(details.data, widget.tasks.length),
-            builder: (context, candidate, rejected) {
-              return SizedBox(
-                height: candidate.isNotEmpty ? 8 : 0,
-              );
-            },
-          ),
+        if (_showDropTargets) _buildInsertTarget(0),
+        for (var i = 0; i < widget.tasks.length; i++) ...[
+          _buildListItem(widget.tasks[i], titles),
+          if (_showDropTargets) _buildInsertTarget(i + 1),
+        ],
         if (!hideDraft)
           _DraftTaskRow(
             done: widget.done,

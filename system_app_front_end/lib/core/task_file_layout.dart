@@ -43,26 +43,40 @@ TaskListRegion taskListRegion(List<Block> fileBlocks, Block listBlock) {
   return TaskListRegion(startIndex: startIndex, endIndex: endIndex);
 }
 
+int? taskIdFromBlockContent(Map<String, dynamic> content) {
+  final value = content['task_id'];
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return null;
+}
+
+Map<int, Block> taskRowBlocksByTaskId(List<Block> fileBlocks) {
+  final rowByTaskId = <int, Block>{};
+  for (final block in fileBlocks) {
+    if (block.type != 'task') continue;
+    final taskId = taskIdFromBlockContent(block.content);
+    if (taskId != null) rowByTaskId[taskId] = block;
+  }
+  return rowByTaskId;
+}
+
 List<Task> orderedTasksForListBlock(
   List<Block> fileBlocks,
   Block listBlock,
   Map<int, List<Task>> tasksByBlockId,
 ) {
-  final blocks = sortedBlocksForFile(fileBlocks);
-  final region = taskListRegion(blocks, listBlock);
-  final taskById = {
-    for (final task in tasksByBlockId[listBlock.id] ?? const <Task>[])
-      task.id: task,
-  };
-  final ordered = <Task>[];
-  for (var i = region.startIndex + 1; i < region.endIndex; i++) {
-    final block = blocks[i];
-    if (block.type != 'task') continue;
-    final taskId = block.content['task_id'] as int?;
-    if (taskId == null) continue;
-    final task = taskById[taskId];
-    if (task != null) ordered.add(task);
-  }
+  final tasks = tasksByBlockId[listBlock.id] ?? const <Task>[];
+  if (tasks.isEmpty) return const [];
+
+  final ordered = List<Task>.from(tasks);
+  ordered.sort((a, b) {
+    final statusCompare = (a.isDone ? 1 : 0).compareTo(b.isDone ? 1 : 0);
+    if (statusCompare != 0) return statusCompare;
+    final orderCompare =
+        a.listOrderIndex.compareTo(b.listOrderIndex);
+    if (orderCompare != 0) return orderCompare;
+    return a.id.compareTo(b.id);
+  });
   return ordered;
 }
 
@@ -75,7 +89,7 @@ class TaskInFile {
 
   final Task task;
   final Block listBlock;
-  final Block rowBlock;
+  final Block? rowBlock;
 }
 
 List<TaskInFile> allTasksInFile(
@@ -91,7 +105,7 @@ List<TaskInFile> allTasksInFile(
       listBlock,
       tasksByBlockId,
     );
-    for (final task in tasks) {
+  for (final task in tasks) {
       Block? rowBlock;
       for (final block in blocks) {
         if (block.type == 'task' && block.content['task_id'] == task.id) {
@@ -99,11 +113,9 @@ List<TaskInFile> allTasksInFile(
           break;
         }
       }
-      if (rowBlock != null) {
-        entries.add(
-          TaskInFile(task: task, listBlock: listBlock, rowBlock: rowBlock),
-        );
-      }
+      entries.add(
+        TaskInFile(task: task, listBlock: listBlock, rowBlock: rowBlock),
+      );
     }
   }
   return entries;
@@ -208,78 +220,4 @@ List<int> mergedTaskIdsAfterZoneInsert({
   final zone = targetDone ? done : active;
   zone.insert(insertIndexInZone.clamp(0, zone.length), task);
   return [...active, ...done].map((t) => t.id).toList();
-}
-
-int blockInsertIndexForTaskInList({
-  required List<Block> fileBlocks,
-  required Block listBlock,
-  required List<int> mergedTaskIds,
-  required int taskId,
-  required Map<int, Block> rowBlockByTaskId,
-}) {
-  final blocks = sortedBlocksForFile(fileBlocks);
-  final region = taskListRegion(blocks, listBlock);
-  final position = mergedTaskIds.indexOf(taskId);
-  if (position <= 0) return region.startIndex + 1;
-  final beforeTaskId = mergedTaskIds[position - 1];
-  final beforeRow = rowBlockByTaskId[beforeTaskId];
-  if (beforeRow == null) return region.startIndex + 1;
-  return listInsertIndexAfterTaskBlock(blocks, beforeRow);
-}
-
-/// Reorder task row blocks inside a list region to match [orderedTaskIds].
-/// Returns null when row blocks cannot be matched to the requested order.
-List<Block>? fileBlocksWithTaskRowOrder(
-  List<Block> fileBlocks,
-  Block listBlock,
-  List<int> orderedTaskIds,
-) {
-  final blocks = List<Block>.from(sortedBlocksForFile(fileBlocks));
-  final region = taskListRegion(blocks, listBlock);
-  final rowByTaskId = <int, Block>{};
-  for (var i = region.startIndex + 1; i < region.endIndex; i++) {
-    final block = blocks[i];
-    if (block.type != 'task') continue;
-    final taskId = block.content['task_id'] as int?;
-    if (taskId != null) rowByTaskId[taskId] = block;
-  }
-
-  final orderedRows = <Block>[];
-  for (final taskId in orderedTaskIds) {
-    final row = rowByTaskId[taskId];
-    if (row == null) return null;
-    orderedRows.add(row);
-  }
-
-  return [
-    ...blocks.sublist(0, region.startIndex + 1),
-    ...orderedRows,
-    ...blocks.sublist(region.endIndex),
-  ];
-}
-
-List<Map<String, int>> taskRowOrderUpdatesForList(
-  List<Block> fileBlocks,
-  Block listBlock,
-  List<int> orderedTaskIds,
-) {
-  final blocks = sortedBlocksForFile(fileBlocks);
-  final region = taskListRegion(blocks, listBlock);
-  final rowByTaskId = <int, Block>{};
-  for (var i = region.startIndex + 1; i < region.endIndex; i++) {
-    final block = blocks[i];
-    if (block.type != 'task') continue;
-    final taskId = block.content['task_id'] as int?;
-    if (taskId != null) rowByTaskId[taskId] = block;
-  }
-
-  final anchorOrder =
-      blocks[region.startIndex].orderIndex ?? region.startIndex;
-  final updates = <Map<String, int>>[];
-  for (var i = 0; i < orderedTaskIds.length; i++) {
-    final row = rowByTaskId[orderedTaskIds[i]];
-    if (row == null) continue;
-    updates.add({'id': row.id, 'order_index': anchorOrder + i + 1});
-  }
-  return updates;
 }

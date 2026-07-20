@@ -1,6 +1,8 @@
 from flask import Blueprint, jsonify, request
 from sqlalchemy import or_
 
+from sqlalchemy import case
+
 from models import Block, File, Task, TaskView, Topic, db
 from routes.helpers import active_query, apply_updates, get_or_404
 from services.automation_dispatcher import dispatch_file_changed
@@ -17,7 +19,11 @@ from services.automation_trigger_lookup import (
     rule_keys_for_trigger_task,
     trigger_task_ids,
 )
-from services.delete_cascade import delete_task_cascade
+from services.task_list_order import (
+    move_task_to_list_block,
+    next_list_order_index,
+    reorder_tasks_in_list_block,
+)
 
 tasks_bp = Blueprint("tasks", __name__)
 
@@ -91,7 +97,11 @@ def list_tasks_by_block(block_id):
     tasks = (
         active_query(Task)
         .filter(or_(Task.block_id == block_id, Task.id.in_(referenced_ids)))
-        .order_by(Task.id)
+        .order_by(
+            case((Task.status == "done", 1), else_=0),
+            Task.list_order_index,
+            Task.id,
+        )
         .all()
     )
     return jsonify([t.to_dict() for t in tasks])
@@ -174,7 +184,11 @@ def list_tasks_by_view(view_type):
     )
     if important_only:
         rows = rows.filter(TaskView.section_flag == IMPORTANT_SECTION_FLAG)
-    rows = rows.order_by(TaskView.section_name.nulls_last(), Task.id).all()
+    rows = rows.order_by(
+        TaskView.section_name.nulls_last(),
+        TaskView.order_index,
+        Task.id,
+    ).all()
     from services.automation_companion import pending_companions_by_task_ids
 
     task_ids = [task.id for task, _, _ in rows]
@@ -221,6 +235,9 @@ def create_task():
         status=data.get("status", "active"),
         due_date=due_date,
     )
+    block_id = data.get("block_id")
+    if block_id is not None:
+        task.list_order_index = next_list_order_index(int(block_id))
 
     db.session.add(task)
     db.session.commit()
@@ -244,7 +261,7 @@ def update_task(task_id):
     apply_updates(
         task,
         data,
-        {"block_id", "title", "status", "due_date", "archived_at"},
+        {"block_id", "list_order_index", "title", "status", "due_date", "archived_at"},
         datetime_fields={"due_date", "archived_at"},
     )
     db.session.commit()
@@ -274,6 +291,68 @@ def update_task(task_id):
         elif not rule_keys_for_trigger_task(task.id):
             payload["automation_trigger_skipped"] = "not_trigger_task"
     return jsonify(payload)
+
+
+@tasks_bp.route("/blocks/<int:block_id>/tasks/reorder", methods=["POST"])
+def reorder_tasks_for_list_block(block_id):
+    block = get_or_404(Block, block_id)
+    if block.type != "task_list":
+        return jsonify({"error": "block must be a task_list"}), 400
+
+    data = request.get_json(silent=True) or {}
+    task_ids = data.get("task_ids")
+    if not isinstance(task_ids, list) or not task_ids:
+        return jsonify({"error": "task_ids must be a non-empty list"}), 400
+    if not all(isinstance(task_id, int) for task_id in task_ids):
+        return jsonify({"error": "task_ids must be integers"}), 400
+
+    try:
+        tasks = reorder_tasks_in_list_block(block_id, task_ids)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    db.session.commit()
+    dispatch_file_changed(block.file_id, "tasks_reordered", {"block_id": block_id})
+    return jsonify([task.to_dict() for task in tasks])
+
+
+@tasks_bp.route("/blocks/<int:block_id>/tasks/move", methods=["POST"])
+def move_task_for_list_block(block_id):
+    block = get_or_404(Block, block_id)
+    if block.type != "task_list":
+        return jsonify({"error": "block must be a task_list"}), 400
+
+    data = request.get_json(silent=True) or {}
+    task_id = data.get("task_id")
+    if task_id is None:
+        return jsonify({"error": "task_id is required"}), 400
+
+    insert_index = data.get("insert_index", 0)
+    if not isinstance(insert_index, int):
+        return jsonify({"error": "insert_index must be an integer"}), 400
+
+    target_done = bool(data.get("target_done", False))
+
+    try:
+        result = move_task_to_list_block(
+            int(task_id),
+            block_id,
+            insert_index_in_zone=insert_index,
+            target_done=target_done,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    db.session.commit()
+    dispatch_file_changed(block.file_id, "task_moved", {"task_id": int(task_id)})
+    return jsonify(
+        {
+            "task": result["task"].to_dict(),
+            "target_tasks": [task.to_dict() for task in result["target_tasks"]],
+            "source_tasks": [task.to_dict() for task in result["source_tasks"]],
+            "source_block_id": result["source_block_id"],
+        }
+    )
 
 
 @tasks_bp.route("/tasks/<int:task_id>/view", methods=["PUT"])
