@@ -78,14 +78,12 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       _ownsFocus = true;
     }
     _focusNode.addListener(_onFocusChanged);
-    _focusNode.onKeyEvent = _onFocusKeyEvent;
     widget.controller.addListener(_normalizeSelectionIfNeeded);
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_normalizeSelectionIfNeeded);
-    _focusNode.onKeyEvent = null;
     _focusNode.removeListener(_onFocusChanged);
     BlockTextFocusRegistry.unregister(widget.controller);
     if (_ownsFocus) _focusNode.dispose();
@@ -209,14 +207,22 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     }
 
     if (event.logicalKey == LogicalKeyboardKey.backspace &&
-        widget.controller.text.isEmpty &&
-        widget.controller.selection.baseOffset == 0 &&
+        _shouldDeleteRowOnBackspace() &&
         widget.onBackspaceAtStart != null) {
-      unawaited(widget.onBackspaceAtStart!().catchError((_) {}));
+      unawaited(widget.onBackspaceAtStart!());
       return KeyEventResult.handled;
     }
 
     return KeyEventResult.ignored;
+  }
+
+  bool _shouldDeleteRowOnBackspace() {
+    final text = widget.controller.text;
+    if (text.isNotEmpty) return false;
+    final selection = widget.controller.selection;
+    return selection.isValid &&
+        selection.isCollapsed &&
+        selection.start == 0;
   }
 
   void _openEmojiPicker() {
@@ -277,32 +283,36 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
             child: child!,
           );
         },
-        child: TextField(
-          controller: widget.controller,
+        child: Focus(
           focusNode: _focusNode,
-          style: style,
-          textAlignVertical: widget.textAlignVertical,
-          maxLines: widget.maxLines,
-          minLines: widget.minLines,
-          decoration: InputDecoration(
-            isDense: true,
-            border: InputBorder.none,
-            hintText: widget.hintText,
-            hintStyle: style.copyWith(
-              color: style.color?.withValues(alpha: 0.35),
+          onKeyEvent: _onFocusKeyEvent,
+          child: TextField(
+            controller: widget.controller,
+            focusNode: _focusNode,
+            style: style,
+            textAlignVertical: widget.textAlignVertical,
+            maxLines: widget.maxLines,
+            minLines: widget.minLines,
+            decoration: InputDecoration(
+              isDense: true,
+              border: InputBorder.none,
+              hintText: widget.hintText,
+              hintStyle: style.copyWith(
+                color: style.color?.withValues(alpha: 0.35),
+              ),
+              contentPadding: EdgeInsets.zero,
             ),
-            contentPadding: EdgeInsets.zero,
+            textInputAction: widget.onEnter != null
+                ? TextInputAction.none
+                : widget.textInputAction,
+            onChanged: (_) => _notifyChanged(),
+            onSubmitted: widget.onSubmitted,
+            onTap: () => _onFocusChanged(),
+            inputFormatters: formatters.isEmpty ? null : formatters,
+            contextMenuBuilder: (context, editableTextState) {
+              return const SizedBox.shrink();
+            },
           ),
-          textInputAction: widget.onEnter != null
-              ? TextInputAction.none
-              : widget.textInputAction,
-          onChanged: (_) => _notifyChanged(),
-          onSubmitted: widget.onSubmitted,
-          onTap: () => _onFocusChanged(),
-          inputFormatters: formatters.isEmpty ? null : formatters,
-          contextMenuBuilder: (context, editableTextState) {
-            return const SizedBox.shrink();
-          },
         ),
       ),
     );

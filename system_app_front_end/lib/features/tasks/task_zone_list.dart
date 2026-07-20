@@ -217,23 +217,28 @@ class _TaskZoneListState extends State<TaskZoneList> {
   }
 
   Widget _buildDragHandle(Task task) {
+    const feedbackWidth = 280.0;
     final payload = TaskDragPayload(
       task: task,
       sourceListBlock: widget.listBlock!,
       sourceDone: widget.done,
       sourceViewType: widget.flipViewType,
     );
-    final isRtl = Directionality.of(context) == TextDirection.rtl;
 
     return Draggable<TaskDragPayload>(
       data: payload,
-      dragAnchorStrategy: pointerDragAnchorStrategy,
-      feedbackOffset: isRtl ? const Offset(-280, 0) : Offset.zero,
+      dragAnchorStrategy: (draggable, context, position) {
+        final anchor = pointerDragAnchorStrategy(draggable, context, position);
+        if (widget.state.isRtl) {
+          return anchor + const Offset(-feedbackWidth, 0);
+        }
+        return anchor;
+      },
       feedback: Material(
         elevation: 4,
         color: Theme.of(context).colorScheme.surface,
         child: SizedBox(
-          width: 280,
+          width: feedbackWidth,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
