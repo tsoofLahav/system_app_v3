@@ -208,6 +208,7 @@ class _TaskZoneListState extends State<TaskZoneList> {
       targetDone: widget.done,
       insertIndex: targetIndex,
       sourceIndexInZone: sourceIndex,
+      targetZoneLength: widget.tasks.length,
       isFlipMode: widget.flipViewType != null,
       allowCrossBoundary: widget.enableCrossListDrag,
       listBlockByTaskId: widget.listBlockByTaskId,
@@ -262,6 +263,14 @@ class _TaskZoneListState extends State<TaskZoneList> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildDragHandle(task),
+          Expanded(child: rowContent),
+        ],
+      );
+    } else if (_showDropTargets) {
+      rowContent = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 20, child: _dragHandle()),
           Expanded(child: rowContent),
         ],
       );
