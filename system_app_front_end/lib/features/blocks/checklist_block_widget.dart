@@ -69,7 +69,7 @@ class _ChecklistBlockWidgetState extends State<ChecklistBlockWidget> {
               _pendingFocusIndex = i + 1;
               widget.onAddItem(i + 1);
             },
-            onBackspaceAtStart: () {
+            onBackspaceAtStart: () async {
               if (items.length <= 1) return;
               _pendingFocusIndex = (i - 1).clamp(0, items.length - 2);
               widget.onRemoveItem(i);
@@ -120,7 +120,7 @@ class _ChecklistRow extends StatefulWidget {
   final FocusNode focusNode;
   final void Function(String text, bool done) onChanged;
   final VoidCallback onSubmitted;
-  final VoidCallback onBackspaceAtStart;
+  final Future<void> Function() onBackspaceAtStart;
   final AppState? aiState;
   final int? aiFileId;
   final int? aiBlockId;
