@@ -1,5 +1,3 @@
-from sqlalchemy import case
-
 from models import (
     AiProposal,
     AutomationCompanionTask,
@@ -12,6 +10,7 @@ from models import (
     Topic,
     db,
 )
+from services.task_list_order import apply_list_task_order, tasks_for_list_block
 
 
 def _list_block_id_for_task(task: Task) -> int | None:
@@ -41,41 +40,19 @@ def _list_block_id_for_task(task: Task) -> int | None:
     return None
 
 
-def _task_row_blocks_for_task(task: Task) -> list[Block]:
-    file_id = None
-    if task.block_id is not None:
-        list_block = db.session.get(Block, task.block_id)
-        if list_block is not None:
-            file_id = list_block.file_id
-    if file_id is None:
-        list_block_id = _list_block_id_for_task(task)
-        if list_block_id is not None:
-            list_block = db.session.get(Block, list_block_id)
-            if list_block is not None:
-                file_id = list_block.file_id
-
-    query = Block.query.filter_by(type="task").filter(Block.archived_at.is_(None))
-    if file_id is not None:
-        query = query.filter_by(file_id=file_id)
-    return query.all()
+def _normalize_task_block_id(task: Task) -> None:
+    list_block_id = _list_block_id_for_task(task)
+    if list_block_id is None:
+        return
+    block = db.session.get(Block, task.block_id) if task.block_id is not None else None
+    if block is None or block.type != "task_list":
+        task.block_id = list_block_id
 
 
 def _compact_list_order(list_block_id: int) -> None:
-    tasks = (
-        Task.query.filter(
-            Task.block_id == list_block_id,
-            Task.archived_at.is_(None),
-        )
-        .order_by(
-            case((Task.status == "done", 1), else_=0),
-            Task.list_order_index,
-            Task.id,
-        )
-        .all()
-    )
-    for index, task in enumerate(tasks):
-        task.list_order_index = index
-    db.session.flush()
+    remaining_ids = [task.id for task in tasks_for_list_block(list_block_id)]
+    if remaining_ids:
+        apply_list_task_order(list_block_id, remaining_ids)
 
 
 def delete_task_cascade(task_id):
@@ -84,36 +61,20 @@ def delete_task_cascade(task_id):
         return
 
     list_block_id = _list_block_id_for_task(task)
-    row_blocks = []
-    for block in _task_row_blocks_for_task(task):
-        content = block.content or {}
-        raw_task_id = content.get("task_id")
-        if raw_task_id is None:
-            continue
-        try:
-            if int(raw_task_id) == int(task_id):
-                row_blocks.append(block)
-        except (TypeError, ValueError):
-            continue
+    _normalize_task_block_id(task)
 
     AutomationCompanionTask.query.filter_by(task_id=int(task_id)).delete(
         synchronize_session=False
     )
     TaskView.query.filter_by(task_id=int(task_id)).delete(synchronize_session=False)
-
-    # Delete the task before row blocks so tasks.block_id never references a
-    # row block we are removing (can happen after legacy drag drift).
     db.session.delete(task)
     db.session.flush()
-
-    for block in row_blocks:
-        db.session.delete(block)
 
     if list_block_id is not None:
         try:
             _compact_list_order(list_block_id)
         except Exception:
-            db.session.expire_all()
+            pass
 
 
 def delete_file_cascade(file_id):

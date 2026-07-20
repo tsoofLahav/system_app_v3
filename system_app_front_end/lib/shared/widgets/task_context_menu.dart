@@ -51,7 +51,7 @@ Future<void> showTaskContextMenu({
   VoidCallback? onCut,
   Future<void> Function()? onPaste,
   VoidCallback? onCopyAll,
-  VoidCallback? onDelete,
+  Future<void> Function()? onDelete,
   String? fileType,
   Block? targetBlock,
   BlockMenuHandler? onBlockAction,
@@ -161,7 +161,7 @@ Future<void> showTaskContextMenu({
     case 'copy_all':
       onCopyAll?.call();
     case 'delete_task':
-      onDelete?.call();
+      await onDelete?.call();
     default:
       if (value.startsWith('topic:')) {
         await _handleTopicAction(

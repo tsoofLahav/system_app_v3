@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -44,7 +46,7 @@ class FormattedTextField extends StatefulWidget {
   final int minLines;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
-  final VoidCallback? onBackspaceAtStart;
+  final Future<void> Function()? onBackspaceAtStart;
   final VoidCallback? onSelectAll;
   final Future<void> Function(String text)? onPaste;
   final TextInputAction? textInputAction;
@@ -206,20 +208,12 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       return KeyEventResult.handled;
     }
 
-    if (widget.onBackspaceAtStart != null) {
-      final text = widget.controller.text;
-      final selection = widget.controller.selection;
-      final isEmptyRow = text.isEmpty;
-      final isFullSelection = selection.isValid &&
-          !selection.isCollapsed &&
-          selection.start == 0 &&
-          selection.end == text.length;
-      if ((event.logicalKey == LogicalKeyboardKey.backspace ||
-              event.logicalKey == LogicalKeyboardKey.delete) &&
-          (isEmptyRow || isFullSelection)) {
-        widget.onBackspaceAtStart!();
-        return KeyEventResult.handled;
-      }
+    if (event.logicalKey == LogicalKeyboardKey.backspace &&
+        widget.controller.text.isEmpty &&
+        widget.controller.selection.baseOffset == 0 &&
+        widget.onBackspaceAtStart != null) {
+      unawaited(widget.onBackspaceAtStart!().catchError((_) {}));
+      return KeyEventResult.handled;
     }
 
     return KeyEventResult.ignored;

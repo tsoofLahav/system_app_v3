@@ -1,5 +1,3 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 
 import '../../core/models/app_file.dart';
@@ -218,54 +216,6 @@ class _TaskZoneListState extends State<TaskZoneList> {
     );
   }
 
-  Widget _buildDragFeedback(BuildContext context, Task task) {
-    final direction = Directionality.of(context);
-    return Material(
-      type: MaterialType.transparency,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 240),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Theme.of(context)
-                  .colorScheme
-                  .surface
-                  .withValues(alpha: 0.72),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: Theme.of(context)
-                    .colorScheme
-                    .outline
-                    .withValues(alpha: 0.22),
-              ),
-            ),
-            child: Text(
-              task.title.isEmpty ? ' ' : task.title,
-              style: AppTypography.taskRowStyle,
-              textDirection: direction,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Offset _taskDragFeedbackOffset(
-    Draggable<Object> draggable,
-    BuildContext context,
-    Offset position,
-  ) {
-    final isRtl = Directionality.of(context) == TextDirection.rtl;
-    final anchor = pointerDragAnchorStrategy(draggable, context, position);
-    // Keep the chip on the text side of the grip in both directions.
-    return anchor + Offset(isRtl ? -132 : 20, -6);
-  }
-
   Widget _buildDragHandle(Task task) {
     final payload = TaskDragPayload(
       task: task,
@@ -273,11 +223,36 @@ class _TaskZoneListState extends State<TaskZoneList> {
       sourceDone: widget.done,
       sourceViewType: widget.flipViewType,
     );
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
 
     return Draggable<TaskDragPayload>(
       data: payload,
-      dragAnchorStrategy: _taskDragFeedbackOffset,
-      feedback: _buildDragFeedback(context, task),
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedbackOffset: isRtl ? const Offset(-280, 0) : Offset.zero,
+      feedback: Material(
+        elevation: 4,
+        color: Theme.of(context).colorScheme.surface,
+        child: SizedBox(
+          width: 280,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _dragHandle(),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    task.title,
+                    style: AppTypography.taskRowStyle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
       childWhenDragging: Opacity(opacity: 0.25, child: _dragHandle()),
       child: _dragHandle(),
     );

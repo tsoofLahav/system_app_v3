@@ -44,7 +44,7 @@ class TaskRow extends StatefulWidget {
   final AppState state;
   final VoidCallback onToggle;
   final Block? taskBlock;
-  final VoidCallback? onDelete;
+  final Future<void> Function()? onDelete;
   final ValueChanged<String>? onTitleChanged;
   final void Function(Offset globalPosition)? onAddTaskAfter;
   final List<String>? allTaskTitles;
@@ -292,9 +292,9 @@ class _TaskRowState extends State<TaskRow> {
           final position = box?.localToGlobal(Offset.zero) ?? Offset.zero;
           widget.onAddTaskAfter?.call(position);
         },
-        onBackspaceAtStart: () {
+        onBackspaceAtStart: () async {
           if (_controller.text.isEmpty) {
-            widget.onDelete?.call();
+            await widget.onDelete?.call();
           }
         },
       );

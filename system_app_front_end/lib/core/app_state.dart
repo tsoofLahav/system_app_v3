@@ -2858,6 +2858,13 @@ class AppState extends ChangeNotifier {
   Future<void> deleteTaskInFile(AppFile file, Task task) async {
     if (selectedTopic == null) return;
     final row = taskRowBlockInFile(file, task);
+    final listBlock = _listBlockByTaskIdForFile(file)[task.id];
+    final remainingIds = listBlock == null
+        ? null
+        : orderedTasksForFile(file, listBlock)
+            .where((entry) => entry.id != task.id)
+            .map((entry) => entry.id)
+            .toList();
 
     try {
       await _taskService.deleteTask(task.id);
@@ -2866,10 +2873,27 @@ class AppState extends ChangeNotifier {
       rethrow;
     }
 
+    if (row != null) {
+      try {
+        await _blockService.deleteBlock(row.id);
+      } catch (_) {
+        // Row anchor may already be gone or referenced elsewhere.
+      }
+    }
+
     _removeTaskFromFileCaches(file, task, row);
     _taskViewMemberships = _taskViewMemberships
         .where((membership) => membership.taskId != task.id)
         .toList();
+
+    if (listBlock != null &&
+        remainingIds != null &&
+        remainingIds.isNotEmpty) {
+      try {
+        await reorderTasksInListBlock(file, listBlock, remainingIds);
+      } catch (_) {}
+    }
+
     notifyListeners();
   }
 
