@@ -403,8 +403,13 @@ def delete_task(task_id):
         return jsonify({"error": "cannot delete automation trigger task"}), 403
     task = get_or_404(Task, task_id)
     file_id = _file_id_for_task(task)
-    delete_task_cascade(task_id)
-    db.session.commit()
+    try:
+        delete_task_cascade(task_id)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("delete_task failed for task %s", task_id)
+        return jsonify({"error": "Internal server error"}), 500
     try:
         dispatch_file_changed(file_id, "task_deleted", {"task_id": task_id})
     except Exception:

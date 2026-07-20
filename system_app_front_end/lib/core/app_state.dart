@@ -2858,16 +2858,6 @@ class AppState extends ChangeNotifier {
   Future<void> deleteTaskInFile(AppFile file, Task task) async {
     if (selectedTopic == null) return;
     final row = taskRowBlockInFile(file, task);
-    Block? listBlock;
-    final listBlockId = task.blockId;
-    if (listBlockId != null) {
-      for (final block in _blocksForFile(file)) {
-        if (block.id == listBlockId && block.type == 'task_list') {
-          listBlock = block;
-          break;
-        }
-      }
-    }
 
     try {
       await _taskService.deleteTask(task.id);
@@ -2880,18 +2870,6 @@ class AppState extends ChangeNotifier {
     _taskViewMemberships = _taskViewMemberships
         .where((membership) => membership.taskId != task.id)
         .toList();
-
-    if (listBlock != null) {
-      final remaining =
-          orderedTasksForFile(file, listBlock).map((entry) => entry.id).toList();
-      if (remaining.isNotEmpty) {
-        try {
-          await reorderTasksInListBlock(file, listBlock, remaining);
-        } catch (_) {
-          await _refreshAfterFileMutation(file);
-        }
-      }
-    }
     notifyListeners();
   }
 

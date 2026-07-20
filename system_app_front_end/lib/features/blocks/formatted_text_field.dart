@@ -206,13 +206,20 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       return KeyEventResult.handled;
     }
 
-    if ((event.logicalKey == LogicalKeyboardKey.backspace ||
-            event.logicalKey == LogicalKeyboardKey.delete) &&
-        widget.controller.text.isEmpty &&
-        widget.controller.selection.baseOffset == 0 &&
-        widget.onBackspaceAtStart != null) {
-      widget.onBackspaceAtStart!();
-      return KeyEventResult.handled;
+    if (widget.onBackspaceAtStart != null) {
+      final text = widget.controller.text;
+      final selection = widget.controller.selection;
+      final isEmptyRow = text.isEmpty;
+      final isFullSelection = selection.isValid &&
+          !selection.isCollapsed &&
+          selection.start == 0 &&
+          selection.end == text.length;
+      if ((event.logicalKey == LogicalKeyboardKey.backspace ||
+              event.logicalKey == LogicalKeyboardKey.delete) &&
+          (isEmptyRow || isFullSelection)) {
+        widget.onBackspaceAtStart!();
+        return KeyEventResult.handled;
+      }
     }
 
     return KeyEventResult.ignored;
