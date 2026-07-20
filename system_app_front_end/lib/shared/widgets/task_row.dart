@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/app_state.dart';
+import '../../core/ai/ai_context.dart';
 import '../../core/models/block.dart';
 import '../../core/models/task.dart';
 import '../../design_system/app_colors.dart';
@@ -35,6 +36,7 @@ class TaskRow extends StatefulWidget {
     this.readOnly = false,
     this.toggleEnabled = true,
     this.onRowTap,
+    this.aiFileId,
   });
 
   final Task task;
@@ -57,6 +59,7 @@ class TaskRow extends StatefulWidget {
   final bool readOnly;
   final bool toggleEnabled;
   final VoidCallback? onRowTap;
+  final int? aiFileId;
 
   @override
   State<TaskRow> createState() => _TaskRowState();
@@ -70,6 +73,8 @@ class _TaskRowState extends State<TaskRow> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.task.title);
+    _controller.addListener(_reportAiFocus);
+    _focusNode.addListener(_reportAiFocus);
     _requestAutofocus();
   }
 
@@ -95,9 +100,26 @@ class _TaskRowState extends State<TaskRow> {
 
   @override
   void dispose() {
+    _controller.removeListener(_reportAiFocus);
+    _focusNode.removeListener(_reportAiFocus);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _reportAiFocus() {
+    if (!_focusNode.hasFocus) return;
+    final fileId = widget.aiFileId;
+    if (fileId == null) return;
+    widget.state.setAiFocus(
+      AiFocus(
+        fileId: fileId,
+        blockId: widget.taskBlock?.id,
+        fullText: _controller.text,
+        selection: _controller.selection,
+        isTaskInput: true,
+      ),
+    );
   }
 
   Future<void> _handlePaste() async {
@@ -251,9 +273,10 @@ class _TaskRowState extends State<TaskRow> {
         stripNewlines: true,
         emojiSearchHint: widget.state.strings['searchEmoji'],
         emojiPickerTitle: widget.state.strings['insertEmoji'],
-        aiState: widget.state,
-        aiSuggestEmojiLabel: widget.state.strings['aiSuggestEmoji'],
-        onChanged: (v) => widget.onTitleChanged?.call(v),
+        onChanged: (v) {
+          _reportAiFocus();
+          widget.onTitleChanged?.call(v);
+        },
         onEnter: () {
           final box = _focusNode.context?.findRenderObject() as RenderBox?;
           final position = box?.localToGlobal(Offset.zero) ?? Offset.zero;

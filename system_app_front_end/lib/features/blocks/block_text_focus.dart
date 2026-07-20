@@ -229,6 +229,18 @@ class BlockTextFocusRegistry {
     return selection.end.clamp(0, controller.text.length);
   }
 
+  /// Caret after a highlight, or at the caret when suggesting from a line.
+  static int? emojiInsertOffset() {
+    final controller = activeController;
+    if (controller == null) return null;
+    final selection = controller.selection;
+    if (!selection.isValid) return null;
+    if (!selection.isCollapsed) {
+      return selection.end.clamp(0, controller.text.length);
+    }
+    return selection.baseOffset.clamp(0, controller.text.length);
+  }
+
   static bool get hasMarkedText => markedText() != null;
 
   static void insertTextAtOffset(int offset, String text) {

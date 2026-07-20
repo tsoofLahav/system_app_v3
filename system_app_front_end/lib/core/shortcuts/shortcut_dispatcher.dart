@@ -37,15 +37,12 @@ class ShortcutDispatcher {
             state.selectedDetail != null &&
             state.selectedTopic?.isMain == true;
       case ShortcutContextRequirement.aiContext:
-        if (action.aiTool == 'move_file_to_topic') {
+        if (action.aiTool == 'move_file_to_topic' ||
+            action.aiTool == 'suggest_emoji') {
           return state.canRunAiTool(action.aiTool!);
         }
         return state.canRunAiTool(action.aiTool ?? '');
       case ShortcutContextRequirement.textFocus:
-        if (action.textAction == 'text:suggest_emoji' ||
-            action.aiTool == 'suggest_emoji') {
-          return state.canRunAiTool('suggest_emoji');
-        }
         return BlockTextFocusRegistry.hasFocus;
       case ShortcutContextRequirement.insertBlock:
         return _insertTargetFile(state) != null &&
@@ -132,10 +129,6 @@ class ShortcutDispatcher {
         );
         return;
       }
-      if (action.textAction == 'text:suggest_emoji') {
-        await runSuggestEmoji(context, state);
-        return;
-      }
       await runBlockTextAction(action.textAction!);
       return;
     }
@@ -171,6 +164,10 @@ class ShortcutDispatcher {
     }
 
     if (tool == 'suggest_emoji') {
+      if (!state.canRunAiTool(tool)) {
+        _snack(context, s['aiNoContext']);
+        return;
+      }
       await runSuggestEmoji(context, state);
       return;
     }

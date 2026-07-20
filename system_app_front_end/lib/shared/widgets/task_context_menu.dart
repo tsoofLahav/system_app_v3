@@ -10,6 +10,8 @@ import '../../core/models/view_section.dart';
 import '../../core/registry/task_view_display.dart';
 import '../../core/registry/view_registry.dart';
 import '../../features/blocks/block_context_menu.dart';
+import '../../features/blocks/block_text_focus.dart';
+import '../../features/blocks/format_range.dart';
 import 'app_context_menu.dart';
 
 /// Pick a topic before creating a task in a by-section view pane.
@@ -65,7 +67,12 @@ Future<void> showTaskContextMenu({
 
   final entries = <AppContextMenuEntry>[];
 
+  if (BlockTextFocusRegistry.hasFocus) {
+    entries.addAll(BlockContextMenu.buildTextEntries(strings));
+  }
+
   if (fileType != null && onBlockAction != null) {
+    if (entries.isNotEmpty) entries.add(const AppContextMenuDivider());
     entries.addAll(
       BlockContextMenu.buildFileEntries(
         strings: strings,
@@ -116,13 +123,28 @@ Future<void> showTaskContextMenu({
   }
   entries.addAll(viewEntries);
 
-  final value = await AppContextMenu.show(
-    context: context,
-    globalPosition: globalPosition,
-    entries: entries,
-    isRtl: strings.isRtl,
-  );
+  final controller = BlockTextFocusRegistry.activeController;
+  if (controller != null) {
+    FormatRange.capturePending(controller.text, controller.selection);
+  }
+  BlockTextFocusRegistry.openMenuSession();
+  String? value;
+  try {
+    value = await AppContextMenu.show(
+      context: context,
+      globalPosition: globalPosition,
+      entries: entries,
+      isRtl: strings.isRtl,
+    );
+  } finally {
+    BlockTextFocusRegistry.closeMenuSession();
+  }
   if (value == null) return;
+
+  if (value.startsWith('text:')) {
+    await BlockContextMenu.handleTextMenuValue(context, strings, value);
+    return;
+  }
 
   if (_isBlockAction(value)) {
     await onBlockAction?.call(value);

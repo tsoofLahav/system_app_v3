@@ -533,7 +533,6 @@ class _FileSectionState extends State<FileSection> {
       context: context,
       globalPosition: position,
       strings: widget.state.strings,
-      appState: widget.state,
       fileType: widget.file.type,
       orderIndex: orderIndex,
       targetBlock: targetBlock,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/models/app_file.dart';
 import '../../core/app_state.dart';
+import '../../core/ai/ai_context.dart';
 import '../../core/models/block.dart';
 import '../../core/models/task.dart';
 import '../../core/models/task_view_menu_context.dart';
@@ -128,6 +129,7 @@ class _TaskZoneListState extends State<TaskZoneList> {
                     task: task,
                   )
                 : null,
+            aiFileId: widget.file?.id,
           ),
         if (!hideDraft)
           _DraftTaskRow(
@@ -135,8 +137,8 @@ class _TaskZoneListState extends State<TaskZoneList> {
             hint: widget.state.strings['newTaskHint'],
             emojiSearchHint: widget.state.strings['searchEmoji'],
             emojiPickerTitle: widget.state.strings['insertEmoji'],
-            aiState: widget.state,
-            aiSuggestEmojiLabel: widget.state.strings['aiSuggestEmoji'],
+            aiFileId: widget.file?.id,
+            state: widget.state,
             onSubmit: (title, position) =>
                 widget.onCreateAtEnd(title, position),
           ),
@@ -151,8 +153,8 @@ class _DraftTaskRow extends StatefulWidget {
     required this.hint,
     required this.emojiSearchHint,
     required this.emojiPickerTitle,
-    required this.aiState,
-    required this.aiSuggestEmojiLabel,
+    required this.aiFileId,
+    required this.state,
     required this.onSubmit,
   });
 
@@ -160,8 +162,8 @@ class _DraftTaskRow extends StatefulWidget {
   final String hint;
   final String emojiSearchHint;
   final String emojiPickerTitle;
-  final AppState aiState;
-  final String aiSuggestEmojiLabel;
+  final int? aiFileId;
+  final AppState state;
   final Future<void> Function(String title, Offset position) onSubmit;
 
   @override
@@ -173,10 +175,33 @@ class _DraftTaskRowState extends State<_DraftTaskRow> {
   final _focusNode = FocusNode();
 
   @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_reportAiFocus);
+    _focusNode.addListener(_reportAiFocus);
+  }
+
+  @override
   void dispose() {
+    _controller.removeListener(_reportAiFocus);
+    _focusNode.removeListener(_reportAiFocus);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _reportAiFocus() {
+    if (!_focusNode.hasFocus) return;
+    final fileId = widget.aiFileId;
+    if (fileId == null) return;
+    widget.state.setAiFocus(
+      AiFocus(
+        fileId: fileId,
+        fullText: _controller.text,
+        selection: _controller.selection,
+        isTaskInput: true,
+      ),
+    );
   }
 
   Future<void> _submit() async {
@@ -218,8 +243,7 @@ class _DraftTaskRowState extends State<_DraftTaskRow> {
               hintText: widget.hint,
               emojiSearchHint: widget.emojiSearchHint,
               emojiPickerTitle: widget.emojiPickerTitle,
-              aiState: widget.aiState,
-              aiSuggestEmojiLabel: widget.aiSuggestEmojiLabel,
+              onChanged: (_) => _reportAiFocus(),
               onEnter: _submit,
             ),
           ),

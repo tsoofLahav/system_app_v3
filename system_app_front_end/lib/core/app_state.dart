@@ -492,7 +492,7 @@ class AppState extends ChangeNotifier {
     if (!canUseAiTools) return false;
     if (tool == 'review') return true;
     if (tool == 'suggest_emoji') {
-      return BlockTextFocusRegistry.hasMarkedText;
+      return hasAiContext && BlockTextFocusRegistry.hasFocus;
     }
     if (tool == 'move_file_to_topic') {
       final file = aiFocusedFile;
@@ -502,26 +502,24 @@ class AppState extends ChangeNotifier {
   }
 
   Future<bool> runSuggestEmoji() async {
-    final marked = BlockTextFocusRegistry.markedText();
-    final insertOffset = BlockTextFocusRegistry.markInsertOffset();
+    final ctx = resolveAiContext();
+    final insertOffset = BlockTextFocusRegistry.emojiInsertOffset();
     final topic = selectedTopic;
-    if (marked == null || insertOffset == null || topic == null) return false;
+    if (ctx == null ||
+        ctx.text.trim().isEmpty ||
+        insertOffset == null ||
+        topic == null) {
+      return false;
+    }
 
     _setAiRunning(true);
     error = null;
     notifyListeners();
     try {
-      final focus = aiFocus;
       final result = await _aiService.runTool(
         tool: 'suggest_emoji',
         topicId: topic.id,
-        context: ResolvedAiContext(
-          text: marked,
-          sourceType: AiSourceType.selection,
-          topicId: topic.id,
-          fileId: focus?.fileId,
-          blockId: focus?.blockId ?? BlockTextFocusRegistry.activeBlockId,
-        ),
+        context: ctx,
         locale: language.name,
       );
       final emoji = result.result?.trim();

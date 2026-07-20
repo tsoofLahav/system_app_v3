@@ -43,6 +43,12 @@ Future<void> runAiTool(
   }
 
   if (tool == 'suggest_emoji') {
+    if (!state.canRunAiTool(tool)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s['aiNoContext'])));
+      return;
+    }
     await runSuggestEmoji(context, state);
     return;
   }
@@ -132,8 +138,7 @@ class AiToolBar extends StatelessWidget {
     final graphEnabled = hasContext && !running;
     final moveFileEnabled =
         state.canRunAiTool('move_file_to_topic') && !running;
-    final suggestEmojiEnabled =
-        state.canRunAiTool('suggest_emoji') && !running;
+    final suggestEmojiEnabled = state.canRunAiTool('suggest_emoji') && !running;
 
     final tools = Row(
       mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
@@ -182,7 +187,7 @@ class AiToolBar extends StatelessWidget {
             s['aiSuggestEmoji'],
             ShortcutActionIds.aiSuggestEmoji,
           ),
-          icon: AppIcons.ai,
+          icon: AppIcons.smiley,
           enabled: suggestEmojiEnabled,
           onPressed: () => onTool('suggest_emoji'),
         ),

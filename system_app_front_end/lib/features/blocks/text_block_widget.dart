@@ -121,9 +121,6 @@ class _TextBlockWidgetState extends State<TextBlockWidget> {
       maxLines: null,
       emojiSearchHint: widget.aiState?.strings['searchEmoji'] ?? 'Search emoji',
       emojiPickerTitle: widget.aiState?.strings['insertEmoji'] ?? 'Insert emoji…',
-      aiState: widget.aiState,
-      aiSuggestEmojiLabel:
-          widget.aiState?.strings['aiSuggestEmoji'] ?? 'Suggest emoji',
       onChanged: (_) {
         _reportAiFocus();
         _emit();

@@ -108,9 +108,6 @@ class _HeaderBlockWidgetState extends State<HeaderBlockWidget> {
         hintText: widget.hint,
         emojiSearchHint: widget.aiState?.strings['searchEmoji'] ?? 'Search emoji',
         emojiPickerTitle: widget.aiState?.strings['insertEmoji'] ?? 'Insert emoji…',
-        aiState: widget.aiState,
-        aiSuggestEmojiLabel:
-            widget.aiState?.strings['aiSuggestEmoji'] ?? 'Suggest emoji',
         onChanged: (_) {
           _reportAiFocus();
           _emit();

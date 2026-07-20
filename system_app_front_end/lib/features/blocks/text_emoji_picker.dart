@@ -38,10 +38,9 @@ Future<void> showTextEmojiPicker({
 
 Future<void> runSuggestEmoji(BuildContext context, AppState state) async {
   final s = state.strings;
-  if (!state.canUseAiTools) return;
-  if (!BlockTextFocusRegistry.hasMarkedText) {
+  if (!state.canRunAiTool('suggest_emoji')) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(s['aiSuggestEmojiNeedSelection'])),
+      SnackBar(content: Text(s['aiNoContext'])),
     );
     return;
   }

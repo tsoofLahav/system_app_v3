@@ -63,7 +63,6 @@ abstract final class ShortcutActionIds {
   static const textCopy = 'text_copy';
   static const textPaste = 'text_paste';
   static const textEmoji = 'text_emoji';
-  static const textSuggestEmoji = 'text_suggest_emoji';
   static const textSizeUp = 'text_size_up';
   static const textSizeDown = 'text_size_down';
 
@@ -183,7 +182,7 @@ final List<ShortcutAction> kShortcutCatalog = [
     category: ShortcutCategory.ai,
     labelKey: 'aiSuggestEmoji',
     defaultBinding: _m(LogicalKeyboardKey.digit7, shift: true),
-    context: ShortcutContextRequirement.textFocus,
+    context: ShortcutContextRequirement.aiContext,
     aiTool: 'suggest_emoji',
   ),
   ShortcutAction(
@@ -241,14 +240,6 @@ final List<ShortcutAction> kShortcutCatalog = [
     defaultBinding: _m(LogicalKeyboardKey.keyE, shift: true),
     context: ShortcutContextRequirement.textFocus,
     textAction: 'text:emoji',
-  ),
-  ShortcutAction(
-    id: ShortcutActionIds.textSuggestEmoji,
-    category: ShortcutCategory.text,
-    labelKey: 'aiSuggestEmoji',
-    defaultBinding: _m(LogicalKeyboardKey.keyM, shift: true),
-    context: ShortcutContextRequirement.textFocus,
-    textAction: 'text:suggest_emoji',
   ),
   ShortcutAction(
     id: ShortcutActionIds.textSizeUp,
