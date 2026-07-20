@@ -184,6 +184,9 @@ class _ChecklistRowState extends State<_ChecklistRow> {
             style: AppTypography.noteBodyStyle,
             maxLines: null,
             minLines: 1,
+            aiState: widget.aiState,
+            aiSuggestEmojiLabel:
+                widget.aiState?.strings['aiSuggestEmoji'] ?? 'Suggest emoji',
             onChanged: (v) => widget.onChanged(v, widget.done),
             onEnter: widget.onSubmitted,
             onBackspaceAtStart: widget.onBackspaceAtStart,

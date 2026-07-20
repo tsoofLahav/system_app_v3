@@ -4,15 +4,16 @@ import 'package:flutter/services.dart';
 import '../../core/app_state.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/shortcuts/shortcut_binding.dart';
+import '../../core/platform/app_form_factor.dart';
 import '../../core/shortcuts/shortcut_catalog.dart';
+import '../../design_system/adaptive_dialog.dart';
 import '../../design_system/app_typography.dart';
-import '../../design_system/glass_surface.dart';
 
 Future<void> showShortcutPreferencesDialog({
   required BuildContext context,
   required AppState state,
 }) {
-  return showDialog<void>(
+  return showAppDialog<void>(
     context: context,
     builder: (_) => ShortcutPreferencesDialog(state: state),
   );
@@ -58,8 +59,9 @@ class _ShortcutPreferencesDialogState extends State<ShortcutPreferencesDialog>
       builder: (context, _) {
         final s = state.strings;
 
-        return AppGlassDialog(
+        return AppAdaptiveDialogShell(
           title: Text(s['shortcuts']),
+          width: 560,
           actions: [
             TextButton(
               onPressed: () => state.resetAllShortcuts(),
@@ -71,8 +73,7 @@ class _ShortcutPreferencesDialogState extends State<ShortcutPreferencesDialog>
             ),
           ],
           child: SizedBox(
-            width: 560,
-            height: 420,
+            height: isPhoneLayout ? 480 : 420,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

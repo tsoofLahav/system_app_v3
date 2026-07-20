@@ -5,8 +5,10 @@ import '../../core/app_state.dart';
 import '../../core/models/topic.dart';
 import '../../core/registry/file_registry.dart';
 import '../../core/registry/topic_appearance.dart';
+import '../../design_system/adaptive_dialog.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
+import '../../design_system/app_segmented_toggle.dart';
 import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
 import 'icon_category_picker.dart';
@@ -182,15 +184,15 @@ class _CreateTopicDialogState extends State<CreateTopicDialog> {
     final files = FileRegistry.recommendedForTopicType(_type);
     final isEdit = widget.isEdit;
 
-    return AppGlassDialog(
-      width: 360,
+    return AppAdaptiveDialogShell(
+      width: 480,
       title: Text(isEdit ? s['editTopic'] : s['newTopic']),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(s['cancel']),
         ),
-        OutlinedButton(
+        FilledButton(
           onPressed: () {
             final name = _nameController.text.trim();
             if (name.isEmpty) return;
@@ -237,49 +239,27 @@ class _CreateTopicDialogState extends State<CreateTopicDialog> {
                 const SizedBox(height: 12),
                 Text(s['type'], style: AppTypography.metaStyle),
                 const SizedBox(height: 6),
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: SizedBox(
-                    width: 130,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _type,
-                      decoration: _fieldDecoration(),
-                      dropdownColor: AppColors.noteTop.withValues(alpha: 0.96),
-                      borderRadius: BorderRadius.circular(14),
-                      elevation: 6,
-                      menuMaxHeight: 280,
-                      itemHeight: null,
-                      style: AppTypography.noteBodyStyle.copyWith(
-                        color: AppColors.text.withValues(alpha: 0.92),
-                        fontSize: 12,
-                      ),
-                      items: [
-                        DropdownMenuItem(
-                          value: 'project',
-                          child: _DialogDropdownItem(
-                            s.topicTypeLabel('project'),
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: 'process',
-                          child: _DialogDropdownItem(
-                            s.topicTypeLabel('process'),
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: 'area',
-                          child: _DialogDropdownItem(s.topicTypeLabel('area')),
-                        ),
-                        DropdownMenuItem(
-                          value: 'others',
-                          child: _DialogDropdownItem(
-                            s.topicTypeLabel('others'),
-                          ),
-                        ),
-                      ],
-                      onChanged: _onTypeChanged,
+                AppSegmentedToggle<String>(
+                  options: [
+                    AppSegmentedOption(
+                      value: 'project',
+                      label: s.topicTypeLabel('project'),
                     ),
-                  ),
+                    AppSegmentedOption(
+                      value: 'process',
+                      label: s.topicTypeLabel('process'),
+                    ),
+                    AppSegmentedOption(
+                      value: 'area',
+                      label: s.topicTypeLabel('area'),
+                    ),
+                    AppSegmentedOption(
+                      value: 'others',
+                      label: s.topicTypeLabel('others'),
+                    ),
+                  ],
+                  selected: _type,
+                  onSelected: (value) => _onTypeChanged(value),
                 ),
               ],
               const SizedBox(height: 12),
@@ -411,20 +391,6 @@ class _ChooserSummaryRow extends StatelessWidget {
           const SizedBox(width: 56),
         ],
       ),
-    );
-  }
-}
-
-class _DialogDropdownItem extends StatelessWidget {
-  const _DialogDropdownItem(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Text(label),
     );
   }
 }

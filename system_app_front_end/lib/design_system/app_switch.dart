@@ -23,7 +23,7 @@ class AppSwitch extends StatelessWidget {
         onChanged: onChanged,
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         activeThumbColor: Colors.white,
-        activeTrackColor: AppColors.primary,
+        activeTrackColor: AppColors.primaryBright,
         inactiveThumbColor: Colors.white,
         inactiveTrackColor: AppColors.textHint.withValues(alpha: 0.28),
         trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),

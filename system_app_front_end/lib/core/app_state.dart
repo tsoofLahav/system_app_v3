@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'ai/ai_context.dart';
 import 'browse/bring_file_catalog.dart';
+import 'platform/app_form_factor.dart';
 import '../features/bring_file/bring_file_preview.dart';
 import 'l10n/app_language.dart';
 import 'l10n/app_strings.dart';
@@ -169,6 +170,7 @@ class AppState extends ChangeNotifier {
   int? pendingFocusBlockId;
   bool aiRunning = false;
   BroughtFileSnapshot? broughtFile;
+  int? phoneFocusFileId;
 
   final Map<int, Timer?> _saveTimers = {};
   final Map<int, String?> _automationLastRunAtById = {};
@@ -198,6 +200,22 @@ class AppState extends ChangeNotifier {
     if (broughtFile == null) return;
     broughtFile = null;
     notifyListeners();
+  }
+
+  void clearPhoneFocusFile() {
+    if (phoneFocusFileId == null) return;
+    phoneFocusFileId = null;
+    notifyListeners();
+  }
+
+  Future<void> bringFileOnPhone(Topic sourceTopic, AppFile file) async {
+    clearBroughtFile();
+    phoneFocusFileId = file.id;
+    if (selectedTopic?.id != sourceTopic.id) {
+      await selectTopic(sourceTopic);
+    } else {
+      notifyListeners();
+    }
   }
 
   Future<List<BrowseFileEntry>> loadBringFileCatalog() async {
@@ -473,11 +491,50 @@ class AppState extends ChangeNotifier {
   bool canRunAiTool(String tool) {
     if (!canUseAiTools) return false;
     if (tool == 'review') return true;
+    if (tool == 'suggest_emoji') {
+      return BlockTextFocusRegistry.hasMarkedText;
+    }
     if (tool == 'move_file_to_topic') {
       final file = aiFocusedFile;
       return file != null && !isGuestFile(file);
     }
     return hasAiContext;
+  }
+
+  Future<bool> runSuggestEmoji() async {
+    final marked = BlockTextFocusRegistry.markedText();
+    final insertOffset = BlockTextFocusRegistry.markInsertOffset();
+    final topic = selectedTopic;
+    if (marked == null || insertOffset == null || topic == null) return false;
+
+    _setAiRunning(true);
+    error = null;
+    notifyListeners();
+    try {
+      final focus = aiFocus;
+      final result = await _aiService.runTool(
+        tool: 'suggest_emoji',
+        topicId: topic.id,
+        context: ResolvedAiContext(
+          text: marked,
+          sourceType: AiSourceType.selection,
+          topicId: topic.id,
+          fileId: focus?.fileId,
+          blockId: focus?.blockId ?? BlockTextFocusRegistry.activeBlockId,
+        ),
+        locale: language.name,
+      );
+      final emoji = result.result?.trim();
+      if (emoji == null || emoji.isEmpty) return false;
+      BlockTextFocusRegistry.insertTextAtOffset(insertOffset, emoji);
+      return true;
+    } catch (e) {
+      error = e.toString();
+      rethrow;
+    } finally {
+      _setAiRunning(false);
+      notifyListeners();
+    }
   }
 
   Future<AiRunResult?> runAiTool(
@@ -964,6 +1021,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> selectArchiveTopic(Topic topic) async {
+    if (isPhoneLayout) return;
     error = null;
     selectedViewType = null;
     selectedTopic = null;
@@ -1739,6 +1797,7 @@ class AppState extends ChangeNotifier {
   }
 
   String layoutFor(Topic topic) {
+    if (isPhoneLayout) return FileLayouts.single;
     final count = selectedDetail?.topic.id == topic.id
         ? mainFilesFor(topic, selectedDetail!.files).length
         : 0;

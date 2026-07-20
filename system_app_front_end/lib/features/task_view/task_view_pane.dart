@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 
+import '../../core/platform/app_form_factor.dart';
 import '../../core/app_state.dart';
 import '../../core/models/task.dart';
 import '../../core/task_list_order.dart';
 import '../../core/models/view_pane_sync_context.dart';
 import '../../core/models/view_section.dart';
 import '../../core/registry/task_view_display.dart';
+import '../../design_system/adaptive_dialog.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
+import '../../design_system/app_segmented_toggle.dart';
 import '../../design_system/app_typography.dart';
-import '../../design_system/glass_surface.dart';
 import '../../design_system/note_widgets.dart';
 import '../shell/app_bottom_bar.dart';
 import '../../shared/widgets/main_pane_loader.dart';
@@ -44,10 +46,11 @@ class _TaskViewPaneState extends State<TaskViewPane> {
 
   void _showAddSectionDialog(String viewType) {
     final s = widget.state.strings;
-    showDialog<void>(
+    showAppDialog<void>(
       context: context,
-      builder: (ctx) => AppGlassDialog(
+      builder: (ctx) => AppAdaptiveDialogShell(
         title: Text(s.newSectionTitle(widget.state.viewLabel(viewType))),
+        width: 400,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -88,10 +91,11 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     final s = widget.state.strings;
     final viewLabel = widget.state.viewLabel(acknowledgement.viewType);
     final missed = acknowledgement.missedTasks.take(8).toList();
-    await showDialog<void>(
+    await showAppDialog<void>(
       context: context,
-      builder: (ctx) => AppGlassDialog(
+      builder: (ctx) => AppAdaptiveDialogShell(
         title: Text(s.taskResetAckTitle(viewLabel)),
+        width: 400,
         actions: [
           TextButton(
             onPressed: () async {
@@ -103,48 +107,45 @@ class _TaskViewPaneState extends State<TaskViewPane> {
             child: Text(s['ok']),
           ),
         ],
-        child: SizedBox(
-          width: 380,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              s.taskResetAckBody(
+                resetCount: acknowledgement.resetCount,
+                missedCount: acknowledgement.missedCount,
+              ),
+              style: AppTypography.noteBodyStyle,
+              textAlign: TextAlign.start,
+            ),
+            if (missed.isNotEmpty) ...[
+              const SizedBox(height: 12),
               Text(
-                s.taskResetAckBody(
-                  resetCount: acknowledgement.resetCount,
-                  missedCount: acknowledgement.missedCount,
-                ),
-                style: AppTypography.noteBodyStyle,
+                s['taskResetMissedTitle'],
+                style: AppTypography.metaStyle,
                 textAlign: TextAlign.start,
               ),
-              if (missed.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  s['taskResetMissedTitle'],
-                  style: AppTypography.metaStyle,
-                  textAlign: TextAlign.start,
-                ),
-                const SizedBox(height: 6),
-                for (final task in missed)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      '- ${task['title'] ?? ''}',
-                      style: AppTypography.metaStyle,
-                      textAlign: TextAlign.start,
-                    ),
+              const SizedBox(height: 6),
+              for (final task in missed)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    '- ${task['title'] ?? ''}',
+                    style: AppTypography.metaStyle,
+                    textAlign: TextAlign.start,
                   ),
-              ],
-              const SizedBox(height: 8),
-              Text(
-                s['taskResetReportArchived'],
-                style: AppTypography.metaStyle.copyWith(
-                  color: AppColors.textHint,
                 ),
-                textAlign: TextAlign.start,
-              ),
             ],
-          ),
+            const SizedBox(height: 8),
+            Text(
+              s['taskResetReportArchived'],
+              style: AppTypography.metaStyle.copyWith(
+                color: AppColors.textHint,
+              ),
+              textAlign: TextAlign.start,
+            ),
+          ],
         ),
       ),
     );
@@ -171,6 +172,9 @@ class _TaskViewPaneState extends State<TaskViewPane> {
 
     _maybeShowTaskResetAcknowledgement(viewType);
 
+    final phone = isPhoneLayout;
+    final bottomInset = phone ? 56.0 : AppBottomBarMetrics.scrollInset;
+
     return TopicCanvasBackground(
       accent: AppColors.text,
       isMain: true,
@@ -178,7 +182,9 @@ class _TaskViewPaneState extends State<TaskViewPane> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            padding: const EdgeInsetsDirectional.fromSTEB(24, 20, 24, 12),
+            padding: phone
+                ? const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 8)
+                : const EdgeInsetsDirectional.fromSTEB(24, 20, 24, 12),
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
@@ -193,23 +199,22 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    SegmentedButton<TaskViewDisplayMode>(
-                      segments: [
-                        ButtonSegment(
+                    AppSegmentedToggle<TaskViewDisplayMode>(
+                      options: [
+                        AppSegmentedOption(
                           value: TaskViewDisplayMode.bySection,
-                          label: Text(s['bySection']),
+                          label: s['bySection'],
                         ),
-                        ButtonSegment(
+                        AppSegmentedOption(
                           value: TaskViewDisplayMode.byTopic,
-                          label: Text(s['byTopic']),
+                          label: s['byTopic'],
                         ),
                       ],
-                      selected: {displayMode},
-                      onSelectionChanged: (s) =>
-                          widget.state.setViewDisplayMode(s.first),
+                      selected: displayMode,
+                      onSelected: widget.state.setViewDisplayMode,
                     ),
                     if (displayMode == TaskViewDisplayMode.bySection) ...[
-                      const Spacer(),
+                      const SizedBox(width: 8),
                       TextButton.icon(
                         onPressed: () => _showAddSectionDialog(viewType),
                         icon: const AppIcon(AppIcons.add, size: 16),
@@ -224,38 +229,57 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                 if (displayMode == TaskViewDisplayMode.bySection &&
                     sections.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  SizedBox(
-                    height: 36,
-                    child: ReorderableListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      buildDefaultDragHandles: false,
-                      onReorder: (from, to) {
-                        if (to > from) to -= 1;
-                        widget.state.reorderViewSections(viewType, from, to);
-                      },
-                      itemCount: sections.length,
-                      itemBuilder: (context, index) {
-                        final section = sections[index];
-                        return ReorderableDragStartListener(
-                          key: ValueKey(section.id),
-                          index: index,
-                          child: Padding(
-                            padding: const EdgeInsetsDirectional.only(end: 6),
-                            child: _SectionChip(
-                              section: section,
-                              onToggleImportance: () =>
-                                  widget.state.setViewSectionImportance(
-                                section,
-                                important: !section.isImportant,
+                  phone
+                      ? Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final section in sections)
+                              _SectionChip(
+                                section: section,
+                                onToggleImportance: () =>
+                                    widget.state.setViewSectionImportance(
+                                  section,
+                                  important: !section.isImportant,
+                                ),
+                                onDelete: () =>
+                                    widget.state.deleteViewSection(section),
                               ),
-                              onDelete: () =>
-                                  widget.state.deleteViewSection(section),
-                            ),
+                          ],
+                        )
+                      : SizedBox(
+                          height: 36,
+                          child: ReorderableListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            buildDefaultDragHandles: false,
+                            onReorder: (from, to) {
+                              if (to > from) to -= 1;
+                              widget.state.reorderViewSections(viewType, from, to);
+                            },
+                            itemCount: sections.length,
+                            itemBuilder: (context, index) {
+                              final section = sections[index];
+                              return ReorderableDragStartListener(
+                                key: ValueKey(section.id),
+                                index: index,
+                                child: Padding(
+                                  padding:
+                                      const EdgeInsetsDirectional.only(end: 6),
+                                  child: _SectionChip(
+                                    section: section,
+                                    onToggleImportance: () =>
+                                        widget.state.setViewSectionImportance(
+                                      section,
+                                      important: !section.isImportant,
+                                    ),
+                                    onDelete: () =>
+                                        widget.state.deleteViewSection(section),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
-                        );
-                      },
-                    ),
-                  ),
+                        ),
                 ],
               ],
             ),
@@ -270,11 +294,12 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                     ),
                   )
                 : SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
+                    scrollDirection:
+                        phone ? Axis.vertical : Axis.horizontal,
                     padding: AppSpacing.canvasPadding.copyWith(
-                      bottom:
-                          AppSpacing.canvasPadding.bottom +
-                          AppBottomBarMetrics.scrollInset,
+                      left: phone ? 12 : AppSpacing.canvasPadding.left,
+                      right: phone ? 12 : AppSpacing.canvasPadding.right,
+                      bottom: AppSpacing.canvasPadding.bottom + bottomInset,
                     ),
                     child: displayMode == TaskViewDisplayMode.bySection
                         ? _buildSectionPanes(tasks, sections, viewType)
@@ -369,6 +394,18 @@ class _TaskViewPaneState extends State<TaskViewPane> {
       }
     }
 
+    if (isPhoneLayout) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < panes.length; i++) ...[
+            if (i > 0) const SizedBox(height: AppSpacing.md),
+            panes[i],
+          ],
+        ],
+      );
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -398,31 +435,46 @@ class _TaskViewPaneState extends State<TaskViewPane> {
 
     final s = widget.state.strings;
 
+    Widget paneForKey(String key) {
+      return _TaskGroupPane(
+        key: ValueKey('topic-$key'),
+        title: key == ViewPaneKeys.noTopic
+            ? s['noTopic']
+            : s.displayTopicName(key),
+        tasks: sortTasksById(grouped[key]!),
+        state: widget.state,
+        viewType: viewType,
+        displayMode: TaskViewDisplayMode.byTopic,
+        topicKey: key == ViewPaneKeys.noTopic ? null : key,
+        accent: key == ViewPaneKeys.noTopic || key == ViewPaneKeys.automations
+            ? null
+            : widget.state.topicAccentForTask(grouped[key]!.first),
+        isMain: key != ViewPaneKeys.noTopic &&
+            key != ViewPaneKeys.automations &&
+            widget.state.topicIsMain(grouped[key]!.first),
+        topicTint:
+            key != ViewPaneKeys.noTopic && key != ViewPaneKeys.automations,
+      );
+    }
+
+    if (isPhoneLayout) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < keys.length; i++) ...[
+            if (i > 0) const SizedBox(height: AppSpacing.md),
+            paneForKey(keys[i]),
+          ],
+        ],
+      );
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (var i = 0; i < keys.length; i++) ...[
           if (i > 0) const SizedBox(width: AppSpacing.md),
-          _TaskGroupPane(
-            key: ValueKey('topic-${keys[i]}'),
-            title: keys[i] == ViewPaneKeys.noTopic
-                ? s['noTopic']
-                : s.displayTopicName(keys[i]),
-            tasks: sortTasksById(grouped[keys[i]]!),
-            state: widget.state,
-            viewType: viewType,
-            displayMode: TaskViewDisplayMode.byTopic,
-            topicKey: keys[i] == ViewPaneKeys.noTopic ? null : keys[i],
-            accent: keys[i] == ViewPaneKeys.noTopic ||
-                    keys[i] == ViewPaneKeys.automations
-                ? null
-                : widget.state.topicAccentForTask(grouped[keys[i]]!.first),
-            isMain: keys[i] != ViewPaneKeys.noTopic &&
-                keys[i] != ViewPaneKeys.automations &&
-                widget.state.topicIsMain(grouped[keys[i]]!.first),
-            topicTint: keys[i] != ViewPaneKeys.noTopic &&
-                keys[i] != ViewPaneKeys.automations,
-          ),
+          paneForKey(keys[i]),
         ],
       ],
     );
@@ -467,72 +519,77 @@ class _TaskGroupPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = state.strings;
-    return SizedBox(
-      width: _paneWidth,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: _minHeight),
-        child: DecoratedBox(
-          decoration: topicTint && accent != null
-              ? AppColors.filePaneDecoration(
-                  accent!,
-                  'tasks',
-                  isMainTopic: isMain,
-                )
-              : AppColors.noteDecoration(),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: AppSpacing.notePadding,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      if (onToggleImportance != null)
-                        Tooltip(
-                          message: isImportant
-                              ? s['unmarkSectionImportant']
-                              : s['markSectionImportant'],
-                          child: InkWell(
-                            onTap: onToggleImportance,
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.all(2),
-                              child: AppIcon(
-                                AppIcons.flag,
-                                size: 14,
-                                color: isImportant
-                                    ? _importantFlagColor
-                                    : AppColors.noteMeta.withValues(
-                                        alpha: 0.45,
-                                      ),
-                              ),
+    final paneBody = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: _minHeight),
+      child: DecoratedBox(
+        decoration: topicTint && accent != null
+            ? AppColors.filePaneDecoration(
+                accent!,
+                'tasks',
+                isMainTopic: isMain,
+              )
+            : AppColors.noteDecoration(),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: AppSpacing.notePadding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    if (onToggleImportance != null)
+                      Tooltip(
+                        message: isImportant
+                            ? s['unmarkSectionImportant']
+                            : s['markSectionImportant'],
+                        child: InkWell(
+                          onTap: onToggleImportance,
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: AppIcon(
+                              AppIcons.flag,
+                              size: 14,
+                              color: isImportant
+                                  ? _importantFlagColor
+                                  : AppColors.noteMeta.withValues(
+                                      alpha: 0.45,
+                                    ),
                             ),
                           ),
                         ),
-                      if (onToggleImportance != null)
-                        const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(title, style: AppTypography.noteTitleStyle),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  ViewPaneTasksEditor(
-                    viewType: viewType,
-                    displayMode: displayMode,
-                    sectionName: sectionName,
-                    topicKey: topicKey,
-                    tasks: tasks,
-                    state: state,
-                  ),
-                ],
-              ),
+                    if (onToggleImportance != null) const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(title, style: AppTypography.noteTitleStyle),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                ViewPaneTasksEditor(
+                  viewType: viewType,
+                  displayMode: displayMode,
+                  sectionName: sectionName,
+                  topicKey: topicKey,
+                  tasks: tasks,
+                  state: state,
+                ),
+              ],
             ),
           ),
         ),
       ),
+    );
+
+    if (isPhoneLayout) {
+      return paneBody;
+    }
+
+    return SizedBox(
+      width: _paneWidth,
+      child: paneBody,
     );
   }
 }

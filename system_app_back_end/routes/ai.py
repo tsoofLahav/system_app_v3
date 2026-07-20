@@ -8,6 +8,7 @@ ALLOWED_TOOLS = {
     "consult",
     "summarize_to_doc",
     "smart_list",
+    "suggest_emoji",
     "move_file_to_topic",
     "create_image",
     "create_graph",

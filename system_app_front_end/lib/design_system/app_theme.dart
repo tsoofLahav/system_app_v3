@@ -57,33 +57,85 @@ ThemeData buildAppTheme(AppLanguage language) {
     dialogTheme: DialogThemeData(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
-    filledButtonTheme: FilledButtonThemeData(
-      style: ButtonStyle(
-        backgroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.disabled)) {
-            return Colors.transparent;
-          }
+    textButtonTheme: TextButtonThemeData(style: _softTextButtonStyle()),
+    filledButtonTheme: FilledButtonThemeData(style: _softPillButtonStyle()),
+    outlinedButtonTheme: OutlinedButtonThemeData(style: _softPillButtonStyle()),
+  );
+}
+
+const _pillHorizontalPadding = 16.0;
+const _pillVerticalPadding = 8.0;
+const _pillMinHeight = 34.0;
+
+ButtonStyle _pillButtonFrame({
+  required ButtonStyle base,
+  EdgeInsetsGeometry? padding,
+}) {
+  return base.copyWith(
+    padding: WidgetStateProperty.all(
+      padding ??
+          const EdgeInsets.symmetric(
+            horizontal: _pillHorizontalPadding,
+            vertical: _pillVerticalPadding,
+          ),
+    ),
+    minimumSize: WidgetStateProperty.all(const Size(0, _pillMinHeight)),
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    shape: WidgetStateProperty.all(
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+    ),
+  );
+}
+
+ButtonStyle _softTextButtonStyle() {
+  return _pillButtonFrame(
+    base: ButtonStyle(
+      foregroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) {
+          return AppColors.textHint.withValues(alpha: 0.45);
+        }
+        return AppColors.primary.withValues(alpha: 0.88);
+      }),
+      backgroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) {
           return Colors.transparent;
-        }),
-        foregroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.disabled)) {
-            return AppColors.textHint.withValues(alpha: 0.45);
-          }
-          return AppColors.primary;
-        }),
-        side: WidgetStateProperty.resolveWith((states) {
-          final color = states.contains(WidgetState.disabled)
-              ? AppColors.textHint.withValues(alpha: 0.24)
-              : AppColors.primary.withValues(alpha: 0.9);
-          return BorderSide(color: color, width: 1.2);
-        }),
-        overlayColor: WidgetStateProperty.all(
-          AppColors.primary.withValues(alpha: 0.08),
-        ),
-        shape: WidgetStateProperty.all(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-        ),
-      ),
+        }
+        if (states.contains(WidgetState.pressed)) {
+          return AppColors.primaryBright.withValues(alpha: 0.12);
+        }
+        if (states.contains(WidgetState.hovered)) {
+          return AppColors.primaryBright.withValues(alpha: 0.08);
+        }
+        return Colors.transparent;
+      }),
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+    ),
+  );
+}
+
+ButtonStyle _softPillButtonStyle() {
+  return _pillButtonFrame(
+    base: ButtonStyle(
+      backgroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) {
+          return AppColors.primaryBright.withValues(alpha: 0.06);
+        }
+        if (states.contains(WidgetState.pressed)) {
+          return AppColors.primaryBright.withValues(alpha: 0.22);
+        }
+        if (states.contains(WidgetState.hovered)) {
+          return AppColors.primaryBright.withValues(alpha: 0.18);
+        }
+        return AppColors.primaryBright.withValues(alpha: 0.14);
+      }),
+      foregroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) {
+          return AppColors.textHint.withValues(alpha: 0.45);
+        }
+        return AppColors.primary.withValues(alpha: 0.92);
+      }),
+      side: const WidgetStatePropertyAll(BorderSide.none),
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
     ),
   );
 }

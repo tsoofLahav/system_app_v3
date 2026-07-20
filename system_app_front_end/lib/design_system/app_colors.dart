@@ -35,6 +35,9 @@ abstract final class AppColors {
   static const primary = Color(0xFF37899E);
   static const primaryLight = Color(0xFF51A0B0);
 
+  /// Brighter teal fill for segmented toggles and active controls.
+  static const primaryBright = Color(0xFF58C4D8);
+
   /// Environmental background — always neutral (topic color lives on file panes).
   static const neutralCanvasGradient = LinearGradient(
     begin: Alignment.topLeft,

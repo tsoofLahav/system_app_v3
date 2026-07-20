@@ -32,3 +32,20 @@ Use folder-local `README.md` files as the primary source for behavior and struct
 flutter pub get
 flutter run -d macos
 ```
+
+### iOS (iPhone shell)
+
+The app uses a separate phone shell on native iOS (`Platform.isIOS`): drawer sidebar, single-file `PageView`, bottom sheet for preferences/automations, and a list-based bring-file picker. Desktop macOS behavior is unchanged.
+
+```bash
+flutter pub get
+flutter run -d ios
+```
+
+Smoke-check on simulator or device:
+
+- Open drawer, switch topics and task views (Daily, Weekly, …)
+- Edit topic files (blocks, swipe between main files)
+- Add file / new topic
+- Bring file from another topic (main topic app bar)
+- Preferences and automations from the bottom sheet

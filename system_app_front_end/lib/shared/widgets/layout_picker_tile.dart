@@ -44,11 +44,8 @@ class LayoutPickerTile extends StatelessWidget {
                   ? BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .primary
-                            .withValues(alpha: 0.9),
-                        width: 1.5,
+                        color: AppColors.primaryBright.withValues(alpha: 0.72),
+                        width: 1.2,
                       ),
                     )
                   : const BoxDecoration(),
@@ -74,10 +71,9 @@ class LayoutPickerTile extends StatelessWidget {
                             fontSize: 10,
                             color: enabled
                                 ? (selected
-                                    ? Theme.of(context)
-                                        .colorScheme
-                                        .primary
-                                        .withValues(alpha: 0.92)
+                                    ? AppColors.primaryBright.withValues(
+                                        alpha: 0.96,
+                                      )
                                     : AppColors.text.withValues(alpha: 0.72))
                                 : AppColors.textHint.withValues(alpha: 0.45),
                           ),

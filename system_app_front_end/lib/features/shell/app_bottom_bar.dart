@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
-import '../../core/l10n/app_strings.dart';
-import '../../core/shortcuts/app_shortcuts.dart';
-import '../../core/shortcuts/shortcut_catalog.dart';
-import '../../core/services/ai_service.dart';
+import '../../core/platform/app_form_factor.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
 import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
 import '../arrange/file_arrange_overlay.dart';
+import 'ai_tool_bar.dart';
 import 'automation_dialog.dart';
 import 'preferences_dialog.dart';
 
@@ -38,7 +36,10 @@ class AppBottomBar extends StatelessWidget {
   final AppState state;
 
   bool get _showArrange =>
-      !state.isArchiveMode && !state.isViewMode && state.selectedDetail != null;
+      !isPhoneLayout &&
+      !state.isArchiveMode &&
+      !state.isViewMode &&
+      state.selectedDetail != null;
 
   bool get _showArchiveDelete =>
       state.isArchiveMode && state.archiveTotalCount > 0;
@@ -54,7 +55,6 @@ class AppBottomBar extends StatelessWidget {
   Widget _buildBar(BuildContext context) {
     final s = state.strings;
     final canAi = state.canUseAiTools;
-    final hasContext = state.hasAiContext;
 
     return SafeArea(
       top: false,
@@ -135,16 +135,10 @@ class AppBottomBar extends StatelessWidget {
                   padding: _segmentPadding,
                   label: 'AI',
                   labelOnBorder: true,
-                  child: _AiToolGroup(
+                  child: AiToolBar(
                     state: state,
-                    enabled: hasContext && !state.aiRunning,
-                    graphEnabled: hasContext && !state.aiRunning,
-                    moveFileEnabled:
-                        state.canRunAiTool('move_file_to_topic') &&
-                        !state.aiRunning,
-                    running: state.aiRunning,
-                    strings: s,
-                    onTool: (tool) => _runTool(context, tool),
+                    compact: true,
+                    onTool: (tool) => runAiTool(context, state, tool),
                   ),
                 ),
               ],
@@ -166,91 +160,6 @@ class AppBottomBar extends StatelessWidget {
                   ],
                 ),
               ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _runTool(BuildContext context, String tool) async {
-    final s = state.strings;
-    if (tool == 'move_file_to_topic') {
-      if (!state.canRunAiTool(tool)) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(s['aiNoFileFocus'])));
-        return;
-      }
-      final file = state.aiFocusedFile;
-      final topic = state.selectedTopic;
-      if (file == null || topic == null) return;
-      try {
-        final result = await state.runAiMoveFile(topic, file);
-        if (!context.mounted || result == null) return;
-        _showResult(context, result);
-      } catch (e) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-      return;
-    }
-
-    if (!state.canRunAiTool(tool)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s['aiNoContext'])));
-      return;
-    }
-
-    if (tool == 'review') {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s['aiReviewSoon'])));
-      return;
-    }
-
-    try {
-      final result = await state.runAiTool(tool);
-      if (!context.mounted || result == null) return;
-      _showResult(context, result);
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
-    }
-  }
-
-  void _showResult(BuildContext context, AiRunResult result) {
-    final s = state.strings;
-    final message = result.result ?? s['aiDone'];
-    final topic = result.targetTopicName;
-    final file = result.targetFileName;
-    final target = topic != null && file != null
-        ? '$topic → $file'
-        : (file ?? topic);
-    final title = result.status == 'not_graphable' ? s['aiGraph'] : s['aiDone'];
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AppGlassDialog(
-        title: Text(title),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s['ok'])),
-        ],
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (target != null) ...[
-                Text(target, style: AppTypography.metaStyle),
-                const SizedBox(height: 8),
-              ],
-              Text(message, style: AppTypography.noteBodyStyle),
             ],
           ),
         ),
@@ -322,117 +231,6 @@ class _BarIconButton extends StatelessWidget {
         color: active
             ? AppColors.primary.withValues(alpha: 0.88)
             : AppColors.text.withValues(alpha: 0.72),
-      ),
-    );
-  }
-}
-
-class _AiToolGroup extends StatelessWidget {
-  const _AiToolGroup({
-    required this.state,
-    required this.strings,
-    required this.enabled,
-    required this.graphEnabled,
-    required this.moveFileEnabled,
-    required this.running,
-    required this.onTool,
-  });
-
-  final AppState state;
-  final AppStrings strings;
-  final bool enabled;
-  final bool graphEnabled;
-  final bool moveFileEnabled;
-  final bool running;
-  final ValueChanged<String> onTool;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = strings;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _AiToolButton(
-          tooltip: _tooltip(s['aiConsult'], ShortcutActionIds.aiConsult),
-          icon: AppIcons.consult,
-          enabled: enabled && !running,
-          onPressed: () => onTool('consult'),
-        ),
-        _AiToolButton(
-          tooltip: _tooltip(s['aiSummarize'], ShortcutActionIds.aiSummarize),
-          icon: AppIcons.summarize,
-          enabled: enabled && !running,
-          onPressed: () => onTool('summarize_to_doc'),
-        ),
-        _AiToolButton(
-          tooltip: _tooltip(s['aiSmartList'], ShortcutActionIds.aiSmartList),
-          icon: AppIcons.smartList,
-          enabled: enabled && !running,
-          onPressed: () => onTool('smart_list'),
-        ),
-        _AiToolButton(
-          tooltip: _tooltip(s['aiImage'], ShortcutActionIds.aiImage),
-          icon: AppIcons.image,
-          enabled: enabled && !running,
-          onPressed: () => onTool('create_image'),
-        ),
-        _AiToolButton(
-          tooltip: _tooltip(s['aiGraph'], ShortcutActionIds.aiGraph),
-          icon: AppIcons.graph,
-          enabled: graphEnabled,
-          onPressed: () => onTool('create_graph'),
-        ),
-        _AiToolButton(
-          tooltip: _tooltip(s['aiMoveFile'], ShortcutActionIds.aiMoveFile),
-          icon: AppIcons.moveFileAi,
-          enabled: moveFileEnabled,
-          onPressed: () => onTool('move_file_to_topic'),
-        ),
-        _AiToolButton(
-          tooltip: s['aiReview'],
-          icon: AppIcons.review,
-          enabled: !running,
-          onPressed: () => onTool('review'),
-        ),
-      ],
-    );
-  }
-
-  String _tooltip(String label, String actionId) {
-    final suffix = shortcutTooltipSuffix(state, actionId);
-    if (suffix == null) return label;
-    return '$label ($suffix)';
-  }
-}
-
-class _AiToolButton extends StatelessWidget {
-  const _AiToolButton({
-    required this.tooltip,
-    required this.icon,
-    required this.enabled,
-    required this.onPressed,
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: tooltip,
-      padding: const EdgeInsets.all(_iconTapPadding),
-      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-      onPressed: enabled ? onPressed : null,
-      icon: AppIcon(
-        icon,
-        size: _iconSize,
-        enabled: enabled,
-        color: enabled
-            ? AppColors.text.withValues(alpha: 0.78)
-            : AppColors.textHint.withValues(alpha: 0.32),
       ),
     );
   }

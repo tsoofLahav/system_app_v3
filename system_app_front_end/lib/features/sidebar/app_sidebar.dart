@@ -9,6 +9,7 @@ import '../../core/registry/view_registry.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
 import '../../design_system/app_typography.dart';
+import '../../design_system/adaptive_dialog.dart';
 import '../../design_system/glass_surface.dart';
 import '../../shared/widgets/topic_emoji.dart';
 import '../../shared/widgets/disclosure_icon.dart';
@@ -28,13 +29,15 @@ class AppSidebar extends StatefulWidget {
   const AppSidebar({
     super.key,
     required this.state,
-    required this.width,
-    required this.onWidthChanged,
+    this.isPhone = false,
+    this.width = AppSidebarMetrics.defaultWidth,
+    this.onWidthChanged,
   });
 
   final AppState state;
+  final bool isPhone;
   final double width;
-  final ValueChanged<double> onWidthChanged;
+  final ValueChanged<double>? onWidthChanged;
 
   @override
   State<AppSidebar> createState() => _AppSidebarState();
@@ -48,45 +51,75 @@ class _AppSidebarState extends State<AppSidebar> {
   static const _panelTint = Color(0xFFDDF6F2);
 
   void _resize(DragUpdateDetails details) {
+    final onWidthChanged = widget.onWidthChanged;
+    if (onWidthChanged == null) return;
     final direction = Directionality.of(context);
     final delta = direction == TextDirection.rtl
         ? -details.delta.dx
         : details.delta.dx;
     final next = (widget.width + delta).clamp(_minWidth, _maxWidth).toDouble();
-    widget.onWidthChanged(next);
+    onWidthChanged(next);
+  }
+
+  void _closeDrawerIfOpen() {
+    if (!widget.isPhone || !mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  void _goHome() {
+    _closeDrawerIfOpen();
+    widget.state.goHome();
+  }
+
+  Future<void> _selectTopic(Topic topic) async {
+    _closeDrawerIfOpen();
+    await widget.state.selectTopic(topic);
+  }
+
+  Future<void> _selectView(String viewType) async {
+    _closeDrawerIfOpen();
+    await widget.state.selectView(viewType);
   }
 
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
     final s = state.strings;
+    final panelWidth = widget.isPhone ? double.infinity : widget.width;
+    final borderRadius = widget.isPhone
+        ? BorderRadius.zero
+        : BorderRadius.circular(_sidebarRadius);
 
     return SizedBox(
-      width: widget.width,
+      width: panelWidth,
       child: Stack(
           children: [
             Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(_sidebarRadius),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+                  borderRadius: borderRadius,
+                  boxShadow: widget.isPhone
+                      ? null
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                 ),
                 child: GlassSurface(
-                  borderRadius: BorderRadius.circular(_sidebarRadius),
-                  blurSigma: 22,
-                  tintOpacity: 0.76,
+                  borderRadius: borderRadius,
+                  blurSigma: widget.isPhone ? 0 : 22,
+                  tintOpacity: widget.isPhone ? 1 : 0.76,
                   tintColor: _panelTint,
                   elevation: 0,
-                  border: Border.all(
-                    color: AppColors.noteBorder.withValues(alpha: 0.5),
-                    width: AppColors.filePaneBorderWidth,
-                  ),
+                  border: widget.isPhone
+                      ? null
+                      : Border.all(
+                          color: AppColors.noteBorder.withValues(alpha: 0.5),
+                          width: AppColors.filePaneBorderWidth,
+                        ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -94,7 +127,7 @@ class _AppSidebarState extends State<AppSidebar> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: TextButton(
-                      onPressed: () => state.goHome(),
+                      onPressed: _goHome,
                       style: TextButton.styleFrom(
                         foregroundColor: AppColors.text,
                         backgroundColor:
@@ -119,7 +152,7 @@ class _AppSidebarState extends State<AppSidebar> {
                     child: ListView(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       children: [
-                        _ViewSection(state: state),
+                        _ViewSection(state: state, onSelectView: _selectView),
                         const _SidebarDivider(),
                         _TopicSection(
                           title: s['projects'],
@@ -127,7 +160,7 @@ class _AppSidebarState extends State<AppSidebar> {
                           selected: state.selectedTopic,
                           isViewMode: state.isViewMode || state.isArchiveMode,
                           state: state,
-                          onSelect: state.selectTopic,
+                          onSelect: _selectTopic,
                         ),
                         _TopicSection(
                           title: s['processes'],
@@ -135,7 +168,7 @@ class _AppSidebarState extends State<AppSidebar> {
                           selected: state.selectedTopic,
                           isViewMode: state.isViewMode,
                           state: state,
-                          onSelect: state.selectTopic,
+                          onSelect: _selectTopic,
                         ),
                         _TopicSection(
                           title: s['areas'],
@@ -143,7 +176,7 @@ class _AppSidebarState extends State<AppSidebar> {
                           selected: state.selectedTopic,
                           isViewMode: state.isViewMode,
                           state: state,
-                          onSelect: state.selectTopic,
+                          onSelect: _selectTopic,
                         ),
                         _TopicSection(
                           title: s['others'],
@@ -151,10 +184,12 @@ class _AppSidebarState extends State<AppSidebar> {
                           selected: state.selectedTopic,
                           isViewMode: state.isViewMode,
                           state: state,
-                          onSelect: state.selectTopic,
+                          onSelect: _selectTopic,
                         ),
-                        const _SidebarDivider(),
-                        _ArchiveSection(state: state),
+                        if (!widget.isPhone) ...[
+                          const _SidebarDivider(),
+                          _ArchiveSection(state: state),
+                        ],
                       ],
                     ),
                   ),
@@ -188,20 +223,21 @@ class _AppSidebarState extends State<AppSidebar> {
               ),
             ),
           ),
-          PositionedDirectional(
-            top: 0,
-            bottom: 0,
-            end: 0,
-            width: _resizeHandleWidth,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.resizeColumn,
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onHorizontalDragUpdate: _resize,
-                child: const SizedBox.expand(),
+          if (!widget.isPhone)
+            PositionedDirectional(
+              top: 0,
+              bottom: 0,
+              end: 0,
+              width: _resizeHandleWidth,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.resizeColumn,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragUpdate: _resize,
+                  child: const SizedBox.expand(),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -209,7 +245,8 @@ class _AppSidebarState extends State<AppSidebar> {
 
   Future<void> _createTopic(BuildContext context) async {
     final state = widget.state;
-    final result = await showDialog<CreateTopicResult>(
+    _closeDrawerIfOpen();
+    final result = await showAppDialog<CreateTopicResult>(
       context: context,
       builder: (_) => CreateTopicDialog(state: state),
     );
@@ -247,9 +284,10 @@ class _SidebarDivider extends StatelessWidget {
 }
 
 class _ViewSection extends StatelessWidget {
-  const _ViewSection({required this.state});
+  const _ViewSection({required this.state, required this.onSelectView});
 
   final AppState state;
+  final Future<void> Function(String viewType) onSelectView;
 
   @override
   Widget build(BuildContext context) {
@@ -265,7 +303,7 @@ class _ViewSection extends StatelessWidget {
           _ViewTile(
             label: state.viewLabel(view.type),
             selected: state.selectedViewType == view.type,
-            onTap: () => state.selectView(view.type),
+            onTap: () => onSelectView(view.type),
           ),
         const SizedBox(height: 2),
       ],

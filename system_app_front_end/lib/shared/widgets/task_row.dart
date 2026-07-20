@@ -249,6 +249,10 @@ class _TaskRowState extends State<TaskRow> {
         maxLines: null,
         minLines: 1,
         stripNewlines: true,
+        emojiSearchHint: widget.state.strings['searchEmoji'],
+        emojiPickerTitle: widget.state.strings['insertEmoji'],
+        aiState: widget.state,
+        aiSuggestEmojiLabel: widget.state.strings['aiSuggestEmoji'],
         onChanged: (v) => widget.onTitleChanged?.call(v),
         onEnter: () {
           final box = _focusNode.context?.findRenderObject() as RenderBox?;

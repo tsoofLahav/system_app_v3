@@ -5,10 +5,12 @@ import '../../design_system/glass_surface.dart';
 import '../../features/arrange/file_arrange_overlay.dart';
 import '../../features/blocks/block_text_actions.dart';
 import '../../features/blocks/block_text_focus.dart';
+import '../../features/blocks/text_emoji_picker.dart';
 import '../../features/bring_file/bring_file_picker_dialog.dart';
 import '../../features/create_topic/add_file_dialog.dart';
 import '../../features/create_topic/create_topic_dialog.dart';
 import '../app_state.dart';
+import '../platform/app_form_factor.dart';
 import '../models/app_file.dart';
 import '../registry/file_behavior_registry.dart';
 import '../services/ai_service.dart';
@@ -40,6 +42,10 @@ class ShortcutDispatcher {
         }
         return state.canRunAiTool(action.aiTool ?? '');
       case ShortcutContextRequirement.textFocus:
+        if (action.textAction == 'text:suggest_emoji' ||
+            action.aiTool == 'suggest_emoji') {
+          return state.canRunAiTool('suggest_emoji');
+        }
         return BlockTextFocusRegistry.hasFocus;
       case ShortcutContextRequirement.insertBlock:
         return _insertTargetFile(state) != null &&
@@ -61,11 +67,16 @@ class ShortcutDispatcher {
         state.goHome();
         return;
       case ShortcutActionIds.bringFile:
-        final entry = await showBringFilePickerDialog(context, state);
+        final entry = await showBringFilePicker(context, state);
         if (entry == null || !context.mounted) return;
-        await state.bringFile(entry.topic, entry.file);
+        if (isPhoneLayout) {
+          await state.bringFileOnPhone(entry.topic, entry.file);
+        } else {
+          await state.bringFile(entry.topic, entry.file);
+        }
         return;
       case ShortcutActionIds.openArrange:
+        if (isPhoneLayout) return;
         await showFileArrangeOverlay(context, state);
         return;
       case ShortcutActionIds.cycleMainFiles:
@@ -75,14 +86,12 @@ class ShortcutDispatcher {
         final topic = state.selectedTopic;
         final detail = state.selectedDetail;
         if (topic == null || detail == null) return;
-        final result = await showDialog<AddFileResult>(
+        final result = await showAddFileDialog(
           context: context,
-          builder: (_) => AddFileDialog(
-            state: state,
-            topic: topic,
-            existingTypes:
-                detail.files.map((f) => f.type).toList(growable: false),
-          ),
+          state: state,
+          topic: topic,
+          existingTypes:
+              detail.files.map((f) => f.type).toList(growable: false),
         );
         if (result == null || !context.mounted) return;
         await state.addFile(
@@ -115,6 +124,18 @@ class ShortcutDispatcher {
     }
 
     if (action.textAction != null) {
+      if (action.textAction == 'text:emoji') {
+        await showTextEmojiPicker(
+          context: context,
+          searchHint: state.strings['searchEmoji'],
+          title: state.strings['insertEmoji'],
+        );
+        return;
+      }
+      if (action.textAction == 'text:suggest_emoji') {
+        await runSuggestEmoji(context, state);
+        return;
+      }
       await runBlockTextAction(action.textAction!);
       return;
     }
@@ -146,6 +167,11 @@ class ShortcutDispatcher {
         if (!context.mounted) return;
         _snack(context, e.toString());
       }
+      return;
+    }
+
+    if (tool == 'suggest_emoji') {
+      await runSuggestEmoji(context, state);
       return;
     }
 

@@ -22,6 +22,7 @@ abstract final class AppIcons {
   static const crop = LucideIcons.crop200;
 
   // General UI
+  static const menu = LucideIcons.menu200;
   static const add = LucideIcons.plus200;
   static const more = LucideIcons.ellipsis200;
   static const check = LucideIcons.check200;

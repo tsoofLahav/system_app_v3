@@ -9,6 +9,7 @@ from services.ai_interactive.create_graph import run_create_graph
 from services.ai_interactive.move_file import run_move_file_to_topic
 from services.ai_interactive.smart_doc import run_smart_doc
 from services.ai_interactive.smart_list import run_smart_list
+from services.ai_interactive.suggest_emoji import run_suggest_emoji
 from services.openai_service import chat_text, generate_image
 
 
@@ -87,6 +88,9 @@ def run_tool(tool: str, topic_id: int, context: dict, locale: str = "en") -> dic
 
     if tool == "smart_list":
         return run_smart_list(text=text, source_topic_id=topic_id, locale=locale)
+
+    if tool == "suggest_emoji":
+        return run_suggest_emoji(text=text, locale=locale)
 
     if tool == "create_image":
         prompt = chat_text(

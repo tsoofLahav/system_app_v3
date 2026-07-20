@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/app_state.dart';
 import '../../core/browse/bring_file_catalog.dart';
+import '../../core/platform/app_form_factor.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/registry/topic_appearance.dart';
 import '../../design_system/app_colors.dart';
@@ -15,6 +16,17 @@ import '../../features/bring_file/bring_file_preview.dart';
 import '../../design_system/overlay_file_preview_card.dart';
 import '../../design_system/horizontal_carousel.dart';
 import '../arrange/file_arrange_keyboard.dart';
+import 'phone_bring_file_sheet.dart';
+
+Future<BrowseFileEntry?> showBringFilePicker(
+  BuildContext context,
+  AppState state,
+) {
+  if (isPhoneLayout) {
+    return showPhoneBringFileSheet(context, state);
+  }
+  return showBringFilePickerDialog(context, state);
+}
 
 Future<BrowseFileEntry?> showBringFilePickerDialog(
   BuildContext context,

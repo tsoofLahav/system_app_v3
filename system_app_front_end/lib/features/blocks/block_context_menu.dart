@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_state.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/models/block.dart';
 import '../../core/registry/file_behavior_registry.dart';
@@ -7,6 +8,7 @@ import '../../shared/widgets/app_context_menu.dart';
 import 'block_text_focus.dart';
 import 'block_text_actions.dart';
 import 'format_range.dart';
+import 'text_emoji_picker.dart';
 
 typedef BlockMenuHandler = Future<void> Function(String action);
 
@@ -79,6 +81,7 @@ class BlockContextMenu {
     required AppStrings strings,
     required String fileType,
     required int orderIndex,
+    AppState? appState,
     Block? targetBlock,
     bool supportsParts = false,
     bool hasAvailableParts = false,
@@ -90,6 +93,7 @@ class BlockContextMenu {
       FormatRange.capturePending(controller.text, controller.selection);
     }
     BlockTextFocusRegistry.openMenuSession();
+    String? value;
     try {
       final entries = buildFileEntries(
         strings: strings,
@@ -99,22 +103,34 @@ class BlockContextMenu {
         hasAvailableParts: hasAvailableParts,
       );
 
-      final value = await AppContextMenu.show(
+      value = await AppContextMenu.show(
         context: context,
         globalPosition: globalPosition,
         entries: entries,
         isRtl: strings.isRtl,
       );
       if (value == null) return null;
-      if (value.startsWith('text:')) {
+      if (value.startsWith('text:') &&
+          value != 'text:emoji' &&
+          value != 'text:suggest_emoji') {
         await runBlockTextAction(value);
-        return value;
+      } else if (value != 'text:emoji' && value != 'text:suggest_emoji') {
+        await onAction?.call(value);
       }
-      await onAction?.call(value);
-      return value;
     } finally {
       BlockTextFocusRegistry.closeMenuSession();
     }
+    if (value == 'text:emoji' && context.mounted) {
+      await showTextEmojiPicker(
+        context: context,
+        searchHint: strings['searchEmoji'],
+        title: strings['insertEmoji'],
+      );
+    }
+    if (value == 'text:suggest_emoji' && context.mounted && appState != null) {
+      await runSuggestEmoji(context, appState);
+    }
+    return value;
   }
 
   static List<AppContextMenuEntry> _blockActions(
@@ -198,6 +214,12 @@ class BlockContextMenu {
         AppContextMenuItem(value: 'text:cut', label: strings['cut']),
         AppContextMenuItem(value: 'text:copy', label: strings['copy']),
         AppContextMenuItem(value: 'text:paste', label: strings['paste']),
+        AppContextMenuItem(value: 'text:emoji', label: strings['insertEmoji']),
+        AppContextMenuItem(
+          value: 'text:suggest_emoji',
+          label: strings['aiSuggestEmoji'],
+          enabled: BlockTextFocusRegistry.hasMarkedText,
+        ),
         const AppContextMenuDivider(),
         AppContextMenuItem(value: 'text:bold', label: strings['bold']),
         AppContextMenuItem(value: 'text:italic', label: strings['italic']),

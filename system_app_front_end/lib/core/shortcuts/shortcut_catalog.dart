@@ -54,6 +54,7 @@ abstract final class ShortcutActionIds {
   static const aiImage = 'ai_image';
   static const aiGraph = 'ai_graph';
   static const aiMoveFile = 'ai_move_file';
+  static const aiSuggestEmoji = 'ai_suggest_emoji';
 
   static const textBold = 'text_bold';
   static const textItalic = 'text_italic';
@@ -61,6 +62,8 @@ abstract final class ShortcutActionIds {
   static const textCut = 'text_cut';
   static const textCopy = 'text_copy';
   static const textPaste = 'text_paste';
+  static const textEmoji = 'text_emoji';
+  static const textSuggestEmoji = 'text_suggest_emoji';
   static const textSizeUp = 'text_size_up';
   static const textSizeDown = 'text_size_down';
 
@@ -176,6 +179,14 @@ final List<ShortcutAction> kShortcutCatalog = [
     aiTool: 'move_file_to_topic',
   ),
   ShortcutAction(
+    id: ShortcutActionIds.aiSuggestEmoji,
+    category: ShortcutCategory.ai,
+    labelKey: 'aiSuggestEmoji',
+    defaultBinding: _m(LogicalKeyboardKey.digit7, shift: true),
+    context: ShortcutContextRequirement.textFocus,
+    aiTool: 'suggest_emoji',
+  ),
+  ShortcutAction(
     id: ShortcutActionIds.textBold,
     category: ShortcutCategory.text,
     labelKey: 'bold',
@@ -222,6 +233,22 @@ final List<ShortcutAction> kShortcutCatalog = [
     defaultBinding: _m(LogicalKeyboardKey.keyV),
     context: ShortcutContextRequirement.textFocus,
     textAction: 'text:paste',
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.textEmoji,
+    category: ShortcutCategory.text,
+    labelKey: 'shortcutInsertEmoji',
+    defaultBinding: _m(LogicalKeyboardKey.keyE, shift: true),
+    context: ShortcutContextRequirement.textFocus,
+    textAction: 'text:emoji',
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.textSuggestEmoji,
+    category: ShortcutCategory.text,
+    labelKey: 'aiSuggestEmoji',
+    defaultBinding: _m(LogicalKeyboardKey.keyM, shift: true),
+    context: ShortcutContextRequirement.textFocus,
+    textAction: 'text:suggest_emoji',
   ),
   ShortcutAction(
     id: ShortcutActionIds.textSizeUp,

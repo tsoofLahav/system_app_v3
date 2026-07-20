@@ -22,10 +22,15 @@ class BlockTextFocusRegistry {
   static FormatRange? _frozenRange;
   static final ValueNotifier<int> menuSessionListenable = ValueNotifier(0);
 
+  static int _emojiPickerSessionDepth = 0;
+  static _EmojiPickerTarget? _emojiPickerTarget;
+
   static final ValueNotifier<int> focusListenable = ValueNotifier(0);
 
   static bool get hasFocus => activeController != null;
   static bool get isInMenuSession => _menuSessionDepth > 0;
+  static bool get isInEmojiPickerSession => _emojiPickerSessionDepth > 0;
+  static bool get hasEmojiPickerTarget => _emojiPickerTarget != null;
   static FormatRange? get frozenFormatRange => _frozenRange;
 
   static void register({
@@ -50,7 +55,7 @@ class BlockTextFocusRegistry {
   }
 
   static void unregister(TextEditingController controller) {
-    if (_menuSessionDepth > 0) return;
+    if (_menuSessionDepth > 0 || _emojiPickerSessionDepth > 0) return;
     if (activeController != controller) return;
     activeController = null;
     onChanged = null;
@@ -110,6 +115,50 @@ class BlockTextFocusRegistry {
     });
   }
 
+  static void beginEmojiPickerSession() {
+    if (_emojiPickerSessionDepth == 0) {
+      final controller = activeController;
+      final changed = onChanged;
+      if (controller == null || changed == null) return;
+      _emojiPickerTarget = _EmojiPickerTarget(
+        controller: controller,
+        onChanged: changed,
+        focusNode: activeFocusNode,
+        selection: controller.selection,
+      );
+    }
+    if (_emojiPickerTarget == null) return;
+    _emojiPickerSessionDepth++;
+  }
+
+  static void endEmojiPickerSession() {
+    if (_emojiPickerSessionDepth > 0) _emojiPickerSessionDepth--;
+    if (_emojiPickerSessionDepth > 0) return;
+
+    final target = _emojiPickerTarget;
+    _emojiPickerTarget = null;
+    if (target == null) return;
+
+    final restoreController = target.controller;
+    final restoreNode = target.focusNode;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        if (restoreNode != null &&
+            !restoreNode.hasFocus &&
+            restoreNode.canRequestFocus) {
+          restoreNode.requestFocus();
+        }
+        final offset = restoreController.selection.baseOffset.clamp(
+          0,
+          restoreController.text.length,
+        );
+        restoreController.selection = TextSelection.collapsed(offset: offset);
+      } catch (_) {
+        // Controller or focus node may have been disposed after a reload.
+      }
+    });
+  }
+
   static FormatRange _effectiveRange(TextEditingController controller) {
     final frozen = _frozenRange;
     if (frozen != null && frozen.isValid) return frozen;
@@ -146,6 +195,70 @@ class BlockTextFocusRegistry {
     _replaceSelection(text);
   }
 
+  static void insertText(String text) {
+    if (text.isEmpty) return;
+
+    final target = _emojiPickerTarget;
+    final controller = target?.controller ?? activeController;
+    final changed = target?.onChanged ?? onChanged;
+    if (controller == null || changed == null) return;
+
+    final selection = target?.selection ?? controller.selection;
+    final start = selection.start.clamp(0, controller.text.length);
+    final end = selection.end.clamp(0, controller.text.length);
+    _applyInsert(controller, changed, start, end, text);
+  }
+
+  static String? markedText() {
+    final controller = activeController;
+    if (controller == null) return null;
+    final selection = controller.selection;
+    if (!selection.isValid || selection.isCollapsed) return null;
+    final start = selection.start.clamp(0, controller.text.length);
+    final end = selection.end.clamp(0, controller.text.length);
+    if (end <= start) return null;
+    final text = controller.text.substring(start, end).trim();
+    return text.isEmpty ? null : text;
+  }
+
+  static int? markInsertOffset() {
+    final controller = activeController;
+    if (controller == null) return null;
+    final selection = controller.selection;
+    if (!selection.isValid || selection.isCollapsed) return null;
+    return selection.end.clamp(0, controller.text.length);
+  }
+
+  static bool get hasMarkedText => markedText() != null;
+
+  static void insertTextAtOffset(int offset, String text) {
+    if (text.isEmpty) return;
+    final controller = activeController;
+    final changed = onChanged;
+    if (controller == null || changed == null) return;
+    final index = offset.clamp(0, controller.text.length);
+    _applyInsert(controller, changed, index, index, text);
+  }
+
+  static void _applyInsert(
+    TextEditingController controller,
+    VoidCallback changed,
+    int start,
+    int end,
+    String text,
+  ) {
+    final next = controller.text.replaceRange(start, end, text);
+    controller.value = controller.value.copyWith(
+      text: next,
+      selection: TextSelection.collapsed(offset: start + text.length),
+      composing: TextRange.empty,
+    );
+    if (controller is SpanTextEditingController) {
+      controller.ensureSpansMatchText();
+    }
+    changed();
+  }
+
   static void _replaceSelection(String replacement) {
     final c = activeController;
     if (c == null) return;
@@ -159,6 +272,9 @@ class BlockTextFocusRegistry {
       ),
       composing: TextRange.empty,
     );
+    if (c is SpanTextEditingController) {
+      c.ensureSpansMatchText();
+    }
     onChanged?.call();
   }
 
@@ -196,4 +312,18 @@ class BlockTextFocusRegistry {
     activeBlockContent = next;
     changed();
   }
+}
+
+class _EmojiPickerTarget {
+  const _EmojiPickerTarget({
+    required this.controller,
+    required this.onChanged,
+    required this.focusNode,
+    required this.selection,
+  });
+
+  final TextEditingController controller;
+  final VoidCallback onChanged;
+  final FocusNode? focusNode;
+  final TextSelection selection;
 }

@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
+import '../../core/platform/app_form_factor.dart';
 import '../../core/shortcuts/app_shortcuts.dart';
-import '../archive/archive_topic_view.dart';
-import '../sidebar/app_sidebar.dart';
-import '../task_view/task_view_pane.dart';
-import '../topic/topic_view.dart';
-import '../../design_system/app_colors.dart';
-import '../../design_system/glass_surface.dart';
-import '../../shared/widgets/main_pane_loader.dart';
-import 'app_bottom_bar.dart';
+import 'desktop_app_shell.dart';
+import 'phone_app_shell.dart';
 
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.state});
@@ -18,109 +13,13 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final body = isPhoneLayout
+        ? PhoneAppShell(state: state)
+        : DesktopAppShell(state: state);
+
     return AppShortcutsScope(
       state: state,
-      child: _AutomationNoticeHost(
-        state: state,
-        child: Scaffold(
-          backgroundColor: AppColors.canvasNeutralBottom,
-          body: _AppShellBody(state: state),
-        ),
-      ),
-    );
-  }
-}
-
-class _AppShellBody extends StatefulWidget {
-  const _AppShellBody({required this.state});
-
-  final AppState state;
-
-  @override
-  State<_AppShellBody> createState() => _AppShellBodyState();
-}
-
-class _AppShellBodyState extends State<_AppShellBody> {
-  var _sidebarWidth = AppSidebarMetrics.defaultWidth;
-
-  @override
-  Widget build(BuildContext context) {
-    final state = widget.state;
-    final contentInset = AppSidebarMetrics.contentInset(_sidebarWidth);
-
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        const Positioned.fill(child: _AppCanvas()),
-        Positioned.fill(
-          child: Padding(
-            padding: EdgeInsetsDirectional.only(start: contentInset),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(
-                  child: !state.appReady
-                      ? const MainPaneLoader()
-                      : AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
-                          switchInCurve: Curves.easeOut,
-                          switchOutCurve: Curves.easeIn,
-                          child: state.isArchiveMode
-                              ? ArchiveTopicView(
-                                  key: ValueKey(
-                                    'archive-${state.selectedArchiveTopic?.id}',
-                                  ),
-                                  state: state,
-                                )
-                              : state.isViewMode && state.viewPaneReady
-                              ? TaskViewPane(
-                                  key: ValueKey(
-                                    'view-${state.selectedViewType}',
-                                  ),
-                                  state: state,
-                                )
-                              : TopicView(
-                                  key: ValueKey(
-                                    'topic-${state.selectedDetail?.topic.id ?? 'none'}',
-                                  ),
-                                  state: state,
-                                ),
-                        ),
-                ),
-                if (state.isViewMode && state.loading)
-                  const Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    child: LinearProgressIndicator(
-                      minHeight: 2,
-                      backgroundColor: Colors.transparent,
-                    ),
-                  ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: AppBottomBar(state: state),
-                ),
-              ],
-            ),
-          ),
-        ),
-        PositionedDirectional(
-          start: AppSidebarMetrics.outerStart,
-          top: AppSidebarMetrics.outerVertical,
-          bottom: AppSidebarMetrics.outerVertical,
-          child: AppSidebar(
-            state: state,
-            width: _sidebarWidth,
-            onWidthChanged: (width) {
-              if (_sidebarWidth == width) return;
-              setState(() => _sidebarWidth = width);
-            },
-          ),
-        ),
-      ],
+      child: _AutomationNoticeHost(state: state, child: body),
     );
   }
 }
@@ -167,30 +66,4 @@ class _AutomationNoticeHostState extends State<_AutomationNoticeHost> {
 
   @override
   Widget build(BuildContext context) => widget.child;
-}
-
-/// Single full-window canvas: gradient + ambient floor shadow stay in sync
-/// everywhere, including behind the floating sidebar.
-class _AppCanvas extends StatelessWidget {
-  const _AppCanvas();
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: const [
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: AppColors.neutralCanvasGradient,
-          ),
-        ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: ChromeFloorShadow(),
-        ),
-      ],
-    );
-  }
 }

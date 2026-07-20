@@ -3,9 +3,25 @@ import 'package:flutter/material.dart';
 import '../../core/app_state.dart';
 import '../../core/models/topic.dart';
 import '../../core/registry/file_registry.dart';
+import '../../design_system/adaptive_dialog.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_typography.dart';
-import '../../design_system/glass_surface.dart';
+
+Future<AddFileResult?> showAddFileDialog({
+  required BuildContext context,
+  required AppState state,
+  required Topic topic,
+  required List<String> existingTypes,
+}) {
+  return showAppDialog<AddFileResult>(
+    context: context,
+    builder: (_) => AddFileDialog(
+      state: state,
+      topic: topic,
+      existingTypes: existingTypes,
+    ),
+  );
+}
 
 class AddFileResult {
   AddFileResult({required this.type, required this.name});
@@ -62,8 +78,9 @@ class _AddFileDialogState extends State<AddFileDialog> {
     final s = widget.state.strings;
 
     if (_options.isEmpty) {
-      return AppGlassDialog(
+      return AppAdaptiveDialogShell(
         title: Text(s['addFile']),
+        width: 480,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -74,8 +91,9 @@ class _AddFileDialogState extends State<AddFileDialog> {
       );
     }
 
-    return AppGlassDialog(
+    return AppAdaptiveDialogShell(
       title: Text(s['addFile']),
+      width: 480,
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),

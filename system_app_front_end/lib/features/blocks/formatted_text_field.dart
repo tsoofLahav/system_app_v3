@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/app_state.dart';
+import '../../design_system/app_icons.dart';
 import 'block_text_focus.dart';
 import 'format_range.dart';
 import 'frozen_selection_painter.dart';
 import 'span_text_editing_controller.dart';
+import 'text_emoji_picker.dart';
 
 /// Text field that registers for block context-menu clipboard/format actions.
 class FormattedTextField extends StatefulWidget {
@@ -30,6 +33,10 @@ class FormattedTextField extends StatefulWidget {
     this.onSecondaryTapDown,
     this.textAlignVertical,
     this.blockId,
+    this.emojiSearchHint = 'Search emoji',
+    this.emojiPickerTitle = 'Insert emoji…',
+    this.aiState,
+    this.aiSuggestEmojiLabel = 'Suggest emoji',
   });
 
   final TextEditingController controller;
@@ -50,6 +57,10 @@ class FormattedTextField extends StatefulWidget {
   final GestureTapDownCallback? onSecondaryTapDown;
   final TextAlignVertical? textAlignVertical;
   final int? blockId;
+  final String emojiSearchHint;
+  final String emojiPickerTitle;
+  final AppState? aiState;
+  final String aiSuggestEmojiLabel;
 
   @override
   State<FormattedTextField> createState() => _FormattedTextFieldState();
@@ -92,7 +103,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         blockId: widget.blockId,
       );
     } else {
-      if (BlockTextFocusRegistry.isInMenuSession &&
+      if ((BlockTextFocusRegistry.isInMenuSession ||
+              BlockTextFocusRegistry.isInEmojiPickerSession) &&
           BlockTextFocusRegistry.activeController == widget.controller) {
         return;
       }
@@ -113,6 +125,22 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     final isMeta = HardwareKeyboard.instance.isMetaPressed;
+    if (isMeta && event.logicalKey == LogicalKeyboardKey.keyE &&
+        HardwareKeyboard.instance.isShiftPressed) {
+      _openEmojiPicker();
+      return KeyEventResult.handled;
+    }
+
+    if (isMeta && event.logicalKey == LogicalKeyboardKey.keyM &&
+        HardwareKeyboard.instance.isShiftPressed &&
+        widget.aiState != null) {
+      final state = widget.aiState!;
+      if (state.canRunAiTool('suggest_emoji') && !state.aiRunning) {
+        runSuggestEmoji(context, state);
+        return KeyEventResult.handled;
+      }
+    }
+
     if (isMeta && event.logicalKey == LogicalKeyboardKey.keyA) {
       widget.onSelectAll?.call();
       widget.controller.selection = TextSelection(
@@ -138,6 +166,15 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     }
 
     return KeyEventResult.ignored;
+  }
+
+  void _openEmojiPicker() {
+    if (!mounted) return;
+    showTextEmojiPicker(
+      context: context,
+      searchHint: widget.emojiSearchHint,
+      title: widget.emojiPickerTitle,
+    );
   }
 
   @override
@@ -189,31 +226,99 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
             child: child!,
           );
         },
-        child: TextField(
-          controller: widget.controller,
-          focusNode: _focusNode,
-          style: style,
-          textAlignVertical: widget.textAlignVertical,
-          maxLines: widget.maxLines,
-          minLines: widget.minLines,
-          decoration: InputDecoration(
-            isDense: true,
-            border: InputBorder.none,
-            hintText: widget.hintText,
-            hintStyle:
-                style.copyWith(color: style.color?.withValues(alpha: 0.35)),
-            contentPadding: EdgeInsets.zero,
-          ),
-          textInputAction: widget.onEnter != null
-              ? TextInputAction.none
-              : widget.textInputAction,
-          onChanged: (_) => _notifyChanged(),
-          onSubmitted: widget.onSubmitted,
-          onTap: () => _onFocusChanged(),
-          inputFormatters: formatters.isEmpty ? null : formatters,
-          contextMenuBuilder: (context, editableTextState) {
-            return const SizedBox.shrink();
-          },
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextField(
+                controller: widget.controller,
+                focusNode: _focusNode,
+                style: style,
+                textAlignVertical: widget.textAlignVertical,
+                maxLines: widget.maxLines,
+                minLines: widget.minLines,
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  hintText: widget.hintText,
+                  hintStyle: style.copyWith(
+                    color: style.color?.withValues(alpha: 0.35),
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                textInputAction: widget.onEnter != null
+                    ? TextInputAction.none
+                    : widget.textInputAction,
+                onChanged: (_) => _notifyChanged(),
+                onSubmitted: widget.onSubmitted,
+                onTap: () => _onFocusChanged(),
+                inputFormatters: formatters.isEmpty ? null : formatters,
+                contextMenuBuilder: (context, editableTextState) {
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+            ListenableBuilder(
+              listenable: _focusNode,
+              builder: (context, _) {
+                if (!_focusNode.hasFocus) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsetsDirectional.only(start: 4, top: 1),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (widget.aiState != null)
+                        ListenableBuilder(
+                          listenable: widget.controller,
+                          builder: (context, _) {
+                            final state = widget.aiState!;
+                            if (!BlockTextFocusRegistry.hasMarkedText ||
+                                !state.canRunAiTool('suggest_emoji')) {
+                              return const SizedBox.shrink();
+                            }
+                            return IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 24,
+                                minHeight: 24,
+                              ),
+                              tooltip: widget.aiSuggestEmojiLabel,
+                              onPressed: state.aiRunning
+                                  ? null
+                                  : () => runSuggestEmoji(context, state),
+                              icon: AppIcon(
+                                AppIcons.ai,
+                                size: 14,
+                                color: style.color?.withValues(alpha: 0.62),
+                              ),
+                            );
+                          },
+                        ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 24,
+                          minHeight: 24,
+                        ),
+                        tooltip: widget.emojiPickerTitle,
+                        onPressed: () {
+                          _focusNode.requestFocus();
+                          _openEmojiPicker();
+                        },
+                        icon: AppIcon(
+                          AppIcons.smiley,
+                          size: 15,
+                          color: style.color?.withValues(alpha: 0.55),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
         ),
       ),
     );

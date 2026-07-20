@@ -133,6 +133,10 @@ class _TaskZoneListState extends State<TaskZoneList> {
           _DraftTaskRow(
             done: widget.done,
             hint: widget.state.strings['newTaskHint'],
+            emojiSearchHint: widget.state.strings['searchEmoji'],
+            emojiPickerTitle: widget.state.strings['insertEmoji'],
+            aiState: widget.state,
+            aiSuggestEmojiLabel: widget.state.strings['aiSuggestEmoji'],
             onSubmit: (title, position) =>
                 widget.onCreateAtEnd(title, position),
           ),
@@ -145,11 +149,19 @@ class _DraftTaskRow extends StatefulWidget {
   const _DraftTaskRow({
     required this.done,
     required this.hint,
+    required this.emojiSearchHint,
+    required this.emojiPickerTitle,
+    required this.aiState,
+    required this.aiSuggestEmojiLabel,
     required this.onSubmit,
   });
 
   final bool done;
   final String hint;
+  final String emojiSearchHint;
+  final String emojiPickerTitle;
+  final AppState aiState;
+  final String aiSuggestEmojiLabel;
   final Future<void> Function(String title, Offset position) onSubmit;
 
   @override
@@ -204,6 +216,10 @@ class _DraftTaskRowState extends State<_DraftTaskRow> {
               minLines: 1,
               stripNewlines: true,
               hintText: widget.hint,
+              emojiSearchHint: widget.emojiSearchHint,
+              emojiPickerTitle: widget.emojiPickerTitle,
+              aiState: widget.aiState,
+              aiSuggestEmojiLabel: widget.aiSuggestEmojiLabel,
               onEnter: _submit,
             ),
           ),

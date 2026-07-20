@@ -22,14 +22,14 @@ class LayoutPreviewIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
+    final primary = AppColors.primaryBright;
     final accent = selected ? primary : AppColors.text;
     final stroke = enabled
         ? accent.withValues(alpha: selected ? 0.95 : 0.72)
         : AppColors.textHint.withValues(alpha: 0.35);
     final fill = enabled
         ? (selected
-            ? primary.withValues(alpha: 0.14)
+            ? primary.withValues(alpha: 0.92)
             : AppColors.noteBottom.withValues(alpha: 0.55))
         : AppColors.noteBorder.withValues(alpha: 0.25);
 

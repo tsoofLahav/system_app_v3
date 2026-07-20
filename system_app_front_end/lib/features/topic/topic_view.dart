@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/platform/app_form_factor.dart';
 import '../../core/app_state.dart';
 import '../../core/models/ai_proposal.dart';
 import '../../core/models/app_file.dart';
@@ -20,6 +21,7 @@ import '../../shared/widgets/files_section_divider.dart';
 import '../../shared/widgets/topic_emoji.dart';
 import '../create_topic/add_file_dialog.dart';
 import '../bring_file/bring_file_picker_dialog.dart';
+import 'phone_topic_view.dart';
 import '../shell/log_for_project_dialog.dart';
 import 'process_update_review_dialog.dart';
 import 'project_update_review_dialog.dart';
@@ -77,6 +79,18 @@ class TopicView extends StatelessWidget {
         ? const <AppFile>[]
         : state.secondaryFilesFor(filesTopic, detail!.files);
     final accent = TopicAppearance.colorFromHex(topic.color);
+
+    if (isPhoneLayout) {
+      return PhoneTopicView(
+        state: state,
+        topic: filesTopic,
+        mainFiles: mainFiles,
+        secondaryFiles: secondaryFiles,
+        accent: accent,
+        stale: stale,
+      );
+    }
+
     final layoutId = state.layoutFor(topic);
 
     final canvasPadding = AppSpacing.canvasPadding.copyWith(
@@ -201,22 +215,24 @@ class TopicView extends StatelessWidget {
     Topic topic,
     List<AppFile> files,
   ) async {
-    final result = await showDialog<AddFileResult>(
+    final result = await showAddFileDialog(
       context: context,
-      builder: (_) => AddFileDialog(
-        state: state,
-        topic: topic,
-        existingTypes: files.map((f) => f.type).toList(growable: false),
-      ),
+      state: state,
+      topic: topic,
+      existingTypes: files.map((f) => f.type).toList(growable: false),
     );
     if (result == null) return;
     await state.addFile(topic: topic, type: result.type, name: result.name);
   }
 
   Future<void> _bringFile(BuildContext context, AppState state) async {
-    final entry = await showBringFilePickerDialog(context, state);
+    final entry = await showBringFilePicker(context, state);
     if (entry == null) return;
-    await state.bringFile(entry.topic, entry.file);
+    if (isPhoneLayout) {
+      await state.bringFileOnPhone(entry.topic, entry.file);
+    } else {
+      await state.bringFile(entry.topic, entry.file);
+    }
   }
 
   Future<void> _createLogForProject(

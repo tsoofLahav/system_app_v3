@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/app_state.dart';
 import '../../core/l10n/app_strings.dart';
+import '../../core/models/automation_definition.dart';
 import '../../core/models/automation_rule.dart';
 import '../../core/models/view_section.dart';
 import '../../core/registry/view_registry.dart';
@@ -10,6 +11,8 @@ import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
 import '../../design_system/app_switch.dart';
 import '../../design_system/app_typography.dart';
+import '../../design_system/adaptive_dialog.dart';
+import '../../design_system/app_segmented_toggle.dart';
 import '../../design_system/bilingual_layout.dart';
 import '../../design_system/glass_surface.dart';
 
@@ -17,7 +20,7 @@ Future<void> showAutomationDialog({
   required BuildContext context,
   required AppState state,
 }) {
-  return showDialog<void>(
+  return showAppDialog<void>(
     context: context,
     builder: (ctx) => AutomationDialog(state: state),
   );
@@ -70,6 +73,82 @@ Widget _compactDropdown({required double width, required Widget child}) {
   );
 }
 
+const _automationScopeOrder = ['all', 'project', 'process'];
+
+const _automationSlotOrder = [
+  'update',
+  'document',
+  'summarize',
+  'daily',
+  'view_reset',
+  'other',
+];
+
+String _automationOrderSlot(String key) {
+  return switch (key) {
+    'process_refresh' || 'project_update' => 'update',
+    'process_documentation_input' => 'document',
+    'process_recap_update' || 'project_summary_update' => 'summarize',
+    'daily_rotation' => 'daily',
+    'view_task_reset' => 'view_reset',
+    _ => 'other',
+  };
+}
+
+int _automationOrderIndex(String key) {
+  final slot = _automationOrderSlot(key);
+  final slotIndex = _automationSlotOrder.indexOf(slot);
+  final tieBreak = switch (key) {
+    'process_refresh' || 'process_recap_update' || 'process_documentation_input' => 0,
+    'project_update' || 'project_summary_update' => 1,
+    _ => 0,
+  };
+  return slotIndex * 100 + tieBreak;
+}
+
+String _automationScopeGroupKey(AutomationDefinition? definition) {
+  if (definition == null) return 'all';
+  final kind = definition.scopeFixed['kind'] as String? ?? 'all';
+  if (kind == 'topic_type') {
+    final topicType = definition.scopeFixed['topic_type'] as String? ?? '';
+    if (topicType == 'project') return 'project';
+    if (topicType == 'process') return 'process';
+  }
+  return 'all';
+}
+
+String _automationScopeSectionTitle(AppStrings s, String key) {
+  return switch (key) {
+    'project' => s['projects'],
+    'process' => s['processes'],
+    _ => s['allTopics'],
+  };
+}
+
+List<({String key, List<AutomationRule> rules})> _groupAutomationRules(
+  List<AutomationRule> rules,
+  AppState state,
+) {
+  final buckets = <String, List<AutomationRule>>{
+    'all': [],
+    'project': [],
+    'process': [],
+  };
+  for (final rule in rules) {
+    final definition = state.definitionForKey(rule.key);
+    buckets[_automationScopeGroupKey(definition)]!.add(rule);
+  }
+  for (final bucket in buckets.values) {
+    bucket.sort((a, b) => _automationOrderIndex(a.key).compareTo(
+          _automationOrderIndex(b.key),
+        ));
+  }
+  return [
+    for (final key in _automationScopeOrder)
+      if (buckets[key]!.isNotEmpty) (key: key, rules: buckets[key]!),
+  ];
+}
+
 class AutomationDialog extends StatefulWidget {
   const AutomationDialog({super.key, required this.state});
 
@@ -113,20 +192,19 @@ class _AutomationDialogState extends State<AutomationDialog> {
             .where((rule) => definitionKeys.contains(rule.key))
             .toList();
 
-        return AppGlassDialog(
+        return AppAdaptiveDialogShell(
           title: Text(s['automations']),
+          width: 480,
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text(s['ok']),
             ),
           ],
-          child: SizedBox(
-            width: 360,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
                 if (_ensuringRules)
                   const Center(
                     child: Padding(
@@ -145,13 +223,84 @@ class _AutomationDialogState extends State<AutomationDialog> {
                     textAlign: TextAlign.start,
                   )
                 else
-                  for (final rule in rules)
-                    _AutomationRuleCard(state: widget.state, rule: rule),
+                  for (final group in _groupAutomationRules(rules, widget.state))
+                    _AutomationScopeSection(
+                      title: _automationScopeSectionTitle(s, group.key),
+                      children: [
+                        for (final rule in group.rules)
+                          _AutomationRuleCard(state: widget.state, rule: rule),
+                      ],
+                    ),
               ],
             ),
-          ),
         );
       },
+    );
+  }
+}
+
+class _AutomationScopeSection extends StatelessWidget {
+  const _AutomationScopeSection({
+    required this.title,
+    required this.children,
+  });
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.mainNoteTop.withValues(alpha: 0.42),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppColors.noteBorder.withValues(alpha: 0.62),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 3,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryBright.withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: AppTypography.metaStyle.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.2,
+                        color: AppColors.text.withValues(alpha: 0.9),
+                      ),
+                      textAlign: TextAlign.start,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Divider(
+                height: 1,
+                thickness: 0.8,
+                color: AppColors.noteBorder.withValues(alpha: 0.5),
+              ),
+              const SizedBox(height: 6),
+              ...children,
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -457,36 +606,26 @@ class _AutomationConfigDialogState extends State<_AutomationConfigDialog> {
               textAlign: TextAlign.start,
             ),
             const SizedBox(height: 6),
-            Align(
-              alignment: Alignment.center,
-              child: IntrinsicWidth(
-                child: SegmentedButton<String>(
-                  style: SegmentedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    textStyle: AppTypography.metaStyle,
+            AppSegmentedToggle<String>(
+              options: [
+                if (activations.contains('schedule'))
+                  AppSegmentedOption(
+                    value: 'schedule',
+                    label: s['triggerByTime'],
                   ),
-                  segments: [
-                    if (activations.contains('schedule'))
-                      ButtonSegment(
-                        value: 'schedule',
-                        label: Text(s['triggerByTime']),
-                      ),
-                    if (activations.contains('event'))
-                      ButtonSegment(
-                        value: 'event',
-                        label: Text(s['triggerByChanges']),
-                      ),
-                    if (activations.contains('task'))
-                      ButtonSegment(
-                        value: 'task',
-                        label: Text(s['triggerByTask']),
-                      ),
-                  ],
-                  selected: {triggerType},
-                  onSelectionChanged: (value) => _setTriggerType(value.first),
-                ),
-              ),
+                if (activations.contains('event'))
+                  AppSegmentedOption(
+                    value: 'event',
+                    label: s['triggerByChanges'],
+                  ),
+                if (activations.contains('task'))
+                  AppSegmentedOption(
+                    value: 'task',
+                    label: s['triggerByTask'],
+                  ),
+              ],
+              selected: triggerType,
+              onSelected: _setTriggerType,
             ),
             const SizedBox(height: 12),
             if (triggerType == 'schedule')
@@ -620,41 +759,30 @@ class _ScheduleFieldsState extends State<_ScheduleFields> {
           textAlign: TextAlign.start,
         ),
         const SizedBox(height: 8),
-        _compactDropdown(
-          width: 150,
-          child: DropdownButtonFormField<_ScheduleFrequency>(
-            initialValue: _draft.frequency,
-            decoration: _automationFieldDecoration(s['frequency']),
-            dropdownColor: _automationDropdownColor(),
-            borderRadius: _automationDropdownRadius(),
-            elevation: 6,
-            menuMaxHeight: 280,
-            itemHeight: null,
-            style: _automationDropdownTextStyle(),
-            items: [
-              DropdownMenuItem(
-                value: _ScheduleFrequency.daily,
-                child: _automationDropdownItem(s['onceADay']),
-              ),
-              DropdownMenuItem(
-                value: _ScheduleFrequency.weekly,
-                child: _automationDropdownItem(s['onceAWeek']),
-              ),
-              DropdownMenuItem(
-                value: _ScheduleFrequency.monthly,
-                child: _automationDropdownItem(s['onceAMonth']),
-              ),
-            ],
-            onChanged: (value) async {
-              if (value == null) return;
-              setState(() => _draft = _draft.copyWith(frequency: value));
-              await _saveSchedule();
-            },
-          ),
+        AppSegmentedToggle<_ScheduleFrequency>(
+          options: [
+            AppSegmentedOption(
+              value: _ScheduleFrequency.daily,
+              label: s['onceADay'],
+            ),
+            AppSegmentedOption(
+              value: _ScheduleFrequency.weekly,
+              label: s['onceAWeek'],
+            ),
+            AppSegmentedOption(
+              value: _ScheduleFrequency.monthly,
+              label: s['onceAMonth'],
+            ),
+          ],
+          selected: _draft.frequency,
+          onSelected: (value) async {
+            setState(() => _draft = _draft.copyWith(frequency: value));
+            await _saveSchedule();
+          },
         ),
         const SizedBox(height: 10),
         if (_draft.frequency == _ScheduleFrequency.weekly) ...[
-          _WeekdayDropdown(
+          _WeekdayToggle(
             state: widget.state,
             weekday: _draft.weekday,
             onChanged: (weekday) async {
@@ -934,7 +1062,7 @@ class _ViewResetScheduleCard extends StatelessWidget {
           ],
           if (viewType != 'daily') ...[
             if (viewType == 'weekly') ...[
-              _WeekdayDropdown(
+              _WeekdayToggle(
                 state: state,
                 weekday: draft.weekday,
                 onChanged: (weekday) => onChanged(
@@ -987,8 +1115,8 @@ class _ViewResetScheduleCard extends StatelessWidget {
   }
 }
 
-class _WeekdayDropdown extends StatelessWidget {
-  const _WeekdayDropdown({
+class _WeekdayToggle extends StatelessWidget {
+  const _WeekdayToggle({
     required this.state,
     required this.weekday,
     required this.onChanged,
@@ -1001,29 +1129,23 @@ class _WeekdayDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = state.strings;
-    return _compactDropdown(
-      width: 132,
-      child: DropdownButtonFormField<String>(
-        initialValue: weekday,
-        decoration: _automationFieldDecoration(s['dayOfWeek']),
-        dropdownColor: _automationDropdownColor(),
-        borderRadius: _automationDropdownRadius(),
-        elevation: 6,
-        menuMaxHeight: 280,
-        itemHeight: null,
-        style: _automationDropdownTextStyle(),
-        items: [
-          for (final value in _weekdayKeys)
-            DropdownMenuItem(
-              value: value,
-              child: _automationDropdownItem(_weekdayLabel(s, value)),
-            ),
-        ],
-        onChanged: (value) {
-          if (value == null) return;
-          onChanged(value);
-        },
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(s['dayOfWeek'], style: AppTypography.metaStyle),
+        const SizedBox(height: 6),
+        AppSegmentedToggle<String>(
+          options: [
+            for (final value in _weekdayKeys)
+              AppSegmentedOption(
+                value: value,
+                label: _weekdayLabel(s, value),
+              ),
+          ],
+          selected: weekday,
+          onSelected: onChanged,
+        ),
+      ],
     );
   }
 }
@@ -1435,31 +1557,22 @@ class _TaskTriggerFieldsState extends State<_TaskTriggerFields> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _compactDropdown(
-          width: 140,
-          child: DropdownButtonFormField<String>(
-            initialValue: _viewType,
-            decoration: _automationFieldDecoration(s['automationTriggerView']),
-            dropdownColor: _automationDropdownColor(),
-            borderRadius: _automationDropdownRadius(),
-            elevation: 6,
-            menuMaxHeight: 280,
-            itemHeight: null,
-            style: _automationDropdownTextStyle(),
-            items: [
-              for (final view in ViewRegistry.views)
-                DropdownMenuItem(
-                  value: view.type,
-                  child: _automationDropdownItem(s.viewLabel(view.type)),
-                ),
-            ],
-            onChanged: (value) async {
-              if (value == null) return;
-              setState(() => _viewType = value);
-              await _loadSections();
-              await _save();
-            },
-          ),
+        Text(s['automationTriggerView'], style: AppTypography.metaStyle),
+        const SizedBox(height: 6),
+        AppSegmentedToggle<String>(
+          options: [
+            for (final view in ViewRegistry.views)
+              AppSegmentedOption(
+                value: view.type,
+                label: s.viewLabel(view.type),
+              ),
+          ],
+          selected: _viewType,
+          onSelected: (value) async {
+            setState(() => _viewType = value);
+            await _loadSections();
+            await _save();
+          },
         ),
         if (!widget.sectionOptional) ...[
           const SizedBox(height: 10),

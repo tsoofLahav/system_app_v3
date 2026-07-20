@@ -5,6 +5,7 @@ import '../../core/l10n/app_strings.dart';
 import '../../core/models/automation_companion_link.dart';
 import '../../core/registry/topic_appearance.dart';
 import '../../design_system/app_colors.dart';
+import '../../design_system/app_segmented_toggle.dart';
 import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
 
@@ -336,23 +337,14 @@ class _GradeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
+    return AppSegmentedToggle<int>(
+      options: [
         for (var grade = 1; grade <= 10; grade++)
-          ChoiceChip(
-            label: Text('$grade'),
-            selected: value == grade,
-            onSelected: enabled
-                ? (selected) {
-                    if (selected) onChanged(grade);
-                  }
-                : null,
-            visualDensity: VisualDensity.compact,
-            labelStyle: AppTypography.metaStyle,
-          ),
+          AppSegmentedOption(value: grade, label: '$grade'),
       ],
+      selected: value,
+      enabled: enabled,
+      onSelected: enabled ? onChanged : null,
     );
   }
 }
