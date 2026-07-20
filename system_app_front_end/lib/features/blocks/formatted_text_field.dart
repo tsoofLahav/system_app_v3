@@ -206,7 +206,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       return KeyEventResult.handled;
     }
 
-    if (event.logicalKey == LogicalKeyboardKey.backspace &&
+    if ((event.logicalKey == LogicalKeyboardKey.backspace ||
+            event.logicalKey == LogicalKeyboardKey.delete) &&
         widget.controller.text.isEmpty &&
         widget.controller.selection.baseOffset == 0 &&
         widget.onBackspaceAtStart != null) {

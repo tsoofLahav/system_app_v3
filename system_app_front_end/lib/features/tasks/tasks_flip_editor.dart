@@ -5,6 +5,7 @@ import '../../core/models/app_file.dart';
 import '../../core/models/block.dart';
 import '../../core/models/task.dart';
 import '../../core/task_file_layout.dart';
+import '../../core/task_list_order.dart';
 import '../../design_system/app_typography.dart';
 import '../blocks/block_context_menu.dart';
 import 'task_lines_editor.dart';
@@ -39,15 +40,23 @@ class _TasksFlipEditorState extends State<TasksFlipEditor> {
   }
 
   TaskZoneHandlers _handlers(
-    Block listBlock,
-    Map<int, Block> listBlockByTaskId,
-  ) {
+    Block fallbackListBlock,
+    Map<int, Block> listBlockByTaskId, {
+    required String? viewType,
+    required bool done,
+  }) {
+    final status = done ? 'done' : 'active';
     return (
       onCreateAfter: (afterTask, _) async {
+        final targetList = afterTask != null
+            ? (listBlockByTaskId[afterTask.id] ?? fallbackListBlock)
+            : fallbackListBlock;
         final created = await widget.state.createTaskInFileAfter(
           file: widget.file,
-          listBlock: listBlock,
+          listBlock: targetList,
           afterTask: afterTask,
+          status: status,
+          flipViewType: viewType,
         );
         if (created != null) {
           setState(() => _focusTaskId = created.id);
@@ -57,11 +66,25 @@ class _TasksFlipEditorState extends State<TasksFlipEditor> {
         final listBlocks = widget.blocks
             .where((block) => block.type == 'task_list')
             .toList();
-        final target = listBlocks.isNotEmpty ? listBlocks.first : listBlock;
+        final target = listBlocks.isNotEmpty ? listBlocks.first : fallbackListBlock;
+        final parts = partitionTasks(
+          viewType == null
+              ? widget.state.orderedTasksForFile(widget.file, target)
+              : _allTasks()
+                  .where(
+                    (task) =>
+                        widget.state.viewTypeForTask(task.id) == viewType,
+                  )
+                  .toList(),
+        );
+        final zone = done ? parts.done : parts.active;
         final created = await widget.state.createTaskInFileAfter(
           file: widget.file,
           listBlock: target,
+          afterTask: zone.isEmpty ? null : zone.last,
           title: title,
+          status: status,
+          flipViewType: viewType,
         );
         if (created != null) {
           setState(() => _focusTaskId = created.id);
@@ -71,7 +94,7 @@ class _TasksFlipEditorState extends State<TasksFlipEditor> {
           widget.state.updateTaskTitle(task, title),
       onDelete: (task) => widget.state.deleteTaskInFile(widget.file, task),
       onPasteAfter: (afterTask, lines, position) async {
-        final target = listBlockByTaskId[afterTask.id] ?? listBlock;
+        final target = listBlockByTaskId[afterTask.id] ?? fallbackListBlock;
         await widget.state.pasteTasksInFileAfter(
           file: widget.file,
           listBlock: target,
@@ -137,7 +160,12 @@ class _TasksFlipEditorState extends State<TasksFlipEditor> {
           TaskLinesEditor(
             tasks: group.tasks,
             state: widget.state,
-            handlersFor: (_) => _handlers(fallbackListBlock, listBlockByTaskId),
+            handlersFor: (done) => _handlers(
+              fallbackListBlock,
+              listBlockByTaskId,
+              viewType: group.viewType,
+              done: done,
+            ),
             focusTaskId: _focusTaskId,
             onFocusHandled: () => setState(() => _focusTaskId = null),
             contextMenuFileType: widget.file.type,

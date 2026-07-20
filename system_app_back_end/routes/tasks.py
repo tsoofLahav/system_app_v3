@@ -397,11 +397,18 @@ def assign_task_view_route(task_id):
 
 @tasks_bp.route("/tasks/<int:task_id>", methods=["DELETE"])
 def delete_task(task_id):
+    from flask import current_app
+
     if task_id in trigger_task_ids():
         return jsonify({"error": "cannot delete automation trigger task"}), 403
     task = get_or_404(Task, task_id)
     file_id = _file_id_for_task(task)
     delete_task_cascade(task_id)
     db.session.commit()
-    dispatch_file_changed(file_id, "task_deleted", {"task_id": task_id})
+    try:
+        dispatch_file_changed(file_id, "task_deleted", {"task_id": task_id})
+    except Exception:
+        current_app.logger.exception(
+            "dispatch_file_changed failed after task delete %s", task_id
+        )
     return "", 204

@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 
 import '../../core/models/app_file.dart';
@@ -216,6 +218,45 @@ class _TaskZoneListState extends State<TaskZoneList> {
     );
   }
 
+  Widget _buildDragFeedback(BuildContext context, Task task) {
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    return Transform.translate(
+      offset: Offset(isRtl ? 8 : -8, -4),
+      child: Material(
+        type: MaterialType.transparency,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 280),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Theme.of(context)
+                    .colorScheme
+                    .surface
+                    .withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .outline
+                      .withValues(alpha: 0.22),
+                ),
+              ),
+              child: Text(
+                task.title.isEmpty ? ' ' : task.title,
+                style: AppTypography.taskRowStyle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDragHandle(Task task) {
     final payload = TaskDragPayload(
       task: task,
@@ -227,30 +268,7 @@ class _TaskZoneListState extends State<TaskZoneList> {
     return Draggable<TaskDragPayload>(
       data: payload,
       dragAnchorStrategy: pointerDragAnchorStrategy,
-      feedback: Material(
-        elevation: 4,
-        color: Theme.of(context).colorScheme.surface,
-        child: SizedBox(
-          width: 280,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _dragHandle(),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    task.title,
-                    style: AppTypography.taskRowStyle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      feedback: _buildDragFeedback(context, task),
       childWhenDragging: Opacity(opacity: 0.25, child: _dragHandle()),
       child: _dragHandle(),
     );
@@ -265,14 +283,7 @@ class _TaskZoneListState extends State<TaskZoneList> {
         final active = candidate.isNotEmpty;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 120),
-          height: active ? 10 : 2,
-          alignment: Alignment.centerLeft,
-          child: active
-              ? Container(
-                  height: 2,
-                  color: Theme.of(context).colorScheme.primary,
-                )
-              : null,
+          height: active ? 14 : 2,
         );
       },
     );
