@@ -43,8 +43,11 @@ class BlockContextMenu {
         ),
       );
     }
-    final insertTypes =
+    final baseTypes =
         FileBehaviorRegistry.contextMenuForFileType(fileType);
+    final insertTypes = baseTypes.contains('details')
+        ? baseTypes
+        : [...baseTypes, 'details'];
     if (insertTypes.isNotEmpty) {
       if (entries.isNotEmpty) entries.add(const AppContextMenuDivider());
       entries.add(
@@ -217,6 +220,22 @@ class BlockContextMenu {
             label: strings['resetImageWidth'],
           ),
         ]);
+      case 'details':
+        items.insertAll(
+          0,
+          [
+            if (BlockTextFocusRegistry.hasFocus)
+              AppContextMenuItem(
+                value: 'details:insert_at_cursor',
+                label: strings['detailsInsertAtCursor'],
+              ),
+            AppContextMenuItem(
+              value: 'details:copy_text',
+              label: strings['detailsCopyText'],
+            ),
+            const AppContextMenuDivider(),
+          ],
+        );
       default:
         break;
     }
@@ -251,6 +270,8 @@ class BlockContextMenu {
         return s['addTable'];
       case 'list':
         return s['addList'];
+      case 'details':
+        return s['addDetails'];
       case 'graph':
         return s['addGraph'];
       case 'task_list':

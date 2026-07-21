@@ -115,6 +115,7 @@ class _ConnectedLinesEditorState extends State<ConnectedLinesEditor> {
 
   void _onTextChanged() {
     _editing = true;
+    setState(() {});
     _debounce?.cancel();
     _debounce = Timer(Duration(milliseconds: widget.debounceMs), _flush);
   }

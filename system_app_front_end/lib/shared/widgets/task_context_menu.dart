@@ -84,6 +84,10 @@ Future<void> showTaskContextMenu({
   }
 
   final taskEntries = <AppContextMenuEntry>[
+    AppContextMenuItem(
+      value: 'attach_details',
+      label: strings['attachDetails'],
+    ),
     if (onDelete != null)
       AppContextMenuItem(value: 'delete_task', label: strings['delete']),
     if (onCut != null) AppContextMenuItem(value: 'cut', label: strings['cut']),
@@ -160,6 +164,8 @@ Future<void> showTaskContextMenu({
       await onPaste?.call();
     case 'copy_all':
       onCopyAll?.call();
+    case 'attach_details':
+      await state.showAttachDetailsForTask(context, task);
     case 'delete_task':
       await onDelete?.call();
     default:
@@ -336,7 +342,8 @@ bool _isBlockAction(String value) =>
     value.startsWith('list:') ||
     value.startsWith('table:') ||
     value.startsWith('graph:') ||
-    value.startsWith('image:');
+    value.startsWith('image:') ||
+    value.startsWith('details:');
 
 Future<Map<String, List<ViewSection>>> _loadSectionsByView(
   AppState state,

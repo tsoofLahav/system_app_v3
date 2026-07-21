@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request
 from models import Topic, db
 from routes.helpers import active_query, apply_updates, get_or_404
 from services.delete_cascade import delete_topic_cascade
+from services.details_lookup import list_details_blocks_for_topic
 
 topics_bp = Blueprint("topics", __name__)
 
@@ -16,6 +17,12 @@ def list_topics():
 @topics_bp.route("/topics/<int:topic_id>", methods=["GET"])
 def get_topic(topic_id):
     return jsonify(get_or_404(Topic, topic_id).to_dict())
+
+
+@topics_bp.route("/topics/<int:topic_id>/details-blocks", methods=["GET"])
+def list_topic_details_blocks(topic_id):
+    get_or_404(Topic, topic_id)
+    return jsonify(list_details_blocks_for_topic(topic_id))
 
 
 @topics_bp.route("/topics", methods=["POST"])

@@ -46,6 +46,7 @@ system_app_back_end/
 |-------|-----|
 | REST endpoints, config, deployment | [`docs/API.md`](docs/API.md) |
 | Task order, move, delete cascade | [`docs/TASKS.md`](docs/TASKS.md) |
+| Details blocks (lookup, task attach) | [`docs/DETAILS.md`](docs/DETAILS.md) |
 | Automation rules, runs, definitions | [`docs/automation.md`](docs/automation.md) |
 | Shared AI smart update (process + project) | [`services/ai_smart_update/`](services/ai_smart_update/) |
 

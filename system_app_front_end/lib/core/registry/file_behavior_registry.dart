@@ -201,6 +201,8 @@ abstract final class FileBehaviorRegistry {
         return {'image_path': '', 'filename': ''};
       case 'board':
         return {'items': []};
+      case 'details':
+        return {'title': '', 'text': '', 'spans': []};
       default:
         return {};
     }

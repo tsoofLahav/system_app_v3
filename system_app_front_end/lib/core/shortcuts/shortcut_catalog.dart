@@ -51,6 +51,7 @@ abstract final class ShortcutActionIds {
   static const aiConsult = 'ai_consult';
   static const aiSummarize = 'ai_summarize';
   static const aiSmartList = 'ai_smart_list';
+  static const aiUploadDetails = 'ai_upload_details';
   static const aiImage = 'ai_image';
   static const aiGraph = 'ai_graph';
   static const aiMoveFile = 'ai_move_file';
@@ -152,6 +153,14 @@ final List<ShortcutAction> kShortcutCatalog = [
     defaultBinding: _m(LogicalKeyboardKey.digit3, shift: true),
     context: ShortcutContextRequirement.aiContext,
     aiTool: 'smart_list',
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.aiUploadDetails,
+    category: ShortcutCategory.ai,
+    labelKey: 'aiUploadDetails',
+    defaultBinding: _m(LogicalKeyboardKey.digit8, shift: true),
+    context: ShortcutContextRequirement.aiContext,
+    aiTool: 'upload_details',
   ),
   ShortcutAction(
     id: ShortcutActionIds.aiImage,

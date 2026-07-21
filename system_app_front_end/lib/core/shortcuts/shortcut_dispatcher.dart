@@ -172,6 +172,23 @@ class ShortcutDispatcher {
       return;
     }
 
+    if (tool == 'upload_details') {
+      if (!state.canRunAiTool(tool)) {
+        _snack(context, s['aiNoContext']);
+        return;
+      }
+      try {
+        final ok = await state.runUploadDetails();
+        if (!context.mounted || !ok) {
+          if (context.mounted) _snack(context, s['aiNoContext']);
+        }
+      } catch (e) {
+        if (!context.mounted) return;
+        _snack(context, e.toString());
+      }
+      return;
+    }
+
     if (!state.canRunAiTool(tool)) {
       _snack(context, s['aiNoContext']);
       return;

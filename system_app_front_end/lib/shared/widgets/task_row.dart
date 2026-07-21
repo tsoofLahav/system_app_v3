@@ -13,6 +13,7 @@ import '../../features/blocks/block_context_menu.dart';
 import '../../core/models/task_view_menu_context.dart';
 import '../../shared/widgets/task_context_menu.dart';
 import '../../features/blocks/formatted_text_field.dart';
+import 'details_hover_bubble.dart';
 import 'task_mark.dart';
 
 class TaskRow extends StatefulWidget {
@@ -351,7 +352,16 @@ class _TaskRowState extends State<TaskRow> {
       ),
     );
 
-    if (!isAutomationReview) return row;
+    if (!isAutomationReview) {
+      if (widget.task.detailsBlockId != null) {
+        return DetailsHoverTarget(
+          detailsBlockId: widget.task.detailsBlockId,
+          loadBlock: widget.state.detailsBlockForId,
+          child: row,
+        );
+      }
+      return row;
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),

@@ -100,6 +100,7 @@ Right-click in a file opens `BlockContextMenu` → `AppContextMenu` (bubble over
 | `table` | `{ "rows": [[string]] }` |
 | `image` | `{ "image_path", "filename" }` |
 | `graph` | `{ chart_type, labels[], values[], palette_index }` — default columns A/B/C; edit values in grid below chart |
+| `details` | `{ "title", "text", "spans"?: [...] }` — reusable topic library item |
 | `board` | `{ items[], canvas_width?, canvas_height?, background_color? }` — each item: `id`, `image_path`, `filename`, `x`, `y`, `width`, `height`, `z_index`, optional crop fields |
 
 Inputs and dependencies:
@@ -131,6 +132,9 @@ Recap files:
 
 Project parts:
 - See [`PARTS.md`](PARTS.md) for the `parts` entity, placement UX, and automation contract.
+
+Details blocks:
+- See [`DETAILS.md`](DETAILS.md) — copy-at-cursor vs task attach (`details_block_id`).
 
 Boundaries:
 - Persistence lives in `AppState` + `core/services`; this folder owns UI behavior.

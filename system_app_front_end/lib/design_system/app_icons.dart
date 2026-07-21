@@ -15,6 +15,7 @@ abstract final class AppIcons {
   static const consult = LucideIcons.messageCircle200;
   static const summarize = LucideIcons.filePlus200;
   static const smartList = LucideIcons.listPlus200;
+  static const uploadDetails = LucideIcons.fileText200;
   static const image = LucideIcons.image200;
   static const graph = LucideIcons.chartColumn200;
   static const review = LucideIcons.scanSearch200;

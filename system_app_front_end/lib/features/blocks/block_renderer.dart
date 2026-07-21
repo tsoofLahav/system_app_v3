@@ -6,6 +6,7 @@ import '../../core/models/block.dart';
 import '../../core/models/task.dart';
 import 'board_block_widget.dart';
 import 'checklist_block_widget.dart';
+import 'details_block_widget.dart';
 import 'graph_block_widget.dart';
 import 'header_block_widget.dart';
 import 'image_block_widget.dart';
@@ -154,6 +155,13 @@ class BlockRenderer extends StatelessWidget {
       case 'list':
         return PointsListBlockWidget(
           block: block,
+          onChanged: (c) => state.updateBlockContent(block, c, notify: true),
+        );
+      case 'details':
+        return DetailsBlockWidget(
+          block: block,
+          aiState: state,
+          aiFileId: file.id,
           onChanged: (c) => state.updateBlockContent(block, c, notify: true),
         );
       case 'graph':

@@ -12,6 +12,7 @@ abstract final class BlockRegistry {
     'graph',
     'measurement',
     'board',
+    'details',
   ];
 
   static bool isKnownBlockType(String blockType) =>

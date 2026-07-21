@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/app_state.dart';
 import '../../core/services/api_service.dart';
@@ -608,6 +609,30 @@ class _FileSectionState extends State<FileSection> {
   }) async {
     if (action.startsWith('insert:')) {
       await _insertBlock(action.substring(7), orderIndex: orderIndex);
+      return;
+    }
+    if (action == 'details:insert_at_cursor' && targetBlock != null) {
+      final content = targetBlock.content;
+      final title = content['title']?.toString().trim() ?? '';
+      final body = content['text']?.toString().trim() ?? '';
+      final text = title.isEmpty
+          ? body
+          : body.isEmpty
+              ? title
+              : '$title\n$body';
+      widget.state.insertDetailsTextAtFocus(text);
+      return;
+    }
+    if (action == 'details:copy_text' && targetBlock != null) {
+      final content = targetBlock.content;
+      final title = content['title']?.toString().trim() ?? '';
+      final body = content['text']?.toString().trim() ?? '';
+      final text = title.isEmpty
+          ? body
+          : body.isEmpty
+              ? title
+              : '$title\n$body';
+      await Clipboard.setData(ClipboardData(text: text));
       return;
     }
     if (action == 'part:new') {

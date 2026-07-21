@@ -48,8 +48,10 @@ class PointsListBlockWidget extends StatelessWidget {
         else
           item?.toString() ?? '',
     ];
-    final nonEmpty = [for (final line in lines) if (line.trim().isNotEmpty) line];
-    return nonEmpty.isEmpty ? [''] : nonEmpty;
+    // Collapse an all-empty saved list to one editable row; keep blank rows
+    // created by Enter so a new bullet line can exist while typing.
+    if (lines.every((line) => line.trim().isEmpty)) return [''];
+    return lines;
   }
 
   static List<Map<String, dynamic>> _toContentItems(List<String> items) => [

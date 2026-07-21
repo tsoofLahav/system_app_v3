@@ -38,6 +38,7 @@ Successful DELETE returns `204` with empty body.
 | PATCH | `/topics/<id>` | Partial update |
 | POST | `/topics/<id>/duplicate` | Deep-copy topic, parts, files, blocks, and tasks |
 | DELETE | `/topics/<id>` | Delete |
+| GET | `/topics/<id>/details-blocks` | List `details` blocks in topic (pickers, AI) |
 
 **POST body** (required: `name`, `type`):
 ```json
@@ -159,7 +160,9 @@ Details: [`TASKS.md`](TASKS.md).
 
 Empty string titles are valid. The field must be present; omitting `title` returns 400.
 
-**PATCH body** — any subset of: `block_id`, `title`, `status`, `due_date`
+**PATCH body** — any subset of: `block_id`, `title`, `status`, `due_date`, `details_block_id` (null to detach)
+
+Details attach: [`DETAILS.md`](DETAILS.md).
 
 ### `GET /tasks/view/<view_type>`
 

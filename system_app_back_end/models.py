@@ -116,6 +116,7 @@ class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     block_id = db.Column(db.Integer, db.ForeignKey("blocks.id"))
     list_order_index = db.Column(db.Integer, nullable=False, default=0)
+    details_block_id = db.Column(db.Integer, db.ForeignKey("blocks.id"))
     title = db.Column(db.Text, nullable=False)
     status = db.Column(db.Text, default="active")
     due_date = db.Column(db.DateTime)
@@ -127,6 +128,7 @@ class Task(db.Model):
             "id": self.id,
             "block_id": self.block_id,
             "list_order_index": self.list_order_index,
+            "details_block_id": self.details_block_id,
             "title": self.title,
             "status": self.status,
             "due_date": _iso(self.due_date),

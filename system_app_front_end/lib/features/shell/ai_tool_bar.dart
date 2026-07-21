@@ -53,6 +53,30 @@ Future<void> runAiTool(
     return;
   }
 
+  if (tool == 'upload_details') {
+    if (!state.canRunAiTool(tool)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s['aiNoContext'])));
+      return;
+    }
+    try {
+      final ok = await state.runUploadDetails();
+      if (!context.mounted) return;
+      if (!ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s['aiNoContext'])),
+        );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+    return;
+  }
+
   if (!state.canRunAiTool(tool)) {
     ScaffoldMessenger.of(
       context,
@@ -168,6 +192,16 @@ class AiToolBar extends StatelessWidget {
           icon: AppIcons.smartList,
           enabled: enabled,
           onPressed: () => onTool('smart_list'),
+        ),
+        AiToolButton(
+          tooltip: _tooltip(
+            state,
+            s['aiUploadDetails'],
+            ShortcutActionIds.aiUploadDetails,
+          ),
+          icon: AppIcons.uploadDetails,
+          enabled: enabled,
+          onPressed: () => onTool('upload_details'),
         ),
         AiToolButton(
           tooltip: _tooltip(state, s['aiImage'], ShortcutActionIds.aiImage),

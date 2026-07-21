@@ -222,6 +222,10 @@ class BlockTextFocusRegistry {
     target.insertOffset = index + text.length;
   }
 
+  static void insertAiText(String text) {
+    insertAiEmoji(text);
+  }
+
   static _AiInsertTarget? _insertTargetForOffset(int? fallbackInsertOffset) {
     final controller = activeController ?? _recentTarget?.controller;
     final changed = onChanged ?? _recentTarget?.onChanged;

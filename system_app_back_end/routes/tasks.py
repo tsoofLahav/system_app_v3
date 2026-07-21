@@ -20,6 +20,7 @@ from services.automation_trigger_lookup import (
     trigger_task_ids,
 )
 from services.delete_cascade import delete_task_cascade
+from services.details_lookup import validate_details_block_for_task
 from services.task_list_order import (
     move_task_to_list_block,
     next_list_order_index,
@@ -259,10 +260,26 @@ def update_task(task_id):
     task = get_or_404(Task, task_id)
     data = request.get_json(silent=True) or {}
     previous_status = task.status
+    if "details_block_id" in data:
+        details_block_id = data.get("details_block_id")
+        if details_block_id is not None and not isinstance(details_block_id, int):
+            return jsonify({"error": "details_block_id must be an integer or null"}), 400
+        try:
+            validate_details_block_for_task(task, details_block_id)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
     apply_updates(
         task,
         data,
-        {"block_id", "list_order_index", "title", "status", "due_date", "archived_at"},
+        {
+            "block_id",
+            "list_order_index",
+            "details_block_id",
+            "title",
+            "status",
+            "due_date",
+            "archived_at",
+        },
         datetime_fields={"due_date", "archived_at"},
     )
     db.session.commit()

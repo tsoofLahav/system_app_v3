@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'ai/ai_context.dart';
 import 'browse/bring_file_catalog.dart';
 import 'platform/app_form_factor.dart';
+import '../features/blocks/details_picker_dialog.dart';
 import '../features/bring_file/bring_file_preview.dart';
 import 'l10n/app_language.dart';
 import 'l10n/app_strings.dart';
@@ -18,6 +19,7 @@ import 'models/automation_rule.dart';
 import 'models/automation_run.dart';
 import 'models/block.dart';
 import 'models/brought_file_snapshot.dart';
+import 'models/details_block_summary.dart';
 import '../features/blocks/board_content.dart';
 import '../features/blocks/block_text_focus.dart';
 import '../shared/utils/platform_text.dart';
@@ -43,6 +45,7 @@ import 'services/automation_definition_service.dart';
 import 'services/automation_service.dart';
 import 'services/block_service.dart';
 import 'services/bootstrap_service.dart';
+import 'services/details_service.dart';
 import 'services/file_service.dart';
 import 'services/image_service.dart';
 import 'services/part_service.dart';
@@ -109,6 +112,7 @@ class AppState extends ChangeNotifier {
   late final FileService _fileService = FileService(_api);
   late final BlockService _blockService = BlockService(_api);
   late final TaskService _taskService = TaskService(_api);
+  late final DetailsService _detailsService = DetailsService(_api);
   late final TaskViewService _taskViewService = TaskViewService(_api);
   late final ImageService _imageService = ImageService(_api);
   late final AiService _aiService = AiService(_api);
@@ -544,6 +548,119 @@ class AppState extends ChangeNotifier {
       _setAiRunning(false);
       notifyListeners();
     }
+  }
+
+  Future<bool> runUploadDetails() async {
+    final ctx = resolveAiContext();
+    final topic = selectedTopic;
+    if (ctx == null || ctx.text.trim().isEmpty || topic == null) {
+      return false;
+    }
+
+    final fallbackOffset = _insertOffsetFromAiFocus(aiFocus);
+    BlockTextFocusRegistry.beginAiInsertSession(
+      fallbackInsertOffset: fallbackOffset,
+    );
+    if (!BlockTextFocusRegistry.hasAiInsertTarget) {
+      return false;
+    }
+
+    _setAiRunning(true);
+    error = null;
+    notifyListeners();
+    try {
+      final result = await _aiService.runTool(
+        tool: 'upload_details',
+        topicId: topic.id,
+        context: ctx,
+        locale: language.name,
+      );
+      final text = result.result?.trim() ?? '';
+      if (text.isEmpty) return false;
+      BlockTextFocusRegistry.insertAiText(text);
+      return true;
+    } catch (e) {
+      error = e.toString();
+      rethrow;
+    } finally {
+      BlockTextFocusRegistry.endAiInsertSession();
+      _setAiRunning(false);
+      notifyListeners();
+    }
+  }
+
+  void insertDetailsTextAtFocus(String text) {
+    if (text.trim().isEmpty) return;
+    BlockTextFocusRegistry.insertText(text);
+  }
+
+  final Map<int, Block> _detailsBlocksById = {};
+
+  Future<Block?> detailsBlockForId(int blockId) async {
+    final cached = _detailsBlocksById[blockId];
+    if (cached != null) return cached;
+    try {
+      final block = await _blockService.getBlock(blockId);
+      if (block.type != 'details') return null;
+      _detailsBlocksById[blockId] = block;
+      return block;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<DetailsBlockSummary>> listDetailsBlocksForTopic(int topicId) =>
+      _detailsService.listForTopic(topicId);
+
+  int? topicIdForTaskContext(Task task) =>
+      topicForTask(task)?.id ?? selectedTopic?.id;
+
+  Future<void> attachTaskDetails(
+    Task task, {
+    required int? detailsBlockId,
+  }) async {
+    final data = await _taskService.updateTaskRaw(task.id, {
+      'details_block_id': detailsBlockId,
+    });
+    final updated = Task.fromJson(data);
+    if (updated.detailsBlockId != null) {
+      await detailsBlockForId(updated.detailsBlockId!);
+    }
+    _applyTaskUpdate(updated);
+    notifyListeners();
+  }
+
+  Future<void> showAttachDetailsForTask(
+    BuildContext context,
+    Task task,
+  ) async {
+    final topicId = topicIdForTaskContext(task);
+    if (topicId == null) return;
+    final items = await listDetailsBlocksForTopic(topicId);
+    if (!context.mounted) return;
+
+    int? suggested;
+    if (items.isNotEmpty) {
+      final needle = task.title.trim().toLowerCase();
+      for (final item in items) {
+        final title = item.title.toLowerCase();
+        if (title == needle || title.contains(needle) || needle.contains(title)) {
+          suggested = item.blockId;
+          break;
+        }
+      }
+      suggested ??= items.first.blockId;
+    }
+
+    final picked = await DetailsPickerDialog.show(
+      context: context,
+      state: this,
+      task: task,
+      items: items,
+      suggestedBlockId: suggested,
+    );
+    if (!context.mounted || picked == task.detailsBlockId) return;
+    await attachTaskDetails(task, detailsBlockId: picked);
   }
 
   static int? _insertOffsetFromAiFocus(AiFocus? focus) {
@@ -2531,6 +2648,9 @@ class AppState extends ChangeNotifier {
     bool notify = false,
   }) async {
     final updated = block.copyWith(content: content);
+    if (block.type == 'details') {
+      _detailsBlocksById[block.id] = updated;
+    }
     if (broughtFile?.file.id == block.fileId) {
       broughtFile = broughtFile!.copyWith(
         blocks: broughtFile!.blocks
@@ -2565,6 +2685,7 @@ class AppState extends ChangeNotifier {
       }
     }
     await _blockService.deleteBlock(block.id);
+    _detailsBlocksById.remove(block.id);
     await _refreshAfterFileMutation(file);
   }
 
@@ -3213,6 +3334,8 @@ class AppState extends ChangeNotifier {
       status: updated.status,
       blockId: updated.blockId,
       listOrderIndex: updated.listOrderIndex,
+      detailsBlockId: updated.detailsBlockId,
+      clearDetailsBlock: updated.detailsBlockId == null,
     );
 
     void patchTasksByBlockId(Map<int, List<Task>> tasksByBlockId) {

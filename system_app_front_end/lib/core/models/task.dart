@@ -8,6 +8,7 @@ class Task {
     required this.title,
     required this.status,
     this.listOrderIndex = 0,
+    this.detailsBlockId,
     this.dueDate,
     this.archivedAt,
     this.createdAt,
@@ -33,6 +34,7 @@ class Task {
   final String title;
   final String status;
   final int listOrderIndex;
+  final int? detailsBlockId;
   final String? dueDate;
   final String? archivedAt;
   final String? createdAt;
@@ -85,6 +87,7 @@ class Task {
     String? title,
     String? status,
     int? listOrderIndex,
+    int? detailsBlockId,
     String? dueDate,
     String? archivedAt,
     String? createdAt,
@@ -105,6 +108,7 @@ class Task {
     bool? hasPendingCompanionFlow,
     bool clearSection = false,
     bool clearSectionFlag = false,
+    bool clearDetailsBlock = false,
   }) {
     return Task(
       id: id ?? this.id,
@@ -112,6 +116,9 @@ class Task {
       title: title ?? this.title,
       status: status ?? this.status,
       listOrderIndex: listOrderIndex ?? this.listOrderIndex,
+      detailsBlockId: clearDetailsBlock
+          ? null
+          : (detailsBlockId ?? this.detailsBlockId),
       dueDate: dueDate ?? this.dueDate,
       archivedAt: archivedAt ?? this.archivedAt,
       createdAt: createdAt ?? this.createdAt,
@@ -143,6 +150,7 @@ class Task {
       title: json['title'] as String,
       status: json['status'] as String? ?? 'active',
       listOrderIndex: json['list_order_index'] as int? ?? 0,
+      detailsBlockId: json['details_block_id'] as int?,
       dueDate: json['due_date'] as String?,
       archivedAt: json['archived_at'] as String?,
       createdAt: json['created_at'] as String?,
@@ -174,6 +182,7 @@ class Task {
     'title': title,
     'status': status,
     if (listOrderIndex != 0) 'list_order_index': listOrderIndex,
+    if (detailsBlockId != null) 'details_block_id': detailsBlockId,
     if (dueDate != null) 'due_date': dueDate,
     if (archivedAt != null) 'archived_at': archivedAt,
   };
