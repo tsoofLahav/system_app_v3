@@ -29,7 +29,7 @@ Read this before making frontend changes. Start at [`../AGENTS.md`](../AGENTS.md
 |---|---|---|
 | Project parts | [`lib/features/blocks/PARTS.md`](lib/features/blocks/PARTS.md) | `part_service.dart`, `part_dialogs.dart`, `app_state.dart` |
 | Block editing/rendering | [`lib/features/blocks/README.md`](lib/features/blocks/README.md) | `block_renderer.dart`, `app_state.dart` |
-| Task rows / zones | [`lib/features/tasks/README.md`](lib/features/tasks/README.md) | `task_lines_editor.dart`, `app_state.dart` |
+| Task rows / zones | [`lib/features/tasks/TASK_FILES.md`](lib/features/tasks/TASK_FILES.md) | `task_zone_list.dart`, `app_state_task_file.dart` |
 | Task views / sections | [`lib/features/task_view/README.md`](lib/features/task_view/README.md) | `task_view_pane.dart`, `app_state.dart` |
 | Topic layout / reorder | [`lib/features/topic/README.md`](lib/features/topic/README.md) + runbooks | `topic_view.dart`, `file_layout_board.dart` |
 | Archive browse | [`lib/features/archive/README.md`](lib/features/archive/README.md) | `archive_topic_view.dart`, `archive_file_grid.dart` |
@@ -46,6 +46,7 @@ Read this before making frontend changes. Start at [`../AGENTS.md`](../AGENTS.md
 | Change review dialog | [`lib/shared/change_review/README.md`](lib/shared/change_review/README.md) |
 | Backend automation (execution) | [`../system_app_back_end/docs/automation.md`](../system_app_back_end/docs/automation.md) |
 | Backend API | [`../system_app_back_end/docs/API.md`](../system_app_back_end/docs/API.md) |
+| Topic task files (persistence) | [`../system_app_back_end/docs/TASKS.md`](../system_app_back_end/docs/TASKS.md) |
 
 ## Documentation Map
 

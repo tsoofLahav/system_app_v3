@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 
 import '../../core/models/app_file.dart';
@@ -216,48 +218,82 @@ class _TaskZoneListState extends State<TaskZoneList> {
     );
   }
 
+  static const _maxDragFeedbackWidth = 280.0;
+  static const _dragFeedbackHorizontalPadding = 20.0;
+
+  double _dragFeedbackWidth(Task task) {
+    final text = task.title.isEmpty ? ' ' : task.title;
+    final textPainter = TextPainter(
+      text: TextSpan(text: text, style: AppTypography.taskRowStyle),
+      textDirection:
+          widget.state.isRtl ? TextDirection.rtl : TextDirection.ltr,
+      maxLines: 2,
+      ellipsis: '…',
+    )..layout(
+        maxWidth: _maxDragFeedbackWidth - _dragFeedbackHorizontalPadding,
+      );
+    return (textPainter.size.width + _dragFeedbackHorizontalPadding)
+        .clamp(48.0, _maxDragFeedbackWidth);
+  }
+
+  Widget _buildDragFeedback(Task task) {
+    final isRtl = widget.state.isRtl;
+    final text = task.title.isEmpty ? ' ' : task.title;
+
+    return Material(
+      type: MaterialType.transparency,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: _maxDragFeedbackWidth),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .surface
+                  .withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Theme.of(context)
+                    .colorScheme
+                    .outline
+                    .withValues(alpha: 0.22),
+              ),
+            ),
+            child: Text(
+              text,
+              style: AppTypography.taskRowStyle,
+              textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDragHandle(Task task) {
-    const feedbackWidth = 280.0;
     final payload = TaskDragPayload(
       task: task,
       sourceListBlock: widget.listBlock!,
       sourceDone: widget.done,
       sourceViewType: widget.flipViewType,
     );
+    final feedbackWidth = _dragFeedbackWidth(task);
 
     return Draggable<TaskDragPayload>(
       data: payload,
       dragAnchorStrategy: (draggable, context, position) {
-        final anchor = pointerDragAnchorStrategy(draggable, context, position);
         if (widget.state.isRtl) {
-          return anchor + const Offset(-feedbackWidth, 0);
+          // Anchor the chip's trailing edge at the pointer so it extends left.
+          return Offset(feedbackWidth, 0);
         }
-        return anchor;
+        return pointerDragAnchorStrategy(draggable, context, position);
       },
-      feedback: Material(
-        elevation: 4,
-        color: Theme.of(context).colorScheme.surface,
-        child: SizedBox(
-          width: feedbackWidth,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _dragHandle(),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    task.title,
-                    style: AppTypography.taskRowStyle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      feedback: _buildDragFeedback(task),
       childWhenDragging: Opacity(opacity: 0.25, child: _dragHandle()),
       child: _dragHandle(),
     );

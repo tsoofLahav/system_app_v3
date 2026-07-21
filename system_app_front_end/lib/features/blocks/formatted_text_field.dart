@@ -67,6 +67,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   late FocusNode _focusNode;
   bool _ownsFocus = false;
   bool _normalizingSelection = false;
+  FocusOnKeyEventCallback? _editableKeyHandler;
 
   @override
   void initState() {
@@ -79,15 +80,43 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     }
     _focusNode.addListener(_onFocusChanged);
     widget.controller.addListener(_normalizeSelectionIfNeeded);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureKeyHandlerChained());
+  }
+
+  @override
+  void didUpdateWidget(covariant FormattedTextField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureKeyHandlerChained());
   }
 
   @override
   void dispose() {
+    if (_focusNode.onKeyEvent == _chainedKeyHandler) {
+      _focusNode.onKeyEvent = _editableKeyHandler;
+    }
     widget.controller.removeListener(_normalizeSelectionIfNeeded);
     _focusNode.removeListener(_onFocusChanged);
     BlockTextFocusRegistry.unregister(widget.controller);
     if (_ownsFocus) _focusNode.dispose();
     super.dispose();
+  }
+
+  void _ensureKeyHandlerChained() {
+    if (!mounted) return;
+    final current = _focusNode.onKeyEvent;
+    if (current == _chainedKeyHandler) return;
+    _editableKeyHandler = current;
+    _focusNode.onKeyEvent = _chainedKeyHandler;
+  }
+
+  KeyEventResult _chainedKeyHandler(FocusNode node, KeyEvent event) {
+    final result = _onFocusKeyEvent(node, event);
+    if (result == KeyEventResult.handled) return result;
+    final editable = _editableKeyHandler;
+    if (editable != null && editable != _chainedKeyHandler) {
+      return editable(node, event);
+    }
+    return KeyEventResult.ignored;
   }
 
   void _onFocusChanged() {
@@ -283,36 +312,32 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
             child: child!,
           );
         },
-        child: Focus(
+        child: TextField(
+          controller: widget.controller,
           focusNode: _focusNode,
-          onKeyEvent: _onFocusKeyEvent,
-          child: TextField(
-            controller: widget.controller,
-            focusNode: _focusNode,
-            style: style,
-            textAlignVertical: widget.textAlignVertical,
-            maxLines: widget.maxLines,
-            minLines: widget.minLines,
-            decoration: InputDecoration(
-              isDense: true,
-              border: InputBorder.none,
-              hintText: widget.hintText,
-              hintStyle: style.copyWith(
-                color: style.color?.withValues(alpha: 0.35),
-              ),
-              contentPadding: EdgeInsets.zero,
+          style: style,
+          textAlignVertical: widget.textAlignVertical,
+          maxLines: widget.maxLines,
+          minLines: widget.minLines,
+          decoration: InputDecoration(
+            isDense: true,
+            border: InputBorder.none,
+            hintText: widget.hintText,
+            hintStyle: style.copyWith(
+              color: style.color?.withValues(alpha: 0.35),
             ),
-            textInputAction: widget.onEnter != null
-                ? TextInputAction.none
-                : widget.textInputAction,
-            onChanged: (_) => _notifyChanged(),
-            onSubmitted: widget.onSubmitted,
-            onTap: () => _onFocusChanged(),
-            inputFormatters: formatters.isEmpty ? null : formatters,
-            contextMenuBuilder: (context, editableTextState) {
-              return const SizedBox.shrink();
-            },
+            contentPadding: EdgeInsets.zero,
           ),
+          textInputAction: widget.onEnter != null
+              ? TextInputAction.none
+              : widget.textInputAction,
+          onChanged: (_) => _notifyChanged(),
+          onSubmitted: widget.onSubmitted,
+          onTap: () => _onFocusChanged(),
+          inputFormatters: formatters.isEmpty ? null : formatters,
+          contextMenuBuilder: (context, editableTextState) {
+            return const SizedBox.shrink();
+          },
         ),
       ),
     );

@@ -40,7 +40,7 @@ Read [`CONSTITUTION.md`](CONSTITUTION.md) before large changes. Key principles:
 |---|---|---|
 | Project parts | [`system_app_front_end/lib/features/blocks/PARTS.md`](system_app_front_end/lib/features/blocks/PARTS.md) | `part_service.dart`, `routes/parts.py`, `part_placement.py` |
 | Block editing/rendering | [`system_app_front_end/lib/features/blocks/README.md`](system_app_front_end/lib/features/blocks/README.md) | `block_renderer.dart`, `app_state.dart` |
-| Task rows / zones | [`system_app_front_end/lib/features/tasks/README.md`](system_app_front_end/lib/features/tasks/README.md) | `task_lines_editor.dart`, `app_state.dart` |
+| Task rows / zones | [`system_app_front_end/lib/features/tasks/TASK_FILES.md`](system_app_front_end/lib/features/tasks/TASK_FILES.md) | `task_zone_list.dart`, `app_state_task_file.dart` |
 | Task views / sections | [`system_app_front_end/lib/features/task_view/README.md`](system_app_front_end/lib/features/task_view/README.md) | `task_view_pane.dart`, `app_state.dart` |
 | Topic layout / reorder | [`system_app_front_end/lib/features/topic/README.md`](system_app_front_end/lib/features/topic/README.md) + runbooks | `topic_view.dart`, `file_layout_board.dart` |
 | Archive browse | [`system_app_front_end/lib/features/archive/README.md`](system_app_front_end/lib/features/archive/README.md) | `archive_topic_view.dart`, `archive_file_grid.dart` |

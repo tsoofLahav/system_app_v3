@@ -29,8 +29,10 @@ What this folder owns:
 
 ### Task blocks (`task_list` + `task`)
 
-- **UI:** Only `task_list` renders `TasksConnectedEditor` (two zones, one `TaskRow` per task). Individual `task` blocks stay in the DB for order and IDs but render as `SizedBox.shrink()` when a `task_list` exists in the same file.
-- **Data:** Each task is a `tasks` row plus one `task` block (`content.task_id`). Display order within a zone follows `task.id`; block `order_index` is updated only on create/delete (not on mark/unmark).
+Full behavior: [`../tasks/TASK_FILES.md`](../tasks/TASK_FILES.md).
+
+- **UI:** Only `task_list` renders `TasksConnectedEditor` or `TasksFlipEditor` (flip: `files.settings['tasks_flip_by_view']`). Individual `task` blocks stay in the DB as row anchors but render as `SizedBox.shrink()` when a `task_list` exists in the same file.
+- **Data:** Each task is a `tasks` row plus one `task` block (`content.task_id`). Display order within a zone: `list_order_index` (regular / unassigned flip) or `task_views.order_index` (assigned flip). Row block `order_index` changes only on create/delete — not drag or mark/unmark.
 - **Enter:** Creates a new task after the current row (or from the draft row at the bottom of a zone) with the zone’s status (`active` or `done`).
 - **Toggle:** `AppState.toggleTaskStatus` — `PATCH status` only; row moves between active and done lists in the UI.
 - **Fallback:** If a file has `task` blocks but no `task_list`, each task still renders via `TaskBlockWidget` / `TaskRow` (legacy path).

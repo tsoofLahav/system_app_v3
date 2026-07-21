@@ -140,6 +140,11 @@ Moving a file to another topic (`topic_id` change) dispatches `file_moved` for e
 | POST | `/tasks` | Create |
 | PATCH | `/tasks/<id>` | Partial update |
 | DELETE | `/tasks/<id>` | Delete |
+| POST | `/blocks/<block_id>/tasks/reorder` | Bulk set `list_order_index` — body: `{ "task_ids": [int, …] }` |
+| POST | `/blocks/<block_id>/tasks/move` | Move task to list/zone — body: `{ "task_id", "insert_index", "target_done" }` |
+| PUT | `/tasks/<id>/view` | Assign view membership |
+
+Details: [`TASKS.md`](TASKS.md).
 
 **POST body** (required: `title` field; value may be `""` for a blank task row):
 
@@ -193,6 +198,9 @@ Typical frontend flow:
 | POST | `/task_views` | Create |
 | PATCH | `/task_views/<id>` | Partial update |
 | DELETE | `/task_views/<id>` | Delete |
+| POST | `/task_views/reorder` | Bulk set `order_index` — body: `{ "view_type", "task_ids", "section_name?" }` |
+
+Details: [`TASKS.md`](TASKS.md).
 
 **POST body** (required: `task_id`, `view_type`):
 ```json
