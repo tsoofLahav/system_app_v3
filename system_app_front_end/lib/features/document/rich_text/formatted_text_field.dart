@@ -436,6 +436,7 @@ RenderEditable? _findRenderEditable(RenderObject root) {
   return found;
 }
 
+class _StripNewlinesFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
