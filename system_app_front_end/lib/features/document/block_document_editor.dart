@@ -4,19 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/app_state.dart';
+import '../../core/l10n/app_strings.dart';
 import '../../core/models/app_file.dart';
-import '../../core/models/object_embed.dart';
-import '../../design_system/app_icons.dart';
 import '../../design_system/app_typography.dart';
-import 'blocks/list_block_widget.dart';
-import 'blocks/table_block_widget.dart';
 import 'document_codec.dart';
+import 'document_edit_history.dart';
 import 'document_editor_controller.dart';
 import 'document_model.dart';
-import 'document_undo_stack.dart';
-import 'embeds/inline_task_list.dart';
-import 'embeds/object_embed_widgets.dart';
+import 'rich_text/block_text_actions.dart';
+import 'rich_text/document_context_menu.dart';
 import 'rich_text/formatted_text_field.dart';
+import 'rich_text/list_editor.dart';
+import 'rich_text/rich_table_editor.dart';
 import 'rich_text/span_text_editing_controller.dart';
 
 class BlockDocumentEditor extends StatefulWidget {
@@ -24,12 +23,12 @@ class BlockDocumentEditor extends StatefulWidget {
     super.key,
     required this.file,
     required this.state,
-    required this.embeds,
+    this.embeds = const [],
   });
 
   final AppFile file;
   final AppState state;
-  final List<ObjectEmbed> embeds;
+  final List<dynamic> embeds;
 
   @override
   State<BlockDocumentEditor> createState() => _BlockDocumentEditorState();
@@ -39,22 +38,18 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   late RichDocument _doc;
   var _dirty = false;
   var _focusedBlockIndex = 0;
-  String? _selectedEmbedBlockId;
+  var _applyingHistory = false;
   Timer? _saveTimer;
-  final _undoStack = DocumentUndoStack();
+  DateTime? _lastHistoryRecord;
+  final _history = DocumentEditHistory();
   final _focusNodes = <String, FocusNode>{};
   final _controllers = <String, SpanTextEditingController>{};
+
+  AppStrings get _strings => widget.state.strings;
 
   AppFile get _currentFile =>
       widget.state.selectedDetail?.files.where((f) => f.id == widget.file.id).firstOrNull ??
       widget.file;
-
-  ObjectEmbed? _embedFor(int objectId) {
-    for (final e in widget.embeds) {
-      if (e.id == objectId) return e;
-    }
-    return null;
-  }
 
   @override
   void initState() {
@@ -83,10 +78,18 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
       _flushPendingChanges();
       _doc = DocumentCodec.parse(_currentFile.documentJson);
       _dirty = false;
-      _selectedEmbedBlockId = null;
+      _clearControllers();
     } else if (!_dirty && oldWidget.file.documentJson != widget.file.documentJson) {
       _doc = DocumentCodec.parse(_currentFile.documentJson);
+      _clearControllers();
     }
+  }
+
+  void _clearControllers() {
+    for (final c in _controllers.values) {
+      c.dispose();
+    }
+    _controllers.clear();
   }
 
   @override
@@ -103,9 +106,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     for (final node in _focusNodes.values) {
       node.dispose();
     }
-    for (final controller in _controllers.values) {
-      controller.dispose();
-    }
+    _clearControllers();
     super.dispose();
   }
 
@@ -126,33 +127,68 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     });
   }
 
-  void _applyDoc(RichDocument doc, {bool save = true}) {
+  void _recordHistory({bool force = false}) {
+    if (_applyingHistory) return;
+    final now = DateTime.now();
+    if (!force &&
+        _lastHistoryRecord != null &&
+        now.difference(_lastHistoryRecord!) < const Duration(milliseconds: 400)) {
+      return;
+    }
+    _history.record(_doc);
+    _lastHistoryRecord = now;
+  }
+
+  void _applyDoc(RichDocument doc, {bool save = true, bool recordHistory = true}) {
+    if (recordHistory) _recordHistory();
     setState(() => _doc = doc);
     if (save) _scheduleSave();
   }
 
-  void _pushUndo() => _undoStack.push(_doc);
-
   void _undo() {
-    final previous = _undoStack.pop();
-    if (previous != null) _applyDoc(previous);
+    final previous = _history.undo(_doc);
+    if (previous == null) return;
+    _applyingHistory = true;
+    setState(() => _doc = previous);
+    _clearControllers();
+    _applyingHistory = false;
+    _scheduleSave();
   }
 
-  SpanTextEditingController _controllerFor(ParagraphNode node) {
-    return _controllers.putIfAbsent(
-      node.id,
-      () => SpanTextEditingController(
-        text: node.text,
-        spans: node.spans.map((s) => s.toJson()).toList(),
-      ),
+  void _redo() {
+    final next = _history.redo(_doc);
+    if (next == null) return;
+    _applyingHistory = true;
+    setState(() => _doc = next);
+    _clearControllers();
+    _applyingHistory = false;
+    _scheduleSave();
+  }
+
+  SpanTextEditingController _controllerFor(String blockId, String text, List<TextSpanMark> spans) {
+    final existing = _controllers[blockId];
+    if (existing != null) return existing;
+    return _controllers[blockId] = SpanTextEditingController(
+      text: text,
+      spans: spans.map((s) => s.toJson()).toList(),
     );
   }
 
   FocusNode _focusFor(String blockId) =>
       _focusNodes.putIfAbsent(blockId, FocusNode.new);
 
+  Future<void> _showTextMenu(TapDownDetails details) async {
+    await DocumentContextMenu.showTextMenu(
+      context: context,
+      globalPosition: details.globalPosition,
+      strings: _strings,
+      onAction: runBlockTextAction,
+    );
+  }
+
   Future<void> _insertAtBlock(String action) async {
     await _flushPendingChanges();
+    _recordHistory(force: true);
     final index = (_focusedBlockIndex + 1).clamp(0, _doc.blocks.length);
     switch (action) {
       case 'paragraph':
@@ -162,16 +198,10 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
             index,
             ParagraphNode(id: DocumentCodec.newId('b'), text: ''),
           ),
-        );
-      case 'heading':
-        _applyDoc(
-          DocumentCodec.insertBlock(
-            _doc,
-            index,
-            HeadingNode(id: DocumentCodec.newId('b'), level: 2, text: ''),
-          ),
+          recordHistory: false,
         );
       case 'list':
+      case 'bullet_list':
         _applyDoc(
           DocumentCodec.insertBlock(
             _doc,
@@ -181,6 +211,20 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
               items: [ListItem(id: DocumentCodec.newId('li'), text: '')],
             ),
           ),
+          recordHistory: false,
+        );
+      case 'ordered_list':
+        _applyDoc(
+          DocumentCodec.insertBlock(
+            _doc,
+            index,
+            ListNode(
+              id: DocumentCodec.newId('b'),
+              listStyle: 'numbered',
+              items: [ListItem(id: DocumentCodec.newId('li'), text: '')],
+            ),
+          ),
+          recordHistory: false,
         );
       case 'table':
         _applyDoc(
@@ -194,107 +238,129 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
               ],
             ),
           ),
+          recordHistory: false,
         );
-      case 'task_list':
-      case 'info':
-        final embed = await widget.state.createObjectInDocument(
-          _currentFile,
-          type: action,
-          blockIndex: index,
-        );
-        final updated = await widget.state.reloadFile(_currentFile.id);
-        _doc = DocumentCodec.parse(updated.documentJson);
-        setState(() {});
-        if (embed.taskListId != null && action == 'task_list') {
-          await widget.state.createTaskInList(embed.taskListId!, title: 'New task');
-        }
-      case 'image':
-      case 'graph':
-        await widget.state.createObjectInDocument(
-          _currentFile,
-          type: action,
-          blockIndex: index,
-          payload: action == 'graph'
-              ? {
-                  'labels': ['A', 'B'],
-                  'values': [1, 2],
-                }
-              : {'url': ''},
-        );
-        final updated = await widget.state.reloadFile(_currentFile.id);
-        _doc = DocumentCodec.parse(updated.documentJson);
-        setState(() {});
     }
   }
 
-  Future<void> _moveEmbedBlock(String blockId, int newIndex) async {
-    _pushUndo();
-    _applyDoc(DocumentCodec.moveEmbedBlock(_doc, blockId, newIndex));
-  }
-
-  Future<void> _convertSelectionToInfo(
-    ParagraphNode block,
-    SpanTextEditingController controller,
-    TextSelection selection,
-  ) async {
-    if (!selection.isValid || selection.isCollapsed) return;
-    final slice = controller.text.substring(selection.start, selection.end);
-    final sliceSpans = _spansForRange(controller.spans, selection.start, selection.end);
-    _pushUndo();
-    final newText = controller.text.replaceRange(selection.start, selection.end, '');
-    final updatedBlock = block.copyWith(text: newText);
-    _applyDoc(DocumentCodec.replaceBlock(_doc, block.id, updatedBlock), save: true);
-    await _flushPendingChanges();
-    final blockIndex = _doc.blocks.indexWhere((b) => b.id == block.id);
-    await widget.state.createObjectInDocument(
-      _currentFile,
-      type: 'info',
-      title: slice.split('\n').first.trim().isEmpty ? 'Info' : slice.split('\n').first.trim(),
-      body: slice,
-      metadata: {'spans': sliceSpans},
-      blockIndex: blockIndex + 1,
+  void _updateParagraph(ParagraphNode block, int index, SpanTextEditingController controller) {
+    _focusedBlockIndex = index;
+    _applyDoc(
+      DocumentCodec.replaceBlock(
+        _doc,
+        block.id,
+        block.copyWith(
+          text: controller.text,
+          spans: [
+            for (final s in controller.spans)
+              TextSpanMark.fromJson(Map<String, dynamic>.from(s)),
+          ],
+        ),
+      ),
     );
-    final updated = await widget.state.reloadFile(_currentFile.id);
-    _doc = DocumentCodec.parse(updated.documentJson);
-    setState(() {});
   }
 
-  List<Map<String, dynamic>> _spansForRange(
-    List<Map<String, dynamic>> spans,
-    int start,
-    int end,
-  ) {
+  void _splitParagraph(ParagraphNode block, int index, SpanTextEditingController controller) {
+    _recordHistory(force: true);
+    final sel = controller.selection;
+    final splitAt = sel.isValid ? sel.start.clamp(0, controller.text.length) : controller.text.length;
+    final beforeText = controller.text.substring(0, splitAt);
+    final afterText = controller.text.substring(splitAt);
+    final beforeSpans = _spansBefore(controller.spans, splitAt);
+    final afterSpans = _spansAfter(controller.spans, splitAt);
+
+    final newId = DocumentCodec.newId('b');
+    var blocks = [..._doc.blocks];
+    blocks[index] = block.copyWith(text: beforeText, spans: beforeSpans);
+    blocks.insert(
+      index + 1,
+      ParagraphNode(id: newId, text: afterText, spans: afterSpans),
+    );
+    _controllers.remove(block.id);
+    _applyDoc(_doc.copyWith(blocks: blocks), recordHistory: false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusFor(newId).requestFocus();
+    });
+  }
+
+  List<TextSpanMark> _spansBefore(List<Map<String, dynamic>> spans, int splitAt) {
     return [
-      for (final span in spans)
-        if ((span['end'] as int? ?? 0) > start && (span['start'] as int? ?? 0) < end)
-          {
-            ...span,
-            'start': ((span['start'] as int? ?? 0) - start).clamp(0, end - start),
-            'end': ((span['end'] as int? ?? 0) - start).clamp(0, end - start),
-          },
+      for (final s in spans)
+        if ((s['start'] as int? ?? 0) < splitAt)
+          TextSpanMark.fromJson({
+            ...s,
+            'end': ((s['end'] as int? ?? 0).clamp(0, splitAt)),
+          }),
     ];
   }
 
-  Future<void> _convertListToTaskList(ListNode block) async {
-    _pushUndo();
-    final blockIndex = _doc.blocks.indexWhere((b) => b.id == block.id);
-    _applyDoc(DocumentCodec.removeBlock(_doc, block.id));
-    await _flushPendingChanges();
-    final embed = await widget.state.createObjectInDocument(
-      _currentFile,
-      type: 'task_list',
-      blockIndex: blockIndex,
-    );
-    if (embed.taskListId != null) {
-      for (final item in block.items) {
-        if (item.text.trim().isNotEmpty) {
-          await widget.state.createTaskInList(embed.taskListId!, title: item.text.trim());
-        }
+  List<TextSpanMark> _spansAfter(List<Map<String, dynamic>> spans, int splitAt) {
+    return [
+      for (final s in spans)
+        if ((s['end'] as int? ?? 0) > splitAt)
+          TextSpanMark.fromJson({
+            ...s,
+            'start': ((s['start'] as int? ?? 0) - splitAt).clamp(0, 999999),
+            'end': ((s['end'] as int? ?? 0) - splitAt).clamp(0, 999999),
+          }),
+    ];
+  }
+
+  Future<void> _mergeOrDeleteParagraph(ParagraphNode block, int index) async {
+    if (index == 0) return;
+    _recordHistory(force: true);
+    final prev = _doc.blocks[index - 1];
+    if (prev is! ParagraphNode) return;
+
+    final controller = _controllerFor(block.id, block.text, block.spans);
+    final mergeAt = prev.text.length;
+    final mergedText = prev.text + controller.text;
+    final mergedSpanMarks = <TextSpanMark>[
+      ...prev.spans,
+      for (final s in controller.spans)
+        TextSpanMark.fromJson({
+          ...Map<String, dynamic>.from(s),
+          'start': (s['start'] as int) + mergeAt,
+          'end': (s['end'] as int) + mergeAt,
+        }),
+    ];
+
+    final blocks = [..._doc.blocks];
+    blocks[index - 1] = prev.copyWith(text: mergedText, spans: mergedSpanMarks);
+    blocks.removeAt(index);
+    _controllers.remove(block.id);
+    _controllers.remove(prev.id);
+    _applyDoc(_doc.copyWith(blocks: blocks), recordHistory: false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusFor(prev.id).requestFocus();
+      final c = _controllerFor(prev.id, mergedText, mergedSpanMarks);
+      c.selection = TextSelection.collapsed(offset: mergeAt);
+    });
+  }
+
+  void _exitListToParagraph(ListNode block, int index) {
+    _recordHistory(force: true);
+    final items = block.items;
+    final text = items.map((i) => i.text).join('\n');
+    final spans = <TextSpanMark>[];
+    var offset = 0;
+    for (var i = 0; i < items.length; i++) {
+      if (i > 0) offset++;
+      for (final s in items[i].spans) {
+        spans.add(s.copyWith(start: s.start + offset, end: s.end + offset));
       }
+      offset += items[i].text.length;
     }
-    final updated = await widget.state.reloadFile(_currentFile.id);
-    _doc = DocumentCodec.parse(updated.documentJson);
-    setState(() {});
+    var blocks = [..._doc.blocks];
+    blocks[index] = ParagraphNode(id: block.id, text: text, spans: spans);
+    blocks.insert(
+      index + 1,
+      ParagraphNode(id: DocumentCodec.newId('b'), text: ''),
+    );
+    _applyDoc(_doc.copyWith(blocks: blocks), recordHistory: false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusFor(blocks[index + 1].id).requestFocus();
+    });
   }
 
   @override
@@ -303,11 +369,17 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
       shortcuts: {
         LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyZ):
             const _UndoIntent(),
+        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ):
+            const _RedoIntent(),
       },
       child: Actions(
         actions: {
           _UndoIntent: CallbackAction<_UndoIntent>(onInvoke: (_) {
             _undo();
+            return null;
+          }),
+          _RedoIntent: CallbackAction<_RedoIntent>(onInvoke: (_) {
+            _redo();
             return null;
           }),
         },
@@ -318,21 +390,8 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (var index = 0; index < _doc.blocks.length; index++)
-                _BlockShell(
-                  index: index,
-                  selected: _doc.blocks[index].id == _selectedEmbedBlockId,
-                  onSelectEmbed: _doc.blocks[index] is EmbedNode
-                      ? () => setState(
-                          () => _selectedEmbedBlockId = _doc.blocks[index].id,
-                        )
-                      : null,
-                  onMoveUp: _doc.blocks[index] is EmbedNode && index > 0
-                      ? () => _moveEmbedBlock(_doc.blocks[index].id, index - 1)
-                      : null,
-                  onMoveDown: _doc.blocks[index] is EmbedNode &&
-                          index < _doc.blocks.length - 1
-                      ? () => _moveEmbedBlock(_doc.blocks[index].id, index + 1)
-                      : null,
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
                   child: _buildBlock(_doc.blocks[index], index),
                 ),
             ],
@@ -343,47 +402,30 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   }
 
   Widget _buildBlock(DocumentNode block, int index) {
+    if (block is EmbedNode) {
+      return Text(
+        '[embedded object ${block.objectId}]',
+        style: AppTypography.metaStyle.copyWith(
+          color: Theme.of(context).colorScheme.outline,
+        ),
+      );
+    }
     if (block is ParagraphNode) {
-      final controller = _controllerFor(block);
+      final controller = _controllerFor(block.id, block.text, block.spans);
       return FormattedTextField(
         controller: controller,
         focusNode: _focusFor(block.id),
         style: AppTypography.noteBodyStyle,
         maxLines: null,
-        onChanged: (text) {
-          _focusedBlockIndex = index;
-          _applyDoc(
-            DocumentCodec.replaceBlock(_doc, block.id, block.copyWith(text: text, spans: [
-              for (final s in controller.spans)
-                TextSpanMark.fromJson(Map<String, dynamic>.from(s)),
-            ])),
-          );
-        },
-        onSecondaryTapDown: (details) async {
-          final selection = controller.selection;
-          if (!selection.isValid || selection.isCollapsed) return;
-          final result = await showMenu<String>(
-            context: context,
-            position: RelativeRect.fromLTRB(
-              details.globalPosition.dx,
-              details.globalPosition.dy,
-              details.globalPosition.dx,
-              details.globalPosition.dy,
-            ),
-            items: const [
-              PopupMenuItem(value: 'info', child: Text('Convert to Info section')),
-            ],
-          );
-          if (result == 'info') {
-            await _convertSelectionToInfo(block, controller, selection);
-          }
-        },
+        minLines: 1,
+        onChanged: (_) => _updateParagraph(block, index, controller),
+        onEnter: () => _splitParagraph(block, index, controller),
+        onBackspaceAtStart: () => _mergeOrDeleteParagraph(block, index),
+        onSecondaryTapDown: _showTextMenu,
       );
     }
     if (block is HeadingNode) {
-      final controller = _controllerFor(
-        ParagraphNode(id: block.id, text: block.text, spans: block.spans),
-      );
+      final controller = _controllerFor(block.id, block.text, block.spans);
       return FormattedTextField(
         controller: controller,
         focusNode: _focusFor(block.id),
@@ -397,118 +439,52 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
             DocumentCodec.replaceBlock(
               _doc,
               block.id,
-              block.copyWith(text: text),
+              block.copyWith(
+                text: text,
+                spans: [
+                  for (final s in controller.spans)
+                    TextSpanMark.fromJson(Map<String, dynamic>.from(s)),
+                ],
+              ),
             ),
           );
         },
+        onSecondaryTapDown: _showTextMenu,
       );
     }
     if (block is ListNode) {
-      return ListBlockWidget(
+      return RichListEditor(
         node: block,
+        strings: _strings,
+        onFocus: () => _focusedBlockIndex = index,
         onChanged: (updated) {
           _focusedBlockIndex = index;
           _applyDoc(DocumentCodec.replaceBlock(_doc, block.id, updated));
         },
-        onConvertToTaskList: () => _convertListToTaskList(block),
+        onExitList: () => _exitListToParagraph(block, index),
       );
     }
     if (block is TableNode) {
-      return DocumentTableBlockWidget(
+      return RichTableEditor(
         node: block,
+        strings: _strings,
+        onFocus: () => _focusedBlockIndex = index,
         onChanged: (updated) {
           _focusedBlockIndex = index;
           _applyDoc(DocumentCodec.replaceBlock(_doc, block.id, updated));
         },
       );
-    }
-    if (block is EmbedNode) {
-      final embed = _embedFor(block.objectId);
-      if (embed == null) {
-        return Text('[missing object ${block.objectId}]', style: AppTypography.metaStyle);
-      }
-      return switch (embed.type) {
-        'task_list' => InlineTaskListWidget(
-          embed: embed,
-          file: _currentFile,
-          state: widget.state,
-          onRefresh: () async {
-            await widget.state.loadEmbedsForFile(_currentFile.id);
-            setState(() {});
-          },
-        ),
-        'info' => InfoEmbed(
-          embed: embed,
-          state: widget.state,
-          onRefresh: () async {
-            await widget.state.loadEmbedsForFile(_currentFile.id);
-            setState(() {});
-          },
-        ),
-        'image' => ImageEmbed(
-          embed: embed,
-          onPayloadChanged: (payload) async {
-            await widget.state.updateObjectPayload(embed.id, payload);
-            await widget.state.loadEmbedsForFile(_currentFile.id);
-            setState(() {});
-          },
-        ),
-        'graph' => GraphEmbed(embed: embed),
-        _ => Text('[${embed.type}]', style: AppTypography.metaStyle),
-      };
     }
     return const SizedBox.shrink();
   }
 }
 
-class _BlockShell extends StatelessWidget {
-  const _BlockShell({
-    required this.index,
-    required this.child,
-    this.selected = false,
-    this.onSelectEmbed,
-    this.onMoveUp,
-    this.onMoveDown,
-  });
-
-  final int index;
-  final Widget child;
-  final bool selected;
-  final VoidCallback? onSelectEmbed;
-  final VoidCallback? onMoveUp;
-  final VoidCallback? onMoveDown;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onDoubleTap: onSelectEmbed,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (selected && onSelectEmbed != null)
-            Column(
-              children: [
-                IconButton(
-                  icon: const AppIcon(AppIcons.drag, size: 18),
-                  tooltip: 'Move up',
-                  onPressed: onMoveUp,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.arrow_downward, size: 18),
-                  tooltip: 'Move down',
-                  onPressed: onMoveDown,
-                ),
-              ],
-            ),
-          Expanded(child: Padding(padding: const EdgeInsets.only(bottom: 8), child: child)),
-        ],
-      ),
-    );
-  }
-}
-
 class _UndoIntent extends Intent {
   const _UndoIntent();
+}
+
+class _RedoIntent extends Intent {
+  const _RedoIntent();
 }
 
 extension _FirstOrNull<E> on Iterable<E> {

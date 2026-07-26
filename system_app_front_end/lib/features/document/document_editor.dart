@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
 import '../../core/models/app_file.dart';
-import '../../core/models/object_embed.dart';
 import 'block_document_editor.dart';
 
 class DocumentEditor extends StatelessWidget {
@@ -10,12 +9,12 @@ class DocumentEditor extends StatelessWidget {
     super.key,
     required this.file,
     required this.state,
-    required this.embeds,
+    this.embeds = const [],
   });
 
   final AppFile file;
   final AppState state;
-  final List<ObjectEmbed> embeds;
+  final List<dynamic> embeds;
 
   @override
   Widget build(BuildContext context) {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/app_state.dart';
 import '../../design_system/app_icons.dart';
@@ -36,38 +37,23 @@ class DocumentInsertBar extends StatelessWidget {
                   children: [
                     _InsertButton(
                       icon: AppIcons.uploadDetails,
-                      tooltip: 'Paragraph break',
+                      tooltip: 'Paragraph',
                       onPressed: () => controller.insertAtBlock('paragraph'),
                     ),
                     _InsertButton(
                       icon: AppIcons.smartList,
-                      tooltip: 'List',
-                      onPressed: () => controller.insertAtBlock('list'),
+                      tooltip: 'Bullet list',
+                      onPressed: () => controller.insertAtBlock('bullet_list'),
+                    ),
+                    _InsertButton(
+                      icon: LucideIcons.list200,
+                      tooltip: 'Numbered list',
+                      onPressed: () => controller.insertAtBlock('ordered_list'),
                     ),
                     _InsertButton(
                       icon: AppIcons.layout,
                       tooltip: 'Table',
                       onPressed: () => controller.insertAtBlock('table'),
-                    ),
-                    _InsertButton(
-                      icon: AppIcons.image,
-                      tooltip: 'Image',
-                      onPressed: () => controller.insertAtBlock('image'),
-                    ),
-                    _InsertButton(
-                      icon: AppIcons.graph,
-                      tooltip: 'Graph',
-                      onPressed: () => controller.insertAtBlock('graph'),
-                    ),
-                    _InsertButton(
-                      icon: AppIcons.check,
-                      tooltip: state.strings['addTask'] ?? 'Task list',
-                      onPressed: () => controller.insertAtBlock('task_list'),
-                    ),
-                    _InsertButton(
-                      icon: AppIcons.consult,
-                      tooltip: 'Info',
-                      onPressed: () => controller.insertAtBlock('info'),
                     ),
                   ],
                 ),

@@ -6,6 +6,7 @@ class TextSpanMark {
     this.italic = false,
     this.underline = false,
     this.size,
+    this.color,
     this.link,
   });
 
@@ -15,6 +16,7 @@ class TextSpanMark {
   final bool italic;
   final bool underline;
   final double? size;
+  final String? color;
   final String? link;
 
   TextSpanMark copyWith({
@@ -24,6 +26,7 @@ class TextSpanMark {
     bool? italic,
     bool? underline,
     double? size,
+    String? color,
     String? link,
   }) {
     return TextSpanMark(
@@ -33,6 +36,7 @@ class TextSpanMark {
       italic: italic ?? this.italic,
       underline: underline ?? this.underline,
       size: size ?? this.size,
+      color: color ?? this.color,
       link: link ?? this.link,
     );
   }
@@ -44,6 +48,7 @@ class TextSpanMark {
     if (italic) 'italic': true,
     if (underline) 'underline': true,
     if (size != null) 'size': size,
+    if (color != null && color!.isNotEmpty) 'color': color,
     if (link != null) 'link': link,
   };
 
@@ -55,6 +60,7 @@ class TextSpanMark {
       italic: json['italic'] as bool? ?? false,
       underline: json['underline'] as bool? ?? false,
       size: (json['size'] as num?)?.toDouble(),
+      color: json['color'] as String?,
       link: json['link'] as String?,
     );
   }
@@ -228,8 +234,10 @@ class ListNode extends DocumentNode {
   final List<ListItem> items;
   final String listStyle;
 
+  bool get isOrdered => listStyle == 'numbered' || listStyle == 'ordered';
+
   @override
-  String get type => 'list';
+  String get type => isOrdered ? 'ordered_list' : 'bullet_list';
 
   ListNode copyWith({List<ListItem>? items, String? listStyle}) {
     return ListNode(
@@ -246,7 +254,6 @@ class ListNode extends DocumentNode {
   Map<String, dynamic> toJson() => {
     'id': id,
     'type': type,
-    'list_style': listStyle,
     'items': items.map((i) => i.toJson()).toList(),
   };
 }

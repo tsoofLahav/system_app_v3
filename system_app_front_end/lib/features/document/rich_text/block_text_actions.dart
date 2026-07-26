@@ -1,6 +1,10 @@
 import 'block_text_focus.dart';
 
 Future<void> runBlockTextAction(String action) async {
+  if (action.startsWith('text:color:')) {
+    BlockTextFocusRegistry.applyTextFormat(action);
+    return;
+  }
   switch (action) {
     case 'text:cut':
       await BlockTextFocusRegistry.cut();

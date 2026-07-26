@@ -12,7 +12,7 @@ DOCUMENT_VERSION_V2 = 2
 DOCUMENT_VERSION_V1 = 1
 EMBED_CHAR = "\uFFFC"
 
-INLINE_BLOCK_TYPES = {"paragraph", "heading", "list", "table"}
+INLINE_BLOCK_TYPES = {"paragraph", "heading", "list", "bullet_list", "ordered_list", "table"}
 OBJECT_TYPES = {"task_list", "info", "image", "graph"}
 
 _TASK_MARKER = re.compile(r"^\{\{task:(\d+)\}\}$")
@@ -92,12 +92,20 @@ def _normalize_block(item: dict[str, Any]) -> dict[str, Any] | None:
             "text": str(item.get("text") or ""),
             "spans": _normalize_spans(item.get("spans")),
         }
-    if block_type == "list":
+    if block_type in {"list", "bullet_list", "ordered_list"}:
         items = item.get("items") if isinstance(item.get("items"), list) else []
+        if block_type == "ordered_list":
+            list_style = "numbered"
+        elif block_type == "bullet_list":
+            list_style = "bullet"
+        else:
+            list_style = item.get("list_style") or "bullet"
+            if list_style == "ordered":
+                list_style = "numbered"
+        normalized_type = "ordered_list" if list_style == "numbered" else "bullet_list"
         return {
             "id": block_id,
-            "type": "list",
-            "list_style": item.get("list_style") or "bullet",
+            "type": normalized_type,
             "items": [_normalize_list_item(i) for i in items if isinstance(i, dict)],
         }
     if block_type == "table":
@@ -142,6 +150,8 @@ def _normalize_spans(raw: Any) -> list[dict[str, Any]]:
             span["size"] = item["size"]
         if item.get("link"):
             span["link"] = str(item["link"])
+        if item.get("color"):
+            span["color"] = str(item["color"])
         spans.append(span)
     return spans
 
@@ -226,8 +236,9 @@ def migrate_v1_nodes_to_v3(nodes: list[dict[str, Any]]) -> dict[str, Any]:
             blocks.append(
                 {
                     "id": str(node.get("id") or new_id("b")),
-                    "type": "list",
-                    "list_style": node.get("list_style") or "bullet",
+                    "type": "ordered_list"
+                    if (node.get("list_style") or "bullet") in {"numbered", "ordered"}
+                    else "bullet_list",
                     "items": items,
                 }
             )
@@ -494,6 +505,9 @@ def _list_block_from_segment(
     region: dict, segment: str, spans: list[dict], base_offset: int
 ) -> dict[str, Any]:
     list_style = region.get("list_style") or "bullet"
+    if list_style == "ordered":
+        list_style = "numbered"
+    normalized_type = "ordered_list" if list_style == "numbered" else "bullet_list"
     items: list[dict[str, Any]] = []
     for line in segment.splitlines():
         stripped = line.lstrip("\t")
@@ -515,8 +529,7 @@ def _list_block_from_segment(
         items = [{"id": new_id("li"), "text": "", "indent": 0, "spans": []}]
     return {
         "id": str(region.get("id") or new_id("b")),
-        "type": "list",
-        "list_style": list_style,
+        "type": normalized_type,
         "items": items,
     }
 
@@ -701,10 +714,13 @@ def insert_region(body: str, region: dict[str, Any], *, offset: int | None = Non
     index = len(blocks) if offset is None else max(0, min(int(offset), len(blocks)))
     kind = region.get("kind")
     if kind == "list":
+        list_style = region.get("list_style") or "bullet"
+        if list_style == "ordered":
+            list_style = "numbered"
+        block_type = "ordered_list" if list_style == "numbered" else "bullet_list"
         block = {
             "id": str(region.get("id") or new_id("b")),
-            "type": "list",
-            "list_style": region.get("list_style") or "bullet",
+            "type": block_type,
             "items": [{"id": new_id("li"), "text": "", "indent": 0, "spans": []}],
         }
     elif kind == "table":

@@ -90,7 +90,7 @@ def test_insert_list_block():
         offset=0,
     )
     doc = parse_document(updated)
-    assert doc["blocks"][0]["type"] == "list"
+    assert doc["blocks"][0]["type"] == "bullet_list"
 
 
 def test_move_embed_block():
@@ -107,6 +107,42 @@ def test_move_embed_block():
     updated = move_embed_block(body, "b2", 2)
     doc = parse_document(updated)
     assert doc["blocks"][2]["id"] == "b2"
+
+
+def test_list_block_normalization():
+    body = serialize_document(
+        {
+            "version": 3,
+            "blocks": [
+                {
+                    "id": "b1",
+                    "type": "list",
+                    "list_style": "numbered",
+                    "items": [{"id": "li1", "text": "One", "indent": 0, "spans": []}],
+                }
+            ],
+        }
+    )
+    doc = parse_document(body)
+    assert doc["blocks"][0]["type"] == "ordered_list"
+
+
+def test_span_color_round_trip():
+    body = serialize_document(
+        {
+            "version": 3,
+            "blocks": [
+                {
+                    "id": "b1",
+                    "type": "paragraph",
+                    "text": "Red",
+                    "spans": [{"start": 0, "end": 3, "color": "#E53935"}],
+                }
+            ],
+        }
+    )
+    doc = parse_document(body)
+    assert doc["blocks"][0]["spans"][0]["color"] == "#E53935"
 
 
 def test_migrate_v2_inline():

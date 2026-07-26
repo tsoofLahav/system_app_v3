@@ -55,6 +55,56 @@ void main() {
     expect(doc.blocks.single, isA<EmbedNode>());
   });
 
+  test('list block types round trip', () {
+    final bullet = DocumentCodec.serialize(
+      RichDocument(
+        version: 3,
+        blocks: [
+          ListNode(
+            id: 'b1',
+            items: [ListItem(id: 'li1', text: 'Item')],
+          ),
+        ],
+      ),
+    );
+    final bulletDoc = DocumentCodec.parse(bullet);
+    expect(bulletDoc.blocks.first, isA<ListNode>());
+    expect((bulletDoc.blocks.first as ListNode).type, 'bullet_list');
+
+    final ordered = DocumentCodec.serialize(
+      RichDocument(
+        version: 3,
+        blocks: [
+          ListNode(
+            id: 'b2',
+            listStyle: 'numbered',
+            items: [ListItem(id: 'li2', text: 'Step')],
+          ),
+        ],
+      ),
+    );
+    final orderedDoc = DocumentCodec.parse(ordered);
+    expect((orderedDoc.blocks.first as ListNode).type, 'ordered_list');
+  });
+
+  test('span color round trip', () {
+    final body = DocumentCodec.serialize(
+      RichDocument(
+        version: 3,
+        blocks: [
+          ParagraphNode(
+            id: 'b1',
+            text: 'Red',
+            spans: [TextSpanMark(start: 0, end: 3, color: '#E53935')],
+          ),
+        ],
+      ),
+    );
+    final doc = DocumentCodec.parse(body);
+    final block = doc.blocks.first as ParagraphNode;
+    expect(block.spans.single.color, '#E53935');
+  });
+
   test('migrate v2 inline body', () {
     final body = jsonEncode({
       'version': 2,

@@ -31,7 +31,6 @@ class DocumentPane extends StatefulWidget {
 
 class _DocumentPaneState extends State<DocumentPane> {
   late TextEditingController _titleController;
-  var _loadingEmbeds = true;
 
   @override
   void initState() {
@@ -39,7 +38,6 @@ class _DocumentPaneState extends State<DocumentPane> {
     _titleController = TextEditingController(
       text: widget.state.fileDisplayName(widget.file.name),
     );
-    _loadEmbeds();
   }
 
   @override
@@ -47,14 +45,7 @@ class _DocumentPaneState extends State<DocumentPane> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.file.id != widget.file.id) {
       _titleController.text = widget.state.fileDisplayName(widget.file.name);
-      _loadEmbeds();
     }
-  }
-
-  Future<void> _loadEmbeds() async {
-    setState(() => _loadingEmbeds = true);
-    await widget.state.loadEmbedsForFile(widget.file.id);
-    if (mounted) setState(() => _loadingEmbeds = false);
   }
 
   @override
@@ -93,7 +84,6 @@ class _DocumentPaneState extends State<DocumentPane> {
 
   @override
   Widget build(BuildContext context) {
-    final embeds = widget.state.embedsByFileId[widget.file.id] ?? const [];
     final file = widget.state.selectedDetail?.files
             .where((f) => f.id == widget.file.id)
             .firstOrNull ??
@@ -134,10 +124,7 @@ class _DocumentPaneState extends State<DocumentPane> {
             ],
           ),
           const SizedBox(height: 8),
-          if (_loadingEmbeds)
-            const LinearProgressIndicator(minHeight: 2)
-          else
-            DocumentEditor(file: file, state: widget.state, embeds: embeds),
+          DocumentEditor(file: file, state: widget.state),
         ],
       ),
     );

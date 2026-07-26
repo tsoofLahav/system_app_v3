@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/app_strings.dart';
 import '../../../shared/widgets/app_context_menu.dart';
 import 'block_text_focus.dart';
-import 'format_range.dart';
 
 typedef DocumentMenuHandler = Future<void> Function(String action);
 
@@ -25,6 +24,12 @@ class DocumentContextMenu {
       value: 'text:size_down',
       label: strings['sizeDown'] ?? 'Size down',
     ),
+    const AppContextMenuDivider(),
+    AppContextMenuItem(value: 'text:color:#E53935', label: 'Red'),
+    AppContextMenuItem(value: 'text:color:#1E88E5', label: 'Blue'),
+    AppContextMenuItem(value: 'text:color:#43A047', label: 'Green'),
+    AppContextMenuItem(value: 'text:color:#FB8C00', label: 'Orange'),
+    AppContextMenuItem(value: 'text:color:clear', label: 'Clear color'),
     const AppContextMenuDivider(),
     AppContextMenuItem(value: 'text:cut', label: strings['cut'] ?? 'Cut'),
     AppContextMenuItem(value: 'text:copy', label: strings['copy'] ?? 'Copy'),

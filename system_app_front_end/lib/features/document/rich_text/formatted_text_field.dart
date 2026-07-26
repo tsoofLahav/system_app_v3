@@ -267,7 +267,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   Widget build(BuildContext context) {
     final style = widget.style;
     final formatters = <TextInputFormatter>[
-      if (widget.onEnter != null) _SubmitOnEnterFormatter(widget.onEnter!),
       if (widget.stripNewlines) _StripNewlinesFormatter(),
     ];
 
@@ -437,24 +436,6 @@ RenderEditable? _findRenderEditable(RenderObject root) {
   return found;
 }
 
-/// Enter creates a new list/task row instead of a soft line break.
-class _SubmitOnEnterFormatter extends TextInputFormatter {
-  _SubmitOnEnterFormatter(this.onSubmit);
-
-  final VoidCallback onSubmit;
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    if (!newValue.text.contains('\n')) return newValue;
-    WidgetsBinding.instance.addPostFrameCallback((_) => onSubmit());
-    return oldValue;
-  }
-}
-
-class _StripNewlinesFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,

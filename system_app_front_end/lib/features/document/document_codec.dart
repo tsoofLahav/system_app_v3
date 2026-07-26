@@ -47,9 +47,11 @@ class DocumentCodec {
           spans: _spansFrom(json['spans']),
         );
       case 'list':
+      case 'bullet_list':
+      case 'ordered_list':
         return ListNode(
           id: id,
-          listStyle: json['list_style'] as String? ?? 'bullet',
+          listStyle: _listStyleFromJson(json, type),
           items: [
             for (final item in json['items'] as List? ?? const [])
               if (item is Map<String, dynamic>) ListItem.fromJson(item),
@@ -93,6 +95,14 @@ class DocumentCodec {
     for (final s in raw as List? ?? const [])
       if (s is Map<String, dynamic>) TextSpanMark.fromJson(s),
   ];
+
+  static String _listStyleFromJson(Map<String, dynamic> json, String type) {
+    if (type == 'ordered_list') return 'numbered';
+    if (type == 'bullet_list') return 'bullet';
+    final style = json['list_style'] as String? ?? 'bullet';
+    if (style == 'ordered') return 'numbered';
+    return style;
+  }
 
   static RichDocument _migratePlain(String body) {
     final blocks = <DocumentNode>[];

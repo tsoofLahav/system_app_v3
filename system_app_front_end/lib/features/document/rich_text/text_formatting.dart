@@ -478,6 +478,15 @@ void applyActionToMark(
       } else {
         mark['size'] = next;
       }
+    default:
+      if (action.startsWith('text:color:')) {
+        final color = action.substring('text:color:'.length);
+        if (color == 'clear') {
+          mark.remove('color');
+        } else if (color.startsWith('#')) {
+          mark['color'] = color;
+        }
+      }
   }
 }
 
