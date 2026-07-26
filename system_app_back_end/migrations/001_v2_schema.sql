@@ -21,7 +21,7 @@ CREATE TABLE files (
     id SERIAL PRIMARY KEY,
     topic_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    body TEXT NOT NULL DEFAULT '',
+    document_json TEXT NOT NULL DEFAULT '',
     is_essence BOOLEAN NOT NULL DEFAULT FALSE,
     order_index INTEGER NOT NULL DEFAULT 0,
     meta JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -57,15 +57,17 @@ CREATE TABLE information_pieces (
 CREATE TABLE objects (
     id SERIAL PRIMARY KEY,
     file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-    type TEXT NOT NULL CHECK (type IN ('task_list', 'info')),
+    type TEXT NOT NULL CHECK (type IN ('task_list', 'info', 'image', 'graph')),
     task_list_id INTEGER REFERENCES task_lists(id) ON DELETE CASCADE,
     information_id INTEGER REFERENCES information_pieces(id) ON DELETE CASCADE,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
     anchor JSONB NOT NULL DEFAULT '{}'::jsonb,
     sort_key INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CHECK (
         (type = 'task_list' AND task_list_id IS NOT NULL AND information_id IS NULL)
         OR (type = 'info' AND information_id IS NOT NULL AND task_list_id IS NULL)
+        OR (type IN ('image', 'graph') AND task_list_id IS NULL AND information_id IS NULL)
     )
 );
 

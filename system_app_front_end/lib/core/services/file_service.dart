@@ -19,7 +19,7 @@ class FileService {
   Future<AppFile> createFile({
     required int topicId,
     required String name,
-    String body = '',
+    String documentJson = '',
     bool isEssence = false,
     int? orderIndex,
     Map<String, dynamic>? meta,
@@ -28,7 +28,7 @@ class FileService {
         await _api.post('/files', {
               'topic_id': topicId,
               'name': name,
-              'body': body,
+              'document_json': documentJson,
               'is_essence': isEssence,
               if (orderIndex != null) 'order_index': orderIndex,
               if (meta != null) 'meta': meta,

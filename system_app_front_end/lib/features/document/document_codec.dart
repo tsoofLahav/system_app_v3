@@ -1,523 +1,257 @@
 import 'dart:convert';
 import 'dart:math';
 
-import 'inline_document_model.dart';
+import 'document_model.dart';
 
 class DocumentCodec {
-  static String newId([String prefix = 'e']) =>
+  static const embedChar = '\uFFFC';
+
+  static String newId([String prefix = 'b']) =>
       '$prefix${Random().nextInt(0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
 
-  static InlineDocument empty() => const InlineDocument(
-    version: InlineDocument.documentVersion,
-    text: '',
-  );
+  static RichDocument empty() =>
+      const RichDocument(version: RichDocument.documentVersion, blocks: []);
 
-  static InlineDocument parse(String? body) {
-    final raw = body?.trim() ?? '';
-    if (raw.isEmpty) return empty();
+  static RichDocument parse(String? raw) {
+    final body = raw?.trim() ?? '';
+    if (body.isEmpty) return empty();
     try {
-      final data = jsonDecode(raw);
-      if (data is! Map<String, dynamic>) return _migratePlain(raw);
+      final data = jsonDecode(body);
+      if (data is! Map<String, dynamic>) return _migratePlain(body);
       final version = data['version'] as int? ?? 1;
+      if (version >= 3 && data['blocks'] is List) {
+        return _fromV3(data);
+      }
       if (version >= 2 && data.containsKey('text')) {
-        return normalize(_fromV2(data));
+        return _migrateV2ToV3(data);
       }
       if (data['nodes'] is List) {
         return _migrateV1Nodes(data['nodes'] as List);
       }
     } catch (_) {}
-    return _migratePlain(raw);
+    return _migratePlain(body);
   }
 
-  static String serialize(InlineDocument doc) =>
-      jsonEncode(normalize(doc).toJson());
+  static String serialize(RichDocument doc) =>
+      jsonEncode({'version': RichDocument.documentVersion, 'blocks': doc.blocks.map((b) => b.toJson()).toList()});
 
-  static InlineDocument normalize(InlineDocument doc) {
-    final sorted = [...doc.embeds]..sort((a, b) => a.offset.compareTo(b.offset));
-    final chars = doc.text.replaceAll(InlineDocument.embedChar, '').split('');
-    final result = <DocumentEmbed>[];
-    var adjust = 0;
-    for (final embed in sorted) {
-      final pos = (embed.offset + adjust).clamp(0, chars.length);
-      chars.insert(pos, InlineDocument.embedChar);
-      adjust++;
-      result.add(embed.copyWith(offset: pos));
+  static DocumentNode nodeFromJson(Map<String, dynamic> json) {
+    final type = json['type'] as String? ?? 'paragraph';
+    final id = json['id'] as String? ?? newId('b');
+    switch (type) {
+      case 'heading':
+        return HeadingNode(
+          id: id,
+          level: json['level'] as int? ?? 1,
+          text: json['text'] as String? ?? '',
+          spans: _spansFrom(json['spans']),
+        );
+      case 'list':
+        return ListNode(
+          id: id,
+          listStyle: json['list_style'] as String? ?? 'bullet',
+          items: [
+            for (final item in json['items'] as List? ?? const [])
+              if (item is Map<String, dynamic>) ListItem.fromJson(item),
+          ],
+        );
+      case 'table':
+        return TableNode(
+          id: id,
+          rows: [
+            for (final row in json['rows'] as List? ?? const [])
+              if (row is List)
+                [for (final cell in row) DocumentTableCell.fromJson(cell)],
+          ],
+        );
+      case 'embed':
+        return EmbedNode(
+          id: id,
+          objectId: json['object_id'] as int? ?? 0,
+        );
+      default:
+        return ParagraphNode(
+          id: id,
+          text: json['text'] as String? ?? '',
+          spans: _spansFrom(json['spans']),
+        );
     }
-    return doc.copyWith(text: chars.join(), embeds: result);
   }
 
-  /// Rebuild document text/spans/embeds from editors and shift region metadata.
-  static InlineDocument rebuildFromText({
-    required InlineDocument base,
-    required String newText,
-    required List<TextSpanMark> newSpans,
-    required List<DocumentEmbed> newEmbeds,
-  }) {
-    if (base.text == newText) {
-      return refreshRegionMetadata(
-        base.copyWith(spans: newSpans, embeds: newEmbeds),
-      );
-    }
-    final prefix = _commonPrefixLength(base.text, newText);
-    final suffix = _commonSuffixLength(base.text, newText, prefix);
-    final oldEnd = base.text.length - suffix;
-    final newEnd = newText.length - suffix;
-    final replacement = newText.substring(prefix, newEnd);
-    final shifted = replaceTextRange(base, prefix, oldEnd, replacement);
-    return refreshRegionMetadata(
-      shifted.copyWith(
-        text: newText,
-        spans: newSpans,
-        embeds: newEmbeds,
-      ),
-    );
-  }
-
-  static int _commonPrefixLength(String a, String b) {
-    final max = a.length < b.length ? a.length : b.length;
-    var i = 0;
-    while (i < max && a.codeUnitAt(i) == b.codeUnitAt(i)) {
-      i++;
-    }
-    return i;
-  }
-
-  static int _commonSuffixLength(String a, String b, int prefix) {
-    var ai = a.length;
-    var bi = b.length;
-    while (ai > prefix && bi > prefix && a.codeUnitAt(ai - 1) == b.codeUnitAt(bi - 1)) {
-      ai--;
-      bi--;
-    }
-    return a.length - ai;
-  }
-
-  static InlineDocument refreshRegionMetadata(InlineDocument doc) {
-    return doc.copyWith(
-      regions: [
-        for (final region in doc.regions)
-          if (region.kind == 'list')
-            _refreshListRegion(doc, region)
-          else if (region.kind == 'table')
-            _refreshTableRegion(doc, region)
-          else
-            region,
-      ],
-    );
-  }
-
-  static DocumentRegion _refreshListRegion(InlineDocument doc, DocumentRegion region) {
-    final start = region.start.clamp(0, doc.text.length);
-    final end = region.end.clamp(start, doc.text.length);
-    final slice = doc.text.substring(start, end);
-    final lines = slice.split('\n').where((l) => l.trim().isNotEmpty).toList();
-    final numbered = lines.isNotEmpty && RegExp(r'^\s*\d+[\.\)]').hasMatch(lines.first);
-    return DocumentRegion(
-      id: region.id,
-      kind: region.kind,
-      start: start,
-      end: end,
-      listStyle: numbered ? 'numbered' : region.listStyle,
-    );
-  }
-
-  static DocumentRegion _refreshTableRegion(InlineDocument doc, DocumentRegion region) {
-    final start = region.start.clamp(0, doc.text.length);
-    final end = region.end.clamp(start, doc.text.length);
-    final slice = doc.text.substring(start, end);
-    final rows = [
-      for (final line in slice.split('\n'))
-        if (line.isNotEmpty) line.split('\t'),
+  static RichDocument _fromV3(Map<String, dynamic> data) {
+    final blocks = [
+      for (final item in data['blocks'] as List? ?? const [])
+        if (item is Map<String, dynamic>) nodeFromJson(item),
     ];
-    return DocumentRegion(
-      id: region.id,
-      kind: region.kind,
-      start: start,
-      end: end,
-      rows: rows.isEmpty ? region.rows : rows,
-    );
-  }
-
-  static String plainText(String? body) {
-    final doc = parse(body);
-    final buffer = StringBuffer(doc.text.replaceAll(InlineDocument.embedChar, ' '));
-    for (final embed in doc.embeds) {
-      buffer.writeln();
-      switch (embed.kind) {
-        case 'object':
-          buffer.write('[${embed.objectType} #${embed.objectId}]');
-        case 'image':
-          buffer.write('[image: ${embed.url}]');
-        case 'graph':
-          buffer.write('[graph]');
-      }
+    if (blocks.isEmpty) {
+      blocks.add(ParagraphNode(id: newId('b'), text: ''));
     }
-    return buffer.toString().trim();
+    return RichDocument(version: RichDocument.documentVersion, blocks: blocks);
   }
 
-  static InlineDocument _fromV2(Map<String, dynamic> data) {
-    final spansRaw = data['spans'];
-    final regionsRaw = data['regions'];
-    final embedsRaw = data['embeds'];
-    return InlineDocument(
-      version: InlineDocument.documentVersion,
-      text: data['text'] as String? ?? '',
-      spans: spansRaw is List
-          ? [
-              for (final s in spansRaw)
-                if (s is Map<String, dynamic>) TextSpanMark.fromJson(s),
-            ]
-          : const [],
-      regions: regionsRaw is List
-          ? [
-              for (final r in regionsRaw)
-                if (r is Map<String, dynamic>) DocumentRegion.fromJson(r),
-            ]
-          : const [],
-      embeds: embedsRaw is List
-          ? [
-              for (final e in embedsRaw)
-                if (e is Map<String, dynamic>) DocumentEmbed.fromJson(e),
-            ]
-          : const [],
-    );
-  }
+  static List<TextSpanMark> _spansFrom(dynamic raw) => [
+    for (final s in raw as List? ?? const [])
+      if (s is Map<String, dynamic>) TextSpanMark.fromJson(s),
+  ];
 
-  static InlineDocument _migrateV1Nodes(List nodes) {
-    final buffer = StringBuffer();
-    final spans = <TextSpanMark>[];
-    final regions = <DocumentRegion>[];
-    final embeds = <DocumentEmbed>[];
-    var cursor = 0;
-
-    void append(String s) {
-      buffer.write(s);
-      cursor += s.length;
-    }
-
-    for (final raw in nodes) {
-      if (raw is! Map<String, dynamic>) continue;
-      switch (raw['type']) {
-        case 'paragraph':
-          if (buffer.isNotEmpty) append('\n');
-          final block = raw['text'] as String? ?? '';
-          final start = cursor;
-          append(block);
-          final spansRaw = raw['spans'];
-          if (spansRaw is List) {
-            for (final s in spansRaw) {
-              if (s is Map<String, dynamic>) {
-                spans.add(
-                  TextSpanMark.fromJson(s).shift(start),
-                );
-              }
-            }
-          }
-        case 'list':
-          if (buffer.isNotEmpty) append('\n');
-          final items = raw['items'] is List ? raw['items'] as List : [''];
-          final listStyle = raw['list_style'] as String? ?? 'bullet';
-          final lines = <String>[];
-          for (var i = 0; i < items.length; i++) {
-            final prefix = listStyle == 'numbered' ? '${i + 1}. ' : '• ';
-            lines.add('$prefix${items[i]}');
-          }
-          final start = cursor;
-          append(lines.join('\n'));
-          regions.add(
-            DocumentRegion(
-              id: newId('r'),
-              kind: 'list',
-              start: start,
-              end: cursor,
-              listStyle: listStyle,
-            ),
-          );
-        case 'table':
-          if (buffer.isNotEmpty) append('\n');
-          final rows = raw['rows'] is List ? raw['rows'] as List : [['', '']];
-          final start = cursor;
-          append(
-            rows
-                .map((r) => r is List ? r.map((c) => c.toString()).join('\t') : '')
-                .join('\n'),
-          );
-          regions.add(
-            DocumentRegion(
-              id: newId('r'),
-              kind: 'table',
-              start: start,
-              end: cursor,
-              rows: [
-                for (final r in rows)
-                  if (r is List) [for (final c in r) c.toString()] else [''],
-              ],
-            ),
-          );
-        case 'image':
-          if (buffer.isNotEmpty) append('\n');
-          embeds.add(
-            DocumentEmbed(
-              id: newId('e'),
-              kind: 'image',
-              offset: cursor,
-              url: raw['url'] as String? ?? '',
-              width: (raw['width'] as num?)?.toDouble(),
-            ),
-          );
-          append(InlineDocument.embedChar);
-        case 'graph':
-          if (buffer.isNotEmpty) append('\n');
-          embeds.add(
-            DocumentEmbed(
-              id: newId('e'),
-              kind: 'graph',
-              offset: cursor,
-              labels: raw['labels'] is List
-                  ? [for (final l in raw['labels'] as List) l.toString()]
-                  : const [],
-              values: raw['values'] is List
-                  ? [for (final v in raw['values'] as List) (v as num).toDouble()]
-                  : const [],
-            ),
-          );
-          append(InlineDocument.embedChar);
-        case 'object':
-          if (buffer.isNotEmpty) append('\n');
-          embeds.add(
-            DocumentEmbed(
-              id: newId('e'),
-              kind: 'object',
-              offset: cursor,
-              objectType: raw['object_type'] as String?,
-              objectId: raw['object_id'] as int?,
-            ),
-          );
-          append(InlineDocument.embedChar);
-      }
-    }
-    return InlineDocument(
-      version: InlineDocument.documentVersion,
-      text: buffer.toString(),
-      spans: spans,
-      regions: regions,
-      embeds: embeds,
-    );
-  }
-
-  static InlineDocument _migratePlain(String body) {
-    final nodes = <Map<String, dynamic>>[];
+  static RichDocument _migratePlain(String body) {
+    final blocks = <DocumentNode>[];
     for (final line in body.split('\n')) {
       final stripped = line.trim();
-      final taskMatch = RegExp(r'^\{\{task:(\d+)\}\}$').firstMatch(stripped);
-      if (taskMatch != null) {
-        nodes.add({
-          'type': 'object',
-          'object_type': 'task_list',
-          'object_id': int.parse(taskMatch.group(1)!),
-        });
+      final task = RegExp(r'^\{\{task:(\d+)\}\}$').firstMatch(stripped);
+      if (task != null) {
+        blocks.add(EmbedNode(id: newId('b'), objectId: int.parse(task.group(1)!)));
         continue;
       }
-      final infoMatch = RegExp(r'^\{\{info:(\d+)\}\}$').firstMatch(stripped);
-      if (infoMatch != null) {
-        nodes.add({
-          'type': 'object',
-          'object_type': 'info',
-          'object_id': int.parse(infoMatch.group(1)!),
-        });
+      final info = RegExp(r'^\{\{info:(\d+)\}\}$').firstMatch(stripped);
+      if (info != null) {
+        blocks.add(EmbedNode(id: newId('b'), objectId: int.parse(info.group(1)!)));
         continue;
       }
-      if (line.isNotEmpty || nodes.isNotEmpty) {
-        nodes.add({'type': 'paragraph', 'text': line, 'spans': []});
+      if (line.isNotEmpty || blocks.isNotEmpty) {
+        blocks.add(ParagraphNode(id: newId('b'), text: line));
       }
     }
-    if (nodes.isEmpty) {
-      nodes.add({'type': 'paragraph', 'text': '', 'spans': []});
+    if (blocks.isEmpty) {
+      blocks.add(ParagraphNode(id: newId('b'), text: ''));
     }
-    return _migrateV1Nodes(nodes);
+    return RichDocument(version: RichDocument.documentVersion, blocks: blocks);
   }
 
-  static InlineDocument insertEmbed(
-    InlineDocument doc,
-    DocumentEmbed embed, {
-    int? offset,
-  }) {
-    final pos = offset ?? doc.text.length;
-    final clamped = pos.clamp(0, doc.text.length);
-    final text =
-        doc.text.substring(0, clamped) +
-        InlineDocument.embedChar +
-        doc.text.substring(clamped);
+  static RichDocument _migrateV1Nodes(List nodes) {
+    final blocks = <DocumentNode>[];
+    for (final raw in nodes) {
+      if (raw is! Map<String, dynamic>) continue;
+      blocks.add(nodeFromJson(_v1NodeToV3(raw)));
+    }
+    return RichDocument(version: RichDocument.documentVersion, blocks: blocks);
+  }
+
+  static Map<String, dynamic> _v1NodeToV3(Map<String, dynamic> node) {
+    final type = node['type'];
+    if (type == 'object') {
+      return {
+        'id': node['id'] ?? newId('b'),
+        'type': 'embed',
+        'object_id': node['object_id'],
+      };
+    }
+    if (type == 'list') {
+      final items = node['items'] as List? ?? const [];
+      return {
+        'id': node['id'] ?? newId('b'),
+        'type': 'list',
+        'list_style': node['list_style'] ?? 'bullet',
+        'items': [
+          for (var i = 0; i < items.length; i++)
+            {
+              'id': newId('li'),
+              'text': items[i].toString(),
+              'indent': 0,
+              'spans': [],
+            },
+        ],
+      };
+    }
+    if (type == 'image' || type == 'graph') {
+      return {
+        'id': node['id'] ?? newId('b'),
+        'type': 'embed',
+        'object_id': 0,
+      };
+    }
+    return {
+      'id': node['id'] ?? newId('b'),
+      'type': type == 'paragraph' ? 'paragraph' : type,
+      'text': node['text'] ?? '',
+      'spans': node['spans'] ?? [],
+      if (type == 'heading') 'level': node['level'] ?? 1,
+      if (type == 'table') 'rows': node['rows'] ?? [['', '']],
+    };
+  }
+
+  static RichDocument _migrateV2ToV3(Map<String, dynamic> data) {
+    final text = data['text'] as String? ?? '';
     final embeds = [
-      for (final e in doc.embeds)
-        e.copyWith(offset: e.offset >= clamped ? e.offset + 1 : e.offset),
-      embed.copyWith(offset: clamped),
-    ];
-    final regions = [
-      for (final r in doc.regions)
-        r.copyWith(
-          start: r.start >= clamped ? r.start + 1 : r.start,
-          end: r.end >= clamped ? r.end + 1 : r.end,
-        ),
-    ];
-    final spans = [
-      for (final s in doc.spans)
-        TextSpanMark(
-          start: s.start >= clamped ? s.start + 1 : s.start,
-          end: s.end >= clamped ? s.end + 1 : s.end,
-          bold: s.bold,
-          italic: s.italic,
-          underline: s.underline,
-          size: s.size,
-        ),
-    ];
-    return doc.copyWith(
-      text: text,
-      embeds: embeds,
-      regions: regions,
-      spans: spans,
-    );
+      for (final e in data['embeds'] as List? ?? const [])
+        if (e is Map<String, dynamic>) e,
+    ]..sort((a, b) => (a['offset'] as int? ?? 0).compareTo(b['offset'] as int? ?? 0));
+
+    final blocks = <DocumentNode>[];
+    var pos = 0;
+    for (final embed in embeds) {
+      final offset = embed['offset'] as int? ?? 0;
+      if (offset > pos) {
+        final segment = text.substring(pos, offset);
+        if (segment.isNotEmpty) {
+          blocks.add(ParagraphNode(id: newId('b'), text: segment));
+        }
+      }
+      if (embed['kind'] == 'object') {
+        blocks.add(
+          EmbedNode(id: newId('b'), objectId: embed['object_id'] as int),
+        );
+      }
+      pos = offset + 1;
+    }
+    if (pos < text.length) {
+      blocks.add(ParagraphNode(id: newId('b'), text: text.substring(pos).replaceAll(embedChar, '')));
+    }
+    if (blocks.isEmpty) {
+      blocks.add(ParagraphNode(id: newId('b'), text: ''));
+    }
+    return RichDocument(version: RichDocument.documentVersion, blocks: blocks);
   }
 
-  static InlineDocument moveEmbed(InlineDocument doc, String embedId, int newOffset) {
-    final embed = doc.embeds.where((e) => e.id == embedId).firstOrNull;
-    if (embed == null) return doc;
-    var working = removeEmbed(doc, embedId);
-    return insertEmbed(working, embed, offset: newOffset);
-  }
-
-  static InlineDocument removeEmbed(InlineDocument doc, String embedId) {
-    final embed = doc.embeds.where((e) => e.id == embedId).firstOrNull;
-    if (embed == null) return doc;
-    final pos = embed.offset;
-    final text = doc.text.substring(0, pos) + doc.text.substring(pos + 1);
-    return doc.copyWith(
-      text: text,
-      embeds: [
-        for (final e in doc.embeds)
-          if (e.id != embedId)
-            e.copyWith(offset: e.offset > pos ? e.offset - 1 : e.offset),
-      ],
-      regions: [
-        for (final r in doc.regions)
-          r.copyWith(
-            start: r.start > pos ? r.start - 1 : r.start,
-            end: r.end > pos ? r.end - 1 : r.end,
-          ),
-      ],
-      spans: [
-        for (final s in doc.spans)
-          TextSpanMark(
-            start: s.start > pos ? s.start - 1 : s.start,
-            end: s.end > pos ? s.end - 1 : s.end,
-            bold: s.bold,
-            italic: s.italic,
-            underline: s.underline,
-            size: s.size,
-          ),
-      ],
-    );
-  }
-
-  static InlineDocument replaceTextRange(
-    InlineDocument doc,
-    int start,
-    int end,
-    String replacement,
-  ) {
-    final s = start.clamp(0, doc.text.length);
-    final e = end.clamp(s, doc.text.length);
-    final delta = replacement.length - (e - s);
-    final text = doc.text.substring(0, s) + replacement + doc.text.substring(e);
-    return doc.copyWith(
-      text: text,
-      spans: [
-        for (final span in doc.spans)
-          if (span.end <= s)
-            span
-          else if (span.start >= e)
-            TextSpanMark(
-              start: span.start + delta,
-              end: span.end + delta,
-              bold: span.bold,
-              italic: span.italic,
-              underline: span.underline,
-              size: span.size,
-            ),
-      ],
-      regions: [
-        for (final region in doc.regions)
-          if (region.end <= s || region.start >= e)
-            region.copyWith(
-              start: region.start >= e ? region.start + delta : region.start,
-              end: region.end >= e ? region.end + delta : region.end,
-            )
-          else if (region.start <= s && region.end >= e)
-            region.copyWith(start: s, end: s + replacement.length)
-          else if (region.start < s)
-            region.copyWith(end: s)
-          else if (region.end > e)
-            region.copyWith(start: s + replacement.length, end: region.end + delta),
-      ].where((r) => r.end > r.start).toList(),
-      embeds: [
-        for (final embed in doc.embeds)
-          embed.copyWith(
-            offset: embed.offset <= s
-                ? embed.offset
-                : embed.offset >= e
-                    ? embed.offset + delta
-                    : s,
-          ),
-      ],
-    );
-  }
-
-  static InlineDocument insertRegion(
-    InlineDocument doc,
-    DocumentRegion region, {
-    int? offset,
+  static RichDocument insertEmbedBlock(
+    RichDocument doc,
+    int objectId, {
+    int? blockIndex,
+    String? blockId,
   }) {
-    final pos = (offset ?? doc.text.length).clamp(0, doc.text.length);
-    final seed = region.kind == 'list'
-        ? (region.listStyle == 'numbered' ? '1. \n' : '• \n')
-        : '\t\n\t';
-    final text =
-        doc.text.substring(0, pos) + seed + doc.text.substring(pos);
-    final delta = seed.length;
+    final blocks = [...doc.blocks];
+    final index = blockIndex == null ? blocks.length : blockIndex.clamp(0, blocks.length);
+    blocks.insert(
+      index,
+      EmbedNode(id: blockId ?? newId('b'), objectId: objectId),
+    );
+    return doc.copyWith(blocks: blocks);
+  }
+
+  static RichDocument moveEmbedBlock(RichDocument doc, String blockId, int newIndex) {
+    final blocks = [...doc.blocks];
+    final current = blocks.indexWhere((b) => b.id == blockId);
+    if (current < 0) return doc;
+    final block = blocks.removeAt(current);
+    final index = newIndex.clamp(0, blocks.length);
+    blocks.insert(index, block);
+    return doc.copyWith(blocks: blocks);
+  }
+
+  static RichDocument removeBlock(RichDocument doc, String blockId) {
+    return doc.copyWith(blocks: doc.blocks.where((b) => b.id != blockId).toList());
+  }
+
+  static RichDocument replaceBlock(RichDocument doc, String blockId, DocumentNode replacement) {
     return doc.copyWith(
-      text: text,
-      regions: [
-        ...doc.regions.map(
-          (r) => r.copyWith(
-            start: r.start >= pos ? r.start + delta : r.start,
-            end: r.end >= pos ? r.end + delta : r.end,
-          ),
-        ),
-        region.copyWith(start: pos, end: pos + delta),
-      ],
-      embeds: [
-        for (final e in doc.embeds)
-          e.copyWith(offset: e.offset >= pos ? e.offset + delta : e.offset),
-      ],
-      spans: [
-        for (final s in doc.spans)
-          TextSpanMark(
-            start: s.start >= pos ? s.start + delta : s.start,
-            end: s.end >= pos ? s.end + delta : s.end,
-            bold: s.bold,
-            italic: s.italic,
-            underline: s.underline,
-            size: s.size,
-          ),
+      blocks: [
+        for (final block in doc.blocks)
+          if (block.id == blockId) replacement else block,
       ],
     );
   }
-}
 
-extension _FirstOrNull<E> on Iterable<E> {
-  E? get firstOrNull {
-    final it = iterator;
-    if (!it.moveNext()) return null;
-    return it.current;
+  static RichDocument insertBlock(RichDocument doc, int index, DocumentNode block) {
+    final blocks = [...doc.blocks];
+    blocks.insert(index.clamp(0, blocks.length), block);
+    return doc.copyWith(blocks: blocks);
+  }
+
+  static int? embedBlockIndex(RichDocument doc, int objectId) {
+    for (var i = 0; i < doc.blocks.length; i++) {
+      final block = doc.blocks[i];
+      if (block is EmbedNode && block.objectId == objectId) return i;
+    }
+    return null;
   }
 }

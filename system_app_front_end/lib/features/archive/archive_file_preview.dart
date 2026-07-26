@@ -27,7 +27,7 @@ class ArchiveFilePreview extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            file.body.isEmpty ? '(empty)' : file.body,
+            file.documentJson.isEmpty ? '(empty)' : file.documentJson,
             style: AppTypography.noteBodyStyle,
           ),
         ],

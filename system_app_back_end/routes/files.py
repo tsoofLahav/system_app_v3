@@ -3,21 +3,29 @@ from flask import Blueprint, jsonify, request
 from models import File, Topic, db
 from routes.helpers import active_query, apply_updates, get_or_404
 from services.delete_cascade import delete_file_cascade
-from services.document_body import empty_document_json, validate_document
+from services.document_v3 import empty_document_json, serialize_document, validate_document
+from services.document_promote import promote_legacy_embeds
 from services.file_versions import save_file_version
 
 files_bp = Blueprint("files", __name__)
 
 
+def _file_response(file: File):
+    promote_legacy_embeds(file)
+    db.session.commit()
+    return jsonify(file.to_dict())
+
+
 @files_bp.route("/files", methods=["GET"])
 def list_files():
     files = active_query(File).order_by(File.order_index, File.id).all()
-    return jsonify([f.to_dict(include_body=False) for f in files])
+    return jsonify([f.to_dict(include_document=False) for f in files])
 
 
 @files_bp.route("/files/<int:file_id>", methods=["GET"])
 def get_file(file_id):
-    return jsonify(get_or_404(File, file_id).to_dict())
+    file = get_or_404(File, file_id)
+    return _file_response(file)
 
 
 @files_bp.route("/topics/<int:topic_id>/files", methods=["GET"])
@@ -29,7 +37,7 @@ def list_files_by_topic(topic_id):
         .order_by(File.order_index, File.id)
         .all()
     )
-    return jsonify([f.to_dict(include_body=False) for f in files])
+    return jsonify([f.to_dict(include_document=False) for f in files])
 
 
 @files_bp.route("/topics/<int:topic_id>/archive/files", methods=["GET"])
@@ -41,7 +49,7 @@ def list_archived_files_by_topic(topic_id):
         .order_by(File.archived_at.desc(), File.id.desc())
         .all()
     )
-    return jsonify([f.to_dict(include_body=True) for f in files])
+    return jsonify([f.to_dict(include_document=True) for f in files])
 
 
 @files_bp.route("/files", methods=["POST"])
@@ -51,10 +59,11 @@ def create_file():
         return jsonify({"error": "name and topic_id are required"}), 400
     get_or_404(Topic, data["topic_id"])
 
+    document_json = data.get("document_json") or empty_document_json()
     file = File(
         topic_id=data["topic_id"],
         name=data["name"],
-        body=data.get("body") or empty_document_json(),
+        document_json=document_json,
         is_essence=bool(data.get("is_essence", False)),
         order_index=data.get("order_index", 0),
         meta=data.get("meta") or {},
@@ -69,19 +78,28 @@ def update_file(file_id):
     file = get_or_404(File, file_id)
     data = request.get_json(silent=True) or {}
 
-    if "body" in data and data["body"] != file.body:
+    if "document_json" in data and data["document_json"] != file.document_json:
         save_file_version(file, source="user")
         try:
-            validate_document(data["body"])
+            validate_document(data["document_json"])
         except ValueError as error:
             return jsonify({"error": str(error)}), 400
 
     apply_updates(
         file,
         data,
-        {"topic_id", "name", "body", "is_essence", "order_index", "meta", "archived_at"},
+        {
+            "topic_id",
+            "name",
+            "document_json",
+            "is_essence",
+            "order_index",
+            "meta",
+            "archived_at",
+        },
         datetime_fields={"archived_at"},
     )
+    promote_legacy_embeds(file)
     db.session.commit()
     return jsonify(file.to_dict())
 

@@ -56,14 +56,14 @@ class File(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"), nullable=False)
     name = db.Column(db.Text, nullable=False)
-    body = db.Column(db.Text, nullable=False, default="")
+    document_json = db.Column(db.Text, nullable=False, default="")
     is_essence = db.Column(db.Boolean, nullable=False, default=False)
     order_index = db.Column(db.Integer, nullable=False, default=0)
     meta = db.Column(JSONB, nullable=False, default=dict)
     archived_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    def to_dict(self, *, include_body: bool = True):
+    def to_dict(self, *, include_document: bool = True):
         data = {
             "id": self.id,
             "topic_id": self.topic_id,
@@ -74,8 +74,8 @@ class File(db.Model):
             "archived_at": _iso(self.archived_at),
             "created_at": _iso(self.created_at),
         }
-        if include_body:
-            data["body"] = self.body or ""
+        if include_document:
+            data["document_json"] = self.document_json or ""
         return data
 
 
@@ -146,6 +146,7 @@ class ObjectEmbed(db.Model):
     type = db.Column(db.Text, nullable=False)
     task_list_id = db.Column(db.Integer, db.ForeignKey("task_lists.id"))
     information_id = db.Column(db.Integer, db.ForeignKey("information_pieces.id"))
+    payload = db.Column(JSONB, nullable=False, default=dict)
     anchor = db.Column(JSONB, nullable=False, default=dict)
     sort_key = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -157,6 +158,7 @@ class ObjectEmbed(db.Model):
             "type": self.type,
             "task_list_id": self.task_list_id,
             "information_id": self.information_id,
+            "payload": self.payload if self.payload is not None else {},
             "anchor": self.anchor if self.anchor is not None else {},
             "sort_key": self.sort_key,
             "created_at": _iso(self.created_at),

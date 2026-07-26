@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/document/document_codec.dart';
-import '../features/document/inline_document_model.dart';
-import '../features/document/rich_text/list_text_parse.dart';
+import '../features/document/document_model.dart';
 import 'l10n/app_language.dart';
 import 'l10n/app_strings.dart';
 import 'models/automation.dart';
@@ -452,23 +451,41 @@ class AppState extends ChangeNotifier {
     return embeds;
   }
 
+  Future<AppFile> reloadFile(int fileId) async {
+    final updated = await _files.getFile(fileId);
+    _patchFileInDetail(updated);
+    notifyListeners();
+    return updated;
+  }
+
+  Future<void> updateObjectPayload(
+    int objectId,
+    Map<String, dynamic> payload,
+  ) async {
+    await _api.patch('/objects/$objectId', {'payload': payload});
+    await _reloadEmbedsForOpenFiles();
+    notifyListeners();
+  }
+
   Future<ObjectEmbed> createObjectInDocument(
     AppFile file, {
     required String type,
     String? title,
     String? body,
+    Map<String, dynamic>? metadata,
+    Map<String, dynamic>? payload,
+    int? blockIndex,
     int? index,
     int? offset,
-    String? documentBody,
   }) async {
     final embed = await _objects.createObject(
       fileId: file.id,
       type: type,
       title: title,
       body: body,
-      index: index,
-      offset: offset,
-      documentBody: documentBody,
+      metadata: metadata,
+      payload: payload,
+      blockIndex: blockIndex ?? index ?? offset,
     );
     final updated = await _files.getFile(file.id);
     _patchFileInDetail(updated);
@@ -478,61 +495,48 @@ class AppState extends ChangeNotifier {
 
   Future<void> convertSelectionToTaskList(
     AppFile file, {
-    required InlineDocument document,
-    required int start,
-    required int end,
-    required void Function(InlineDocument doc) onDocumentChanged,
+    required RichDocument document,
+    required ListNode listBlock,
   }) async {
-    final slice = document.text.substring(
-      start.clamp(0, document.text.length),
-      end.clamp(0, document.text.length),
+    final blockIndex = document.blocks.indexWhere((b) => b.id == listBlock.id);
+    if (blockIndex < 0) return;
+    final cleared = document.copyWith(
+      blocks: [...document.blocks]..removeAt(blockIndex),
     );
-    final lines = parsePastedListText(slice);
-    final cleared = DocumentCodec.replaceTextRange(document, start, end, '');
-    onDocumentChanged(cleared);
-    await updateFile(file, {'body': DocumentCodec.serialize(cleared)});
+    await updateFile(file, {'document_json': DocumentCodec.serialize(cleared)});
 
     final embed = await createObjectInDocument(
       file,
       type: 'task_list',
-      offset: start,
+      blockIndex: blockIndex,
     );
     if (embed.taskListId != null) {
-      for (final line in lines) {
-        await createTaskInList(embed.taskListId!, title: line);
+      for (final item in listBlock.items) {
+        if (item.text.trim().isNotEmpty) {
+          await createTaskInList(embed.taskListId!, title: item.text.trim());
+        }
       }
     }
-    final updated = await _files.getFile(file.id);
-    _patchFileInDetail(updated);
-    onDocumentChanged(DocumentCodec.parse(updated.body));
+    await reloadFile(file.id);
   }
 
   Future<void> convertSelectionToInfo(
     AppFile file, {
-    required InlineDocument document,
-    required int start,
-    required int end,
-    required void Function(InlineDocument doc) onDocumentChanged,
+    required RichDocument document,
+    required String slice,
+    required List<Map<String, dynamic>> spans,
+    required int blockIndex,
   }) async {
-    final slice = document.text.substring(
-      start.clamp(0, document.text.length),
-      end.clamp(0, document.text.length),
-    );
     final titleLine = slice.split('\n').first.trim();
-    final cleared = DocumentCodec.replaceTextRange(document, start, end, '');
-    onDocumentChanged(cleared);
-    await updateFile(file, {'body': DocumentCodec.serialize(cleared)});
-
     await createObjectInDocument(
       file,
       type: 'info',
       title: titleLine.isEmpty ? 'Info' : titleLine,
       body: slice,
-      offset: start,
+      metadata: {'spans': spans},
+      blockIndex: blockIndex + 1,
     );
-    final updated = await _files.getFile(file.id);
-    _patchFileInDetail(updated);
-    onDocumentChanged(DocumentCodec.parse(updated.body));
+    await reloadFile(file.id);
   }
 
   Future<Task> createTaskInList(int taskListId, {String title = 'New task'}) async {
@@ -785,9 +789,9 @@ class AppState extends ChangeNotifier {
     for (final change in changes) {
       if (change is! Map) continue;
       final fileId = change['file_id'] as int?;
-      final newBody = change['new_body'] as String?;
+      final newBody = change['new_document_json'] as String? ?? change['new_body'] as String?;
       if (fileId != null && newBody != null) {
-        await _files.updateFile(fileId, {'body': newBody});
+        await _files.updateFile(fileId, {'document_json': newBody});
       }
     }
     pendingAgentReview = null;

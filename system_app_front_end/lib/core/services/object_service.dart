@@ -18,18 +18,22 @@ class ObjectService {
     required String type,
     String? title,
     String? body,
+    Map<String, dynamic>? metadata,
+    Map<String, dynamic>? payload,
+    int? blockIndex,
     int? index,
     int? offset,
-    String? documentBody,
   }) async {
     final data =
         await _api.post('/files/$fileId/objects', {
               'type': type,
               if (title != null) 'title': title,
               if (body != null) 'body': body,
+              if (metadata != null) 'metadata': metadata,
+              if (payload != null) 'payload': payload,
+              if (blockIndex != null) 'block_index': blockIndex,
               if (index != null) 'index': index,
               if (offset != null) 'offset': offset,
-              if (documentBody != null) 'document_body': documentBody,
             })
             as Map<String, dynamic>;
     return ObjectEmbed.fromJson(data);

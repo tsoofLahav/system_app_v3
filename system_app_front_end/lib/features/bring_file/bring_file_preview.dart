@@ -30,7 +30,7 @@ class OverlayFileContentPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(
-      preview.file.body.isEmpty ? preview.file.name : preview.file.body,
+      preview.file.documentJson.isEmpty ? preview.file.name : preview.file.documentJson,
       maxLines: 6,
       overflow: TextOverflow.ellipsis,
     );

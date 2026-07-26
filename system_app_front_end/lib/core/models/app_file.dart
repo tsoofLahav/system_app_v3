@@ -3,7 +3,7 @@ class AppFile {
     required this.id,
     required this.topicId,
     required this.name,
-    this.body = '',
+    this.documentJson = '',
     this.isEssence = false,
     this.orderIndex = 0,
     this.meta = const {},
@@ -14,7 +14,7 @@ class AppFile {
   final int id;
   final int topicId;
   final String name;
-  final String body;
+  final String documentJson;
   final bool isEssence;
   final int orderIndex;
   final Map<String, dynamic> meta;
@@ -29,7 +29,7 @@ class AppFile {
       id: json['id'] as int,
       topicId: json['topic_id'] as int,
       name: json['name'] as String,
-      body: json['body'] as String? ?? '',
+      documentJson: json['document_json'] as String? ?? '',
       isEssence: json['is_essence'] as bool? ?? false,
       orderIndex: json['order_index'] as int? ?? 0,
       meta: rawMeta is Map<String, dynamic>
@@ -42,7 +42,7 @@ class AppFile {
 
   AppFile copyWith({
     String? name,
-    String? body,
+    String? documentJson,
     bool? isEssence,
     int? orderIndex,
     Map<String, dynamic>? meta,
@@ -52,7 +52,7 @@ class AppFile {
       id: id,
       topicId: topicId,
       name: name ?? this.name,
-      body: body ?? this.body,
+      documentJson: documentJson ?? this.documentJson,
       isEssence: isEssence ?? this.isEssence,
       orderIndex: orderIndex ?? this.orderIndex,
       meta: meta ?? this.meta,
@@ -61,10 +61,10 @@ class AppFile {
     );
   }
 
-  Map<String, dynamic> toJson({bool includeBody = true}) => {
+  Map<String, dynamic> toJson({bool includeDocument = true}) => {
     'topic_id': topicId,
     'name': name,
-    if (includeBody) 'body': body,
+    if (includeDocument) 'document_json': documentJson,
     'is_essence': isEssence,
     'order_index': orderIndex,
     if (meta.isNotEmpty) 'meta': meta,

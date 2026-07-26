@@ -12,6 +12,7 @@ class ObjectEmbed {
     this.tasks,
     this.information,
     this.links,
+    this.payload,
   });
 
   final int id;
@@ -24,6 +25,7 @@ class ObjectEmbed {
   final List<Task>? tasks;
   final Map<String, dynamic>? information;
   final List<Map<String, dynamic>>? links;
+  final Map<String, dynamic>? payload;
 
   factory ObjectEmbed.fromJson(Map<String, dynamic> json) {
     return ObjectEmbed(
@@ -50,6 +52,9 @@ class ObjectEmbed {
               for (final l in json['links'] as List)
                 Map<String, dynamic>.from(l as Map),
             ]
+          : null,
+      payload: json['payload'] is Map<String, dynamic>
+          ? Map<String, dynamic>.from(json['payload'] as Map)
           : null,
     );
   }

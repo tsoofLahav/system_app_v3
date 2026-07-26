@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/app_state.dart';
 import '../../core/models/app_file.dart';
 import '../../core/models/object_embed.dart';
-import 'inline_document_editor.dart';
+import 'block_document_editor.dart';
 
-/// Thin wrapper — all editing happens in [InlineDocumentEditor].
 class DocumentEditor extends StatelessWidget {
   const DocumentEditor({
     super.key,
@@ -20,7 +19,7 @@ class DocumentEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InlineDocumentEditor(
+    return BlockDocumentEditor(
       file: file,
       state: state,
       embeds: embeds,

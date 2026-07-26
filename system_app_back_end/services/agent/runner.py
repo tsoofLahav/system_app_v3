@@ -41,10 +41,10 @@ def _search_files(scope: dict, query: str) -> list[dict]:
     rows = q.all()
     query_lower = query.lower()
     return [
-        f.to_dict(include_body=False)
+        f.to_dict(include_document=False)
         for f in rows
         if query_lower in (f.name or "").lower()
-        or query_lower in document_plain_text(f.body or "").lower()
+        or query_lower in document_plain_text(f.document_json or "").lower()
     ]
 
 
@@ -55,29 +55,39 @@ def _open_file(file_id: int) -> dict | None:
     data = file.to_dict()
     embeds = ObjectEmbed.query.filter_by(file_id=file_id).all()
     data["objects"] = [e.to_dict() for e in embeds]
-    data["body_plain"] = document_plain_text(file.body or "")
+    data["document_plain"] = document_plain_text(file.document_json or "")
     return data
 
 
-def _update_file(file_id: int, body: str, *, apply_mode: str) -> dict:
+def _update_file(file_id: int, document_json: str, *, apply_mode: str) -> dict:
     file = db.session.get(File, file_id)
     if file is None:
         return {"error": "file not found"}
-    old_body = file.body or ""
+    old_document = file.document_json or ""
     if apply_mode == "notify_only":
-        return {"file_id": file_id, "old_body": old_body, "new_body": body, "applied": False}
+        return {
+            "file_id": file_id,
+            "old_document_json": old_document,
+            "new_document_json": document_json,
+            "applied": False,
+        }
     if apply_mode == "review":
         return {
             "file_id": file_id,
-            "old_body": old_body,
-            "new_body": body,
+            "old_document_json": old_document,
+            "new_document_json": document_json,
             "applied": False,
-            "review": compute_diff(old_body, body),
+            "review": compute_diff(old_document, document_json),
         }
     save_file_version(file, source="agent")
-    file.body = body
+    file.document_json = document_json
     db.session.flush()
-    return {"file_id": file_id, "old_body": old_body, "new_body": body, "applied": True}
+    return {
+        "file_id": file_id,
+        "old_document_json": old_document,
+        "new_document_json": document_json,
+        "applied": True,
+    }
 
 
 TOOL_DEFS = [

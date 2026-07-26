@@ -1,50 +1,76 @@
-# Document body model (v2 inline)
+# Document model (v3 block tree)
 
-Files store a JSON **document body** in `files.body`. Version 2 uses a single text stream with overlays.
+Files store a JSON **document** in `files.document_json`. Version 3 uses an ordered block array with embed references.
 
 ## Shape
 
 ```json
 {
-  "version": 2,
-  "text": "Goals\n• Item one\n\uFFFC\nMore notes",
-  "spans": [{"start": 0, "end": 5, "bold": true}],
-  "regions": [
-    {"id": "r1", "kind": "list", "start": 6, "end": 16, "list_style": "bullet"},
-    {"id": "r2", "kind": "table", "start": 20, "end": 30, "rows": [["A", "B"]]}
-  ],
-  "embeds": [
-    {"id": "e1", "kind": "object", "object_type": "task_list", "object_id": 42, "offset": 17},
-    {"id": "e2", "kind": "image", "offset": 18, "url": "https://…"},
-    {"id": "e3", "kind": "graph", "offset": 19, "labels": ["A"], "values": [1]},
-    {"id": "e4", "kind": "object", "object_type": "info", "object_id": 99, "offset": 20}
+  "version": 3,
+  "blocks": [
+    { "id": "b1", "type": "paragraph", "text": "Morning notes", "spans": [] },
+    { "id": "b2", "type": "heading", "level": 2, "text": "Goals", "spans": [] },
+    {
+      "id": "b3",
+      "type": "list",
+      "list_style": "bullet",
+      "items": [{ "id": "li1", "text": "Item one", "indent": 0, "spans": [] }]
+    },
+    {
+      "id": "b4",
+      "type": "table",
+      "rows": [[{ "text": "A", "spans": [] }, { "text": "B", "spans": [] }]]
+    },
+    { "id": "b5", "type": "embed", "object_id": 42 }
   ]
 }
 ```
 
-## Fields
+## Block types
 
-| Field | Purpose |
-|-------|---------|
-| `text` | Single source of truth for editable content |
-| `spans` | Character-range formatting (`bold`, `italic`, `underline`, `size`) |
-| `regions` | List/table ranges `[start, end)` styled in the editor; moved via cut/copy/paste only |
-| `embeds` | Graph, image, task_list, info anchored at `offset` |
+| Type | Purpose |
+|------|---------|
+| `paragraph` | Rich text with optional spans |
+| `heading` | Heading level 1–6 with spans |
+| `list` | Inline list items with indent and spans |
+| `table` | Editable table cells with spans |
+| `embed` | Reference to `objects.id` |
 
-Each embed occupies one character slot in `text`: U+FFFC (object replacement character).
-
-## Migration
-
-- Plain text with `{{task:id}}` / `{{info:id}}` markers → v2
-- v1 `nodes[]` JSON → v2 via `migrate_v1_nodes_to_v2`
-- Reads accept v1; writes normalize to v2
+Position is **array order** — no character offsets.
 
 ## Object embeds
 
-`object_id` references `objects.id` (API: `/objects/:id`). Task list and info payloads live in related tables; the document only stores the anchor offset.
+Supported object types in `objects` table:
 
-Creating an object via `POST /files/:id/objects` accepts `{ "type", "offset" }` and inserts `\uFFFC` + embed entry server-side.
+| Type | Storage |
+|------|---------|
+| `task_list` | `task_lists` + `tasks` |
+| `info` | `information_pieces` |
+| `image` | `objects.payload` (`url`, `width`, …) |
+| `graph` | `objects.payload` (`labels`, `values`, …) |
 
-## Agent plain text
+Creating an object via `POST /files/:id/objects` accepts `{ "type", "block_index" }` and inserts an embed block server-side.
 
-`document_plain_text()` flattens v2 bodies for diffs: text with embed chars as spaces, plus `[task_list #N]` / `[info #N]` lines.
+## Migration
+
+- Plain text with `{{task:id}}` / `{{info:id}}` → v3
+- v1 `nodes[]` JSON → v3
+- v2 inline `{ text, spans, regions, embeds }` → v3 on read
+- Writes always normalize to v3
+
+## Agent text
+
+`document_to_agent_text()` produces deterministic sections:
+
+```
+[TASK_LIST id="42"]
+ACTIVE:
+- [ ] Call clinic
+[/TASK_LIST]
+
+[INFO id="17"]
+Body text
+[/INFO]
+```
+
+Malformed agent input must not silently delete existing objects (`apply_agent_text` validation).

@@ -4,16 +4,19 @@ from models import File, InformationPiece, Link, ObjectEmbed, TaskList, Topic, d
 from routes.helpers import get_or_404
 from services.bootstrap import default_workspace_id
 from services.delete_cascade import delete_object_embed_cascade
-from services.document_body import (
-    insert_embed,
-    object_node_for,
+from services.document_v3 import (
+    insert_embed_block,
     parse_document,
     remove_object_embeds,
+    serialize_document,
     sync_object_anchors,
 )
+from services.document_promote import promote_legacy_embeds
 from services.task_list_order import tasks_for_list
 
 objects_bp = Blueprint("objects", __name__)
+
+_OBJECT_TYPES = {"task_list", "info", "image", "graph"}
 
 
 def _workspace_for_object(embed: ObjectEmbed) -> int | None:
@@ -43,6 +46,37 @@ def _resolve_embed(obj: ObjectEmbed) -> dict:
     return data
 
 
+def _create_embed_entity(type_: str, data: dict) -> ObjectEmbed:
+    if type_ == "task_list":
+        task_list = TaskList()
+        db.session.add(task_list)
+        db.session.flush()
+        return ObjectEmbed(
+            file_id=data["file_id"],
+            type="task_list",
+            task_list_id=task_list.id,
+        )
+    if type_ == "info":
+        entity = InformationPiece(
+            title=data.get("title") or "",
+            body=data.get("body") or "",
+            metadata_=data.get("metadata") or {},
+        )
+        db.session.add(entity)
+        db.session.flush()
+        return ObjectEmbed(
+            file_id=data["file_id"],
+            type="info",
+            information_id=entity.id,
+        )
+    payload = data.get("payload") or {}
+    return ObjectEmbed(
+        file_id=data["file_id"],
+        type=type_,
+        payload=payload,
+    )
+
+
 @objects_bp.route("/files/<int:file_id>/objects", methods=["GET"])
 def list_objects(file_id):
     get_or_404(File, file_id)
@@ -59,45 +93,34 @@ def create_object(file_id):
     file = get_or_404(File, file_id)
     data = request.get_json(silent=True) or {}
     type_ = data.get("type")
-    if type_ not in {"task_list", "info"}:
-        return jsonify({"error": "type must be task_list or info"}), 400
+    if type_ not in _OBJECT_TYPES:
+        return jsonify({"error": f"type must be one of {sorted(_OBJECT_TYPES)}"}), 400
 
-    if type_ == "task_list":
-        task_list = TaskList()
-        db.session.add(task_list)
-        db.session.flush()
-        embed = ObjectEmbed(
-            file_id=file.id, type="task_list", task_list_id=task_list.id
-        )
-    else:
-        entity = InformationPiece(
-            title=data.get("title") or "",
-            body=data.get("body") or "",
-            metadata_=data.get("metadata") or {},
-        )
-        db.session.add(entity)
-        db.session.flush()
-        embed = ObjectEmbed(
-            file_id=file.id, type="info", information_id=entity.id
-        )
-
+    embed = _create_embed_entity(type_, {**data, "file_id": file.id})
     db.session.add(embed)
     db.session.flush()
 
-    offset = data.get("offset")
-    if offset is None and data.get("index") is not None:
-        offset = data.get("index")
-    if data.get("document_body") is not None:
-        file.body = str(data["document_body"])
-    embed_spec = object_node_for(embed.id, type_)
-    if offset is not None:
-        embed_spec["offset"] = int(offset)
-    file.body = insert_embed(file.body or "", embed_spec, offset=offset)
-    doc = parse_document(file.body)
-    hit = next((e for e in doc["embeds"] if e.get("object_id") == embed.id), embed_spec)
-    embed.anchor = {"kind": "embed", "embed_id": hit["id"], "offset": hit["offset"]}
+    block_index = data.get("block_index")
+    if block_index is None and data.get("index") is not None:
+        block_index = data.get("index")
+    if block_index is None and data.get("offset") is not None:
+        block_index = data.get("offset")
+
+    file.document_json = insert_embed_block(
+        file.document_json or "",
+        embed.id,
+        block_index=block_index,
+    )
+    doc = parse_document(file.document_json)
+    hit = next(
+        (b for b in doc["blocks"] if b.get("object_id") == embed.id),
+        None,
+    )
+    if hit:
+        embed.anchor = {"kind": "embed", "block_id": hit["id"]}
     embed.sort_key = data.get("sort_key", embed.id)
-    sync_object_anchors(file.body or "", [embed])
+    sync_object_anchors(file.document_json or "", [embed])
+    promote_legacy_embeds(file)
     db.session.commit()
     return jsonify(_resolve_embed(embed)), 201
 
@@ -116,6 +139,8 @@ def update_object(object_id):
         embed.sort_key = data["sort_key"]
     if "anchor" in data:
         embed.anchor = data["anchor"]
+    if "payload" in data and embed.type in {"image", "graph"}:
+        embed.payload = data["payload"] or {}
     db.session.commit()
     return jsonify(_resolve_embed(embed))
 
@@ -123,7 +148,7 @@ def update_object(object_id):
 @objects_bp.route("/objects/<int:object_id>", methods=["DELETE"])
 def delete_object(object_id):
     embed = get_or_404(ObjectEmbed, object_id)
-    delete_object_embed_cascade(embed, remove_from_body=True)
+    delete_object_embed_cascade(embed, remove_from_document=True)
     db.session.commit()
     return "", 204
 

@@ -15,7 +15,7 @@ from models import (
     ViewTaskMembership,
     db,
 )
-from services.document_body import remove_object_nodes
+from services.document_v3 import remove_object_embeds
 
 
 def delete_task_cascade(task_id: int) -> None:
@@ -57,10 +57,10 @@ def delete_task_list_cascade(task_list_id: int) -> None:
         db.session.delete(task_list)
 
 
-def delete_object_embed_cascade(embed: ObjectEmbed, *, remove_from_body: bool) -> None:
+def delete_object_embed_cascade(embed: ObjectEmbed, *, remove_from_document: bool) -> None:
     file = db.session.get(File, embed.file_id)
-    if file and remove_from_body:
-        file.body = remove_object_nodes(file.body or "", embed.id)
+    if file and remove_from_document:
+        file.document_json = remove_object_embeds(file.document_json or "", embed.id)
 
     if embed.type == "task_list" and embed.task_list_id:
         delete_task_list_cascade(embed.task_list_id)
@@ -82,7 +82,7 @@ def delete_file_cascade(file_id: int) -> None:
 
     embeds = ObjectEmbed.query.filter_by(file_id=file_id).all()
     for embed in embeds:
-        delete_object_embed_cascade(embed, remove_from_body=False)
+        delete_object_embed_cascade(embed, remove_from_document=False)
 
     FileVersion.query.filter_by(file_id=file_id).delete(synchronize_session=False)
     db.session.delete(file)
