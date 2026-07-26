@@ -19,6 +19,8 @@ import 'rich_text/list_editor.dart';
 import 'rich_text/rich_table_editor.dart';
 import 'rich_text/span_text_editing_controller.dart';
 
+/// Continuous rich-text document: paragraphs hold multiline text (`\n` = line break).
+/// Enter inserts a newline in-place; use the insert bar for a new block after lists/tables.
 class BlockDocumentEditor extends StatefulWidget {
   const BlockDocumentEditor({
     super.key,
@@ -47,6 +49,8 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   final _focusNodes = <String, FocusNode>{};
   final _controllers = <String, SpanTextEditingController>{};
 
+  static final _paragraphStyle = AppTypography.noteBodyStyle.copyWith(height: 1.35);
+
   AppStrings get _strings => widget.state.strings;
 
   AppFile get _currentFile =>
@@ -56,7 +60,9 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   @override
   void initState() {
     super.initState();
-    _doc = DocumentCodec.parse(_currentFile.documentJson);
+    _doc = DocumentCodec.coalesceAdjacentParagraphs(
+      DocumentCodec.parse(_currentFile.documentJson),
+    );
     if (_doc.blocks.isEmpty) {
       _doc = _doc.copyWith(blocks: [ParagraphNode(id: DocumentCodec.newId('b'), text: '')]);
     }
@@ -66,7 +72,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         DocumentEditorController(
           fileId: widget.file.id,
           insertAtBlock: _insertAtBlock,
-          focusBlock: (index) => setState(() => _focusedBlockIndex = index),
+          focusBlock: (index) => _focusedBlockIndex = index,
           flushPendingChanges: _flushPendingChanges,
         ),
       );
@@ -78,24 +84,55 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.file.id != widget.file.id) {
       _flushPendingChanges();
-      _doc = DocumentCodec.parse(_currentFile.documentJson);
+      _doc = DocumentCodec.coalesceAdjacentParagraphs(
+        DocumentCodec.parse(_currentFile.documentJson),
+      );
       _dirty = false;
-      _clearControllers();
+      _rebuildEditingState();
     } else if (!_dirty && oldWidget.file.documentJson != widget.file.documentJson) {
       final incoming = _currentFile.documentJson;
       if (incoming != _lastSavedJson) {
-        _doc = DocumentCodec.parse(_currentFile.documentJson);
-        _clearControllers();
+        _doc = DocumentCodec.coalesceAdjacentParagraphs(
+          DocumentCodec.parse(_currentFile.documentJson),
+        );
+        _rebuildEditingState();
       }
     }
   }
 
-  void _clearControllers() {
+  void _rebuildEditingState() {
     BlockTextFocusRegistry.abandonStashedFocus();
+    _disposeControllers();
+    _disposeAllFocusNodes();
+    if (mounted) setState(() {});
+  }
+
+  void _disposeControllers() {
     for (final c in _controllers.values) {
       c.dispose();
     }
     _controllers.clear();
+  }
+
+  void _disposeAllFocusNodes() {
+    for (final node in _focusNodes.values) {
+      node.dispose();
+    }
+    _focusNodes.clear();
+  }
+
+  void _pruneOrphans() {
+    final liveIds = _doc.blocks.map((b) => b.id).toSet();
+    for (final id in _controllers.keys.toList()) {
+      if (!liveIds.contains(id)) {
+        _controllers.remove(id)?.dispose();
+      }
+    }
+    for (final id in _focusNodes.keys.toList()) {
+      if (!liveIds.contains(id)) {
+        _focusNodes.remove(id)?.dispose();
+      }
+    }
   }
 
   @override
@@ -109,10 +146,8 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     unawaited(_flushPendingChanges());
     DocumentEditorRegistry.unregister(widget.file.id);
     _saveTimer?.cancel();
-    for (final node in _focusNodes.values) {
-      node.dispose();
-    }
-    _clearControllers();
+    _disposeAllFocusNodes();
+    _disposeControllers();
     super.dispose();
   }
 
@@ -147,18 +182,25 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     _lastHistoryRecord = now;
   }
 
-  void _applyDoc(RichDocument doc, {bool save = true, bool recordHistory = true}) {
+  void _mutateDoc(
+    RichDocument doc, {
+    bool rebuild = false,
+    bool save = true,
+    bool recordHistory = true,
+  }) {
     if (recordHistory) _recordHistory();
-    setState(() => _doc = doc);
+    _doc = doc;
+    _pruneOrphans();
     if (save) _scheduleSave();
+    if (rebuild && mounted) setState(() {});
   }
 
   void _undo() {
     final previous = _history.undo(_doc);
     if (previous == null) return;
     _applyingHistory = true;
-    setState(() => _doc = previous);
-    _clearControllers();
+    _doc = DocumentCodec.coalesceAdjacentParagraphs(previous);
+    _rebuildEditingState();
     _applyingHistory = false;
     _scheduleSave();
   }
@@ -167,8 +209,8 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     final next = _history.redo(_doc);
     if (next == null) return;
     _applyingHistory = true;
-    setState(() => _doc = next);
-    _clearControllers();
+    _doc = DocumentCodec.coalesceAdjacentParagraphs(next);
+    _rebuildEditingState();
     _applyingHistory = false;
     _scheduleSave();
   }
@@ -200,17 +242,22 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     final index = (_focusedBlockIndex + 1).clamp(0, _doc.blocks.length);
     switch (action) {
       case 'paragraph':
-        _applyDoc(
+        _mutateDoc(
           DocumentCodec.insertBlock(
             _doc,
             index,
             ParagraphNode(id: DocumentCodec.newId('b'), text: ''),
           ),
+          rebuild: true,
           recordHistory: false,
         );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final block = _doc.blocks[index];
+          _focusFor(block.id).requestFocus();
+        });
       case 'list':
       case 'bullet_list':
-        _applyDoc(
+        _mutateDoc(
           DocumentCodec.insertBlock(
             _doc,
             index,
@@ -219,10 +266,11 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
               items: [ListItem(id: DocumentCodec.newId('li'), text: '')],
             ),
           ),
+          rebuild: true,
           recordHistory: false,
         );
       case 'ordered_list':
-        _applyDoc(
+        _mutateDoc(
           DocumentCodec.insertBlock(
             _doc,
             index,
@@ -232,10 +280,11 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
               items: [ListItem(id: DocumentCodec.newId('li'), text: '')],
             ),
           ),
+          rebuild: true,
           recordHistory: false,
         );
       case 'table':
-        _applyDoc(
+        _mutateDoc(
           DocumentCodec.insertBlock(
             _doc,
             index,
@@ -246,14 +295,15 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
               ],
             ),
           ),
+          rebuild: true,
           recordHistory: false,
         );
     }
   }
 
-  void _updateParagraph(ParagraphNode block, int index, SpanTextEditingController controller) {
-    _focusedBlockIndex = index;
-    _applyDoc(
+  void _updateParagraph(ParagraphNode block, SpanTextEditingController controller) {
+    _focusedBlockIndex = _doc.blocks.indexWhere((b) => b.id == block.id);
+    _mutateDoc(
       DocumentCodec.replaceBlock(
         _doc,
         block.id,
@@ -265,53 +315,8 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
           ],
         ),
       ),
+      rebuild: false,
     );
-  }
-
-  void _splitParagraph(ParagraphNode block, int index, SpanTextEditingController controller) {
-    _recordHistory(force: true);
-    final sel = controller.selection;
-    final splitAt = sel.isValid ? sel.start.clamp(0, controller.text.length) : controller.text.length;
-    final beforeText = controller.text.substring(0, splitAt);
-    final afterText = controller.text.substring(splitAt);
-    final beforeSpans = _spansBefore(controller.spans, splitAt);
-    final afterSpans = _spansAfter(controller.spans, splitAt);
-
-    final newId = DocumentCodec.newId('b');
-    var blocks = [..._doc.blocks];
-    blocks[index] = block.copyWith(text: beforeText, spans: beforeSpans);
-    blocks.insert(
-      index + 1,
-      ParagraphNode(id: newId, text: afterText, spans: afterSpans),
-    );
-    _controllers.remove(block.id)?.dispose();
-    _applyDoc(_doc.copyWith(blocks: blocks), recordHistory: false);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusFor(newId).requestFocus();
-    });
-  }
-
-  List<TextSpanMark> _spansBefore(List<Map<String, dynamic>> spans, int splitAt) {
-    return [
-      for (final s in spans)
-        if ((s['start'] as int? ?? 0) < splitAt)
-          TextSpanMark.fromJson({
-            ...s,
-            'end': ((s['end'] as int? ?? 0).clamp(0, splitAt)),
-          }),
-    ];
-  }
-
-  List<TextSpanMark> _spansAfter(List<Map<String, dynamic>> spans, int splitAt) {
-    return [
-      for (final s in spans)
-        if ((s['end'] as int? ?? 0) > splitAt)
-          TextSpanMark.fromJson({
-            ...s,
-            'start': ((s['start'] as int? ?? 0) - splitAt).clamp(0, 999999),
-            'end': ((s['end'] as int? ?? 0) - splitAt).clamp(0, 999999),
-          }),
-    ];
   }
 
   Future<void> _mergeOrDeleteParagraph(ParagraphNode block, int index) async {
@@ -321,28 +326,24 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     if (prev is! ParagraphNode) return;
 
     final controller = _controllerFor(block.id, block.text, block.spans);
-    final mergeAt = prev.text.length;
-    final mergedText = prev.text + controller.text;
-    final mergedSpanMarks = <TextSpanMark>[
-      ...prev.spans,
-      for (final s in controller.spans)
-        TextSpanMark.fromJson({
-          ...Map<String, dynamic>.from(s),
-          'start': (s['start'] as int) + mergeAt,
-          'end': (s['end'] as int) + mergeAt,
-        }),
-    ];
+    if (controller.text.isNotEmpty) return;
+
+    final joinAt = prev.text.isEmpty ? 0 : prev.text.length + 1;
+    final mergedText = prev.text.isEmpty ? '' : '${prev.text}\n';
+    final mergedSpanMarks = [...prev.spans];
 
     final blocks = [..._doc.blocks];
     blocks[index - 1] = prev.copyWith(text: mergedText, spans: mergedSpanMarks);
     blocks.removeAt(index);
     _controllers.remove(block.id)?.dispose();
-    _controllers.remove(prev.id)?.dispose();
-    _applyDoc(_doc.copyWith(blocks: blocks), recordHistory: false);
+    _focusNodes.remove(block.id)?.dispose();
+    _mutateDoc(_doc.copyWith(blocks: blocks), rebuild: true, recordHistory: false);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusFor(prev.id).requestFocus();
+      if (!mounted) return;
+      final node = _focusFor(prev.id);
+      if (node.context != null) node.requestFocus();
       final c = _controllerFor(prev.id, mergedText, mergedSpanMarks);
-      c.selection = TextSelection.collapsed(offset: mergeAt);
+      c.selection = TextSelection.collapsed(offset: joinAt.clamp(0, mergedText.length));
     });
   }
 
@@ -359,15 +360,18 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
       }
       offset += items[i].text.length;
     }
-    var blocks = [..._doc.blocks];
+    final newParagraphId = DocumentCodec.newId('b');
+    final blocks = [..._doc.blocks];
     blocks[index] = ParagraphNode(id: block.id, text: text, spans: spans);
     blocks.insert(
       index + 1,
-      ParagraphNode(id: DocumentCodec.newId('b'), text: ''),
+      ParagraphNode(id: newParagraphId, text: ''),
     );
-    _applyDoc(_doc.copyWith(blocks: blocks), recordHistory: false);
+    _mutateDoc(_doc.copyWith(blocks: blocks), rebuild: true, recordHistory: false);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusFor(blocks[index + 1].id).requestFocus();
+      if (!mounted) return;
+      final node = _focusFor(newParagraphId);
+      if (node.context != null) node.requestFocus();
     });
   }
 
@@ -398,9 +402,14 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (var index = 0; index < _doc.blocks.length; index++)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _buildBlock(_doc.blocks[index], index),
+                KeyedSubtree(
+                  key: ValueKey(_doc.blocks[index].id),
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      bottom: _doc.blocks[index] is ParagraphNode ? 2 : 8,
+                    ),
+                    child: _buildBlock(_doc.blocks[index], index),
+                  ),
                 ),
             ],
           ),
@@ -421,13 +430,13 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     if (block is ParagraphNode) {
       final controller = _controllerFor(block.id, block.text, block.spans);
       return FormattedTextField(
+        key: ValueKey('p-${block.id}'),
         controller: controller,
         focusNode: _focusFor(block.id),
-        style: AppTypography.noteBodyStyle,
+        style: _paragraphStyle,
         maxLines: null,
         minLines: 1,
-        onChanged: (_) => _updateParagraph(block, index, controller),
-        onEnter: () => _splitParagraph(block, index, controller),
+        onChanged: (_) => _updateParagraph(block, controller),
         onBackspaceAtStart: () => _mergeOrDeleteParagraph(block, index),
         onSecondaryTapDown: _showTextMenu,
       );
@@ -435,26 +444,29 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     if (block is HeadingNode) {
       final controller = _controllerFor(block.id, block.text, block.spans);
       return FormattedTextField(
+        key: ValueKey('h-${block.id}'),
         controller: controller,
         focusNode: _focusFor(block.id),
         style: AppTypography.noteTitleStyle.copyWith(
           fontSize: 24 - (block.level * 2),
+          height: 1.3,
         ),
         maxLines: null,
-        onChanged: (text) {
+        onChanged: (_) {
           _focusedBlockIndex = index;
-          _applyDoc(
+          _mutateDoc(
             DocumentCodec.replaceBlock(
               _doc,
               block.id,
               block.copyWith(
-                text: text,
+                text: controller.text,
                 spans: [
                   for (final s in controller.spans)
                     TextSpanMark.fromJson(Map<String, dynamic>.from(s)),
                 ],
               ),
             ),
+            rebuild: false,
           );
         },
         onSecondaryTapDown: _showTextMenu,
@@ -462,24 +474,32 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     }
     if (block is ListNode) {
       return RichListEditor(
+        key: ValueKey('l-${block.id}'),
         node: block,
         strings: _strings,
         onFocus: () => _focusedBlockIndex = index,
         onChanged: (updated) {
           _focusedBlockIndex = index;
-          _applyDoc(DocumentCodec.replaceBlock(_doc, block.id, updated));
+          _mutateDoc(
+            DocumentCodec.replaceBlock(_doc, block.id, updated),
+            rebuild: false,
+          );
         },
         onExitList: () => _exitListToParagraph(block, index),
       );
     }
     if (block is TableNode) {
       return RichTableEditor(
+        key: ValueKey('t-${block.id}'),
         node: block,
         strings: _strings,
         onFocus: () => _focusedBlockIndex = index,
         onChanged: (updated) {
           _focusedBlockIndex = index;
-          _applyDoc(DocumentCodec.replaceBlock(_doc, block.id, updated));
+          _mutateDoc(
+            DocumentCodec.replaceBlock(_doc, block.id, updated),
+            rebuild: false,
+          );
         },
       );
     }

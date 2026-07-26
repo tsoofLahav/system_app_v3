@@ -257,6 +257,48 @@ class DocumentCodec {
     return doc.copyWith(blocks: blocks);
   }
 
+  static RichDocument coalesceAdjacentParagraphs(RichDocument doc) {
+    final blocks = <DocumentNode>[];
+    ParagraphNode? run;
+
+    void flushRun() {
+      if (run != null) {
+        blocks.add(run!);
+        run = null;
+      }
+    }
+
+    for (final block in doc.blocks) {
+      if (block is ParagraphNode) {
+        if (run == null) {
+          run = block;
+        } else {
+          final joinAt = run!.text.length + 1;
+          run = ParagraphNode(
+            id: run!.id,
+            text: '${run!.text}\n${block.text}',
+            spans: [
+              ...run!.spans,
+              for (final span in block.spans)
+                span.copyWith(
+                  start: span.start + joinAt,
+                  end: span.end + joinAt,
+                ),
+            ],
+          );
+        }
+      } else {
+        flushRun();
+        blocks.add(block);
+      }
+    }
+    flushRun();
+    if (blocks.isEmpty) {
+      blocks.add(ParagraphNode(id: newId('b'), text: ''));
+    }
+    return doc.copyWith(blocks: blocks);
+  }
+
   static int? embedBlockIndex(RichDocument doc, int objectId) {
     for (var i = 0; i < doc.blocks.length; i++) {
       final block = doc.blocks[i];

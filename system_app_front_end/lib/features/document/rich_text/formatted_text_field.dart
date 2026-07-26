@@ -86,6 +86,24 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   @override
   void didUpdateWidget(covariant FormattedTextField oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_normalizeSelectionIfNeeded);
+      widget.controller.addListener(_normalizeSelectionIfNeeded);
+    }
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode?.removeListener(_onFocusChanged);
+      if (_ownsFocus) {
+        _focusNode.dispose();
+        _ownsFocus = false;
+      }
+      if (widget.focusNode != null) {
+        _focusNode = widget.focusNode!;
+      } else {
+        _focusNode = FocusNode();
+        _ownsFocus = true;
+      }
+      _focusNode.addListener(_onFocusChanged);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _ensureKeyHandlerChained());
   }
 

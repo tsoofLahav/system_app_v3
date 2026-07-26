@@ -122,7 +122,9 @@ class BlockTextFocusRegistry {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (restoreController != activeController) return;
       try {
-        if (!restoreNode.hasFocus && restoreNode.canRequestFocus) {
+        if (restoreNode.context != null &&
+            !restoreNode.hasFocus &&
+            restoreNode.canRequestFocus) {
           restoreNode.requestFocus();
         }
         if (range != null && range.isValid) {
@@ -163,6 +165,7 @@ class BlockTextFocusRegistry {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
         if (restoreNode != null &&
+            restoreNode.context != null &&
             !restoreNode.hasFocus &&
             restoreNode.canRequestFocus) {
           restoreNode.requestFocus();
@@ -199,6 +202,7 @@ class BlockTextFocusRegistry {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
         if (restoreNode != null &&
+            restoreNode.context != null &&
             !restoreNode.hasFocus &&
             restoreNode.canRequestFocus) {
           restoreNode.requestFocus();

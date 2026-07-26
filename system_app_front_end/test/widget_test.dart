@@ -105,6 +105,25 @@ void main() {
     expect(block.spans.single.color, '#E53935');
   });
 
+  test('coalesce adjacent paragraphs', () {
+    final doc = DocumentCodec.coalesceAdjacentParagraphs(
+      RichDocument(
+        version: 3,
+        blocks: [
+          ParagraphNode(id: 'b1', text: 'Line one'),
+          ParagraphNode(id: 'b2', text: 'Line two'),
+          ListNode(
+            id: 'b3',
+            items: [ListItem(id: 'li1', text: 'Item')],
+          ),
+        ],
+      ),
+    );
+    expect(doc.blocks, hasLength(2));
+    expect(doc.blocks.first, isA<ParagraphNode>());
+    expect((doc.blocks.first as ParagraphNode).text, 'Line one\nLine two');
+  });
+
   test('migrate v2 inline body', () {
     final body = jsonEncode({
       'version': 2,
