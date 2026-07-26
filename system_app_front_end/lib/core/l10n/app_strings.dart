@@ -91,6 +91,9 @@ class AppStrings {
   String deleteFileMessage(String name) =>
       this['deleteFileBody'].replaceAll('{name}', name);
 
+  String archiveFileMessage(String name) =>
+      this['archiveFileBody'].replaceAll('{name}', name);
+
   String archiveDeleteBody(int count) =>
       this['archiveDeleteBody'].replaceAll('{count}', '$count');
 
@@ -122,8 +125,7 @@ class AppStrings {
   String unknownBlock(String type) =>
       this['unknownBlock'].replaceAll('{type}', type);
 
-  String fileTypeOption(String name, String type) =>
-      '${fileNameLabel(name)} (${fileTypeLabel(type)})';
+  String fileTypeOption(String name, String type) => fileTypeLabel(type);
 
   String processUpdateProgress(int current, int total) =>
       this['processUpdateProgress']
@@ -186,14 +188,14 @@ class AppStrings {
     'arrangeFiles': 'Arrange files',
     'arrangeDone': 'Done',
     'arrangeTapMainHint': 'Tap a file to move it first',
-    'arrangeTapAdditionalHint': 'Tap to add centered file to main',
+    'arrangeTapAdditionalHint': 'Tap to add centered file to essence',
     'moveFileEarlier': 'Move file earlier',
     'moveFileLater': 'Move file later',
     'arrangePosition': '{current} / {total}',
     'paneDrag': 'Reorder panes',
     'paneDragOn': 'Reorder panes — drag any pane',
     'reorderMode': 'Reorder mode',
-    'showOnMain': 'Show on main canvas',
+    'showOnMain': 'Show in essence',
     'moveToMoreFiles': 'Move to more files',
     'moveFileToTopic': 'Move file to topic',
     'duplicateFile': 'Duplicate file',
@@ -247,6 +249,10 @@ class AppStrings {
     'deleteTopicBody': 'Delete "{name}" and its files?',
     'deleteFileTitle': 'Delete file?',
     'deleteFileBody': 'Delete "{name}"?',
+    'archiveFile': 'Archive file',
+    'archiveFileTitle': 'Archive file?',
+    'archiveFileBody':
+        'Move "{name}" to Archive? You can browse it later from the sidebar.',
     'allFilesExist': 'All available files already exist for this topic.',
     'ok': 'OK',
     'addBlock': 'Add block',
@@ -358,9 +364,12 @@ class AppStrings {
     'shortcutInsertEmoji': 'Insert emoji',
     'shortcutBringFile': 'Bring file',
     'shortcutOpenArrange': 'Arrange files',
-    'shortcutCycleMainFiles': 'Cycle main files',
+    'shortcutCycleMainFiles': 'Cycle essence files',
     'shortcutAddFile': 'Add file',
     'shortcutAddTopic': 'Add topic',
+    'shortcutInsertBlockMenu': 'Choose block to insert',
+    'shortcutToggleLayoutMode': 'Toggle flip / view layout',
+    'shortcutToggleLanguage': 'Switch language',
     'shortcutCategoryNavigation': 'Navigation',
     'shortcutCategoryAi': 'AI tools',
     'shortcutCategoryText': 'Text formatting',
@@ -527,14 +536,14 @@ class AppStrings {
     'arrangeFiles': 'סידור קבצים',
     'arrangeDone': 'סיום',
     'arrangeTapMainHint': 'הקש על קובץ כדי להעביר אותו לראשון',
-    'arrangeTapAdditionalHint': 'הקש כדי להוסיף את הקובץ במרכז לראשי',
+    'arrangeTapAdditionalHint': 'הקש כדי להוסיף את הקובץ במרכז לעיקר',
     'moveFileEarlier': 'הזז קובץ קדימה',
     'moveFileLater': 'הזז קובץ אחורה',
     'arrangePosition': '{current} / {total}',
     'paneDrag': 'סידור חלוניות',
     'paneDragOn': 'סידור חלוניות — גרור חלונית',
     'reorderMode': 'סידור קבצים',
-    'showOnMain': 'הצג בקנבס הראשי',
+    'showOnMain': 'הצג בעיקר',
     'moveToMoreFiles': 'העבר לקבצים נוספים',
     'moveFileToTopic': 'העבר קובץ לנושא',
     'duplicateFile': 'שכפל קובץ',
@@ -588,6 +597,10 @@ class AppStrings {
     'deleteTopicBody': 'למחוק את "{name}" ואת הקבצים שלו?',
     'deleteFileTitle': 'למחוק קובץ?',
     'deleteFileBody': 'למחוק את "{name}"?',
+    'archiveFile': 'העבר לארכיון',
+    'archiveFileTitle': 'להעביר לארכיון?',
+    'archiveFileBody':
+        'להעביר את "{name}" לארכיון? אפשר לצפות בו מאוחר יותר מהתפריט בצד.',
     'allFilesExist': 'כל הקבצים הזמינים כבר קיימים לנושא זה.',
     'ok': 'אישור',
     'addBlock': 'הוסף בלוק',
@@ -699,9 +712,12 @@ class AppStrings {
     'shortcutInsertEmoji': 'הוסף אמוג\'י',
     'shortcutBringFile': 'הבא קובץ',
     'shortcutOpenArrange': 'סידור קבצים',
-    'shortcutCycleMainFiles': 'מעבר בין קבצים ראשיים',
+    'shortcutCycleMainFiles': 'מעבר בין קבצי עיקר',
     'shortcutAddFile': 'הוסף קובץ',
     'shortcutAddTopic': 'נושא חדש',
+    'shortcutInsertBlockMenu': 'בחר בלוק להוספה',
+    'shortcutToggleLayoutMode': 'החלפת תצוגת משימות / מדורים',
+    'shortcutToggleLanguage': 'החלפת שפה',
     'shortcutCategoryNavigation': 'ניווט',
     'shortcutCategoryAi': 'כלי AI',
     'shortcutCategoryText': 'עיצוב טקסט',
@@ -971,7 +987,7 @@ class AppStrings {
   };
 
   static const _fileTypesEn = {
-    'main': 'main',
+    'main': 'Daily',
     'text': 'text',
     'overview': 'recap',
     'plan': 'plan',
@@ -985,7 +1001,7 @@ class AppStrings {
   };
 
   static const _fileTypesHe = {
-    'main': 'ראשי',
+    'main': 'יומי',
     'text': 'טקסט',
     'overview': 'סיכום',
     'plan': 'תכנית',

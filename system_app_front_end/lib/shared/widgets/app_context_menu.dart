@@ -137,6 +137,58 @@ abstract final class AppContextMenu {
     overlay.insert(entry);
     return completer.future;
   }
+
+  /// Flat list menu for keyboard-only selection (↑/↓, Enter, Esc).
+  static Future<String?> showFlatKeyboard({
+    required BuildContext context,
+    required List<AppContextMenuItem> items,
+    required bool isRtl,
+    Offset? anchor,
+  }) {
+    if (items.isEmpty) return Future.value(null);
+    dismissActive();
+
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final textDirection = isRtl ? TextDirection.rtl : TextDirection.ltr;
+    final completer = Completer<String?>();
+    late OverlayEntry entry;
+    var removed = false;
+    final session = Object();
+    final screen = MediaQuery.sizeOf(context);
+    final globalPosition =
+        anchor ?? Offset(screen.width * 0.5, screen.height * 0.32);
+
+    void close([String? value]) {
+      if (!completer.isCompleted) completer.complete(value);
+      if (identical(_dismissActiveSession, session)) {
+        _dismissActiveSession = null;
+        _dismissActive = null;
+      }
+      if (!removed) {
+        removed = true;
+        entry.remove();
+      }
+    }
+
+    _dismissActiveSession = session;
+    _dismissActive = () => close(null);
+
+    entry = OverlayEntry(
+      builder: (overlayContext) => Directionality(
+        textDirection: textDirection,
+        child: _FlatKeyboardMenuHost(
+          globalPosition: globalPosition,
+          items: items,
+          isRtl: isRtl,
+          onSelect: close,
+          onDismiss: () => close(null),
+        ),
+      ),
+    );
+
+    overlay.insert(entry);
+    return completer.future;
+  }
 }
 
 class _BubbleContextMenuHost extends StatefulWidget {
@@ -516,12 +568,14 @@ class _MenuActionRow extends StatefulWidget {
     required this.onTap,
     this.enabled = true,
     this.destructive = false,
+    this.keyboardSelected = false,
   });
 
   final String label;
   final VoidCallback? onTap;
   final bool enabled;
   final bool destructive;
+  final bool keyboardSelected;
 
   @override
   State<_MenuActionRow> createState() => _MenuActionRowState();
@@ -532,7 +586,8 @@ class _MenuActionRowState extends State<_MenuActionRow> {
 
   @override
   Widget build(BuildContext context) {
-    final highlighted = _hovered && widget.enabled;
+    final highlighted =
+        (widget.keyboardSelected || _hovered) && widget.enabled;
     return MouseRegion(
       onEnter: widget.enabled ? (_) => setState(() => _hovered = true) : null,
       onExit: widget.enabled ? (_) => setState(() => _hovered = false) : null,
@@ -599,6 +654,189 @@ class _MenuDivider extends StatelessWidget {
 
 class _DismissIntent extends Intent {
   const _DismissIntent();
+}
+
+class _MoveSelectionIntent extends Intent {
+  const _MoveSelectionIntent(this.delta);
+
+  final int delta;
+}
+
+class _ActivateSelectionIntent extends Intent {
+  const _ActivateSelectionIntent();
+}
+
+class _FlatKeyboardMenuHost extends StatefulWidget {
+  const _FlatKeyboardMenuHost({
+    required this.globalPosition,
+    required this.items,
+    required this.isRtl,
+    required this.onSelect,
+    required this.onDismiss,
+  });
+
+  final Offset globalPosition;
+  final List<AppContextMenuItem> items;
+  final bool isRtl;
+  final ValueChanged<String> onSelect;
+  final VoidCallback onDismiss;
+
+  @override
+  State<_FlatKeyboardMenuHost> createState() => _FlatKeyboardMenuHostState();
+}
+
+class _FlatKeyboardMenuHostState extends State<_FlatKeyboardMenuHost> {
+  late int _selectedIndex;
+  final _focusNode = FocusNode(debugLabel: 'flatKeyboardMenu');
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIndex = _firstSelectableIndex(forward: true, from: -1);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  int _firstSelectableIndex({required bool forward, required int from}) {
+    final items = widget.items;
+    if (items.isEmpty) return 0;
+    if (forward) {
+      for (var i = from + 1; i < items.length; i++) {
+        if (items[i].enabled) return i;
+      }
+      for (var i = 0; i <= from; i++) {
+        if (items[i].enabled) return i;
+      }
+    } else {
+      for (var i = from - 1; i >= 0; i--) {
+        if (items[i].enabled) return i;
+      }
+      for (var i = items.length - 1; i >= from; i--) {
+        if (items[i].enabled) return i;
+      }
+    }
+    return from.clamp(0, items.length - 1);
+  }
+
+  void _moveSelection(int delta) {
+    if (widget.items.isEmpty) return;
+    var index = _selectedIndex;
+    for (var step = 0; step < widget.items.length; step++) {
+      index = (index + delta + widget.items.length) % widget.items.length;
+      if (widget.items[index].enabled) {
+        setState(() => _selectedIndex = index);
+        return;
+      }
+    }
+  }
+
+  void _activateSelection() {
+    if (_selectedIndex < 0 || _selectedIndex >= widget.items.length) return;
+    final item = widget.items[_selectedIndex];
+    if (!item.enabled) return;
+    widget.onSelect(item.value);
+  }
+
+  Widget _positionedMenu(BuildContext context) {
+    final overlayBox =
+        Overlay.of(context, rootOverlay: true).context.findRenderObject()
+            as RenderBox;
+    final local = overlayBox.globalToLocal(widget.globalPosition);
+    final menuHeight = _menuHeight(
+      widget.items.map((item) => item as AppContextMenuEntry).toList(),
+    );
+    final menuWidth = AppContextMenu._menuWidth;
+
+    var left = widget.isRtl ? local.dx - menuWidth : local.dx - menuWidth / 2;
+    var top = local.dy;
+
+    if (left + menuWidth > overlayBox.size.width - 8) {
+      left = overlayBox.size.width - menuWidth - 8;
+    }
+    if (left < 8) left = 8;
+    if (top + menuHeight > overlayBox.size.height - 8) {
+      top = overlayBox.size.height - menuHeight - 8;
+    }
+    if (top < 8) top = 8;
+
+    return Positioned(
+      left: left,
+      top: top,
+      child: _BubbleMenuPanel(
+        width: menuWidth,
+        children: [
+          for (var i = 0; i < widget.items.length; i++)
+            _MenuActionRow(
+              label: widget.items[i].label,
+              enabled: widget.items[i].enabled,
+              destructive: widget.items[i].destructive,
+              keyboardSelected: i == _selectedIndex,
+              onTap: widget.items[i].enabled
+                  ? () => widget.onSelect(widget.items[i].value)
+                  : null,
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Shortcuts(
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.escape): const _DismissIntent(),
+        LogicalKeySet(LogicalKeyboardKey.arrowDown):
+            const _MoveSelectionIntent(1),
+        LogicalKeySet(LogicalKeyboardKey.arrowUp): const _MoveSelectionIntent(-1),
+        LogicalKeySet(LogicalKeyboardKey.enter): const _ActivateSelectionIntent(),
+      },
+      child: Actions(
+        actions: {
+          _DismissIntent: CallbackAction<_DismissIntent>(
+            onInvoke: (_) {
+              widget.onDismiss();
+              return null;
+            },
+          ),
+          _MoveSelectionIntent: CallbackAction<_MoveSelectionIntent>(
+            onInvoke: (intent) {
+              _moveSelection(intent.delta);
+              return null;
+            },
+          ),
+          _ActivateSelectionIntent: CallbackAction<_ActivateSelectionIntent>(
+            onInvoke: (_) {
+              _activateSelection();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          focusNode: _focusNode,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: widget.onDismiss,
+                ),
+              ),
+              _positionedMenu(context),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 double _menuHeight(List<AppContextMenuEntry> entries) {

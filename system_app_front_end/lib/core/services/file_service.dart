@@ -1,5 +1,4 @@
 import '../models/app_file.dart';
-import '../models/archive_files_page.dart';
 import 'api_service.dart';
 
 class FileService {
@@ -7,63 +6,39 @@ class FileService {
 
   final ApiService _api;
 
-  Future<List<AppFile>> listAll() async {
-    final data = await _api.get('/files') as List<dynamic>;
+  Future<List<AppFile>> listFilesForTopic(int topicId) async {
+    final data = await _api.get('/topics/$topicId/files') as List<dynamic>;
     return data.map((e) => AppFile.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  Future<List<AppFile>> listForTopic(
-    int topicId, {
-    bool includeArchived = false,
-  }) async {
-    final path = includeArchived
-        ? '/topics/$topicId/files?include_archived=true'
-        : '/topics/$topicId/files';
-    final data = await _api.get(path) as List<dynamic>;
-    return data.map((e) => AppFile.fromJson(e as Map<String, dynamic>)).toList()
-      ..sort((a, b) => (a.orderIndex ?? 0).compareTo(b.orderIndex ?? 0));
-  }
-
-  Future<ArchiveFilesPage> listArchiveForTopic(
-    int topicId, {
-    int limit = 24,
-    int offset = 0,
-    String? query,
-  }) async {
-    final params = <String, String>{
-      'limit': '$limit',
-      'offset': '$offset',
-    };
-    if (query != null && query.trim().isNotEmpty) {
-      params['q'] = query.trim();
-    }
-    final queryString = params.entries
-        .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
-        .join('&');
-    final data = await _api.get(
-      '/topics/$topicId/archive/files?$queryString',
-    ) as Map<String, dynamic>;
-    return ArchiveFilesPage.fromJson(data);
+  Future<AppFile> getFile(int id) async {
+    final data = await _api.get('/files/$id') as Map<String, dynamic>;
+    return AppFile.fromJson(data);
   }
 
   Future<AppFile> createFile({
     required int topicId,
     required String name,
-    required String type,
-    int? anchorTopicId,
+    String body = '',
+    bool isEssence = false,
     int? orderIndex,
-    bool? isMain,
+    Map<String, dynamic>? meta,
   }) async {
     final data =
         await _api.post('/files', {
               'topic_id': topicId,
               'name': name,
-              'type': type,
-              if (anchorTopicId != null) 'anchor_topic_id': anchorTopicId,
+              'body': body,
+              'is_essence': isEssence,
               if (orderIndex != null) 'order_index': orderIndex,
-              if (isMain != null) 'is_main': isMain,
+              if (meta != null) 'meta': meta,
             })
             as Map<String, dynamic>;
+    return AppFile.fromJson(data);
+  }
+
+  Future<AppFile> updateFile(int id, Map<String, dynamic> body) async {
+    final data = await _api.patch('/files/$id', body) as Map<String, dynamic>;
     return AppFile.fromJson(data);
   }
 
@@ -71,15 +46,9 @@ class FileService {
     await _api.delete('/files/$id');
   }
 
-  Future<AppFile> updateFile(int id, Map<String, dynamic> patch) async {
-    final data = await _api.patch('/files/$id', patch) as Map<String, dynamic>;
-    return AppFile.fromJson(data);
-  }
-
-  Future<AppFile> duplicateFile(int id, {String? name}) async {
-    final data = await _api.post('/files/$id/duplicate', {
-      if (name != null) 'name': name,
-    }) as Map<String, dynamic>;
-    return AppFile.fromJson(data);
+  Future<List<AppFile>> listArchivedForTopic(int topicId) async {
+    final data =
+        await _api.get('/topics/$topicId/archive/files') as List<dynamic>;
+    return data.map((e) => AppFile.fromJson(e as Map<String, dynamic>)).toList();
   }
 }

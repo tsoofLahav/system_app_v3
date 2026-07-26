@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../../features/blocks/block_text_focus.dart';
 import '../app_state.dart';
 import 'shortcut_catalog.dart';
 import 'shortcut_dispatcher.dart';
@@ -27,19 +27,17 @@ class AppShortcutsScope extends StatefulWidget {
 
 class _AppShortcutsScopeState extends State<AppShortcutsScope> {
   final _shellFocusNode = FocusNode(debugLabel: 'appShortcuts');
-  late final Listenable _shortcutListenable;
 
   @override
   void initState() {
     super.initState();
-    _shortcutListenable = Listenable.merge([
-      widget.state.shortcutRebuildListenable,
-      BlockTextFocusRegistry.focusListenable,
-    ]);
+    HardwareKeyboard.instance.addHandler(_handleGlobalKey);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureShellFocus());
   }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleGlobalKey);
     _shellFocusNode.dispose();
     super.dispose();
   }
@@ -50,60 +48,36 @@ class _AppShortcutsScopeState extends State<AppShortcutsScope> {
     }
   }
 
+  bool _handleGlobalKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: _shortcutListenable,
-      builder: (context, _) {
-        final shortcuts = <ShortcutActivator, Intent>{};
-        for (final action in kShortcutCatalog) {
-          if (!ShortcutDispatcher.canInvoke(widget.state, action.id)) continue;
-          final binding = widget.state.shortcutBindings.bindingFor(action.id);
-          if (!binding.isValid) continue;
-          shortcuts[binding.toActivator()] = AppShortcutIntent(action.id);
-        }
+    final shortcuts = <ShortcutActivator, Intent>{
+      const SingleActivator(LogicalKeyboardKey.keyN, meta: true):
+          const AppShortcutIntent(ShortcutActionIds.addTopic),
+    };
 
-        return Shortcuts(
-          shortcuts: shortcuts,
-          child: Actions(
-            actions: {
-              AppShortcutIntent: CallbackAction<AppShortcutIntent>(
-                onInvoke: (intent) {
-                  ShortcutDispatcher.invoke(
-                    context,
-                    widget.state,
-                    intent.actionId,
-                  );
-                  return intent;
-                },
-              ),
-            },
-            child: Focus(
-              focusNode: _shellFocusNode,
-              autofocus: true,
-              skipTraversal: true,
-              child: Listener(
-                behavior: HitTestBehavior.translucent,
-                onPointerDown: (_) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    final primary = FocusManager.instance.primaryFocus;
-                    if (primary == null || !primary.hasFocus) {
-                      _ensureShellFocus();
-                    }
-                  });
-                },
-                child: widget.child,
-              ),
+    return Focus(
+      focusNode: _shellFocusNode,
+      child: Shortcuts(
+        shortcuts: shortcuts,
+        child: Actions(
+          actions: {
+            AppShortcutIntent: CallbackAction<AppShortcutIntent>(
+              onInvoke: (intent) {
+                dispatchShortcutAction(context, widget.state, intent.actionId);
+                return null;
+              },
             ),
-          ),
-        );
-      },
+          },
+          child: widget.child,
+        ),
+      ),
     );
   }
 }
 
-String? shortcutTooltipSuffix(AppState state, String actionId) {
-  final binding = state.shortcutBindings.bindingFor(actionId);
-  if (!binding.isValid) return null;
-  return binding.displayLabel();
-}
+String? shortcutTooltipSuffix(AppState state, String actionId) => null;

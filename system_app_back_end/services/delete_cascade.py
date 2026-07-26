@@ -1,126 +1,127 @@
 from models import (
-    AiProposal,
-    AutomationCompanionTask,
-    Block,
+    Automation,
+    AutomationRun,
+    EntityTag,
     File,
-    Part,
+    FileVersion,
+    InformationPiece,
+    Link,
+    ObjectEmbed,
+    Tag,
     Task,
-    TaskResetAcknowledgement,
-    TaskView,
     Topic,
+    View,
+    ViewTaskMembership,
     db,
 )
-from services.task_list_order import apply_list_task_order, tasks_for_list_block
+from services.document_body import marker_for, remove_marker
 
 
-def _list_block_id_for_task(task: Task) -> int | None:
-    block_id = task.block_id
-    if block_id is None:
-        return None
-    block = db.session.get(Block, block_id)
-    if block is None:
-        return None
-    if block.type == "task_list":
-        return block.id
-    if block.file_id is None:
-        return None
-
-    blocks = (
-        Block.query.filter_by(file_id=block.file_id)
-        .filter(Block.archived_at.is_(None))
-        .order_by(Block.order_index, Block.id)
-        .all()
-    )
-    row_index = next((index for index, item in enumerate(blocks) if item.id == block.id), None)
-    if row_index is None:
-        return None
-    for index in range(row_index, -1, -1):
-        if blocks[index].type == "task_list":
-            return blocks[index].id
-    return None
-
-
-def _normalize_task_block_id(task: Task) -> None:
-    list_block_id = _list_block_id_for_task(task)
-    if list_block_id is None:
-        return
-    block = db.session.get(Block, task.block_id) if task.block_id is not None else None
-    if block is None or block.type != "task_list":
-        task.block_id = list_block_id
-
-
-def _compact_list_order(list_block_id: int) -> None:
-    remaining_ids = [task.id for task in tasks_for_list_block(list_block_id)]
-    if remaining_ids:
-        apply_list_task_order(list_block_id, remaining_ids)
-
-
-def delete_task_cascade(task_id):
+def delete_task_cascade(task_id: int) -> None:
     task = db.session.get(Task, int(task_id))
     if task is None:
         return
 
-    list_block_id = _list_block_id_for_task(task)
-    _normalize_task_block_id(task)
-
-    AutomationCompanionTask.query.filter_by(task_id=int(task_id)).delete(
+    ViewTaskMembership.query.filter_by(task_id=task.id).delete(
         synchronize_session=False
     )
-    TaskView.query.filter_by(task_id=int(task_id)).delete(synchronize_session=False)
+    embeds = ObjectEmbed.query.filter_by(task_id=task.id).all()
+    for embed in embeds:
+        delete_object_embed_cascade(embed, remove_from_body=True)
     db.session.delete(task)
-    db.session.flush()
-
-    if list_block_id is not None:
-        try:
-            _compact_list_order(list_block_id)
-        except Exception:
-            pass
 
 
-def delete_file_cascade(file_id):
+def delete_object_embed_cascade(embed: ObjectEmbed, *, remove_from_body: bool) -> None:
+    file = db.session.get(File, embed.file_id)
+    if file and remove_from_body:
+        if embed.type == "task" and embed.task_id:
+            marker = marker_for("task", embed.task_id)
+        elif embed.type == "information" and embed.information_id:
+            marker = marker_for("information", embed.information_id)
+        else:
+            marker = None
+        if marker:
+            file.body = remove_marker(file.body or "", marker)
+
+    if embed.type == "task" and embed.task_id:
+        task = db.session.get(Task, embed.task_id)
+        if task:
+            ViewTaskMembership.query.filter_by(task_id=task.id).delete(
+                synchronize_session=False
+            )
+            db.session.delete(task)
+    elif embed.type == "information" and embed.information_id:
+        info = db.session.get(InformationPiece, embed.information_id)
+        if info:
+            db.session.delete(info)
+
+    db.session.delete(embed)
+
+
+def delete_file_cascade(file_id: int) -> None:
     file = db.session.get(File, file_id)
     if file is None:
         return
 
-    blocks = Block.query.filter_by(file_id=file_id).all()
-    block_ids = [block.id for block in blocks]
+    embeds = ObjectEmbed.query.filter_by(file_id=file_id).all()
+    for embed in embeds:
+        delete_object_embed_cascade(embed, remove_from_body=False)
 
-    if block_ids:
-        tasks = Task.query.filter(Task.block_id.in_(block_ids)).all()
-        for task in tasks:
-            delete_task_cascade(task.id)
-
-    for block in blocks:
-        db.session.delete(block)
-
-    AiProposal.query.filter_by(target_file_id=file_id).delete(
-        synchronize_session=False
-    )
-    TaskResetAcknowledgement.query.filter_by(report_file_id=file_id).delete(
-        synchronize_session=False
-    )
+    FileVersion.query.filter_by(file_id=file_id).delete(synchronize_session=False)
     db.session.delete(file)
 
 
-def delete_topic_cascade(topic_id):
+def delete_topic_cascade(topic_id: int) -> None:
     topic = db.session.get(Topic, topic_id)
     if topic is None:
         return
-
-    AiProposal.query.filter_by(topic_id=topic_id).delete(synchronize_session=False)
-
-    AutomationCompanionTask.query.filter_by(topic_id=topic_id).delete(
-        synchronize_session=False
-    )
 
     files = File.query.filter_by(topic_id=topic_id).all()
     for file in files:
         delete_file_cascade(file.id)
 
-    Part.query.filter_by(topic_id=topic_id).delete(synchronize_session=False)
-
-    Topic.query.filter_by(parent_id=topic_id).update(
-        {Topic.parent_id: None},
-        synchronize_session=False,
+    EntityTag.query.filter_by(entity_type="topic", entity_id=topic_id).delete(
+        synchronize_session=False
     )
     db.session.delete(topic)
+
+
+def delete_view_cascade(view_id: int) -> None:
+    ViewTaskMembership.query.filter_by(view_id=view_id).delete(
+        synchronize_session=False
+    )
+    view = db.session.get(View, view_id)
+    if view:
+        db.session.delete(view)
+
+
+def delete_automation_cascade(automation_id: int) -> None:
+    AutomationRun.query.filter_by(automation_id=automation_id).delete(
+        synchronize_session=False
+    )
+    automation = db.session.get(Automation, automation_id)
+    if automation:
+        db.session.delete(automation)
+
+
+def delete_tag_cascade(tag_id: int) -> None:
+    EntityTag.query.filter_by(tag_id=tag_id).delete(synchronize_session=False)
+    tag = db.session.get(Tag, tag_id)
+    if tag:
+        db.session.delete(tag)
+
+
+def delete_workspace_cascade(workspace_id: int) -> None:
+    for topic in Topic.query.filter_by(workspace_id=workspace_id).all():
+        delete_topic_cascade(topic.id)
+    for view in View.query.filter_by(workspace_id=workspace_id).all():
+        delete_view_cascade(view.id)
+    for automation in Automation.query.filter_by(workspace_id=workspace_id).all():
+        delete_automation_cascade(automation.id)
+    from models import Workspace
+
+    Link.query.filter_by(workspace_id=workspace_id).delete(synchronize_session=False)
+    Tag.query.filter_by(workspace_id=workspace_id).delete(synchronize_session=False)
+    ws = db.session.get(Workspace, workspace_id)
+    if ws:
+        db.session.delete(ws)

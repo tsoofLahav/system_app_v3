@@ -43,7 +43,9 @@ class ArchiveFileGrid extends StatelessWidget {
         final marked = markedForDelete.contains(file.id);
         final selected = !deleteMode && file.id == selectedFileId;
         final title = state.fileDisplayName(file.name);
-        final typeLabel = state.strings.fileTypeLabel(file.type);
+        final typeLabel = file.isEssence
+            ? (state.strings['essence'] ?? 'Essence')
+            : (state.strings['additionals'] ?? 'Additional');
 
         return Material(
           color: Colors.transparent,

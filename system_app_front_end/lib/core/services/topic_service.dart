@@ -1,3 +1,4 @@
+import '../models/app_file.dart';
 import '../models/topic.dart';
 import 'api_service.dart';
 
@@ -6,27 +7,30 @@ class TopicService {
 
   final ApiService _api;
 
-  Future<List<Topic>> listTopics({bool includeArchived = false}) async {
-    final data =
-        await _api.get(
-              includeArchived ? '/topics?include_archived=true' : '/topics',
-            )
-            as List<dynamic>;
+  Future<List<Topic>> listTopics({int? workspaceId, bool includeArchived = false}) async {
+    final query = StringBuffer('/topics');
+    final params = <String>[];
+    if (workspaceId != null) params.add('workspace_id=$workspaceId');
+    if (includeArchived) params.add('include_archived=true');
+    if (params.isNotEmpty) query.write('?${params.join('&')}');
+    final data = await _api.get(query.toString()) as List<dynamic>;
     return data.map((e) => Topic.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   Future<Topic> createTopic({
     required String name,
-    required String type,
+    required int workspaceId,
     String? icon,
     String? color,
+    List<int>? tagIds,
   }) async {
     final data =
         await _api.post('/topics', {
               'name': name,
-              'type': type,
+              'workspace_id': workspaceId,
               if (icon != null) 'icon': icon,
               if (color != null) 'color': color,
+              if (tagIds != null) 'tag_ids': tagIds,
             })
             as Map<String, dynamic>;
     return Topic.fromJson(data);
@@ -38,15 +42,6 @@ class TopicService {
 
   Future<Topic> updateTopic(int id, Map<String, dynamic> body) async {
     final data = await _api.patch('/topics/$id', body) as Map<String, dynamic>;
-    return Topic.fromJson(data);
-  }
-
-  Future<Topic> duplicateTopic(int id, {String? name}) async {
-    final data =
-        await _api.post('/topics/$id/duplicate', {
-              if (name != null) 'name': name,
-            })
-            as Map<String, dynamic>;
     return Topic.fromJson(data);
   }
 }

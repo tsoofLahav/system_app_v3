@@ -147,6 +147,15 @@ class ShortcutBinding {
 
   @override
   int get hashCode => Object.hash(keyId, meta, control, shift, alt);
+
+  bool matchesEvent(KeyDownEvent event) {
+    if (event.logicalKey.keyId != keyId) return false;
+    final keyboard = HardwareKeyboard.instance;
+    return meta == keyboard.isMetaPressed &&
+        control == keyboard.isControlPressed &&
+        shift == keyboard.isShiftPressed &&
+        alt == keyboard.isAltPressed;
+  }
 }
 
 ShortcutBinding? shortcutBindingFromEvent(KeyEvent event) {

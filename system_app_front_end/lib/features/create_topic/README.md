@@ -3,24 +3,27 @@
 Purpose: create/edit topic flows.
 
 What this module covers:
-- Topic creation and edit dialogs.
-- Input validation and user-facing form guidance.
-- Selection of topic type and the initial files to create.
+- Topic creation and edit dialogs
+- Topic type selection and initial file checkboxes
+- Add-file dialog (any file type, any topic)
 
-File choices:
-- Project topics start with `overview`, `tasks`, and `execution` as main files,
-  with `doc` and `plan` available as additional project files.
-- Process topics start with `overview`, `plan`, `tasks`, and `doc`.
-- Area topics start with `tasks` and `doc`.
-- Others topics start with `text` and `doc` (minimal structure).
-- The add-file dialog offers every file type for every topic type.
-- File names, order, and main/additional placement come from `core/registry/file_registry.dart` (main topic uses `allFileTypes`; main section capped at 3 files).
-- Initial blocks for each selected file come from `core/registry/file_behavior_registry.dart`.
+File choices (defaults from [`core/registry/file_registry.dart`](../../core/registry/file_registry.dart)):
+
+| Topic type | Essence at creation | Additionals at creation |
+|---|---|---|
+| Project | `overview`, `tasks`, `execution` | `doc`, `plan`, `data` |
+| Process | `overview`, `plan`, `tasks` | `doc`, `data` |
+| Area | `tasks`, `data`, `text` | `doc` |
+| Others | none (empty topic) | none |
+
+- The add-file dialog offers every file type not already in the topic.
+- Default file names use the translated type label (`fileTypeLabel`), not custom English names.
+- Essence pane holds at most 3 files (`maxMainFilesPerTopic`).
+- Initial blocks per file come from [`file_behavior_registry.dart`](../../core/registry/file_behavior_registry.dart).
 
 Project structure:
-- Project work is split into ordered **parts** — see [`../features/blocks/PARTS.md`](../features/blocks/PARTS.md).
-- `overview` is a generated status surface, not the source of the part structure.
+- Project work uses **parts** — see [`../blocks/PARTS.md`](../blocks/PARTS.md).
+- `overview` is a generated status surface, not the source of part structure.
 
 Guidelines:
-- Use `core/registry` for file catalogs, defaults, and behavior profiles.
-- Keep business rules out of widget literals when possible.
+- Use `core/registry` for catalogs and profiles; keep business rules out of widget literals.

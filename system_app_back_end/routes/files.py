@@ -2,28 +2,16 @@ from flask import Blueprint, jsonify, request
 
 from models import File, Topic, db
 from routes.helpers import active_query, apply_updates, get_or_404
-from services.archive_files import list_archived_files_for_topic
-from services.automation_dispatcher import dispatch_file_changed
 from services.delete_cascade import delete_file_cascade
-from services.duplicate_file import duplicate_file as duplicate_file_record
-from services.file_anchor import validate_anchor_topic_id
+from services.file_versions import save_file_version
 
 files_bp = Blueprint("files", __name__)
-
-
-def _validate_anchor(data: dict) -> str | None:
-    if "anchor_topic_id" not in data:
-        return None
-    raw = data.get("anchor_topic_id")
-    if raw is None:
-        return None
-    return validate_anchor_topic_id(int(raw))
 
 
 @files_bp.route("/files", methods=["GET"])
 def list_files():
     files = active_query(File).order_by(File.order_index, File.id).all()
-    return jsonify([f.to_dict() for f in files])
+    return jsonify([f.to_dict(include_body=False) for f in files])
 
 
 @files_bp.route("/files/<int:file_id>", methods=["GET"])
@@ -33,48 +21,42 @@ def get_file(file_id):
 
 @files_bp.route("/topics/<int:topic_id>/files", methods=["GET"])
 def list_files_by_topic(topic_id):
+    get_or_404(Topic, topic_id)
     files = (
         active_query(File)
         .filter_by(topic_id=topic_id)
         .order_by(File.order_index, File.id)
         .all()
     )
-    return jsonify([f.to_dict() for f in files])
+    return jsonify([f.to_dict(include_body=False) for f in files])
 
 
 @files_bp.route("/topics/<int:topic_id>/archive/files", methods=["GET"])
 def list_archived_files_by_topic(topic_id):
-    limit = request.args.get("limit", default=24, type=int)
-    offset = request.args.get("offset", default=0, type=int)
-    q = request.args.get("q", default="", type=str).strip() or None
-
-    result = list_archived_files_for_topic(
-        topic_id,
-        limit=limit,
-        offset=offset,
-        q=q,
+    get_or_404(Topic, topic_id)
+    files = (
+        File.query.filter_by(topic_id=topic_id)
+        .filter(File.archived_at.isnot(None))
+        .order_by(File.archived_at.desc(), File.id.desc())
+        .all()
     )
-    if result is None:
-        return jsonify({"error": "Topic not found"}), 404
-    return jsonify(result)
+    return jsonify([f.to_dict(include_body=True) for f in files])
 
 
 @files_bp.route("/files", methods=["POST"])
 def create_file():
     data = request.get_json(silent=True) or {}
-    if not data.get("name") or not data.get("type"):
-        return jsonify({"error": "name and type are required"}), 400
-    anchor_error = _validate_anchor(data)
-    if anchor_error:
-        return jsonify({"error": anchor_error}), 400
+    if not data.get("name") or not data.get("topic_id"):
+        return jsonify({"error": "name and topic_id are required"}), 400
+    get_or_404(Topic, data["topic_id"])
 
     file = File(
-        topic_id=data.get("topic_id"),
-        anchor_topic_id=data.get("anchor_topic_id"),
+        topic_id=data["topic_id"],
         name=data["name"],
-        type=data["type"],
-        order_index=data.get("order_index"),
-        is_main=data.get("is_main"),
+        body=data.get("body", ""),
+        is_essence=bool(data.get("is_essence", False)),
+        order_index=data.get("order_index", 0),
+        meta=data.get("meta") or {},
     )
     db.session.add(file)
     db.session.commit()
@@ -85,60 +67,18 @@ def create_file():
 def update_file(file_id):
     file = get_or_404(File, file_id)
     data = request.get_json(silent=True) or {}
-    anchor_error = _validate_anchor(data)
-    if anchor_error:
-        return jsonify({"error": anchor_error}), 400
 
-    previous_topic_id = file.topic_id
+    if "body" in data and data["body"] != file.body:
+        save_file_version(file, source="user")
+
     apply_updates(
         file,
         data,
-        {
-            "topic_id",
-            "anchor_topic_id",
-            "name",
-            "type",
-            "order_index",
-            "is_main",
-            "archived_at",
-            "settings",
-        },
+        {"topic_id", "name", "body", "is_essence", "order_index", "meta", "archived_at"},
         datetime_fields={"archived_at"},
     )
     db.session.commit()
-
-    moved = (
-        "topic_id" in data
-        and previous_topic_id is not None
-        and file.topic_id is not None
-        and int(previous_topic_id) != int(file.topic_id)
-    )
-    if moved:
-        dispatch_file_changed(
-            file_id,
-            "file_moved",
-            {
-                "previous_topic_id": int(previous_topic_id),
-                "topic_id": int(file.topic_id),
-            },
-        )
-    else:
-        dispatch_file_changed(file_id, "file_updated")
     return jsonify(file.to_dict())
-
-
-@files_bp.route("/files/<int:file_id>/duplicate", methods=["POST"])
-def duplicate_file(file_id):
-    source = get_or_404(File, file_id)
-    data = request.get_json(silent=True) or {}
-    name = data.get("name")
-    try:
-        duplicate = duplicate_file_record(source, name=name)
-    except ValueError as error:
-        return jsonify({"error": str(error)}), 400
-    db.session.commit()
-    dispatch_file_changed(duplicate.id, "file_duplicated", {"source_file_id": file_id})
-    return jsonify(duplicate.to_dict()), 201
 
 
 @files_bp.route("/files/<int:file_id>", methods=["DELETE"])

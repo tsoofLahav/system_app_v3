@@ -197,6 +197,18 @@ abstract final class AppColors {
     );
   }
 
+  /// Faint frame for reusable details blocks (title + body unit).
+  static BoxDecoration detailsBlockDecoration() {
+    return BoxDecoration(
+      color: noteTop.withValues(alpha: 0.42),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(
+        color: noteBorder.withValues(alpha: 0.56),
+        width: 0.85,
+      ),
+    );
+  }
+
   /// Topic-tinted pane surface — same pastel as topic canvas, used inside a card.
   @Deprecated('Use filePaneDecoration with a file type')
   static BoxDecoration topicPaneDecoration(

@@ -138,7 +138,7 @@ class AppBottomBar extends StatelessWidget {
                   child: AiToolBar(
                     state: state,
                     compact: true,
-                    onTool: (tool) => runAiTool(context, state, tool),
+                    onTool: (_) => runAgentPrompt(context, state),
                   ),
                 ),
               ],

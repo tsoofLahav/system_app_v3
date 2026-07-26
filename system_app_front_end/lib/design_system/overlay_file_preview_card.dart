@@ -84,11 +84,9 @@ class OverlayFilePreviewCard extends StatelessWidget {
             ),
             SizedBox(height: topicLabel != null ? 10 : 8),
             Expanded(
-              child: OverlayFileContentPreview(
-                preview: preview,
-                loaded: previewsLoaded,
-                strings: strings,
-              ),
+              child: preview == null
+                  ? const SizedBox.shrink()
+                  : OverlayFileContentPreview(preview: preview!),
             ),
           ],
         ),

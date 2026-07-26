@@ -10,7 +10,8 @@ Any file may contain any block type. This keeps manual editing and existing AI t
 
 | File type | Purpose | Default blocks | Gap insert | Right-click suggestions |
 |---|---|---|---|---|
-| `text` | Free writing and notes | `text` | `text` | `image`, `summary`, `header`, `text` |
+| `text` | Free writing and notes | `text` | `text` | all insertable blocks incl. `details` |
+| `data` | Reference / details storage | `text` | `text` | `header`, `text`, `details`, `table`, `list` |
 | `overview` | Overview/recap file | `summary`, `task_list`, `table`, `text` | `text` | `header`, `text`, `summary`, `task_list`, `table`, `list` |
 | `plan` | Planning and steps | `text`, `list`, `text` | `text` | `header`, `text`, `summary`, `list`, `image` |
 | `tasks` | Dedicated task entry | `task_list` | none (edit in `task_list`) | `header`, `task_list` |
@@ -20,10 +21,13 @@ Any file may contain any block type. This keeps manual editing and existing AI t
 
 The file name is the visible editable header. Profiles do not seed an extra `header` block by default.
 
-Topic defaults:
-- Projects: Summary (`overview`), Tasks, Execution (main); Documentation, Plan (additional)
-- Processes: `overview`, `plan`, `tasks`, `doc`
-- Areas: `tasks`, `doc`
+Topic defaults (essence / additionals):
+- Projects: `overview`, `tasks`, `execution` (essence); `doc`, `plan`, `data` (additionals)
+- Processes: `overview`, `plan`, `tasks` (essence); `doc`, `data` (additionals)
+- Areas: `tasks`, `data`, `text` (essence); `doc` (additionals)
+- Others: no default files
+
+**`details` blocks** appear in the Add block menu only for `text` and `data` files.
 
 ## Project Parts
 
@@ -35,7 +39,7 @@ Project `plan`, `execution`, and `tasks` files use the **`parts` entity** (see [
 
 ## UI
 
-- File corner `...` = file actions only (delete, main/additional visibility)
+- File corner `...` = file actions only (delete, essence/additional visibility)
 - Right-click inside file = glass bubble menu (`AppContextMenu`): **Add block →** hover submenu for profile-filtered inserts, plus block/text actions. See [`lib/shared/widgets/README.md`](../../lib/shared/widgets/README.md).
 - Files with a text default keep a text block at the end (never two consecutive text blocks).
 - On topic load, adjacent empty text blocks after another text block are removed; trailing ensure skips when the file already ends with text.
@@ -54,7 +58,7 @@ Project `plan`, `execution`, and `tasks` files use the **`parts` entity** (see [
 - Right-click inside a text/header/summary block: format (bold, size, etc.) applies to marked text or the current paragraph; selection stays visible via a paint-only overlay. See [RICH_TEXT.md](../../lib/features/blocks/RICH_TEXT.md).
 - AI tools may insert any block type anywhere
 
-The corner menu contains file actions only: delete file, show on main, and move to additional files.
+The corner menu contains file actions only: delete file, show in essence, and move to additionals.
 
 ## Block Taxonomy
 
@@ -67,6 +71,7 @@ The corner menu contains file actions only: delete file, show on main, and move 
 - `table`: editable grid block for documentation and recap structures.
 - `graph`: bar/line/pie chart with A/B/C default columns, editable name/value grid; right-click to add/remove variables, change colors, or switch chart type.
 - `list`: structured points or numbered list block.
+- `details`: titled reference unit; menu item only in `text` and `data` files.
 - `measurement`: specialized measured value block.
 
 Recap is a file composition, not a `recap` block type. Recap files are built from the editable file title plus `table`, `task_list`, and `list`.

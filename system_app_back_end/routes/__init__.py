@@ -1,33 +1,29 @@
-from routes.ai import ai_bp
-from routes.ai_proposals import ai_proposals_bp
-from routes.automation_companion import automation_companion_bp
-from routes.automation_definitions import automation_definitions_bp
-from routes.automation_rules import automation_rules_bp
-from routes.automation_runs import automation_runs_bp
-from routes.blocks import blocks_bp
+from routes.agent import agent_bp
+from routes.automations import automations_bp
+from routes.bootstrap import bootstrap_bp
+from routes.file_versions import file_versions_bp
 from routes.files import files_bp
-from routes.parts import parts_bp
-from routes.process_documentation_inputs import process_documentation_inputs_bp
-from routes.task_views import task_views_bp
-from routes.task_reset_acknowledgements import task_reset_acknowledgements_bp
+from routes.information import information_bp
+from routes.objects import objects_bp
+from routes.tags import tags_bp
 from routes.tasks import tasks_bp
 from routes.topics import topics_bp
 from routes.upload import upload_bp
+from routes.views import views_bp
+from routes.workspaces import workspaces_bp
 
 
 def register_blueprints(app):
-    app.register_blueprint(ai_bp)
-    app.register_blueprint(ai_proposals_bp)
-    app.register_blueprint(automation_definitions_bp)
-    app.register_blueprint(automation_rules_bp)
-    app.register_blueprint(automation_companion_bp)
-    app.register_blueprint(automation_runs_bp)
+    app.register_blueprint(bootstrap_bp)
+    app.register_blueprint(workspaces_bp)
     app.register_blueprint(topics_bp)
     app.register_blueprint(files_bp)
-    app.register_blueprint(blocks_bp)
-    app.register_blueprint(parts_bp)
+    app.register_blueprint(objects_bp)
     app.register_blueprint(tasks_bp)
-    app.register_blueprint(task_views_bp)
-    app.register_blueprint(task_reset_acknowledgements_bp)
-    app.register_blueprint(process_documentation_inputs_bp)
+    app.register_blueprint(information_bp)
+    app.register_blueprint(tags_bp)
+    app.register_blueprint(views_bp)
+    app.register_blueprint(agent_bp)
+    app.register_blueprint(automations_bp)
+    app.register_blueprint(file_versions_bp)
     app.register_blueprint(upload_bp)

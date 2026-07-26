@@ -6,8 +6,7 @@ AppFile _file(int id) => AppFile(
       id: id,
       topicId: 1,
       name: 'File$id',
-      type: 'doc',
-      isMain: true,
+      isEssence: true,
     );
 
 void main() {

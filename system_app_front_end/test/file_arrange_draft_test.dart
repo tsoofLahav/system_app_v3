@@ -2,12 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/core/models/app_file.dart';
 import 'package:system_app_front_end/features/arrange/file_arrange_draft.dart';
 
-AppFile _file(int id, {bool isMain = true}) => AppFile(
+AppFile _file(int id, {bool isEssence = true}) => AppFile(
       id: id,
       topicId: 1,
       name: 'File$id',
-      type: 'doc',
-      isMain: isMain,
+      isEssence: isEssence,
     );
 
 void main() {
@@ -33,7 +32,7 @@ void main() {
     expect(draft.main.map((f) => f.id), [1, 2]);
   });
 
-  test('promoteFromAdditional moves file to main and evicts last main file', () {
+  test('promoteFromAdditional moves file to main end', () {
     final draft = FileArrangeDraft(
       main: [_file(1), _file(2), _file(3)],
       additional: [_file(4)],
@@ -41,8 +40,8 @@ void main() {
     );
 
     expect(draft.promoteFromAdditional(0), isTrue);
-    expect(draft.main.map((f) => f.id), [1, 2, 4]);
-    expect(draft.additional.map((f) => f.id), [3]);
+    expect(draft.main.map((f) => f.id), [1, 2, 3, 4]);
+    expect(draft.additional, isEmpty);
   });
 
   test('promoteFromAdditional appends when main has room', () {

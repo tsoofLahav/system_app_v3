@@ -1,8 +1,8 @@
-# API Reference
+# API Reference (v2)
 
-REST API for `system_app`. For domain model and conventions, see [`../AGENTS.md`](../AGENTS.md).
+REST API for `system_app` v2. Domain model: [`DOCUMENT_MODEL.md`](DOCUMENT_MODEL.md).
 
-All endpoints return JSON. Timestamps are ISO 8601 strings (e.g. `"2026-06-09T10:00:00"`).
+All endpoints return JSON. Timestamps are ISO 8601 strings.
 
 ## Error format
 
@@ -12,9 +12,9 @@ All endpoints return JSON. Timestamps are ISO 8601 strings (e.g. `"2026-06-09T10
 
 | Status | When |
 |--------|------|
-| 400 | Validation error, bad datetime, missing required fields |
+| 400 | Validation error |
 | 404 | Resource not found |
-| 500 | Unexpected server error (DB failures, etc.) |
+| 500 | Server error |
 
 Successful DELETE returns `204` with empty body.
 
@@ -28,30 +28,38 @@ Successful DELETE returns `204` with empty body.
 
 ---
 
+## Bootstrap
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/bootstrap` | Create default workspace, home topic, Daily essence file if DB empty |
+| GET | `/bootstrap/status` | `{"ready": true, "workspace_id": 1}` |
+
+---
+
+## Workspaces
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/workspaces` | List |
+| GET | `/workspaces/<id>` | Get one |
+| POST | `/workspaces` | Create `{ "name": "..." }` |
+
+---
+
 ## Topics
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/topics` | List all |
+| GET | `/topics` | List (`?workspace_id=`) |
 | GET | `/topics/<id>` | Get one |
 | POST | `/topics` | Create |
-| PATCH | `/topics/<id>` | Partial update |
-| POST | `/topics/<id>/duplicate` | Deep-copy topic, parts, files, blocks, and tasks |
-| DELETE | `/topics/<id>` | Delete |
-| GET | `/topics/<id>/details-blocks` | List `details` blocks in topic (pickers, AI) |
+| PATCH | `/topics/<id>` | Update |
+| DELETE | `/topics/<id>` | Delete cascade |
 
-**POST body** (required: `name`, `type`):
-```json
-{
-  "name": "Home renovation",
-  "type": "project",
-  "icon": "hammer",
-  "color": "#FF5733",
-  "parent_id": null
-}
-```
+**POST body:** `{ "workspace_id", "name", "icon?", "color?", "order_index?" }`
 
-**PATCH body** — any subset of: `name`, `type`, `icon`, `color`, `parent_id`
+**PATCH:** `name`, `icon`, `color`, `order_index`, `archived_at`
 
 ---
 
@@ -60,73 +68,26 @@ Successful DELETE returns `204` with empty body.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/files` | List all |
-| GET | `/files/<id>` | Get one |
-| GET | `/topics/<topic_id>/files` | Files for a topic |
+| GET | `/files/<id>` | Get one (includes `body`) |
+| GET | `/topics/<topic_id>/files` | Files for topic |
 | POST | `/files` | Create |
-| POST | `/files/<id>/duplicate` | Deep-copy file, blocks, and tasks |
-| PATCH | `/files/<id>` | Partial update |
-| DELETE | `/files/<id>` | Delete |
+| PATCH | `/files/<id>` | Update (name, body, is_essence, order_index, meta, archived_at) |
+| DELETE | `/files/<id>` | Delete cascade |
 
-**POST body** (required: `name`, `type`):
-```json
-{
-  "topic_id": 1,
-  "name": "Project plan",
-  "type": "plan",
-  "order_index": 0,
-  "is_main": true,
-  "anchor_topic_id": 12
-}
-```
-
-Optional `anchor_topic_id` (project topic only) lets a file on **main** use another project's part list — used by `log` files created via "Log for project…".
-
-**PATCH body** — any subset of: `topic_id`, `name`, `type`, `order_index`, `is_main`, `anchor_topic_id`
-
-Moving a file to another topic (`topic_id` change) dispatches `file_moved` for event automations such as `project_update`.
+**POST body:** `{ "topic_id", "name", "body?", "is_essence?", "order_index?", "meta?" }`
 
 ---
 
-## Blocks
+## Objects (embeds)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/blocks` | List all |
-| GET | `/blocks/<id>` | Get one |
-| GET | `/files/<file_id>/blocks` | Blocks for a file |
-| POST | `/blocks` | Create |
-| PATCH | `/blocks/<id>` | Partial update |
-| DELETE | `/blocks/<id>` | Delete |
+| GET | `/files/<file_id>/objects` | List embeds with resolved task/info |
+| POST | `/files/<file_id>/objects` | Create embed + entity |
+| PATCH | `/objects/<id>` | Update anchor / sort_key |
+| DELETE | `/objects/<id>` | Remove marker from body + delete entity |
 
-**POST body** (required: `type`):
-```json
-{
-  "file_id": 1,
-  "type": "text",
-  "content": {"text": "Hello world"},
-  "order_index": 0
-}
-```
-
-**PATCH body** — any subset of: `file_id`, `type`, `content`, `order_index`, `part_id`
-
-`part_id` links a block to a project part. Send `null` to clear.
-
----
-
-## Parts
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/topics/<topic_id>/parts` | List ordered parts |
-| POST | `/topics/<topic_id>/parts` | Create part (optional placement) |
-| GET | `/parts/<id>` | Get one |
-| PATCH | `/parts/<id>` | Update `name`, `order_index`, `archived_at` |
-| DELETE | `/parts/<id>` | Archive part |
-| POST | `/files/<file_id>/parts` | Place new or existing part in file |
-| GET | `/files/<file_id>/part-ids` | Part ids placed in file |
-
-**POST `/files/<file_id>/parts`** — existing part: `{"part_id": 3}`; new part: `{"name": "Auth"}`; optional `insert_after_block_id`.
+**POST body (task):** `{ "type": "task", "title", "line?" }` — inserts `{{task:id}}` at line
 
 ---
 
@@ -134,154 +95,87 @@ Moving a file to another topic (`topic_id` change) dispatches `file_moved` for e
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/tasks` | List all |
-| GET | `/tasks/<id>` | Get one |
-| GET | `/blocks/<block_id>/tasks` | Tasks for a block |
-| GET | `/tasks/view/<view_type>` | Tasks joined with task_views (see below) |
-| POST | `/tasks` | Create |
-| PATCH | `/tasks/<id>` | Partial update |
-| DELETE | `/tasks/<id>` | Delete |
-| POST | `/blocks/<block_id>/tasks/reorder` | Bulk set `list_order_index` — body: `{ "task_ids": [int, …] }` |
-| POST | `/blocks/<block_id>/tasks/move` | Move task to list/zone — body: `{ "task_id", "insert_index", "target_done" }` |
-| PUT | `/tasks/<id>/view` | Assign view membership |
-
-Details: [`TASKS.md`](TASKS.md).
-
-**POST body** (required: `title` field; value may be `""` for a blank task row):
-
-```json
-{
-  "block_id": 1,
-  "title": "Buy paint",
-  "status": "active",
-  "due_date": "2026-06-15T09:00:00"
-}
-```
-
-Empty string titles are valid. The field must be present; omitting `title` returns 400.
-
-**PATCH body** — any subset of: `block_id`, `title`, `status`, `due_date`, `details_block_id` (null to detach)
-
-Details attach: [`DETAILS.md`](DETAILS.md).
-
-### `GET /tasks/view/<view_type>`
-
-Returns tasks that belong to a given view. Each item is the task dict plus:
-
-```json
-{
-  "id": 1,
-  "block_id": 5,
-  "title": "Buy paint",
-  "status": "active",
-  "due_date": null,
-  "created_at": "2026-06-09T10:00:00",
-  "task_view_id": 12,
-  "view_type": "weekly"
-}
-```
-
-Valid `view_type` values: `arrangements`, `tasks`, `weekly`, `monthly`, `quarterly`.
-
-Typical frontend flow:
-1. `POST /tasks` — create task
-2. `POST /task_views` — add to view(s)
-3. `GET /tasks/view/weekly` — load weekly list
-4. `PATCH /tasks/<id>` — mark done (updates everywhere)
+| GET | `/tasks/<id>` | Get |
+| PATCH | `/tasks/<id>` | Update title, status, due_date, list_order_index |
+| POST | `/tasks/<id>/toggle` | Toggle active/done |
 
 ---
 
-## Task views
+## Information pieces
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/task_views` | List all |
-| GET | `/task_views/<id>` | Get one |
-| GET | `/task_views/by-view/<view_type>` | Filter by view_type |
-| POST | `/task_views` | Create |
-| PATCH | `/task_views/<id>` | Partial update |
-| DELETE | `/task_views/<id>` | Delete |
-| POST | `/task_views/reorder` | Bulk set `order_index` — body: `{ "view_type", "task_ids", "section_name?" }` |
-
-Details: [`TASKS.md`](TASKS.md).
-
-**POST body** (required: `task_id`, `view_type`):
-```json
-{
-  "task_id": 1,
-  "view_type": "weekly"
-}
-```
-
-**PATCH body** — any subset of: `task_id`, `view_type`
+| GET | `/information/<id>` | Get |
+| PATCH | `/information/<id>` | Update title, body, metadata |
 
 ---
 
-## Image upload & serving
+## Tags
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/upload-image` | Upload image (multipart) |
-| GET | `/images/<filename>` | Serve uploaded file |
+| GET | `/tags` | List (`?workspace_id=`) |
+| POST | `/tags` | Create |
+| POST | `/tags/assign` | `{ "tag_id", "entity_type", "entity_id" }` |
+| DELETE | `/tags/assign` | Remove assignment (body or query params) |
 
-**Upload request**: `multipart/form-data` with field name `image`.
+---
 
-**Allowed extensions**: `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`
+## Views
 
-**Response** (201):
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/views` | List |
+| POST | `/views` | Create |
+| PATCH | `/views/<id>` | Update |
+| DELETE | `/views/<id>` | Delete |
+| GET | `/views/<id>/memberships` | Task memberships |
+| PUT | `/views/<id>/memberships` | Replace ordered memberships |
+
+---
+
+## Agent
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/agent/run` | Run tool-using agent |
+
+**POST body:**
 ```json
 {
-  "filename": "photo_a1b2c3d4.jpg",
-  "image_path": "/images/photo_a1b2c3d4.jpg",
-  "url": "/images/photo_a1b2c3d4.jpg"
+  "prompt": "Update the daily file…",
+  "workspace_id": 1,
+  "scope": { "topic_ids": [1], "file_ids": [2] },
+  "apply_mode": "review",
+  "context": {}
 }
 ```
 
-Filenames are sanitized with `secure_filename` and suffixed with a random 8-char hex to avoid collisions.
+**Response:** `{ "run_id", "status", "messages", "proposed_changes?", "applied?" }`
 
 ---
 
-## Configuration
+## Automations
 
-Defined in `config.py`:
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `DATABASE_URL` | Render internal URL (fallback) | PostgreSQL connection string |
-| `UPLOAD_FOLDER` | `/var/data/uploads` | Image storage directory |
-
-`DATABASE_URL` is read from the environment first. Render auto-injects it when the DB is linked. The fallback URL uses Render's **internal** hostname and only works inside Render's network.
-
-`postgres://` URLs are automatically rewritten to `postgresql://` for SQLAlchemy compatibility.
-
-### Local development
-
-```bash
-cd system_app_back_end
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# Use Render's EXTERNAL database URL for local access:
-export DATABASE_URL="postgresql://user:pass@dpg-....oregon-postgres.render.com/dbname"
-
-# Local uploads (Render path won't exist on Mac/Linux dev machines):
-export UPLOAD_FOLDER="./uploads"
-
-python app.py          # dev server on PORT (default 5000)
-gunicorn app:app       # production-style
-```
-
-On macOS, port 5000 may be taken by AirPlay Receiver — use `PORT=5001 python app.py`.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/automations` | List |
+| POST | `/automations` | Create |
+| PATCH | `/automations/<id>` | Update |
+| DELETE | `/automations/<id>` | Delete |
+| POST | `/automations/<id>/run` | Manual run → same as agent |
 
 ---
 
-## Render deployment
+## File versions & diff
 
-| Setting | Value |
-|---------|-------|
-| Root directory | `system_app_back_end` |
-| Start command | `gunicorn app:app` (or use `Procfile`) |
-| `DATABASE_URL` | Auto-set when PostgreSQL is linked |
-| Persistent disk | Mount at `/var/data` for image uploads to survive redeploys |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/files/<id>/versions` | List snapshots |
+| POST | `/files/<id>/diff` | `{ "old_body", "new_body" }` → unified diff hunks |
 
-Without a persistent disk, uploaded images are lost on redeploy.
+---
+
+## Uploads
+
+Unchanged: `POST /upload`, static file serving under `/uploads/`.

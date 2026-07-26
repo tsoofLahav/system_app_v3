@@ -5,8 +5,6 @@ import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
 import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
-import '../bring_file/bring_file_picker_dialog.dart';
-import '../create_topic/add_file_dialog.dart';
 import '../sidebar/app_sidebar.dart';
 import '../task_view/task_view_pane.dart';
 import '../topic/topic_view.dart';
@@ -51,29 +49,11 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
 
   Future<void> _addFile(BuildContext context) async {
     final topic = state.selectedTopic;
-    final detail = state.selectedDetail;
-    if (topic == null || detail == null) return;
-    final result = await showAddFileDialog(
-      context: context,
-      state: state,
-      topic: topic,
-      existingTypes: detail.files.map((f) => f.type).toList(growable: false),
-    );
-    if (result == null) return;
-    await state.addFile(topic: topic, type: result.type, name: result.name);
-    if (!context.mounted) return;
-    if (state.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(state.error!)),
-      );
-    }
+    if (topic == null) return;
+    await state.addFile(topic: topic, name: 'Document', isEssence: false);
   }
 
-  Future<void> _bringFile(BuildContext context) async {
-    final entry = await showBringFilePicker(context, state);
-    if (entry == null) return;
-    await state.bringFileOnPhone(entry.topic, entry.file);
-  }
+  Future<void> _bringFile(BuildContext context) async {}
 
   @override
   Widget build(BuildContext context) {
@@ -243,7 +223,7 @@ class _PhoneBottomToolsSheet extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: AiToolBar(
                       state: state,
-                      onTool: (tool) => runAiTool(context, state, tool),
+                      onTool: (_) => runAgentPrompt(context, state),
                     ),
                   ),
                   if (state.aiRunning)

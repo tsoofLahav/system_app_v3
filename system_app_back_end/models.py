@@ -10,26 +10,41 @@ def _iso(dt):
     return dt.isoformat() if dt else None
 
 
-class Topic(db.Model):
-    __tablename__ = "topics"
+class Workspace(db.Model):
+    __tablename__ = "workspaces"
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.Text, nullable=False)
-    type = db.Column(db.Text, nullable=False)
-    icon = db.Column(db.Text)
-    color = db.Column(db.Text)
-    parent_id = db.Column(db.Integer, db.ForeignKey("topics.id"))
-    archived_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         return {
             "id": self.id,
             "name": self.name,
-            "type": self.type,
+            "created_at": _iso(self.created_at),
+        }
+
+
+class Topic(db.Model):
+    __tablename__ = "topics"
+
+    id = db.Column(db.Integer, primary_key=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id"), nullable=False)
+    name = db.Column(db.Text, nullable=False)
+    icon = db.Column(db.Text)
+    color = db.Column(db.Text)
+    order_index = db.Column(db.Integer, nullable=False, default=0)
+    archived_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workspace_id": self.workspace_id,
+            "name": self.name,
             "icon": self.icon,
             "color": self.color,
-            "parent_id": self.parent_id,
+            "order_index": self.order_index,
             "archived_at": _iso(self.archived_at),
             "created_at": _iso(self.created_at),
         }
@@ -39,62 +54,175 @@ class File(db.Model):
     __tablename__ = "files"
 
     id = db.Column(db.Integer, primary_key=True)
-    topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"))
-    anchor_topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"))
+    topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"), nullable=False)
     name = db.Column(db.Text, nullable=False)
-    type = db.Column(db.Text, nullable=False)
-    order_index = db.Column(db.Integer)
-    is_main = db.Column(db.Boolean)
+    body = db.Column(db.Text, nullable=False, default="")
+    is_essence = db.Column(db.Boolean, nullable=False, default=False)
+    order_index = db.Column(db.Integer, nullable=False, default=0)
+    meta = db.Column(JSONB, nullable=False, default=dict)
     archived_at = db.Column(db.DateTime)
-    settings = db.Column(JSONB, nullable=False, default=dict)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self, *, include_body: bool = True):
+        data = {
+            "id": self.id,
+            "topic_id": self.topic_id,
+            "name": self.name,
+            "is_essence": self.is_essence,
+            "order_index": self.order_index,
+            "meta": self.meta if self.meta is not None else {},
+            "archived_at": _iso(self.archived_at),
+            "created_at": _iso(self.created_at),
+        }
+        if include_body:
+            data["body"] = self.body or ""
+        return data
+
+
+class Task(db.Model):
+    __tablename__ = "tasks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.Text, nullable=False)
+    status = db.Column(db.Text, nullable=False, default="active")
+    due_date = db.Column(db.DateTime)
+    list_order_index = db.Column(db.Integer, nullable=False, default=0)
+    archived_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         return {
             "id": self.id,
-            "topic_id": self.topic_id,
-            "anchor_topic_id": self.anchor_topic_id,
-            "name": self.name,
-            "type": self.type,
-            "order_index": self.order_index,
-            "is_main": self.is_main,
+            "title": self.title,
+            "status": self.status,
+            "due_date": _iso(self.due_date),
+            "list_order_index": self.list_order_index,
             "archived_at": _iso(self.archived_at),
-            "settings": self.settings if self.settings is not None else {},
             "created_at": _iso(self.created_at),
         }
 
 
-class Block(db.Model):
-    __tablename__ = "blocks"
+class InformationPiece(db.Model):
+    __tablename__ = "information_pieces"
 
     id = db.Column(db.Integer, primary_key=True)
-    file_id = db.Column(db.Integer, db.ForeignKey("files.id"))
-    type = db.Column(db.Text, nullable=False)
-    content = db.Column(JSONB, nullable=False, default=dict)
-    order_index = db.Column(db.Integer)
-    part_id = db.Column(db.Integer, db.ForeignKey("parts.id"))
+    title = db.Column(db.Text, nullable=False, default="")
+    body = db.Column(db.Text, nullable=False, default="")
+    metadata_ = db.Column("metadata", JSONB, nullable=False, default=dict)
     archived_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         return {
+            "id": self.id,
+            "title": self.title,
+            "body": self.body or "",
+            "metadata": self.metadata_ if self.metadata_ is not None else {},
+            "archived_at": _iso(self.archived_at),
+            "created_at": _iso(self.created_at),
+        }
+
+
+class ObjectEmbed(db.Model):
+    __tablename__ = "objects"
+
+    id = db.Column(db.Integer, primary_key=True)
+    file_id = db.Column(db.Integer, db.ForeignKey("files.id"), nullable=False)
+    type = db.Column(db.Text, nullable=False)
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"))
+    information_id = db.Column(db.Integer, db.ForeignKey("information_pieces.id"))
+    anchor = db.Column(JSONB, nullable=False, default=dict)
+    sort_key = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self, *, task=None, information=None):
+        data = {
             "id": self.id,
             "file_id": self.file_id,
             "type": self.type,
-            "content": self.content if self.content is not None else {},
-            "order_index": self.order_index,
-            "part_id": self.part_id,
-            "archived_at": _iso(self.archived_at),
+            "task_id": self.task_id,
+            "information_id": self.information_id,
+            "anchor": self.anchor if self.anchor is not None else {},
+            "sort_key": self.sort_key,
+            "created_at": _iso(self.created_at),
+        }
+        if task is not None:
+            data["task"] = task.to_dict()
+        if information is not None:
+            data["information"] = information.to_dict()
+        return data
+
+
+class Tag(db.Model):
+    __tablename__ = "tags"
+
+    id = db.Column(db.Integer, primary_key=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id"), nullable=False)
+    name = db.Column(db.Text, nullable=False)
+    color = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workspace_id": self.workspace_id,
+            "name": self.name,
+            "color": self.color,
             "created_at": _iso(self.created_at),
         }
 
 
-class Part(db.Model):
-    __tablename__ = "parts"
+class EntityTag(db.Model):
+    __tablename__ = "entity_tags"
 
     id = db.Column(db.Integer, primary_key=True)
-    topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"), nullable=False)
+    tag_id = db.Column(db.Integer, db.ForeignKey("tags.id"), nullable=False)
+    entity_type = db.Column(db.Text, nullable=False)
+    entity_id = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "tag_id": self.tag_id,
+            "entity_type": self.entity_type,
+            "entity_id": self.entity_id,
+            "created_at": _iso(self.created_at),
+        }
+
+
+class Link(db.Model):
+    __tablename__ = "links"
+
+    id = db.Column(db.Integer, primary_key=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id"), nullable=False)
+    source_type = db.Column(db.Text, nullable=False)
+    source_id = db.Column(db.Integer, nullable=False)
+    target_type = db.Column(db.Text, nullable=False)
+    target_id = db.Column(db.Integer, nullable=False)
+    label = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workspace_id": self.workspace_id,
+            "source_type": self.source_type,
+            "source_id": self.source_id,
+            "target_type": self.target_type,
+            "target_id": self.target_id,
+            "label": self.label,
+            "created_at": _iso(self.created_at),
+        }
+
+
+class View(db.Model):
+    __tablename__ = "views"
+
+    id = db.Column(db.Integer, primary_key=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id"), nullable=False)
     name = db.Column(db.Text, nullable=False)
+    layout_config = db.Column(JSONB, nullable=False, default=dict)
     order_index = db.Column(db.Integer, nullable=False, default=0)
     archived_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -102,77 +230,52 @@ class Part(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
-            "topic_id": self.topic_id,
+            "workspace_id": self.workspace_id,
             "name": self.name,
+            "layout_config": self.layout_config if self.layout_config is not None else {},
             "order_index": self.order_index,
             "archived_at": _iso(self.archived_at),
             "created_at": _iso(self.created_at),
         }
 
 
-class Task(db.Model):
-    __tablename__ = "tasks"
+class ViewTaskMembership(db.Model):
+    __tablename__ = "view_task_memberships"
 
     id = db.Column(db.Integer, primary_key=True)
-    block_id = db.Column(db.Integer, db.ForeignKey("blocks.id"))
-    list_order_index = db.Column(db.Integer, nullable=False, default=0)
-    details_block_id = db.Column(db.Integer, db.ForeignKey("blocks.id"))
-    title = db.Column(db.Text, nullable=False)
-    status = db.Column(db.Text, default="active")
-    due_date = db.Column(db.DateTime)
-    archived_at = db.Column(db.DateTime)
+    view_id = db.Column(db.Integer, db.ForeignKey("views.id"), nullable=False)
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"))
+    section_name = db.Column(db.Text)
+    order_index = db.Column(db.Integer, nullable=False, default=0)
+    section_flag = db.Column(db.Text)
+    topic_key = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         return {
             "id": self.id,
-            "block_id": self.block_id,
-            "list_order_index": self.list_order_index,
-            "details_block_id": self.details_block_id,
-            "title": self.title,
-            "status": self.status,
-            "due_date": _iso(self.due_date),
-            "archived_at": _iso(self.archived_at),
-            "created_at": _iso(self.created_at),
-        }
-
-
-class TaskView(db.Model):
-    """Task membership in a view, or a section placeholder (task_id NULL)."""
-
-    __tablename__ = "task_views"
-
-    id = db.Column(db.Integer, primary_key=True)
-    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=True)
-    view_type = db.Column(db.Text, nullable=False)
-    section_name = db.Column(db.Text, nullable=True)
-    order_index = db.Column(db.Integer, default=0)
-    section_flag = db.Column(db.Text, nullable=True)
-    topic_key = db.Column(db.Text, nullable=True)
-
-    def to_dict(self):
-        return {
-            "id": self.id,
+            "view_id": self.view_id,
             "task_id": self.task_id,
-            "view_type": self.view_type,
             "section_name": self.section_name,
             "order_index": self.order_index,
             "section_flag": self.section_flag,
             "topic_key": self.topic_key,
+            "created_at": _iso(self.created_at),
         }
 
 
-class AutomationRule(db.Model):
-    __tablename__ = "automation_rules"
+class Automation(db.Model):
+    __tablename__ = "automations"
 
     id = db.Column(db.Integer, primary_key=True)
-    key = db.Column(db.Text, nullable=False, unique=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id"), nullable=False)
     name = db.Column(db.Text, nullable=False)
-    action_type = db.Column(db.Text, nullable=False)
-    trigger_type = db.Column(db.Text, nullable=False, default="schedule")
+    trigger = db.Column(JSONB, nullable=False, default=dict)
+    scope = db.Column(JSONB, nullable=False, default=dict)
+    prompt = db.Column(db.Text, nullable=False, default="")
+    apply_mode = db.Column(db.Text, nullable=False, default="review")
     schedule = db.Column(db.Text)
     timezone = db.Column(db.Text, nullable=False, default="UTC")
-    params = db.Column(JSONB, nullable=False, default=dict)
     enabled = db.Column(db.Boolean, nullable=False, default=True)
     last_run_at = db.Column(db.DateTime)
     next_run_at = db.Column(db.DateTime)
@@ -184,49 +287,17 @@ class AutomationRule(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
-            "key": self.key,
+            "workspace_id": self.workspace_id,
             "name": self.name,
-            "action_type": self.action_type,
-            "trigger_type": self.trigger_type,
+            "trigger": self.trigger if self.trigger is not None else {},
+            "scope": self.scope if self.scope is not None else {},
+            "prompt": self.prompt or "",
+            "apply_mode": self.apply_mode,
             "schedule": self.schedule,
             "timezone": self.timezone,
-            "params": self.params if self.params is not None else {},
             "enabled": self.enabled,
             "last_run_at": _iso(self.last_run_at),
             "next_run_at": _iso(self.next_run_at),
-            "created_at": _iso(self.created_at),
-            "updated_at": _iso(self.updated_at),
-        }
-
-
-class AutomationChangeTrigger(db.Model):
-    __tablename__ = "automation_change_triggers"
-
-    id = db.Column(db.Integer, primary_key=True)
-    rule_id = db.Column(
-        db.Integer, db.ForeignKey("automation_rules.id"), nullable=False
-    )
-    dedupe_key = db.Column(db.Text, nullable=False)
-    event_context = db.Column(JSONB, nullable=False, default=dict)
-    fire_at = db.Column(db.DateTime, nullable=False)
-    dirty = db.Column(db.Boolean, nullable=False, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(
-        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
-
-    __table_args__ = (
-        db.UniqueConstraint("rule_id", "dedupe_key", name="uq_automation_change_triggers"),
-    )
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "rule_id": self.rule_id,
-            "dedupe_key": self.dedupe_key,
-            "event_context": self.event_context if self.event_context is not None else {},
-            "fire_at": _iso(self.fire_at),
-            "dirty": self.dirty,
             "created_at": _iso(self.created_at),
             "updated_at": _iso(self.updated_at),
         }
@@ -236,7 +307,7 @@ class AutomationRun(db.Model):
     __tablename__ = "automation_runs"
 
     id = db.Column(db.Integer, primary_key=True)
-    rule_id = db.Column(db.Integer, db.ForeignKey("automation_rules.id"))
+    automation_id = db.Column(db.Integer, db.ForeignKey("automations.id"), nullable=False)
     status = db.Column(db.Text, nullable=False)
     trigger_source = db.Column(db.Text, nullable=False, default="schedule")
     event_context = db.Column(JSONB, nullable=False, default=dict)
@@ -248,7 +319,7 @@ class AutomationRun(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
-            "rule_id": self.rule_id,
+            "automation_id": self.automation_id,
             "status": self.status,
             "trigger_source": self.trigger_source,
             "event_context": self.event_context if self.event_context is not None else {},
@@ -259,82 +330,47 @@ class AutomationRun(db.Model):
         }
 
 
-class AutomationCompanionTask(db.Model):
-    __tablename__ = "automation_companion_tasks"
+class FileVersion(db.Model):
+    __tablename__ = "file_versions"
 
     id = db.Column(db.Integer, primary_key=True)
-    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
-    rule_key = db.Column(db.Text, nullable=False)
-    automation_run_id = db.Column(db.Integer, db.ForeignKey("automation_runs.id"))
-    flow_key = db.Column(db.Text, nullable=False)
-    topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"))
-    payload = db.Column(JSONB, nullable=False, default=dict)
-    status = db.Column(db.Text, nullable=False, default="pending")
+    file_id = db.Column(db.Integer, db.ForeignKey("files.id"), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    source = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    completed_at = db.Column(db.DateTime)
 
     def to_dict(self):
         return {
             "id": self.id,
-            "task_id": self.task_id,
-            "rule_key": self.rule_key,
-            "automation_run_id": self.automation_run_id,
-            "flow_key": self.flow_key,
-            "topic_id": self.topic_id,
-            "payload": self.payload if self.payload is not None else {},
-            "status": self.status,
+            "file_id": self.file_id,
+            "body": self.body,
+            "source": self.source,
             "created_at": _iso(self.created_at),
-            "completed_at": _iso(self.completed_at),
         }
 
 
-class TaskResetAcknowledgement(db.Model):
-    __tablename__ = "task_reset_acknowledgements"
+class AgentConfig(db.Model):
+    __tablename__ = "agent_configs"
 
     id = db.Column(db.Integer, primary_key=True)
-    automation_run_id = db.Column(db.Integer, db.ForeignKey("automation_runs.id"))
-    rule_id = db.Column(db.Integer, db.ForeignKey("automation_rules.id"))
-    view_type = db.Column(db.Text, nullable=False)
-    report_file_id = db.Column(db.Integer, db.ForeignKey("files.id"))
-    payload = db.Column(JSONB, nullable=False, default=dict)
-    status = db.Column(db.Text, nullable=False, default="pending")
+    workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id"), nullable=False)
+    name = db.Column(db.Text, nullable=False, default="default")
+    model = db.Column(db.Text, nullable=False, default="gpt-4o-mini")
+    system_prompt = db.Column(db.Text, nullable=False, default="")
+    tool_allowlist = db.Column(JSONB, nullable=False, default=list)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    approved_at = db.Column(db.DateTime)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
 
     def to_dict(self):
         return {
             "id": self.id,
-            "automation_run_id": self.automation_run_id,
-            "rule_id": self.rule_id,
-            "view_type": self.view_type,
-            "report_file_id": self.report_file_id,
-            "payload": self.payload if self.payload is not None else {},
-            "status": self.status,
+            "workspace_id": self.workspace_id,
+            "name": self.name,
+            "model": self.model,
+            "system_prompt": self.system_prompt or "",
+            "tool_allowlist": self.tool_allowlist if self.tool_allowlist is not None else [],
             "created_at": _iso(self.created_at),
-            "approved_at": _iso(self.approved_at),
-        }
-
-
-class AiProposal(db.Model):
-    __tablename__ = "ai_proposals"
-
-    id = db.Column(db.Integer, primary_key=True)
-    topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"))
-    target_file_id = db.Column(db.Integer, db.ForeignKey("files.id"))
-    proposal_type = db.Column(db.Text, nullable=False)
-    payload = db.Column(JSONB, nullable=False, default=dict)
-    status = db.Column(db.Text, nullable=False, default="pending")
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    decided_at = db.Column(db.DateTime)
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "topic_id": self.topic_id,
-            "target_file_id": self.target_file_id,
-            "proposal_type": self.proposal_type,
-            "payload": self.payload if self.payload is not None else {},
-            "status": self.status,
-            "created_at": _iso(self.created_at),
-            "decided_at": _iso(self.decided_at),
+            "updated_at": _iso(self.updated_at),
         }

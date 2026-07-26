@@ -3,81 +3,71 @@ class AppFile {
     required this.id,
     required this.topicId,
     required this.name,
-    required this.type,
-    this.anchorTopicId,
-    this.orderIndex,
-    this.isMain,
+    this.body = '',
+    this.isEssence = false,
+    this.orderIndex = 0,
+    this.meta = const {},
     this.archivedAt,
     this.createdAt,
-    this.settings = const {},
   });
 
   final int id;
-  final int? topicId;
-  final int? anchorTopicId;
+  final int topicId;
   final String name;
-  final String type;
-  final int? orderIndex;
-  final bool? isMain;
+  final String body;
+  final bool isEssence;
+  final int orderIndex;
+  final Map<String, dynamic> meta;
   final String? archivedAt;
   final String? createdAt;
-  final Map<String, dynamic> settings;
+
   bool get isArchived => archivedAt != null;
 
-  bool get tasksFlipByView => settings['tasks_flip_by_view'] == true;
-
   factory AppFile.fromJson(Map<String, dynamic> json) {
-    final rawSettings = json['settings'];
+    final rawMeta = json['meta'];
     return AppFile(
       id: json['id'] as int,
-      topicId: json['topic_id'] as int?,
-      anchorTopicId: json['anchor_topic_id'] as int?,
+      topicId: json['topic_id'] as int,
       name: json['name'] as String,
-      type: json['type'] as String,
-      orderIndex: json['order_index'] as int?,
-      isMain: json['is_main'] as bool?,
+      body: json['body'] as String? ?? '',
+      isEssence: json['is_essence'] as bool? ?? false,
+      orderIndex: json['order_index'] as int? ?? 0,
+      meta: rawMeta is Map<String, dynamic>
+          ? Map<String, dynamic>.from(rawMeta)
+          : const {},
       archivedAt: json['archived_at'] as String?,
       createdAt: json['created_at'] as String?,
-      settings: rawSettings is Map<String, dynamic>
-          ? Map<String, dynamic>.from(rawSettings)
-          : const {},
     );
   }
 
   AppFile copyWith({
-    int? id,
-    int? topicId,
-    int? anchorTopicId,
     String? name,
-    String? type,
+    String? body,
+    bool? isEssence,
     int? orderIndex,
-    bool? isMain,
+    Map<String, dynamic>? meta,
     String? archivedAt,
-    String? createdAt,
-    Map<String, dynamic>? settings,
   }) {
     return AppFile(
-      id: id ?? this.id,
-      topicId: topicId ?? this.topicId,
-      anchorTopicId: anchorTopicId ?? this.anchorTopicId,
+      id: id,
+      topicId: topicId,
       name: name ?? this.name,
-      type: type ?? this.type,
+      body: body ?? this.body,
+      isEssence: isEssence ?? this.isEssence,
       orderIndex: orderIndex ?? this.orderIndex,
-      isMain: isMain ?? this.isMain,
+      meta: meta ?? this.meta,
       archivedAt: archivedAt ?? this.archivedAt,
-      createdAt: createdAt ?? this.createdAt,
-      settings: settings ?? this.settings,
+      createdAt: createdAt,
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    if (topicId != null) 'topic_id': topicId,
-    if (anchorTopicId != null) 'anchor_topic_id': anchorTopicId,
+  Map<String, dynamic> toJson({bool includeBody = true}) => {
+    'topic_id': topicId,
     'name': name,
-    'type': type,
-    if (orderIndex != null) 'order_index': orderIndex,
-    if (isMain != null) 'is_main': isMain,
+    if (includeBody) 'body': body,
+    'is_essence': isEssence,
+    'order_index': orderIndex,
+    if (meta.isNotEmpty) 'meta': meta,
     if (archivedAt != null) 'archived_at': archivedAt,
-    if (settings.isNotEmpty) 'settings': settings,
   };
 }

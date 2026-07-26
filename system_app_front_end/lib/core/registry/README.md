@@ -3,78 +3,92 @@
 Purpose: declarative product rules and defaults (the decision layer).
 
 What lives here:
-- File catalog per topic type (`file_registry.dart`).
-- File behavior profiles (`file_behavior_registry.dart`): default blocks, right-click suggestions, and inline insert behavior.
-- Block type catalog (`block_registry.dart`): known block types only, not per-file restrictions.
-- Topic appearance defaults (icon/color choices).
-- View definitions and display metadata.
+- File catalog per topic type ([`file_registry.dart`](file_registry.dart))
+- File behavior profiles ([`file_behavior_registry.dart`](file_behavior_registry.dart))
+- Block type catalog ([`block_registry.dart`](block_registry.dart))
+- Topic appearance defaults, view definitions, automation flow metadata
 
 Decision precedence:
-1. Explicit backend state (`is_main`, `order_index`, stored settings).
-2. Registry defaults/fallbacks.
-3. UI-level display choices.
+1. Explicit backend state (`is_main`, `order_index`, stored settings)
+2. Registry defaults/fallbacks
+3. UI-level display choices
 
-Examples:
-- Which files are main by default for a topic type (and for the main topic via `allFileTypes`).
-- Main section capacity: at most `maxMainFilesPerTopic` (3) visible files per topic.
-- Which blocks a file starts with.
-- Which block types are suggested in a file context menu.
-- Which views appear in the sidebar and their labels.
+## Glossary
 
-## File Behavior Model
+| Term | Meaning |
+|---|---|
+| **Essence (primary pane)** | Up to 3 files shown in the main topic canvas (`is_main: true`). UI label: Essence / עיקר. Code still uses `isMain`, `mainFiles`. |
+| **Additionals (more files)** | Secondary files below the divider (`is_main: false`). |
+| **Main topic (home)** | The special home topic (`topic.isMain`, name `main`). Sidebar label unchanged. |
+| **Daily file** | The automation anchor file on the main topic (`file.type == 'main'`). Behavior matches `text`; default name comes from `fileTypeLabel('main')` → Daily / יומי. |
 
-File type controls creation UX, not capability. Any file may contain any block type; file type only decides which blocks appear by default, which blocks are suggested on right-click, and what a gap click inserts.
+New files default to the **translated file type label** (`AppStrings.fileTypeLabel`), not custom English names like “Summary” or “Recap”.
 
-The file name is the visible editable header. Profiles do not seed an extra `header` block by default, but most files can add inner `header` blocks from the right-click menu.
+## All file types
 
-## File Types
+Any type can be added to any topic via the add-file dialog. Topic type only controls **creation defaults**.
 
-| File type and name | Purpose | Recommended template blocks | Default block at end | Right-click suggestions |
-|---|---|---|---|---|
-| `text` | Free writing and notes | `text` | `text` | `header`, `text`, `summary`, `list`, `image` |
-| `overview` | Overview/recap file | `summary`, `task_list`, `table` | `text` | `header`, `text`, `summary`, `task_list`, `table`, `list` |
-| `plan` | Planning and steps | `text`, `list` | `text` | `header`, `text`, `summary`, `list`, `image` |
-| `tasks` | Dedicated task entry | `task_list` | none | `header`, `task_list` |
-| `doc` | Documentation | `table` | `text` | `header`, `text`, `summary`, `graph` |
-| `board` | Image canvas / mood board | `board` (items with x/y/width/height) | none | none |
-| `execution` | Execution steps (header + list) | `header`, `list` | `text` | `text`, `header`, `summary`, `list`, `graph`, `image` |
+| Type key | Purpose |
+|---|---|
+| `main` | Daily file on the home topic (automation anchor) |
+| `text` | Free writing — most versatile insert menu |
+| `overview` | Generated recap / status surface |
+| `plan` | Planning steps |
+| `tasks` | Dedicated task entry (`task_list`) |
+| `doc` | Documentation tables |
+| `board` | Image canvas |
+| `execution` | Execution steps (header + list) |
+| `log` | Project log on the home topic |
+| `data` | Reference / details storage |
 
-Task-file editing happens entirely in the `task_list` block (connected lines). No trailing input row.
-Board files store positioned images in one `board` block. Content shape:
+Essence capacity: `FileRegistry.maxMainFilesPerTopic` (3). Promote/reorder evicts the last essence file when full.
 
-```json
-{
-  "items": [{ "id", "image_path", "filename", "x", "y", "width", "height", "z_index", "crop_*?" }],
-  "canvas_width": 960,
-  "canvas_height": 540,
-  "background_color": 4294967295
-}
-```
+## Topic creation defaults
 
-Omitted `canvas_*` / `background_color` use defaults (960×540, translucent white). Right-click on the canvas handles copy/paste and background — not `BlockContextMenu`.
+| Topic type | Essence | Additionals |
+|---|---|---|
+| **Project** | `overview`, `tasks`, `execution` | `doc`, `plan`, `data` |
+| **Process** | `overview`, `plan`, `tasks` | `doc`, `data` |
+| **Area** | `tasks`, `data`, `text` | `doc` |
+| **Others** | none | none |
+| **Main topic (bootstrap)** | Daily (`main`) only | user-added files |
 
-Topic defaults:
-- **Main topic:** `allFileTypes` — Text, Recap, and Plan are main by default; Tasks, Documentation, Board, and Execution are additional. Daily (`main`) is always main.
-- Projects: `overview` (Summary), `tasks`, `execution` (main); `doc`, `plan` (additional)
-- Processes: `overview`, `plan`, `tasks`, `doc`
-- Areas: `tasks`, `doc`
-- Others: `text`, `doc` (minimal structure — free writing + documentation)
-- When adding a file to a topic, every file type is available regardless of topic type.
+## File behavior model
 
-Main section limit: `FileRegistry.maxMainFilesPerTopic` (3). Reorder and promote-to-main evict the last main file when full.
+File type controls creation UX, not rendering capability. Any file may contain any block type; profiles only set **default blocks**, **Add block suggestions**, and **gap-click insert**.
 
-## Project Parts
+The editable file title is the primary header. Profiles do not seed an extra top `header` block by default.
 
-Projects use a first-class **`parts` entity** (see [`../features/blocks/PARTS.md`](../features/blocks/PARTS.md)).
+### Behavior profiles
 
-- A part is a topic-scoped row in `parts` with stable `id` and `order_index`.
-- Placement in a file is a `header` block plus default blocks below, all linked via `blocks.part_id`.
-- New parts are created in the current file; existing parts can be added to other files later.
-- `plan`, `execution`, and `tasks` support placement. `overview` is generated only.
+| Profile / file type | Default blocks | Gap insert | Add block suggestions |
+|---|---|---|---|
+| `text`, `main` (Daily) | `text` | `text` | all insertable blocks (see below) |
+| `data` | `text` | `text` | `header`, `text`, `details`, `table`, `list` |
+| `overview` | `summary`, `task_list`, `table`, `text` | `text` | `header`, `text`, `summary`, `task_list`, `table`, `list` |
+| `plan` | `text`, `list`, `text` | `text` | `header`, `text`, `summary`, `list`, `image` |
+| `tasks` | `task_list` | none | `header`, `task_list` |
+| `doc` | `table`, `text` | `text` | `header`, `text`, `summary`, `graph` |
+| `board` | `board` | none | none (canvas menu) |
+| `execution` | `header`, `list`, `text` | `text` | `text`, `header`, `summary`, `list`, `graph`, `image` |
+| `log` | `text` | `text` | `header`, `text`, `summary`, `list` |
 
-The project summary automation reads `parts` by id and writes overview without `is_current_part` highlighting.
+### Block insert rules
+
+- **Insertable block types** (`BlockRegistry.insertableBlockTypes`): `header`, `text`, `summary`, `list`, `task_list`, `image`, `table`, `graph`, `details`
+- **`details` menu item** appears only in `text` and `data` files (not auto-appended elsewhere)
+- **`text` / Daily** offer every insertable block type
+- Renderer accepts all known block types regardless of file type
+
+Task files edit entirely inside `task_list`. Board files use one `board` block and a canvas UI.
+
+## Project parts
+
+Projects use a first-class **`parts` entity** (see [`../../features/blocks/PARTS.md`](../../features/blocks/PARTS.md)).
+
+- Part placement supported in `plan`, `execution`, `tasks`, `log`
+- `overview` is generated only
 
 How to use it:
-- Add/adjust rules here first, then adapt UI behavior in features.
-- Keep these files data-first (simple constants/maps), not widget logic.
-- Avoid hardcoding the same rule in multiple places.
+- Change rules here first, then adapt UI in features
+- Keep these files data-first (constants/maps), not widget logic

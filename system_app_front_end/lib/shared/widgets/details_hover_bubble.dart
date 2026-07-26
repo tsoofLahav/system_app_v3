@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../../core/models/block.dart';
@@ -15,6 +18,52 @@ class DetailsHoverBubble extends StatelessWidget {
   final double maxHeight;
   final double maxWidth;
 
+  static const _radius = 10.0;
+  static const _minWidth = 120.0;
+  static const _horizontalPadding = 24.0;
+
+  static List<BoxShadow> get _shadows => [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.14),
+          blurRadius: 24,
+          offset: const Offset(0, 8),
+        ),
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.06),
+          blurRadius: 6,
+          offset: const Offset(0, 2),
+        ),
+      ];
+
+  double _bubbleWidth(BuildContext context, String title, String body) {
+    final direction = Directionality.of(context);
+    final titleStyle = AppTypography.listItemStyle.copyWith(
+      fontWeight: FontWeight.w600,
+      decoration: TextDecoration.none,
+    );
+    final bodyStyle = AppTypography.noteBodyStyle.copyWith(
+      decoration: TextDecoration.none,
+    );
+    final innerMax = maxWidth - _horizontalPadding;
+
+    double measure(String text, TextStyle style, {bool wrap = false}) {
+      if (text.isEmpty) return 0;
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: style),
+        textDirection: direction,
+        maxLines: wrap ? null : 1,
+      )..layout(maxWidth: innerMax);
+      return painter.size.width;
+    }
+
+    final contentWidth = math.max(
+      measure(title, titleStyle),
+      measure(body, bodyStyle, wrap: true),
+    );
+    if (contentWidth <= 0) return _minWidth;
+    return (contentWidth + _horizontalPadding).clamp(_minWidth, maxWidth);
+  }
+
   @override
   Widget build(BuildContext context) {
     final content = block.content;
@@ -24,35 +73,57 @@ class DetailsHoverBubble extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final width = _bubbleWidth(context, title, body);
+    final titleStyle = AppTypography.listItemStyle.copyWith(
+      fontWeight: FontWeight.w600,
+      decoration: TextDecoration.none,
+    );
+    final bodyStyle = AppTypography.noteBodyStyle.copyWith(
+      decoration: TextDecoration.none,
+    );
+    final bodyMaxHeight = math.max(48.0, maxHeight - 56);
+
     return Material(
-      elevation: 6,
-      borderRadius: BorderRadius.circular(8),
-      color: Theme.of(context).colorScheme.surface,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: maxHeight),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (title.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text(
-                    title,
-                    style: AppTypography.listItemStyle.copyWith(
-                      fontWeight: FontWeight.w600,
+      type: MaterialType.transparency,
+      child: Container(
+        width: width,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(_radius),
+          boxShadow: _shadows,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(_radius),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.82),
+                borderRadius: BorderRadius.circular(_radius),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.68),
+                  width: 0.85,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (title.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(title, style: titleStyle),
                     ),
-                  ),
-                ),
-              if (body.isNotEmpty)
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Text(body, style: AppTypography.noteBodyStyle),
-                  ),
-                ),
-            ],
+                  if (body.isNotEmpty)
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: bodyMaxHeight),
+                      child: SingleChildScrollView(
+                        child: Text(body, style: bodyStyle),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

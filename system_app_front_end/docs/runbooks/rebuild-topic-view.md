@@ -12,15 +12,15 @@ Rebuild the topic page that renders file panes, supports layout mode, and integr
 
 ## Steps
 1. Build a `TopicView` entry that reads `selectedDetail` from `AppState`.
-2. Split files into main/additional groups using state/registry-driven rules.
-3. Render main layout mode using shared file-pane widgets.
+2. Split files into essence/additional groups using state/registry-driven rules.
+3. Render essence layout mode using shared file-pane widgets.
 4. Wire file-level actions (add/delete/update) back to `AppState`.
 5. Ensure block/task content previews come from topic detail maps.
 6. Add empty/loading/error states consistent with shell behavior.
 
 ## Validation
 - Opening a topic shows the correct files, blocks, and task summaries.
-- Main vs additional grouping matches persisted `is_main` and ordering (main topic included).
-- Main section shows at most 3 files; additional files appear below the divider.
+- Essence vs additional grouping matches persisted `is_main` and ordering (main topic included).
+- Essence pane shows at most 3 files; additional files appear below the divider.
 - Primary file panes grow taller as the window enlarges (min 540px) before the more-files section becomes visible.
 - File-level actions update UI and persist correctly after refresh.

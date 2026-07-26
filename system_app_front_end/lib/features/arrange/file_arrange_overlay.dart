@@ -252,19 +252,11 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   }
 
   Future<void> _loadPreviews() async {
-    final files = [..._draft.main, ..._draft.additional];
-    if (files.isEmpty) return;
-    try {
-      final previews = await widget.state.loadBringFilePreviews(files);
-      if (!mounted) return;
-      setState(() {
-        _previewsByFileId = previews;
-        _previewsLoaded = true;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _previewsLoaded = true);
-    }
+    if (!mounted) return;
+    setState(() {
+      _previewsByFileId = {};
+      _previewsLoaded = true;
+    });
   }
 
   double get _overlayWidth {
@@ -283,8 +275,8 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
     widget.state.setLayoutForTopic(widget.topic, _draft.layoutId);
     final error = await widget.state.reorderTopicFiles(
       widget.topic,
-      _draft.ordered,
-      _draft.mainCount,
+      main: _draft.main,
+      additional: _draft.additional,
     );
     if (!mounted) return;
     if (error != null) {

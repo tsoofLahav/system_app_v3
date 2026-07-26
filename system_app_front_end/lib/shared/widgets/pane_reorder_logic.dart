@@ -1,45 +1,15 @@
 import '../../core/models/app_file.dart';
-import '../../core/registry/file_registry.dart';
-
-const paneReorderMaxMainFiles = FileRegistry.maxMainFilesPerTopic;
+import '../../core/shortcuts/main_file_cycle.dart';
 
 enum PaneReorderSection { main, additional }
 
 class PaneReorderState {
-  const PaneReorderState({
-    required this.main,
-    required this.additional,
-  });
+  PaneReorderState({required this.main, required this.additional});
 
   final List<AppFile> main;
   final List<AppFile> additional;
-
-  factory PaneReorderState.fromFiles({
-    required List<AppFile> mainFiles,
-    required List<AppFile> secondaryFiles,
-  }) {
-    return PaneReorderState(
-      main: List<AppFile>.from(mainFiles),
-      additional: List<AppFile>.from(secondaryFiles),
-    );
-  }
-
-  PaneReorderSection? sectionOf(AppFile file) {
-    if (main.any((f) => f.id == file.id)) return PaneReorderSection.main;
-    if (additional.any((f) => f.id == file.id)) {
-      return PaneReorderSection.additional;
-    }
-    return null;
-  }
-
-  int indexInSection(AppFile file, PaneReorderSection section) {
-    final list =
-        section == PaneReorderSection.main ? main : additional;
-    return list.indexWhere((f) => f.id == file.id);
-  }
 }
 
-/// Applies a drop of [file] from [from]/[fromIndex] into [to] at [toIndex].
 PaneReorderState applyPaneReorderDrop({
   required PaneReorderState state,
   required AppFile file,
@@ -48,8 +18,8 @@ PaneReorderState applyPaneReorderDrop({
   required PaneReorderSection to,
   required int toIndex,
 }) {
-  var main = List<AppFile>.from(state.main);
-  var additional = List<AppFile>.from(state.additional);
+  final main = List<AppFile>.from(state.main);
+  final additional = List<AppFile>.from(state.additional);
 
   if (from == PaneReorderSection.main) {
     main.removeAt(fromIndex);
@@ -57,28 +27,17 @@ PaneReorderState applyPaneReorderDrop({
     additional.removeAt(fromIndex);
   }
 
-  var insertAt = toIndex;
-  if (from == to && fromIndex < toIndex) {
-    insertAt--;
-  }
-
   if (to == PaneReorderSection.main) {
-    insertAt = insertAt.clamp(0, main.length);
-    if (main.length < paneReorderMaxMainFiles) {
-      main.insert(insertAt, file);
-    } else {
-      final evicted = main.removeLast();
-      insertAt = insertAt.clamp(0, main.length);
-      main.insert(insertAt, file);
-      additional.insert(0, evicted);
-    }
+    main.insert(toIndex.clamp(0, main.length), file);
   } else {
-    insertAt = insertAt.clamp(0, additional.length);
-    additional.insert(insertAt, file);
+    additional.insert(toIndex.clamp(0, additional.length), file);
   }
 
   return PaneReorderState(main: main, additional: additional);
 }
 
-List<AppFile> orderedFiles(PaneReorderState state) =>
-    [...state.main, ...state.additional];
+List<AppFile> essenceFiles(List<AppFile> files) =>
+    files.where((f) => f.isEssence).toList();
+
+List<AppFile> additionalFiles(List<AppFile> files) =>
+    files.where((f) => !f.isEssence).toList();

@@ -1,41 +1,38 @@
-import '../../core/models/block.dart';
-import '../../core/models/task.dart';
+import 'package:flutter/material.dart';
 
-/// Blocks + task data used to render a read-only mini snapshot in overlay cards.
+import '../../core/models/app_file.dart';
+
 class OverlayFilePreviewData {
   const OverlayFilePreviewData({
-    required this.blocks,
-    required this.tasksByBlockId,
+    required this.file,
+    this.summary = '',
   });
 
-  final List<Block> blocks;
-  final Map<int, List<Task>> tasksByBlockId;
+  final AppFile file;
+  final String summary;
 
-  bool get isEmpty => blocks.isEmpty;
+  static OverlayFilePreviewData fromFile(AppFile file) =>
+      OverlayFilePreviewData(file: file);
 
   static const empty = OverlayFilePreviewData(
-    blocks: [],
-    tasksByBlockId: {},
+    file: AppFile(id: 0, topicId: 0, name: ''),
   );
 }
 
-/// How many top blocks to load tasks for and render in overlay snapshots.
-const overlayFilePreviewMaxBlocks = 8;
+class OverlayFileContentPreview extends StatelessWidget {
+  const OverlayFileContentPreview({
+    super.key,
+    required this.preview,
+  });
 
-Future<OverlayFilePreviewData> previewDataForFile(
-  List<Block> blocks,
-  Future<List<Task>> Function(int blockId) tasksForBlock,
-) async {
-  final previewBlocks = blocks.take(overlayFilePreviewMaxBlocks).toList();
-  final tasksByBlockId = <int, List<Task>>{};
+  final OverlayFilePreviewData preview;
 
-  for (final block in previewBlocks) {
-    if (block.type != 'task' && block.type != 'task_list') continue;
-    tasksByBlockId[block.id] = await tasksForBlock(block.id);
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      preview.file.body.isEmpty ? preview.file.name : preview.file.body,
+      maxLines: 6,
+      overflow: TextOverflow.ellipsis,
+    );
   }
-
-  return OverlayFilePreviewData(
-    blocks: blocks,
-    tasksByBlockId: tasksByBlockId,
-  );
 }

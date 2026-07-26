@@ -548,7 +548,7 @@ class AppGlassDialog extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               _GlassDivider(color: separator),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Flexible(
                 child: scrollable
                     ? SingleChildScrollView(

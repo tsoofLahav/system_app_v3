@@ -1,7 +1,7 @@
 # Rebuild Reorder Mode
 
 ## Scope
-Rebuild pane reorder interaction for topic files with main/additional sections and persistence.
+Rebuild pane reorder interaction for topic files with essence/additional sections and persistence.
 
 ## Required Layers
 - `lib/features/topic/`
@@ -12,14 +12,14 @@ Rebuild pane reorder interaction for topic files with main/additional sections a
 ## Steps
 1. Expose a global reorder mode toggle in shell controls.
 2. In topic view, branch between normal layout and reorder canvas when toggle is on.
-3. Render two reorder frames: main (3-row viewport) and additional (scrollable).
+3. Render two reorder frames: essence (3-row viewport) and additional (scrollable).
 4. Support drag/drop within and across lists, including full-main push behavior.
 5. Hide dragged item from original slot during drag for true pickup feel.
 6. Persist final ordering via `reorderTopicFiles` (`order_index` + `is_main`).
 
 ## Validation
-- Reordering works within main, within additional, and across sections (including the main topic).
-- Main section holds at most 3 files (`FileRegistry.maxMainFilesPerTopic`).
-- Full-main insertion moves the last main file to additional top.
+- Reordering works within essence, within additional, and across sections (including the main topic).
+- Essence pane holds at most 3 files (`FileRegistry.maxMainFilesPerTopic`).
+- Full essence insertion moves the last essence file to additional top.
 - Reorder mode remains active while switching topics.
 - Refresh preserves final order and section assignment.

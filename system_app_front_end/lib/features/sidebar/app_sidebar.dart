@@ -5,7 +5,6 @@ import '../../core/models/archive_index.dart';
 import '../../core/models/topic.dart';
 import '../../core/shortcuts/app_shortcuts.dart';
 import '../../core/shortcuts/shortcut_catalog.dart';
-import '../../core/registry/view_registry.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
 import '../../design_system/app_typography.dart';
@@ -256,7 +255,6 @@ class _AppSidebarState extends State<AppSidebar> {
       type: result.type,
       icon: result.icon,
       color: result.color,
-      selectedFileTypes: result.selectedFileTypes,
     );
   }
 
@@ -299,9 +297,9 @@ class _ViewSection extends StatelessWidget {
           padding: const EdgeInsetsDirectional.fromSTEB(8, 4, 8, 2),
           child: Text(s['views'], style: AppTypography.sidebarSectionStyle),
         ),
-        for (final view in ViewRegistry.views)
+        for (final view in state.userViews)
           _ViewTile(
-            label: state.viewLabel(view.type),
+            label: view.name,
             selected: state.selectedViewType == view.type,
             onTap: () => onSelectView(view.type),
           ),
@@ -581,7 +579,7 @@ class _TopicSectionState extends State<_TopicSection> {
     );
     if (result == null) return;
     await widget.state.updateTopic(
-      topic: topic,
+      topic,
       name: result.name,
       icon: result.icon,
       color: result.color,

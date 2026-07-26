@@ -16,6 +16,8 @@ enum ShortcutContextRequirement {
   aiContext,
   textFocus,
   insertBlock,
+  insertBlockMenu,
+  toggleLayoutMode,
 }
 
 class ShortcutAction {
@@ -74,6 +76,10 @@ abstract final class ShortcutActionIds {
   static const insertImage = 'insert_image';
   static const insertTable = 'insert_table';
   static const insertGraph = 'insert_graph';
+  static const insertTaskList = 'insert_task_list';
+  static const insertBlockMenu = 'insert_block_menu';
+  static const toggleLayoutMode = 'toggle_layout_mode';
+  static const toggleLanguage = 'toggle_language';
 }
 
 ShortcutBinding _m(
@@ -321,6 +327,34 @@ final List<ShortcutAction> kShortcutCatalog = [
     defaultBinding: _m(LogicalKeyboardKey.keyG, shift: true),
     context: ShortcutContextRequirement.insertBlock,
     blockType: 'graph',
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.insertTaskList,
+    category: ShortcutCategory.blocks,
+    labelKey: 'addTaskList',
+    defaultBinding: _m(LogicalKeyboardKey.keyY, shift: true),
+    context: ShortcutContextRequirement.insertBlock,
+    blockType: 'task_list',
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.insertBlockMenu,
+    category: ShortcutCategory.blocks,
+    labelKey: 'shortcutInsertBlockMenu',
+    defaultBinding: _m(LogicalKeyboardKey.keyO, shift: true),
+    context: ShortcutContextRequirement.insertBlockMenu,
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.toggleLayoutMode,
+    category: ShortcutCategory.navigation,
+    labelKey: 'shortcutToggleLayoutMode',
+    defaultBinding: _m(LogicalKeyboardKey.keyM, shift: true),
+    context: ShortcutContextRequirement.toggleLayoutMode,
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.toggleLanguage,
+    category: ShortcutCategory.navigation,
+    labelKey: 'shortcutToggleLanguage',
+    defaultBinding: _m(LogicalKeyboardKey.digit9, shift: true),
   ),
 ];
 
