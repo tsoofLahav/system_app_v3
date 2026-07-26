@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request
 from models import File, Topic, db
 from routes.helpers import active_query, apply_updates, get_or_404
 from services.delete_cascade import delete_file_cascade
+from services.document_body import empty_document_json, validate_document
 from services.file_versions import save_file_version
 
 files_bp = Blueprint("files", __name__)
@@ -53,7 +54,7 @@ def create_file():
     file = File(
         topic_id=data["topic_id"],
         name=data["name"],
-        body=data.get("body", ""),
+        body=data.get("body") or empty_document_json(),
         is_essence=bool(data.get("is_essence", False)),
         order_index=data.get("order_index", 0),
         meta=data.get("meta") or {},
@@ -70,6 +71,10 @@ def update_file(file_id):
 
     if "body" in data and data["body"] != file.body:
         save_file_version(file, source="user")
+        try:
+            validate_document(data["body"])
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
 
     apply_updates(
         file,

@@ -5,13 +5,16 @@ import json
 from typing import Any
 
 from models import File, ObjectEmbed, Task, Topic, db
+from services.document_body import document_plain_text
 from services.file_versions import save_file_version
 from services.openai_service import chat_json
 
 
 def compute_diff(old_body: str, new_body: str) -> dict:
-    old_lines = (old_body or "").splitlines(keepends=True)
-    new_lines = (new_body or "").splitlines(keepends=True)
+    old_plain = document_plain_text(old_body)
+    new_plain = document_plain_text(new_body)
+    old_lines = old_plain.splitlines(keepends=True)
+    new_lines = new_plain.splitlines(keepends=True)
     hunks = list(
         difflib.unified_diff(
             old_lines,
@@ -41,7 +44,7 @@ def _search_files(scope: dict, query: str) -> list[dict]:
         f.to_dict(include_body=False)
         for f in rows
         if query_lower in (f.name or "").lower()
-        or query_lower in (f.body or "").lower()
+        or query_lower in document_plain_text(f.body or "").lower()
     ]
 
 
@@ -52,6 +55,7 @@ def _open_file(file_id: int) -> dict | None:
     data = file.to_dict()
     embeds = ObjectEmbed.query.filter_by(file_id=file_id).all()
     data["objects"] = [e.to_dict() for e in embeds]
+    data["body_plain"] = document_plain_text(file.body or "")
     return data
 
 
@@ -129,7 +133,9 @@ def run_agent(
     system = (
         "You are a document assistant for system_app. "
         "Use tools to search and open files before editing. "
-        "When updating a file, return the FULL new body string with embed markers preserved. "
+        "When updating a file, return the FULL new body as a JSON document string "
+        "(version + nodes array). Preserve object nodes by object_id. "
+        "Use paragraph nodes for text with optional spans for bold/italic. "
         "Respond as JSON: {\"tool_calls\": [{\"name\": \"...\", \"arguments\": {...}}]} "
         "or {\"final\": \"summary text\"} when done."
     )

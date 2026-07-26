@@ -13,16 +13,19 @@ class ObjectService {
         .toList();
   }
 
-  Future<ObjectEmbed> createTaskEmbed({
+  Future<ObjectEmbed> createObject({
     required int fileId,
-    required String title,
-    int? line,
+    required String type,
+    String? title,
+    String? body,
+    int? index,
   }) async {
     final data =
         await _api.post('/files/$fileId/objects', {
-              'type': 'task',
-              'title': title,
-              if (line != null) 'line': line,
+              'type': type,
+              if (title != null) 'title': title,
+              if (body != null) 'body': body,
+              if (index != null) 'index': index,
             })
             as Map<String, dynamic>;
     return ObjectEmbed.fromJson(data);
@@ -30,5 +33,28 @@ class ObjectService {
 
   Future<void> deleteEmbed(int objectId) async {
     await _api.delete('/objects/$objectId');
+  }
+
+  Future<List<Map<String, dynamic>>> listLinks(int objectId) async {
+    return (await _api.get('/objects/$objectId/links') as List<dynamic>)
+        .cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> createLink(
+    int objectId, {
+    required String targetType,
+    required int targetId,
+    String? label,
+  }) async {
+    return await _api.post('/objects/$objectId/links', {
+          'target_type': targetType,
+          'target_id': targetId,
+          if (label != null) 'label': label,
+        })
+        as Map<String, dynamic>;
+  }
+
+  Future<void> deleteLink(int objectId, int linkId) async {
+    await _api.delete('/objects/$objectId/links/$linkId');
   }
 }

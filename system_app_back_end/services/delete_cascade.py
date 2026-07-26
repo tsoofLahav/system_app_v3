@@ -9,12 +9,13 @@ from models import (
     ObjectEmbed,
     Tag,
     Task,
+    TaskList,
     Topic,
     View,
     ViewTaskMembership,
     db,
 )
-from services.document_body import marker_for, remove_marker
+from services.document_body import remove_object_nodes
 
 
 def delete_task_cascade(task_id: int) -> None:
@@ -22,37 +23,53 @@ def delete_task_cascade(task_id: int) -> None:
     if task is None:
         return
 
+    task_list_id = task.task_list_id
     ViewTaskMembership.query.filter_by(task_id=task.id).delete(
         synchronize_session=False
     )
-    embeds = ObjectEmbed.query.filter_by(task_id=task.id).all()
-    for embed in embeds:
-        delete_object_embed_cascade(embed, remove_from_body=True)
     db.session.delete(task)
+    db.session.flush()
+
+    if task_list_id is not None:
+        remaining = Task.query.filter_by(task_list_id=task_list_id).all()
+        for index, t in enumerate(
+            sorted(
+                remaining,
+                key=lambda x: (
+                    1 if x.status == "done" else 0,
+                    x.list_order_index,
+                    x.id,
+                ),
+            )
+        ):
+            t.list_order_index = index
+
+
+def delete_task_list_cascade(task_list_id: int) -> None:
+    tasks = Task.query.filter_by(task_list_id=task_list_id).all()
+    for task in tasks:
+        ViewTaskMembership.query.filter_by(task_id=task.id).delete(
+            synchronize_session=False
+        )
+        db.session.delete(task)
+    task_list = db.session.get(TaskList, task_list_id)
+    if task_list:
+        db.session.delete(task_list)
 
 
 def delete_object_embed_cascade(embed: ObjectEmbed, *, remove_from_body: bool) -> None:
     file = db.session.get(File, embed.file_id)
     if file and remove_from_body:
-        if embed.type == "task" and embed.task_id:
-            marker = marker_for("task", embed.task_id)
-        elif embed.type == "information" and embed.information_id:
-            marker = marker_for("information", embed.information_id)
-        else:
-            marker = None
-        if marker:
-            file.body = remove_marker(file.body or "", marker)
+        file.body = remove_object_nodes(file.body or "", embed.id)
 
-    if embed.type == "task" and embed.task_id:
-        task = db.session.get(Task, embed.task_id)
-        if task:
-            ViewTaskMembership.query.filter_by(task_id=task.id).delete(
-                synchronize_session=False
-            )
-            db.session.delete(task)
-    elif embed.type == "information" and embed.information_id:
+    if embed.type == "task_list" and embed.task_list_id:
+        delete_task_list_cascade(embed.task_list_id)
+    elif embed.type == "info" and embed.information_id:
         info = db.session.get(InformationPiece, embed.information_id)
         if info:
+            Link.query.filter_by(
+                source_type="info", source_id=info.id
+            ).delete(synchronize_session=False)
             db.session.delete(info)
 
     db.session.delete(embed)

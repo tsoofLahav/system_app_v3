@@ -82,12 +82,30 @@ Successful DELETE returns `204` with empty body.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/files/<file_id>/objects` | List embeds with resolved task/info |
-| POST | `/files/<file_id>/objects` | Create embed + entity |
+| GET | `/files/<file_id>/objects` | List embeds with resolved task_list tasks / info |
+| POST | `/files/<file_id>/objects` | Create embed + entity + document object node |
+| GET | `/objects/<id>` | Get one embed (expanded) |
 | PATCH | `/objects/<id>` | Update anchor / sort_key |
-| DELETE | `/objects/<id>` | Remove marker from body + delete entity |
+| DELETE | `/objects/<id>` | Remove object node from body + delete entity |
+| GET | `/objects/<id>/links` | List info object links |
+| POST | `/objects/<id>/links` | Create link from info object |
+| DELETE | `/objects/<id>/links/<link_id>` | Delete link |
 
-**POST body (task):** `{ "type": "task", "title", "line?" }` — inserts `{{task:id}}` at line
+**POST body (task_list):** `{ "type": "task_list", "index?" }` — inserts object node at index
+
+**POST body (info):** `{ "type": "info", "title?", "body?", "index?" }`
+
+---
+
+## Task lists
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/task-lists/<id>` | Get list + tasks |
+| GET | `/task-lists/<id>/tasks` | List tasks (active then done) |
+| POST | `/task-lists/<id>/tasks` | Create task `{ "title", "status?", "list_order_index?" }` |
+| PUT | `/task-lists/<id>/tasks/order` | `{ "ordered_task_ids": [1,2,3] }` |
+| POST | `/tasks/<id>/move` | Cross-list move `{ "target_task_list_id", "insert_index_in_zone", "target_done" }` |
 
 ---
 
@@ -95,9 +113,13 @@ Successful DELETE returns `204` with empty body.
 
 | Method | Path | Description |
 |--------|------|-------------|
+| GET | `/tasks` | List all |
 | GET | `/tasks/<id>` | Get |
-| PATCH | `/tasks/<id>` | Update title, status, due_date, list_order_index |
+| PATCH | `/tasks/<id>` | Update title, status, due_date, list_order_index, task_list_id |
 | POST | `/tasks/<id>/toggle` | Toggle active/done |
+| DELETE | `/tasks/<id>` | Delete task + compact list order |
+| GET | `/tasks/<id>/memberships` | View memberships for task |
+| PUT | `/tasks/<id>/memberships` | Replace view memberships |
 
 ---
 

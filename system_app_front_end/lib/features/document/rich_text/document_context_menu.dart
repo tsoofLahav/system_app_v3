@@ -1,0 +1,53 @@
+import 'package:flutter/material.dart';
+
+import '../../../core/l10n/app_strings.dart';
+import '../../../shared/widgets/app_context_menu.dart';
+import 'block_text_focus.dart';
+import 'format_range.dart';
+
+typedef DocumentMenuHandler = Future<void> Function(String action);
+
+class DocumentContextMenu {
+  const DocumentContextMenu._();
+
+  static List<AppContextMenuEntry> buildTextEntries(AppStrings strings) => [
+    AppContextMenuItem(value: 'text:bold', label: strings['bold'] ?? 'Bold'),
+    AppContextMenuItem(value: 'text:italic', label: strings['italic'] ?? 'Italic'),
+    AppContextMenuItem(
+      value: 'text:underline',
+      label: strings['underline'] ?? 'Underline',
+    ),
+    AppContextMenuItem(
+      value: 'text:size_up',
+      label: strings['sizeUp'] ?? 'Size up',
+    ),
+    AppContextMenuItem(
+      value: 'text:size_down',
+      label: strings['sizeDown'] ?? 'Size down',
+    ),
+    const AppContextMenuDivider(),
+    AppContextMenuItem(value: 'text:cut', label: strings['cut'] ?? 'Cut'),
+    AppContextMenuItem(value: 'text:copy', label: strings['copy'] ?? 'Copy'),
+    AppContextMenuItem(value: 'text:paste', label: strings['paste'] ?? 'Paste'),
+  ];
+
+  static Future<void> showTextMenu({
+    required BuildContext context,
+    required Offset globalPosition,
+    required AppStrings strings,
+    required DocumentMenuHandler onAction,
+  }) async {
+    AppContextMenu.dismissActive();
+    BlockTextFocusRegistry.openMenuSession();
+    final value = await AppContextMenu.show(
+      context: context,
+      globalPosition: globalPosition,
+      entries: buildTextEntries(strings),
+      isRtl: strings.isRtl,
+    );
+    BlockTextFocusRegistry.closeMenuSession();
+    if (value != null) {
+      await onAction(value);
+    }
+  }
+}

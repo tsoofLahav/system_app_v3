@@ -1,36 +1,36 @@
-"""Task order within a task_list block (list_order_index on tasks)."""
+"""Task order within a task_list object (list_order_index on tasks)."""
 
 from __future__ import annotations
 
 from sqlalchemy import case
 
-from models import Block, Task, db
+from models import Task, TaskList, db
 
 
 def _active_tasks_query():
     return Task.query.filter(Task.archived_at.is_(None))
 
 
-def _list_block_or_error(block_id: int) -> Block:
-    block = db.session.get(Block, block_id)
-    if block is None or block.type != "task_list":
-        raise ValueError("block must be a task_list")
-    return block
+def _task_list_or_error(task_list_id: int) -> TaskList:
+    task_list = db.session.get(TaskList, task_list_id)
+    if task_list is None:
+        raise ValueError("task_list not found")
+    return task_list
 
 
-def next_list_order_index(block_id: int) -> int:
+def next_list_order_index(task_list_id: int) -> int:
     max_order = (
         db.session.query(db.func.max(Task.list_order_index))
-        .filter(Task.block_id == block_id)
+        .filter(Task.task_list_id == task_list_id)
         .scalar()
     )
     return (max_order if max_order is not None else -1) + 1
 
 
-def tasks_for_list_block_query(block_id: int):
+def tasks_for_list_query(task_list_id: int):
     return (
         _active_tasks_query()
-        .filter(Task.block_id == block_id)
+        .filter(Task.task_list_id == task_list_id)
         .order_by(
             case((Task.status == "done", 1), else_=0),
             Task.list_order_index,
@@ -39,11 +39,11 @@ def tasks_for_list_block_query(block_id: int):
     )
 
 
-def tasks_for_list_block(block_id: int) -> list[Task]:
-    return tasks_for_list_block_query(block_id).all()
+def tasks_for_list(task_list_id: int) -> list[Task]:
+    return tasks_for_list_query(task_list_id).all()
 
 
-def apply_list_task_order(block_id: int, ordered_task_ids: list[int]) -> list[Task]:
+def apply_list_task_order(task_list_id: int, ordered_task_ids: list[int]) -> list[Task]:
     """Set list_order_index 0..n-1 for tasks in ordered_task_ids (active then done)."""
     if not ordered_task_ids:
         return []
@@ -52,18 +52,18 @@ def apply_list_task_order(block_id: int, ordered_task_ids: list[int]) -> list[Ta
 
     tasks = (
         _active_tasks_query()
-        .filter(Task.block_id == block_id, Task.id.in_(ordered_task_ids))
+        .filter(Task.task_list_id == task_list_id, Task.id.in_(ordered_task_ids))
         .all()
     )
     if len(tasks) != len(ordered_task_ids):
-        raise ValueError("task ids must belong to list block")
+        raise ValueError("task ids must belong to task list")
 
     by_id = {task.id: task for task in tasks}
     for index, task_id in enumerate(ordered_task_ids):
         by_id[task_id].list_order_index = index
 
     db.session.flush()
-    return tasks_for_list_block(block_id)
+    return tasks_for_list(task_list_id)
 
 
 def merged_task_ids_after_zone_insert(
@@ -81,29 +81,29 @@ def merged_task_ids_after_zone_insert(
     return [t.id for t in active] + [t.id for t in done]
 
 
-def reorder_tasks_in_list_block(block_id: int, ordered_task_ids: list[int]) -> list[Task]:
-    _list_block_or_error(block_id)
-    return apply_list_task_order(block_id, ordered_task_ids)
+def reorder_tasks_in_list(task_list_id: int, ordered_task_ids: list[int]) -> list[Task]:
+    _task_list_or_error(task_list_id)
+    return apply_list_task_order(task_list_id, ordered_task_ids)
 
 
-def move_task_to_list_block(
+def move_task_to_list(
     task_id: int,
-    target_block_id: int,
+    target_task_list_id: int,
     *,
     insert_index_in_zone: int,
     target_done: bool,
 ) -> dict:
-    _list_block_or_error(target_block_id)
+    _task_list_or_error(target_task_list_id)
     task = db.session.get(Task, int(task_id))
     if task is None:
         raise ValueError("task not found")
 
-    source_block_id = task.block_id
-    task.block_id = target_block_id
+    source_task_list_id = task.task_list_id
+    task.task_list_id = target_task_list_id
     task.status = "done" if target_done else "active"
 
     target_tasks = [
-        t for t in tasks_for_list_block(target_block_id) if t.id != task.id
+        t for t in tasks_for_list(target_task_list_id) if t.id != task.id
     ]
     merged_ids = merged_task_ids_after_zone_insert(
         target_tasks + [task],
@@ -111,18 +111,18 @@ def move_task_to_list_block(
         target_done=target_done,
         insert_index_in_zone=insert_index_in_zone,
     )
-    target_result = apply_list_task_order(target_block_id, merged_ids)
+    target_result = apply_list_task_order(target_task_list_id, merged_ids)
 
     source_result: list[Task] = []
-    if source_block_id is not None and source_block_id != target_block_id:
+    if source_task_list_id is not None and source_task_list_id != target_task_list_id:
         source_result = apply_list_task_order(
-            source_block_id,
-            [t.id for t in tasks_for_list_block(source_block_id)],
+            source_task_list_id,
+            [t.id for t in tasks_for_list(source_task_list_id)],
         )
 
     return {
         "task": task,
         "target_tasks": target_result,
         "source_tasks": source_result,
-        "source_block_id": source_block_id,
+        "source_task_list_id": source_task_list_id,
     }

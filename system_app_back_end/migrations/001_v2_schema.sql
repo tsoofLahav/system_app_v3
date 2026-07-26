@@ -29,8 +29,14 @@ CREATE TABLE files (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE task_lists (
+    id SERIAL PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE tasks (
     id SERIAL PRIMARY KEY,
+    task_list_id INTEGER REFERENCES task_lists(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
     due_date TIMESTAMPTZ,
@@ -51,15 +57,15 @@ CREATE TABLE information_pieces (
 CREATE TABLE objects (
     id SERIAL PRIMARY KEY,
     file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-    type TEXT NOT NULL CHECK (type IN ('task', 'information')),
-    task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+    type TEXT NOT NULL CHECK (type IN ('task_list', 'info')),
+    task_list_id INTEGER REFERENCES task_lists(id) ON DELETE CASCADE,
     information_id INTEGER REFERENCES information_pieces(id) ON DELETE CASCADE,
     anchor JSONB NOT NULL DEFAULT '{}'::jsonb,
     sort_key INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CHECK (
-        (type = 'task' AND task_id IS NOT NULL AND information_id IS NULL)
-        OR (type = 'information' AND information_id IS NOT NULL AND task_id IS NULL)
+        (type = 'task_list' AND task_list_id IS NOT NULL AND information_id IS NULL)
+        OR (type = 'info' AND information_id IS NOT NULL AND task_list_id IS NULL)
     )
 );
 
@@ -166,6 +172,8 @@ CREATE TABLE agent_configs (
 CREATE INDEX idx_topics_workspace ON topics(workspace_id);
 CREATE INDEX idx_files_topic ON files(topic_id);
 CREATE INDEX idx_objects_file ON objects(file_id);
+CREATE INDEX idx_tasks_task_list ON tasks(task_list_id);
+CREATE INDEX idx_objects_task_list ON objects(task_list_id);
 CREATE INDEX idx_entity_tags_entity ON entity_tags(entity_type, entity_id);
 CREATE INDEX idx_view_memberships_view ON view_task_memberships(view_id);
 CREATE INDEX idx_automation_runs_automation ON automation_runs(automation_id);

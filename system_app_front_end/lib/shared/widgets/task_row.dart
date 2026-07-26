@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/app_state.dart';
 import '../../core/models/task.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_typography.dart';
 import 'task_mark.dart';
-
-typedef BlockMenuHandler = Future<void> Function(String action);
 
 class TaskRow extends StatefulWidget {
   const TaskRow({
@@ -59,46 +56,43 @@ class _TaskRowState extends State<TaskRow> {
 
   @override
   Widget build(BuildContext context) {
-    final task = widget.task;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TaskMark(
-          done: task.isDone,
-          onToggle: widget.onToggle,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: widget.readOnly
-              ? Text(
-                  task.title,
-                  style: AppTypography.noteBodyStyle.copyWith(
-                    decoration: task.isDone ? TextDecoration.lineThrough : null,
-                    color: task.isDone ? AppColors.textHint : AppColors.text,
-                  ),
-                )
-              : TextField(
-                  controller: _controller,
-                  maxLines: null,
-                  style: AppTypography.noteBodyStyle.copyWith(
-                    decoration: task.isDone ? TextDecoration.lineThrough : null,
-                  ),
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                  onSubmitted: widget.onTitleChanged,
-                  onEditingComplete: () => widget.onTitleChanged?.call(_controller.text),
-                ),
-        ),
-        if (widget.onDelete != null && !widget.readOnly)
-          IconButton(
-            icon: const Icon(Icons.close, size: 16),
-            onPressed: widget.onDelete,
-            visualDensity: VisualDensity.compact,
+    final done = widget.task.isDone;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TaskMark(
+            done: done,
+            onToggle: widget.toggleEnabled && !widget.readOnly
+                ? widget.onToggle
+                : () {},
           ),
-      ],
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              readOnly: widget.readOnly,
+              style: AppTypography.noteBodyStyle.copyWith(
+                decoration: done ? TextDecoration.lineThrough : null,
+                color: done ? AppColors.textHint : null,
+              ),
+              decoration: const InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+              ),
+              onSubmitted: widget.onTitleChanged,
+              onEditingComplete: () =>
+                  widget.onTitleChanged?.call(_controller.text),
+            ),
+          ),
+          if (widget.onDelete != null && !widget.readOnly)
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: widget.onDelete,
+            ),
+        ],
+      ),
     );
   }
 }

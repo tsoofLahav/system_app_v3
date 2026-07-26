@@ -4,7 +4,8 @@ import 'view_pane_sync_context.dart';
 class Task {
   const Task({
     required this.id,
-    required this.blockId,
+    this.taskListId,
+    this.blockId,
     required this.title,
     required this.status,
     this.listOrderIndex = 0,
@@ -30,6 +31,7 @@ class Task {
   });
 
   final int id;
+  final int? taskListId;
   final int? blockId;
   final String title;
   final String status;
@@ -146,6 +148,7 @@ class Task {
   factory Task.fromJson(Map<String, dynamic> json) {
     return Task(
       id: json['id'] as int,
+      taskListId: json['task_list_id'] as int?,
       blockId: json['block_id'] as int?,
       title: json['title'] as String,
       status: json['status'] as String? ?? 'active',

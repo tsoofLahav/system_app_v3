@@ -79,10 +79,24 @@ class File(db.Model):
         return data
 
 
+class TaskList(db.Model):
+    __tablename__ = "task_lists"
+
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "created_at": _iso(self.created_at),
+        }
+
+
 class Task(db.Model):
     __tablename__ = "tasks"
 
     id = db.Column(db.Integer, primary_key=True)
+    task_list_id = db.Column(db.Integer, db.ForeignKey("task_lists.id"))
     title = db.Column(db.Text, nullable=False)
     status = db.Column(db.Text, nullable=False, default="active")
     due_date = db.Column(db.DateTime)
@@ -93,6 +107,7 @@ class Task(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "task_list_id": self.task_list_id,
             "title": self.title,
             "status": self.status,
             "due_date": _iso(self.due_date),
@@ -129,25 +144,27 @@ class ObjectEmbed(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     file_id = db.Column(db.Integer, db.ForeignKey("files.id"), nullable=False)
     type = db.Column(db.Text, nullable=False)
-    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"))
+    task_list_id = db.Column(db.Integer, db.ForeignKey("task_lists.id"))
     information_id = db.Column(db.Integer, db.ForeignKey("information_pieces.id"))
     anchor = db.Column(JSONB, nullable=False, default=dict)
     sort_key = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    def to_dict(self, *, task=None, information=None):
+    def to_dict(self, *, task_list=None, tasks=None, information=None):
         data = {
             "id": self.id,
             "file_id": self.file_id,
             "type": self.type,
-            "task_id": self.task_id,
+            "task_list_id": self.task_list_id,
             "information_id": self.information_id,
             "anchor": self.anchor if self.anchor is not None else {},
             "sort_key": self.sort_key,
             "created_at": _iso(self.created_at),
         }
-        if task is not None:
-            data["task"] = task.to_dict()
+        if task_list is not None:
+            data["task_list"] = task_list.to_dict()
+        if tasks is not None:
+            data["tasks"] = [t.to_dict() for t in tasks]
         if information is not None:
             data["information"] = information.to_dict()
         return data

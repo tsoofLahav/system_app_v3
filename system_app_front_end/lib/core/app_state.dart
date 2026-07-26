@@ -18,6 +18,7 @@ import 'services/bootstrap_service.dart';
 import 'services/file_service.dart';
 import 'services/object_service.dart';
 import 'services/tag_service.dart';
+import 'services/task_service.dart';
 import 'services/topic_service.dart';
 import 'services/view_service.dart';
 import 'shortcuts/shortcut_bindings_store.dart';
@@ -38,6 +39,7 @@ class AppState extends ChangeNotifier {
     _files = FileService(_api);
     _objects = ObjectService(_api);
     _views = ViewService(_api);
+    _tasks = TaskService(_api);
     _tags = TagService(_api);
     _agent = AgentService(_api);
     _automations = AutomationService(_api);
@@ -49,6 +51,7 @@ class AppState extends ChangeNotifier {
   late final FileService _files;
   late final ObjectService _objects;
   late final ViewService _views;
+  late final TaskService _tasks;
   late final TagService _tags;
   late final AgentService _agent;
   late final AutomationService _automations;
@@ -439,12 +442,85 @@ class AppState extends ChangeNotifier {
     return embeds;
   }
 
-  Future<Task> createTaskInDocument(AppFile file, {String title = 'New task'}) async {
-    final embed = await _objects.createTaskEmbed(fileId: file.id, title: title);
+  Future<ObjectEmbed> createObjectInDocument(
+    AppFile file, {
+    required String type,
+    String? title,
+    int? index,
+  }) async {
+    final embed = await _objects.createObject(
+      fileId: file.id,
+      type: type,
+      title: title,
+      index: index,
+    );
     final updated = await _files.getFile(file.id);
     _patchFileInDetail(updated);
     await loadEmbedsForFile(file.id);
-    return embed.task!;
+    return embed;
+  }
+
+  Future<Task> createTaskInList(int taskListId, {String title = 'New task'}) async {
+    final task = await _tasks.createInList(taskListId: taskListId, title: title);
+    await _reloadEmbedsForOpenFiles();
+    notifyListeners();
+    return task;
+  }
+
+  Future<void> reorderTasksInList(int taskListId, List<int> orderedIds) async {
+    await _tasks.reorderInList(taskListId, orderedIds);
+    await _reloadEmbedsForOpenFiles();
+    notifyListeners();
+  }
+
+  Future<List<ViewMembership>> loadTaskMemberships(int taskId) async {
+    final rows = await _tasks.getTaskMemberships(taskId);
+    return rows.map((e) => ViewMembership.fromJson(e)).toList();
+  }
+
+  Future<void> assignTaskToView(int taskId, int viewId) async {
+    final existing = await loadTaskMemberships(taskId);
+    await _tasks.replaceTaskMemberships(taskId, [
+      ...existing.map(
+        (m) => {
+          'view_id': m.viewId,
+          'section_name': m.sectionName,
+          'order_index': m.orderIndex,
+          'section_flag': m.sectionFlag,
+          'topic_key': m.topicKey,
+        },
+      ),
+      {'view_id': viewId, 'order_index': existing.length},
+    ]);
+    notifyListeners();
+  }
+
+  Future<void> updateInfoObject(
+    ObjectEmbed embed, {
+    required String title,
+    required String body,
+    List<Map<String, dynamic>>? spans,
+  }) async {
+    if (embed.informationId == null) return;
+    await _api.patch('/information/${embed.informationId}', {
+      'title': title,
+      'body': body,
+      'metadata': {'spans': spans ?? []},
+    });
+    await _reloadEmbedsForOpenFiles();
+  }
+
+  Future<void> addInfoLink(
+    ObjectEmbed embed,
+    String targetType,
+    int targetId,
+  ) async {
+    await _objects.createLink(
+      embed.id,
+      targetType: targetType,
+      targetId: targetId,
+    );
+    await loadEmbedsForFile(embed.fileId);
   }
 
   Future<void> toggleTaskStatus(Task task) async {
@@ -459,14 +535,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> deleteTask(Task task, AppFile file) async {
-    final embed = embedsByFileId[file.id]?.where((e) => e.taskId == task.id).firstOrNull;
-    if (embed != null) {
-      await _objects.deleteEmbed(embed.id);
-      final updated = await _files.getFile(file.id);
-      _patchFileInDetail(updated);
-      await loadEmbedsForFile(file.id);
-    }
+  Future<void> deleteTask(Task task) async {
+    await _tasks.deleteTask(task.id);
+    await _reloadEmbedsForOpenFiles();
+    notifyListeners();
   }
 
   Future<void> _reloadEmbedsForOpenFiles() async {
