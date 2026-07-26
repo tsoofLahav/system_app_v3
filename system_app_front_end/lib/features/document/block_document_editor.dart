@@ -313,26 +313,29 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         },
         child: Focus(
           autofocus: true,
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: _doc.blocks.length,
-            itemBuilder: (context, index) {
-              final block = _doc.blocks[index];
-              return _BlockShell(
-                index: index,
-                selected: block.id == _selectedEmbedBlockId,
-                onSelectEmbed: block is EmbedNode
-                    ? () => setState(() => _selectedEmbedBlockId = block.id)
-                    : null,
-                onMoveUp: block is EmbedNode && index > 0
-                    ? () => _moveEmbedBlock(block.id, index - 1)
-                    : null,
-                onMoveDown: block is EmbedNode && index < _doc.blocks.length - 1
-                    ? () => _moveEmbedBlock(block.id, index + 1)
-                    : null,
-                child: _buildBlock(block, index),
-              );
-            },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var index = 0; index < _doc.blocks.length; index++)
+                _BlockShell(
+                  index: index,
+                  selected: _doc.blocks[index].id == _selectedEmbedBlockId,
+                  onSelectEmbed: _doc.blocks[index] is EmbedNode
+                      ? () => setState(
+                          () => _selectedEmbedBlockId = _doc.blocks[index].id,
+                        )
+                      : null,
+                  onMoveUp: _doc.blocks[index] is EmbedNode && index > 0
+                      ? () => _moveEmbedBlock(_doc.blocks[index].id, index - 1)
+                      : null,
+                  onMoveDown: _doc.blocks[index] is EmbedNode &&
+                          index < _doc.blocks.length - 1
+                      ? () => _moveEmbedBlock(_doc.blocks[index].id, index + 1)
+                      : null,
+                  child: _buildBlock(_doc.blocks[index], index),
+                ),
+            ],
           ),
         ),
       ),
