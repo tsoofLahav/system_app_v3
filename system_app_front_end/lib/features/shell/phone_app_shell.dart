@@ -5,6 +5,7 @@ import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
 import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
+import '../create_topic/add_file_dialog.dart';
 import '../sidebar/app_sidebar.dart';
 import '../task_view/task_view_pane.dart';
 import '../topic/topic_view.dart';
@@ -50,7 +51,17 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
   Future<void> _addFile(BuildContext context) async {
     final topic = state.selectedTopic;
     if (topic == null) return;
-    await state.addFile(topic: topic, name: 'Document', isEssence: false);
+    final result = await showAddFileDialog(
+      context: context,
+      state: state,
+      topic: topic,
+    );
+    if (result == null) return;
+    await state.addFile(
+      topic: topic,
+      name: result.name,
+      isEssence: result.isEssence,
+    );
   }
 
   Future<void> _bringFile(BuildContext context) async {}

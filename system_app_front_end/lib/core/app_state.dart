@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'l10n/app_language.dart';
 import 'l10n/app_strings.dart';
+import 'models/automation.dart';
 import 'models/app_file.dart';
 import 'models/app_view.dart';
 import 'models/archive_index.dart';
@@ -10,6 +11,7 @@ import 'models/object_embed.dart';
 import 'models/tag.dart';
 import 'models/task.dart';
 import 'models/topic.dart';
+import 'services/automation_service.dart';
 import 'services/agent_service.dart';
 import 'services/api_service.dart';
 import 'services/bootstrap_service.dart';
@@ -38,6 +40,7 @@ class AppState extends ChangeNotifier {
     _views = ViewService(_api);
     _tags = TagService(_api);
     _agent = AgentService(_api);
+    _automations = AutomationService(_api);
   }
 
   final ApiService _api;
@@ -48,6 +51,7 @@ class AppState extends ChangeNotifier {
   late final ViewService _views;
   late final TagService _tags;
   late final AgentService _agent;
+  late final AutomationService _automations;
 
   AppLanguage _language = AppLanguage.en;
   bool loading = false;
@@ -58,6 +62,7 @@ class AppState extends ChangeNotifier {
   List<Topic> allTopics = [];
   List<AppTag> allTags = [];
   List<AppView> userViews = [];
+  List<Automation> automations = [];
   Topic? selectedTopic;
   TopicDetail? selectedDetail;
   bool topicDetailStale = false;
@@ -125,6 +130,7 @@ class AppState extends ChangeNotifier {
       workspaceId = status['workspace_id'] as int?;
       await _reloadAll();
       appReady = true;
+      await loadAutomations();
       if (selectedTopic == null && allTopics.isNotEmpty) {
         final home = allTopics.where((t) => t.isMain).firstOrNull ?? allTopics.first;
         await selectTopic(home);
@@ -311,6 +317,71 @@ class AppState extends ChangeNotifier {
       name: '${topic.name} copy',
       type: topic.primaryTag ?? 'other',
     );
+  }
+
+  List<Automation> get manualAiActions =>
+      automations.where((a) => a.isManual).toList();
+
+  List<Automation> get scheduledAutomations =>
+      automations.where((a) => a.isScheduled).toList();
+
+  Future<void> loadAutomations() async {
+    if (workspaceId == null) return;
+    automations = await _automations.list(workspaceId: workspaceId);
+    notifyListeners();
+  }
+
+  Future<Automation> createAutomation({
+    required String name,
+    required String prompt,
+    required String applyMode,
+    required bool isScheduled,
+    String? schedule,
+  }) async {
+    if (workspaceId == null) {
+      throw StateError('workspace not ready');
+    }
+    final scope = <String, dynamic>{
+      if (selectedTopic != null) 'topic_ids': [selectedTopic!.id],
+      if (selectedDetail != null)
+        'file_ids': selectedDetail!.files.map((f) => f.id).toList(),
+    };
+    final automation = await _automations.create(
+      workspaceId: workspaceId!,
+      name: name,
+      prompt: prompt,
+      applyMode: applyMode,
+      trigger: isScheduled
+          ? {'type': 'schedule'}
+          : {'type': 'manual'},
+      scope: scope,
+      schedule: schedule,
+    );
+    automations = [...automations, automation];
+    notifyListeners();
+    return automation;
+  }
+
+  Future<void> deleteAutomation(Automation automation) async {
+    await _automations.delete(automation.id);
+    automations = automations.where((a) => a.id != automation.id).toList();
+    notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> runAutomationRecord(Automation automation) async {
+    aiRunning = true;
+    notifyListeners();
+    try {
+      final result = await _automations.run(automation.id);
+      final agent = result['agent'];
+      if (agent is Map && (agent['proposed_changes'] as List?)?.isNotEmpty == true) {
+        pendingAgentReview = Map<String, dynamic>.from(agent as Map);
+      }
+      return result;
+    } finally {
+      aiRunning = false;
+      notifyListeners();
+    }
   }
 
   Future<AppFile> addFile({

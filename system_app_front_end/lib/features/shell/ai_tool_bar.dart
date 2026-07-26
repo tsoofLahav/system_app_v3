@@ -1,22 +1,65 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
+import '../../core/models/automation.dart';
 import '../../core/shortcuts/app_shortcuts.dart';
 import '../../core/shortcuts/shortcut_catalog.dart';
 import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
-import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
 import '../../shared/change_review/text_diff_dialog.dart';
 
 const aiToolIconSize = 22.0;
 const aiToolTapPadding = 4.0;
 
+Future<void> runSavedAgentAction(
+  BuildContext context,
+  AppState state,
+  Automation automation,
+) async {
+  final s = state.strings;
+  try {
+    final result = await state.runAutomationRecord(automation);
+    if (!context.mounted) return;
+    final agent = result['agent'];
+    if (agent is! Map) return;
+
+    if (automation.applyMode == 'review') {
+      final changes = agent['proposed_changes'] as List?;
+      if (changes != null && changes.isNotEmpty) {
+        final first = changes.first as Map;
+        final review = first['review'] as Map?;
+        final diff = review?['diff_hunks']?.toString() ?? '';
+        final apply = await TextDiffDialog.show(
+          context,
+          title: s['reviewChanges'] ?? 'Review changes',
+          diffHunks: diff,
+        );
+        if (apply == true) {
+          await state.applyAgentReview();
+        } else {
+          state.dismissAgentReview();
+        }
+        return;
+      }
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(agent['summary']?.toString() ?? s['aiDone'])),
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(e.toString())),
+    );
+  }
+}
+
 Future<void> runAgentPrompt(BuildContext context, AppState state) async {
   final s = state.strings;
   if (!state.hasAiContext || state.aiRunning) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(s['aiNoContext'] ?? 'No context')),
+      SnackBar(content: Text(s['aiNoContext'])),
     );
     return;
   }
@@ -25,21 +68,19 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
   final prompt = await showDialog<String>(
     context: context,
     builder: (ctx) => AppGlassDialog(
-      title: Text(s['aiAgent'] ?? 'Agent'),
+      title: Text(s['aiAgent']),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s['cancel'])),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-          child: Text(s['run'] ?? 'Run'),
+          child: Text(s['run']),
         ),
       ],
       child: TextField(
         controller: controller,
         autofocus: true,
         maxLines: 4,
-        decoration: InputDecoration(
-          hintText: s['aiAgentPromptHint'] ?? 'What should the agent do?',
-        ),
+        decoration: InputDecoration(hintText: s['aiAgentPromptHint']),
       ),
     ),
   );
@@ -88,12 +129,31 @@ class AiToolBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = state.strings;
     final enabled = state.hasAiContext && !state.aiRunning;
+    final actions = state.manualAiActions;
 
     return Row(
       mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
       children: [
+        if (actions.isNotEmpty)
+          PopupMenuButton<Automation>(
+            enabled: enabled,
+            tooltip: s['aiActions'],
+            icon: Icon(
+              Icons.bolt_outlined,
+              size: aiToolIconSize,
+              color: enabled ? AppColors.text : AppColors.textHint,
+            ),
+            itemBuilder: (ctx) => [
+              for (final action in actions)
+                PopupMenuItem(
+                  value: action,
+                  child: Text(action.name, overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onSelected: (action) => runSavedAgentAction(context, state, action),
+          ),
         AiToolButton(
-          tooltip: _tooltip(state, s['aiAgent'] ?? 'Agent', ShortcutActionIds.aiConsult),
+          tooltip: _tooltip(s['aiAgent'], ShortcutActionIds.aiConsult),
           icon: AppIcons.consult,
           enabled: enabled,
           onPressed: () => runAgentPrompt(context, state),
@@ -102,7 +162,7 @@ class AiToolBar extends StatelessWidget {
     );
   }
 
-  String _tooltip(AppState state, String label, String actionId) => label;
+  String _tooltip(String label, String actionId) => label;
 }
 
 class AiToolButton extends StatelessWidget {

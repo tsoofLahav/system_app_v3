@@ -6,6 +6,7 @@ import '../../design_system/app_colors.dart';
 import '../../design_system/app_icons.dart';
 import '../../design_system/app_typography.dart';
 import '../../design_system/glass_surface.dart';
+import '../create_topic/add_file_dialog.dart';
 import '../arrange/file_arrange_overlay.dart';
 import 'ai_tool_bar.dart';
 import 'automation_dialog.dart';
@@ -34,6 +35,12 @@ class AppBottomBar extends StatelessWidget {
   const AppBottomBar({super.key, required this.state});
 
   final AppState state;
+
+  bool get _showAddFile =>
+      !isPhoneLayout &&
+      !state.isArchiveMode &&
+      !state.isViewMode &&
+      state.selectedDetail != null;
 
   bool get _showArrange =>
       !isPhoneLayout &&
@@ -89,6 +96,12 @@ class AppBottomBar extends StatelessWidget {
                         state: state,
                       ),
                     ),
+                    if (_showAddFile)
+                      _BarIconButton(
+                        tooltip: s['addFile'],
+                        icon: AppIcons.addFile,
+                        onPressed: () => _addFile(context),
+                      ),
                     if (_showArrange)
                       _BarIconButton(
                         tooltip: s['arrangeFiles'],
@@ -164,6 +177,22 @@ class AppBottomBar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _addFile(BuildContext context) async {
+    final topic = state.selectedTopic;
+    if (topic == null) return;
+    final result = await showAddFileDialog(
+      context: context,
+      state: state,
+      topic: topic,
+    );
+    if (result == null) return;
+    await state.addFile(
+      topic: topic,
+      name: result.name,
+      isEssence: result.isEssence,
     );
   }
 

@@ -4,6 +4,7 @@ import '../../core/app_state.dart';
 import '../../core/models/app_file.dart';
 import '../../core/models/topic.dart';
 import '../../design_system/app_typography.dart';
+import '../create_topic/add_file_dialog.dart';
 import '../document/document_pane.dart';
 
 class PhoneTopicView extends StatelessWidget {
@@ -34,9 +35,21 @@ class PhoneTopicView extends StatelessWidget {
             ),
           ),
         if (files.isEmpty)
-          TextButton(
-            onPressed: () => state.addFile(topic: topic, name: 'Document', isEssence: true),
-            child: Text(state.strings['addFile'] ?? 'Add file'),
+          OutlinedButton(
+            onPressed: () async {
+              final result = await showAddFileDialog(
+                context: context,
+                state: state,
+                topic: topic,
+              );
+              if (result == null) return;
+              await state.addFile(
+                topic: topic,
+                name: result.name,
+                isEssence: result.isEssence,
+              );
+            },
+            child: Text(state.strings['addFile']),
           ),
       ],
     );

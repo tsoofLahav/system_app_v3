@@ -1,5 +1,4 @@
-import '../models/automation_rule.dart';
-import '../models/automation_run.dart';
+import '../models/automation.dart';
 import 'api_service.dart';
 
 class AutomationService {
@@ -7,46 +6,46 @@ class AutomationService {
 
   final ApiService _api;
 
-  Future<List<AutomationRule>> listRules() async {
-    final data = await _api.get('/automation_rules') as List<dynamic>;
+  Future<List<Automation>> list({int? workspaceId}) async {
+    final path = workspaceId != null
+        ? '/automations?workspace_id=$workspaceId'
+        : '/automations';
+    final data = await _api.get(path) as List<dynamic>;
     return data
-        .map((e) => AutomationRule.fromJson(e as Map<String, dynamic>))
+        .map((e) => Automation.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 
-  Future<AutomationRule> createRule(Map<String, dynamic> body) async {
+  Future<Automation> create({
+    required int workspaceId,
+    required String name,
+    required String prompt,
+    required String applyMode,
+    required Map<String, dynamic> trigger,
+    Map<String, dynamic>? scope,
+    String? schedule,
+  }) async {
     final data =
-        await _api.post('/automation_rules', body) as Map<String, dynamic>;
-    return AutomationRule.fromJson(data);
-  }
-
-  Future<AutomationRule> updateRule(int id, Map<String, dynamic> patch) async {
-    final data =
-        await _api.patch('/automation_rules/$id', patch)
+        await _api.post('/automations', {
+              'workspace_id': workspaceId,
+              'name': name,
+              'prompt': prompt,
+              'apply_mode': applyMode,
+              'trigger': trigger,
+              'scope': scope ?? {},
+              if (schedule != null) 'schedule': schedule,
+            })
             as Map<String, dynamic>;
-    return AutomationRule.fromJson(data);
+    return Automation.fromJson(data);
   }
 
-  Future<AutomationRun> runRule(int id) async {
+  Future<void> delete(int id) async {
+    await _api.delete('/automations/$id');
+  }
+
+  Future<Map<String, dynamic>> run(int id) async {
     final data =
-        await _api.post('/automation_rules/$id/run', {})
-            as Map<String, dynamic>;
-    return AutomationRun.fromJson(data['run'] as Map<String, dynamic>);
-  }
-
-  Future<AutomationRun> getRun(int id) async {
-    final data = await _api.get('/automation_runs/$id') as Map<String, dynamic>;
-    return AutomationRun.fromJson(data);
-  }
-
-  Future<List<AutomationRun>> listActiveRuns({int? ruleId}) async {
-    final query = StringBuffer('/automation_runs?status=queued,running&limit=20');
-    if (ruleId != null) {
-      query.write('&rule_id=$ruleId');
-    }
-    final data = await _api.get(query.toString()) as List<dynamic>;
-    return data
-        .map((e) => AutomationRun.fromJson(e as Map<String, dynamic>))
-        .toList();
+        await _api.post('/automations/$id/run', {}) as Map<String, dynamic>;
+    return Map<String, dynamic>.from(data);
   }
 }
