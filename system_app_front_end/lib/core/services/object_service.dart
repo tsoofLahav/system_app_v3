@@ -19,6 +19,7 @@ class ObjectService {
     String? title,
     String? body,
     int? index,
+    int? offset,
   }) async {
     final data =
         await _api.post('/files/$fileId/objects', {
@@ -26,6 +27,7 @@ class ObjectService {
               if (title != null) 'title': title,
               if (body != null) 'body': body,
               if (index != null) 'index': index,
+              if (offset != null) 'offset': offset,
             })
             as Map<String, dynamic>;
     return ObjectEmbed.fromJson(data);

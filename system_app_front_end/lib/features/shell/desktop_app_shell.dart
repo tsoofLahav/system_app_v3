@@ -8,7 +8,7 @@ import '../sidebar/app_sidebar.dart';
 import '../task_view/task_view_pane.dart';
 import '../topic/topic_view.dart';
 import '../../shared/widgets/main_pane_loader.dart';
-import 'app_bottom_bar.dart';
+import '../document/document_insert_bar.dart';
 
 class DesktopAppShell extends StatefulWidget {
   const DesktopAppShell({super.key, required this.state});
@@ -78,6 +78,13 @@ class _DesktopAppShellState extends State<DesktopAppShell> {
                       backgroundColor: Colors.transparent,
                     ),
                   ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: AppBottomBarMetrics.barHeight +
+                      AppBottomBarMetrics.floatMargin * 2,
+                  child: DocumentInsertBar(state: state),
+                ),
                 Positioned(
                   left: 0,
                   right: 0,

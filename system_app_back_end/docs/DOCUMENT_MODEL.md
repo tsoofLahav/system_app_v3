@@ -1,65 +1,50 @@
-# Document model (v2 rich files)
+# Document body model (v2 inline)
 
-## Encoding: JSON document in `files.body`
+Files store a JSON **document body** in `files.body`. Version 2 uses a single text stream with overlays.
 
-Each file body is a JSON string:
+## Shape
 
 ```json
 {
-  "version": 1,
-  "nodes": [
-    {"id": "n1", "type": "paragraph", "text": "Hello", "spans": []},
-    {"id": "n2", "type": "table", "rows": [["A", "B"]]},
-    {"id": "n3", "type": "list", "list_style": "bullet", "items": ["One"]},
-    {"id": "n4", "type": "image", "url": "https://…"},
-    {"id": "n5", "type": "graph", "labels": ["Mon"], "values": [1.0]},
-    {"id": "n6", "type": "object", "object_type": "task_list", "object_id": 42},
-    {"id": "n7", "type": "object", "object_type": "info", "object_id": 99}
+  "version": 2,
+  "text": "Goals\n• Item one\n\uFFFC\nMore notes",
+  "spans": [{"start": 0, "end": 5, "bold": true}],
+  "regions": [
+    {"id": "r1", "kind": "list", "start": 6, "end": 16, "list_style": "bullet"},
+    {"id": "r2", "kind": "table", "start": 20, "end": 30, "rows": [["A", "B"]]}
+  ],
+  "embeds": [
+    {"id": "e1", "kind": "object", "object_type": "task_list", "object_id": 42, "offset": 17},
+    {"id": "e2", "kind": "image", "offset": 18, "url": "https://…"},
+    {"id": "e3", "kind": "graph", "offset": 19, "labels": ["A"], "values": [1]},
+    {"id": "e4", "kind": "object", "object_type": "info", "object_id": 99, "offset": 20}
   ]
 }
 ```
 
-### Node types
+## Fields
 
-| Type | DB object? | Notes |
-|------|------------|-------|
-| `paragraph` | No | Rich text: `text` + `spans[]` (bold, italic, underline, size) |
-| `table` | No | `rows: [[cell, …], …]` |
-| `list` | No | `items: [string]` + `list_style` (`bullet` \| `numbered`) |
-| `image` | No | `url`, optional `width` |
-| `graph` | No | `labels`, `values` |
-| `object` | Yes | `object_type`: `task_list` \| `info`; `object_id` = `objects.id` |
+| Field | Purpose |
+|-------|---------|
+| `text` | Single source of truth for editable content |
+| `spans` | Character-range formatting (`bold`, `italic`, `underline`, `size`) |
+| `regions` | List/table ranges `[start, end)` styled in the editor; moved via cut/copy/paste only |
+| `embeds` | Graph, image, task_list, info anchored at `offset` |
 
-Embed placement is **document-flow** (Notion-style nodes between paragraphs), not mid-word inline runs.
+Each embed occupies one character slot in `text`: U+FFFC (object replacement character).
 
-### Object anchoring
+## Migration
 
-`objects.anchor` stores the document node reference:
+- Plain text with `{{task:id}}` / `{{info:id}}` markers → v2
+- v1 `nodes[]` JSON → v2 via `migrate_v1_nodes_to_v2`
+- Reads accept v1; writes normalize to v2
 
-```json
-{"kind": "node", "node_id": "n6", "index": 3}
-```
+## Object embeds
 
-`object_id` in the document always refers to the **`objects` table primary key**, not the underlying entity id.
+`object_id` references `objects.id` (API: `/objects/:id`). Task list and info payloads live in related tables; the document only stores the anchor offset.
 
-### Task lists
+Creating an object via `POST /files/:id/objects` accepts `{ "type", "offset" }` and inserts `\uFFFC` + embed entry server-side.
 
-- `objects.type = task_list` → `task_lists` row → ordered `tasks` via `tasks.task_list_id` + `list_order_index`
-- Task `status` (active/done) is global; toggling in any view updates the task everywhere
-- View membership via `view_task_memberships` (views act like tags/contexts)
+## Agent plain text
 
-### Info objects
-
-- `objects.type = info` → `information_pieces` row (title, body, metadata.spans)
-- Framed paragraph in the editor
-- Links to other entities via `links` (`source_type=info`)
-
-### Agent / diff
-
-- Agents read/write the full JSON body string
-- Review UI uses `document_plain_text()` ([`services/document_body.py`](../services/document_body.py)) for readable diffs
-- Legacy plain-text bodies (including `{{info:id}}` markers) migrate on parse
-
-### Versioning
-
-Every applied write saves `file_versions.body` before updating `files.body`.
+`document_plain_text()` flattens v2 bodies for diffs: text with embed chars as spaces, plus `[task_list #N]` / `[info #N]` lines.

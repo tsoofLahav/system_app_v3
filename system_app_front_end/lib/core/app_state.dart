@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../features/document/document_codec.dart';
+import '../features/document/inline_document_model.dart';
+import '../features/document/rich_text/list_text_parse.dart';
 import 'l10n/app_language.dart';
 import 'l10n/app_strings.dart';
 import 'models/automation.dart';
@@ -82,6 +85,7 @@ class AppState extends ChangeNotifier {
   ArchiveIndex archiveIndex = ArchiveIndex.empty;
 
   final Map<int, List<ObjectEmbed>> embedsByFileId = {};
+  int? editingFileId;
   String? _automationNotice;
   bool aiRunning = false;
   bool archiveDeleteMode = false;
@@ -435,6 +439,12 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  void setEditingFileId(int? fileId) {
+    if (editingFileId == fileId) return;
+    editingFileId = fileId;
+    notifyListeners();
+  }
+
   Future<List<ObjectEmbed>> loadEmbedsForFile(int fileId) async {
     final embeds = await _objects.listForFile(fileId);
     embedsByFileId[fileId] = embeds;
@@ -446,18 +456,81 @@ class AppState extends ChangeNotifier {
     AppFile file, {
     required String type,
     String? title,
+    String? body,
     int? index,
+    int? offset,
   }) async {
     final embed = await _objects.createObject(
       fileId: file.id,
       type: type,
       title: title,
+      body: body,
       index: index,
+      offset: offset,
     );
     final updated = await _files.getFile(file.id);
     _patchFileInDetail(updated);
     await loadEmbedsForFile(file.id);
     return embed;
+  }
+
+  Future<void> convertSelectionToTaskList(
+    AppFile file, {
+    required InlineDocument document,
+    required int start,
+    required int end,
+    required void Function(InlineDocument doc) onDocumentChanged,
+  }) async {
+    final slice = document.text.substring(
+      start.clamp(0, document.text.length),
+      end.clamp(0, document.text.length),
+    );
+    final lines = parsePastedListText(slice);
+    final cleared = DocumentCodec.replaceTextRange(document, start, end, '');
+    onDocumentChanged(cleared);
+    await updateFile(file, {'body': DocumentCodec.serialize(cleared)});
+
+    final embed = await createObjectInDocument(
+      file,
+      type: 'task_list',
+      offset: start,
+    );
+    if (embed.taskListId != null) {
+      for (final line in lines) {
+        await createTaskInList(embed.taskListId!, title: line);
+      }
+    }
+    final updated = await _files.getFile(file.id);
+    _patchFileInDetail(updated);
+    onDocumentChanged(DocumentCodec.parse(updated.body));
+  }
+
+  Future<void> convertSelectionToInfo(
+    AppFile file, {
+    required InlineDocument document,
+    required int start,
+    required int end,
+    required void Function(InlineDocument doc) onDocumentChanged,
+  }) async {
+    final slice = document.text.substring(
+      start.clamp(0, document.text.length),
+      end.clamp(0, document.text.length),
+    );
+    final titleLine = slice.split('\n').first.trim();
+    final cleared = DocumentCodec.replaceTextRange(document, start, end, '');
+    onDocumentChanged(cleared);
+    await updateFile(file, {'body': DocumentCodec.serialize(cleared)});
+
+    await createObjectInDocument(
+      file,
+      type: 'info',
+      title: titleLine.isEmpty ? 'Info' : titleLine,
+      body: slice,
+      offset: start,
+    );
+    final updated = await _files.getFile(file.id);
+    _patchFileInDetail(updated);
+    onDocumentChanged(DocumentCodec.parse(updated.body));
   }
 
   Future<Task> createTaskInList(int taskListId, {String title = 'New task'}) async {

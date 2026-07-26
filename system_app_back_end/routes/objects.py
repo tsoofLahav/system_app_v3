@@ -5,8 +5,10 @@ from routes.helpers import get_or_404
 from services.bootstrap import default_workspace_id
 from services.delete_cascade import delete_object_embed_cascade
 from services.document_body import (
-    insert_node,
+    insert_embed,
     object_node_for,
+    parse_document,
+    remove_object_embeds,
     sync_object_anchors,
 )
 from services.task_list_order import tasks_for_list
@@ -82,10 +84,16 @@ def create_object(file_id):
     db.session.add(embed)
     db.session.flush()
 
-    node = object_node_for(embed.id, type_)
-    index = data.get("index")
-    file.body = insert_node(file.body or "", node, index=index)
-    embed.anchor = {"kind": "node", "node_id": node["id"]}
+    offset = data.get("offset")
+    if offset is None and data.get("index") is not None:
+        offset = data.get("index")
+    embed_spec = object_node_for(embed.id, type_)
+    if offset is not None:
+        embed_spec["offset"] = int(offset)
+    file.body = insert_embed(file.body or "", embed_spec, offset=offset)
+    doc = parse_document(file.body)
+    hit = next((e for e in doc["embeds"] if e.get("object_id") == embed.id), embed_spec)
+    embed.anchor = {"kind": "embed", "embed_id": hit["id"], "offset": hit["offset"]}
     embed.sort_key = data.get("sort_key", embed.id)
     sync_object_anchors(file.body or "", [embed])
     db.session.commit()
