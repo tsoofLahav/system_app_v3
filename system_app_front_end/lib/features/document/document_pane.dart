@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 
 import '../../core/app_state.dart';
 import '../../core/models/app_file.dart';
 import '../../core/models/topic.dart';
 import '../../design_system/app_typography.dart';
 import '../../design_system/note_widgets.dart';
+import 'document_editor_controller.dart';
 import 'document_editor.dart';
 
 class DocumentPane extends StatefulWidget {
@@ -53,6 +55,12 @@ class _DocumentPaneState extends State<DocumentPane> {
     setState(() => _loadingEmbeds = true);
     await widget.state.loadEmbedsForFile(widget.file.id);
     if (mounted) setState(() => _loadingEmbeds = false);
+  }
+
+  @override
+  void deactivate() {
+    unawaited(DocumentEditorRegistry.flushActive());
+    super.deactivate();
   }
 
   @override

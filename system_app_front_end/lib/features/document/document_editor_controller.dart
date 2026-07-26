@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'document_codec.dart';
@@ -9,25 +10,40 @@ class DocumentEditorController {
     required this.fileId,
     required this.insertAtCaret,
     required this.focusCaret,
+    required this.flushPendingChanges,
   });
 
   final int fileId;
   final Future<void> Function(String action) insertAtCaret;
   final VoidCallback focusCaret;
+  final Future<void> Function() flushPendingChanges;
 }
 
 class DocumentEditorRegistry {
   DocumentEditorRegistry._();
 
+  static final Listenable notifier = ValueNotifier<int>(0);
   static DocumentEditorController? active;
   static int? get activeFileId => active?.fileId;
 
+  static void _notify() {
+    (notifier as ValueNotifier<int>).value++;
+  }
+
   static void register(DocumentEditorController controller) {
     active = controller;
+    _notify();
   }
 
   static void unregister(int fileId) {
-    if (active?.fileId == fileId) active = null;
+    if (active?.fileId == fileId) {
+      active = null;
+      _notify();
+    }
+  }
+
+  static Future<void> flushActive() async {
+    await active?.flushPendingChanges();
   }
 }
 

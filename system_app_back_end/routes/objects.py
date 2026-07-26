@@ -87,6 +87,8 @@ def create_object(file_id):
     offset = data.get("offset")
     if offset is None and data.get("index") is not None:
         offset = data.get("index")
+    if data.get("document_body") is not None:
+        file.body = str(data["document_body"])
     embed_spec = object_node_for(embed.id, type_)
     if offset is not None:
         embed_spec["offset"] = int(offset)

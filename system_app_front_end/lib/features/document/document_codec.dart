@@ -20,7 +20,7 @@ class DocumentCodec {
       if (data is! Map<String, dynamic>) return _migratePlain(raw);
       final version = data['version'] as int? ?? 1;
       if (version >= 2 && data.containsKey('text')) {
-        return _fromV2(data);
+        return normalize(_fromV2(data));
       }
       if (data['nodes'] is List) {
         return _migrateV1Nodes(data['nodes'] as List);
@@ -30,7 +30,113 @@ class DocumentCodec {
   }
 
   static String serialize(InlineDocument doc) =>
-      jsonEncode(doc.toJson());
+      jsonEncode(normalize(doc).toJson());
+
+  static InlineDocument normalize(InlineDocument doc) {
+    final sorted = [...doc.embeds]..sort((a, b) => a.offset.compareTo(b.offset));
+    final chars = doc.text.replaceAll(InlineDocument.embedChar, '').split('');
+    final result = <DocumentEmbed>[];
+    var adjust = 0;
+    for (final embed in sorted) {
+      final pos = (embed.offset + adjust).clamp(0, chars.length);
+      chars.insert(pos, InlineDocument.embedChar);
+      adjust++;
+      result.add(embed.copyWith(offset: pos));
+    }
+    return doc.copyWith(text: chars.join(), embeds: result);
+  }
+
+  /// Rebuild document text/spans/embeds from editors and shift region metadata.
+  static InlineDocument rebuildFromText({
+    required InlineDocument base,
+    required String newText,
+    required List<TextSpanMark> newSpans,
+    required List<DocumentEmbed> newEmbeds,
+  }) {
+    if (base.text == newText) {
+      return refreshRegionMetadata(
+        base.copyWith(spans: newSpans, embeds: newEmbeds),
+      );
+    }
+    final prefix = _commonPrefixLength(base.text, newText);
+    final suffix = _commonSuffixLength(base.text, newText, prefix);
+    final oldEnd = base.text.length - suffix;
+    final newEnd = newText.length - suffix;
+    final replacement = newText.substring(prefix, newEnd);
+    final shifted = replaceTextRange(base, prefix, oldEnd, replacement);
+    return refreshRegionMetadata(
+      shifted.copyWith(
+        text: newText,
+        spans: newSpans,
+        embeds: newEmbeds,
+      ),
+    );
+  }
+
+  static int _commonPrefixLength(String a, String b) {
+    final max = a.length < b.length ? a.length : b.length;
+    var i = 0;
+    while (i < max && a.codeUnitAt(i) == b.codeUnitAt(i)) {
+      i++;
+    }
+    return i;
+  }
+
+  static int _commonSuffixLength(String a, String b, int prefix) {
+    var ai = a.length;
+    var bi = b.length;
+    while (ai > prefix && bi > prefix && a.codeUnitAt(ai - 1) == b.codeUnitAt(bi - 1)) {
+      ai--;
+      bi--;
+    }
+    return a.length - ai;
+  }
+
+  static InlineDocument refreshRegionMetadata(InlineDocument doc) {
+    return doc.copyWith(
+      regions: [
+        for (final region in doc.regions)
+          if (region.kind == 'list')
+            _refreshListRegion(doc, region)
+          else if (region.kind == 'table')
+            _refreshTableRegion(doc, region)
+          else
+            region,
+      ],
+    );
+  }
+
+  static DocumentRegion _refreshListRegion(InlineDocument doc, DocumentRegion region) {
+    final start = region.start.clamp(0, doc.text.length);
+    final end = region.end.clamp(start, doc.text.length);
+    final slice = doc.text.substring(start, end);
+    final lines = slice.split('\n').where((l) => l.trim().isNotEmpty).toList();
+    final numbered = lines.isNotEmpty && RegExp(r'^\s*\d+[\.\)]').hasMatch(lines.first);
+    return DocumentRegion(
+      id: region.id,
+      kind: region.kind,
+      start: start,
+      end: end,
+      listStyle: numbered ? 'numbered' : region.listStyle,
+    );
+  }
+
+  static DocumentRegion _refreshTableRegion(InlineDocument doc, DocumentRegion region) {
+    final start = region.start.clamp(0, doc.text.length);
+    final end = region.end.clamp(start, doc.text.length);
+    final slice = doc.text.substring(start, end);
+    final rows = [
+      for (final line in slice.split('\n'))
+        if (line.isNotEmpty) line.split('\t'),
+    ];
+    return DocumentRegion(
+      id: region.id,
+      kind: region.kind,
+      start: start,
+      end: end,
+      rows: rows.isEmpty ? region.rows : rows,
+    );
+  }
 
   static String plainText(String? body) {
     final doc = parse(body);

@@ -11,6 +11,7 @@ import '../task_view/task_view_pane.dart';
 import '../topic/topic_view.dart';
 import '../../shared/widgets/main_pane_loader.dart';
 import 'automation_dialog.dart';
+import '../document/document_editor_controller.dart';
 import '../document/document_insert_bar.dart';
 import 'ai_tool_bar.dart';
 import 'desktop_app_shell.dart';
@@ -156,13 +157,20 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
                     backgroundColor: Colors.transparent,
                   ),
                 ),
-              if (state.editingFileId != null)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: MediaQuery.sizeOf(context).height * 0.1,
-                  child: DocumentInsertBar(state: state),
-                ),
+              ListenableBuilder(
+                listenable: DocumentEditorRegistry.notifier,
+                builder: (context, _) {
+                  if (DocumentEditorRegistry.active == null) {
+                    return const SizedBox.shrink();
+                  }
+                  return Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: MediaQuery.sizeOf(context).height * 0.1,
+                    child: DocumentInsertBar(state: state),
+                  );
+                },
+              ),
               Positioned(
                 left: 0,
                 right: 0,

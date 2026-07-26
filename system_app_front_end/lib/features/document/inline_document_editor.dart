@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -40,7 +42,9 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
   final _textControllers = <String, SpanTextEditingController>{};
   final _focusNodes = <String, FocusNode>{};
   var _dirty = false;
-  var _saveScheduled = false;
+  var _commitScheduled = false;
+  Timer? _saveDebounce;
+  Future<void>? _flushInFlight;
   String? _movingEmbedId;
   int? _moveDropOffset;
 
@@ -49,24 +53,55 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
     super.initState();
     _doc = DocumentCodec.parse(widget.file.body);
     _syncControllers();
-    _registerEditor();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _registerEditor();
+    });
   }
 
   @override
   void didUpdateWidget(InlineDocumentEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.file.id != widget.file.id ||
-        (!_dirty && oldWidget.file.body != widget.file.body)) {
+    if (oldWidget.file.id != widget.file.id) {
+      unawaited(_flushPendingChanges());
       _doc = DocumentCodec.parse(widget.file.body);
       _syncControllers();
       _dirty = false;
+      return;
     }
+    if (!_dirty && oldWidget.file.body != widget.file.body) {
+      _doc = DocumentCodec.parse(widget.file.body);
+      _syncControllers();
+    }
+  }
+
+  @override
+  void deactivate() {
+    unawaited(_flushPendingChanges());
+    super.deactivate();
   }
 
   @override
   void dispose() {
     DocumentEditorRegistry.unregister(widget.file.id);
-    widget.state.setEditingFileId(null);
+    if (widget.state.editingFileId == widget.file.id) {
+      widget.state.setEditingFileId(null, notify: false);
+    }
+    _cancelScheduledWork();
+    final rebuilt = _buildDocFromControllers();
+    if (rebuilt != null) {
+      _doc = rebuilt;
+      _dirty = true;
+    }
+    if (_dirty) {
+      unawaited(
+        widget.state.updateFile(
+          _currentFile,
+          {'body': DocumentCodec.serialize(_doc)},
+        ),
+      );
+    }
+    _saveDebounce?.cancel();
     for (final c in _textControllers.values) {
       c.dispose();
     }
@@ -82,33 +117,84 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
         fileId: widget.file.id,
         insertAtCaret: _handleInsertAction,
         focusCaret: _focusPrimaryField,
+        flushPendingChanges: _flushPendingChanges,
       ),
     );
-    widget.state.setEditingFileId(widget.file.id);
+    widget.state.setEditingFileId(widget.file.id, notify: false);
   }
 
-  void _focusPrimaryField() {
-    for (final node in _focusNodes.values) {
-      node.requestFocus();
-      return;
+  void _cancelScheduledWork() {
+    _commitScheduled = false;
+    _saveDebounce?.cancel();
+    _saveDebounce = null;
+  }
+
+  Future<void> _flushPendingChanges() async {
+    if (_flushInFlight != null) return _flushInFlight!;
+    _flushInFlight = _doFlush();
+    try {
+      await _flushInFlight;
+    } finally {
+      _flushInFlight = null;
     }
   }
 
-  String _segmentKey(InlineTextSegment segment) => '${segment.start}:${segment.end}';
+  Future<void> _doFlush() async {
+    _cancelScheduledWork();
+    final rebuilt = _buildDocFromControllers();
+    if (rebuilt != null) {
+      _doc = rebuilt;
+      _dirty = true;
+      if (mounted) {
+        setState(_syncControllers);
+      } else {
+        _syncControllers();
+      }
+    }
+    if (_dirty) {
+      await _saveBody();
+    }
+  }
+
+  void _scheduleCommit() {
+    if (_commitScheduled) return;
+    _commitScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _commitScheduled = false;
+      if (!mounted) return;
+      _commitFromControllers();
+    });
+  }
+
+  void _focusPrimaryField() {
+    for (final focus in _focusNodes.values) {
+      if (focus.context != null) {
+        focus.requestFocus();
+        return;
+      }
+    }
+  }
+
+  String _segmentKey(int textSegmentIndex) => 'text_$textSegmentIndex';
 
   void _syncControllers() {
     final segments = splitInlineSegments(_doc);
     final liveKeys = <String>{};
+    var textIndex = 0;
     for (final segment in segments) {
       if (segment is! InlineTextSegment) continue;
-      final key = _segmentKey(segment);
+      final key = _segmentKey(textIndex++);
       liveKeys.add(key);
       final text = segment.textSlice(_doc);
       final spans = segment.spans.map((s) => s.toJson()).toList();
       final existing = _textControllers[key];
       if (existing == null) {
         _textControllers[key] = SpanTextEditingController(text: text, spans: spans);
-        _focusNodes[key] = FocusNode();
+        final node = FocusNode();
+        node.addListener(() {
+          if (!node.hasFocus) unawaited(_flushPendingChanges());
+        });
+        _focusNodes[key] = node;
       } else {
         syncRichControllerFromBlockIfIdle(
           controller: existing,
@@ -117,11 +203,18 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
         );
       }
     }
+    _disposeStaleControllers(liveKeys);
+  }
+
+  void _disposeStaleControllers(Set<String> liveKeys) {
     for (final key in _textControllers.keys.toList()) {
-      if (!liveKeys.contains(key)) {
-        _textControllers.remove(key)?.dispose();
-        _focusNodes.remove(key)?.dispose();
-      }
+      if (liveKeys.contains(key)) continue;
+      final controller = _textControllers.remove(key);
+      final focus = _focusNodes.remove(key);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller?.dispose();
+        focus?.dispose();
+      });
     }
   }
 
@@ -148,17 +241,18 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
     _syncControllers();
   }
 
-  void _commitFromControllers() {
+  InlineDocument? _buildDocFromControllers() {
     final segments = splitInlineSegments(_doc);
     final buffer = StringBuffer();
     final spans = <TextSpanMark>[];
     final embeds = [..._doc.embeds]..sort((a, b) => a.offset.compareTo(b.offset));
     var cursor = 0;
     var embedIdx = 0;
+    var textIndex = 0;
 
     for (final segment in segments) {
       if (segment is InlineTextSegment) {
-        final key = _segmentKey(segment);
+        final key = _segmentKey(textIndex++);
         final controller = _textControllers[key];
         final slice = controller?.text ?? segment.textSlice(_doc);
         final segmentSpans = controller == null
@@ -182,44 +276,65 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
       }
     }
 
+    final newText = buffer.toString();
+    final rebuilt = DocumentCodec.rebuildFromText(
+      base: _doc,
+      newText: newText,
+      newSpans: spans,
+      newEmbeds: embeds,
+    );
+    if (rebuilt.text == _doc.text &&
+        rebuilt.spans.length == _doc.spans.length &&
+        rebuilt.embeds.length == _doc.embeds.length) {
+      return null;
+    }
+    return rebuilt;
+  }
+
+  void _commitFromControllers() {
+    final rebuilt = _buildDocFromControllers();
+    if (rebuilt == null) return;
     setState(() {
-      _doc = _doc.copyWith(
-        text: buffer.toString(),
-        spans: spans,
-        embeds: embeds,
-      );
+      _doc = rebuilt;
       _dirty = true;
     });
+    _syncControllers();
     _scheduleSave();
   }
 
   void _scheduleSave() {
-    if (_saveScheduled) return;
-    _saveScheduled = true;
-    Future<void>.delayed(const Duration(milliseconds: 400), () async {
-      _saveScheduled = false;
-      await _saveBody();
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(const Duration(milliseconds: 150), () {
+      _saveDebounce = null;
+      unawaited(_saveBody());
     });
   }
 
   Future<void> _saveBody() async {
     if (!_dirty) return;
-    await widget.state.updateFile(
-      _currentFile,
-      {'body': DocumentCodec.serialize(_doc)},
-    );
-    _dirty = false;
+    try {
+      await widget.state.updateFile(
+        _currentFile,
+        {'body': DocumentCodec.serialize(_doc)},
+      );
+      _dirty = false;
+    } catch (e) {
+      widget.state.error = e.toString();
+    }
   }
 
   _FocusedSegment? _focusedSegment() {
-    for (final entry in _focusNodes.entries) {
-      if (!entry.value.hasFocus) continue;
-      final parts = entry.key.split(':');
-      final start = int.tryParse(parts.first) ?? 0;
-      final controller = _textControllers[entry.key];
+    final segments = splitInlineSegments(_doc);
+    var textIndex = 0;
+    for (final segment in segments) {
+      if (segment is! InlineTextSegment) continue;
+      final key = _segmentKey(textIndex++);
+      final focusNode = _focusNodes[key];
+      if (focusNode == null || !focusNode.hasFocus) continue;
+      final controller = _textControllers[key];
       if (controller == null) continue;
       return _FocusedSegment(
-        start: start,
+        start: segment.start,
         controller: controller,
       );
     }
@@ -235,17 +350,12 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
   }
 
   Future<void> _handleInsertAction(String action) async {
-    _commitFromControllers();
+    await _flushPendingChanges();
     final offset = _caretOffset;
     switch (action) {
       case 'paragraph':
         setState(() {
-          _doc = DocumentCodec.replaceTextRange(
-            _doc,
-            offset,
-            offset,
-            '\n',
-          );
+          _doc = DocumentCodec.replaceTextRange(_doc, offset, offset, '\n');
           _dirty = true;
         });
       case 'list':
@@ -291,6 +401,8 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
           );
           _dirty = true;
         });
+        await _flushPendingChanges();
+        return;
       case 'graph':
         setState(() {
           _doc = DocumentCodec.insertEmbed(
@@ -306,19 +418,22 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
           );
           _dirty = true;
         });
+        await _flushPendingChanges();
+        return;
       case 'task_list':
       case 'info':
         await widget.state.createObjectInDocument(
           _currentFile,
           type: action == 'task_list' ? 'task_list' : 'info',
           offset: offset,
+          body: DocumentCodec.serialize(_doc),
         );
         await widget.state.loadEmbedsForFile(widget.file.id);
         _reloadFromServerBody();
         return;
     }
     _syncControllers();
-    _scheduleSave();
+    await _flushPendingChanges();
   }
 
   Future<void> _refreshEmbeds() async {
@@ -350,17 +465,17 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
       _dirty = true;
     });
     _syncControllers();
-    _scheduleSave();
+    unawaited(_flushPendingChanges());
   }
 
   Future<void> _onTextMenuAction(String action) async {
     await runBlockTextAction(action);
     _commitFromControllers();
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   Future<void> _onSelectionMenuAction(String action) async {
-    _commitFromControllers();
+    await _flushPendingChanges();
     final focused = _focusedSegment();
     if (focused == null) return;
     final selection = focused.controller.selection;
@@ -380,10 +495,10 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
             _dirty = true;
           });
           _syncControllers();
-          _scheduleSave();
         },
       );
       await _refreshEmbeds();
+      await _flushPendingChanges();
     } else if (action == 'convert:info') {
       await widget.state.convertSelectionToInfo(
         _currentFile,
@@ -396,16 +511,17 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
             _dirty = true;
           });
           _syncControllers();
-          _scheduleSave();
         },
       );
       await _refreshEmbeds();
+      await _flushPendingChanges();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final segments = splitInlineSegments(_doc);
+    var textIndex = 0;
     return Shortcuts(
       shortcuts: {
         if (_movingEmbedId != null)
@@ -432,13 +548,12 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
                 onOffsetChanged: (v) => setState(() => _moveDropOffset = v),
               ),
             RegionOverlayHost(
-              document: _doc,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   for (final segment in segments) ...[
                     if (segment is InlineTextSegment)
-                      _buildTextSegment(segment)
+                      _buildTextSegment(segment, textIndex++)
                     else if (segment is InlineEmbedSegment)
                       _buildEmbedSegment(segment),
                   ],
@@ -451,10 +566,13 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
     );
   }
 
-  Widget _buildTextSegment(InlineTextSegment segment) {
-    final key = _segmentKey(segment);
-    final controller = _textControllers[key]!;
-    final focusNode = _focusNodes[key]!;
+  Widget _buildTextSegment(InlineTextSegment segment, int textIndex) {
+    final key = _segmentKey(textIndex);
+    final controller = _textControllers[key];
+    final focusNode = _focusNodes[key];
+    if (controller == null || focusNode == null) {
+      return const SizedBox.shrink();
+    }
     final overlappingRegions = _doc.regions
         .where((r) => r.start < segment.end && r.end > segment.start)
         .toList();
@@ -464,11 +582,12 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
         for (final region in overlappingRegions)
           RegionStyleHint(region: region, text: segment.textSlice(_doc)),
         FormattedTextField(
+          key: ValueKey(key),
           controller: controller,
           focusNode: focusNode,
           style: AppTypography.noteBodyStyle,
           maxLines: null,
-          onChanged: (_) => _commitFromControllers(),
+          onChanged: (_) => _scheduleCommit(),
           onSecondaryTapDown: (details) async {
             final selection = controller.selection;
             final entries = DocumentSelectionMenu.buildEntries(
@@ -507,13 +626,20 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
     switch (embed.kind) {
       case 'object':
         final objectEmbed = _embedForObjectId(embed.objectId);
-        if (embed.objectType == 'task_list' && objectEmbed != null) {
-          child = InlineTaskListWidget(
-            embed: objectEmbed,
-            file: _currentFile,
-            state: widget.state,
-            onRefresh: _refreshEmbeds,
-          );
+        if (embed.objectType == 'task_list') {
+          if (objectEmbed != null) {
+            child = InlineTaskListWidget(
+              embed: objectEmbed,
+              file: _currentFile,
+              state: widget.state,
+              onRefresh: _refreshEmbeds,
+            );
+          } else {
+            child = Text(
+              'Loading task list…',
+              style: AppTypography.metaStyle,
+            );
+          }
         } else if (embed.objectType == 'info' && objectEmbed != null) {
           child = InlineInfoWidget(
             embed: objectEmbed,
@@ -529,7 +655,7 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
       case 'image':
         child = InlineImageWidget(
           embed: embed,
-          onUrlChanged: (url) {
+          onUrlChanged: (url) async {
             setState(() {
               _doc = _doc.copyWith(
                 embeds: [
@@ -539,7 +665,7 @@ class _InlineDocumentEditorState extends State<InlineDocumentEditor> {
               );
               _dirty = true;
             });
-            _scheduleSave();
+            await _flushPendingChanges();
           },
         );
       case 'graph':

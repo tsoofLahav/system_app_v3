@@ -14,7 +14,7 @@ class DocumentInsertBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: state,
+      listenable: DocumentEditorRegistry.notifier,
       builder: (context, _) {
         final controller = DocumentEditorRegistry.active;
         if (controller == null) return const SizedBox.shrink();

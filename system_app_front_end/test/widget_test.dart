@@ -46,4 +46,40 @@ void main() {
     expect(doc.embeds.single.offset, 3);
     expect(doc.text.replaceAll(InlineDocument.embedChar, '').length, 4);
   });
+
+  test('normalize inserts embed chars on serialize', () {
+    const doc = InlineDocument(
+      version: 2,
+      text: 'ab',
+      embeds: [
+        DocumentEmbed(id: 'e1', kind: 'image', offset: 1, url: 'http://x'),
+      ],
+    );
+    final json = DocumentCodec.serialize(doc);
+    final parsed = jsonDecode(json) as Map<String, dynamic>;
+    expect(parsed['text'], contains(InlineDocument.embedChar));
+  });
+
+  test('rebuildFromText shifts list region bounds on edit', () {
+    const base = InlineDocument(
+      version: 2,
+      text: '• a\n• b',
+      regions: [
+        DocumentRegion(
+          id: 'r1',
+          kind: 'list',
+          start: 0,
+          end: 7,
+          listStyle: 'bullet',
+        ),
+      ],
+    );
+    final rebuilt = DocumentCodec.rebuildFromText(
+      base: base,
+      newText: '• aa\n• bb',
+      newSpans: const [],
+      newEmbeds: const [],
+    );
+    expect(rebuilt.regions.single.end, greaterThan(base.regions.single.end));
+  });
 }

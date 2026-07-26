@@ -439,10 +439,10 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  void setEditingFileId(int? fileId) {
+  void setEditingFileId(int? fileId, {bool notify = true}) {
     if (editingFileId == fileId) return;
     editingFileId = fileId;
-    notifyListeners();
+    if (notify) notifyListeners();
   }
 
   Future<List<ObjectEmbed>> loadEmbedsForFile(int fileId) async {
@@ -459,6 +459,7 @@ class AppState extends ChangeNotifier {
     String? body,
     int? index,
     int? offset,
+    String? documentBody,
   }) async {
     final embed = await _objects.createObject(
       fileId: file.id,
@@ -467,6 +468,7 @@ class AppState extends ChangeNotifier {
       body: body,
       index: index,
       offset: offset,
+      documentBody: documentBody,
     );
     final updated = await _files.getFile(file.id);
     _patchFileInDetail(updated);
