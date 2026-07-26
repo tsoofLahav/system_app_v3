@@ -50,9 +50,9 @@ class DocumentContextMenu {
       entries: buildTextEntries(strings),
       isRtl: strings.isRtl,
     );
-    BlockTextFocusRegistry.closeMenuSession();
     if (value != null) {
       await onAction(value);
     }
+    BlockTextFocusRegistry.closeMenuSession();
   }
 }

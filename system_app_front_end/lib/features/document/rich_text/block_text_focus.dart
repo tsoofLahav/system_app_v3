@@ -383,13 +383,21 @@ class BlockTextFocusRegistry {
     if (!range.isValid) return;
 
     if (controller is SpanTextEditingController) {
-      controller.applyFormatAction(
-        action,
-        range: range,
-        baseFontSize: baseFontSize,
-      );
-      controller.selection = TextSelection.collapsed(offset: range.end);
-      changed();
+      try {
+        controller.applyFormatAction(
+          action,
+          range: range,
+          baseFontSize: baseFontSize,
+        );
+        controller.selection = TextSelection.collapsed(offset: range.end);
+      } catch (_) {
+        return;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          changed();
+        } catch (_) {}
+      });
       return;
     }
 
@@ -403,7 +411,11 @@ class BlockTextFocusRegistry {
       baseFontSize: baseFontSize,
     );
     activeBlockContent = next;
-    changed();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        changed();
+      } catch (_) {}
+    });
   }
 }
 

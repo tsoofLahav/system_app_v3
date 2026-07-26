@@ -12,6 +12,7 @@ import 'document_edit_history.dart';
 import 'document_editor_controller.dart';
 import 'document_model.dart';
 import 'rich_text/block_text_actions.dart';
+import 'rich_text/block_text_focus.dart';
 import 'rich_text/document_context_menu.dart';
 import 'rich_text/formatted_text_field.dart';
 import 'rich_text/list_editor.dart';
@@ -41,6 +42,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   var _applyingHistory = false;
   Timer? _saveTimer;
   DateTime? _lastHistoryRecord;
+  String? _lastSavedJson;
   final _history = DocumentEditHistory();
   final _focusNodes = <String, FocusNode>{};
   final _controllers = <String, SpanTextEditingController>{};
@@ -80,12 +82,16 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
       _dirty = false;
       _clearControllers();
     } else if (!_dirty && oldWidget.file.documentJson != widget.file.documentJson) {
-      _doc = DocumentCodec.parse(_currentFile.documentJson);
-      _clearControllers();
+      final incoming = _currentFile.documentJson;
+      if (incoming != _lastSavedJson) {
+        _doc = DocumentCodec.parse(_currentFile.documentJson);
+        _clearControllers();
+      }
     }
   }
 
   void _clearControllers() {
+    BlockTextFocusRegistry.abandonStashedFocus();
     for (final c in _controllers.values) {
       c.dispose();
     }
@@ -114,8 +120,10 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     _saveTimer?.cancel();
     if (!_dirty) return;
     _dirty = false;
+    final json = DocumentCodec.serialize(_doc);
+    _lastSavedJson = json;
     await widget.state.updateFile(_currentFile, {
-      'document_json': DocumentCodec.serialize(_doc),
+      'document_json': json,
     });
   }
 
@@ -276,7 +284,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
       index + 1,
       ParagraphNode(id: newId, text: afterText, spans: afterSpans),
     );
-    _controllers.remove(block.id);
+    _controllers.remove(block.id)?.dispose();
     _applyDoc(_doc.copyWith(blocks: blocks), recordHistory: false);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusFor(newId).requestFocus();
@@ -328,8 +336,8 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     final blocks = [..._doc.blocks];
     blocks[index - 1] = prev.copyWith(text: mergedText, spans: mergedSpanMarks);
     blocks.removeAt(index);
-    _controllers.remove(block.id);
-    _controllers.remove(prev.id);
+    _controllers.remove(block.id)?.dispose();
+    _controllers.remove(prev.id)?.dispose();
     _applyDoc(_doc.copyWith(blocks: blocks), recordHistory: false);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusFor(prev.id).requestFocus();

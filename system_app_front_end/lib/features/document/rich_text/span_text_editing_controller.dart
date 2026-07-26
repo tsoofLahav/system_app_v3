@@ -111,6 +111,8 @@ class SpanTextEditingController extends TextEditingController {
       baseFontSize: baseFontSize,
     );
     _previousText = text;
-    notifyListeners();
+    try {
+      notifyListeners();
+    } catch (_) {}
   }
 }

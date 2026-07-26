@@ -121,17 +121,19 @@ class _RichListEditorState extends State<RichListEditor> {
       widget.onExitList();
       return;
     }
+    final removedFocus = _focusNodes[index];
     setState(() {
       _controllers.removeAt(index).dispose();
-      final node = _focusNodes.removeAt(index);
+      _focusNodes.removeAt(index);
+    });
+    _emit();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      removedFocus.dispose();
+      if (!mounted) return;
       final focusPrev = index > 0 ? index - 1 : 0;
-      node.dispose();
-      _emit();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (focusPrev < _focusNodes.length) {
-          _focusNodes[focusPrev].requestFocus();
-        }
-      });
+      if (focusPrev < _focusNodes.length) {
+        _focusNodes[focusPrev].requestFocus();
+      }
     });
   }
 
