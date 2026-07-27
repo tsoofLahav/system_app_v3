@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import './format_range.dart';
 import './span_text_editing_controller.dart';
 import '../../../shared/utils/platform_text.dart';
+import '../editor/document_mark.dart';
+import '../editor/document_text_flow.dart';
 import './text_formatting.dart';
 
 /// Active block text field for context-menu clipboard/format actions.
@@ -19,8 +21,14 @@ class BlockTextFocusRegistry {
   static int? activeBlockId;
   static double baseFontSize = 12.5;
 
+  /// The flow of the editor the caret is in, when there is one. Its presence is
+  /// what lets actions reach across parts.
+  static DocumentTextFlow? activeFlow;
+
   static int _menuSessionDepth = 0;
   static FormatRange? _frozenRange;
+  static DocumentMark? _frozenMark;
+  static DocumentMark? _pendingMark;
   static final ValueNotifier<int> menuSessionListenable = ValueNotifier(0);
 
   static int _emojiPickerSessionDepth = 0;
@@ -38,6 +46,47 @@ class BlockTextFocusRegistry {
   static bool get hasEmojiPickerTarget => _emojiPickerTarget != null;
   static FormatRange? get frozenFormatRange => _frozenRange;
 
+  /// The mark an open menu will act on, frozen when the menu opened.
+  static DocumentMark? get frozenMark => _frozenMark;
+
+  /// The single target for any action: the current selection, or the line at
+  /// the caret when nothing is marked.
+  ///
+  /// Every action must go through this — see [DocumentMark]. While a menu is
+  /// open the mark frozen at open time wins, so the target cannot shift under
+  /// the user mid-menu.
+  static DocumentMark resolveMark() {
+    final frozen = _frozenMark;
+    if (frozen != null && frozen.isValid) return frozen;
+    final pending = _pendingMark;
+    if (pending != null && pending.isValid) return pending;
+    return _resolveLiveMark();
+  }
+
+  static DocumentMark _resolveLiveMark() {
+    final flow = activeFlow;
+    if (flow != null) {
+      final mark = DocumentMark.resolve(flow);
+      if (mark.isValid) return mark;
+    }
+
+    final controller = activeController ?? _recentTarget?.controller;
+    if (controller == null) return const DocumentMark.empty();
+    return DocumentMark.resolveForController(
+      controller,
+      onChanged: onChanged ?? _recentTarget?.onChanged,
+    );
+  }
+
+  /// Captured on secondary pointer-down, before opening the menu can disturb
+  /// focus or collapse the selection.
+  static void capturePendingMark() {
+    if (_pendingMark != null && _pendingMark!.isValid) return;
+    _pendingMark = _resolveLiveMark();
+  }
+
+  static void clearPendingMark() => _pendingMark = null;
+
   static void register({
     required TextEditingController controller,
     required VoidCallback changed,
@@ -45,12 +94,14 @@ class BlockTextFocusRegistry {
     double? fontSize,
     FocusNode? focusNode,
     int? blockId,
+    DocumentTextFlow? flow,
   }) {
     activeController = controller;
     onChanged = changed;
     activeBlockContent = blockContent;
     activeFocusNode = focusNode;
     activeBlockId = blockId;
+    activeFlow = flow;
     if (fontSize != null) baseFontSize = fontSize;
     _recentTarget = _RecentTextTarget(
       controller: controller,
@@ -90,12 +141,17 @@ class BlockTextFocusRegistry {
     activeBlockContent = null;
     activeFocusNode = null;
     activeBlockId = null;
+    activeFlow = null;
     _recentTarget = null;
+    _frozenMark = null;
+    _pendingMark = null;
     _bumpFocus();
   }
 
   static void openMenuSession() {
     _menuSessionDepth++;
+    _frozenMark = _pendingMark ?? _resolveLiveMark();
+    _pendingMark = null;
     final controller = activeController;
     if (controller == null) {
       _frozenRange = FormatRange.pending;
@@ -112,8 +168,15 @@ class BlockTextFocusRegistry {
     final range = _frozenRange;
     final node = activeFocusNode;
     final controller = activeController;
+    final mark = _frozenMark;
     _frozenRange = null;
+    _frozenMark = null;
+    _pendingMark = null;
     menuSessionListenable.value++;
+
+    // A mark that covered several parts stays marked after the menu closes, so
+    // the caret is not silently yanked into one of them.
+    if (mark != null && mark.spansParts) return;
 
     if (_menuSessionDepth != 0 || node == null || controller == null) return;
 
@@ -255,36 +318,52 @@ class BlockTextFocusRegistry {
     return selection.baseOffset.clamp(0, controller.text.length);
   }
 
-  static FormatRange _effectiveRange(TextEditingController controller) {
-    final frozen = _frozenRange;
-    if (frozen != null && frozen.isValid) return frozen;
-    return FormatRange.resolve(controller.text, controller.selection);
-  }
-
   static Future<void> cut() async {
-    final c = activeController;
-    if (c == null) return;
-    final range = _effectiveRange(c);
-    if (!range.isValid) return;
-    await setClipboardText(safeSubstring(c.text, range.start, range.end));
-    _replaceSelection('');
+    final mark = resolveMark();
+    if (!mark.isValid) return;
+    await setClipboardText(mark.text);
+    final fullyCovered = mark.fullyCoveredSegmentIds;
+    mark.delete();
+    _afterMarkEdit(mark, fullyCovered: fullyCovered);
   }
 
   static Future<void> copy() async {
-    final c = activeController;
-    if (c == null) return;
-    final range = _effectiveRange(c);
-    if (!range.isValid) return;
-    await setClipboardText(safeSubstring(c.text, range.start, range.end));
+    final mark = resolveMark();
+    if (!mark.isValid) return;
+    await setClipboardText(mark.text);
   }
 
   static Future<void> paste() async {
-    final c = activeController;
-    if (c == null) return;
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text;
     if (text == null) return;
-    _replaceSelection(sanitizePlatformText(text));
+    final mark = resolveMark();
+    if (mark.spans.isEmpty) return;
+    // Pasting over parts that were marked in full replaces them, so the emptied
+    // structures should go the same way as for a cut.
+    final fullyCovered = mark.fullyCoveredSegmentIds;
+    mark.replaceWith(sanitizePlatformText(text));
+    _afterMarkEdit(mark, fullyCovered: fullyCovered, keepFirstPart: true);
+  }
+
+  /// After an edit the old mark no longer describes anything, so the caret is
+  /// left collapsed where the edit happened and any structure that was fully
+  /// consumed is dropped.
+  static void _afterMarkEdit(
+    DocumentMark mark, {
+    Set<String> fullyCovered = const {},
+    bool keepFirstPart = false,
+  }) {
+    if (!mark.spansParts) return;
+    _frozenMark = null;
+    final flow = activeFlow;
+    flow?.clearSelection();
+    final prunable = {...fullyCovered};
+    if (keepFirstPart) {
+      // Paste leaves its text in the first part, so that part must survive.
+      prunable.remove(mark.first?.segmentId);
+    }
+    flow?.pruneStructures(prunable, spansParts: true);
   }
 
   static void insertText(String text) {
@@ -301,24 +380,21 @@ class BlockTextFocusRegistry {
     _applyInsert(controller, changed, start, end, text);
   }
 
+  /// Text an action will run on: what is marked, or the caret's line.
+  ///
+  /// This is the text AI actions should be given.
   static String? markedText() {
-    final controller = activeController;
-    if (controller == null) return null;
-    final selection = controller.selection;
-    if (!selection.isValid || selection.isCollapsed) return null;
-    final start = selection.start.clamp(0, controller.text.length);
-    final end = selection.end.clamp(0, controller.text.length);
-    if (end <= start) return null;
-    final text = safeSubstring(controller.text, start, end).trim();
+    final mark = resolveMark();
+    if (!mark.isValid) return null;
+    final text = mark.text.trim();
     return text.isEmpty ? null : text;
   }
 
+  /// Offset just after the mark, in the mark's last part.
   static int? markInsertOffset() {
-    final controller = activeController;
-    if (controller == null) return null;
-    final selection = controller.selection;
-    if (!selection.isValid || selection.isCollapsed) return null;
-    return selection.end.clamp(0, controller.text.length);
+    final mark = resolveMark();
+    if (!mark.isValid) return null;
+    return mark.spans.last.safeEnd;
   }
 
   /// Caret after a highlight, or at the caret when suggesting from a line.
@@ -366,44 +442,31 @@ class BlockTextFocusRegistry {
     changed();
   }
 
-  static void _replaceSelection(String replacement) {
-    final c = activeController;
-    final changed = onChanged;
-    if (c == null || changed == null) return;
-    final range = _effectiveRange(c);
-    if (!range.isValid) return;
-    _applyInsert(c, changed, range.start, range.end, replacement);
-  }
-
   static void applyTextFormat(String action) {
+    final mark = resolveMark();
+
+    // Formatting spans the whole mark, so it reaches every part the user marked.
+    if (mark.isValid && mark.spans.any((s) => s.spanController != null)) {
+      try {
+        mark.applyFormat(action, baseFontSize: baseFontSize);
+      } catch (_) {
+        return;
+      }
+      if (!mark.spansParts) {
+        final span = mark.spans.first;
+        span.controller.selection =
+            TextSelection.collapsed(offset: span.safeEnd);
+      }
+      return;
+    }
+
     final controller = activeController;
     final changed = onChanged;
     if (controller == null || changed == null) return;
 
-    final range = _frozenRange ?? FormatRange.resolve(
-      controller.text,
-      controller.selection,
-    );
+    final range = _frozenRange ??
+        FormatRange.resolve(controller.text, controller.selection);
     if (!range.isValid) return;
-
-    if (controller is SpanTextEditingController) {
-      try {
-        controller.applyFormatAction(
-          action,
-          range: range,
-          baseFontSize: baseFontSize,
-        );
-        controller.selection = TextSelection.collapsed(offset: range.end);
-      } catch (_) {
-        return;
-      }
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        try {
-          changed();
-        } catch (_) {}
-      });
-      return;
-    }
 
     final content = activeBlockContent;
     if (content == null) return;

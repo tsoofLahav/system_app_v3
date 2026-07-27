@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/app_strings.dart';
 import '../../ui/app_typography.dart';
+import '../editor/document_text_flow.dart';
 import '../model/document_codec.dart';
 import '../model/document_model.dart';
 import './block_text_actions.dart';
@@ -17,6 +18,7 @@ class RichListEditor extends StatefulWidget {
     required this.onChanged,
     required this.onExitList,
     this.onFocus,
+    this.onStyleChanged,
   });
 
   final ListNode node;
@@ -25,6 +27,9 @@ class RichListEditor extends StatefulWidget {
   /// Called when the user exits the list (empty item + Enter). Passes the empty item index.
   final ValueChanged<int> onExitList;
   final VoidCallback? onFocus;
+
+  /// Switches the whole list between `'bullet'` and `'numbered'`.
+  final ValueChanged<String>? onStyleChanged;
 
   @override
   State<RichListEditor> createState() => _RichListEditorState();
@@ -193,11 +198,18 @@ class _RichListEditorState extends State<RichListEditor> {
   }
 
   Future<void> _showMenu(TapDownDetails details) async {
-    await DocumentContextMenu.showTextMenu(
+    await DocumentContextMenu.showListMenu(
       context: context,
       globalPosition: details.globalPosition,
       strings: widget.strings,
-      onAction: runBlockTextAction,
+      isOrdered: widget.node.isOrdered,
+      onAction: (action) async {
+        if (action.startsWith('list:style:')) {
+          widget.onStyleChanged?.call(action.substring('list:style:'.length));
+          return;
+        }
+        await runBlockTextAction(action);
+      },
     );
   }
 
@@ -224,6 +236,7 @@ class _RichListEditorState extends State<RichListEditor> {
                   child: FormattedTextField(
                     controller: _controllers[i],
                     focusNode: _focusNodes[i],
+                    segmentId: listItemSegmentId(widget.node.id, i),
                     style: AppTypography.listItemStyle,
                     maxLines: null,
                     minLines: 1,

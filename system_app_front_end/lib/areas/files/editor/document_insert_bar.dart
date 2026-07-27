@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/app_state.dart';
 import '../../ui/app_icons.dart';
@@ -37,22 +36,19 @@ class DocumentInsertBar extends StatelessWidget {
                   children: [
                     _InsertButton(
                       icon: AppIcons.uploadDetails,
-                      tooltip: 'Paragraph',
+                      tooltip: state.strings['paragraph'],
                       onPressed: () => controller.insertAtBlock('paragraph'),
                     ),
+                    // One list option only. Points vs numbers is a property of
+                    // an existing list, switched from its right-click menu.
                     _InsertButton(
                       icon: AppIcons.smartList,
-                      tooltip: 'Bullet list',
+                      tooltip: state.strings['list'],
                       onPressed: () => controller.insertAtBlock('bullet_list'),
                     ),
                     _InsertButton(
-                      icon: LucideIcons.list200,
-                      tooltip: 'Numbered list',
-                      onPressed: () => controller.insertAtBlock('ordered_list'),
-                    ),
-                    _InsertButton(
                       icon: AppIcons.layout,
-                      tooltip: 'Table',
+                      tooltip: state.strings['table'],
                       onPressed: () => controller.insertAtBlock('table'),
                     ),
                   ],

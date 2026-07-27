@@ -64,6 +64,12 @@ _(Dated bullets — added when the user asks to remember something.)_
 - **2026-07-14** — v3 rewrite in progress; use the `legacy/v1` branch on GitHub when old behavior is needed as reference.
 - **2026-07-14** — Production agent prompt lives in `content/production_agent/system_prompt.md`, not in backend dev docs; it is synced into `agent_configs.system_prompt`.
 - **2026-07-27** — Code is organized by area (`areas/<area>/`) in both projects, each with its own `AREA.md`. UI and UX are frontend-only and strictly separated: UI is look, UX is flow.
+- **2026-07-27** — Known unresolved issues live in [`BACKLOG.md`](BACKLOG.md), grouped by area. We clear one area at a time; the current area is **files**.
+- **2026-07-27** — A file must read as one continuous text. Paragraphs, bullets, and table cells are *segments* of a single caret/selection owned by `DocumentTextFlow`; anything new that holds editable text has to register a segment.
+- **2026-07-27** — **There is only one marking.** Every action (right-click, clipboard, formatting, and AI) resolves its target through `DocumentMark`: the marking if there is one — across as many parts as it covers — otherwise the line at the caret. Never read a single field's selection to decide what an action affects.
+- **2026-07-27** — **A bullet in a list and a row in a table each count as one line of text.** Settle any caret or marking question by asking what a plain line would do: arrow up lands on the *last* line of what is above, marking a whole row and deleting removes the row, marking every row removes the table. Rules in the files [`AREA.md`](system_app_front_end/lib/areas/files/AREA.md).
+- **2026-07-27** — An arrow key moves the caret the direction it points **on screen**, in Hebrew as in English. This is done by overriding the text field's motion *intents* (`rtl_caret_motion.dart`), not by handling key events — never reimplement caret movement in a key handler, it breaks key repeat and rebuilds the file on every keypress. Text direction currently follows the UI language, not the text.
+- **2026-07-27** — A list has one style; points vs numbers is switched on the existing list from its right-click menu, never offered as two things to insert.
 
 ---
 
@@ -71,6 +77,7 @@ _(Dated bullets — added when the user asks to remember something.)_
 
 | Doc | Purpose |
 |-----|---------|
+| [`BACKLOG.md`](BACKLOG.md) | Known unresolved issues, grouped by area |
 | [`CONSTITUTION.md`](CONSTITUTION.md) | Product principles — read-only for agents |
 | [`AGENTS.md`](AGENTS.md) | Monorepo entry and task routing |
 | [`system_app_back_end/docs/API.md`](system_app_back_end/docs/API.md) | REST endpoint reference |

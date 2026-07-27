@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/l10n/app_strings.dart';
 import '../../ui/app_typography.dart';
+import '../editor/document_text_flow.dart';
 import '../model/document_model.dart';
 import './block_text_actions.dart';
 import './document_context_menu.dart';
@@ -209,6 +210,8 @@ class _RichTableEditorState extends State<RichTableEditor> {
     return _controllers[row].every((c) => c.text.trim().isEmpty);
   }
 
+  /// Enter and Tab only. Arrow keys belong to the document text flow, which
+  /// moves by column inside the table and out of it at the edge rows.
   KeyEventResult _onKey(FocusNode node, KeyEvent event, int row, int col) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
@@ -234,17 +237,6 @@ class _RichTableEditorState extends State<RichTableEditor> {
       } else if (row + 1 < _controllers.length) {
         _focusCell(row + 1, 0);
       }
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
-        row + 1 < _controllers.length) {
-      _focusCell(row + 1, col);
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp && row > 0) {
-      _focusCell(row - 1, col);
       return KeyEventResult.handled;
     }
 
@@ -315,6 +307,7 @@ class _RichTableEditorState extends State<RichTableEditor> {
                               child: FormattedTextField(
                                 controller: _controllers[r][c],
                                 focusNode: _focusAt(r, c),
+                                segmentId: tableCellSegmentId(widget.node.id, r, c),
                                 style: AppTypography.noteBodyStyle,
                                 hintText: r == 0 && c == 0 ? 'Cell' : null,
                                 maxLines: null,

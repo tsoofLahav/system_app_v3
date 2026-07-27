@@ -56,6 +56,41 @@ class DocumentContextMenu {
     BlockTextFocusRegistry.closeMenuSession();
   }
 
+  /// List menu: the text actions plus the one control that decides whether the
+  /// list shows points or numbers.
+  ///
+  /// A list has a single style, so this is a switch on the existing block
+  /// rather than two kinds of list to insert.
+  static Future<void> showListMenu({
+    required BuildContext context,
+    required Offset globalPosition,
+    required AppStrings strings,
+    required bool isOrdered,
+    required DocumentMenuHandler onAction,
+  }) async {
+    AppContextMenu.dismissActive();
+    BlockTextFocusRegistry.openMenuSession();
+    final value = await AppContextMenu.show(
+      context: context,
+      globalPosition: globalPosition,
+      entries: [
+        ...buildTextEntries(strings),
+        const AppContextMenuDivider(),
+        AppContextMenuItem(
+          value: isOrdered ? 'list:style:bullet' : 'list:style:numbered',
+          label: isOrdered
+              ? strings['switchToPoints']
+              : strings['switchToNumbers'],
+        ),
+      ],
+      isRtl: strings.isRtl,
+    );
+    if (value != null) {
+      await onAction(value);
+    }
+    BlockTextFocusRegistry.closeMenuSession();
+  }
+
   static Future<void> showTableCellMenu({
     required BuildContext context,
     required Offset globalPosition,

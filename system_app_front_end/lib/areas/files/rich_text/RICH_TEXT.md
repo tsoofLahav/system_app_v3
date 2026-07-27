@@ -12,16 +12,20 @@ When a `SpanTextEditingController` field **has focus** (or a context menu is ope
 - Use `syncRichControllerFromBlockIfIdle()` from `rich_text_block_sync.dart` in `didUpdateWidget`.
 - Sync must **also skip** when `BlockTextFocusRegistry.activeController == controller` — after the context menu closes, focus is often still lost for a frame while the field remains the active editor. Syncing then overwrote spans and caused formatting to “drag” onto new typing.
 
-### 2. Format target is frozen at menu open
+### 2. One marking, resolved once and frozen at menu open
 
-Format applies to:
+Every action targets **the mark**, resolved by a single rule:
 
-- **Marked text** — non-collapsed selection, or
-- **Current paragraph** — from previous `\n` (or start) to next `\n` (or end) when the caret is collapsed.
+1. **Anything marked** → that is the target, across as many parts as it covers.
+2. **Nothing marked** → the **line at the caret** (previous `\n` or start, to next `\n` or end).
 
-`FormatRange.resolve()` in `format_range.dart` implements this. It runs **once** when the menu opens (`BlockTextFocusRegistry.openMenuSession`). The range is stored as `_frozenRange` and used for cut/copy/paste/format — not re-read from a selection that may have been cleared by focus loss.
+`DocumentMark.resolve()` in [`../editor/document_mark.dart`](../editor/document_mark.dart) is the only implementation of this rule, and cut/copy/paste/format/AI all go through it via `BlockTextFocusRegistry.resolveMark()`.
 
-`FormatRange.capturePending()` on secondary pointer-down in `FormattedTextField` helps preserve the selection before focus blurs. **Only the first valid pending capture is kept** until the menu consumes it — do not capture again from `file_section` or other parents after focus loss (that replaced a word selection with the whole paragraph).
+**Never read a single field's `controller.selection` to decide what an action affects.** A field's selection only describes how that field paints itself. Inside the file editor a marking routinely spans several fields, and reading one of them would silently act on a fraction of what the user marked.
+
+The mark is captured on secondary pointer-down (`capturePendingMark`) and frozen for the menu session (`openMenuSession`), so focus loss or a collapsed selection cannot change the target mid-menu. `FormatRange` remains only as the fallback for a lone field outside any document flow.
+
+**Only the first valid pending capture is kept** until the menu consumes it — do not capture again from parents after focus loss (that replaced a word selection with the whole paragraph).
 
 ### 3. Span shifts only on text changes
 
@@ -41,13 +45,13 @@ Formatting always affects an existing character range. Newly typed characters ar
 
 `BlockTextFocusRegistry` only:
 
-- tracks the active field,
-- freezes `FormatRange` for the menu session,
-- runs clipboard/format actions.
+- tracks the active field and the flow it belongs to,
+- freezes the `DocumentMark` for the menu session,
+- runs clipboard/format actions against that mark.
 
 **Allowed:** a paint-only selection overlay in `FormattedTextField` while the block menu is open:
 
-- Reads `frozenFormatRange` only (read-only).
+- Reads `frozenMark` (and `frozenFormatRange` as fallback) only (read-only). It paints this field's share of the mark, so a mark covering several parts is shown highlighted across all of them.
 - `_FrozenSelectionOverlay` finds the inner `RenderEditable` in the `TextField` render tree and calls `getBoxesForSelection` on it, then transforms rects into the `CustomPaint` host space. **Do not** recompute boxes with a separate `TextPainter` — that misaligns in RTL and horizontally vs the real field.
 - `FrozenSelectionPainter` only fills precomputed rects.
 - `menuSessionListenable` triggers remeasure/repaint when the menu opens/closes — it must not drive business logic.
@@ -64,10 +68,12 @@ Toggle semantics: bold/italic/underline flip independently per character in the 
 
 Before merging any rich-text PR:
 
-1. Run `flutter test test/span_shift_test.dart`
+1. Run `flutter test test/span_shift_test.dart test/document_mark_test.dart test/continuous_text_test.dart`
 2. Manual: bold a word → click after it → type (new text stays regular)
 3. Manual: mixed bold + regular lines → size up (bold stays bold, regular stays regular)
 4. Manual: select text → right-click → selection highlight visible during menu and matches selected glyphs (English + Hebrew / RTL)
+5. Manual: mark from a paragraph through a bullet into a cell → right-click → the highlight covers all three, and the action affects all three
+6. Manual: nothing marked → right-click mid-line → the action affects that whole line only
 5. Confirm no edits to `remapSpansForTextEdit` boundary rule (`start <= index < end`) without new tests
 6. Confirm no `setRichState` / `loadFromContent` while `hasFocus || activeController == controller`
 7. Confirm selection overlay still uses `RenderEditable.getBoxesForSelection` (not a duplicate `TextPainter`)
@@ -76,11 +82,15 @@ Before merging any rich-text PR:
 
 | File | Role |
 |------|------|
-| `format_range.dart` | What to format (selection or paragraph) |
+| `../editor/document_mark.dart` | **The mark** — the one target every action resolves |
+| `../editor/document_text_flow.dart` | Document-wide caret/selection across parts |
+| `format_range.dart` | Range fallback for a lone field with no document flow |
 | `text_formatting.dart` | Pure span math + `TextSpan` rendering |
 | `span_text_editing_controller.dart` | `TextEditingController` + spans + `handleTextChange` |
 | `block_text_focus.dart` | Active field + frozen menu range + menu actions |
 | `formatted_text_field.dart` | `TextField` wrapper, focus registration, `_FrozenSelectionOverlay` |
+| `rtl_caret_motion.dart` | Flips the field's horizontal motion intents so arrows move visually in Hebrew |
+| `document_context_menu.dart` | Text, list, and table-cell menu entries |
 | `frozen_selection_painter.dart` | Paints precomputed selection rects during menu |
 | `rich_text_block_sync.dart` | Idle-only sync from block → controller |
 | `block_context_menu.dart` | Opens/closes menu session around `AppContextMenu` bubble |

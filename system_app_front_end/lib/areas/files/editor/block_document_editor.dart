@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -10,6 +11,8 @@ import '../../ui/app_typography.dart';
 import '../model/document_codec.dart';
 import './document_edit_history.dart';
 import './document_editor_controller.dart';
+import './document_structure_prune.dart';
+import './document_text_flow.dart';
 import '../model/document_model.dart';
 import '../rich_text/block_text_actions.dart';
 import '../rich_text/block_text_focus.dart';
@@ -48,6 +51,10 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   final _history = DocumentEditHistory();
   final _focusNodes = <String, FocusNode>{};
   final _controllers = <String, SpanTextEditingController>{};
+  final _flow = DocumentTextFlow();
+  Offset? _dragOrigin;
+  String? _dragOriginSegment;
+  bool _draggingAcrossParts = false;
 
   static final _paragraphStyle = AppTypography.noteBodyStyle.copyWith(height: 1.35);
 
@@ -66,6 +73,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     if (_doc.blocks.isEmpty) {
       _doc = _doc.copyWith(blocks: [ParagraphNode(id: DocumentCodec.newId('b'), text: '')]);
     }
+    _flow.onPruneStructures = _pruneStructures;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       DocumentEditorRegistry.register(
@@ -148,6 +156,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     _saveTimer?.cancel();
     _disposeAllFocusNodes();
     _disposeControllers();
+    _flow.dispose();
     super.dispose();
   }
 
@@ -240,65 +249,53 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     await _flushPendingChanges();
     _recordHistory(force: true);
     final index = (_focusedBlockIndex + 1).clamp(0, _doc.blocks.length);
-    switch (action) {
-      case 'paragraph':
-        _mutateDoc(
-          DocumentCodec.insertBlock(
-            _doc,
-            index,
-            ParagraphNode(id: DocumentCodec.newId('b'), text: ''),
-          ),
-          rebuild: true,
-          recordHistory: false,
-        );
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          final block = _doc.blocks[index];
-          _focusFor(block.id).requestFocus();
-        });
-      case 'list':
-      case 'bullet_list':
-        _mutateDoc(
-          DocumentCodec.insertBlock(
-            _doc,
-            index,
-            ListNode(
-              id: DocumentCodec.newId('b'),
-              items: [ListItem(id: DocumentCodec.newId('li'), text: '')],
-            ),
-          ),
-          rebuild: true,
-          recordHistory: false,
-        );
-      case 'ordered_list':
-        _mutateDoc(
-          DocumentCodec.insertBlock(
-            _doc,
-            index,
-            ListNode(
-              id: DocumentCodec.newId('b'),
-              listStyle: 'numbered',
-              items: [ListItem(id: DocumentCodec.newId('li'), text: '')],
-            ),
-          ),
-          rebuild: true,
-          recordHistory: false,
-        );
-      case 'table':
-        _mutateDoc(
-          DocumentCodec.insertBlock(
-            _doc,
-            index,
-            TableNode(
-              id: DocumentCodec.newId('b'),
-              rows: [
-                [const DocumentTableCell(text: ''), const DocumentTableCell(text: '')],
-              ],
-            ),
-          ),
-          rebuild: true,
-          recordHistory: false,
-        );
-    }
+
+    final node = switch (action) {
+      'paragraph' => ParagraphNode(id: DocumentCodec.newId('b'), text: ''),
+      // One way to insert a list. Points vs numbers is switched afterwards on
+      // the block itself, from its right-click menu.
+      'list' || 'bullet_list' => ListNode(
+          id: DocumentCodec.newId('b'),
+          items: [ListItem(id: DocumentCodec.newId('li'), text: '')],
+        ),
+      'table' => TableNode(
+          id: DocumentCodec.newId('b'),
+          rows: [
+            [const DocumentTableCell(text: ''), const DocumentTableCell(text: '')],
+          ],
+        ),
+      _ => null,
+    };
+    if (node == null) return;
+
+    _mutateDoc(
+      DocumentCodec.insertBlock(_doc, index, node),
+      rebuild: true,
+      recordHistory: false,
+    );
+    // Whatever was inserted, the caret goes into it — a new list or table is
+    // ready to type in, exactly like a new paragraph.
+    _focusFirstPartOf(node.id);
+  }
+
+  /// Puts the caret in the first part of a block: the paragraph itself, the
+  /// first bullet, or the top-left cell.
+  void _focusFirstPartOf(String blockId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final index = _doc.blocks.indexWhere((b) => b.id == blockId);
+      if (index < 0) return;
+      final block = _doc.blocks[index];
+      final segmentId = switch (block) {
+        ListNode() when block.items.isNotEmpty => listItemSegmentId(blockId, 0),
+        TableNode() when block.rows.isNotEmpty && block.rows.first.isNotEmpty =>
+          tableCellSegmentId(blockId, 0, 0),
+        ParagraphNode() || HeadingNode() => paragraphSegmentId(blockId),
+        _ => null,
+      };
+      if (segmentId == null) return;
+      _flow.placeCaret(DocumentTextPosition(segmentId, 0));
+    });
   }
 
   void _updateParagraph(ParagraphNode block, SpanTextEditingController controller) {
@@ -421,8 +418,165 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     });
   }
 
+  /// Drops the bullets, rows, and blocks a delete emptied completely.
+  ///
+  /// Runs after the frame because it restructures the document while the text
+  /// fields that triggered the delete are still settling.
+  void _pruneStructures(Set<String> fullyEmptied, {required bool spansParts}) {
+    if (fullyEmptied.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final caretSegment = _flow.focusedSegmentId;
+      final pruned = pruneFullyMarkedStructures(
+        blocks: _doc.blocks,
+        fullyEmptied: fullyEmptied,
+        spansParts: spansParts,
+      );
+      if (!pruned.changed) return;
+
+      _flow.clearSelection();
+      _mutateDoc(_doc.copyWith(blocks: pruned.blocks), rebuild: true);
+
+      final caretSurvived =
+          caretSegment != null && _segmentOrder().contains(caretSegment);
+      if (!caretSurvived) {
+        final landing =
+            pruned.firstRemovedIndex.clamp(0, pruned.blocks.length - 1);
+        _focusFirstPartOf(pruned.blocks[landing].id);
+      }
+    });
+  }
+
+  /// Switches an existing list between points and numbers. A list has one
+  /// style, so this replaces it rather than creating a different kind of list.
+  void _setListStyle(String blockId, String style) {
+    final index = _doc.blocks.indexWhere((b) => b.id == blockId);
+    if (index < 0) return;
+    final block = _doc.blocks[index];
+    if (block is! ListNode || block.listStyle == style) return;
+    _mutateDoc(
+      DocumentCodec.replaceBlock(_doc, blockId, block.copyWith(listStyle: style)),
+      rebuild: true,
+    );
+  }
+
+  /// Segment ids in reading order: a paragraph or heading is one segment, a
+  /// list contributes one per bullet, a table one per cell. This is what makes
+  /// the caret able to walk from any part to the next.
+  List<String> _segmentOrder() {
+    final ids = <String>[];
+    for (final block in _doc.blocks) {
+      if (block is ListNode) {
+        for (var i = 0; i < block.items.length; i++) {
+          ids.add(listItemSegmentId(block.id, i));
+        }
+      } else if (block is TableNode) {
+        for (var r = 0; r < block.rows.length; r++) {
+          for (var c = 0; c < block.rows[r].length; c++) {
+            ids.add(tableCellSegmentId(block.id, r, c));
+          }
+        }
+      } else if (block is ParagraphNode || block is HeadingNode) {
+        ids.add(paragraphSegmentId(block.id));
+      }
+    }
+    return ids;
+  }
+
+  /// Up/down links for table cells: within a table the caret moves by column,
+  /// and from the edge rows it leaves the table into the adjacent block.
+  (Map<String, String>, Map<String, String>) _verticalLinks(List<String> order) {
+    final above = <String, String>{};
+    final below = <String, String>{};
+
+    for (var b = 0; b < _doc.blocks.length; b++) {
+      final block = _doc.blocks[b];
+      if (block is! TableNode || block.rows.isEmpty) continue;
+
+      final firstCell = tableCellSegmentId(block.id, 0, 0);
+      final firstIndex = order.indexOf(firstCell);
+      final lastRow = block.rows.length - 1;
+      final lastCell =
+          tableCellSegmentId(block.id, lastRow, block.rows[lastRow].length - 1);
+      final lastIndex = order.indexOf(lastCell);
+
+      final beforeTable = firstIndex > 0 ? order[firstIndex - 1] : null;
+      final afterTable =
+          lastIndex >= 0 && lastIndex < order.length - 1 ? order[lastIndex + 1] : null;
+
+      for (var r = 0; r < block.rows.length; r++) {
+        for (var c = 0; c < block.rows[r].length; c++) {
+          final id = tableCellSegmentId(block.id, r, c);
+          if (r > 0 && c < block.rows[r - 1].length) {
+            above[id] = tableCellSegmentId(block.id, r - 1, c);
+          } else if (beforeTable != null) {
+            above[id] = beforeTable;
+          }
+          if (r < lastRow && c < block.rows[r + 1].length) {
+            below[id] = tableCellSegmentId(block.id, r + 1, c);
+          } else if (afterTable != null) {
+            below[id] = afterTable;
+          }
+        }
+      }
+    }
+    return (above, below);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final order = _segmentOrder();
+    _flow.setOrder(order);
+    final (above, below) = _verticalLinks(order);
+    _flow.setVerticalLinks(above: above, below: below);
+    return DocumentTextFlowScope(
+      flow: _flow,
+      child: Listener(
+        onPointerDown: _onEditorPointerDown,
+        onPointerMove: _onEditorPointerMove,
+        onPointerUp: (_) => _endDragSelection(),
+        onPointerCancel: (_) => _endDragSelection(),
+        child: _buildEditor(context),
+      ),
+    );
+  }
+
+  void _onEditorPointerDown(PointerDownEvent event) {
+    if (event.buttons != kPrimaryButton) return;
+    _dragOrigin = event.position;
+    _dragOriginSegment = _flow.positionAtGlobal(event.position)?.segmentId;
+    _draggingAcrossParts = false;
+  }
+
+  /// Extends the document selection while the pointer is dragged.
+  ///
+  /// A drag that stays inside one part is left to that text field's own
+  /// selection; this only takes over once the pointer reaches another part.
+  void _onEditorPointerMove(PointerMoveEvent event) {
+    final origin = _dragOrigin;
+    if (origin == null || event.buttons != kPrimaryButton) return;
+
+    final current = _flow.positionAtGlobal(event.position);
+    if (current == null) return;
+
+    if (!_draggingAcrossParts) {
+      if (current.segmentId == _dragOriginSegment) return;
+      final start = _flow.positionAtGlobal(origin);
+      if (start == null) return;
+      _draggingAcrossParts = true;
+      _flow.collapseTo(start);
+    }
+    _flow.extendTo(current);
+  }
+
+  void _endDragSelection() {
+    _dragOrigin = null;
+    _dragOriginSegment = null;
+    _draggingAcrossParts = false;
+  }
+
+  Widget _buildEditor(BuildContext context) {
     return Shortcuts(
       shortcuts: {
         LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyZ):
@@ -479,6 +633,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         key: ValueKey('p-${block.id}'),
         controller: controller,
         focusNode: _focusFor(block.id),
+        segmentId: paragraphSegmentId(block.id),
         style: _paragraphStyle,
         maxLines: null,
         minLines: 1,
@@ -493,6 +648,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         key: ValueKey('h-${block.id}'),
         controller: controller,
         focusNode: _focusFor(block.id),
+        segmentId: paragraphSegmentId(block.id),
         style: AppTypography.noteTitleStyle.copyWith(
           fontSize: 24 - (block.level * 2),
           height: 1.3,
@@ -532,6 +688,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
           );
         },
         onExitList: (emptyItemIndex) => _exitListBelow(block.id, emptyItemIndex),
+        onStyleChanged: (style) => _setListStyle(block.id, style),
       );
     }
     if (block is TableNode) {
