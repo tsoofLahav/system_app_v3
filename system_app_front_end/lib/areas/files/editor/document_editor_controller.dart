@@ -1,5 +1,4 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import '../../../shared/utils/frame_safe_notifier.dart';
 
 class DocumentEditorController {
   DocumentEditorController({
@@ -18,23 +17,23 @@ class DocumentEditorController {
 class DocumentEditorRegistry {
   DocumentEditorRegistry._();
 
-  static final Listenable notifier = ValueNotifier<int>(0);
+  /// Editors unregister from `dispose`, so this cannot rebuild its listeners
+  /// on the spot — the insert bar and both shells listen to it, and they are
+  /// being unmounted in the same frame.
+  static final FrameSafeNotifier notifier = FrameSafeNotifier();
+
   static DocumentEditorController? active;
   static int? get activeFileId => active?.fileId;
 
-  static void _notify() {
-    (notifier as ValueNotifier<int>).value++;
-  }
-
   static void register(DocumentEditorController controller) {
     active = controller;
-    _notify();
+    notifier.notify();
   }
 
   static void unregister(int fileId) {
     if (active?.fileId == fileId) {
       active = null;
-      _notify();
+      notifier.notify();
     }
   }
 

@@ -53,6 +53,7 @@ Code: [`areas/files/`](system_app_front_end/lib/areas/files/)
 | E8 | **P3** | Deleting across parts does not merge the first and last part into one. Both survive with their remaining text, where a word processor would join them. |
 | E9 | **P3** | Cmd+arrow and Home/End still use the platform's logical direction, so in Hebrew they move against the arrow. Plain and Alt+arrow are fixed via intent overrides; line-break motion is shared with Home/End, so flipping it would break those. |
 | E10 | **P3** | Text direction comes from the UI language, not from the text. A Hebrew paragraph in an English-UI file gets LTR caret behavior. Matches the app-wide rule in [`BILINGUAL.md`](system_app_front_end/lib/core/l10n/BILINGUAL.md); revisit if files become genuinely mixed. |
+| E11 | **P3** | `BlockDocumentEditor.build` calls `_flow.setOrder`, which notifies from inside build. Harmless today because every listener is a descendant that has not been built yet this frame, but a listener added anywhere else would throw *markNeedsBuild during build*. |
 | E2 | **P3** | `RichListEditor._localStateMatchesNode` compares text only, not spans, so an external span-only change (undo, remote sync) does not resync controllers. |
 | E3 | **P3** | `RichTableEditor._focusNodes` grows via `_focusAt` and is never pruned when rows or columns shrink. Minor leak until the block is disposed. |
 
