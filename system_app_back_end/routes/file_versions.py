@@ -24,4 +24,4 @@ def diff_file(file_id):
     data = request.get_json(silent=True) or {}
     old_body = data.get("old_body", "")
     new_body = data.get("new_body", "")
-    return jsonify(compute_diff(old_body, new_body))
+    return jsonify(compute_diff(old_body, new_body, file_id=file_id))

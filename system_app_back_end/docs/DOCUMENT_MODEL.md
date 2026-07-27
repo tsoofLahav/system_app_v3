@@ -2,6 +2,11 @@
 
 Files store a JSON **document** in `files.document_json`. Version 3 uses an ordered block array with embed references.
 
+**Related docs**
+
+- Agent text serialize/parse: [`PRODUCTION_AGENT.md`](PRODUCTION_AGENT.md)
+- In-app editor UX: [`../../system_app_front_end/docs/APP_FILES.md`](../../system_app_front_end/docs/APP_FILES.md)
+
 ## Shape
 
 ```json
@@ -12,8 +17,7 @@ Files store a JSON **document** in `files.document_json`. Version 3 uses an orde
     { "id": "b2", "type": "heading", "level": 2, "text": "Goals", "spans": [] },
     {
       "id": "b3",
-      "type": "list",
-      "list_style": "bullet",
+      "type": "bullet_list",
       "items": [{ "id": "li1", "text": "Item one", "indent": 0, "spans": [] }]
     },
     {
@@ -32,9 +36,11 @@ Files store a JSON **document** in `files.document_json`. Version 3 uses an orde
 |------|---------|
 | `paragraph` | Rich text with optional spans |
 | `heading` | Heading level 1–6 with spans |
-| `list` | Inline list items with indent and spans |
-| `table` | Editable table cells with spans |
+| `bullet_list` | Inline list items (`ordered_list` for numbered) |
+| `table` | Rows of cells with text and spans |
 | `embed` | Reference to `objects.id` |
+
+Legacy `list` + `list_style` normalizes to `bullet_list` / `ordered_list` on read.
 
 Position is **array order** — no character offsets.
 
@@ -60,17 +66,7 @@ Creating an object via `POST /files/:id/objects` accepts `{ "type", "block_index
 
 ## Agent text
 
-`document_to_agent_text()` produces deterministic sections:
+See [`PRODUCTION_AGENT.md`](PRODUCTION_AGENT.md). Summary:
 
-```
-[TASK_LIST id="42"]
-ACTIVE:
-- [ ] Call clinic
-[/TASK_LIST]
-
-[INFO id="17"]
-Body text
-[/INFO]
-```
-
-Malformed agent input must not silently delete existing objects (`apply_agent_text` validation).
+- `document_to_agent_text()` — tree → plain agent text (on demand only)
+- `apply_agent_text()` — agent text → tree; validates embed ids are preserved

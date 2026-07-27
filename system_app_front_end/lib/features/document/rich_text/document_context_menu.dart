@@ -55,4 +55,31 @@ class DocumentContextMenu {
     }
     BlockTextFocusRegistry.closeMenuSession();
   }
+
+  static Future<void> showTableCellMenu({
+    required BuildContext context,
+    required Offset globalPosition,
+    required AppStrings strings,
+    required DocumentMenuHandler onAction,
+  }) async {
+    AppContextMenu.dismissActive();
+    BlockTextFocusRegistry.openMenuSession();
+    final value = await AppContextMenu.show(
+      context: context,
+      globalPosition: globalPosition,
+      entries: [
+        ...buildTextEntries(strings),
+        const AppContextMenuDivider(),
+        AppContextMenuItem(
+          value: 'table:add_column',
+          label: strings['addColumn'] ?? 'Add column',
+        ),
+      ],
+      isRtl: strings.isRtl,
+    );
+    if (value != null) {
+      await onAction(value);
+    }
+    BlockTextFocusRegistry.closeMenuSession();
+  }
 }

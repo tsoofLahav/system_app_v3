@@ -31,10 +31,16 @@ class _RichTableEditorState extends State<RichTableEditor> {
   late List<List<SpanTextEditingController>> _controllers;
   final _focusNodes = <FocusNode>[];
 
+  static const _defaultColumns = 2;
+  static const _minCellHeight = 36.0;
+
   @override
   void initState() {
     super.initState();
     _syncControllers();
+    if (widget.node.rows.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _emit());
+    }
   }
 
   @override
@@ -46,9 +52,33 @@ class _RichTableEditorState extends State<RichTableEditor> {
     }
   }
 
-  void _syncControllers() {
-    _controllers = [
+  List<List<DocumentTableCell>> get _normalizedRows {
+    if (widget.node.rows.isEmpty) {
+      return [
+        for (var r = 0; r < 1; r++)
+          [
+            for (var c = 0; c < _defaultColumns; c++)
+              const DocumentTableCell(text: ''),
+          ],
+      ];
+    }
+    final maxCols = widget.node.rows
+        .map((row) => row.length)
+        .fold(_defaultColumns, (a, b) => a > b ? a : b);
+    final targetCols = maxCols < _defaultColumns ? _defaultColumns : maxCols;
+    return [
       for (final row in widget.node.rows)
+        [
+          for (var c = 0; c < targetCols; c++)
+            c < row.length ? row[c] : const DocumentTableCell(text: ''),
+        ],
+    ];
+  }
+
+  void _syncControllers() {
+    final rows = _normalizedRows;
+    _controllers = [
+      for (final row in rows)
         [
           for (final cell in row)
             SpanTextEditingController(
@@ -57,7 +87,17 @@ class _RichTableEditorState extends State<RichTableEditor> {
             ),
         ],
     ];
+    if (_controllers.isEmpty) {
+      _controllers = [
+        [
+          for (var c = 0; c < _defaultColumns; c++)
+            SpanTextEditingController(text: ''),
+        ],
+      ];
+    }
   }
+
+  int get _columnCount => _controllers.isEmpty ? _defaultColumns : _controllers.first.length;
 
   void _disposeAll() {
     for (final row in _controllers) {
@@ -98,7 +138,7 @@ class _RichTableEditorState extends State<RichTableEditor> {
   }
 
   FocusNode _focusAt(int row, int col) {
-    final index = row * _controllers.first.length + col;
+    final index = row * _columnCount + col;
     while (_focusNodes.length <= index) {
       _focusNodes.add(FocusNode());
     }
@@ -107,6 +147,7 @@ class _RichTableEditorState extends State<RichTableEditor> {
 
   void _focusCell(int row, int col) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _focusAt(row, col).requestFocus();
     });
   }
@@ -116,13 +157,23 @@ class _RichTableEditorState extends State<RichTableEditor> {
       _controllers.insert(
         row + 1,
         [
-          for (var i = 0; i < _controllers.first.length; i++)
+          for (var i = 0; i < _columnCount; i++)
             SpanTextEditingController(text: ''),
         ],
       );
     });
     _emit();
     _focusCell(row + 1, 0);
+  }
+
+  void _addColumnAfter(int col, {required int focusRow}) {
+    setState(() {
+      for (final row in _controllers) {
+        row.insert(col + 1, SpanTextEditingController(text: ''));
+      }
+    });
+    _emit();
+    _focusCell(focusRow, col + 1);
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event, int row, int col) {
@@ -163,42 +214,80 @@ class _RichTableEditorState extends State<RichTableEditor> {
     return KeyEventResult.ignored;
   }
 
-  Future<void> _showMenu(TapDownDetails details) async {
-    await DocumentContextMenu.showTextMenu(
+  Future<void> _showMenu(TapDownDetails details, int row, int col) async {
+    await DocumentContextMenu.showTableCellMenu(
       context: context,
       globalPosition: details.globalPosition,
       strings: widget.strings,
-      onAction: runBlockTextAction,
+      onAction: (action) async {
+        if (action == 'table:add_column') {
+          _addColumnAfter(col, focusRow: row);
+          return;
+        }
+        await runBlockTextAction(action);
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var r = 0; r < _controllers.length; r++)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (var c = 0; c < _controllers[r].length; c++)
-                Expanded(
-                  child: Focus(
-                    onKeyEvent: (node, event) => _onKey(node, event, r, c),
-                    child: FormattedTextField(
-                      controller: _controllers[r][c],
-                      focusNode: _focusAt(r, c),
-                      style: AppTypography.noteBodyStyle,
-                      maxLines: null,
-                      minLines: 1,
-                      onChanged: (_) => _emit(),
-                      onSecondaryTapDown: _showMenu,
+    final borderColor = Theme.of(context).colorScheme.outline.withValues(alpha: 0.45);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var r = 0; r < _controllers.length; r++)
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var c = 0; c < _controllers[r].length; c++)
+                    Expanded(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          border: Border(
+                            right: c < _controllers[r].length - 1
+                                ? BorderSide(color: borderColor)
+                                : BorderSide.none,
+                            bottom: r < _controllers.length - 1
+                                ? BorderSide(color: borderColor)
+                                : BorderSide.none,
+                          ),
+                        ),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: _minCellHeight),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                            child: Focus(
+                              onKeyEvent: (node, event) => _onKey(node, event, r, c),
+                              child: FormattedTextField(
+                                controller: _controllers[r][c],
+                                focusNode: _focusAt(r, c),
+                                style: AppTypography.noteBodyStyle,
+                                hintText: r == 0 && c == 0 ? 'Cell' : null,
+                                maxLines: null,
+                                minLines: 1,
+                                onChanged: (_) => _emit(),
+                                onSecondaryTapDown: (d) => _showMenu(d, r, c),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-            ],
-          ),
-      ],
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

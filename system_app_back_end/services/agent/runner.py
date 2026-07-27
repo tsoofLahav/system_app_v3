@@ -5,14 +5,28 @@ import json
 from typing import Any
 
 from models import File, ObjectEmbed, Task, Topic, db
-from services.document_body import document_plain_text
+from services.document_agent_text import (
+    apply_agent_text_to_file,
+    apply_object_updates,
+    document_to_agent_text,
+    load_objects_by_id,
+)
 from services.file_versions import save_file_version
 from services.openai_service import chat_json
 
 
-def compute_diff(old_body: str, new_body: str) -> dict:
-    old_plain = document_plain_text(old_body)
-    new_plain = document_plain_text(new_body)
+def compute_diff(
+    old_document_json: str,
+    new_document_json: str,
+    *,
+    file_id: int | None = None,
+    objects_by_id: dict[int, dict[str, Any]] | None = None,
+) -> dict:
+    if objects_by_id is None and file_id is not None:
+        objects_by_id = load_objects_by_id(file_id)
+    objects_by_id = objects_by_id or {}
+    old_plain = document_to_agent_text(old_document_json, objects_by_id=objects_by_id)
+    new_plain = document_to_agent_text(new_document_json, objects_by_id=objects_by_id)
     old_lines = old_plain.splitlines(keepends=True)
     new_lines = new_plain.splitlines(keepends=True)
     hunks = list(
@@ -25,8 +39,8 @@ def compute_diff(old_body: str, new_body: str) -> dict:
     )
     return {
         "diff_hunks": "".join(hunks),
-        "old_body": old_body or "",
-        "new_body": new_body or "",
+        "old_document_text": old_plain,
+        "new_document_text": new_plain,
     }
 
 
@@ -44,7 +58,7 @@ def _search_files(scope: dict, query: str) -> list[dict]:
         f.to_dict(include_document=False)
         for f in rows
         if query_lower in (f.name or "").lower()
-        or query_lower in document_plain_text(f.document_json or "").lower()
+        or query_lower in document_to_agent_text(f.document_json or "").lower()
     ]
 
 
@@ -53,39 +67,64 @@ def _open_file(file_id: int) -> dict | None:
     if file is None:
         return None
     data = file.to_dict()
-    embeds = ObjectEmbed.query.filter_by(file_id=file_id).all()
-    data["objects"] = [e.to_dict() for e in embeds]
-    data["document_plain"] = document_plain_text(file.document_json or "")
+    objects_by_id = load_objects_by_id(file_id)
+    data["objects"] = list(objects_by_id.values())
+    data["document_plain"] = document_to_agent_text(
+        file.document_json or "",
+        objects_by_id=objects_by_id,
+    )
     return data
 
 
-def _update_file(file_id: int, document_json: str, *, apply_mode: str) -> dict:
+def _known_object_ids(file_id: int) -> set[int]:
+    embeds = ObjectEmbed.query.filter_by(file_id=file_id).all()
+    return {int(e.id) for e in embeds}
+
+
+def _update_file(file_id: int, document_text: str, *, apply_mode: str) -> dict:
     file = db.session.get(File, file_id)
     if file is None:
         return {"error": "file not found"}
     old_document = file.document_json or ""
+    known_ids = _known_object_ids(file_id)
+    new_document_json, object_updates, errors = apply_agent_text_to_file(
+        file_id,
+        old_document,
+        document_text,
+        known_object_ids=known_ids,
+    )
+    if errors:
+        return {"error": "; ".join(errors)}
+
     if apply_mode == "notify_only":
         return {
             "file_id": file_id,
             "old_document_json": old_document,
-            "new_document_json": document_json,
+            "new_document_json": new_document_json,
+            "document_text": document_text,
             "applied": False,
         }
     if apply_mode == "review":
         return {
             "file_id": file_id,
             "old_document_json": old_document,
-            "new_document_json": document_json,
+            "new_document_json": new_document_json,
+            "document_text": document_text,
             "applied": False,
-            "review": compute_diff(old_document, document_json),
+            "review": compute_diff(old_document, new_document_json or "", file_id=file_id),
         }
+
     save_file_version(file, source="agent")
-    file.document_json = document_json
+    file.document_json = new_document_json
+    update_errors = apply_object_updates(file_id, object_updates)
+    if update_errors:
+        return {"error": "; ".join(update_errors)}
     db.session.flush()
     return {
         "file_id": file_id,
         "old_document_json": old_document,
-        "new_document_json": document_json,
+        "new_document_json": new_document_json,
+        "document_text": document_text,
         "applied": True,
     }
 
@@ -98,13 +137,13 @@ TOOL_DEFS = [
     },
     {
         "name": "open_file",
-        "description": "Open a file with body and object ids",
+        "description": "Open a file with agent document text and embedded objects",
         "parameters": {"file_id": "integer"},
     },
     {
         "name": "update_file",
-        "description": "Propose or apply a full file body replacement",
-        "parameters": {"file_id": "integer", "body": "string"},
+        "description": "Propose or apply a full document replacement in agent text format",
+        "parameters": {"file_id": "integer", "document_text": "string"},
     },
     {
         "name": "search_tasks",
@@ -120,7 +159,10 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
     if name == "open_file":
         return _open_file(int(args["file_id"]))
     if name == "update_file":
-        return _update_file(int(args["file_id"]), args.get("body", ""), apply_mode=apply_mode)
+        document_text = args.get("document_text")
+        if document_text is None:
+            document_text = args.get("body", "")
+        return _update_file(int(args["file_id"]), document_text, apply_mode=apply_mode)
     if name == "search_tasks":
         query = (args.get("query") or "").lower()
         tasks = Task.query.filter(Task.archived_at.is_(None)).all()
@@ -143,9 +185,11 @@ def run_agent(
     system = (
         "You are a document assistant for system_app. "
         "Use tools to search and open files before editing. "
-        "When updating a file, return the FULL new body as a JSON document string "
-        "(version + nodes array). Preserve object nodes by object_id. "
-        "Use paragraph nodes for text with optional spans for bold/italic. "
+        "Files use agent text format (see system_app_back_end/docs/PRODUCTION_AGENT.md): "
+        "paragraphs and markdown headings, fenced [BULLET_LIST], [ORDERED_LIST], [TABLE], "
+        "and embed markers [TASK_LIST id=\"…\"], [INFO id=\"…\"], [IMAGE id=\"…\"], [GRAPH id=\"…\"]. "
+        "When updating a file, call update_file with the FULL new document_text in that format. "
+        "Preserve every existing embed object_id; never omit fenced object blocks. "
         "Respond as JSON: {\"tool_calls\": [{\"name\": \"...\", \"arguments\": {...}}]} "
         "or {\"final\": \"summary text\"} when done."
     )
