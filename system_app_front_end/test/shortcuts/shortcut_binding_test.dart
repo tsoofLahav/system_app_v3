@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:system_app_front_end/core/shortcuts/shortcut_binding.dart';
+import 'package:system_app_front_end/areas/ux/shortcuts/shortcut_binding.dart';
 
 void main() {
   test('toJson and fromJson round-trip', () {

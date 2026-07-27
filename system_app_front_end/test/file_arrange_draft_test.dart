@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:system_app_front_end/core/models/app_file.dart';
-import 'package:system_app_front_end/features/arrange/file_arrange_draft.dart';
+import 'package:system_app_front_end/areas/files/data/app_file.dart';
+import 'package:system_app_front_end/areas/ux/arrange/file_arrange_draft.dart';
 
 AppFile _file(int id, {bool isEssence = true}) => AppFile(
       id: id,

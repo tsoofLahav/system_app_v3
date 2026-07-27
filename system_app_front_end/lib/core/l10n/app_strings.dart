@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'app_language.dart';
+import './app_language.dart';
 
 /// UI strings and English DB-key → display label maps.
 /// Database values stay in English; only on-screen labels are translated.

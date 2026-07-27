@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:system_app_front_end/core/models/task.dart';
-import 'package:system_app_front_end/core/models/view_section.dart';
-import 'package:system_app_front_end/core/models/view_section_flags.dart';
+import 'package:system_app_front_end/areas/objects/data/task.dart';
+import 'package:system_app_front_end/areas/objects/data/view_section.dart';
+import 'package:system_app_front_end/areas/objects/data/view_section_flags.dart';
 
 void main() {
   test('ViewSection parses importance flag', () {

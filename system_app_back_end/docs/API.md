@@ -1,6 +1,6 @@
 # API Reference (v2)
 
-REST API for `system_app` v2. Domain model: [`DOCUMENT_MODEL.md`](DOCUMENT_MODEL.md).
+REST endpoint reference. Behavior and rules live in the area docs: [`areas/README.md`](../areas/README.md).
 
 All endpoints return JSON. Timestamps are ISO 8601 strings.
 

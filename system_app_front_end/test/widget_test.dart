@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:system_app_front_end/features/document/document_codec.dart';
-import 'package:system_app_front_end/features/document/document_model.dart';
+import 'package:system_app_front_end/areas/files/model/document_codec.dart';
+import 'package:system_app_front_end/areas/files/model/document_model.dart';
 
 void main() {
   test('empty document is v3', () {

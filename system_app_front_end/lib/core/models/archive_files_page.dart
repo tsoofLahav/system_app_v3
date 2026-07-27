@@ -1,4 +1,4 @@
-import 'app_file.dart';
+import '../../areas/files/data/app_file.dart';
 
 class ArchiveFilesPage {
   const ArchiveFilesPage({

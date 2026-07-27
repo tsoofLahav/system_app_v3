@@ -1,9 +1,9 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:system_app_front_end/core/shortcuts/shortcut_binding.dart';
-import 'package:system_app_front_end/core/shortcuts/shortcut_bindings_store.dart';
-import 'package:system_app_front_end/core/shortcuts/shortcut_catalog.dart';
+import 'package:system_app_front_end/areas/ux/shortcuts/shortcut_binding.dart';
+import 'package:system_app_front_end/areas/ux/shortcuts/shortcut_bindings_store.dart';
+import 'package:system_app_front_end/areas/ux/shortcuts/shortcut_catalog.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

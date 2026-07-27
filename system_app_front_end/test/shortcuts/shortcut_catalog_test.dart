@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:system_app_front_end/core/shortcuts/shortcut_catalog.dart';
+import 'package:system_app_front_end/areas/ux/shortcuts/shortcut_catalog.dart';
 
 void main() {
   test('catalog default bindings are unique', () {

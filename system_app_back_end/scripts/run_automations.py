@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app import app
 from models import Automation, AutomationRun, db
-from services.agent.runner import run_agent
+from areas.production_agent.services.runner import run_agent
 
 
 def main() -> int:

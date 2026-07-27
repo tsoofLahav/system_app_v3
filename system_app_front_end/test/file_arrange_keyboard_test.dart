@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:system_app_front_end/features/arrange/file_arrange_keyboard.dart';
+import 'package:system_app_front_end/areas/ux/arrange/file_arrange_keyboard.dart';
 
 void main() {
   test('moveArrangeFocusUp walks layouts to main through additional', () {

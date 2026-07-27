@@ -22,7 +22,7 @@ Follow this whenever you add labels, rows with controls, or dialogs.
 
 ## Text direction
 
-- App-wide direction is set once in [`app.dart`](../app.dart) from `AppState.textDirection`.
+- App-wide direction is set once in [`app.dart`](../../app.dart) from `AppState.textDirection`.
 - Do **not** wrap whole screens/dialogs in extra `Directionality` unless opening a subtree outside `MaterialApp` (rare).
 - Do **not** force `TextDirection.ltr` on rows to “fix” Hebrew — it mirrors English physical layout and breaks RTL expectations.
 
@@ -40,7 +40,7 @@ Follow this whenever you add labels, rows with controls, or dialogs.
 
 ### Rows with a trailing control (toggle, chevron, button)
 
-Use [`StartTrailingRow`](../design_system/bilingual_layout.dart):
+Use [`StartTrailingRow`](../../areas/ui/bilingual_layout.dart):
 
 ```dart
 StartTrailingRow(
@@ -61,7 +61,7 @@ This matches platform settings lists. Never wrap this row in `Directionality(tex
 
 ### Dialog action buttons
 
-Use [`DialogActionsRow`](../design_system/bilingual_layout.dart) inside `AppGlassDialog` — actions align to the reading-direction **trailing** edge (right in English, left in Hebrew).
+Use [`DialogActionsRow`](../../areas/ui/bilingual_layout.dart) inside `AppGlassDialog` — actions align to the reading-direction **trailing** edge (right in English, left in Hebrew).
 
 ### When physical placement is required (rare)
 
@@ -96,5 +96,5 @@ Keys live in `_automationNamesEn` / `_automationNamesHe` and `_automationDescrip
 ## Related
 
 - String maps: [`app_strings.dart`](app_strings.dart)
-- Layout helpers: [`bilingual_layout.dart`](../design_system/bilingual_layout.dart)
-- Design system overview: [`design_system/README.md`](../design_system/README.md)
+- Layout helpers: [`bilingual_layout.dart`](../../areas/ui/bilingual_layout.dart)
+- UI area: [`areas/ui/AREA.md`](../../areas/ui/AREA.md)

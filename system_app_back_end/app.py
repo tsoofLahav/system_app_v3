@@ -5,8 +5,8 @@ from flask_cors import CORS
 
 from config import DATABASE_URL, UPLOAD_FOLDER, resolve_upload_folder
 from models import db
-from routes import register_blueprints
-from routes.helpers import register_error_handlers
+from areas import register_blueprints
+from shared.helpers import register_error_handlers
 
 
 def _ensure_upload_folder(app: Flask) -> None:

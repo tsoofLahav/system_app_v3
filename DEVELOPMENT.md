@@ -1,0 +1,77 @@
+# Development guide (v3 in progress)
+
+**This is the working memory for the coding agent.** When the user says “remember this”, add it here.
+
+Not for the production agent — that agent reads its instructions from the database (`agent_configs.system_prompt`), not this file.
+
+---
+
+## Current state
+
+We are building a **new version** of system_app on `main`. Much of the codebase is mid-rewrite and still needs work. Treat incomplete areas as expected, not finished.
+
+### v1 reference (GitHub)
+
+Behavior removed in the rewrite still exists on the legacy branch. Use it when porting or recovering something that was lost:
+
+```bash
+git fetch origin
+git checkout legacy/v1
+```
+
+Remote: `origin/legacy/v1` on [github.com/tsoofLahav/system_app_v3](https://github.com/tsoofLahav/system_app_v3/tree/legacy/v1)
+
+Back to current work: `git checkout main`
+
+### Deploy / test loop
+
+**After backend changes, push to `main`** so Render redeploys and the Flutter app can be tested against the live API. Frontend-only changes do not need a backend deploy.
+
+---
+
+## System areas
+
+The code is physically split by area. Each area owns its folder and an `AREA.md` with its rules and logic. Matching areas exist on both sides where relevant, and their docs mirror each other.
+
+| Area | Backend | Frontend |
+|------|---------|----------|
+| **File structure & functionality** | [`areas/files/AREA.md`](system_app_back_end/areas/files/AREA.md) | [`areas/files/AREA.md`](system_app_front_end/lib/areas/files/AREA.md) |
+| **Production agent** | [`areas/production_agent/AREA.md`](system_app_back_end/areas/production_agent/AREA.md) | [`areas/production_agent/AREA.md`](system_app_front_end/lib/areas/production_agent/AREA.md) |
+| **Automations** | [`areas/automations/AREA.md`](system_app_back_end/areas/automations/AREA.md) | [`areas/automations/AREA.md`](system_app_front_end/lib/areas/automations/AREA.md) |
+| **Objects** (incl. **tasks**) | [`areas/objects/AREA.md`](system_app_back_end/areas/objects/AREA.md) | [`areas/objects/AREA.md`](system_app_front_end/lib/areas/objects/AREA.md) |
+| **UI** — visual style only | — | [`areas/ui/AREA.md`](system_app_front_end/lib/areas/ui/AREA.md) |
+| **UX** — flow and experience | — | [`areas/ux/AREA.md`](system_app_front_end/lib/areas/ux/AREA.md) |
+
+Area maps: [backend](system_app_back_end/areas/README.md) · [frontend](system_app_front_end/lib/areas/README.md)
+
+**Working rule:** if you change behavior in an area, update that area's `AREA.md` in the same commit. If the change spans front and back, update both.
+
+### Where the production agent's own file lives
+
+| Layer | Location |
+|-------|----------|
+| Git source (edit here) | [`content/production_agent/system_prompt.md`](content/production_agent/system_prompt.md) |
+| Runtime | `agent_configs.system_prompt` in PostgreSQL |
+| Sync | `python system_app_back_end/scripts/sync_agent_prompt.py --overwrite` |
+
+---
+
+## Remembered notes
+
+_(Dated bullets — added when the user asks to remember something.)_
+
+- **2026-07-14** — Push to `main` after backend changes to test on Render.
+- **2026-07-14** — v3 rewrite in progress; use the `legacy/v1` branch on GitHub when old behavior is needed as reference.
+- **2026-07-14** — Production agent prompt lives in `content/production_agent/system_prompt.md`, not in backend dev docs; it is synced into `agent_configs.system_prompt`.
+- **2026-07-27** — Code is organized by area (`areas/<area>/`) in both projects, each with its own `AREA.md`. UI and UX are frontend-only and strictly separated: UI is look, UX is flow.
+
+---
+
+## Related
+
+| Doc | Purpose |
+|-----|---------|
+| [`CONSTITUTION.md`](CONSTITUTION.md) | Product principles — read-only for agents |
+| [`AGENTS.md`](AGENTS.md) | Monorepo entry and task routing |
+| [`system_app_back_end/docs/API.md`](system_app_back_end/docs/API.md) | REST endpoint reference |
+| [`content/README.md`](content/README.md) | DB-bound app content |

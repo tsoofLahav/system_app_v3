@@ -1,5 +1,5 @@
-import 'app_file.dart';
-import 'topic.dart';
+import '../../areas/files/data/app_file.dart';
+import '../../areas/files/data/topic.dart';
 
 class ArchiveTopicEntry {
   const ArchiveTopicEntry({

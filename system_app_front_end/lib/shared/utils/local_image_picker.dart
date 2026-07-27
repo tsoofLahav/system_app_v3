@@ -1,8 +1,6 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
-
 /// Opens the OS image picker after a short delay (e.g. after a menu closes).
 Future<(String, List<int>)?> pickLocalImageFile({Duration delay = const Duration(milliseconds: 80)}) async {
   await Future<void>.delayed(delay);

@@ -1,23 +1,42 @@
-# `lib/` Overview
+# `lib/` overview
 
-This folder contains all frontend application code.
+```
+lib/
+├── main.dart, app.dart    bootstrap and provider wiring
+├── areas/                 the six system areas — see areas/README.md
+├── core/                  app-wide state, API client, l10n, platform
+├── shared/utils/          clipboard, image picking, platform text
+└── config/                API base URL
+```
 
-Structure:
-- `main.dart`, `app.dart`: app bootstrap, provider wiring, app shell entry.
-- `config/`: runtime config such as API base URL.
-- `core/`: state orchestration, models, registries, services.
-- `features/`: user-facing screens and feature modules.
-- `shared/`: reusable cross-feature widgets/utilities.
-- `design_system/`: tokens and reusable visual primitives.
+**Start with [`areas/README.md`](areas/README.md).** Each area has an `AREA.md` that owns its rules.
 
-Dependency direction:
-- `features/` -> `core/`, `shared/`, `design_system/`
-- `shared/` -> `core/`, `design_system/` (when needed)
-- `core/` -> models/services/registry/l10n/ai only (no feature widgets)
-- `design_system/` should stay feature-agnostic
+## What stays outside the areas
 
-Placement rules:
-- Put domain workflows in `core/app_state.dart`.
-- Put network/API calls in `core/services/`.
-- Put cross-feature widgets in `shared/widgets/`.
-- Put feature-specific UI in `features/<feature>/`.
+| Path | Why |
+|------|-----|
+| `core/app_state.dart` | Single app-wide state object; delegates to area services |
+| `core/services/api_service.dart` | HTTP client used by every area |
+| `core/services/bootstrap_service.dart`, `image_service.dart`, `tag_service.dart` | Cross-area services |
+| `core/l10n/` | English/Hebrew strings and RTL rules — see [`BILINGUAL.md`](core/l10n/BILINGUAL.md) |
+| `core/platform/` | Desktop vs phone form factor |
+| `shared/utils/` | Platform helpers with no domain knowledge |
+
+## Dependency direction
+
+```
+areas/*  →  core, shared, areas/ui
+core     →  models and services only, never area widgets
+areas/ui →  nothing app-specific (presentational only)
+```
+
+## Placement rules
+
+- Domain workflow that spans areas → `core/app_state.dart`
+- Area-specific API calls → that area's `data/` folder
+- Anything visual (color, font, radius, glass) → `areas/ui/`
+- Anything about where things appear or how the user moves around → `areas/ux/`
+
+## Legacy
+
+`core/models/block.dart` and `core/models/part.dart` are v1 shapes that no live code depends on. Do not build on them.

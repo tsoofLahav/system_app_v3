@@ -1,4 +1,4 @@
-import 'api_service.dart';
+import './api_service.dart';
 
 class ImageService {
   ImageService(this._api);

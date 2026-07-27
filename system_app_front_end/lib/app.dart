@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'design_system/app_theme.dart';
-import 'core/app_state.dart';
-import 'features/shell/app_shell.dart';
+import './areas/ui/app_theme.dart';
+import './core/app_state.dart';
+import './areas/ux/shell/app_shell.dart';
 
 class SystemApp extends StatelessWidget {
   const SystemApp({super.key});

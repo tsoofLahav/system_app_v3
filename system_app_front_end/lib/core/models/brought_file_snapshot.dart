@@ -1,7 +1,7 @@
-import 'app_file.dart';
-import 'block.dart';
-import 'task.dart';
-import 'topic.dart';
+import '../../areas/files/data/app_file.dart';
+import './block.dart';
+import '../../areas/objects/data/task.dart';
+import '../../areas/files/data/topic.dart';
 
 class BroughtFileSnapshot {
   const BroughtFileSnapshot({

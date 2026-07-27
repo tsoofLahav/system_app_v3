@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:system_app_front_end/core/models/app_file.dart';
-import 'package:system_app_front_end/core/shortcuts/main_file_cycle.dart';
+import 'package:system_app_front_end/areas/files/data/app_file.dart';
+import 'package:system_app_front_end/areas/ux/shortcuts/main_file_cycle.dart';
 
 AppFile _file(int id) => AppFile(
       id: id,
