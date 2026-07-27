@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/app_state.dart';
 import '../../files/data/topic.dart';
 import '../topic/topic_appearance.dart';
+import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_typography.dart';
-import '../../ui/glass_surface.dart';
 import '../widgets/topic_emoji.dart';
 
 Future<Topic?> showMoveFileTopicDialog({
@@ -12,7 +12,7 @@ Future<Topic?> showMoveFileTopicDialog({
   required AppState state,
   required int currentTopicId,
 }) {
-  return showDialog<Topic>(
+  return showAppDialog<Topic>(
     context: context,
     builder: (_) => MoveFileTopicDialog(
       state: state,
@@ -38,7 +38,7 @@ class MoveFileTopicDialog extends StatelessWidget {
         .where((topic) => topic.id != currentTopicId)
         .toList();
 
-    return AppGlassDialog(
+    return AppAdaptiveDialogShell(
       title: Text(s['moveFileToTopic']),
       actions: [
         TextButton(

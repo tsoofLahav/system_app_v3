@@ -5,8 +5,11 @@ import '../../../core/app_state.dart';
 import '../data/app_file.dart';
 import '../data/topic.dart';
 import '../../ui/app_colors.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
+import '../../ui/confirm_dialog.dart';
 import '../../ui/note_widgets.dart';
+import '../../ux/widgets/app_context_menu.dart';
 import './document_editor_controller.dart';
 import './document_editor.dart';
 
@@ -32,6 +35,7 @@ class DocumentPane extends StatefulWidget {
 
 class _DocumentPaneState extends State<DocumentPane> {
   late TextEditingController _titleController;
+  final _menuButtonKey = GlobalKey();
 
   @override
   void initState() {
@@ -69,18 +73,48 @@ class _DocumentPaneState extends State<DocumentPane> {
 
   Future<void> _archive() async {
     final s = widget.state.strings;
-    final ok = await showDialog<bool>(
+    final ok = await showAppConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s['archiveFileTitle'] ?? 'Archive file?'),
-        content: Text(s['archiveFileMessage'] ?? 'Archive this file?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s['cancel'])),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s['archive'])),
-        ],
+      title: s['archiveFileTitle'],
+      message: s.archiveFileMessage(
+        widget.state.fileDisplayName(widget.file.name),
       ),
+      confirmLabel: s['archive'],
+      cancelLabel: s['cancel'],
     );
-    if (ok == true) await widget.state.archiveFile(widget.file);
+    if (ok) await widget.state.archiveFile(widget.file);
+  }
+
+  /// The file's own menu. It is the right-click menu in every way but how it
+  /// is opened, so it uses the same bubble rather than a Material popup.
+  Future<void> _showFileMenu() async {
+    final s = widget.state.strings;
+    final box = _menuButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+
+    final isRtl = s.isRtl;
+    final corner = box.localToGlobal(
+      Offset(isRtl ? 0 : box.size.width, box.size.height + 2),
+    );
+
+    final value = await AppContextMenu.show(
+      context: context,
+      globalPosition: corner,
+      isRtl: isRtl,
+      entries: [
+        AppContextMenuItem(value: 'archive', label: s['archiveFile']),
+        const AppContextMenuDivider(),
+        AppContextMenuItem(
+          value: 'delete',
+          label: s['delete'],
+          destructive: true,
+        ),
+      ],
+    );
+
+    if (!mounted || value == null) return;
+    if (value == 'archive') await _archive();
+    if (value == 'delete') widget.onDelete();
   }
 
   @override
@@ -111,21 +145,10 @@ class _DocumentPaneState extends State<DocumentPane> {
                     onEditingComplete: _saveTitle,
                   ),
                 ),
-                PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'archive') _archive();
-                    if (value == 'delete') widget.onDelete();
-                  },
-                  itemBuilder: (ctx) => [
-                    PopupMenuItem(
-                      value: 'archive',
-                      child: Text(widget.state.strings['archiveFile']),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Text(widget.state.strings['delete']),
-                    ),
-                  ],
+                _FileMenuButton(
+                  buttonKey: _menuButtonKey,
+                  tooltip: widget.state.strings['fileMenu'],
+                  onPressed: _showFileMenu,
                 ),
               ],
             ),
@@ -139,6 +162,58 @@ class _DocumentPaneState extends State<DocumentPane> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The dots in the corner of a file.
+///
+/// Quiet at rest — a file's own name should be the only thing drawing the eye
+/// on that row — and it wakes up on hover. Lucide at the app's stroke weight,
+/// like every other icon.
+class _FileMenuButton extends StatefulWidget {
+  const _FileMenuButton({
+    required this.buttonKey,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final Key buttonKey;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  State<_FileMenuButton> createState() => _FileMenuButtonState();
+}
+
+class _FileMenuButtonState extends State<_FileMenuButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: widget.tooltip,
+      waitDuration: const Duration(milliseconds: 500),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          key: widget.buttonKey,
+          onTap: widget.onPressed,
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox(
+            width: 26,
+            height: 26,
+            child: Center(
+              child: AppIcon(
+                AppIcons.more,
+                size: 16,
+                color: AppColors.text.withValues(alpha: _hovered ? 0.72 : 0.34),
+              ),
+            ),
+          ),
         ),
       ),
     );

@@ -10,6 +10,9 @@ import './glass_surface.dart';
 import './overlay_dialog_style.dart';
 
 /// Frosted file preview card shared by bring-file and arrange overlays.
+///
+/// Always fills the slot it is given. Content is clipped inside — a long
+/// document cannot change the card's size.
 class OverlayFilePreviewCard extends StatelessWidget {
   const OverlayFilePreviewCard({
     super.key,
@@ -46,49 +49,51 @@ class OverlayFilePreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final child = DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius:
-            BorderRadius.circular(OverlayDialogStyle.fileCardBorderRadius),
-        boxShadow: OverlayDialogStyle.fileCardShadow,
-      ),
-      child: GlassSurface(
-        borderRadius:
-            BorderRadius.circular(OverlayDialogStyle.fileCardBorderRadius),
-        tintColor: accent,
-        tintOpacity: tintOpacity,
-        padding: padding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (topicLabel != null) ...[
+    final child = SizedBox.expand(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius:
+              BorderRadius.circular(OverlayDialogStyle.fileCardBorderRadius),
+          boxShadow: OverlayDialogStyle.fileCardShadow,
+        ),
+        child: GlassSurface(
+          borderRadius:
+              BorderRadius.circular(OverlayDialogStyle.fileCardBorderRadius),
+          tintColor: accent,
+          tintOpacity: tintOpacity,
+          padding: padding,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (topicLabel != null) ...[
+                Text(
+                  topicLabel!,
+                  style: AppTypography.metaStyle.copyWith(
+                    color: accent.withValues(alpha: 0.92),
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+              ],
               Text(
-                topicLabel!,
-                style: AppTypography.metaStyle.copyWith(
-                  color: accent.withValues(alpha: 0.92),
-                  fontWeight: FontWeight.w600,
+                fileName,
+                style: AppTypography.noteTitleStyle.copyWith(
+                  fontSize: titleFontSize,
+                  fontWeight: emphasized ? FontWeight.w600 : FontWeight.w500,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 4),
-            ],
-            Text(
-              fileName,
-              style: AppTypography.noteTitleStyle.copyWith(
-                fontSize: titleFontSize,
-                fontWeight: emphasized ? FontWeight.w600 : FontWeight.w500,
+              SizedBox(height: topicLabel != null ? 10 : 8),
+              Expanded(
+                child: preview == null
+                    ? const SizedBox.shrink()
+                    : OverlayFileContentPreview(preview: preview!),
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            SizedBox(height: topicLabel != null ? 10 : 8),
-            Expanded(
-              child: preview == null
-                  ? const SizedBox.shrink()
-                  : OverlayFileContentPreview(preview: preview!),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

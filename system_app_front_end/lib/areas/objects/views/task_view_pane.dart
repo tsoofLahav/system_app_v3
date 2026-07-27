@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
+import '../../ui/adaptive_dialog.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
+import '../../ui/dialog_field_style.dart';
 import '../tasks/task_row.dart';
 
 class TaskViewPane extends StatelessWidget {
@@ -47,29 +50,36 @@ class TaskViewPane extends StatelessWidget {
         OutlinedButton.icon(
           onPressed: () async {
             final controller = TextEditingController();
-            final name = await showDialog<String>(
+            final name = await showAppDialog<String>(
               context: context,
-              builder: (ctx) => AlertDialog(
+              builder: (ctx) => AppAdaptiveDialogShell(
                 title: Text(state.strings.newSectionTitle(label)),
-                content: TextField(
-                  controller: controller,
-                  decoration: InputDecoration(labelText: state.strings['sectionName']),
-                ),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx), child: Text(state.strings['cancel'])),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text(state.strings['cancel']),
+                  ),
                   FilledButton(
                     onPressed: () => Navigator.pop(ctx, controller.text.trim()),
                     child: Text(state.strings['add']),
                   ),
                 ],
+                child: AppDialogField(
+                  label: state.strings['sectionName'],
+                  child: TextField(
+                    controller: controller,
+                    autofocus: true,
+                    decoration: DialogFieldStyle.decoration(),
+                  ),
+                ),
               ),
             );
             if (name != null && name.isNotEmpty) {
               await state.createViewSection(viewType, name);
             }
           },
-          icon: const Icon(Icons.add),
-          label: Text(state.strings['addSection'] ?? 'Add section'),
+          icon: const AppIcon(AppIcons.add, size: 16),
+          label: Text(state.strings['addSection']),
         ),
       ],
     );

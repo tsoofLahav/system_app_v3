@@ -4,8 +4,9 @@ import '../../core/l10n/app_strings.dart';
 import '../../core/app_state.dart';
 import './automation.dart';
 import '../ui/adaptive_dialog.dart';
+import '../ui/app_icons.dart';
+import '../ui/app_segmented_toggle.dart';
 import '../ui/dialog_field_style.dart';
-import '../ui/glass_surface.dart';
 import '../production_agent/ai_tool_bar.dart';
 
 Future<void> showAutomationDialog({
@@ -107,7 +108,7 @@ class _AutomationDialogState extends State<_AutomationDialog>
     final manual = state.manualAiActions;
     final scheduled = state.scheduledAutomations;
 
-    return AppGlassDialog(
+    return AppAdaptiveDialogShell(
       title: Text(s['automations']),
       width: 520,
       actions: [
@@ -164,40 +165,52 @@ class _AutomationDialogState extends State<_AutomationDialog>
           style: Theme.of(context).textTheme.titleSmall,
         ),
         const SizedBox(height: 8),
-        TextField(
-          controller: _nameController,
-          decoration: DialogFieldStyle.decoration(hintText: s['automationName']),
+        AppDialogField(
+          label: s['automationName'],
+          child: TextField(
+            controller: _nameController,
+            decoration: DialogFieldStyle.decoration(),
+          ),
         ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _promptController,
-          minLines: 2,
-          maxLines: 4,
-          decoration: DialogFieldStyle.decoration(hintText: s['automationPrompt']),
+        const SizedBox(height: DialogFieldStyle.fieldGap),
+        AppDialogField(
+          label: s['automationPrompt'],
+          child: TextField(
+            controller: _promptController,
+            minLines: 2,
+            maxLines: 4,
+            decoration: DialogFieldStyle.decoration(),
+          ),
         ),
         if (_tabs.index == 1) ...[
-          const SizedBox(height: 8),
-          TextField(
-            controller: _scheduleController,
-            decoration: DialogFieldStyle.decoration(
-              hintText: s['scheduleCronHint'],
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          AppDialogField(
+            label: s['schedule'],
+            hint: s['scheduleCronHint'],
+            child: TextField(
+              controller: _scheduleController,
+              decoration: DialogFieldStyle.decoration(),
             ),
           ),
         ],
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: _applyMode,
-          decoration: DialogFieldStyle.decoration(hintText: s['applyMode']),
-          items: [
-            DropdownMenuItem(value: 'review', child: Text(s['applyModeReview'])),
-            DropdownMenuItem(value: 'direct_apply', child: Text(s['applyModeDirect'])),
-            DropdownMenuItem(value: 'notify_only', child: Text(s['applyModeNotify'])),
+        const SizedBox(height: DialogFieldStyle.fieldGap),
+        AppDialogChoiceField<String>(
+          label: s['applyMode'],
+          options: [
+            AppSegmentedOption(value: 'review', label: s['applyModeReview']),
+            AppSegmentedOption(
+              value: 'direct_apply',
+              label: s['applyModeDirect'],
+            ),
+            AppSegmentedOption(
+              value: 'notify_only',
+              label: s['applyModeNotify'],
+            ),
           ],
-          onChanged: (v) {
-            if (v != null) setState(() => _applyMode = v);
-          },
+          selected: _applyMode,
+          onSelected: (mode) => setState(() => _applyMode = mode),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: DialogFieldStyle.fieldGap),
         Align(
           alignment: AlignmentDirectional.centerEnd,
           child: FilledButton(
@@ -252,11 +265,11 @@ class _AutomationList extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                icon: const Icon(Icons.play_arrow),
+                icon: const AppIcon(AppIcons.runNow, size: 18),
                 onPressed: () => onRun(item),
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline),
+                icon: const AppIcon(AppIcons.trash, size: 18),
                 onPressed: () => onDelete(item),
               ),
             ],

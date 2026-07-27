@@ -50,12 +50,38 @@ abstract final class AppColors {
   /// over a dialog still reads as sitting on top of it.
   static const menuTint = Color(0xFFF4F4F5);
 
-  /// Environmental background — always neutral (topic color lives on file panes).
+  /// Environmental background — always neutral under everything else.
   static const neutralCanvasGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [canvasNeutralTop, canvasNeutralBottom],
   );
+
+  /// Soft topic wash from the top of the window.
+  ///
+  /// Painted full-bleed behind the sidebar and the bottom bar so the topic
+  /// colour reads as the room, while chrome floats above it.
+  static LinearGradient topicTopVeil({
+    required Color accent,
+    required bool isMainTopic,
+  }) {
+    final tint = Color.alphaBlend(
+      (isMainTopic ? text : accent).withValues(
+        alpha: isMainTopic ? 0.02 : 0.08,
+      ),
+      Colors.white,
+    );
+    return LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        tint.withValues(alpha: 0.86),
+        tint.withValues(alpha: 0.52),
+        tint.withValues(alpha: 0),
+      ],
+      stops: const [0, 0.22, 0.55],
+    );
+  }
 
   /// Desaturated topic accent for pane fills (borders use [topicPaneBorder]).
   static Color uiAccent(Color accent) =>

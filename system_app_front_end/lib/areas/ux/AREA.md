@@ -75,6 +75,14 @@ The overlay has three bands, walked with up/down:
 
 On commit it writes one `order_index` per file and one `file_layout` on the topic.
 
+### The topic canvas composition
+
+How a topic is laid out on screen, top to bottom — matching v1:
+
+1. **Topic header** floats at the top ([`topic/topic_header.dart`](topic/topic_header.dart)): the topic name (and emoji when it is not the main topic), and the `+` that adds a file. It does not scroll away.
+2. **Files begin immediately under the header**, top-aligned. The canvas reserves the header's height and the bottom bar's; the files never sit vertically centred in leftover space.
+3. The add-file control lives **only** on the header — not also on the bottom bar — so there is one place to look.
+
 ## Sections
 
 | Section | Entry | Main pane |
@@ -98,7 +106,7 @@ The sidebar is navigation only. It never edits content.
 
 | Menu | Where | Purpose |
 |------|-------|---------|
-| Topic / file context menu | Right-click in topic view | Rename, move, archive, change layout |
+| Topic / file context menu | Right-click in topic view, or the `⋯` on a file | Archive, delete — same bubble either way |
 | Text context menu | Right-click inside a document | Formatting, clipboard, emoji |
 | Table cell menu | Right-click in a table cell | Add column, plus text actions |
 | AI actions | Bottom bar | Run a prompt or a saved automation — see [production agent](../production_agent/AREA.md) |
@@ -121,6 +129,7 @@ Shortcuts are user-rebindable. [`shortcuts/`](shortcuts/) owns the catalog of av
 ## Rules
 
 - Section changes swap the main pane only. Never rebuild or hide the sidebar and bottom bar on desktop.
+- On desktop, document insert tools join the centered bottom-bar group beside preferences / automations / AI — same baseline, not above the bar and not pinned to a screen edge.
 - Navigation never mutates content. Opening, browsing, and arranging are separate from editing.
 - Every menu action is also reachable without the menu where it makes sense (shortcut or inline control).
 - Overlay modes (arrange, bring file, previews) must be cancellable without saving.

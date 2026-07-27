@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../areas/files/model/document_codec.dart';
 import '../areas/files/model/document_model.dart';
@@ -132,6 +135,7 @@ class AppState extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
+      await _loadLanguage();
       await _bootstrap.bootstrap();
       final status = await _bootstrap.status();
       workspaceId = status['workspace_id'] as int?;
@@ -164,12 +168,26 @@ class AppState extends ChangeNotifier {
   }
 
   void setLanguage(AppLanguage language) {
+    if (_language == language) return;
     _language = language;
     notifyListeners();
+    unawaited(_persistLanguage(language));
   }
 
   Future<void> toggleLanguage() async {
     setLanguage(_language == AppLanguage.en ? AppLanguage.he : AppLanguage.en);
+  }
+
+  static const _languagePrefsKey = 'app_language';
+
+  Future<void> _persistLanguage(AppLanguage language) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_languagePrefsKey, language.name);
+  }
+
+  Future<void> _loadLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    _language = AppLanguage.fromStorage(prefs.getString(_languagePrefsKey));
   }
 
   String topicDisplayName(Topic topic) => strings.displayTopicName(topic.name);
@@ -438,7 +456,14 @@ class AppState extends ChangeNotifier {
 
   Future<void> _refreshTopicFiles(Topic topic) async {
     final files = await _files.listFilesForTopic(topic.id);
-    selectedDetail = TopicDetail(topic: topic, files: files);
+    // Prefer the topic already in state. Callers often hand in a snapshot from
+    // when a dialog opened; using that here would undo a layout (or rename)
+    // that finished just before this refresh.
+    final fresh = allTopics.where((t) => t.id == topic.id).firstOrNull ??
+        (selectedDetail?.topic.id == topic.id ? selectedDetail!.topic : null) ??
+        topic;
+    selectedDetail = TopicDetail(topic: fresh, files: files);
+    if (selectedTopic?.id == fresh.id) selectedTopic = fresh;
     notifyListeners();
   }
 

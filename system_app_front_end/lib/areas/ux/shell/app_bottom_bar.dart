@@ -5,11 +5,13 @@ import '../../../core/platform/app_form_factor.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
+import '../../ui/confirm_dialog.dart';
 import '../../ui/glass_surface.dart';
-import '../create_topic/add_file_dialog.dart';
 import '../arrange/file_arrange_overlay.dart';
 import '../../production_agent/ai_tool_bar.dart';
 import '../../automations/automation_dialog.dart';
+import '../../files/editor/document_editor_controller.dart';
+import '../../files/editor/document_insert_bar.dart';
 import './preferences_dialog.dart';
 
 abstract final class AppBottomBarMetrics {
@@ -36,12 +38,6 @@ class AppBottomBar extends StatelessWidget {
 
   final AppState state;
 
-  bool get _showAddFile =>
-      !isPhoneLayout &&
-      !state.isArchiveMode &&
-      !state.isViewMode &&
-      state.selectedDetail != null;
-
   bool get _showArrange =>
       !isPhoneLayout &&
       !state.isArchiveMode &&
@@ -53,8 +49,13 @@ class AppBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Rebuild for both app state and editor focus, so the insert segment
+    // appears in the centered group when a document is active.
     return ListenableBuilder(
-      listenable: state,
+      listenable: Listenable.merge([
+        state,
+        DocumentEditorRegistry.notifier,
+      ]),
       builder: (context, _) => _buildBar(context),
     );
   }
@@ -62,6 +63,7 @@ class AppBottomBar extends StatelessWidget {
   Widget _buildBar(BuildContext context) {
     final s = state.strings;
     final canAi = state.canUseAiTools;
+    final hasEditor = DocumentEditorRegistry.active != null;
 
     return SafeArea(
       top: false,
@@ -74,6 +76,10 @@ class AppBottomBar extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (hasEditor) ...[
+                DocumentInsertBar(state: state, embedded: true),
+                const SizedBox(width: 8),
+              ],
               GlassBarSegment(
                 height: AppBottomBarMetrics.barHeight,
                 padding: _segmentPadding,
@@ -96,17 +102,12 @@ class AppBottomBar extends StatelessWidget {
                         state: state,
                       ),
                     ),
-                    if (_showAddFile)
-                      _BarIconButton(
-                        tooltip: s['addFile'],
-                        icon: AppIcons.addFile,
-                        onPressed: () => _addFile(context),
-                      ),
                     if (_showArrange)
                       _BarIconButton(
                         tooltip: s['arrangeFiles'],
                         icon: AppIcons.arrange,
-                        onPressed: () => showFileArrangeOverlay(context, state),
+                        onPressed: () =>
+                            showFileArrangeOverlay(context, state),
                       ),
                     if (_showArchiveDelete)
                       _BarIconButton(
@@ -180,18 +181,6 @@ class AppBottomBar extends StatelessWidget {
     );
   }
 
-  Future<void> _addFile(BuildContext context) async {
-    final topic = state.selectedTopic;
-    if (topic == null) return;
-    final result = await showAddFileDialog(
-      context: context,
-      state: state,
-      topic: topic,
-    );
-    if (result == null) return;
-    await state.addFile(topic: topic, name: result.name);
-  }
-
   Future<void> _handleArchiveDelete(BuildContext context) async {
     if (!state.archiveDeleteMode) {
       state.toggleArchiveDeleteMode();
@@ -207,27 +196,17 @@ class AppBottomBar extends StatelessWidget {
   Future<void> _confirmArchiveDelete(BuildContext context) async {
     final s = state.strings;
     final count = state.archiveDeleteSelection.length;
-    final ok = await showDialog<bool>(
+    final ok = await showAppConfirmDialog(
       context: context,
-      builder: (ctx) => AppGlassDialog(
-        title: Text(s['archiveDeleteTitle']),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(s['cancel']),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(s['delete']),
-          ),
-        ],
-        child: Text(s.archiveDeleteBody(count)),
-      ),
+      title: s['archiveDeleteTitle'],
+      message: s.archiveDeleteBody(count),
+      confirmLabel: s['delete'],
+      cancelLabel: s['cancel'],
+      destructive: true,
     );
-    if (ok != true || !context.mounted) return;
+    if (!ok || !context.mounted) return;
     await state.deleteSelectedArchiveFiles();
   }
-
 }
 
 class _BarIconButton extends StatelessWidget {
@@ -260,4 +239,3 @@ class _BarIconButton extends StatelessWidget {
     );
   }
 }
-

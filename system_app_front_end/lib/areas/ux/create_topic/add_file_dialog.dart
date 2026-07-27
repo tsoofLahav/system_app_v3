@@ -4,7 +4,6 @@ import '../../../core/app_state.dart';
 import '../../files/data/topic.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/dialog_field_style.dart';
-import '../../ui/glass_surface.dart';
 
 /// Only a name. How prominent the file is comes from where it sits in the
 /// topic's order, which the user changes by arranging — not from a choice made
@@ -55,7 +54,7 @@ class _AddFileDialogState extends State<_AddFileDialog> {
   Widget build(BuildContext context) {
     final s = widget.state.strings;
 
-    return AppGlassDialog(
+    return AppAdaptiveDialogShell(
       title: Text(s['addFile']),
       actions: [
         TextButton(
@@ -64,11 +63,14 @@ class _AddFileDialogState extends State<_AddFileDialog> {
         ),
         FilledButton(onPressed: _submit, child: Text(s['create'])),
       ],
-      child: TextField(
-        controller: _nameController,
-        autofocus: true,
-        decoration: DialogFieldStyle.decoration(hintText: s['fileName']),
-        onSubmitted: (_) => _submit(),
+      child: AppDialogField(
+        label: s['fileName'],
+        child: TextField(
+          controller: _nameController,
+          autofocus: true,
+          decoration: DialogFieldStyle.decoration(),
+          onSubmitted: (_) => _submit(),
+        ),
       ),
     );
   }

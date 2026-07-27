@@ -22,6 +22,10 @@ abstract final class AppTypography {
     FontWeight? fontWeight,
     TextDecoration? decoration,
   }) {
+    // Hebrew uses the system SF Hebrew face (with fallbacks), matching v1.
+    // Letter spacing is always 0 — negative tracking mangles Hebrew glyphs.
+    // Styles must be read per build, never cached as `static final`, or a
+    // language switch leaves Inter under Hebrew text.
     if (language == AppLanguage.he) {
       return TextStyle(
         fontFamily: 'SF Hebrew',
@@ -35,7 +39,7 @@ abstract final class AppTypography {
         fontWeight: fontWeight ?? weight,
         color: color ?? AppColors.text,
         height: height,
-        letterSpacing: letterSpacing,
+        letterSpacing: 0,
         decoration: decoration,
       );
     }
@@ -54,7 +58,7 @@ abstract final class AppTypography {
   static TextStyle get pageTitleStyle => _style(
     size: 19,
     height: 1.3,
-    letterSpacing: language == AppLanguage.he ? 0 : -0.2,
+    letterSpacing: -0.2,
     fontWeight: titleWeight,
   );
 
@@ -62,7 +66,7 @@ abstract final class AppTypography {
   static TextStyle get noteTitleStyle => _style(
     size: 14,
     height: 1.3,
-    letterSpacing: language == AppLanguage.he ? 0 : -0.1,
+    letterSpacing: -0.1,
     fontWeight: titleWeight,
   );
 
@@ -72,6 +76,22 @@ abstract final class AppTypography {
 
   /// Body, inputs, tasks, checklist items — smaller.
   static TextStyle get noteBodyStyle => _style(size: 12.5, height: 1.55);
+
+  /// A paragraph as it reads inside a document — tighter than a bare body
+  /// line, because paragraphs sit one under another with almost no gap.
+  static TextStyle get documentParagraphStyle =>
+      noteBodyStyle.copyWith(height: 1.35);
+
+  /// A heading inside a document. Level 1 is the largest; each level down
+  /// loses 2px, and level 5 lands back on the paragraph size.
+  static TextStyle documentHeadingStyle(int level) {
+    final clamped = level.clamp(1, 5);
+    return noteTitleStyle.copyWith(
+      fontSize: 24 - clamped * 2,
+      height: 1.3,
+      fontWeight: FontWeight.w600,
+    );
+  }
 
   /// Dense list bullets and list item fields.
   static TextStyle get listItemStyle => _style(size: 12.5, height: 1.38);

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
 import '../../../core/app_state.dart';
 import '../../files/data/topic.dart';
 import '../topic/topic_appearance.dart';
+import '../../ui/adaptive_dialog.dart';
+import '../../ui/app_segmented_toggle.dart';
 import '../../ui/dialog_field_style.dart';
-import '../../ui/glass_surface.dart';
-import './icon_category_picker.dart';
+import './topic_color_dialog.dart';
+import './topic_emoji_dialog.dart';
 
 class CreateTopicResult {
   CreateTopicResult({
@@ -81,7 +82,7 @@ class _CreateTopicDialogState extends State<CreateTopicDialog> {
     final s = widget.state.strings;
     final isEdit = widget.isEdit;
 
-    return AppGlassDialog(
+    return AppAdaptiveDialogShell(
       title: Text(isEdit ? s['editTopic'] : s['newTopic']),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(s['cancel'])),
@@ -109,42 +110,86 @@ class _CreateTopicDialogState extends State<CreateTopicDialog> {
           child: Text(isEdit ? s['save'] : s['create']),
         ),
       ],
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppDialogField(
+            label: s['name'],
+            child: TextField(
               controller: _nameController,
-              decoration: DialogFieldStyle.decoration(hintText: s['topicName']),
+              decoration: DialogFieldStyle.decoration(),
               autofocus: !isEdit,
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              children: ['project', 'process', 'area', 'other'].map((type) {
-                final selected = _type == type;
-                return ChoiceChip(
-                  label: Text(s.topicTypeLabel(type)),
-                  selected: selected,
-                  onSelected: isEdit
-                      ? null
-                      : (v) {
-                          if (v) setState(() => _type = type);
-                        },
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 12),
-            IconCategoryPicker(
-              selectedId: _icon,
-              onSelected: (icon) => setState(() => _icon = icon),
-            ),
-            const SizedBox(height: 12),
-            BlockPicker(
-              pickerColor: _pickerColor,
-              onColorChanged: (c) => setState(() => _pickerColor = c),
-            ),
-          ],
+          ),
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          AppDialogChoiceField<String>(
+            label: s['type'],
+            // A topic's type decides where it files itself in the sidebar, so
+            // it is settled once, at creation.
+            enabled: !isEdit,
+            options: [
+              for (final type in const ['project', 'process', 'area', 'other'])
+                AppSegmentedOption(value: type, label: s.topicTypeLabel(type)),
+            ],
+            selected: _type,
+            onSelected: (type) => setState(() => _type = type),
+          ),
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          AppDialogPickerField(
+            label: s['emoji'],
+            preview: Text(_icon, style: const TextStyle(fontSize: 15)),
+            valueLabel: s['chooseEmoji'],
+            onTap: _pickEmoji,
+          ),
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          AppDialogPickerField(
+            label: s['color'],
+            preview: _ColorDot(color: _pickerColor),
+            valueLabel: s['chooseColor'],
+            onTap: _pickColor,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickEmoji() async {
+    final picked = await showTopicEmojiDialog(
+      context: context,
+      strings: widget.state.strings,
+      selected: _icon,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _icon = picked);
+  }
+
+  Future<void> _pickColor() async {
+    final picked = await showTopicColorDialog(
+      context: context,
+      strings: widget.state.strings,
+      selectedHex: _colorHex,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _pickerColor = TopicAppearance.colorFromHex(picked));
+  }
+}
+
+class _ColorDot extends StatelessWidget {
+  const _ColorDot({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 15,
+      height: 15,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.7),
+          width: 0.8,
         ),
       ),
     );

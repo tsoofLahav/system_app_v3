@@ -9,6 +9,7 @@ import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/adaptive_dialog.dart';
+import '../../ui/confirm_dialog.dart';
 import '../../ui/glass_surface.dart';
 import '../widgets/topic_emoji.dart';
 import '../widgets/disclosure_icon.dart';
@@ -573,7 +574,7 @@ class _TopicSectionState extends State<_TopicSection> {
   }
 
   Future<void> _editTopic(BuildContext context, Topic topic) async {
-    final result = await showDialog<EditTopicResult>(
+    final result = await showAppDialog<EditTopicResult>(
       context: context,
       builder: (_) => CreateTopicDialog(state: widget.state, topic: topic),
     );
@@ -588,24 +589,15 @@ class _TopicSectionState extends State<_TopicSection> {
 
   Future<void> _confirmDelete(BuildContext context, Topic topic) async {
     final s = widget.state.strings;
-    final ok = await showDialog<bool>(
+    final ok = await showAppConfirmDialog(
       context: context,
-      builder: (ctx) => AppGlassDialog(
-        title: Text(s['deleteTopicTitle']),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(s['cancel']),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(s['delete']),
-          ),
-        ],
-        child: Text(s.deleteTopicMessage(topic.name)),
-      ),
+      title: s['deleteTopicTitle'],
+      message: s.deleteTopicMessage(topic.name),
+      confirmLabel: s['delete'],
+      cancelLabel: s['cancel'],
+      destructive: true,
     );
-    if (ok == true) {
+    if (ok) {
       await widget.state.deleteTopic(topic);
     }
   }

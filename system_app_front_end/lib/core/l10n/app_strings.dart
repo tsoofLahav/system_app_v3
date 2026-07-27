@@ -183,6 +183,7 @@ class AppStrings {
     'retry': 'Retry',
     'selectTopic': 'Select a topic',
     'noFilesYet': 'No files yet. Add a file to get started.',
+    'topicNoFiles': 'No files on screen. Use + above to add one.',
     'moreFiles': 'More files ({count})',
     'layout': 'Layout',
     'arrangeFiles': 'Arrange files',
@@ -269,6 +270,7 @@ class AppStrings {
     'deleteTopicBody': 'Delete "{name}" and its files?',
     'deleteFileTitle': 'Delete file?',
     'deleteFileBody': 'Delete "{name}"?',
+    'fileMenu': 'File actions',
     'archiveFile': 'Archive file',
     'archiveFileTitle': 'Archive file?',
     'archiveFileBody':
@@ -556,6 +558,7 @@ class AppStrings {
     'retry': 'נסה שוב',
     'selectTopic': 'בחר נושא',
     'noFilesYet': 'אין קבצים עדיין. הוסף קובץ כדי להתחיל.',
+    'topicNoFiles': 'אין קבצים על המסך. השתמש ב־+ למעלה כדי להוסיף.',
     'moreFiles': 'קבצים נוספים ({count})',
     'layout': 'פריסה',
     'arrangeFiles': 'סידור קבצים',
@@ -642,6 +645,7 @@ class AppStrings {
     'deleteTopicBody': 'למחוק את "{name}" ואת הקבצים שלו?',
     'deleteFileTitle': 'למחוק קובץ?',
     'deleteFileBody': 'למחוק את "{name}"?',
+    'fileMenu': 'פעולות על הקובץ',
     'archiveFile': 'העבר לארכיון',
     'archiveFileTitle': 'להעביר לארכיון?',
     'archiveFileBody':

@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import './app_colors.dart';
+import './app_icons.dart';
 import './app_typography.dart';
 import './bilingual_layout.dart';
 
@@ -476,7 +477,7 @@ class GlassCircleButton extends StatelessWidget {
               width: size,
               height: size,
               child: Center(
-                child: Icon(
+                child: AppIcon(
                   icon,
                   size: iconSize,
                   color: AppColors.text.withValues(alpha: 0.78),

@@ -6,10 +6,9 @@ import '../../ui/glass_surface.dart';
 import '../archive/archive_topic_view.dart';
 import '../sidebar/app_sidebar.dart';
 import '../../objects/views/task_view_pane.dart';
+import '../topic/topic_appearance.dart';
 import '../topic/topic_view.dart';
 import '../widgets/main_pane_loader.dart';
-import '../../files/editor/document_editor_controller.dart';
-import '../../files/editor/document_insert_bar.dart';
 import './app_bottom_bar.dart';
 
 class DesktopAppShell extends StatefulWidget {
@@ -26,119 +25,141 @@ class _DesktopAppShellState extends State<DesktopAppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final state = widget.state;
-    final contentInset = AppSidebarMetrics.contentInset(_sidebarWidth);
+    return ListenableBuilder(
+      listenable: widget.state,
+      builder: (context, _) {
+        final state = widget.state;
+        final contentInset = AppSidebarMetrics.contentInset(_sidebarWidth);
+        final topic = state.selectedDetail?.topic ?? state.selectedTopic;
+        final accent = topic == null ? null : TopicAppearance.accentFor(topic);
+        final isMain = topic?.isMain ?? true;
 
-    return Scaffold(
-      backgroundColor: AppColors.canvasNeutralBottom,
-      body: Stack(
-      fit: StackFit.expand,
-      children: [
-        const Positioned.fill(child: AppShellCanvas()),
-        Positioned.fill(
-          child: Padding(
-            padding: EdgeInsetsDirectional.only(start: contentInset),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(
-                  child: !state.appReady
-                      ? const MainPaneLoader()
-                      : AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
-                          switchInCurve: Curves.easeOut,
-                          switchOutCurve: Curves.easeIn,
-                          child: state.isArchiveMode
-                              ? ArchiveTopicView(
-                                  key: ValueKey(
-                                    'archive-${state.selectedArchiveTopic?.id}',
-                                  ),
-                                  state: state,
-                                )
-                              : state.isViewMode && state.viewPaneReady
-                              ? TaskViewPane(
-                                  key: ValueKey(
-                                    'view-${state.selectedViewType}',
-                                  ),
-                                  state: state,
-                                )
-                              : TopicView(
-                                  key: ValueKey(
-                                    'topic-${state.selectedDetail?.topic.id ?? 'none'}',
-                                  ),
-                                  state: state,
-                                ),
+        return Scaffold(
+          backgroundColor: AppColors.canvasNeutralBottom,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(
+                child: AppShellCanvas(topicAccent: accent, isMainTopic: isMain),
+              ),
+              Positioned.fill(
+                child: Padding(
+                  padding: EdgeInsetsDirectional.only(start: contentInset),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned.fill(
+                        child: !state.appReady
+                            ? const MainPaneLoader()
+                            : AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 200),
+                                switchInCurve: Curves.easeOut,
+                                switchOutCurve: Curves.easeIn,
+                                child: state.isArchiveMode
+                                    ? ArchiveTopicView(
+                                        key: ValueKey(
+                                          'archive-${state.selectedArchiveTopic?.id}',
+                                        ),
+                                        state: state,
+                                      )
+                                    : state.isViewMode && state.viewPaneReady
+                                    ? TaskViewPane(
+                                        key: ValueKey(
+                                          'view-${state.selectedViewType}',
+                                        ),
+                                        state: state,
+                                      )
+                                    : TopicView(
+                                        key: ValueKey(
+                                          'topic-${state.selectedDetail?.topic.id ?? 'none'}',
+                                        ),
+                                        state: state,
+                                      ),
+                              ),
+                      ),
+                      if (state.isViewMode && state.loading)
+                        const Positioned(
+                          left: 0,
+                          right: 0,
+                          top: 0,
+                          child: LinearProgressIndicator(
+                            minHeight: 2,
+                            backgroundColor: Colors.transparent,
+                          ),
                         ),
-                ),
-                if (state.isViewMode && state.loading)
-                  const Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    child: LinearProgressIndicator(
-                      minHeight: 2,
-                      backgroundColor: Colors.transparent,
-                    ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: AppBottomBar(state: state),
+                      ),
+                    ],
                   ),
-                ListenableBuilder(
-                  listenable: DocumentEditorRegistry.notifier,
-                  builder: (context, _) {
-                    if (DocumentEditorRegistry.active == null) {
-                      return const SizedBox.shrink();
-                    }
-                    return Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: AppBottomBarMetrics.barHeight +
-                          AppBottomBarMetrics.floatMargin * 2,
-                      child: DocumentInsertBar(state: state),
-                    );
+                ),
+              ),
+              PositionedDirectional(
+                start: AppSidebarMetrics.outerStart,
+                top: AppSidebarMetrics.outerVertical,
+                bottom: AppSidebarMetrics.outerVertical,
+                child: AppSidebar(
+                  state: state,
+                  width: _sidebarWidth,
+                  onWidthChanged: (width) {
+                    if (_sidebarWidth == width) return;
+                    setState(() => _sidebarWidth = width);
                   },
                 ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: AppBottomBar(state: state),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ),
-        PositionedDirectional(
-          start: AppSidebarMetrics.outerStart,
-          top: AppSidebarMetrics.outerVertical,
-          bottom: AppSidebarMetrics.outerVertical,
-          child: AppSidebar(
-            state: state,
-            width: _sidebarWidth,
-            onWidthChanged: (width) {
-              if (_sidebarWidth == width) return;
-              setState(() => _sidebarWidth = width);
-            },
-          ),
-        ),
-      ],
-      ),
+        );
+      },
     );
   }
 }
 
 /// Full-window canvas shared by desktop and phone shells.
+///
+/// The topic wash is painted here, edge to edge, so it continues behind the
+/// sidebar. Sidebar glass and the bottom bar sit above it in the shell stack.
 class AppShellCanvas extends StatelessWidget {
-  const AppShellCanvas({super.key});
+  const AppShellCanvas({
+    super.key,
+    this.topicAccent,
+    this.isMainTopic = true,
+  });
+
+  final Color? topicAccent;
+  final bool isMainTopic;
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       fit: StackFit.expand,
-      children: const [
-        DecoratedBox(
+      children: [
+        const DecoratedBox(
           decoration: BoxDecoration(
             gradient: AppColors.neutralCanvasGradient,
           ),
         ),
-        Positioned(
+        if (topicAccent != null)
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: 220,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: AppColors.topicTopVeil(
+                    accent: topicAccent!,
+                    isMainTopic: isMainTopic,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        const Positioned(
           left: 0,
           right: 0,
           bottom: 0,

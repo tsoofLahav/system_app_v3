@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../../core/app_state.dart';
 import '../automations/automation.dart';
 import '../ux/shortcuts/shortcut_catalog.dart';
+import '../ui/adaptive_dialog.dart';
 import '../ui/app_colors.dart';
 import '../ui/app_icons.dart';
+import '../ui/dialog_field_style.dart';
 import '../ui/glass_surface.dart';
 import './text_diff_dialog.dart';
 
@@ -64,9 +66,9 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
   }
 
   final controller = TextEditingController();
-  final prompt = await showDialog<String>(
+  final prompt = await showAppDialog<String>(
     context: context,
-    builder: (ctx) => AppGlassDialog(
+    builder: (ctx) => AppAdaptiveDialogShell(
       title: Text(s['aiAgent']),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s['cancel'])),
@@ -75,11 +77,14 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
           child: Text(s['run']),
         ),
       ],
-      child: TextField(
-        controller: controller,
-        autofocus: true,
-        maxLines: 4,
-        decoration: InputDecoration(hintText: s['aiAgentPromptHint']),
+      child: AppDialogField(
+        label: s['aiAgentPromptHint'],
+        child: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 4,
+          decoration: DialogFieldStyle.decoration(),
+        ),
       ),
     ),
   );

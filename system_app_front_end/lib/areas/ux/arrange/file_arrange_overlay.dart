@@ -251,9 +251,13 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   }
 
   Future<void> _loadPreviews() async {
+    final files = [..._draft.ordered];
+    final previews = <int, OverlayFilePreviewData>{
+      for (final file in files) file.id: OverlayFilePreviewData.fromFile(file),
+    };
     if (!mounted) return;
     setState(() {
-      _previewsByFileId = {};
+      _previewsByFileId = previews;
       _previewsLoaded = true;
     });
   }
@@ -272,8 +276,14 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
     if (_saving) return;
     setState(() => _saving = true);
     await widget.state.setLayoutForTopic(widget.topic, _draft.layoutId);
+    // Prefer the topic state just wrote — the overlay still holds the snapshot
+    // from when it opened, whose layout is the old one.
+    final topic = widget.state.allTopics
+            .where((t) => t.id == widget.topic.id)
+            .firstOrNull ??
+        widget.topic;
     final error = await widget.state.reorderTopicFiles(
-      widget.topic,
+      topic,
       ordered: _draft.ordered,
     );
     if (!mounted) return;

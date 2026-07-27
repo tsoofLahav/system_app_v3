@@ -8,6 +8,7 @@ import '../../ui/glass_surface.dart';
 import '../create_topic/add_file_dialog.dart';
 import '../sidebar/app_sidebar.dart';
 import '../../objects/views/task_view_pane.dart';
+import '../topic/topic_appearance.dart';
 import '../topic/topic_view.dart';
 import '../widgets/main_pane_loader.dart';
 import '../../automations/automation_dialog.dart';
@@ -113,7 +114,21 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
           body: Stack(
             fit: StackFit.expand,
             children: [
-              const Positioned.fill(child: AppShellCanvas()),
+              Positioned.fill(
+                child: AppShellCanvas(
+                  topicAccent: (state.selectedDetail?.topic ??
+                              state.selectedTopic) ==
+                          null
+                      ? null
+                      : TopicAppearance.accentFor(
+                          state.selectedDetail?.topic ?? state.selectedTopic!,
+                        ),
+                  isMainTopic:
+                      (state.selectedDetail?.topic ?? state.selectedTopic)
+                              ?.isMain ??
+                          true,
+                ),
+              ),
               Positioned.fill(
                 child: SafeArea(
                   top: false,

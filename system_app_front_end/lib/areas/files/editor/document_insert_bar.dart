@@ -7,9 +7,17 @@ import './document_editor_controller.dart';
 import '../../ux/shell/app_bottom_bar.dart';
 
 class DocumentInsertBar extends StatelessWidget {
-  const DocumentInsertBar({super.key, required this.state});
+  const DocumentInsertBar({
+    super.key,
+    required this.state,
+    this.embedded = false,
+  });
 
   final AppState state;
+
+  /// When true, the bar sits beside the bottom tools on the same baseline —
+  /// no SafeArea, no centering of its own.
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
@@ -19,42 +27,40 @@ class DocumentInsertBar extends StatelessWidget {
         final controller = DocumentEditorRegistry.active;
         if (controller == null) return const SizedBox.shrink();
 
+        final segment = GlassBarSegment(
+          height: AppBottomBarMetrics.barHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _InsertButton(
+                icon: AppIcons.uploadDetails,
+                tooltip: state.strings['paragraph'],
+                onPressed: () => controller.insertAtBlock('paragraph'),
+              ),
+              // One list option only. Points vs numbers is a property of
+              // an existing list, switched from its right-click menu.
+              _InsertButton(
+                icon: AppIcons.smartList,
+                tooltip: state.strings['list'],
+                onPressed: () => controller.insertAtBlock('bullet_list'),
+              ),
+              _InsertButton(
+                icon: AppIcons.layout,
+                tooltip: state.strings['table'],
+                onPressed: () => controller.insertAtBlock('table'),
+              ),
+            ],
+          ),
+        );
+
+        if (embedded) return segment;
+
         return SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.only(
-              left: 20,
-              right: 20,
-              bottom: 4,
-            ),
-            child: Center(
-              child: GlassBarSegment(
-                height: AppBottomBarMetrics.barHeight,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _InsertButton(
-                      icon: AppIcons.uploadDetails,
-                      tooltip: state.strings['paragraph'],
-                      onPressed: () => controller.insertAtBlock('paragraph'),
-                    ),
-                    // One list option only. Points vs numbers is a property of
-                    // an existing list, switched from its right-click menu.
-                    _InsertButton(
-                      icon: AppIcons.smartList,
-                      tooltip: state.strings['list'],
-                      onPressed: () => controller.insertAtBlock('bullet_list'),
-                    ),
-                    _InsertButton(
-                      icon: AppIcons.layout,
-                      tooltip: state.strings['table'],
-                      onPressed: () => controller.insertAtBlock('table'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            padding: const EdgeInsets.only(left: 20, right: 20, bottom: 4),
+            child: Center(child: segment),
           ),
         );
       },

@@ -229,7 +229,7 @@ class _RichListEditorState extends State<RichListEditor> {
                   width: 28,
                   child: Text(
                     ordered ? '${i + 1}.' : '•',
-                    style: AppTypography.listItemStyle,
+                    style: AppTypography.documentParagraphStyle,
                   ),
                 ),
                 Expanded(
@@ -237,7 +237,7 @@ class _RichListEditorState extends State<RichListEditor> {
                     controller: _controllers[i],
                     focusNode: _focusNodes[i],
                     segmentId: listItemSegmentId(widget.node.id, i),
-                    style: AppTypography.listItemStyle,
+                    style: AppTypography.documentParagraphStyle,
                     maxLines: null,
                     minLines: 1,
                     onChanged: (_) => _emit(),

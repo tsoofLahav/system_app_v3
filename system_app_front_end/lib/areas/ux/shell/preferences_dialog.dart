@@ -5,7 +5,7 @@ import '../../../core/l10n/app_language.dart';
 import '../../../core/platform/app_form_factor.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_segmented_toggle.dart';
-import '../../ui/app_typography.dart';
+import '../../ui/dialog_field_style.dart';
 import './shortcut_preferences_dialog.dart';
 
 Future<void> showPreferencesDialog({
@@ -41,11 +41,10 @@ class PreferencesDialog extends StatelessWidget {
           ],
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(s['language'], style: AppTypography.metaStyle),
-              const SizedBox(height: 8),
-              AppSegmentedToggle<AppLanguage>(
+              AppDialogChoiceField<AppLanguage>(
+                label: s['language'],
                 options: [
                   AppSegmentedOption(
                     value: AppLanguage.en,
@@ -60,19 +59,19 @@ class PreferencesDialog extends StatelessWidget {
                 onSelected: state.setLanguage,
               ),
               if (!isPhoneLayout) ...[
-                const SizedBox(height: 24),
-                Text(s['shortcuts'], style: AppTypography.metaStyle),
-                const SizedBox(height: 4),
-                Text(s['shortcutHint'], style: AppTypography.noteBodyStyle),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: FilledButton(
-                    onPressed: () => showShortcutPreferencesDialog(
-                      context: context,
-                      state: state,
+                const SizedBox(height: 22),
+                AppDialogField(
+                  label: s['shortcuts'],
+                  hint: s['shortcutHint'],
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: FilledButton(
+                      onPressed: () => showShortcutPreferencesDialog(
+                        context: context,
+                        state: state,
+                      ),
+                      child: Text(s['shortcutManage']),
                     ),
-                    child: Text(s['shortcutManage']),
                   ),
                 ),
               ],

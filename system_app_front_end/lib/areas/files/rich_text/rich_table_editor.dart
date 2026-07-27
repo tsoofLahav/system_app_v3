@@ -308,7 +308,7 @@ class _RichTableEditorState extends State<RichTableEditor> {
                                 controller: _controllers[r][c],
                                 focusNode: _focusAt(r, c),
                                 segmentId: tableCellSegmentId(widget.node.id, r, c),
-                                style: AppTypography.noteBodyStyle,
+                                style: AppTypography.documentParagraphStyle,
                                 hintText: r == 0 && c == 0 ? 'Cell' : null,
                                 maxLines: null,
                                 minLines: 1,

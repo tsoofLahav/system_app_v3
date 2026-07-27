@@ -56,7 +56,9 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   String? _dragOriginSegment;
   bool _draggingAcrossParts = false;
 
-  static final _paragraphStyle = AppTypography.noteBodyStyle.copyWith(height: 1.35);
+  // Read per build, never cached: the styles carry the font of the current
+  // language, and a field caching one would keep Inter under Hebrew text.
+  TextStyle get _paragraphStyle => AppTypography.documentParagraphStyle;
 
   AppStrings get _strings => widget.state.strings;
 
@@ -649,10 +651,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         controller: controller,
         focusNode: _focusFor(block.id),
         segmentId: paragraphSegmentId(block.id),
-        style: AppTypography.noteTitleStyle.copyWith(
-          fontSize: 24 - (block.level * 2),
-          height: 1.3,
-        ),
+        style: AppTypography.documentHeadingStyle(block.level),
         maxLines: null,
         onChanged: (_) {
           _focusedBlockIndex = index;

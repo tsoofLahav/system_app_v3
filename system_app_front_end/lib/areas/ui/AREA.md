@@ -16,10 +16,10 @@ Loudest last:
 
 | Surface | Treatment |
 |---------|-----------|
-| **Canvas** — the window behind everything | Near-white neutral gradient, no topic colour |
+| **Canvas** — the window behind everything | Near-white neutral gradient, with the topic's soft top wash painted full-bleed (including behind the sidebar) |
 | **File panes** — the working surfaces | Topic colour at a gentle strength, thin saturated topic border |
-| **Sidebar** | Soft glass, present but never dominant |
-| **Floating chrome** — bottom bar, insert bar, pills | Glass or solid white with a lift shadow |
+| **Sidebar** | Soft glass floating above the canvas — never paints the topic wash itself |
+| **Floating chrome** — bottom bar, insert bar, pills | Glass or solid white with a lift shadow; insert tools join the centered bottom-bar group on the same baseline |
 | **Dialogs** | Glass panels over a light scrim |
 | **Context menus** | The topmost layer — cooler frost, tighter rows |
 
@@ -102,7 +102,7 @@ All of it comes from [`app_typography.dart`](app_typography.dart). One family, f
 
 Weights are only **w400 / w500 / w600**. Bold is something the user applies to their own text, not something the interface does to itself.
 
-**Font by language, not by content:** English gets Inter (`google_fonts`); Hebrew gets `SF Hebrew` with system fallbacks, and letter spacing forced to 0 because negative tracking mangles Hebrew. `AppTypography.configure` is called when the language changes.
+**Font by language, not by content:** English gets Inter (`google_fonts`); Hebrew gets **SF Hebrew** with system fallbacks (`.SF Hebrew`, `Arial Hebrew`, `Noto Sans Hebrew`), and letter spacing forced to 0 because negative tracking mangles Hebrew. `AppTypography.configure` is called when the language changes. Document styles must be **read per build**, never cached as `static final`, or a language switch leaves Inter under Hebrew text.
 
 Chrome under 12px exists, but only for labels that must not be read as content: context menu rows at 11.5, popup menus and sidebar items at 11, the `AI` badge at 9.
 
@@ -165,24 +165,37 @@ Marking and selection are **gentle by rule**: a translucent fill or a hairline r
 
 ## Dialogs and menus
 
+The preferences dialog is the **reference** glass dialog. Every other dialog uses the same shell and the same field language.
+
 | Kind | Widget | Shape |
 |------|--------|-------|
-| Standard dialog | `AppGlassDialog` | Width 420, radius 22, padding 20/18/20/14, hairline dividers |
+| Standard dialog | `AppAdaptiveDialogShell` → `AppGlassDialog` | Width 420, radius 22, padding 20/18/20/14, hairline dividers |
 | Phone dialog | `AppAdaptiveDialogShell` | Radius 20, inset 16×24, tint 0.94 |
+| Confirm | `showAppConfirmDialog` | Same shell; destructive answers use amber-brown text |
 | Full-screen overlay | `OverlayDialogShell` + `OverlayDialogStyle` | Scrim black 18%, cards radius 14 |
-| Context menu (right-click) | `../ux/widgets/app_context_menu.dart` | Bubble radius 12, rows 28 high, 11.5px labels, `menuTint` frost, highlight in `primary` |
+| Context menu (right-click **and** file `⋯`) | `../ux/widgets/app_context_menu.dart` | Bubble radius 12, rows 28 high, 11.5px labels, `menuTint` frost, highlight in `primary` |
 | Hover bubble | `../ux/widgets/details_hover_bubble.dart` | Radius 10, blur 18, white 82%, max 320×240 |
-| Native popup menu | `app_theme.dart` `popupMenuTheme` | `noteTop` 0.94, radius 16, 11px |
+| Native popup menu | Avoid — use `AppContextMenu` | — |
 
-Route every dialog through [`adaptive_dialog.dart`](adaptive_dialog.dart) — it picks the phone or desktop shell. Fields inside dialogs use [`dialog_field_style.dart`](dialog_field_style.dart) (radius 10, padding 10×8), never a bare `TextField`.
+Route every dialog through [`adaptive_dialog.dart`](adaptive_dialog.dart). Fields inside dialogs use the helpers in [`dialog_field_style.dart`](dialog_field_style.dart):
 
-A **secondary** dialog — one opened from a dialog — keeps the same shell and gains no chrome. Depth is expressed by the scrim stacking and the cooler menu frost, not by shadows getting heavier.
+| Helper | Rule |
+|--------|------|
+| `AppDialogField` | The field's **name sits above it** in 11px meta text — never as a hint inside the field |
+| `AppDialogChoiceField` | Multiple choices as chips; the chosen one is filled in **bright teal** (`primaryBright`) |
+| `AppDialogPickerField` | Opens a **secondary** dialog for the value (colour, emoji) — a dialog never grows a picker inside itself |
+
+A **secondary** dialog — one opened from a dialog — keeps the same shell and gains no chrome. Depth is expressed by the scrim stacking, not by shadows getting heavier. Topic colour and emoji are picked this way from the create/edit topic dialog.
+
+The `⋯` on a file opens `AppContextMenu` at the button — the same bubble as a right-click, not a Material `PopupMenuButton`.
 
 ## Icons
 
-[Lucide](https://lucide.dev) at the **200 stroke weight**, named in [`app_icons.dart`](app_icons.dart) and drawn through `AppIcon` (20px default, `text` at 82%, `textHint` at 38% when disabled). The thin stroke is what keeps icons as quiet as the type next to them.
+[Lucide](https://lucide.dev) at the **200 stroke weight**, named in [`app_icons.dart`](app_icons.dart) and drawn through `AppIcon` (20px default, `text` at 82%, `textHint` at 38% when disabled). The thin stroke is what keeps icons as quiet as the type next to them — including the `⋯` on a file (`AppIcons.more`), which must never be a Material `Icons.more_vert`.
 
-Sizes in use: 14 dividers and marks · 16 circle buttons · 18 sidebar and inline actions · 20 default · 22 bottom bar.
+Sizes in use: 14 dividers and marks · 16 circle buttons and file menus · 18 sidebar and inline actions · 20 default · 22 bottom bar.
+
+`GlassCircleButton` and every other chrome control draw through `AppIcon`, never a bare `Icon(...)` with a Material glyph.
 
 ## Bilingual
 
@@ -215,4 +228,4 @@ Every surface must work in English (LTR) and Hebrew (RTL). Use [`bilingual_layou
 
 ## Where the style is still not honest
 
-Tracked as **U1–U4** in [`BACKLOG.md`](../../../../BACKLOG.md): the context menu and hover bubble keep their own visual language, the AI review dialogs bypass `AppGlassDialog` and `AppTypography`, document heading sizes are computed inline, and some Material icons remain among the Lucide ones.
+Tracked as **U1–U5** in [`BACKLOG.md`](../../../../BACKLOG.md): the context menu and hover bubble keep some local blur values instead of an `AppGlassStyle` preset, the AI review/diff dialogs bypass `AppGlassDialog` and `AppTypography`, document heading sizes still derive from a formula (now named as `documentHeadingStyle`), some Material icons remain among the Lucide ones in older surfaces, and `AppSwitch` is themed but unused.

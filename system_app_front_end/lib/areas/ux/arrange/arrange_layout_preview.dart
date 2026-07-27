@@ -42,22 +42,24 @@ class ArrangeLayoutPreview extends StatelessWidget {
       builder: (context, constraints) {
         final slots = [
           for (var i = 0; i < files.length; i++)
-            OverlayFilePreviewCard(
-              file: files[i],
-              topic: topic,
-              fileName: fileNameFor(files[i]),
-              accent: accent,
-              preview:
-                  previewsByFileId[files[i].id] ?? OverlayFilePreviewData.empty,
-              previewsLoaded: previewsLoaded,
-              strings: strings,
-              padding: const EdgeInsets.all(12),
-              titleFontSize: 13,
-              emphasized: i == 0,
-              onTap: () => onFileTap(files[i]),
-              onSecondaryTapDown: onFileSecondaryTap == null
-                  ? null
-                  : (_) => onFileSecondaryTap!(files[i]),
+            SizedBox.expand(
+              child: OverlayFilePreviewCard(
+                file: files[i],
+                topic: topic,
+                fileName: fileNameFor(files[i]),
+                accent: accent,
+                preview: previewsByFileId[files[i].id] ??
+                    OverlayFilePreviewData.fromFile(files[i]),
+                previewsLoaded: previewsLoaded,
+                strings: strings,
+                padding: const EdgeInsets.all(12),
+                titleFontSize: 13,
+                emphasized: i == 0,
+                onTap: () => onFileTap(files[i]),
+                onSecondaryTapDown: onFileSecondaryTap == null
+                    ? null
+                    : (_) => onFileSecondaryTap!(files[i]),
+              ),
             ),
         ];
 
