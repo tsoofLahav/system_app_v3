@@ -78,12 +78,21 @@ Format spec: [`content/production_agent/system_prompt.md`](../../../content/prod
 | [`routes/file_versions.py`](routes/file_versions.py) | History and `POST /files/:id/diff` |
 | [`routes/topics.py`](routes/topics.py) | Topics — the container files live in |
 
+## Sending documents to the app
+
+`File.to_dict()` includes `document_json` unless a caller opts out, and the file lists the app reads from **must not** opt out. The topic screen renders every file of a topic inline from one `GET /topics/:id/files` response; there is no second request per file.
+
+Leaving the document out of that response is a data-loss bug, not a display one: each editor opens empty, and the first keystroke saves that emptiness over the stored document. `tests/files/test_file_routes_document.py` guards it.
+
+`include_document=False` is for callers that only want names — currently the agent's file listing, so a tool call does not pour every document into the prompt.
+
 ## Rules
 
 - Never write a document body that is not valid v3 — always go through `serialize_document`.
 - Never store derived plain text.
 - Never drop an embed block during a programmatic edit; fail loudly instead.
 - Save a file version before any agent or automation write.
+- Any endpoint the editor loads a file from must include `document_json`.
 
 ## Known gaps
 

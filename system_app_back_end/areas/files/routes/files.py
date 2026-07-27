@@ -37,7 +37,10 @@ def list_files_by_topic(topic_id):
         .order_by(File.order_index, File.id)
         .all()
     )
-    return jsonify([f.to_dict(include_document=False) for f in files])
+    # Documents included: the app renders every file of a topic inline from this
+    # one response. Without them the editor opens empty and the first keystroke
+    # saves that emptiness over the stored document.
+    return jsonify([f.to_dict(include_document=True) for f in files])
 
 
 @files_bp.route("/topics/<int:topic_id>/archive/files", methods=["GET"])
