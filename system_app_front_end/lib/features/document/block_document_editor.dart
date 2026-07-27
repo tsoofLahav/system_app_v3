@@ -347,26 +347,60 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     });
   }
 
-  void _exitListToParagraph(ListNode block, int index) {
+  void _exitListBelow(ListNode block, int index, int emptyItemIndex) {
     _recordHistory(force: true);
-    final items = block.items;
-    final text = items.map((i) => i.text).join('\n');
-    final spans = <TextSpanMark>[];
-    var offset = 0;
-    for (var i = 0; i < items.length; i++) {
-      if (i > 0) offset++;
-      for (final s in items[i].spans) {
-        spans.add(s.copyWith(start: s.start + offset, end: s.end + offset));
-      }
-      offset += items[i].text.length;
+    var items = [...block.items];
+    if (emptyItemIndex >= 0 && emptyItemIndex < items.length) {
+      items.removeAt(emptyItemIndex);
     }
+
     final newParagraphId = DocumentCodec.newId('b');
     final blocks = [..._doc.blocks];
-    blocks[index] = ParagraphNode(id: block.id, text: text, spans: spans);
-    blocks.insert(
-      index + 1,
-      ParagraphNode(id: newParagraphId, text: ''),
+
+    if (items.isEmpty) {
+      blocks[index] = ParagraphNode(id: newParagraphId, text: '');
+    } else {
+      blocks[index] = block.copyWith(items: items);
+      blocks.insert(
+        index + 1,
+        ParagraphNode(id: newParagraphId, text: ''),
+      );
+    }
+
+    _mutateDoc(_doc.copyWith(blocks: blocks), rebuild: true, recordHistory: false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final node = _focusFor(newParagraphId);
+      if (node.context != null) node.requestFocus();
+    });
+  }
+
+  void _exitTableBelow(TableNode block, int index, int emptyRowIndex) {
+    _recordHistory(force: true);
+    var rows = [
+      for (final row in block.rows)
+        [for (final cell in row) cell],
+    ];
+    if (emptyRowIndex >= 0 && emptyRowIndex < rows.length) {
+      rows.removeAt(emptyRowIndex);
+    }
+
+    final newParagraphId = DocumentCodec.newId('b');
+    final blocks = [..._doc.blocks];
+    final hasContent = rows.any(
+      (row) => row.any((cell) => cell.text.trim().isNotEmpty),
     );
+
+    if (!hasContent || rows.isEmpty) {
+      blocks[index] = ParagraphNode(id: newParagraphId, text: '');
+    } else {
+      blocks[index] = block.copyWith(rows: rows);
+      blocks.insert(
+        index + 1,
+        ParagraphNode(id: newParagraphId, text: ''),
+      );
+    }
+
     _mutateDoc(_doc.copyWith(blocks: blocks), rebuild: true, recordHistory: false);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -485,7 +519,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
             rebuild: false,
           );
         },
-        onExitList: () => _exitListToParagraph(block, index),
+        onExitList: (emptyItemIndex) => _exitListBelow(block, index, emptyItemIndex),
       );
     }
     if (block is TableNode) {
@@ -501,6 +535,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
             rebuild: false,
           );
         },
+        onExitTable: (emptyRowIndex) => _exitTableBelow(block, index, emptyRowIndex),
       );
     }
     return const SizedBox.shrink();

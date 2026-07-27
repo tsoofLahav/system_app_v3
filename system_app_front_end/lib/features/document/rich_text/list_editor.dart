@@ -22,7 +22,8 @@ class RichListEditor extends StatefulWidget {
   final ListNode node;
   final AppStrings strings;
   final ValueChanged<ListNode> onChanged;
-  final VoidCallback onExitList;
+  /// Called when the user exits the list (empty item + Enter). Passes the empty item index.
+  final ValueChanged<int> onExitList;
   final VoidCallback? onFocus;
 
   @override
@@ -32,6 +33,7 @@ class RichListEditor extends StatefulWidget {
 class _RichListEditorState extends State<RichListEditor> {
   final _controllers = <SpanTextEditingController>[];
   final _focusNodes = <FocusNode>[];
+  int? _pendingFocusIndex;
 
   @override
   void initState() {
@@ -39,14 +41,40 @@ class _RichListEditorState extends State<RichListEditor> {
     _syncFromNode();
   }
 
+  bool _localStateMatchesNode() {
+    if (_controllers.length != widget.node.items.length) return false;
+    for (var i = 0; i < _controllers.length; i++) {
+      if (_controllers[i].text != widget.node.items[i].text) return false;
+    }
+    return true;
+  }
+
   @override
   void didUpdateWidget(RichListEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.node.id != widget.node.id ||
-        oldWidget.node.items.length != widget.node.items.length) {
+    if (oldWidget.node.id != widget.node.id) {
       _disposeControllers();
       _syncFromNode();
+      return;
     }
+    if (_localStateMatchesNode()) return;
+    final focusIdx = _pendingFocusIndex ?? _focusNodes.indexWhere((f) => f.hasFocus);
+    _disposeControllers();
+    _syncFromNode();
+    if (focusIdx >= 0 && focusIdx < _focusNodes.length) {
+      _pendingFocusIndex = focusIdx;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
+    }
+  }
+
+  void _applyPendingFocus() {
+    if (!mounted) return;
+    final idx = _pendingFocusIndex;
+    if (idx == null || idx < 0 || idx >= _focusNodes.length) return;
+    _pendingFocusIndex = null;
+    _focusNodes[idx].requestFocus();
+    final controller = _controllers[idx];
+    controller.selection = TextSelection.collapsed(offset: controller.text.length);
   }
 
   void _syncFromNode() {
@@ -104,21 +132,19 @@ class _RichListEditorState extends State<RichListEditor> {
   }
 
   void _insertItemAfter(int index) {
+    final newIndex = index + 1;
     setState(() {
-      _controllers.insert(index + 1, SpanTextEditingController(text: ''));
-      _focusNodes.insert(index + 1, FocusNode());
+      _controllers.insert(newIndex, SpanTextEditingController(text: ''));
+      _focusNodes.insert(newIndex, FocusNode());
     });
     _emit();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (index + 1 < _focusNodes.length) {
-        _focusNodes[index + 1].requestFocus();
-      }
-    });
+    _pendingFocusIndex = newIndex;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
   }
 
   void _removeItemAt(int index) {
     if (_controllers.length <= 1) {
-      widget.onExitList();
+      widget.onExitList(index);
       return;
     }
     final removedFocus = _focusNodes[index];
@@ -141,7 +167,7 @@ class _RichListEditorState extends State<RichListEditor> {
     widget.onFocus?.call();
     final text = _controllers[index].text;
     if (text.trim().isEmpty) {
-      widget.onExitList();
+      widget.onExitList(index);
       return;
     }
     _insertItemAfter(index);

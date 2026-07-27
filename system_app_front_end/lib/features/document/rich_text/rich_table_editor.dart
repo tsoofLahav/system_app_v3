@@ -16,12 +16,14 @@ class RichTableEditor extends StatefulWidget {
     required this.strings,
     required this.onChanged,
     this.onFocus,
+    this.onExitTable,
   });
 
   final TableNode node;
   final AppStrings strings;
   final ValueChanged<TableNode> onChanged;
   final VoidCallback? onFocus;
+  final ValueChanged<int>? onExitTable;
 
   @override
   State<RichTableEditor> createState() => _RichTableEditorState();
@@ -176,12 +178,20 @@ class _RichTableEditorState extends State<RichTableEditor> {
     _focusCell(focusRow, col + 1);
   }
 
+  bool _rowIsEmpty(int row) {
+    return _controllers[row].every((c) => c.text.trim().isEmpty);
+  }
+
   KeyEventResult _onKey(FocusNode node, KeyEvent event, int row, int col) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     if (event.logicalKey == LogicalKeyboardKey.enter &&
         !HardwareKeyboard.instance.isShiftPressed) {
       widget.onFocus?.call();
+      if (_rowIsEmpty(row)) {
+        widget.onExitTable?.call(row);
+        return KeyEventResult.handled;
+      }
       if (row + 1 < _controllers.length) {
         _focusCell(row + 1, col);
       } else {
@@ -231,11 +241,15 @@ class _RichTableEditorState extends State<RichTableEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = Theme.of(context).colorScheme.outline.withValues(alpha: 0.45);
+    final scheme = Theme.of(context).colorScheme;
+    final borderColor = Color.alphaBlend(
+      scheme.outline.withValues(alpha: 0.55),
+      scheme.surface,
+    );
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        border: Border.all(color: borderColor),
+        border: Border.all(color: borderColor, width: 1),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Column(
@@ -246,16 +260,19 @@ class _RichTableEditorState extends State<RichTableEditor> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (var c = 0; c < _controllers[r].length; c++)
+                  for (var c = 0; c < _controllers[r].length; c++) ...[
+                    if (c > 0)
+                      VerticalDivider(
+                        width: 1,
+                        thickness: 1,
+                        color: borderColor,
+                      ),
                     Expanded(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           border: Border(
-                            right: c < _controllers[r].length - 1
-                                ? BorderSide(color: borderColor)
-                                : BorderSide.none,
                             bottom: r < _controllers.length - 1
-                                ? BorderSide(color: borderColor)
+                                ? BorderSide(color: borderColor, width: 1)
                                 : BorderSide.none,
                           ),
                         ),
@@ -283,6 +300,7 @@ class _RichTableEditorState extends State<RichTableEditor> {
                         ),
                       ),
                     ),
+                  ],
                 ],
               ),
             ),
