@@ -59,7 +59,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   late final HorizontalCarouselMetrics _metrics;
   late HorizontalCarouselController _carousel;
   late FileArrangeDraft _draft;
-  ArrangeFocusZone _focusZone = ArrangeFocusZone.main;
+  ArrangeFocusZone _focusZone = ArrangeFocusZone.shown;
   ArrangeBottomFocus _bottomFocus =
       const ArrangeBottomFocus.layout(0);
   bool _saving = false;
@@ -73,8 +73,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
     super.initState();
     final detail = widget.state.selectedDetail!;
     _draft = FileArrangeDraft(
-      main: widget.state.mainFilesFor(widget.topic, detail.files),
-      additional: widget.state.secondaryFilesFor(widget.topic, detail.files),
+      ordered: widget.state.orderedFilesFor(widget.topic, detail.files),
       layoutId: widget.state.layoutFor(widget.topic),
     );
     _scrollController = ScrollController();
@@ -100,19 +99,21 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   }
 
   void _syncLayoutFocusIndex() {
-    final ids = enabledLayoutIds(_draft.mainCount);
-    _bottomFocus = ArrangeBottomFocus.forLayoutId(_draft.layoutId, ids);
+    _bottomFocus = ArrangeBottomFocus.forLayoutId(
+      _draft.layoutId,
+      _enabledLayoutIds(),
+    );
   }
 
-  List<String> _enabledLayoutIds() => enabledLayoutIds(_draft.mainCount);
+  List<String> _enabledLayoutIds() => enabledLayoutIds(_draft.ordered.length);
 
   void _setStateAndSyncLayout() {
     _syncLayoutFocusIndex();
     setState(() {});
   }
 
-  int _centeredAdditionalIndex() {
-    final files = _draft.additional;
+  int _centeredHiddenIndex() {
+    final files = _draft.hidden;
     if (files.isEmpty) return 0;
     return _metrics.centeredIndex(
       viewportWidth: _overlayWidth,
@@ -125,7 +126,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
     setState(() {
       _focusZone = moveArrangeFocusUp(
         current: _focusZone,
-        hasAdditional: _draft.additional.isNotEmpty,
+        hasHidden: _draft.hidden.isNotEmpty,
       );
     });
   }
@@ -134,7 +135,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
     setState(() {
       _focusZone = moveArrangeFocusDown(
         current: _focusZone,
-        hasAdditional: _draft.additional.isNotEmpty,
+        hasHidden: _draft.hidden.isNotEmpty,
       );
     });
   }
@@ -155,11 +156,11 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
           _draft.setLayoutId(ids[_bottomFocus.layoutIndex]);
         }
         setState(() {});
-      case ArrangeFocusZone.additional:
-        final files = _draft.additional;
+      case ArrangeFocusZone.hidden:
+        final files = _draft.hidden;
         if (files.isEmpty) return;
         final next = stepCarouselIndex(
-          currentIndex: _centeredAdditionalIndex(),
+          currentIndex: _centeredHiddenIndex(),
           itemCount: files.length,
           delta: delta,
         );
@@ -168,11 +169,11 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
           itemCount: files.length,
           viewportWidth: _overlayWidth,
         );
-      case ArrangeFocusZone.main:
+      case ArrangeFocusZone.shown:
         if (delta < 0) {
-          if (!_draft.rotateMainRight()) return;
+          if (!_draft.rotateShownRight()) return;
         } else {
-          if (!_draft.rotateMainLeft()) return;
+          if (!_draft.rotateShownLeft()) return;
         }
         _setStateAndSyncLayout();
     }
@@ -181,14 +182,12 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   void _transferBetweenSections() {
     if (_saving) return;
     switch (_focusZone) {
-      case ArrangeFocusZone.additional:
-        if (_draft.additional.isNotEmpty) {
-          _onPromoteCenteredAdditional(_overlayWidth);
+      case ArrangeFocusZone.hidden:
+        if (_draft.hidden.isNotEmpty) {
+          _onShowCenteredHidden(_overlayWidth);
         }
-      case ArrangeFocusZone.main:
-        if (_draft.main.isNotEmpty && _draft.demoteFromMain(0)) {
-          _setStateAndSyncLayout();
-        }
+      case ArrangeFocusZone.shown:
+        if (_draft.hide(0)) _setStateAndSyncLayout();
       case ArrangeFocusZone.layouts:
         return;
     }
@@ -272,11 +271,10 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   Future<void> _save() async {
     if (_saving) return;
     setState(() => _saving = true);
-    widget.state.setLayoutForTopic(widget.topic, _draft.layoutId);
+    await widget.state.setLayoutForTopic(widget.topic, _draft.layoutId);
     final error = await widget.state.reorderTopicFiles(
       widget.topic,
-      main: _draft.main,
-      additional: _draft.additional,
+      ordered: _draft.ordered,
     );
     if (!mounted) return;
     if (error != null) {
@@ -287,29 +285,29 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
     Navigator.of(context).pop(true);
   }
 
-  void _onMainFileTap(AppFile file) {
-    final index = _draft.main.indexWhere((f) => f.id == file.id);
+  void _onShownFileTap(AppFile file) {
+    final index = _draft.shown.indexWhere((f) => f.id == file.id);
     if (index < 0) return;
-    if (!_draft.moveMainToFirst(index)) return;
+    if (!_draft.moveShownToFirst(index)) return;
     _setStateAndSyncLayout();
   }
 
-  void _onMainFileSecondaryTap(AppFile file) {
-    final index = _draft.main.indexWhere((f) => f.id == file.id);
+  void _onShownFileSecondaryTap(AppFile file) {
+    final index = _draft.shown.indexWhere((f) => f.id == file.id);
     if (index < 0) return;
-    if (!_draft.demoteFromMain(index)) return;
+    if (!_draft.hide(index)) return;
     _setStateAndSyncLayout();
   }
 
-  void _onPromoteCenteredAdditional(double viewportWidth) {
-    final files = _draft.additional;
+  void _onShowCenteredHidden(double viewportWidth) {
+    final files = _draft.hidden;
     if (files.isEmpty) return;
     final index = _metrics.centeredIndex(
       viewportWidth: viewportWidth,
       scrollOffset: _carousel.scrollOffset,
       itemCount: files.length,
     );
-    if (!_draft.promoteFromAdditional(index)) return;
+    if (!_draft.show(index)) return;
     _setStateAndSyncLayout();
   }
 
@@ -328,7 +326,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
 
   void _onCarouselPointerUp(double viewportWidth) {
     if (_tapCandidate) {
-      _onPromoteCenteredAdditional(viewportWidth);
+      _onShowCenteredHidden(viewportWidth);
     }
     _tapCandidate = false;
     _tapDownPosition = null;
@@ -338,7 +336,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   Widget build(BuildContext context) {
     final s = widget.state.strings;
     final accent = TopicAppearance.accentFor(widget.topic);
-    final hasAdditional = _draft.additional.isNotEmpty;
+    final hasHidden = _draft.hidden.isNotEmpty;
 
     return Focus(
       focusNode: _focusNode,
@@ -361,10 +359,10 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
                 ),
                 const SizedBox(height: 10),
                 _zoneChrome(
-                  focused: _focusZone == ArrangeFocusZone.main,
+                  focused: _focusZone == ArrangeFocusZone.shown,
                   child: SizedBox(
                     height: _mainPreviewHeight,
-                    child: _draft.main.isEmpty
+                    child: _draft.shown.isEmpty
                         ? Center(
                             child: Text(
                               s['noFilesYet'],
@@ -375,29 +373,40 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
                           )
                         : ArrangeLayoutPreview(
                             key: ValueKey(
-                              '${_draft.layoutId}:${_draft.main.map((f) => f.id).join(',')}',
+                              '${_draft.layoutId}:${_draft.shown.map((f) => f.id).join(',')}',
                             ),
-                            files: _draft.main,
+                            files: _draft.shown,
                             layoutId: _draft.layoutId,
                             topic: widget.topic,
                             accent: accent,
                             fileNameFor: (file) =>
                                 widget.state.fileDisplayName(file.name),
-                            onFileTap: _onMainFileTap,
-                            onFileSecondaryTap: _onMainFileSecondaryTap,
+                            onFileTap: _onShownFileTap,
+                            onFileSecondaryTap: _onShownFileSecondaryTap,
                             previewsByFileId: _previewsByFileId,
                             previewsLoaded: _previewsLoaded,
                             strings: s,
                           ),
                   ),
                 ),
-                if (hasAdditional) ...[
-                  const SizedBox(height: 14),
+                if (hasHidden) ...[
+                  const SizedBox(height: 10),
+                  Tooltip(
+                    message: s['arrangeTapHiddenHint'],
+                    child: Text(
+                      s['arrangeOffScreen'],
+                      style: AppTypography.metaStyle.copyWith(
+                        color: AppColors.textHint,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
                   _zoneChrome(
-                    focused: _focusZone == ArrangeFocusZone.additional,
+                    focused: _focusZone == ArrangeFocusZone.hidden,
                     child: SizedBox(
                       height: _carouselHeight,
-                      child: _buildAdditionalCarousel(accent, s),
+                      child: _buildHiddenCarousel(accent, s),
                     ),
                   ),
                 ],
@@ -414,8 +423,10 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
     );
   }
 
-  Widget _buildAdditionalCarousel(Color accent, AppStrings s) {
-    final files = _draft.additional;
+  /// The files the layout has no room for. This strip is the only place they
+  /// appear, so it is how the user gets one back on screen.
+  Widget _buildHiddenCarousel(Color accent, AppStrings s) {
+    final files = _draft.hidden;
 
     return Listener(
       behavior: HitTestBehavior.translucent,
@@ -504,7 +515,10 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
                   builder: (context) {
                     final layout = FileLayouts.all[i];
                     final enabled =
-                        FileLayouts.isAvailable(layout.id, _draft.mainCount);
+                        FileLayouts.isAvailable(
+                          layout.id,
+                          _draft.ordered.length,
+                        );
                     final enabledIndex = enabledIds.indexOf(layout.id);
                     final keyboardFocused = _focusZone == ArrangeFocusZone.layouts &&
                         _bottomFocus.target == ArrangeBottomFocusTarget.layout &&

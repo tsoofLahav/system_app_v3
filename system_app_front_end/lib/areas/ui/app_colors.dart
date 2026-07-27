@@ -38,6 +38,18 @@ abstract final class AppColors {
   /// Brighter teal fill for segmented toggles and active controls.
   static const primaryBright = Color(0xFF58C4D8);
 
+  /// Amber-brown for menu entries that delete or discard. Never red — nothing
+  /// in a personal workspace deserves an alarm.
+  static const destructive = Color(0xFFB45309);
+
+  /// Frost behind glass — dialogs, the sidebar, floating chrome. Faintly cyan,
+  /// which is what makes a blurred panel read as glass rather than as fog.
+  static const glassTint = Color(0xFFDDF6F2);
+
+  /// Frost behind a context menu. Cooler and greyer than [glassTint], so a menu
+  /// over a dialog still reads as sitting on top of it.
+  static const menuTint = Color(0xFFF4F4F5);
+
   /// Environmental background — always neutral (topic color lives on file panes).
   static const neutralCanvasGradient = LinearGradient(
     begin: Alignment.topLeft,
@@ -50,40 +62,34 @@ abstract final class AppColors {
       Color.lerp(accent, Colors.white, 0.18) ?? accent;
 
   /// Vivid topic accent for pane outlines.
-  static Color topicPaneBorder(Color topicAccent, String fileType) {
+  static Color topicPaneBorder(Color topicAccent, int fileId) {
     final vivid = Color.lerp(topicAccent, Colors.white, 0.08) ?? topicAccent;
-    final strength = fileTypeTintStrength(fileType);
-    final alpha = 0.36 + strength * 0.42;
+    final alpha = 0.36 + fileTintStrength(fileId) * 0.42;
     return vivid.withValues(alpha: alpha.clamp(0.0, 1.0));
   }
 
-  /// Tint strength by file type — semantic, stable when files reorder.
-  static double fileTypeTintStrength(String fileType) {
-    switch (fileType) {
-      case 'plan':
-        return 0.17;
-      case 'tasks':
-        return 0.13;
-      case 'doc':
-        return 0.10;
-      case 'overview':
-        return 0.075;
-      case 'board':
-        return 0.09;
-      case 'execution':
-        return 0.14;
-      case 'text':
-        return 0.045;
-      default:
-        return 0.08;
-    }
+  /// Lightest and heaviest a file pane wears its topic color.
+  static const minFileTint = 0.045;
+  static const maxFileTint = 0.17;
+
+  /// How strongly one file wears its topic color.
+  ///
+  /// Panes in a topic should differ enough to tell apart at a glance, so the
+  /// strength is spread across the range rather than shared. It is derived from
+  /// the file's id, which makes it arbitrary but **fixed**: a file keeps its
+  /// shade when the topic is rearranged, reopened, or opened on another device.
+  static double fileTintStrength(int fileId) {
+    // Knuth multiplicative hash — spreads consecutive ids, unlike `id % n`.
+    final spread = (fileId * 2654435761) & 0x7FFFFFFF;
+    final position = (spread % 1000) / 1000.0;
+    return minFileTint + position * (maxFileTint - minFileTint);
   }
 
   static const filePaneBorderWidth = 0.5;
 
-  static LinearGradient filePaneGradient(Color topicAccent, String fileType) {
+  static LinearGradient filePaneGradient(Color topicAccent, int fileId) {
     final accent = uiAccent(topicAccent);
-    final strength = fileTypeTintStrength(fileType);
+    final strength = fileTintStrength(fileId);
     final top = Color.alphaBlend(
       accent.withValues(alpha: strength * 0.72),
       mainNoteTop,
@@ -97,15 +103,6 @@ abstract final class AppColors {
       end: Alignment.bottomRight,
       colors: [top, bottom],
     );
-  }
-
-  /// Pastel topic canvas from accent hex.
-  @Deprecated('Canvas is always neutral; use neutralCanvasGradient')
-  static LinearGradient topicCanvasGradient(
-    Color accent, {
-    bool isMain = false,
-  }) {
-    return neutralCanvasGradient;
   }
 
   static LinearGradient noteGradient = const LinearGradient(
@@ -140,18 +137,18 @@ abstract final class AppColors {
     );
   }
 
-  /// File pane tinted by topic color + file type (main topic stays white).
+  /// File pane wearing its topic's color (the main topic stays white).
   static BoxDecoration filePaneDecoration(
     Color topicAccent,
-    String fileType, {
+    int fileId, {
     bool isMainTopic = false,
   }) {
     if (isMainTopic) return mainNoteDecoration();
     return BoxDecoration(
-      gradient: filePaneGradient(topicAccent, fileType),
+      gradient: filePaneGradient(topicAccent, fileId),
       borderRadius: BorderRadius.circular(10),
       border: Border.all(
-        color: topicPaneBorder(topicAccent, fileType),
+        color: topicPaneBorder(topicAccent, fileId),
         width: filePaneBorderWidth,
       ),
       boxShadow: const [
@@ -163,7 +160,7 @@ abstract final class AppColors {
   /// Lighter wash of the file pane surface (summary sits inside the pane).
   static BoxDecoration summaryPaneDecoration(
     Color topicAccent,
-    String fileType, {
+    int fileId, {
     bool isMainTopic = false,
   }) {
     if (isMainTopic) {
@@ -180,7 +177,7 @@ abstract final class AppColors {
       );
     }
 
-    final pane = filePaneGradient(topicAccent, fileType);
+    final pane = filePaneGradient(topicAccent, fileId);
     final top = Color.lerp(pane.colors.first, Colors.white, 0.44)!;
     final bottom = Color.lerp(pane.colors.last, Colors.white, 0.5)!;
     return BoxDecoration(
@@ -191,7 +188,7 @@ abstract final class AppColors {
       ),
       borderRadius: BorderRadius.circular(8),
       border: Border.all(
-        color: topicPaneBorder(topicAccent, fileType).withValues(alpha: 0.38),
+        color: topicPaneBorder(topicAccent, fileId).withValues(alpha: 0.38),
         width: filePaneBorderWidth,
       ),
     );
@@ -208,18 +205,9 @@ abstract final class AppColors {
       ),
     );
   }
-
-  /// Topic-tinted pane surface — same pastel as topic canvas, used inside a card.
-  @Deprecated('Use filePaneDecoration with a file type')
-  static BoxDecoration topicPaneDecoration(
-    Color accent, {
-    bool isMain = false,
-    String fileType = 'tasks',
-  }) {
-    return filePaneDecoration(accent, fileType, isMainTopic: isMain);
-  }
 }
 
+/// The one spacing scale. Small steps, because the app is dense on purpose.
 abstract final class AppSpacing {
   static const xs = 4.0;
   static const sm = 6.0;

@@ -1,41 +1,46 @@
 import '../layout/file_layouts.dart';
 
+/// The three bands of the arrange overlay: the files on screen, the files that
+/// are not, and the layout picker.
 enum ArrangeFocusZone {
-  main,
-  additional,
+  shown,
+  hidden,
   layouts,
 }
 
 ArrangeFocusZone moveArrangeFocusUp({
   required ArrangeFocusZone current,
-  required bool hasAdditional,
+  required bool hasHidden,
 }) {
   return switch (current) {
-    ArrangeFocusZone.layouts => hasAdditional
-        ? ArrangeFocusZone.additional
-        : ArrangeFocusZone.main,
-    ArrangeFocusZone.additional => ArrangeFocusZone.main,
-    ArrangeFocusZone.main => ArrangeFocusZone.layouts,
+    ArrangeFocusZone.layouts =>
+      hasHidden ? ArrangeFocusZone.hidden : ArrangeFocusZone.shown,
+    ArrangeFocusZone.hidden => ArrangeFocusZone.shown,
+    ArrangeFocusZone.shown => ArrangeFocusZone.layouts,
   };
 }
 
 ArrangeFocusZone moveArrangeFocusDown({
   required ArrangeFocusZone current,
-  required bool hasAdditional,
+  required bool hasHidden,
 }) {
   return switch (current) {
-    ArrangeFocusZone.main => hasAdditional
-        ? ArrangeFocusZone.additional
-        : ArrangeFocusZone.layouts,
-    ArrangeFocusZone.additional => ArrangeFocusZone.layouts,
-    ArrangeFocusZone.layouts => ArrangeFocusZone.main,
+    ArrangeFocusZone.shown =>
+      hasHidden ? ArrangeFocusZone.hidden : ArrangeFocusZone.layouts,
+    ArrangeFocusZone.hidden => ArrangeFocusZone.layouts,
+    ArrangeFocusZone.layouts => ArrangeFocusZone.shown,
   };
 }
 
-List<String> enabledLayoutIds(int mainCount) {
+/// Layouts the topic can pick with this many files in total.
+///
+/// Counted over every file, not just the shown ones: a layout with three slots
+/// is a valid choice as soon as the topic has three files, whatever the current
+/// layout happens to show.
+List<String> enabledLayoutIds(int fileCount) {
   return [
     for (final layout in FileLayouts.all)
-      if (FileLayouts.isAvailable(layout.id, mainCount)) layout.id,
+      if (FileLayouts.isAvailable(layout.id, fileCount)) layout.id,
   ];
 }
 

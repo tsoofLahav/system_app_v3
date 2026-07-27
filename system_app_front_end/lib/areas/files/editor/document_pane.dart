@@ -4,6 +4,7 @@ import 'dart:async';
 import '../../../core/app_state.dart';
 import '../data/app_file.dart';
 import '../data/topic.dart';
+import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/note_widgets.dart';
 import './document_editor_controller.dart';
@@ -91,41 +92,54 @@ class _DocumentPaneState extends State<DocumentPane> {
 
     return NoteCard(
       topicAccent: widget.accent,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _titleController,
-                  style: AppTypography.noteTitleStyle,
-                  decoration: AppTypography.noteInputDecoration(),
-                  onSubmitted: (_) => _saveTitle(),
-                  onEditingComplete: _saveTitle,
+      fileId: file.id,
+      isMainTopic: widget.topic.isMain,
+      child: Padding(
+        padding: AppSpacing.notePadding,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _titleController,
+                    style: AppTypography.noteTitleStyle,
+                    decoration: AppTypography.noteInputDecoration(),
+                    onSubmitted: (_) => _saveTitle(),
+                    onEditingComplete: _saveTitle,
+                  ),
                 ),
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'archive') _archive();
+                    if (value == 'delete') widget.onDelete();
+                  },
+                  itemBuilder: (ctx) => [
+                    PopupMenuItem(
+                      value: 'archive',
+                      child: Text(widget.state.strings['archiveFile']),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text(widget.state.strings['delete']),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            // The pane is one slot of the topic's layout, so its height is
+            // fixed and the document scrolls inside it rather than pushing the
+            // pane taller.
+            Flexible(
+              child: SingleChildScrollView(
+                child: DocumentEditor(file: file, state: widget.state),
               ),
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'archive') _archive();
-                  if (value == 'delete') widget.onDelete();
-                },
-                itemBuilder: (ctx) => [
-                  PopupMenuItem(
-                    value: 'archive',
-                    child: Text(widget.state.strings['archiveFile'] ?? 'Archive'),
-                  ),
-                  PopupMenuItem(
-                    value: 'delete',
-                    child: Text(widget.state.strings['delete'] ?? 'Delete'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          DocumentEditor(file: file, state: widget.state),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

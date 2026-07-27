@@ -189,11 +189,7 @@ class AppBottomBar extends StatelessWidget {
       topic: topic,
     );
     if (result == null) return;
-    await state.addFile(
-      topic: topic,
-      name: result.name,
-      isEssence: result.isEssence,
-    );
+    await state.addFile(topic: topic, name: result.name);
   }
 
   Future<void> _handleArchiveDelete(BuildContext context) async {

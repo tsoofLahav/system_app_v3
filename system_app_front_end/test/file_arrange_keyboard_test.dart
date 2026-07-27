@@ -2,44 +2,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/ux/arrange/file_arrange_keyboard.dart';
 
 void main() {
-  test('moveArrangeFocusUp walks layouts to main through additional', () {
+  test('moveArrangeFocusUp walks layouts to shown through hidden', () {
     expect(
-      moveArrangeFocusUp(
-        current: ArrangeFocusZone.layouts,
-        hasAdditional: true,
-      ),
-      ArrangeFocusZone.additional,
+      moveArrangeFocusUp(current: ArrangeFocusZone.layouts, hasHidden: true),
+      ArrangeFocusZone.hidden,
     );
     expect(
-      moveArrangeFocusUp(
-        current: ArrangeFocusZone.additional,
-        hasAdditional: true,
-      ),
-      ArrangeFocusZone.main,
+      moveArrangeFocusUp(current: ArrangeFocusZone.hidden, hasHidden: true),
+      ArrangeFocusZone.shown,
     );
     expect(
-      moveArrangeFocusUp(
-        current: ArrangeFocusZone.main,
-        hasAdditional: true,
-      ),
+      moveArrangeFocusUp(current: ArrangeFocusZone.shown, hasHidden: true),
       ArrangeFocusZone.layouts,
     );
   });
 
-  test('moveArrangeFocusDown skips additional when empty', () {
+  test('moveArrangeFocusDown skips the hidden band when nothing is hidden', () {
     expect(
-      moveArrangeFocusDown(
-        current: ArrangeFocusZone.main,
-        hasAdditional: false,
-      ),
+      moveArrangeFocusDown(current: ArrangeFocusZone.shown, hasHidden: false),
       ArrangeFocusZone.layouts,
     );
     expect(
-      moveArrangeFocusUp(
-        current: ArrangeFocusZone.layouts,
-        hasAdditional: false,
-      ),
-      ArrangeFocusZone.main,
+      moveArrangeFocusUp(current: ArrangeFocusZone.layouts, hasHidden: false),
+      ArrangeFocusZone.shown,
     );
   });
 
@@ -54,7 +39,7 @@ void main() {
     );
   });
 
-  test('enabledLayoutIds respects main file count', () {
+  test('enabledLayoutIds respects how many files the topic has', () {
     expect(enabledLayoutIds(1), ['single', 'row', 'grid']);
     expect(enabledLayoutIds(2), contains('split'));
     expect(enabledLayoutIds(3), contains('hero_left'));

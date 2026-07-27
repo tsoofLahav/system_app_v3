@@ -4,7 +4,6 @@ class AppFile {
     required this.topicId,
     required this.name,
     this.documentJson = '',
-    this.isEssence = false,
     this.orderIndex = 0,
     this.meta = const {},
     this.archivedAt,
@@ -15,7 +14,9 @@ class AppFile {
   final int topicId;
   final String name;
   final String documentJson;
-  final bool isEssence;
+
+  /// Position inside the topic. The topic's layout decides how many of these
+  /// positions are on screen; the rest are reached by rearranging.
   final int orderIndex;
   final Map<String, dynamic> meta;
   final String? archivedAt;
@@ -30,7 +31,6 @@ class AppFile {
       topicId: json['topic_id'] as int,
       name: json['name'] as String,
       documentJson: json['document_json'] as String? ?? '',
-      isEssence: json['is_essence'] as bool? ?? false,
       orderIndex: json['order_index'] as int? ?? 0,
       meta: rawMeta is Map<String, dynamic>
           ? Map<String, dynamic>.from(rawMeta)
@@ -43,7 +43,6 @@ class AppFile {
   AppFile copyWith({
     String? name,
     String? documentJson,
-    bool? isEssence,
     int? orderIndex,
     Map<String, dynamic>? meta,
     String? archivedAt,
@@ -53,7 +52,6 @@ class AppFile {
       topicId: topicId,
       name: name ?? this.name,
       documentJson: documentJson ?? this.documentJson,
-      isEssence: isEssence ?? this.isEssence,
       orderIndex: orderIndex ?? this.orderIndex,
       meta: meta ?? this.meta,
       archivedAt: archivedAt ?? this.archivedAt,
@@ -65,7 +63,6 @@ class AppFile {
     'topic_id': topicId,
     'name': name,
     if (includeDocument) 'document_json': documentJson,
-    'is_essence': isEssence,
     'order_index': orderIndex,
     if (meta.isNotEmpty) 'meta': meta,
     if (archivedAt != null) 'archived_at': archivedAt,

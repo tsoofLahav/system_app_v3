@@ -67,7 +67,7 @@ class TopicAppearance {
   }
 
   static Color colorFromHex(String? hex) {
-    if (hex == null || hex.isEmpty) return const Color(0xFF6B7280);
+    if (hex == null || hex.isEmpty) return colorFromHex(defaultColor);
     var v = hex.replaceFirst('#', '');
     if (v.length == 6) v = 'FF$v';
     return Color(int.parse(v, radix: 16));

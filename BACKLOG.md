@@ -93,11 +93,27 @@ Code: [`areas/production_agent/`](system_app_back_end/areas/production_agent/)
 
 ---
 
+## UI — style debt
+
+Code: [`areas/ui/`](system_app_front_end/lib/areas/ui/) · Spec: [`areas/ui/AREA.md`](system_app_front_end/lib/areas/ui/AREA.md)
+
+The spec says every visual constant lives in `areas/ui/`. These are the places that is not yet true.
+
+| # | Sev | Issue |
+|---|-----|-------|
+| U1 | **P3** | `app_context_menu.dart` and `details_hover_bubble.dart` keep their own visual language: local blur and tint values instead of an `AppGlassStyle` preset, and their own shadow stacks. |
+| U2 | **P3** | `change_review_dialog.dart` and `text_diff_dialog.dart` bypass `AppGlassDialog` and `AppTypography` — raw `TextStyle(fontSize: 18)`, `fontFamily: 'monospace'`, own max sizes. |
+| U3 | **P3** | Document heading sizes are computed inline as `24 - level * 2` in `block_document_editor.dart` instead of being named styles in `AppTypography`. |
+| U4 | **P3** | Material `Icons.*` still appear among the Lucide set (`task_mark`, `task_row`, `task_view_pane`, `automation_dialog`, `ai_tool_bar`), so stroke weights do not match. |
+| U5 | **P3** | `AppSwitch` is defined and themed but no widget uses it; `BILINGUAL.md` describes it as standard. Either adopt it or drop it. |
+
+---
+
 ## Cleanup (any time)
 
 | # | Sev | Issue |
 |---|-----|-------|
-| C1 | **P3** | 33 Dart files under `lib/` are unreachable from `main.dart` — leftovers from v1 (`part.dart`, `brought_file_snapshot.dart`, old `list_block_widget.dart` / `table_block_widget.dart`, `automation_rule.dart`, and more). Confirmed equally dead before the reorganization. |
+| C1 | **P3** | ~30 Dart files under `lib/` are unreachable from `main.dart` — leftovers from v1 (`part.dart`, `brought_file_snapshot.dart`, old `list_block_widget.dart` / `table_block_widget.dart`, `automation_rule.dart`, and more). Confirmed equally dead before the reorganization. `phone_topic_view.dart` and `pane_reorder_logic.dart` were removed with the layout work. |
 | C2 | **P3** | `areas/files/services/document_body.py` is a back-compat re-export with no importers. |
 | C3 | **P3** | 35 analyzer warnings, all `dead_null_aware_expression` / `dead_code` from `??` applied to non-nullable `AppStrings` getters. |
 

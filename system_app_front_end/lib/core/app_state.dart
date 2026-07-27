@@ -23,6 +23,7 @@ import './services/tag_service.dart';
 import '../areas/objects/data/task_service.dart';
 import '../areas/files/data/topic_service.dart';
 import '../areas/objects/data/view_service.dart';
+import '../areas/ux/layout/topic_file_slots.dart';
 import '../areas/ux/shortcuts/shortcut_bindings_store.dart';
 
 class TopicDetail {
@@ -257,18 +258,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<AppFile> mainFilesFor(Topic topic, List<AppFile> files) {
-    return files.where((f) => f.isEssence).toList()
-      ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
-  }
+  /// Every file of the topic in the one order that decides placement.
+  List<AppFile> orderedFilesFor(Topic topic, List<AppFile> files) =>
+      orderedFiles(files);
 
-  List<AppFile> secondaryFilesFor(Topic topic, List<AppFile> files) {
-    return files.where((f) => !f.isEssence).toList()
-      ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
-  }
+  /// The files the topic's layout has room for.
+  List<AppFile> shownFilesFor(Topic topic, List<AppFile> files) =>
+      shownFiles(orderedFiles(files), layoutFor(topic));
 
-  String layoutFor(Topic topic) => 'default';
-  void setLayoutForTopic(Topic topic, String layoutId) {}
+  /// The files past the last slot — off screen until the topic is rearranged.
+  List<AppFile> hiddenFilesFor(Topic topic, List<AppFile> files) =>
+      hiddenFiles(orderedFiles(files), layoutFor(topic));
+
+  String layoutFor(Topic topic) => topic.fileLayout;
+
+  Future<void> setLayoutForTopic(Topic topic, String layoutId) async {
+    if (topic.fileLayout == layoutId) return;
+    await updateTopic(topic, fileLayout: layoutId);
+  }
 
   Future<void> createTopic({
     required String name,
@@ -294,11 +301,13 @@ class AppState extends ChangeNotifier {
     String? name,
     String? icon,
     String? color,
+    String? fileLayout,
   }) async {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
     if (icon != null) body['icon'] = icon;
     if (color != null) body['color'] = color;
+    if (fileLayout != null) body['file_layout'] = fileLayout;
     final updated = await _topics.updateTopic(topic.id, body);
     allTopics = allTopics.map((t) => t.id == updated.id ? updated : t).toList();
     if (selectedTopic?.id == updated.id) selectedTopic = updated;
@@ -381,7 +390,7 @@ class AppState extends ChangeNotifier {
       final result = await _automations.run(automation.id);
       final agent = result['agent'];
       if (agent is Map && (agent['proposed_changes'] as List?)?.isNotEmpty == true) {
-        pendingAgentReview = Map<String, dynamic>.from(agent as Map);
+        pendingAgentReview = Map<String, dynamic>.from(agent);
       }
       return result;
     } finally {
@@ -390,17 +399,20 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<AppFile> addFile({
-    required Topic topic,
-    required String name,
-    bool isEssence = false,
-  }) async {
+  /// Adds a file at the front of the topic.
+  ///
+  /// A file you just created should be on screen, and every layout has at least
+  /// one slot, so first is the only position that guarantees it.
+  Future<AppFile> addFile({required Topic topic, required String name}) async {
+    final existing = orderedFiles(selectedDetail?.files ?? const <AppFile>[]);
     final file = await _files.createFile(
       topicId: topic.id,
       name: name,
-      isEssence: isEssence,
-      orderIndex: selectedDetail?.files.length ?? 0,
+      orderIndex: 0,
     );
+    for (var i = 0; i < existing.length; i++) {
+      await _files.updateFile(existing[i].id, {'order_index': i + 1});
+    }
     await _refreshTopicFiles(topic);
     return file;
   }
@@ -629,18 +641,14 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Writes the topic's file order. The layout then decides how far down that
+  /// order the screen reaches.
   Future<String?> reorderTopicFiles(
     Topic topic, {
-    required List<AppFile> main,
-    required List<AppFile> additional,
+    required List<AppFile> ordered,
   }) async {
-    var index = 0;
-    for (final file in [...main, ...additional]) {
-      await _files.updateFile(file.id, {
-        'order_index': index,
-        'is_essence': main.contains(file),
-      });
-      index++;
+    for (var index = 0; index < ordered.length; index++) {
+      await _files.updateFile(ordered[index].id, {'order_index': index});
     }
     await _refreshTopicFiles(topic);
     return null;

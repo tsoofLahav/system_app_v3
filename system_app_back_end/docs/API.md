@@ -57,9 +57,11 @@ Successful DELETE returns `204` with empty body.
 | PATCH | `/topics/<id>` | Update |
 | DELETE | `/topics/<id>` | Delete cascade |
 
-**POST body:** `{ "workspace_id", "name", "icon?", "color?", "order_index?" }`
+**POST body:** `{ "workspace_id", "name", "icon?", "color?", "order_index?", "file_layout?" }`
 
-**PATCH:** `name`, `icon`, `color`, `order_index`, `archived_at`
+**PATCH:** `name`, `icon`, `color`, `order_index`, `file_layout`, `archived_at`
+
+`file_layout` is how the topic arranges its files on screen (`single`, `split`, `hero_left`, `hero_right`, `row`, `grid`). It also decides how many files are shown at all — see [files area](../areas/files/AREA.md).
 
 ---
 
@@ -71,10 +73,10 @@ Successful DELETE returns `204` with empty body.
 | GET | `/files/<id>` | Get one (includes `body`) |
 | GET | `/topics/<topic_id>/files` | Files for topic |
 | POST | `/files` | Create |
-| PATCH | `/files/<id>` | Update (name, body, is_essence, order_index, meta, archived_at) |
+| PATCH | `/files/<id>` | Update (name, body, order_index, meta, archived_at) |
 | DELETE | `/files/<id>` | Delete cascade |
 
-**POST body:** `{ "topic_id", "name", "body?", "is_essence?", "order_index?", "meta?" }`
+**POST body:** `{ "topic_id", "name", "body?", "order_index?", "meta?" }`
 
 ---
 

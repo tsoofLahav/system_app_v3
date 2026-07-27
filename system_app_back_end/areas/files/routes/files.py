@@ -67,7 +67,6 @@ def create_file():
         topic_id=data["topic_id"],
         name=data["name"],
         document_json=document_json,
-        is_essence=bool(data.get("is_essence", False)),
         order_index=data.get("order_index", 0),
         meta=data.get("meta") or {},
     )
@@ -95,7 +94,6 @@ def update_file(file_id):
             "topic_id",
             "name",
             "document_json",
-            "is_essence",
             "order_index",
             "meta",
             "archived_at",

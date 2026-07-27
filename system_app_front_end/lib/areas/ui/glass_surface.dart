@@ -28,7 +28,7 @@ class GlassStyleSpec {
 }
 
 abstract final class AppGlassStyle {
-  static const dialogTint = Color(0xFFDDF6F2);
+  static const dialogTint = AppColors.glassTint;
   static const floatingRadius = 16.0;
   static const dialogRadius = 22.0;
   static const pillRadius = 999.0;

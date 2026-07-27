@@ -8,6 +8,7 @@ class Topic {
     this.icon,
     this.color,
     this.orderIndex = 0,
+    this.fileLayout = 'single',
     this.archivedAt,
     this.createdAt,
     this.tags = const [],
@@ -19,6 +20,10 @@ class Topic {
   final String? icon;
   final String? color;
   final int orderIndex;
+
+  /// How this topic arranges its files, and with that how many it shows at all.
+  final String fileLayout;
+
   final String? archivedAt;
   final String? createdAt;
   final List<AppTag> tags;
@@ -37,6 +42,7 @@ class Topic {
       icon: json['icon'] as String?,
       color: json['color'] as String?,
       orderIndex: json['order_index'] as int? ?? 0,
+      fileLayout: json['file_layout'] as String? ?? 'single',
       archivedAt: json['archived_at'] as String?,
       createdAt: json['created_at'] as String?,
       tags: rawTags is List
@@ -52,6 +58,7 @@ class Topic {
     String? icon,
     String? color,
     int? orderIndex,
+    String? fileLayout,
     List<AppTag>? tags,
   }) {
     return Topic(
@@ -61,6 +68,7 @@ class Topic {
       icon: icon ?? this.icon,
       color: color ?? this.color,
       orderIndex: orderIndex ?? this.orderIndex,
+      fileLayout: fileLayout ?? this.fileLayout,
       archivedAt: archivedAt,
       createdAt: createdAt,
       tags: tags ?? this.tags,
@@ -72,6 +80,7 @@ class Topic {
     if (icon != null) 'icon': icon,
     if (color != null) 'color': color,
     'order_index': orderIndex,
+    'file_layout': fileLayout,
     if (archivedAt != null) 'archived_at': archivedAt,
   };
 }

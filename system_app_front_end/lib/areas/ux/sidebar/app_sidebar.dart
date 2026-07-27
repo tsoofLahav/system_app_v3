@@ -47,7 +47,7 @@ class _AppSidebarState extends State<AppSidebar> {
   static const double _maxWidth = 340;
   static const double _resizeHandleWidth = 10;
   static const _sidebarRadius = 14.0;
-  static const _panelTint = Color(0xFFDDF6F2);
+  static const _panelTint = AppColors.glassTint;
 
   void _resize(DragUpdateDetails details) {
     final onWidthChanged = widget.onWidthChanged;

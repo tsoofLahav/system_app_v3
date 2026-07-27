@@ -43,9 +43,6 @@ class ArchiveFileGrid extends StatelessWidget {
         final marked = markedForDelete.contains(file.id);
         final selected = !deleteMode && file.id == selectedFileId;
         final title = state.fileDisplayName(file.name);
-        final typeLabel = file.isEssence
-            ? (state.strings['essence'] ?? 'Essence')
-            : (state.strings['additionals'] ?? 'Additional');
 
         return Material(
           color: Colors.transparent,
@@ -90,15 +87,7 @@ class ArchiveFileGrid extends StatelessWidget {
                           ),
                         ),
                         const Spacer(),
-                        Text(
-                          typeLabel,
-                          textAlign: TextAlign.start,
-                          style: AppTypography.metaStyle.copyWith(
-                            color: AppColors.textHint,
-                          ),
-                        ),
                         if (file.archivedAt != null) ...[
-                          const SizedBox(height: 2),
                           Text(
                             file.archivedAt!,
                             maxLines: 1,

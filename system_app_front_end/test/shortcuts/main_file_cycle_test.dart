@@ -2,12 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/files/data/app_file.dart';
 import 'package:system_app_front_end/areas/ux/shortcuts/main_file_cycle.dart';
 
-AppFile _file(int id) => AppFile(
-      id: id,
-      topicId: 1,
-      name: 'File$id',
-      isEssence: true,
-    );
+AppFile _file(int id) => AppFile(id: id, topicId: 1, name: 'File$id');
 
 void main() {
   test('rotateMainFilesLeft is no-op for fewer than two files', () {

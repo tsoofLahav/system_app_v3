@@ -20,7 +20,6 @@ class FileService {
     required int topicId,
     required String name,
     String documentJson = '',
-    bool isEssence = false,
     int? orderIndex,
     Map<String, dynamic>? meta,
   }) async {
@@ -29,7 +28,6 @@ class FileService {
               'topic_id': topicId,
               'name': name,
               'document_json': documentJson,
-              'is_essence': isEssence,
               if (orderIndex != null) 'order_index': orderIndex,
               if (meta != null) 'meta': meta,
             })

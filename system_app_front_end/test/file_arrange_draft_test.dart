@@ -1,104 +1,83 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/files/data/app_file.dart';
 import 'package:system_app_front_end/areas/ux/arrange/file_arrange_draft.dart';
+import 'package:system_app_front_end/areas/ux/layout/file_layouts.dart';
 
-AppFile _file(int id, {bool isEssence = true}) => AppFile(
-      id: id,
-      topicId: 1,
-      name: 'File$id',
-      isEssence: isEssence,
-    );
+AppFile _file(int id) => AppFile(id: id, topicId: 1, name: 'f$id');
+
+FileArrangeDraft _draft(List<int> ids, String layoutId) => FileArrangeDraft(
+  ordered: ids.map(_file).toList(),
+  layoutId: layoutId,
+);
+
+List<int> _ids(List<AppFile> files) => files.map((f) => f.id).toList();
 
 void main() {
-  test('moveMainToFirst moves tapped file to front', () {
-    final draft = FileArrangeDraft(
-      main: [_file(1), _file(2), _file(3)],
-      additional: const [],
-      layoutId: 'split',
-    );
+  test('the layout decides how far down the order the screen reaches', () {
+    expect(_ids(_draft([1, 2, 3, 4], FileLayouts.single).shown), [1]);
+    expect(_ids(_draft([1, 2, 3, 4], FileLayouts.single).hidden), [2, 3, 4]);
 
-    expect(draft.moveMainToFirst(2), isTrue);
-    expect(draft.main.map((f) => f.id), [3, 1, 2]);
+    expect(_ids(_draft([1, 2, 3, 4], FileLayouts.heroLeft).shown), [1, 2, 3]);
+    expect(_ids(_draft([1, 2, 3, 4], FileLayouts.heroLeft).hidden), [4]);
+
+    expect(_ids(_draft([1, 2, 3, 4], FileLayouts.grid).shown), [1, 2, 3, 4]);
+    expect(_draft([1, 2, 3, 4], FileLayouts.grid).hidden, isEmpty);
   });
 
-  test('moveMainToFirst is no-op when already first', () {
-    final draft = FileArrangeDraft(
-      main: [_file(1), _file(2)],
-      additional: const [],
-      layoutId: 'split',
-    );
-
-    expect(draft.moveMainToFirst(0), isFalse);
-    expect(draft.main.map((f) => f.id), [1, 2]);
+  test('tapping a shown file makes it the first one', () {
+    final draft = _draft([1, 2, 3], FileLayouts.heroLeft);
+    expect(draft.moveShownToFirst(2), isTrue);
+    expect(_ids(draft.ordered), [3, 1, 2]);
   });
 
-  test('promoteFromAdditional moves file to main end', () {
-    final draft = FileArrangeDraft(
-      main: [_file(1), _file(2), _file(3)],
-      additional: [_file(4)],
-      layoutId: 'hero_left',
-    );
-
-    expect(draft.promoteFromAdditional(0), isTrue);
-    expect(draft.main.map((f) => f.id), [1, 2, 3, 4]);
-    expect(draft.additional, isEmpty);
+  test('the first file is already first', () {
+    final draft = _draft([1, 2, 3], FileLayouts.heroLeft);
+    expect(draft.moveShownToFirst(0), isFalse);
+    expect(_ids(draft.ordered), [1, 2, 3]);
   });
 
-  test('promoteFromAdditional appends when main has room', () {
-    final draft = FileArrangeDraft(
-      main: [_file(1), _file(2)],
-      additional: [_file(3)],
-      layoutId: 'split',
-    );
+  test('showing a hidden file takes the last slot from the file in it', () {
+    final draft = _draft([1, 2, 3, 4], FileLayouts.heroLeft);
 
-    expect(draft.promoteFromAdditional(0), isTrue);
-    expect(draft.main.map((f) => f.id), [1, 2, 3]);
-    expect(draft.additional, isEmpty);
+    expect(draft.show(0), isTrue);
+
+    expect(_ids(draft.shown), [1, 2, 4]);
+    expect(_ids(draft.hidden), [3]);
   });
 
-  test('demoteFromMain moves file to front of additional', () {
-    final draft = FileArrangeDraft(
-      main: [_file(1), _file(2)],
-      additional: [_file(3)],
-      layoutId: 'split',
-    );
+  test('hiding a shown file sends it to the end of the order', () {
+    final draft = _draft([1, 2, 3, 4], FileLayouts.heroLeft);
 
-    expect(draft.demoteFromMain(1), isTrue);
-    expect(draft.main.map((f) => f.id), [1]);
-    expect(draft.additional.map((f) => f.id), [2, 3]);
+    expect(draft.hide(0), isTrue);
+
+    expect(_ids(draft.shown), [2, 3, 4]);
+    expect(_ids(draft.hidden), [1]);
   });
 
-  test('setLayoutId does not mutate order', () {
-    final draft = FileArrangeDraft(
-      main: [_file(1), _file(2)],
-      additional: [_file(3)],
-      layoutId: 'split',
-    );
+  test('rotating cycles the shown files and leaves the hidden ones alone', () {
+    final draft = _draft([1, 2, 3, 4], FileLayouts.heroLeft);
 
-    draft.setLayoutId('single');
-    expect(draft.ordered.map((f) => f.id), [1, 2, 3]);
-    expect(draft.layoutId, 'single');
+    expect(draft.rotateShownLeft(), isTrue);
+    expect(_ids(draft.ordered), [2, 3, 1, 4]);
+
+    expect(draft.rotateShownRight(), isTrue);
+    expect(_ids(draft.ordered), [1, 2, 3, 4]);
   });
 
-  test('rotateMainLeft cycles main order', () {
-    final draft = FileArrangeDraft(
-      main: [_file(1), _file(2), _file(3)],
-      additional: const [],
-      layoutId: 'hero_left',
-    );
-
-    expect(draft.rotateMainLeft(), isTrue);
-    expect(draft.main.map((f) => f.id), [2, 3, 1]);
+  test('one shown file has nothing to rotate', () {
+    final draft = _draft([1, 2, 3], FileLayouts.single);
+    expect(draft.rotateShownLeft(), isFalse);
+    expect(_ids(draft.ordered), [1, 2, 3]);
   });
 
-  test('rotateMainRight cycles main order backwards', () {
-    final draft = FileArrangeDraft(
-      main: [_file(1), _file(2), _file(3)],
-      additional: const [],
-      layoutId: 'hero_left',
-    );
+  test('choosing a smaller layout pushes files off screen, not away', () {
+    final draft = _draft([1, 2, 3], FileLayouts.heroLeft);
+    expect(draft.hidden, isEmpty);
 
-    expect(draft.rotateMainRight(), isTrue);
-    expect(draft.main.map((f) => f.id), [3, 1, 2]);
+    draft.setLayoutId(FileLayouts.single);
+
+    expect(_ids(draft.shown), [1]);
+    expect(_ids(draft.hidden), [2, 3]);
+    expect(_ids(draft.ordered), [1, 2, 3]);
   });
 }

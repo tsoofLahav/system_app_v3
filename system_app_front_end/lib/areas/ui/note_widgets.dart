@@ -22,26 +22,28 @@ class TopicCanvasBackground extends StatelessWidget {
   Widget build(BuildContext context) => child;
 }
 
+/// A file's surface. Given a topic accent it wears that topic's color, at a
+/// strength fixed per file — see [AppColors.fileTintStrength].
 class NoteCard extends StatelessWidget {
   const NoteCard({
     super.key,
     required this.child,
     this.topicAccent,
-    this.fileType,
+    this.fileId,
     this.isMainTopic = false,
   });
 
   final Widget child;
   final Color? topicAccent;
-  final String? fileType;
+  final int? fileId;
   final bool isMainTopic;
 
   @override
   Widget build(BuildContext context) {
-    final decoration = topicAccent != null && fileType != null
+    final decoration = topicAccent != null && fileId != null
         ? AppColors.filePaneDecoration(
             topicAccent!,
-            fileType!,
+            fileId!,
             isMainTopic: isMainTopic,
           )
         : AppColors.noteDecoration();

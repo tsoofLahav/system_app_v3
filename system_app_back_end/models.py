@@ -34,6 +34,7 @@ class Topic(db.Model):
     icon = db.Column(db.Text)
     color = db.Column(db.Text)
     order_index = db.Column(db.Integer, nullable=False, default=0)
+    file_layout = db.Column(db.Text, nullable=False, default="single")
     archived_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -45,6 +46,7 @@ class Topic(db.Model):
             "icon": self.icon,
             "color": self.color,
             "order_index": self.order_index,
+            "file_layout": self.file_layout or "single",
             "archived_at": _iso(self.archived_at),
             "created_at": _iso(self.created_at),
         }
@@ -57,7 +59,6 @@ class File(db.Model):
     topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"), nullable=False)
     name = db.Column(db.Text, nullable=False)
     document_json = db.Column(db.Text, nullable=False, default="")
-    is_essence = db.Column(db.Boolean, nullable=False, default=False)
     order_index = db.Column(db.Integer, nullable=False, default=0)
     meta = db.Column(JSONB, nullable=False, default=dict)
     archived_at = db.Column(db.DateTime)
@@ -68,7 +69,6 @@ class File(db.Model):
             "id": self.id,
             "topic_id": self.topic_id,
             "name": self.name,
-            "is_essence": self.is_essence,
             "order_index": self.order_index,
             "meta": self.meta if self.meta is not None else {},
             "archived_at": _iso(self.archived_at),

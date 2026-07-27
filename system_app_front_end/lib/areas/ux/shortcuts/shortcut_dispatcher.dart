@@ -34,11 +34,7 @@ Future<void> dispatchShortcutAction(
         topic: topic,
       );
       if (fileResult == null) return;
-      await state.addFile(
-        topic: topic,
-        name: fileResult.name,
-        isEssence: fileResult.isEssence,
-      );
+      await state.addFile(topic: topic, name: fileResult.name);
       return;
     case ShortcutActionIds.aiConsult:
       await runAgentPrompt(context, state);

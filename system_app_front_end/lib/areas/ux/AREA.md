@@ -23,15 +23,57 @@ Moving between sections replaces **only the main pane**. The sidebar, bottom bar
 
 ## Layout of files
 
-A topic shows its files in a layout the user controls. The **essence** file is the topic's main file and gets prominence; other files arrange around it.
+A topic shows its files in a shape the user picks. **The shape decides which files are on screen** — there is no property on a file that makes it important.
+
+A layout has a number of slots. Files fill them in order. Everything past the last slot is off screen.
+
+| Layout | Slots | Shows |
+|--------|-------|-------|
+| Single | 1 | The first file |
+| Split | 2 | The first two, side by side |
+| Large left / Large right | 3 | A hero and two smaller |
+| Row | all | Every file, in a row |
+| Grid | all | Every file, wrapped |
+
+So with five files: a grid shows all five, `Large left` shows three, and `Single` shows one. In every case the other files are **not on screen at all** — not collapsed, not below a divider. The only place they appear is the arrange overlay.
+
+### Why prominence is not a flag
+
+A file being "the important one" is a fact about the topic's arrangement, not about the file. Storing it twice — as a flag *and* as an order — means the two can disagree, and then the app has to pick a winner. So the topic stores `file_layout`, each file stores `order_index`, and everything else is derived by [`layout/topic_file_slots.dart`](layout/topic_file_slots.dart):
+
+| Question | Answer |
+|----------|--------|
+| Which files are on screen? | `shownFiles(ordered, layoutId)` |
+| Which are not? | `hiddenFiles(ordered, layoutId)` |
+| What if the layout needs more files than exist? | `effectiveLayoutId` falls back for drawing and **leaves the stored layout alone**, so adding the files back restores it |
+
+### Rules that follow
+
+- **A new file is added first**, so it is always on screen. Every layout has at least one slot, and a file you just created that you cannot see would be a bug you could not diagnose.
+- **A hidden file is never lost.** Deleting and archiving are explicit actions with their own UI; being off screen is neither.
+- **Choosing a smaller layout hides files, it does not reorder them.** Switching back shows the same files in the same places.
+- **Phone shows the same files**, stacked one per row, because two panes cannot sit side by side. A file hidden on desktop stays hidden on the phone.
 
 | Concern | Files |
 |---------|-------|
-| Layout options | [`layout/file_layouts.dart`](layout/file_layouts.dart) |
-| Rearranging files | [`arrange/`](arrange/) — draft state, keyboard handling, overlay |
-| Reorder mechanics | [`widgets/pane_reorder_logic.dart`](widgets/pane_reorder_logic.dart) |
+| The layouts themselves | [`layout/file_layouts.dart`](layout/file_layouts.dart) |
+| Which files a layout reaches | [`layout/topic_file_slots.dart`](layout/topic_file_slots.dart) |
+| Drawing them | [`layout/file_layout_board.dart`](layout/file_layout_board.dart) |
+| Rearranging | [`arrange/`](arrange/) — draft state, keyboard handling, overlay |
 
-Arranging is a **mode**: the user enters it, drags or uses the keyboard to reposition, and commits. Nothing persists until commit.
+### Arranging
+
+Arranging is a **mode**: the user opens it from the bottom bar, moves files, and commits. Nothing is written until Done, and Escape leaves everything as it was.
+
+The overlay has three bands, walked with up/down:
+
+| Band | What it holds | Actions |
+|------|---------------|---------|
+| Shown | The layout, previewed | Tap a file to make it first, right-click to take it off screen, left/right to cycle |
+| Not on screen | The hidden files, in a strip | Tap to bring one back into the last slot |
+| Layouts | The pickable shapes | Click or left/right; layouts needing more files than the topic has are disabled |
+
+On commit it writes one `order_index` per file and one `file_layout` on the topic.
 
 ## Sections
 
@@ -41,7 +83,7 @@ Arranging is a **mode**: the user enters it, drags or uses the keyboard to repos
 | Task view | Sidebar view | [`../objects/views/task_view_pane.dart`](../objects/views/task_view_pane.dart) |
 | Archive | Sidebar archive | [`archive/`](archive/) — archived topics and files, read-mostly |
 
-Phone uses dedicated shells ([`shell/phone_app_shell.dart`](shell/phone_app_shell.dart), [`topic/phone_topic_view.dart`](topic/phone_topic_view.dart)) because the sidebar cannot stay visible.
+Phone uses its own shell ([`shell/phone_app_shell.dart`](shell/phone_app_shell.dart)) because the sidebar cannot stay visible, but the same [`topic/topic_view.dart`](topic/topic_view.dart) draws the files — it collapses the layout to one pane per row rather than being a separate screen.
 
 ## What the sidebar allows
 
@@ -74,7 +116,7 @@ Shortcuts are user-rebindable. [`shortcuts/`](shortcuts/) owns the catalog of av
 | [`shortcuts/shortcut_catalog.dart`](shortcuts/shortcut_catalog.dart) | Every bindable action |
 | [`shortcuts/shortcut_bindings_store.dart`](shortcuts/shortcut_bindings_store.dart) | User overrides, persisted |
 | [`shortcuts/shortcut_dispatcher.dart`](shortcuts/shortcut_dispatcher.dart) | Keystroke → action |
-| [`shortcuts/main_file_cycle.dart`](shortcuts/main_file_cycle.dart) | Cycle which file is focused |
+| [`shortcuts/main_file_cycle.dart`](shortcuts/main_file_cycle.dart) | Rotate which of the shown files leads |
 
 ## Rules
 
@@ -84,3 +126,4 @@ Shortcuts are user-rebindable. [`shortcuts/`](shortcuts/) owns the catalog of av
 - Overlay modes (arrange, bring file, previews) must be cancellable without saving.
 - Use `core/platform/app_form_factor.dart` to branch desktop vs phone; do not check screen width inline.
 - Visual constants come from [UI](../ui/AREA.md) — this area decides *what appears*, not what it looks like.
+- Which files are on screen is derived from the layout and the order. Never add a field to a file to answer it.

@@ -14,11 +14,18 @@ Everything the user sees in a file is stored in **one column**: `files.document_
 |--------|---------|
 | `document_json` | The whole document as a v3 block tree (JSON text) |
 | `name`, `topic_id`, `order_index` | Placement inside a topic |
-| `is_essence` | Marks the topic's main file |
 | `meta` (JSONB) | Automation anchors and misc flags |
 | `archived_at` | Soft archive |
 
 **There is no plain-text column.** Plain text is always derived, never stored.
+
+## Which files a topic shows
+
+`topics.file_layout` holds the layout the user picked. The layout has a fixed number of slots — `single` 1, `split` 2, `hero_left` and `hero_right` 3, `row` and `grid` all of them — and files fill those slots in `order_index` order.
+
+A file past the last slot is **not on screen**. It is not archived and not marked; it is simply further down the order than the layout has room for, and the user reaches it by rearranging the topic.
+
+This is why there is no flag on the file. Prominence is a property of the topic's arrangement, so the only thing the backend stores is the order and the layout. `files.is_essence` existed for this and was dropped in [`migrations/004_topic_file_layout.sql`](../../migrations/004_topic_file_layout.sql); ordering already carried the same information, since arranging always wrote the shown files first.
 
 ## Block tree (v3)
 

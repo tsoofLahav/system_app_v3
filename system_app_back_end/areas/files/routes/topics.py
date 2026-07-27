@@ -56,6 +56,7 @@ def create_topic():
         icon=data.get("icon"),
         color=data.get("color"),
         order_index=data.get("order_index", 0),
+        file_layout=data.get("file_layout") or "single",
     )
     db.session.add(topic)
     db.session.flush()
@@ -79,7 +80,7 @@ def update_topic(topic_id):
     apply_updates(
         topic,
         data,
-        {"name", "icon", "color", "order_index", "archived_at"},
+        {"name", "icon", "color", "order_index", "file_layout", "archived_at"},
         datetime_fields={"archived_at"},
     )
 

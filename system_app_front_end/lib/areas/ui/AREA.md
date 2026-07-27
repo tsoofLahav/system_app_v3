@@ -1,42 +1,218 @@
 # Area: UI — visual style
 
-**Only how things look.** No navigation, no flows, no business rules.
+**Only how things look.** No navigation, no flows, no business rules. This file is the cross-app style spec: every colour, size, and shape choice in the app should be traceable to something below.
 
 Backend twin: none. This area is frontend-only.
 
-## What belongs here
+## The look, in one paragraph
 
-| Concern | Files |
-|---------|-------|
-| Colors | [`app_colors.dart`](app_colors.dart), [`app_theme.dart`](app_theme.dart) |
-| Text size and font | [`app_typography.dart`](app_typography.dart) |
-| Glass | [`glass_surface.dart`](glass_surface.dart) |
-| Buttons, toggles, switches | [`app_segmented_toggle.dart`](app_segmented_toggle.dart), [`app_switch.dart`](app_switch.dart) |
-| Dialog design | [`adaptive_dialog.dart`](adaptive_dialog.dart), [`overlay_dialog_shell.dart`](overlay_dialog_shell.dart), [`overlay_dialog_style.dart`](overlay_dialog_style.dart), [`dialog_field_style.dart`](dialog_field_style.dart) |
-| Icons | [`app_icons.dart`](app_icons.dart) |
-| Cards and previews | [`overlay_file_preview_card.dart`](overlay_file_preview_card.dart), [`layout_preview_icon.dart`](layout_preview_icon.dart), [`note_widgets.dart`](note_widgets.dart) |
-| Carousel | [`horizontal_carousel.dart`](horizontal_carousel.dart) |
-| RTL / bilingual layout primitives | [`bilingual_layout.dart`](bilingual_layout.dart) |
+The app is a personal workspace, so the interface should **reduce mental load rather than ask for attention**. Calm, mature, practical, quietly colour-supported. Text is small and dense, spaces are tight, edges are soft, and nothing pulses or shouts. The user's own content is the loudest thing on screen; every piece of chrome is deliberately quieter than the file it sits next to.
 
-## Two kinds of text
+Concretely, that means: small type (12–14px for almost everything), 4–18px spacing, thin borders under 1px, gentle translucent fills instead of solid blocks, and no saturated alert colours anywhere.
+
+## Surface hierarchy
+
+Loudest last:
+
+| Surface | Treatment |
+|---------|-----------|
+| **Canvas** — the window behind everything | Near-white neutral gradient, no topic colour |
+| **File panes** — the working surfaces | Topic colour at a gentle strength, thin saturated topic border |
+| **Sidebar** | Soft glass, present but never dominant |
+| **Floating chrome** — bottom bar, insert bar, pills | Glass or solid white with a lift shadow |
+| **Dialogs** | Glass panels over a light scrim |
+| **Context menus** | The topmost layer — cooler frost, tighter rows |
+
+## Colours
+
+All of them live in [`app_colors.dart`](app_colors.dart). Nothing outside this folder writes a `Color(0x…)`.
+
+### Neutrals and text
+
+| Token | Value | Used for |
+|-------|-------|----------|
+| `canvasNeutralTop` / `canvasNeutralBottom` | `#FFFEFE` → `#FAFAF8` | The window gradient |
+| `noteTop` / `noteBottom` | `#FCFBF7` → `#F4F2EC` | Untinted cards |
+| `mainNoteTop` / `mainNoteBottom` | `#FFFFFF` | Panes in the main topic |
+| `noteBorder` | `#DCD8CF` | Card edges |
+| `noteShadow` | black 6% | Every card shadow |
+| `text` | `#5E5B56` | **All** text — titles and body share one soft charcoal |
+| `textHint` | `#9D988F` | Hints, meta, secondary labels |
+| `sidebarBg` / `sidebarBorder` | `#F1EFE8` / `#D8D4CB` | Sidebar panel |
+
+There is no black and no pure grey. Warm charcoal on warm off-white is what keeps long reading comfortable.
+
+### Accents
+
+| Token | Value | Meaning |
+|-------|-------|---------|
+| `primary` | `#37899E` | The app's own accent: selections, key actions, menu highlight |
+| `primaryLight` | `#51A0B0` | Softer variant |
+| `primaryBright` | `#58C4D8` | Fills on active controls and toggles |
+| `aiCyan` | `#00D4FF` | AI, and only AI — the one place the app is allowed to glow |
+| `destructive` | `#B45309` | Delete and discard. Amber-brown, never red |
+| `glassTint` | `#DDF6F2` | Frost behind glass surfaces |
+| `menuTint` | `#F4F4F5` | Frost behind context menus |
+
+**There is no success green and no error red.** A personal workspace has nothing to alarm the user about; failures are reported in words, in `Theme.colorScheme.error`, not in colour blocks.
+
+### Opacity as the main tool
+
+Most variation comes from alpha over the tokens above, not from more tokens. The conventions:
+
+| Range | Meaning |
+|-------|---------|
+| 0.88–0.94 | Primary text on a surface |
+| 0.68–0.82 | Secondary text, resting icons |
+| 0.38–0.55 | Disabled |
+| 0.08–0.22 | Hover and pressed fills |
+| ~0.18 | Modal scrim (`OverlayDialogStyle.barrierColor`) |
+
+### Topic colour on files
+
+A topic carries a colour (16 presets in [`../ux/topic/topic_appearance.dart`](../ux/topic/topic_appearance.dart), default `#6B7280`), and its **files wear it**. This is the app's main wayfinding cue: you know which topic you are in from the colour of the paper, before reading a word.
+
+| Rule | Why |
+|------|-----|
+| The canvas stays neutral | A tinted window would fight the panes and tire the eye |
+| The main topic's panes stay pure white | Home is the neutral place |
+| The fill is a gentle wash, `minFileTint` 4.5% to `maxFileTint` 17% | Enough to read as coloured paper, never enough to compete with text |
+| The border is the same colour, saturated, at `filePaneBorderWidth` 0.5px | A hairline is what makes the tint look intentional |
+| **Each file's strength is fixed to its id** | See below |
+
+`AppColors.fileTintStrength(fileId)` spreads files across that range using a multiplicative hash of the file id. The strength is arbitrary — panes in a topic are pleasantly varied rather than uniform — but it is **stable**: a file keeps its exact shade when the topic is rearranged, when the app restarts, and on another device. Nothing about a file's position or content may ever feed into this, or reordering would repaint the topic.
+
+(v1 varied the tint by *file type* — `plan` heaviest, `text` lightest. The document model has no file types, so identity took over the same range.)
+
+## Text
+
+All of it comes from [`app_typography.dart`](app_typography.dart). One family, few weights, one colour.
+
+| Style | Size | Height | Weight | For |
+|-------|------|--------|--------|-----|
+| `pageTitleStyle` | 19 | 1.3 | w500 | Topic title |
+| `noteTitleStyle` | 14 | 1.3 | w500 | File names, dialog titles |
+| `blockHeaderStyle` | 14 | 1.4 | w600 | Headers inside a document |
+| `noteBodyStyle` | 12.5 | 1.55 | w400 | Document body, inputs |
+| `listItemStyle` | 12.5 | 1.38 | w400 | Bullets |
+| `taskRowStyle` | 12.5 | 1.38 | w400 | Task rows |
+| `metaStyle` | 12 | 1.4 | w400 | Meta, hints (in `textHint`) |
+| `sidebarSectionStyle` | 13 | 1.35 | w400 | Sidebar sections |
+| `sidebarItemStyle` | 11 | 1.4 | w400 | Sidebar topics |
+
+Weights are only **w400 / w500 / w600**. Bold is something the user applies to their own text, not something the interface does to itself.
+
+**Font by language, not by content:** English gets Inter (`google_fonts`); Hebrew gets `SF Hebrew` with system fallbacks, and letter spacing forced to 0 because negative tracking mangles Hebrew. `AppTypography.configure` is called when the language changes.
+
+Chrome under 12px exists, but only for labels that must not be read as content: context menu rows at 11.5, popup menus and sidebar items at 11, the `AI` badge at 9.
+
+### Two kinds of text
 
 The distinction matters and is easy to get wrong:
 
 | Text | Style source |
 |------|--------------|
 | **App chrome** — menu labels, dialog titles, buttons, sidebar | `AppTypography` chrome styles |
-| **File content** — the default text a user types in a document | `AppTypography.noteBodyStyle` and friends |
+| **File content** — what a user types in a document | `noteBodyStyle`, `listItemStyle`, `taskRowStyle` |
 
-Changing document default size or font is a UI change, but it affects how every file reads — treat it as a deliberate decision, not a tweak.
+Changing the document default size or font is a UI change, but it changes how every file reads — a deliberate decision, not a tweak.
+
+## Spacing and shape
+
+[`AppSpacing`](app_colors.dart) is the scale: `xs 4`, `sm 6`, `md 12`, `lg 18`, `xl 26`, plus `blockGap 3` between blocks inside a document and `notePadding` / `canvasPadding` at 12.
+
+| Metric | Value | Where |
+|--------|-------|-------|
+| Gap between file panes | 8 | `AppLayoutSpacing.gap` |
+| Bottom bar height | 44 | `AppBottomBarMetrics` |
+| Topic header height | 32 | `AppTopicHeaderMetrics` |
+| Sidebar width | 200 default, 150–340 | `AppSidebarMetrics` |
+| Context menu row height | 28 | `AppContextMenu` |
+
+**Radii**, smallest to largest: `4` marks and chips · `6` menu rows · `8` inner blocks · `10` cards and file panes · `12` menu bubbles · `14` sidebar · `16` floating chrome · `22` dialogs · `999` pills.
+
+**Border widths** are all sub-pixel-ish on purpose: `0.5` file panes, `0.65` menus, `0.8`–`0.9` cards and fields, `1`+ only for a focus ring.
+
+**Motion** is short and never bouncy: `140ms` for a toggle or mark, `200ms` for a pane or menu change, `220ms` for a carousel snap. `Curves.easeOut` in, `easeIn` out.
 
 ## Glass
 
-Glass is the app's signature surface: a blurred, translucent panel used for overlays, dialogs, and floating chrome. It is defined once in `glass_surface.dart`. Anything that needs to float over content uses it rather than rolling its own blur.
+Glass is the app's signature surface: a blurred, translucent panel for anything that floats over content. It is defined once in [`glass_surface.dart`](glass_surface.dart), and **nothing rolls its own blur**.
+
+| Preset | Blur | Tint | For |
+|--------|------|------|-----|
+| `dialog` | 24 | `glassTint` 0.78, elevation 7 | Modals via `AppGlassDialog` |
+| `floating` | 24 | `glassTint` 0.78, elevation 4 | Floating pills, layout tiles |
+| `opaqueChrome` | 0 | Solid white + lift shadow | Bottom bar segments, `+` buttons |
+| `aiAccent` | 0 | Solid, `aiCyan` border | The AI segment, with `AI` on the outline |
+
+Solid chrome is not a contradiction: the bottom bar sits over scrolling text all day, and blur there would shimmer.
+
+## Controls
+
+Small, quiet, and generous to click. Every control's hit target is larger than its paint.
+
+| Control | Shape |
+|---------|-------|
+| Text / filled / outlined buttons | Pill (`radius 999`), padding 16×8, min height 34, `primaryBright` fill at 14% resting → 18% hover → 22% pressed |
+| `AppSegmentedToggle` | Chips 10×5, gap 6, radius 6, selected fill `primaryBright` 0.92 |
+| `AppSwitch` | Material switch at **0.78 scale** — full size looks like a control panel |
+| `TaskMark` | Custom 14px mark, radius 4, 140ms, in `aiCyan` when done, 32×32 hit target |
+| `GlassCircleButton` | 34px circle, 16px icon |
+| Bottom bar icons | 22px icon, 34×34 minimum target |
+
+Marking and selection are **gentle by rule**: a translucent fill or a hairline ring, never a hard colour block or a heavy outline.
+
+## Dialogs and menus
+
+| Kind | Widget | Shape |
+|------|--------|-------|
+| Standard dialog | `AppGlassDialog` | Width 420, radius 22, padding 20/18/20/14, hairline dividers |
+| Phone dialog | `AppAdaptiveDialogShell` | Radius 20, inset 16×24, tint 0.94 |
+| Full-screen overlay | `OverlayDialogShell` + `OverlayDialogStyle` | Scrim black 18%, cards radius 14 |
+| Context menu (right-click) | `../ux/widgets/app_context_menu.dart` | Bubble radius 12, rows 28 high, 11.5px labels, `menuTint` frost, highlight in `primary` |
+| Hover bubble | `../ux/widgets/details_hover_bubble.dart` | Radius 10, blur 18, white 82%, max 320×240 |
+| Native popup menu | `app_theme.dart` `popupMenuTheme` | `noteTop` 0.94, radius 16, 11px |
+
+Route every dialog through [`adaptive_dialog.dart`](adaptive_dialog.dart) — it picks the phone or desktop shell. Fields inside dialogs use [`dialog_field_style.dart`](dialog_field_style.dart) (radius 10, padding 10×8), never a bare `TextField`.
+
+A **secondary** dialog — one opened from a dialog — keeps the same shell and gains no chrome. Depth is expressed by the scrim stacking and the cooler menu frost, not by shadows getting heavier.
+
+## Icons
+
+[Lucide](https://lucide.dev) at the **200 stroke weight**, named in [`app_icons.dart`](app_icons.dart) and drawn through `AppIcon` (20px default, `text` at 82%, `textHint` at 38% when disabled). The thin stroke is what keeps icons as quiet as the type next to them.
+
+Sizes in use: 14 dividers and marks · 16 circle buttons · 18 sidebar and inline actions · 20 default · 22 bottom bar.
+
+## Bilingual
+
+Every surface must work in English (LTR) and Hebrew (RTL). Use [`bilingual_layout.dart`](bilingual_layout.dart) primitives (`StartTrailingRow`, `DialogActionsRow`) rather than hardcoding a direction. Rules: [`../../core/l10n/BILINGUAL.md`](../../core/l10n/BILINGUAL.md).
+
+## File map
+
+| Concern | Files |
+|---------|-------|
+| Colours, spacing scale | [`app_colors.dart`](app_colors.dart) |
+| Material theme | [`app_theme.dart`](app_theme.dart) |
+| Text | [`app_typography.dart`](app_typography.dart) |
+| Glass | [`glass_surface.dart`](glass_surface.dart) |
+| Controls | [`app_segmented_toggle.dart`](app_segmented_toggle.dart), [`app_switch.dart`](app_switch.dart) |
+| Dialogs | [`adaptive_dialog.dart`](adaptive_dialog.dart), [`overlay_dialog_shell.dart`](overlay_dialog_shell.dart), [`overlay_dialog_style.dart`](overlay_dialog_style.dart), [`dialog_field_style.dart`](dialog_field_style.dart) |
+| Icons | [`app_icons.dart`](app_icons.dart) |
+| Cards and previews | [`note_widgets.dart`](note_widgets.dart), [`overlay_file_preview_card.dart`](overlay_file_preview_card.dart), [`layout_preview_icon.dart`](layout_preview_icon.dart) |
+| Carousel | [`horizontal_carousel.dart`](horizontal_carousel.dart) |
+| RTL primitives | [`bilingual_layout.dart`](bilingual_layout.dart) |
 
 ## Rules
 
-- **No hardcoded visual values outside this folder.** Colors, font sizes, radii, blur amounts, and spacing constants live here.
+- **No hardcoded visual values outside this folder.** Colours, font sizes, radii, blur amounts, and spacing constants live here. A one-off `Color(0x…)` in a widget is a bug in this area, not a shortcut.
 - UI widgets are **presentational**: they take values and callbacks, never call services or `AppState`.
 - Nothing here decides *when* it is shown — that is [UX](../ux/AREA.md).
+- Reach for opacity over a new token. Reach for an existing radius over a new one.
 - Changing a shared style means checking both app chrome and file content, since both consume this area.
-- Every surface must work in English (LTR) and Hebrew (RTL); use `bilingual_layout.dart` rather than hardcoding direction.
+- Anything floating uses a `AppGlassStyle` preset. Do not invent blur and tint values.
+- Keep it small and quiet. If a change makes something louder than the user's own text, it is wrong.
+
+## Where the style is still not honest
+
+Tracked as **U1–U4** in [`BACKLOG.md`](../../../../BACKLOG.md): the context menu and hover bubble keep their own visual language, the AI review dialogs bypass `AppGlassDialog` and `AppTypography`, document heading sizes are computed inline, and some Material icons remain among the Lucide ones.

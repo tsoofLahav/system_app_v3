@@ -73,7 +73,7 @@ abstract final class AppContextMenu {
       color: highlighted
           ? Colors.white
           : destructive
-              ? const Color(0xFFB45309)
+              ? AppColors.destructive
               : AppColors.text.withValues(alpha: 0.92),
     );
   }
@@ -468,7 +468,7 @@ class _BubbleMenuPanel extends StatelessWidget {
   static final _menuStyle = GlassStyleSpec(
     blurSigma: 28,
     tintOpacity: 0.88,
-    tintColor: const Color(0xFFF4F4F5),
+    tintColor: AppColors.menuTint,
     showTopHighlight: false,
     elevation: 0,
     border: Border.all(
@@ -628,7 +628,7 @@ class _MenuRowChrome extends StatelessWidget {
       ),
       alignment: AlignmentDirectional.centerStart,
       decoration: BoxDecoration(
-        color: highlighted ? const Color(0xFF007AFF) : Colors.transparent,
+        color: highlighted ? AppColors.primary : Colors.transparent,
         borderRadius: BorderRadius.circular(6),
       ),
       child: child,

@@ -59,11 +59,7 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
       topic: topic,
     );
     if (result == null) return;
-    await state.addFile(
-      topic: topic,
-      name: result.name,
-      isEssence: result.isEssence,
-    );
+    await state.addFile(topic: topic, name: result.name);
   }
 
   Future<void> _bringFile(BuildContext context) async {}

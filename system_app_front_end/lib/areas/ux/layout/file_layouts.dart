@@ -105,6 +105,15 @@ abstract final class FileLayouts {
     return math.max(primarySlotMinHeight, available);
   }
 
+  /// Height of one file on a phone, where files always stack.
+  ///
+  /// Short of the viewport on purpose: the next file peeking in is what tells
+  /// the user the topic continues below.
+  static double phoneSlotHeight(BuildContext context) {
+    final viewport = MediaQuery.sizeOf(context).height;
+    return math.max(320.0, viewport * 0.72);
+  }
+
   static double _slotHeightFromConstraints(BoxConstraints constraints) {
     if (constraints.maxHeight.isFinite) return constraints.maxHeight;
     return primarySlotMinHeight;

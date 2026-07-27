@@ -28,7 +28,6 @@ def bootstrap_if_empty() -> dict:
         topic_id=home.id,
         name="Daily",
         document_json=empty_document_json(),
-        is_essence=True,
         order_index=0,
         meta={"automation_anchor": "daily"},
     )
