@@ -85,6 +85,7 @@ class Task {
 
   Task copyWith({
     int? id,
+    int? taskListId,
     int? blockId,
     String? title,
     String? status,
@@ -114,6 +115,7 @@ class Task {
   }) {
     return Task(
       id: id ?? this.id,
+      taskListId: taskListId ?? this.taskListId,
       blockId: blockId ?? this.blockId,
       title: title ?? this.title,
       status: status ?? this.status,

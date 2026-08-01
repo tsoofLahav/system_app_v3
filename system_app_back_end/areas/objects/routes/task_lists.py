@@ -31,7 +31,8 @@ def list_tasks(task_list_id):
 def create_task(task_list_id):
     get_or_404(TaskList, task_list_id)
     data = request.get_json(silent=True) or {}
-    title = data.get("title") or "New task"
+    # Empty string is allowed (blank row to type into); only missing title defaults.
+    title = "" if "title" not in data or data.get("title") is None else str(data.get("title"))
     status = data.get("status") or "active"
     order_index = data.get("list_order_index")
     if order_index is None:

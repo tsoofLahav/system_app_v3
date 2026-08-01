@@ -1,30 +1,47 @@
 # Area: Objects (frontend)
 
-Backend twin: [`system_app_back_end/areas/objects/AREA.md`](../../../../system_app_back_end/areas/objects/AREA.md) — read it for storage, cascades, and the link graph.
+Backend twin: [`system_app_back_end/areas/objects/AREA.md`](../../../../system_app_back_end/areas/objects/AREA.md) — storage, cascades, links, views.
 
-## What an object is
+## What this area owns
 
-A **piece of information with special qualities** — something the app can track, toggle, order, filter, or link, rather than plain prose.
+An object is a **piece of information with special qualities** — trackable, toggleable, orderable, filterable, or linkable — not plain prose.
 
-Objects appear inside a document through an embed block. The [files area](../files/AREA.md) decides **where** the object sits in the text; this area renders and edits **what it contains**.
+This area owns **data, services, and type logic**. How an object is *presented inside a file* (caret, mark, frames, Move Mode, right-click) lives in [files](../files/AREA.md) under `editor/embeds/`.
 
-| Type | Widget | Special quality |
-|------|--------|-----------------|
-| `task_list` | [`embeds/inline_task_list.dart`](embeds/inline_task_list.dart) | Order, done/active, views |
-| `info` | [`embeds/object_embed_widgets.dart`](embeds/object_embed_widgets.dart) | Linkable into a graph |
-| `image` | same | Uploaded asset |
-| `graph` | same | Rendered series |
-
-## Tasks
-
-**Order.** Tasks carry an explicit index inside their list. The user reorders by dragging ([`tasks/task_drag_data.dart`](tasks/task_drag_data.dart)); order is never inferred from creation time.
-
-**Done / active.** A single toggle on the task row ([`tasks/task_mark.dart`](tasks/task_mark.dart)). The task exists once — checking it off in a view updates the same row shown inside the file, and vice versa. Never keep a local per-view "done" flag.
-
-**Views.** A view is a user-made list a task can appear in without being copied. [`views/task_view_pane.dart`](views/task_view_pane.dart) renders one view as the main pane; [`views/task_view_display.dart`](views/task_view_display.dart) holds display config. A task can sit in several views at once, each with its own ordering.
+| Type | Special quality (this area) | In-file presentation (files) |
+|------|-----------------------------|------------------------------|
+| `task_list` | Tasks as rows; order; done/active; **views** | List-like embed ([`../files/editor/embeds/inline_task_list.dart`](../files/editor/embeds/inline_task_list.dart)) |
+| `info` | Knowledge piece; **links / object graph** | Title + body embed ([`../files/editor/embeds/object_embed_widgets.dart`](../files/editor/embeds/object_embed_widgets.dart)) |
+| `image` | Asset + caption payload | Image embed (same file) |
+| `graph` | Chart data (labels/values) | Table-like embed ([`../files/editor/embeds/graph_embed.dart`](../files/editor/embeds/graph_embed.dart)) |
 
 ```
-task ──┬── shown inline in its file
+files (presentation) ──thin overlay──► objects (data + type logic)
+         │                                    │
+         │  calls services / shows            │  tasks.status (done/active)
+         │  controls for object fields        │  tasks ↔ views
+         │                                    │  info ↔ links
+         └────────────────────────────────────┘
+```
+
+**Done/active is data, not chrome.** It lives on the task row (`tasks.status`). The [`TaskMark`](tasks/task_mark.dart) widget is only the control that toggles that field — used in the file embed and in views.
+
+**Thin overlay:** file embeds may import `objects/data/*` and shared controls like `TaskMark` to read/write object fields. Objects must **not** own document-flow, menus, or embed chrome — and should avoid importing the file editor.
+
+## Tasks and views
+
+**Two orders.** A task has `list_order_index` in its home list and a separate `order_index` per view membership — first in the list can be fifth in a view.
+
+**Active / Done zones.** Both the in-file list and the view pane split into Active then Done ([`tasks/task_zones.dart`](tasks/task_zones.dart)). Status is canonical on the task row (`active` / `done`); never a per-view done flag. Checking done in a view updates the same row in the file, and vice versa.
+
+**Drag + optimistic UI.** Long-press the checkbox / row to drag ([`tasks/task_drag_data.dart`](tasks/task_drag_data.dart)). Local order updates immediately; list persist uses `PUT …/tasks/order` or `POST …/move` (cross-zone); view persist rewrites memberships (+ toggle when the zone changes). On failure, revert and show `reorderFailed`.
+
+**Empty titles.** New tasks are created with `title: ""` and a hint (`newTaskHint`) — never the literal “New task”. Enter on an empty row exits the list (same as document lists).
+
+**Views.** A user-made list a task can appear in without being copied. [`views/task_view_pane.dart`](views/task_view_pane.dart) is the main pane; [`views/task_view_display.dart`](views/task_view_display.dart) holds display config.
+
+```
+task ──┬── shown inline in its file (files embed)
        ├── shown in view "This week"
        └── shown in view "Errands"
         (one row, three places)
@@ -32,24 +49,45 @@ task ──┬── shown inline in its file
 
 ## Info and the object graph
 
-An info object holds a piece of knowledge. Info objects can link to tasks, to other info, and in principle to any object — those edges form a graph across the workspace, independent of which file each object lives in.
+An info object holds knowledge (`title`, `body`, …). Links connect **any** object to any other (info↔task, info↔info, …) via the backend `links` table — a workspace-wide graph, independent of which file each object lives in.
 
-Rendering the graph is not built yet; the links exist on the backend.
+In-file editing of title/body is presentation (files). **Link create/navigate/query UI and rules belong here** as they grow — not inside the embed widget beyond a small entry point.
+
+## Image and graph (data)
+
+| Type | Data |
+|------|------|
+| `image` | Payload: url/path/width/caption |
+| `graph` | Payload: `labels`, `values`, `chartType`, **`colors[]`** (one hex per variable; legacy `color` = first) |
+
+Agent text and API shapes: backend objects `AREA.md` + production agent prompt.
 
 ## Structure
 
 | Folder | Role |
 |--------|------|
-| [`embeds/`](embeds/) | Widgets that render objects inside a document |
-| [`tasks/`](tasks/) | Task row, done mark, drag payload |
+| [`data/`](data/) | Models and API services (objects, tasks, views, …) |
+| [`tasks/`](tasks/) | Shared task UI: row, mark, drag payload, Active/Done zone helper |
 | [`views/`](views/) | Task view pane and display config |
-| [`data/`](data/) | Models and API services for objects, tasks, and views |
+
+In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 
 ## Rules
 
 - A task exists once. Views reference it — never copy task state into a view.
-- Toggling done anywhere must update the one canonical row and reflect everywhere.
-- Ordering is explicit and persisted; never rely on list position alone.
-- Creating an object must also place its embed block, or it will be invisible in the file.
+- Toggling done anywhere updates the one canonical row everywhere.
+- Ordering is explicit and persisted.
+- Creating an object must also place its embed block (API), or it is invisible in the file.
 - Deleting an embed goes through the object service so the backing row is cleaned up.
-- Object widgets keep the document's text rhythm — they sit in the flow, not in boxed-off panels.
+- Any object may link to any object; do not hardcode allowed link pairs.
+- Do not put document caret/mark/menu rules here — that is files.
+
+## Shipped vs next
+
+**Shipped (data):** task CRUD/status/order; view membership pane; empty titles; object create/delete with embed insert.
+
+**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order.
+
+**Shipped (presentation, in files):** list-like task embed; info title/body flow; graph table-like embed; Move Mode; right-click text menu on task/info fields.
+
+**Next (this area):** richer view sections; **info links** UI and navigation on the object graph; convert-selection → Info as a product flow using object APIs.

@@ -20,6 +20,7 @@ import '../areas/automations/automation_service.dart';
 import '../areas/production_agent/agent_service.dart';
 import './services/api_service.dart';
 import './services/bootstrap_service.dart';
+import './services/image_service.dart';
 import '../areas/files/data/file_service.dart';
 import '../areas/objects/data/object_service.dart';
 import './services/tag_service.dart';
@@ -49,6 +50,7 @@ class AppState extends ChangeNotifier {
     _tags = TagService(_api);
     _agent = AgentService(_api);
     _automations = AutomationService(_api);
+    _images = ImageService(_api);
   }
 
   final ApiService _api;
@@ -61,6 +63,7 @@ class AppState extends ChangeNotifier {
   late final TagService _tags;
   late final AgentService _agent;
   late final AutomationService _automations;
+  late final ImageService _images;
 
   AppLanguage _language = AppLanguage.en;
   bool loading = false;
@@ -222,6 +225,9 @@ class AppState extends ChangeNotifier {
       final files = await _files.listFilesForTopic(topic.id);
       selectedDetail = TopicDetail(topic: topic, files: files);
       topicDetailStale = false;
+      for (final file in files) {
+        await loadEmbedsForFile(file.id);
+      }
     } catch (e) {
       error = e.toString();
     }
@@ -435,10 +441,16 @@ class AppState extends ChangeNotifier {
     return file;
   }
 
-  Future<void> updateFile(AppFile file, Map<String, dynamic> body) async {
+  Future<void> updateFile(
+    AppFile file,
+    Map<String, dynamic> body, {
+    bool notify = true,
+  }) async {
     final updated = await _files.updateFile(file.id, body);
     _patchFileInDetail(updated);
-    notifyListeners();
+    // Silent document autosaves must not notify — MaterialApp's Consumer and
+    // other listeners rebuilding mid-keystroke desync HardwareKeyboard.
+    if (notify) notifyListeners();
   }
 
   Future<void> archiveFile(AppFile file) async {
@@ -481,10 +493,13 @@ class AppState extends ChangeNotifier {
     if (notify) notifyListeners();
   }
 
-  Future<List<ObjectEmbed>> loadEmbedsForFile(int fileId) async {
+  Future<List<ObjectEmbed>> loadEmbedsForFile(
+    int fileId, {
+    bool notify = true,
+  }) async {
     final embeds = await _objects.listForFile(fileId);
     embedsByFileId[fileId] = embeds;
-    notifyListeners();
+    if (notify) notifyListeners();
     return embeds;
   }
 
@@ -495,13 +510,59 @@ class AppState extends ChangeNotifier {
     return updated;
   }
 
-  Future<void> updateObjectPayload(
-    int objectId,
-    Map<String, dynamic> payload,
-  ) async {
-    await _api.patch('/objects/$objectId', {'payload': payload});
+  Future<void> deleteObjectEmbed(int objectId) async {
+    await _objects.deleteEmbed(objectId);
     await _reloadEmbedsForOpenFiles();
     notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> uploadImageBytes(
+    String filename,
+    List<int> bytes,
+  ) {
+    return _images.uploadBytes(filename, bytes);
+  }
+
+  Future<void> updateObjectPayload(
+    int objectId,
+    Map<String, dynamic> payload, {
+    bool notify = false,
+  }) async {
+    try {
+      await _api.patch('/objects/$objectId', {'payload': payload});
+    } on ApiException catch (e) {
+      // Late write after delete (empty graph exit, prune, etc.).
+      if (e.statusCode == 404) return;
+      rethrow;
+    }
+    // Patch the local cache so typing does not rebuild the whole file mid-key.
+    for (final entry in embedsByFileId.entries) {
+      final list = entry.value;
+      final index = list.indexWhere((e) => e.id == objectId);
+      if (index < 0) continue;
+      final current = list[index];
+      embedsByFileId[entry.key] = [
+        for (var i = 0; i < list.length; i++)
+          if (i == index)
+            ObjectEmbed(
+              id: current.id,
+              fileId: current.fileId,
+              type: current.type,
+              taskListId: current.taskListId,
+              informationId: current.informationId,
+              anchor: current.anchor,
+              sortKey: current.sortKey,
+              tasks: current.tasks,
+              information: current.information,
+              links: current.links,
+              payload: payload,
+            )
+          else
+            list[i],
+      ];
+      break;
+    }
+    if (notify) notifyListeners();
   }
 
   Future<ObjectEmbed> createObjectInDocument(
@@ -576,17 +637,56 @@ class AppState extends ChangeNotifier {
     await reloadFile(file.id);
   }
 
-  Future<Task> createTaskInList(int taskListId, {String title = 'New task'}) async {
-    final task = await _tasks.createInList(taskListId: taskListId, title: title);
-    await _reloadEmbedsForOpenFiles();
-    notifyListeners();
+  Future<Task> createTaskInList(
+    int taskListId, {
+    String title = '',
+    int? afterTaskId,
+    bool notify = true,
+  }) async {
+    final task = await _tasks.createInList(
+      taskListId: taskListId,
+      title: title,
+    );
+    // Keep new tasks in the Active zone: insert after [afterTaskId] among
+    // active tasks, otherwise append to active; then append done ids.
+    final existing = await _tasks.listForTaskList(taskListId);
+    final others = existing.where((t) => t.id != task.id).toList();
+    final active = others.where((t) => !t.isDone).map((t) => t.id).toList();
+    final done = others.where((t) => t.isDone).map((t) => t.id).toList();
+    final ordered = <int>[];
+    if (afterTaskId != null && active.contains(afterTaskId)) {
+      for (final id in active) {
+        ordered.add(id);
+        if (id == afterTaskId) ordered.add(task.id);
+      }
+    } else {
+      ordered.addAll(active);
+      ordered.add(task.id);
+    }
+    ordered.addAll(done);
+    await _tasks.reorderInList(taskListId, ordered);
+    await _reloadEmbedsForOpenFiles(notify: notify);
     return task;
   }
 
-  Future<void> reorderTasksInList(int taskListId, List<int> orderedIds) async {
+  Future<void> reorderTasksInList(
+    int taskListId,
+    List<int> orderedIds, {
+    bool notify = true,
+  }) async {
     await _tasks.reorderInList(taskListId, orderedIds);
-    await _reloadEmbedsForOpenFiles();
-    notifyListeners();
+    await _reloadEmbedsForOpenFiles(notify: notify);
+  }
+
+  /// Persist view membership order (active ids then done ids among task rows).
+  Future<void> reorderViewMemberships(
+    List<Map<String, dynamic>> memberships, {
+    bool notify = true,
+  }) async {
+    if (selectedView == null) return;
+    viewMemberships =
+        await _views.replaceMemberships(selectedView!.id, memberships);
+    if (notify) notifyListeners();
   }
 
   Future<List<ViewMembership>> loadTaskMemberships(int taskId) async {
@@ -616,6 +716,7 @@ class AppState extends ChangeNotifier {
     required String title,
     required String body,
     List<Map<String, dynamic>>? spans,
+    bool notify = false,
   }) async {
     if (embed.informationId == null) return;
     await _api.patch('/information/${embed.informationId}', {
@@ -623,7 +724,11 @@ class AppState extends ChangeNotifier {
       'body': body,
       'metadata': {'spans': spans ?? []},
     });
-    await _reloadEmbedsForOpenFiles();
+    // Keep the typed text on screen without reloading embeds (which would
+    // notifyListeners and rebuild the document mid-keystroke).
+    if (notify) {
+      await loadEmbedsForFile(embed.fileId);
+    }
   }
 
   Future<void> addInfoLink(
@@ -639,32 +744,61 @@ class AppState extends ChangeNotifier {
     await loadEmbedsForFile(embed.fileId);
   }
 
-  Future<void> toggleTaskStatus(Task task) async {
+  Future<void> toggleTaskStatus(Task task, {bool notify = true}) async {
     await _api.post('/tasks/${task.id}/toggle', {});
-    await _reloadEmbedsForOpenFiles();
-    notifyListeners();
+    await _reloadEmbedsForOpenFiles(notify: notify);
   }
 
-  Future<void> updateTaskTitle(Task task, String title) async {
-    await _api.patch('/tasks/${task.id}', {'title': title});
-    await _reloadEmbedsForOpenFiles();
-    notifyListeners();
+  /// Place [task] at [insertIndexInZone] in the Active/Done zone of its list.
+  Future<void> moveTaskInListZone({
+    required Task task,
+    required bool targetDone,
+    required int insertIndexInZone,
+    bool notify = true,
+  }) async {
+    final listId = task.taskListId;
+    if (listId == null) return;
+    await _tasks.moveToListZone(
+      taskId: task.id,
+      targetTaskListId: listId,
+      insertIndexInZone: insertIndexInZone,
+      targetDone: targetDone,
+    );
+    await _reloadEmbedsForOpenFiles(notify: notify);
   }
 
-  Future<void> deleteTask(Task task) async {
+  Future<void> updateTaskTitle(
+    Task task,
+    String title, {
+    bool notify = true,
+  }) async {
+    try {
+      await _api.patch('/tasks/${task.id}', {'title': title});
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) return;
+      rethrow;
+    }
+    await _reloadEmbedsForOpenFiles(notify: notify);
+  }
+
+  Future<void> deleteTask(Task task, {bool notify = true}) async {
     await _tasks.deleteTask(task.id);
-    await _reloadEmbedsForOpenFiles();
-    notifyListeners();
+    await _reloadEmbedsForOpenFiles(notify: notify);
   }
 
-  Future<void> _reloadEmbedsForOpenFiles() async {
+  Future<void> _reloadEmbedsForOpenFiles({bool notify = true}) async {
     for (final file in selectedDetail?.files ?? const <AppFile>[]) {
-      await loadEmbedsForFile(file.id);
+      await loadEmbedsForFile(file.id, notify: false);
     }
     if (isViewMode && selectedView != null) {
       viewMemberships = await _views.listMemberships(selectedView!.id);
     }
+    if (notify) notifyListeners();
   }
+
+  /// Reload open-file embeds and the selected view's memberships.
+  Future<void> refreshOpenTaskSurfaces({bool notify = true}) =>
+      _reloadEmbedsForOpenFiles(notify: notify);
 
   /// Writes the topic's file order. The layout then decides how far down that
   /// order the screen reaches.

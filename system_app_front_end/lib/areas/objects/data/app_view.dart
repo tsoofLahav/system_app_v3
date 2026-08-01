@@ -67,4 +67,31 @@ class ViewMembership {
           : null,
     );
   }
+
+  ViewMembership copyWith({
+    int? orderIndex,
+    Map<String, dynamic>? task,
+    String? sectionName,
+    String? sectionFlag,
+    String? topicKey,
+  }) {
+    return ViewMembership(
+      id: id,
+      viewId: viewId,
+      taskId: taskId,
+      sectionName: sectionName ?? this.sectionName,
+      orderIndex: orderIndex ?? this.orderIndex,
+      sectionFlag: sectionFlag ?? this.sectionFlag,
+      topicKey: topicKey ?? this.topicKey,
+      task: task ?? this.task,
+    );
+  }
+
+  Map<String, dynamic> toReplaceJson() => {
+        'task_id': taskId,
+        'section_name': sectionName,
+        'order_index': orderIndex,
+        'section_flag': sectionFlag,
+        'topic_key': topicKey,
+      };
 }

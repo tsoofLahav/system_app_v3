@@ -13,7 +13,8 @@ Everything the user writes is saved as a single v3 block tree in `files.document
 | Folder | Role |
 |--------|------|
 | [`model/`](model/) | Node types and JSON codec |
-| [`editor/`](editor/) | The editor surface and block widgets |
+| [`editor/`](editor/) | The editor surface, block widgets, embed host |
+| [`editor/embeds/`](editor/embeds/) | In-file presentation of objects (task list, info, image, graph) |
 | [`rich_text/`](rich_text/) | Span formatting, controllers, context menus |
 | [`data/`](data/) | File and topic models + API services |
 
@@ -26,7 +27,7 @@ Everything the user writes is saved as a single v3 block tree in `files.document
 | Bullet list | `bullet_list` | `RichListEditor` |
 | Ordered list | `ordered_list` | `RichListEditor` |
 | Table | `table` | `RichTableEditor` |
-| Embed | `embed` | Object widget — see [objects](../objects/AREA.md) |
+| Embed | `embed` | [`editor/embeds/`](editor/embeds/) — presentation only; type data in [objects](../objects/AREA.md) |
 
 Position is array order in `blocks[]`.
 
@@ -111,6 +112,7 @@ Segment ids come from the document tree, so order is always derived from `blocks
 | Paragraph / heading | `blockId` |
 | List item | `blockId#i<index>` |
 | Table cell | `blockId#c<row>:<col>` |
+| Embed (whole object) | `blockId#embed` |
 
 `BlockDocumentEditor` pushes the order on every build; the fields attach themselves through `DocumentTextFlowScope`.
 
@@ -162,7 +164,7 @@ Everything an action needs is on the mark, so no action re-derives ranges:
 
 Opening the right-click menu can move focus and collapse a selection, so the mark is captured on secondary pointer-down (`capturePendingMark`) and **frozen** for the life of the menu (`openMenuSession`). While a menu is open, `resolveMark()` returns the frozen mark, so the target cannot shift under the user between opening the menu and choosing an item.
 
-The frozen mark is also what gets highlighted, on **every part it covers**, so the user can see the exact extent an action will apply to before choosing it.
+The frozen mark is also what gets highlighted, on **every part it covers**, so the user can see the exact extent an action will apply to before choosing it. While that overlay is up, the field's native selection paint is hidden — there is never a second wash (user selection + line-at-caret) at the same time.
 
 Right-clicking *outside* an existing marking clears it first, so the action targets the line pointed at rather than a marking elsewhere in the file.
 
@@ -170,7 +172,6 @@ Right-clicking *outside* an existing marking clears it first, so the action targ
 
 - Deleting across parts removes the parts it emptied **in full** and clears the rest. The first and last part are not merged into one.
 - Enter over a multi-part selection deletes it and stops; the split happens on a second press, at a caret that is unambiguously in one part.
-- Embeds are not segments yet, so the caret jumps over them.
 
 ## Rich text
 
@@ -178,11 +179,53 @@ Inline bold, italic, underline, size, and color are **spans** — ranges over a 
 
 `SpanTextEditingController` keeps text and spans in sync; formatting actions operate on the current selection through `block_text_actions.dart`.
 
-## How objects fit in
+## How objects fit in (presentation)
 
-An embedded object is a block in the document with an `object_id`. The document decides **where** it sits; the [objects area](../objects/AREA.md) renders and edits **what it contains**.
+An embedded object is a top-level block with an `object_id`. **This area** owns where it sits, how it joins the caret/mark, menus, frames, and Move Mode. **[Objects](../objects/AREA.md)** owns the backing data and special qualities (task **views**, info **links**, payloads).
 
-Deleting an embed must go through the object service so the backing row is cleaned up.
+Embed widgets live here and call into objects through a **thin overlay** (models/services + controls for object fields, e.g. the done toggle). Task done/active is **`tasks.status` in objects**, not a files-only UI detail. Embeds must not grow into the home of views logic or the link graph.
+
+| Embed | Widget | Flow role |
+|-------|--------|-----------|
+| Task list | [`embeds/inline_task_list.dart`](editor/embeds/inline_task_list.dart) | One segment per task (like a list) |
+| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | Title + body segments; gentle frame |
+| Image | same | Atomic unit; caption field |
+| Graph | [`embeds/graph_embed.dart`](editor/embeds/graph_embed.dart) | One segment per column (like a table) |
+| Host | [`embed_block_host.dart`](editor/embed_block_host.dart) | Move Mode; optional atomic `#embed` segment |
+
+### Placement rules
+
+| Rule | Meaning |
+|------|---------|
+| Between blocks only | Never inside a list item or table cell |
+| Create at the caret | Inserts go to the **last-claimed** file, after the block that last held the caret |
+| Document tree is source of truth | Position is `blocks[]` order; the object row holds data, not placement |
+| Right-click on embed text | Same text menu as paragraphs (`DocumentMark`). Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Graphs extend the table cell menu (add column + chart options) |
+| Move Mode | Double-click → whole object draggable; drop/cancel returns to edit. No permanent drag handle |
+
+### Segment id
+
+| Part | Id |
+|------|-----|
+| Atomic embed (image, or host when `registerAsUnit`) | `blockId#embed` via `embedSegmentId` |
+| Task / info / graph parts | Per-part ids from `document_text_flow.dart` helpers |
+
+Deleting a fully marked embed removes the block **and** cascades through the object service.
+
+### Exit below (continuity)
+
+Enter on an empty trailing unit (final task / info body line / graph column) exits below without destroying remaining content — same idea as lists and tables.
+
+### In-file behaviour by type (presentation only)
+
+| Type | In the document |
+|------|-----------------|
+| Task list | Active then Done; checkbox gutter (long-press drag); empty title + hint; Enter/Backspace like a list |
+| Info | Title ↔ body like adjacent lines; empty final body line + Enter exits below |
+| Graph | Chart on top; two-row grid; max **8** variables; Enter adds columns (blocked at 8); empty column exits below; chart paints in the same reading direction as the table (RTL in Hebrew); right-click → type + palette submenu ([`AppColorPalettes`](../ui/app_color_palettes.dart), 8 colours each) |
+| Image | Display + caption; resize handles deferred |
+
+Type logic beyond presentation (views, links, cascades) → [objects](../objects/AREA.md).
 
 ## Text version vs full version
 
@@ -204,7 +247,7 @@ Undo/redo is tracked by `document_edit_history.dart` at document level.
 - Enter never splits a paragraph into two blocks.
 - Never store or display derived plain text in the app.
 - Never rebuild the whole editor on a keystroke; save silently and keep focus.
-- An empty list item or table row plus Enter exits that structure **without destroying it**.
+- An empty list item, table row, or trailing object unit (empty final task / info line / graph column) plus Enter exits that structure **without destroying it**.
 - All formatting goes through spans, never through separate styled blocks.
 - Any new editable text must register a segment with the flow, or the caret will not reach it.
 - Segment order comes from the document tree, never from widget build order.
@@ -212,6 +255,7 @@ Undo/redo is tracked by `document_edit_history.dart` at document level.
 - With nothing marked, an action applies to the caret's line — never to nothing, and never to the whole part.
 - A bullet and a row each count as one line of text; settle caret and marking questions by asking what a plain line would do.
 - A part is removed only when it was marked end to end; a partial marking never destroys structure.
+- Never rebuild the whole editor from `AppState.notifyListeners` while a key may still be down. Silent saves and post-frame embed refreshes only — otherwise Flutter's keyboard state desyncs (`KeyDownEvent … already pressed`).
 - An arrow key moves the caret the direction it points on screen, in Hebrew as in English.
 - A list has one style. Points vs numbers is switched on the existing list, never offered as two kinds of list to insert.
 
@@ -220,4 +264,6 @@ Undo/redo is tracked by `document_edit_history.dart` at document level.
 - Deleting across parts does not merge the first and last part into one.
 - Cmd+arrow and Home/End still follow the platform's logical direction in Hebrew. They share one intent with Home/End, so flipping it would break those; plain and Alt+arrow are handled.
 - Undo/redo is still per document mutation, not one stack shared with cross-part edits.
-- Objects are not part of the flow; the caret cannot enter an embed.
+- Insert still places the embed after the focused block, not by splitting a paragraph at the caret offset.
+- Image resize handles deferred. Convert selection → Info is an objects-area product flow (uses object APIs) with a small files entry point.
+- In-file task lists show Active then Done; long-press the checkbox to drag-reorder (optimistic). Empty new tasks use a hint, not prefilled “New task”.

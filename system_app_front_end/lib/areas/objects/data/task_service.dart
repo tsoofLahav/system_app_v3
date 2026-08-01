@@ -42,6 +42,20 @@ class TaskService {
     return data.map((e) => Task.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  /// Same-list or cross-list move into an Active/Done zone slot.
+  Future<void> moveToListZone({
+    required int taskId,
+    required int targetTaskListId,
+    required int insertIndexInZone,
+    required bool targetDone,
+  }) async {
+    await _api.post('/tasks/$taskId/move', {
+      'target_task_list_id': targetTaskListId,
+      'insert_index_in_zone': insertIndexInZone,
+      'target_done': targetDone,
+    });
+  }
+
   Future<List<Map<String, dynamic>>> getTaskMemberships(int taskId) async {
     return (await _api.get('/tasks/$taskId/memberships') as List<dynamic>)
         .cast<Map<String, dynamic>>();

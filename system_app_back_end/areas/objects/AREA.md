@@ -8,22 +8,35 @@ An object is a **piece of information with special qualities** — something tha
 
 Plain sentences live in the document body. Anything the system needs to *reason about* becomes an object.
 
-Objects live in the `objects` table and appear inside a file through an `embed` block that points at `objects.id`. The [files area](../files/AREA.md) owns **placement**; this area owns **content and behavior**.
+Objects live in the `objects` table and appear inside a file through an `embed` block that points at `objects.id`. The [files area](../files/AREA.md) owns **placement and in-file presentation**; this area owns **content, type logic** (tasks/views, info links), and cascades.
 
 | Type | Backing storage | Special quality |
 |------|-----------------|-----------------|
 | `task_list` | `task_lists` + `tasks` | Ordering, done/active, views |
 | `info` | `information_pieces` | Linkable into a graph |
-| `image` | `objects.payload` | Uploaded asset reference |
-| `graph` | `objects.payload` | Rendered data series |
+| `image` | `objects.payload` | Uploaded asset reference + caption |
+| `graph` | `objects.payload` | Chart data as labels/values (two-row table) |
+
+Every object has a stable id, file id, type, optional typed FKs / payload, and timestamps. The document owns position; the object owns data.
+
+## Shared rules with the file
+
+| Rule | Meaning |
+|------|---------|
+| Embed is a pointer | `{ "type": "embed", "object_id": N }` — no nested content in the block tree |
+| Top-level only | Never nested inside list or table JSON |
+| Create inserts the block | `POST /files/:id/objects` creates the row **and** inserts the embed at `block_index` |
+| Delete cascades | `delete_object_embed_cascade` removes the object and strips the embed from `document_json` |
 
 ## Tasks
 
 Tasks are the richest object type — a sub-part of this area, not a separate one.
 
-**Order.** Every task carries `list_order_index` within its `task_list`. Users reorder freely; order is explicit, not derived from creation time. Reordering rewrites indices for the whole list so they stay dense.
+**Order.** Every task carries `list_order_index` within its `task_list`. Users reorder freely; order is explicit, not derived from creation time. Reordering rewrites indices for the whole list so they stay dense (`active` ids then `done` ids). Views keep a separate `order_index` on `view_task_memberships`.
 
-**Done / active toggle.** `tasks.status` is `active` or `done`. A task exists **once**. Marking it done anywhere updates the single row and is reflected everywhere it appears.
+**Done / active toggle.** `tasks.status` is `active` or `done`. A task exists **once**. Marking it done anywhere updates the single row and is reflected everywhere it appears. List queries and the UI show Active then Done zones; `POST /tasks/:id/move` can place a task into a zone (including the same list).
+
+**Empty titles.** `POST /task-lists/:id/tasks` accepts `title: ""` (blank row). Only a missing title key may default; never coerce empty string to `"New task"`.
 
 **Views.** A view is a user-made list that a task can appear in without being copied. Membership lives in `view_task_memberships`, with its own ordering per view.
 
@@ -45,6 +58,15 @@ Info objects can be **linked** — and links are not restricted to info. The `li
 | `target_type`, `target_id` | The other endpoint |
 
 So an info piece can link to a task, a task to another task, an info to several infos. Together these edges form a **graph of objects** across the whole workspace, independent of which file each object sits in.
+
+## Image and graph payloads
+
+| Type | Typical payload |
+|------|-----------------|
+| `image` | `{ "url", "path", "width", "caption" }` |
+| `graph` | `{ "labels": [...], "values": [...], "chartType"?, "colors": ["#…", …], "color"? }` — one column and one colour per variable (`color` is legacy alias for the first) |
+
+Agent text expands task lists and info fully; images contribute reference + caption; graphs contribute the two-row table only. Spec: production agent system prompt.
 
 ## Deletion
 
