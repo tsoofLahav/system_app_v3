@@ -6,6 +6,7 @@ class ObjectEmbed {
     required this.fileId,
     required this.type,
     this.taskListId,
+    this.taskListTitle = '',
     this.informationId,
     this.anchor = const {},
     this.sortKey = 0,
@@ -19,6 +20,7 @@ class ObjectEmbed {
   final int fileId;
   final String type;
   final int? taskListId;
+  final String taskListTitle;
   final int? informationId;
   final Map<String, dynamic> anchor;
   final int sortKey;
@@ -32,12 +34,14 @@ class ObjectEmbed {
     Map<String, dynamic>? information,
     List<Map<String, dynamic>>? links,
     Map<String, dynamic>? payload,
+    String? taskListTitle,
   }) {
     return ObjectEmbed(
       id: id,
       fileId: fileId,
       type: type,
       taskListId: taskListId,
+      taskListTitle: taskListTitle ?? this.taskListTitle,
       informationId: informationId,
       anchor: anchor,
       sortKey: sortKey,
@@ -49,11 +53,14 @@ class ObjectEmbed {
   }
 
   factory ObjectEmbed.fromJson(Map<String, dynamic> json) {
+    final taskList = json['task_list'];
+    final listTitle = taskList is Map ? '${taskList['title'] ?? ''}' : '';
     return ObjectEmbed(
       id: json['id'] as int,
       fileId: json['file_id'] as int,
       type: json['type'] as String,
       taskListId: json['task_list_id'] as int?,
+      taskListTitle: listTitle,
       informationId: json['information_id'] as int?,
       anchor: json['anchor'] is Map<String, dynamic>
           ? Map<String, dynamic>.from(json['anchor'] as Map)

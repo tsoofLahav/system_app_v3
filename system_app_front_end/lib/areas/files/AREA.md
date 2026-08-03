@@ -187,7 +187,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 
 | Embed | Widget | Flow role |
 |-------|--------|-----------|
-| Task list | [`embeds/inline_task_list.dart`](editor/embeds/inline_task_list.dart) | One segment per task (like a list) |
+| Task list | [`embeds/inline_task_list.dart`](editor/embeds/inline_task_list.dart) | Header segment + one segment per task |
 | Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | Title + body segments; gentle frame |
 | Image | same | Atomic unit; caption field |
 | Graph | [`embeds/graph_embed.dart`](editor/embeds/graph_embed.dart) | One segment per column (like a table) |

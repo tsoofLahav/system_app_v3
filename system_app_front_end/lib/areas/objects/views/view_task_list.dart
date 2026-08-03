@@ -14,6 +14,17 @@ import '../tasks/task_drag_data.dart';
 import '../tasks/task_row.dart';
 import '../tasks/task_zones.dart';
 
+/// A home list that already has tasks in this frame (for assign-to-list).
+class ViewFrameListOption {
+  const ViewFrameListOption({
+    required this.taskListId,
+    required this.title,
+  });
+
+  final int taskListId;
+  final String title;
+}
+
 /// Active/Done task list for one view frame — keyboard add/edit/delete,
 /// mark/unmark, and Reorder Mode.
 class ViewTaskList extends StatefulWidget {
@@ -24,6 +35,7 @@ class ViewTaskList extends StatefulWidget {
     required this.onZonesChanged,
     this.sectionName,
     this.topicKey,
+    this.frameLists = const [],
     this.enabled = true,
   });
 
@@ -32,6 +44,7 @@ class ViewTaskList extends StatefulWidget {
   final ValueChanged<TaskZones> onZonesChanged;
   final String? sectionName;
   final String? topicKey;
+  final List<ViewFrameListOption> frameLists;
   final bool enabled;
 
   @override
@@ -81,17 +94,20 @@ class _ViewTaskListState extends State<ViewTaskList> {
     widget.onZonesChanged(next);
   }
 
-  Future<void> _confirmDelete(Task task) async {
+  Future<void> _deleteTask(Task task) async {
     final s = widget.state.strings;
-    final ok = await showAppConfirmDialog(
-      context: context,
-      title: s['deleteTaskTitle'],
-      message: s['deleteTaskFromViewBody'],
-      confirmLabel: s['delete'],
-      cancelLabel: s['cancel'],
-      destructive: true,
-    );
-    if (!ok || !mounted) return;
+    final hasHomeList = task.taskListId != null;
+    if (hasHomeList) {
+      final ok = await showAppConfirmDialog(
+        context: context,
+        title: s['deleteTaskTitle'],
+        message: s['deleteTaskFromViewBody'],
+        confirmLabel: s['delete'],
+        cancelLabel: s['cancel'],
+        destructive: true,
+      );
+      if (!ok || !mounted) return;
+    }
     _busy = true;
     try {
       await widget.state.deleteTask(task);
@@ -129,10 +145,10 @@ class _ViewTaskListState extends State<ViewTaskList> {
   Future<void> _handleBackspace(Task task) async {
     if (_busy || !widget.enabled) return;
     if (task.title.trim().isNotEmpty) return;
-    await _confirmDelete(task);
+    await _deleteTask(task);
   }
 
-  Future<void> _createSeed({String title = ''}) async {
+  Future<void> _createSeed({String title = '', int? taskListId}) async {
     if (_busy || !widget.enabled) return;
     _busy = true;
     try {
@@ -140,6 +156,7 @@ class _ViewTaskListState extends State<ViewTaskList> {
         title: title,
         sectionName: widget.sectionName,
         topicKey: widget.topicKey,
+        taskListId: taskListId,
       );
       if (!mounted) return;
       setState(() {
@@ -151,20 +168,45 @@ class _ViewTaskListState extends State<ViewTaskList> {
     }
   }
 
+  Future<void> _assignToList(Task task, int taskListId) async {
+    _busy = true;
+    try {
+      await widget.state.assignViewTaskToList(task, taskListId);
+    } finally {
+      _busy = false;
+    }
+  }
+
   Future<void> _showTaskMenu(Offset globalPosition, Task task) async {
     final s = widget.state.strings;
+    final lists = widget.frameLists;
+    final orphan = task.taskListId == null;
+    final entries = <AppContextMenuEntry>[
+      AppContextMenuItem(value: 'reorder', label: s['reorderTasks']),
+      if (orphan && lists.isNotEmpty)
+        AppContextMenuSubmenu(
+          label: s['addToHomeList'],
+          children: [
+            for (final list in lists)
+              AppContextMenuItem(
+                value: 'list:${list.taskListId}',
+                label: list.title.trim().isEmpty
+                    ? s['untitledTaskList']
+                    : list.title,
+              ),
+          ],
+        ),
+      AppContextMenuItem(
+        value: 'delete',
+        label: s['delete'],
+        destructive: true,
+      ),
+    ];
     final action = await AppContextMenu.show(
       context: context,
       globalPosition: globalPosition,
       isRtl: s.isRtl,
-      entries: [
-        AppContextMenuItem(value: 'reorder', label: s['reorderTasks']),
-        AppContextMenuItem(
-          value: 'delete',
-          label: s['delete'],
-          destructive: true,
-        ),
-      ],
+      entries: entries,
     );
     if (!mounted || action == null) return;
     if (action == 'reorder') {
@@ -172,7 +214,12 @@ class _ViewTaskListState extends State<ViewTaskList> {
       return;
     }
     if (action == 'delete') {
-      await _confirmDelete(task);
+      await _deleteTask(task);
+      return;
+    }
+    if (action.startsWith('list:')) {
+      final id = int.tryParse(action.substring('list:'.length));
+      if (id != null) await _assignToList(task, id);
     }
   }
 
@@ -311,26 +358,55 @@ class _ViewTaskListState extends State<ViewTaskList> {
   }
 
   Widget _emptySeed() {
-    final seed = Task(
-      id: -1,
-      title: '',
-      status: 'active',
-    );
-    return TaskRow(
-      task: seed,
-      state: widget.state,
-      autofocus: _focusSeed,
-      onAutofocusConsumed: () => setState(() => _focusSeed = false),
-      onToggle: () {},
-      toggleEnabled: false,
-      onTitleChanged: (title) {
-        if (title.trim().isEmpty) return;
-        unawaited(_createSeed(title: title));
-      },
-      onEnter: (_) => _createSeed(),
-      onBackspaceAtStart: () async {
-        FocusManager.instance.primaryFocus?.unfocus();
-      },
+    final seed = Task(id: -1, title: '', status: 'active');
+    final lists = widget.frameLists;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TaskRow(
+          task: seed,
+          state: widget.state,
+          autofocus: _focusSeed,
+          onAutofocusConsumed: () => setState(() => _focusSeed = false),
+          onToggle: () {},
+          toggleEnabled: false,
+          onTitleChanged: (title) {
+            if (title.trim().isEmpty) return;
+            unawaited(_createSeed(title: title));
+          },
+          onEnter: (_) => _createSeed(),
+          onBackspaceAtStart: () async {
+            FocusManager.instance.primaryFocus?.unfocus();
+          },
+          onSecondaryTapDown: lists.isEmpty
+              ? null
+              : (d) async {
+                  final s = widget.state.strings;
+                  final action = await AppContextMenu.show(
+                    context: context,
+                    globalPosition: d.globalPosition,
+                    isRtl: s.isRtl,
+                    entries: [
+                      AppContextMenuSubmenu(
+                        label: s['createInHomeList'],
+                        children: [
+                          for (final list in lists)
+                            AppContextMenuItem(
+                              value: 'list:${list.taskListId}',
+                              label: list.title.trim().isEmpty
+                                  ? s['untitledTaskList']
+                                  : list.title,
+                            ),
+                        ],
+                      ),
+                    ],
+                  );
+                  if (action == null || !action.startsWith('list:')) return;
+                  final id = int.tryParse(action.substring('list:'.length));
+                  if (id != null) await _createSeed(taskListId: id);
+                },
+        ),
+      ],
     );
   }
 

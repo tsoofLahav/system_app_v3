@@ -3,10 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
-import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
-import '../../ui/dialog_field_style.dart';
 import '../../ux/shell/app_bottom_bar.dart';
 import '../../ux/topic/topic_appearance.dart';
 import '../../ux/widgets/app_context_menu.dart';
@@ -16,6 +14,7 @@ import '../tasks/task_zones.dart';
 import './edit_view_section_dialog.dart';
 import './view_chrome_menu.dart';
 import './view_list_frame.dart';
+import './view_task_list.dart';
 
 class _ViewFrame {
   const _ViewFrame({
@@ -157,16 +156,15 @@ class _TaskViewPaneState extends State<TaskViewPane> {
         ),
       );
     }
-    if (uncategorized.isNotEmpty || frames.isEmpty) {
-      frames.add(
-        _ViewFrame(
-          key: 'section:',
-          title: s['uncategorized'],
-          tasks: uncategorized,
-          tintSeed: 1,
-        ),
-      );
-    }
+    // Always keep a non-section frame for orphans / unsectioned tasks.
+    frames.add(
+      _ViewFrame(
+        key: 'section:',
+        title: s['uncategorized'],
+        tasks: uncategorized,
+        tintSeed: 1,
+      ),
+    );
     return frames;
   }
 
@@ -185,7 +183,7 @@ class _TaskViewPaneState extends State<TaskViewPane> {
         if (byTopic.containsKey(k)) k,
       for (final k in byTopic.keys)
         if (!preferred.contains(k) && k != 'no_topic') k,
-      if (byTopic.containsKey('no_topic')) 'no_topic',
+      'no_topic', // always keep a non-topic frame for orphans
     ];
 
     return [
@@ -199,15 +197,19 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                   : key),
           tasks: byTopic[key] ?? const [],
           topicKey: key == 'no_topic' ? null : key,
-          accent: key == 'no_topic'
+          accent: key == 'no_topic' || (byTopic[key]?.isEmpty ?? true)
               ? null
               : TopicAppearance.colorFromHex(byTopic[key]!.first.topicColor),
           tintSeed: key == 'no_topic'
               ? 1
-              : (byTopic[key]!.first.topicId ?? _stableSeed(key)),
+              : ((byTopic[key]?.isNotEmpty ?? false)
+                  ? byTopic[key]!.first.topicId
+                  : null) ??
+                  _stableSeed(key),
         ),
     ];
   }
+
 
   List<Map<String, dynamic>> _membershipPayload(List<Task> ordered) {
     final byTaskId = {
@@ -306,39 +308,22 @@ class _TaskViewPaneState extends State<TaskViewPane> {
   Future<void> _addSection() async {
     final viewType = state.selectedViewType;
     if (viewType == null) return;
-    final label = state.viewLabel(viewType);
-    final controller = TextEditingController();
-    final name = await showAppDialog<String>(
+    final next = await showViewSectionDialog(
       context: context,
-      builder: (ctx) => AppAdaptiveDialogShell(
-        title: Text(state.strings.newSectionTitle(label)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(state.strings['cancel']),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: Text(state.strings['add']),
-          ),
-        ],
-        child: AppDialogField(
-          label: state.strings['sectionName'],
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: DialogFieldStyle.decoration(),
-          ),
-        ),
-      ),
+      state: state,
+      viewLabel: state.viewLabel(viewType),
     );
-    if (name != null && name.isNotEmpty) {
-      await state.createViewSection(viewType, name);
-    }
+    if (next == null || next.name.trim().isEmpty) return;
+    await state.createViewSection(
+      viewType,
+      next.name,
+      flag: next.flag,
+      colorHex: next.colorHex,
+    );
   }
 
   Future<void> _editSection(ViewSectionDef section) async {
-    final next = await showEditViewSectionDialog(
+    final next = await showViewSectionDialog(
       context: context,
       state: state,
       section: section,
@@ -558,6 +543,7 @@ class _DraggableFrame extends StatelessWidget {
       tasks: frame.tasks,
       sectionName: frame.sectionName,
       topicKey: frame.topicKey,
+      frameLists: _frameListsFromTasks(state, frame.tasks),
       accent: frame.accent,
       tintSeed: frame.tintSeed,
       isImportant: frame.isImportant,
@@ -607,4 +593,28 @@ class _DraggableFrame extends StatelessWidget {
       },
     );
   }
+}
+
+List<ViewFrameListOption> _frameListsFromTasks(
+  AppState state,
+  List<Task> tasks,
+) {
+  final s = state.strings;
+  final seen = <int>{};
+  final out = <ViewFrameListOption>[];
+  for (final t in tasks) {
+    final id = t.taskListId;
+    if (id == null || seen.contains(id)) continue;
+    seen.add(id);
+    final title = t.taskListTitle?.trim();
+    out.add(
+      ViewFrameListOption(
+        taskListId: id,
+        title: (title == null || title.isEmpty)
+            ? s['untitledTaskList']
+            : title,
+      ),
+    );
+  }
+  return out;
 }

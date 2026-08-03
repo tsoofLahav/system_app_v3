@@ -40,6 +40,9 @@ String infoTitleSegmentId(String blockId) => '$blockId#infoTitle';
 /// Info object body — continuous text under the title.
 String infoBodySegmentId(String blockId) => '$blockId#infoBody';
 
+/// Task list object header — one line above the task rows.
+String taskListTitleSegmentId(String blockId) => '$blockId#taskListTitle';
+
 bool isTaskItemSegmentId(String segmentId) =>
     RegExp(r'#t\d+$').hasMatch(segmentId);
 

@@ -31,6 +31,7 @@ CREATE TABLE files (
 
 CREATE TABLE task_lists (
     id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

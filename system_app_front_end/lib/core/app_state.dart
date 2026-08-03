@@ -911,10 +911,14 @@ class AppState extends ChangeNotifier {
   }
 
   /// Create a task and membership in the open view (after optional sibling).
+  ///
+  /// Defaults to an orphan (`task_list_id` null). Pass [taskListId] only when
+  /// placing into a home list that already appears in the same frame.
   Future<Task> createTaskInView({
     String title = '',
     String status = 'active',
     int? afterTaskId,
+    int? taskListId,
     String? sectionName,
     String? sectionFlag,
     String? topicKey,
@@ -928,6 +932,7 @@ class AppState extends ChangeNotifier {
       title: title,
       status: status,
       afterTaskId: afterTaskId,
+      taskListId: taskListId,
       sectionName: sectionName,
       sectionFlag: sectionFlag,
       topicKey: topicKey,
@@ -935,6 +940,43 @@ class AppState extends ChangeNotifier {
     viewMemberships = await _views.listMemberships(selectedView!.id);
     await _reloadEmbedsForOpenFiles(notify: notify);
     return task;
+  }
+
+  Future<void> updateTaskListTitle(
+    int taskListId,
+    String title, {
+    bool notify = false,
+  }) async {
+    await _api.patch('/task-lists/$taskListId', {'title': title});
+    for (final file in selectedDetail?.files ?? const <AppFile>[]) {
+      final embeds = embedsByFileId[file.id];
+      if (embeds == null) continue;
+      embedsByFileId[file.id] = [
+        for (final e in embeds)
+          e.taskListId == taskListId ? e.copyWith(taskListTitle: title) : e,
+      ];
+    }
+    if (isViewMode && selectedView != null) {
+      viewMemberships = [
+        for (final m in viewMemberships)
+          if (m.task != null && m.task!['task_list_id'] == taskListId)
+            m.copyWith(task: {...m.task!, 'task_list_title': title})
+          else
+            m,
+      ];
+    }
+    if (notify) notifyListeners();
+  }
+
+  /// Place an orphan (or any) view task into a home list.
+  Future<void> assignViewTaskToList(Task task, int taskListId) async {
+    await _tasks.moveToListZone(
+      taskId: task.id,
+      targetTaskListId: taskListId,
+      insertIndexInZone: 0,
+      targetDone: task.isDone,
+    );
+    await _reloadEmbedsForOpenFiles(notify: true);
   }
 
   Future<void> _reloadEmbedsForOpenFiles({bool notify = true}) async {
@@ -1015,12 +1057,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> createViewSection(String viewType, String name) async {
+  Future<void> createViewSection(
+    String viewType,
+    String name, {
+    String? flag,
+    String? colorHex,
+  }) async {
     final trimmed = name.trim();
     if (selectedView == null || trimmed.isEmpty) return;
     final sections = [...sectionsForSelectedView()];
     if (sections.any((s) => s.name == trimmed)) return;
-    sections.add(ViewSectionDef(name: trimmed, orderIndex: sections.length));
+    sections.add(
+      ViewSectionDef(
+        name: trimmed,
+        flag: flag,
+        colorHex: colorHex,
+        orderIndex: sections.length,
+      ),
+    );
     await _persistViewLayout(
       ViewLayoutConfig.withSections(selectedView!.layoutConfig, sections),
     );

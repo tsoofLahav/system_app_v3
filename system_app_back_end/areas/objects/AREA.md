@@ -49,7 +49,9 @@ Views are membership and filtering only. **Never add per-view status columns** �
 
 **Membership GET enrichment.** Listing memberships includes the nested task plus home-topic fields (`topic_id`, `topic_name`, `topic_key`, `topic_color`) so the frontend can colour topic frames without extra round-trips.
 
-**Create task in a view.** `POST /views/:id/tasks` creates a real `tasks` row (preferring a sibling's home list, else any list used by the view, else a new orphan `task_lists` row) and a membership. Deleting a task still deletes the canonical row everywhere — the UI must warn.
+**Create task in a view.** `POST /views/:id/tasks` creates a real `tasks` row with **`task_list_id` null by default** (orphan — no home list). Optional `task_list_id` places it into an existing list. `tasks.task_list_id` is already nullable. Deleting a task with a home list should warn; orphans need no “original list” warning.
+
+**Task list header.** `task_lists.title` (migration `005`) is the list’s header — same role as info title. `PATCH /task-lists/:id` updates it. Membership/task payloads include `task_list_title` when the task has a home list.
 
 ## Information and the object graph
 

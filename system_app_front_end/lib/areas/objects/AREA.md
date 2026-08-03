@@ -40,7 +40,9 @@ files (presentation) ──thin overlay──► objects (data + type logic)
 
 **Views.** A user-made list a task can appear in without being copied. Create from the sidebar (**New view**); rename via right-click → Edit on a view. Assign from a task’s right-click menu or the **Add task to view** shortcut (caret must be on a task). Assign UI in [`views/assign_task_view_dialog.dart`](views/assign_task_view_dialog.dart).
 
-**View page.** [`views/task_view_pane.dart`](views/task_view_pane.dart) is a **grid of fixed-width file-like frames** ([`views/view_list_frame.dart`](views/view_list_frame.dart)), each holding one list (section or topic). Floating chrome ([`views/view_chrome_menu.dart`](views/view_chrome_menu.dart)) has one **toggle** for sections↔topics, add-section (dormant in topics mode), and frame-reorder. Section defs live in `views.layout_config` ([`data/view_layout.dart`](data/view_layout.dart)). Inside a frame: Enter/Backspace add & delete (delete warns it removes the task from its home list too), mark/unmark, and **Reorder tasks** ([`views/view_task_list.dart`](views/view_task_list.dart)).
+**View page.** [`views/task_view_pane.dart`](views/task_view_pane.dart) is a **grid of fixed-width file-like frames** ([`views/view_list_frame.dart`](views/view_list_frame.dart)), each holding one list (section or topic), plus a standing **uncategorized / no-topic** frame. Floating chrome toggles sections↔topics, adds sections, and reorders frames. View-created tasks are **orphans** (no home list) unless the user assigns them to a list that already has tasks in that frame (`Add to list…` / `Create in list…`). Delete warns only when the task has a home list.
+
+**Task list header.** In-file task lists show a title line above the rows (like info) — `task_lists.title`.
 
 ```
 task ──┬── shown inline in its file (files embed)

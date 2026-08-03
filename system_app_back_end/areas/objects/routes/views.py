@@ -66,10 +66,13 @@ def delete_view(view_id):
 
 
 def _task_dict_with_topic(task: Task) -> dict:
-    """Include home-topic fields so the view pane can colour topic frames."""
+    """Include home-list title and topic fields for view frames."""
     data = task.to_dict()
     if not task.task_list_id:
         return data
+    task_list = db.session.get(TaskList, task.task_list_id)
+    if task_list is not None:
+        data["task_list_title"] = task_list.title or ""
     obj = ObjectEmbed.query.filter_by(task_list_id=task.task_list_id).first()
     if obj is None:
         return data
@@ -88,10 +91,10 @@ def _task_dict_with_topic(task: Task) -> dict:
 
 @views_bp.route("/views/<int:view_id>/tasks", methods=["POST"])
 def create_view_task(view_id):
-    """Create a real task and add it to this view (membership).
+    """Create a task membership in this view.
 
-    Prefers the sibling task's home list when ``after_task_id`` is set; otherwise
-    any list already used by the view; otherwise a new orphan ``task_lists`` row.
+    View-created tasks are orphans by default (``task_list_id`` null). Pass
+    ``task_list_id`` only when placing into an existing home list.
     """
     get_or_404(View, view_id)
     data = request.get_json(silent=True) or {}
@@ -105,37 +108,19 @@ def create_view_task(view_id):
     section_flag = data.get("section_flag")
     topic_key = data.get("topic_key")
     after_task_id = data.get("after_task_id")
+    task_list_id = data.get("task_list_id")
+    if task_list_id is not None:
+        task_list_id = int(task_list_id)
+        get_or_404(TaskList, task_list_id)
 
-    task_list_id = None
-    if after_task_id is not None:
-        sibling = db.session.get(Task, int(after_task_id))
-        if sibling is not None:
-            task_list_id = sibling.task_list_id
-
-    if task_list_id is None:
-        for row in (
-            ViewTaskMembership.query.filter_by(view_id=view_id)
-            .order_by(ViewTaskMembership.order_index, ViewTaskMembership.id)
-            .all()
-        ):
-            if not row.task_id:
-                continue
-            existing = db.session.get(Task, row.task_id)
-            if existing is not None and existing.task_list_id is not None:
-                task_list_id = existing.task_list_id
-                break
-
-    if task_list_id is None:
-        task_list = TaskList()
-        db.session.add(task_list)
-        db.session.flush()
-        task_list_id = task_list.id
-
+    order_index = (
+        next_list_order_index(task_list_id) if task_list_id is not None else 0
+    )
     task = Task(
         task_list_id=task_list_id,
         title=title,
         status=status,
-        list_order_index=next_list_order_index(task_list_id),
+        list_order_index=order_index,
     )
     db.session.add(task)
     db.session.flush()

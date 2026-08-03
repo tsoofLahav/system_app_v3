@@ -250,6 +250,11 @@ class AppStrings {
     'deleteTaskTitle': 'Delete task?',
     'deleteTaskFromViewBody':
         'This deletes the task from its original list as well, not only from this view.',
+    'taskListTitleHint': 'List title',
+    'untitledTaskList': 'Untitled list',
+    'addToHomeList': 'Add to list…',
+    'createInHomeList': 'Create in list…',
+    'sectionImportant': 'Important',
     'editSection': 'Edit section',
     'sectionColor': 'Section color',
     'clearSectionColor': 'Clear color',
@@ -655,6 +660,11 @@ class AppStrings {
     'deleteTaskTitle': 'למחוק משימה?',
     'deleteTaskFromViewBody':
         'המשימה תימחק גם מהרשימה המקורית שלה, לא רק מהתצוגה הזו.',
+    'taskListTitleHint': 'כותרת רשימה',
+    'untitledTaskList': 'רשימה ללא שם',
+    'addToHomeList': 'הוסף לרשימה…',
+    'createInHomeList': 'צור ברשימה…',
+    'sectionImportant': 'חשוב',
     'editSection': 'עריכת מדור',
     'sectionColor': 'צבע מדור',
     'clearSectionColor': 'נקה צבע',

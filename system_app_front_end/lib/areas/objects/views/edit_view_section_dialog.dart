@@ -4,46 +4,70 @@ import '../../../core/app_state.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/app_typography.dart';
 import '../../ui/color_dialog.dart';
 import '../../ui/dialog_field_style.dart';
 import '../data/view_layout.dart';
 import '../data/view_section_flags.dart';
 
+/// Create or edit a view section (name, important flag icon, color).
+Future<ViewSectionDef?> showViewSectionDialog({
+  required BuildContext context,
+  required AppState state,
+  ViewSectionDef? section,
+  String? viewLabel,
+}) {
+  return showAppDialog<ViewSectionDef>(
+    context: context,
+    builder: (ctx) => _ViewSectionDialog(
+      state: state,
+      section: section,
+      viewLabel: viewLabel,
+    ),
+  );
+}
+
+/// Backward-compatible alias for edit.
 Future<ViewSectionDef?> showEditViewSectionDialog({
   required BuildContext context,
   required AppState state,
   required ViewSectionDef section,
 }) {
-  return showAppDialog<ViewSectionDef>(
+  return showViewSectionDialog(
     context: context,
-    builder: (ctx) => _EditViewSectionDialog(state: state, section: section),
+    state: state,
+    section: section,
   );
 }
 
-class _EditViewSectionDialog extends StatefulWidget {
-  const _EditViewSectionDialog({
+class _ViewSectionDialog extends StatefulWidget {
+  const _ViewSectionDialog({
     required this.state,
-    required this.section,
+    this.section,
+    this.viewLabel,
   });
 
   final AppState state;
-  final ViewSectionDef section;
+  final ViewSectionDef? section;
+  final String? viewLabel;
 
   @override
-  State<_EditViewSectionDialog> createState() => _EditViewSectionDialogState();
+  State<_ViewSectionDialog> createState() => _ViewSectionDialogState();
 }
 
-class _EditViewSectionDialogState extends State<_EditViewSectionDialog> {
+class _ViewSectionDialogState extends State<_ViewSectionDialog> {
   late final TextEditingController _name;
   late bool _important;
   String? _colorHex;
 
+  bool get _isCreate => widget.section == null;
+
   @override
   void initState() {
     super.initState();
-    _name = TextEditingController(text: widget.section.name);
-    _important = sectionFlagIsImportant(widget.section.flag);
-    _colorHex = widget.section.colorHex;
+    _name = TextEditingController(text: widget.section?.name ?? '');
+    _important = sectionFlagIsImportant(widget.section?.flag);
+    _colorHex = widget.section?.colorHex;
   }
 
   @override
@@ -62,32 +86,41 @@ class _EditViewSectionDialogState extends State<_EditViewSectionDialog> {
     setState(() => _colorHex = picked);
   }
 
+  void _submit() {
+    final name = _name.text.trim();
+    if (name.isEmpty) return;
+    final base = widget.section ?? ViewSectionDef(name: name);
+    Navigator.pop(
+      context,
+      base.copyWith(
+        name: name,
+        flag: _important ? ViewSectionFlags.important : null,
+        clearFlag: !_important,
+        colorHex: _colorHex,
+        clearColor: _colorHex == null || _colorHex!.isEmpty,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.state.strings;
+    final title = _isCreate
+        ? (widget.viewLabel == null
+            ? s['addSection']
+            : s.newSectionTitle(widget.viewLabel!))
+        : s['editSection'];
+
     return AppAdaptiveDialogShell(
-      title: Text(s['editSection']),
+      title: Text(title),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(s['cancel']),
         ),
         FilledButton(
-          onPressed: () {
-            final name = _name.text.trim();
-            if (name.isEmpty) return;
-            Navigator.pop(
-              context,
-              widget.section.copyWith(
-                name: name,
-                flag: _important ? ViewSectionFlags.important : null,
-                clearFlag: !_important,
-                colorHex: _colorHex,
-                clearColor: _colorHex == null || _colorHex!.isEmpty,
-              ),
-            );
-          },
-          child: Text(s['save']),
+          onPressed: _submit,
+          child: Text(_isCreate ? s['add'] : s['save']),
         ),
       ],
       child: Column(
@@ -100,16 +133,43 @@ class _EditViewSectionDialogState extends State<_EditViewSectionDialog> {
               controller: _name,
               autofocus: true,
               decoration: DialogFieldStyle.decoration(),
+              onSubmitted: (_) => _submit(),
             ),
           ),
-          const SizedBox(height: 12),
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: Text(s['markSectionImportant']),
-            value: _important,
-            onChanged: (v) => setState(() => _important = v),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Tooltip(
+                message: _important
+                    ? s['unmarkSectionImportant']
+                    : s['markSectionImportant'],
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => setState(() => _important = !_important),
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: AppIcon(
+                      AppIcons.flag,
+                      size: 22,
+                      color: _important
+                          ? AppColors.primary
+                          : AppColors.textHint.withValues(alpha: 0.42),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  s['sectionImportant'],
+                  style: AppTypography.metaStyle.copyWith(
+                    color: AppColors.text.withValues(alpha: 0.78),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: AppIcon(AppIcons.colorWheel, size: 18),

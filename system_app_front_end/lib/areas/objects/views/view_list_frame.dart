@@ -20,6 +20,7 @@ class ViewListFrame extends StatelessWidget {
     required this.onZonesChanged,
     this.sectionName,
     this.topicKey,
+    this.frameLists = const [],
     this.accent,
     this.tintSeed = 1,
     this.isImportant = false,
@@ -33,6 +34,7 @@ class ViewListFrame extends StatelessWidget {
   final ValueChanged<TaskZones> onZonesChanged;
   final String? sectionName;
   final String? topicKey;
+  final List<ViewFrameListOption> frameLists;
   final Color? accent;
   final int tintSeed;
   final bool isImportant;
@@ -77,6 +79,7 @@ class ViewListFrame extends StatelessWidget {
                 tasks: tasks,
                 sectionName: sectionName,
                 topicKey: topicKey,
+                frameLists: frameLists,
                 onZonesChanged: onZonesChanged,
                 enabled: !frameReorderMode,
               ),

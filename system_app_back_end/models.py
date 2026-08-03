@@ -83,11 +83,13 @@ class TaskList(db.Model):
     __tablename__ = "task_lists"
 
     id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.Text, nullable=False, default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         return {
             "id": self.id,
+            "title": self.title or "",
             "created_at": _iso(self.created_at),
         }
 

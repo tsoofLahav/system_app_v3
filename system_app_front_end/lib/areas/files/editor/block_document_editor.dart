@@ -989,6 +989,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     if (embed?.type == 'task_list') {
       final count = (embed!.tasks?.length ?? 0).clamp(1, 10000);
       return [
+        taskListTitleSegmentId(block.id),
         for (var i = 0; i < count; i++) taskItemSegmentId(block.id, i),
       ];
     }

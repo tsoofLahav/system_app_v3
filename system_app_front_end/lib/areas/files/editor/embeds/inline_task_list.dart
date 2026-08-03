@@ -47,6 +47,9 @@ class InlineTaskListWidget extends StatefulWidget {
 }
 
 class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
+  late SpanTextEditingController _titleController;
+  late final FocusNode _titleFocus;
+  Timer? _titleSaveTimer;
   final _controllers = <SpanTextEditingController>[];
   final _focusNodes = <FocusNode>[];
   final _taskIds = <int?>[];
@@ -71,6 +74,10 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
   @override
   void initState() {
     super.initState();
+    _titleFocus = FocusNode();
+    _titleController = SpanTextEditingController(
+      text: widget.embed.taskListTitle,
+    );
     _syncFromTasks(_displayTasks);
     if (_taskIds.isEmpty || _taskIds.every((id) => id == null)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -85,9 +92,14 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
     if (_persisting) return;
     if (oldWidget.embed.id != widget.embed.id) {
       _optimistic = null;
+      _titleController.text = widget.embed.taskListTitle;
       _disposeRows();
       _syncFromTasks(_displayTasks);
       return;
+    }
+    if (!_titleFocus.hasFocus &&
+        oldWidget.embed.taskListTitle != widget.embed.taskListTitle) {
+      _titleController.text = widget.embed.taskListTitle;
     }
     if (_optimistic != null) {
       if (_idsMatch(_optimistic!, _remoteTasks)) {
@@ -208,11 +220,42 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
 
   @override
   void dispose() {
+    _titleSaveTimer?.cancel();
+    unawaited(_flushTitleHeader().catchError((_) {}));
     for (final timer in _saveTimers) {
       timer?.cancel();
     }
+    _titleFocus.dispose();
+    _titleController.dispose();
     _disposeRows();
     super.dispose();
+  }
+
+  void _scheduleTitleSave() {
+    widget.onFocus?.call();
+    _titleSaveTimer?.cancel();
+    _titleSaveTimer = Timer(const Duration(milliseconds: 400), () {
+      unawaited(_flushTitleHeader());
+    });
+  }
+
+  Future<void> _flushTitleHeader() async {
+    _titleSaveTimer?.cancel();
+    final id = widget.embed.taskListId;
+    if (id == null) return;
+    final title = _titleController.text;
+    if (title == widget.embed.taskListTitle) return;
+    try {
+      await widget.state.updateTaskListTitle(id, title, notify: false);
+    } catch (_) {}
+  }
+
+  void _onTitleEnter() {
+    widget.onFocus?.call();
+    unawaited(_flushTitleHeader());
+    if (_focusNodes.isEmpty) return;
+    _pendingFocusIndex = 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
   }
 
   Task? _taskById(int id) {
@@ -311,6 +354,14 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
   Future<void> _handleBackspace(int index) async {
     widget.onFocus?.call();
     if (_controllers[index].text.trim().isEmpty) {
+      if (_controllers.length <= 1) {
+        // Climb into the list header — same as info body → title.
+        _titleFocus.requestFocus();
+        final len = _titleController.text.length;
+        _titleController.selection =
+            TextSelection.collapsed(offset: len);
+        return;
+      }
       await _removeAt(index);
     }
   }
@@ -790,6 +841,27 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
       crossAxisAlignment:
           moveMode || _reorderMode ? CrossAxisAlignment.start : CrossAxisAlignment.stretch,
       children: [
+        if (!moveMode && !_reorderMode)
+          FormattedTextField(
+            controller: _titleController,
+            focusNode: _titleFocus,
+            segmentId: taskListTitleSegmentId(widget.blockId),
+            style: AppTypography.noteTitleStyle,
+            hintText: s['taskListTitleHint'],
+            maxLines: 1,
+            minLines: 1,
+            onChanged: (_) => _scheduleTitleSave(),
+            onEnter: _onTitleEnter,
+            onSecondaryTapDown: (d) => unawaited(
+              DocumentContextMenu.showTextMenu(
+                context: context,
+                globalPosition: d.globalPosition,
+                strings: widget.state.strings,
+                onAction: runBlockTextAction,
+              ),
+            ),
+          ),
+        if (!moveMode && !_reorderMode) const SizedBox(height: 4),
         if (showDoneHeader) _zoneLabel(s['tasksActive']),
         for (var i = 0; i < activeCount; i++) _taskRow(i),
         _dropGap(targetDone: false, indexInZone: activeCount),

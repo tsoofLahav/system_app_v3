@@ -48,7 +48,7 @@ def _resolve_embed(obj: ObjectEmbed) -> dict:
 
 def _create_embed_entity(type_: str, data: dict) -> ObjectEmbed:
     if type_ == "task_list":
-        task_list = TaskList()
+        task_list = TaskList(title=data.get("title") or "")
         db.session.add(task_list)
         db.session.flush()
         return ObjectEmbed(

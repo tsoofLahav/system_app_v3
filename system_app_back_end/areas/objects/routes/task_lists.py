@@ -21,6 +21,16 @@ def get_task_list(task_list_id):
     return jsonify(data)
 
 
+@task_lists_bp.route("/task-lists/<int:task_list_id>", methods=["PATCH"])
+def update_task_list(task_list_id):
+    task_list = get_or_404(TaskList, task_list_id)
+    data = request.get_json(silent=True) or {}
+    if "title" in data:
+        task_list.title = "" if data.get("title") is None else str(data.get("title"))
+    db.session.commit()
+    return jsonify(task_list.to_dict())
+
+
 @task_lists_bp.route("/task-lists/<int:task_list_id>/tasks", methods=["GET"])
 def list_tasks(task_list_id):
     get_or_404(TaskList, task_list_id)
