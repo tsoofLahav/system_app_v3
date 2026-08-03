@@ -97,8 +97,8 @@ Opening a view replaces the main pane with a **grid of file-like frames**. Each 
 
 | Control | Does |
 |---------|------|
-| Sections / Topics | Switches how frames are grouped (`layout_config.display_mode`) |
-| Add section | Creates a section (sections mode only) |
+| Toggle (swap) | Alternates sections ↔ topics (`layout_config.display_mode`) |
+| Add section | Always visible; dormant in topics mode |
 | Reorder | Mode: drag frames to reorder sections or topics |
 
 Right-click a **section** frame to edit name, important flag, and section color. **Topic** frames wear the topic colour. Task behaviour inside a frame matches the in-file list: mark/unmark, Active/Done, and right-click **Reorder tasks** (glass chips; tap outside ends the mode).

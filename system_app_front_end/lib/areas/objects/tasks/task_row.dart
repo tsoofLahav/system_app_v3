@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/app_state.dart';
 import '../data/task.dart';
@@ -15,6 +16,8 @@ class TaskRow extends StatefulWidget {
     this.onDelete,
     this.onTitleChanged,
     this.onEnter,
+    this.onBackspaceAtStart,
+    this.onSecondaryTapDown,
     this.readOnly = false,
     this.toggleEnabled = true,
     this.autofocus = false,
@@ -29,6 +32,10 @@ class TaskRow extends StatefulWidget {
 
   /// Enter in the title field — create next / exit when empty final.
   final Future<void> Function(String title)? onEnter;
+
+  /// Backspace on an empty title — delete / remove the row.
+  final Future<void> Function()? onBackspaceAtStart;
+  final GestureTapDownCallback? onSecondaryTapDown;
   final bool readOnly;
   final bool toggleEnabled;
   final bool autofocus;
@@ -46,7 +53,7 @@ class _TaskRowState extends State<TaskRow> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.task.title);
-    _focusNode = FocusNode();
+    _focusNode = FocusNode(onKeyEvent: _onKeyEvent);
     if (widget.autofocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -60,7 +67,7 @@ class _TaskRowState extends State<TaskRow> {
   void didUpdateWidget(TaskRow oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.task.id != widget.task.id ||
-        oldWidget.task.title != widget.task.title) {
+        (oldWidget.task.title != widget.task.title && !_focusNode.hasFocus)) {
       _controller.text = widget.task.title;
     }
     if (widget.autofocus && !oldWidget.autofocus) {
@@ -79,9 +86,52 @@ class _TaskRowState extends State<TaskRow> {
     super.dispose();
   }
 
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (widget.readOnly || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    final isEnter = event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    if (isEnter && !HardwareKeyboard.instance.isShiftPressed) {
+      if (widget.onEnter != null) {
+        widget.onEnter!(_controller.text);
+        return KeyEventResult.handled;
+      }
+    }
+    if (event.logicalKey == LogicalKeyboardKey.backspace &&
+        widget.onBackspaceAtStart != null &&
+        _controller.text.isEmpty) {
+      widget.onBackspaceAtStart!();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final done = widget.task.isDone;
+    final field = TextField(
+      controller: _controller,
+      focusNode: _focusNode,
+      readOnly: widget.readOnly,
+      style: AppTypography.noteBodyStyle.copyWith(
+        decoration: done ? TextDecoration.lineThrough : null,
+        color: done ? AppColors.textHint : null,
+      ),
+      decoration: InputDecoration(
+        isDense: true,
+        border: InputBorder.none,
+        hintText: widget.state.strings['newTaskHint'],
+        hintStyle: AppTypography.noteBodyStyle.copyWith(
+          color: AppColors.textHint.withValues(alpha: 0.55),
+        ),
+      ),
+      maxLines: null,
+      minLines: 1,
+      textInputAction: TextInputAction.newline,
+      onChanged: widget.onTitleChanged,
+    );
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -95,42 +145,13 @@ class _TaskRowState extends State<TaskRow> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: TextField(
-              controller: _controller,
-              focusNode: _focusNode,
-              readOnly: widget.readOnly,
-              style: AppTypography.noteBodyStyle.copyWith(
-                decoration: done ? TextDecoration.lineThrough : null,
-                color: done ? AppColors.textHint : null,
-              ),
-              decoration: InputDecoration(
-                isDense: true,
-                border: InputBorder.none,
-                hintText: widget.state.strings['newTaskHint'],
-                hintStyle: AppTypography.noteBodyStyle.copyWith(
-                  color: AppColors.textHint.withValues(alpha: 0.55),
-                ),
-              ),
-              textInputAction: TextInputAction.newline,
-              onSubmitted: (value) {
-                if (widget.onEnter != null) {
-                  widget.onEnter!(value);
-                } else {
-                  widget.onTitleChanged?.call(value);
-                }
-              },
-              onEditingComplete: () {
-                if (widget.onEnter == null) {
-                  widget.onTitleChanged?.call(_controller.text);
-                }
-              },
-            ),
+            child: widget.onSecondaryTapDown == null
+                ? field
+                : GestureDetector(
+                    onSecondaryTapDown: widget.onSecondaryTapDown,
+                    child: field,
+                  ),
           ),
-          if (widget.onDelete != null && !widget.readOnly)
-            IconButton(
-              icon: const Icon(Icons.close, size: 18),
-              onPressed: widget.onDelete,
-            ),
         ],
       ),
     );

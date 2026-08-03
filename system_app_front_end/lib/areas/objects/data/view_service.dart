@@ -1,4 +1,5 @@
 import './app_view.dart';
+import './task.dart';
 import '../../../core/services/api_service.dart';
 
 class ViewService {
@@ -61,5 +62,25 @@ class ViewService {
     return data
         .map((e) => ViewMembership.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<Task> createTaskInView(
+    int viewId, {
+    String title = '',
+    String status = 'active',
+    int? afterTaskId,
+    String? sectionName,
+    String? sectionFlag,
+    String? topicKey,
+  }) async {
+    final data = await _api.post('/views/$viewId/tasks', {
+      'title': title,
+      'status': status,
+      if (afterTaskId != null) 'after_task_id': afterTaskId,
+      if (sectionName != null) 'section_name': sectionName,
+      if (sectionFlag != null) 'section_flag': sectionFlag,
+      if (topicKey != null) 'topic_key': topicKey,
+    }) as Map<String, dynamic>;
+    return Task.fromJson(data);
   }
 }

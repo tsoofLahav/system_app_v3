@@ -6,6 +6,7 @@ import '../../../core/app_state.dart';
 import '../../files/editor/drag_mode_frame.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
+import '../../ui/confirm_dialog.dart';
 import '../../ui/glass_surface.dart';
 import '../../ux/widgets/app_context_menu.dart';
 import '../data/task.dart';
@@ -13,19 +14,24 @@ import '../tasks/task_drag_data.dart';
 import '../tasks/task_row.dart';
 import '../tasks/task_zones.dart';
 
-/// Active/Done task list for one view frame — mark/unmark + Reorder Mode.
+/// Active/Done task list for one view frame — keyboard add/edit/delete,
+/// mark/unmark, and Reorder Mode.
 class ViewTaskList extends StatefulWidget {
   const ViewTaskList({
     super.key,
     required this.state,
     required this.tasks,
     required this.onZonesChanged,
+    this.sectionName,
+    this.topicKey,
     this.enabled = true,
   });
 
   final AppState state;
   final List<Task> tasks;
   final ValueChanged<TaskZones> onZonesChanged;
+  final String? sectionName;
+  final String? topicKey;
   final bool enabled;
 
   @override
@@ -34,6 +40,9 @@ class ViewTaskList extends StatefulWidget {
 
 class _ViewTaskListState extends State<ViewTaskList> {
   var _reorderMode = false;
+  var _busy = false;
+  int? _focusTaskId;
+  var _focusSeed = false;
 
   List<Task> get _tasks => widget.tasks;
 
@@ -72,6 +81,76 @@ class _ViewTaskListState extends State<ViewTaskList> {
     widget.onZonesChanged(next);
   }
 
+  Future<void> _confirmDelete(Task task) async {
+    final s = widget.state.strings;
+    final ok = await showAppConfirmDialog(
+      context: context,
+      title: s['deleteTaskTitle'],
+      message: s['deleteTaskFromViewBody'],
+      confirmLabel: s['delete'],
+      cancelLabel: s['cancel'],
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    _busy = true;
+    try {
+      await widget.state.deleteTask(task);
+    } finally {
+      _busy = false;
+    }
+  }
+
+  Future<void> _handleEnter(Task task, String title) async {
+    if (_busy || !widget.enabled) return;
+    final trimmed = title.trim();
+    if (task.title != title) {
+      await widget.state.updateTaskTitle(task, title, notify: false);
+    }
+    if (trimmed.isEmpty) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      return;
+    }
+    _busy = true;
+    try {
+      final created = await widget.state.createTaskInView(
+        title: '',
+        status: task.isDone ? 'done' : 'active',
+        afterTaskId: task.id,
+        sectionName: widget.sectionName,
+        topicKey: widget.topicKey,
+      );
+      if (!mounted) return;
+      setState(() => _focusTaskId = created.id);
+    } finally {
+      _busy = false;
+    }
+  }
+
+  Future<void> _handleBackspace(Task task) async {
+    if (_busy || !widget.enabled) return;
+    if (task.title.trim().isNotEmpty) return;
+    await _confirmDelete(task);
+  }
+
+  Future<void> _createSeed({String title = ''}) async {
+    if (_busy || !widget.enabled) return;
+    _busy = true;
+    try {
+      final created = await widget.state.createTaskInView(
+        title: title,
+        sectionName: widget.sectionName,
+        topicKey: widget.topicKey,
+      );
+      if (!mounted) return;
+      setState(() {
+        _focusTaskId = created.id;
+        _focusSeed = false;
+      });
+    } finally {
+      _busy = false;
+    }
+  }
+
   Future<void> _showTaskMenu(Offset globalPosition, Task task) async {
     final s = widget.state.strings;
     final action = await AppContextMenu.show(
@@ -79,13 +158,22 @@ class _ViewTaskListState extends State<ViewTaskList> {
       globalPosition: globalPosition,
       isRtl: s.isRtl,
       entries: [
+        AppContextMenuItem(value: 'reorder', label: s['reorderTasks']),
         AppContextMenuItem(
-          value: 'reorder',
-          label: s['reorderTasks'],
+          value: 'delete',
+          label: s['delete'],
+          destructive: true,
         ),
       ],
     );
-    if (action == 'reorder') _setReorderMode(true);
+    if (!mounted || action == null) return;
+    if (action == 'reorder') {
+      _setReorderMode(true);
+      return;
+    }
+    if (action == 'delete') {
+      await _confirmDelete(task);
+    }
   }
 
   Widget _zoneLabel(String text) {
@@ -150,6 +238,7 @@ class _ViewTaskListState extends State<ViewTaskList> {
     final zone = inDone ? zones.done : zones.active;
     final zoneIndex = zone.indexWhere((t) => t.id == task.id);
     final indexInZone = zoneIndex < 0 ? zone.length : zoneIndex;
+    final autofocus = _focusTaskId == task.id;
 
     if (_reorderMode) {
       final framed = _compactChip(task, glass: true);
@@ -195,20 +284,53 @@ class _ViewTaskListState extends State<ViewTaskList> {
       );
     }
 
-    return GestureDetector(
+    return TaskRow(
+      task: task,
+      state: widget.state,
+      autofocus: autofocus,
+      onAutofocusConsumed: () {
+        if (_focusTaskId == task.id) {
+          setState(() => _focusTaskId = null);
+        }
+      },
+      onToggle: widget.enabled ? () => unawaited(_toggle(task)) : () {},
+      onTitleChanged: widget.enabled
+          ? (title) => unawaited(
+                widget.state.updateTaskTitle(task, title, notify: false),
+              )
+          : null,
+      onEnter: widget.enabled ? (title) => _handleEnter(task, title) : null,
+      onBackspaceAtStart:
+          widget.enabled ? () => _handleBackspace(task) : null,
       onSecondaryTapDown: widget.enabled
           ? (d) => unawaited(_showTaskMenu(d.globalPosition, task))
           : null,
-      child: TaskRow(
-        task: task,
-        state: widget.state,
-        onToggle: widget.enabled ? () => unawaited(_toggle(task)) : () {},
-        onTitleChanged: widget.enabled
-            ? (title) => unawaited(widget.state.updateTaskTitle(task, title))
-            : null,
-        readOnly: !widget.enabled,
-        toggleEnabled: widget.enabled,
-      ),
+      readOnly: !widget.enabled,
+      toggleEnabled: widget.enabled,
+    );
+  }
+
+  Widget _emptySeed() {
+    final seed = Task(
+      id: -1,
+      title: '',
+      status: 'active',
+    );
+    return TaskRow(
+      task: seed,
+      state: widget.state,
+      autofocus: _focusSeed,
+      onAutofocusConsumed: () => setState(() => _focusSeed = false),
+      onToggle: () {},
+      toggleEnabled: false,
+      onTitleChanged: (title) {
+        if (title.trim().isEmpty) return;
+        unawaited(_createSeed(title: title));
+      },
+      onEnter: (_) => _createSeed(),
+      onBackspaceAtStart: () async {
+        FocusManager.instance.primaryFocus?.unfocus();
+      },
     );
   }
 
@@ -216,18 +338,13 @@ class _ViewTaskListState extends State<ViewTaskList> {
   Widget build(BuildContext context) {
     final s = widget.state.strings;
     final zones = TaskZones.fromOrdered(_tasks);
-    if (_tasks.isEmpty) {
-      return Text(
-        s['noTasks'],
-        style: AppTypography.metaStyle.copyWith(color: AppColors.textHint),
-      );
-    }
 
     final list = Column(
       crossAxisAlignment:
           _reorderMode ? CrossAxisAlignment.start : CrossAxisAlignment.stretch,
       children: [
         _zoneLabel(s['tasksActive']),
+        if (zones.active.isEmpty && !_reorderMode) _emptySeed(),
         for (final t in zones.active) _taskTile(t),
         _dropGap(targetDone: false, indexInZone: zones.active.length),
         if (zones.done.isNotEmpty) ...[

@@ -23,6 +23,8 @@ class _ViewFrame {
     required this.title,
     required this.tasks,
     this.section,
+    this.sectionName,
+    this.topicKey,
     this.accent,
     this.tintSeed = 1,
     this.isImportant = false,
@@ -33,6 +35,8 @@ class _ViewFrame {
   final String title;
   final List<Task> tasks;
   final ViewSectionDef? section;
+  final String? sectionName;
+  final String? topicKey;
   final Color? accent;
   final int tintSeed;
   final bool isImportant;
@@ -131,6 +135,7 @@ class _TaskViewPaneState extends State<TaskViewPane> {
           title: section.name,
           tasks: bySection[section.name] ?? const [],
           section: section,
+          sectionName: section.name,
           accent: state.sectionAccent(section),
           tintSeed: _stableSeed(section.name),
           isImportant: section.isImportant,
@@ -146,6 +151,7 @@ class _TaskViewPaneState extends State<TaskViewPane> {
           title: entry.key,
           tasks: entry.value,
           section: ViewSectionDef(name: entry.key),
+          sectionName: entry.key,
           tintSeed: _stableSeed(entry.key),
           editableSection: true,
         ),
@@ -192,6 +198,7 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                   ? byTopic[key]!.first.topicName!
                   : key),
           tasks: byTopic[key] ?? const [],
+          topicKey: key == 'no_topic' ? null : key,
           accent: key == 'no_topic'
               ? null
               : TopicAppearance.colorFromHex(byTopic[key]!.first.topicColor),
@@ -413,7 +420,6 @@ class _TaskViewPaneState extends State<TaskViewPane> {
         final byTopic = state.viewDisplayMode == ViewDisplayMode.byTopic;
         final frames =
             byTopic ? _framesForTopics(tasks) : _framesForSections(tasks);
-        final s = state.strings;
 
         Widget grid = _FrameGrid(
           frames: frames,
@@ -435,6 +441,9 @@ class _TaskViewPaneState extends State<TaskViewPane> {
           children: [
             Positioned.fill(
               child: ListView(
+                physics: _frameReorderMode
+                    ? const NeverScrollableScrollPhysics()
+                    : null,
                 padding: EdgeInsets.fromLTRB(
                   AppSpacing.canvasPadding.left,
                   AppSpacing.canvasPadding.top,
@@ -446,15 +455,7 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                 children: [
                   Text(label, style: AppTypography.pageTitleStyle),
                   const SizedBox(height: 16),
-                  if (tasks.isEmpty && frames.every((f) => f.tasks.isEmpty))
-                    Text(
-                      s.noTasksInView(label),
-                      style: AppTypography.metaStyle.copyWith(
-                        color: AppColors.textHint,
-                      ),
-                    )
-                  else
-                    grid,
+                  grid,
                 ],
               ),
             ),
@@ -467,9 +468,13 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                   state: state,
                   displayMode: state.viewDisplayMode,
                   frameReorderMode: _frameReorderMode,
-                  onDisplayMode: (mode) {
+                  onToggleDisplayMode: () {
                     setState(() => _frameReorderMode = false);
-                    unawaited(state.setViewDisplayMode(mode));
+                    final next =
+                        state.viewDisplayMode == ViewDisplayMode.byTopic
+                            ? ViewDisplayMode.bySection
+                            : ViewDisplayMode.byTopic;
+                    unawaited(state.setViewDisplayMode(next));
                   },
                   onAddSection: () => unawaited(_addSection()),
                   onToggleFrameReorder: () {
@@ -502,36 +507,28 @@ class _FrameGrid extends StatelessWidget {
   final Future<void> Function(Offset, ViewSectionDef) onSectionMenu;
   final void Function(String fromKey, String toKey) onMoveFrame;
 
+  static const frameWidth = 260.0;
+  static const gap = 12.0;
+
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final columns = width >= 960 ? 3 : (width >= 620 ? 2 : 1);
-        const gap = 14.0;
-        final tileWidth = columns == 1
-            ? width
-            : (width - gap * (columns - 1)) / columns;
-
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
-          children: [
-            for (final frame in frames)
-              SizedBox(
-                width: tileWidth,
-                child: _DraggableFrame(
-                  frame: frame,
-                  frameReorderMode: frameReorderMode,
-                  state: state,
-                  onZonesChanged: onZonesChanged,
-                  onSectionMenu: onSectionMenu,
-                  onMoveFrame: onMoveFrame,
-                ),
-              ),
-          ],
-        );
-      },
+    return Wrap(
+      spacing: gap,
+      runSpacing: gap,
+      children: [
+        for (final frame in frames)
+          SizedBox(
+            width: frameWidth,
+            child: _DraggableFrame(
+              frame: frame,
+              frameReorderMode: frameReorderMode,
+              state: state,
+              onZonesChanged: onZonesChanged,
+              onSectionMenu: onSectionMenu,
+              onMoveFrame: onMoveFrame,
+            ),
+          ),
+      ],
     );
   }
 }
@@ -559,6 +556,8 @@ class _DraggableFrame extends StatelessWidget {
       state: state,
       title: frame.title,
       tasks: frame.tasks,
+      sectionName: frame.sectionName,
+      topicKey: frame.topicKey,
       accent: frame.accent,
       tintSeed: frame.tintSeed,
       isImportant: frame.isImportant,
@@ -575,34 +574,35 @@ class _DraggableFrame extends StatelessWidget {
       onWillAcceptWithDetails: (d) => d.data.frameKey != frame.key,
       onAcceptWithDetails: (d) => onMoveFrame(d.data.frameKey, frame.key),
       builder: (context, candidate, rejected) {
-        return Column(
-          children: [
-            if (candidate.isNotEmpty)
-              Container(
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            LongPressDraggable<ViewFrameDragPayload>(
-              data: ViewFrameDragPayload(frameKey: frame.key),
-              feedback: Material(
-                color: Colors.transparent,
-                elevation: 4,
-                child: SizedBox(
-                  width: 260,
-                  child: Opacity(opacity: 0.92, child: card),
-                ),
-              ),
-              childWhenDragging: Opacity(opacity: 0.35, child: card),
-              child: MouseRegion(
-                cursor: SystemMouseCursors.grab,
-                child: card,
+        final hot = candidate.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: hot
+                ? Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.45),
+                    width: 1.5,
+                  )
+                : null,
+          ),
+          child: Draggable<ViewFrameDragPayload>(
+            data: ViewFrameDragPayload(frameKey: frame.key),
+            feedback: Material(
+              color: Colors.transparent,
+              elevation: 6,
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                width: _FrameGrid.frameWidth,
+                child: Opacity(opacity: 0.94, child: card),
               ),
             ),
-          ],
+            childWhenDragging: Opacity(opacity: 0.3, child: card),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.grab,
+              child: card,
+            ),
+          ),
         );
       },
     );

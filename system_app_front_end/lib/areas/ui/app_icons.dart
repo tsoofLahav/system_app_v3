@@ -37,6 +37,7 @@ abstract final class AppIcons {
   static const drag = LucideIcons.gripVertical200;
   static const paneDrag = LucideIcons.gripHorizontal200;
   static const arrange = LucideIcons.layoutPanelTop200;
+  static const swap = LucideIcons.arrowLeftRight200;
   static const close = LucideIcons.x200;
   static const trash = LucideIcons.trash2200;
   static const search = LucideIcons.search200;

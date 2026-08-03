@@ -49,6 +49,8 @@ Views are membership and filtering only. **Never add per-view status columns** â
 
 **Membership GET enrichment.** Listing memberships includes the nested task plus home-topic fields (`topic_id`, `topic_name`, `topic_key`, `topic_color`) so the frontend can colour topic frames without extra round-trips.
 
+**Create task in a view.** `POST /views/:id/tasks` creates a real `tasks` row (preferring a sibling's home list, else any list used by the view, else a new orphan `task_lists` row) and a membership. Deleting a task still deletes the canonical row everywhere â€” the UI must warn.
+
 ## Information and the object graph
 
 An `info` object holds a piece of knowledge (`title`, `body`, `metadata`).

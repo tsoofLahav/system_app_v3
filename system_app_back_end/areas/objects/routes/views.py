@@ -1,9 +1,10 @@
 from flask import Blueprint, jsonify, request
 
-from models import File, ObjectEmbed, Task, Topic, View, ViewTaskMembership, db
+from models import File, ObjectEmbed, Task, TaskList, Topic, View, ViewTaskMembership, db
 from shared.helpers import active_query, apply_updates, get_or_404
 from shared.bootstrap import default_workspace_id
 from areas.objects.services.delete_cascade import delete_view_cascade
+from areas.objects.services.task_list_order import next_list_order_index
 
 views_bp = Blueprint("views", __name__)
 
@@ -83,6 +84,93 @@ def _task_dict_with_topic(task: Task) -> dict:
     data["topic_key"] = f"topic_{topic.id}"
     data["topic_color"] = topic.color
     return data
+
+
+@views_bp.route("/views/<int:view_id>/tasks", methods=["POST"])
+def create_view_task(view_id):
+    """Create a real task and add it to this view (membership).
+
+    Prefers the sibling task's home list when ``after_task_id`` is set; otherwise
+    any list already used by the view; otherwise a new orphan ``task_lists`` row.
+    """
+    get_or_404(View, view_id)
+    data = request.get_json(silent=True) or {}
+    title = (
+        ""
+        if "title" not in data or data.get("title") is None
+        else str(data.get("title"))
+    )
+    status = data.get("status") or "active"
+    section_name = data.get("section_name")
+    section_flag = data.get("section_flag")
+    topic_key = data.get("topic_key")
+    after_task_id = data.get("after_task_id")
+
+    task_list_id = None
+    if after_task_id is not None:
+        sibling = db.session.get(Task, int(after_task_id))
+        if sibling is not None:
+            task_list_id = sibling.task_list_id
+
+    if task_list_id is None:
+        for row in (
+            ViewTaskMembership.query.filter_by(view_id=view_id)
+            .order_by(ViewTaskMembership.order_index, ViewTaskMembership.id)
+            .all()
+        ):
+            if not row.task_id:
+                continue
+            existing = db.session.get(Task, row.task_id)
+            if existing is not None and existing.task_list_id is not None:
+                task_list_id = existing.task_list_id
+                break
+
+    if task_list_id is None:
+        task_list = TaskList()
+        db.session.add(task_list)
+        db.session.flush()
+        task_list_id = task_list.id
+
+    task = Task(
+        task_list_id=task_list_id,
+        title=title,
+        status=status,
+        list_order_index=next_list_order_index(task_list_id),
+    )
+    db.session.add(task)
+    db.session.flush()
+
+    insert_at = None
+    if after_task_id is not None:
+        for row in ViewTaskMembership.query.filter_by(view_id=view_id).all():
+            if row.task_id == int(after_task_id):
+                insert_at = (row.order_index or 0) + 1
+                break
+
+    rows = (
+        ViewTaskMembership.query.filter_by(view_id=view_id)
+        .order_by(ViewTaskMembership.order_index, ViewTaskMembership.id)
+        .all()
+    )
+    if insert_at is None:
+        insert_at = len(rows)
+
+    for row in rows:
+        if (row.order_index or 0) >= insert_at:
+            row.order_index = (row.order_index or 0) + 1
+
+    db.session.add(
+        ViewTaskMembership(
+            view_id=view_id,
+            task_id=task.id,
+            section_name=section_name,
+            order_index=insert_at,
+            section_flag=section_flag,
+            topic_key=topic_key,
+        )
+    )
+    db.session.commit()
+    return jsonify(_task_dict_with_topic(task)), 201
 
 
 @views_bp.route("/views/<int:view_id>/memberships", methods=["GET"])

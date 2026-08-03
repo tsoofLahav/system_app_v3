@@ -14,7 +14,7 @@ class ViewChromeMenu extends StatelessWidget {
     required this.state,
     required this.displayMode,
     required this.frameReorderMode,
-    required this.onDisplayMode,
+    required this.onToggleDisplayMode,
     required this.onAddSection,
     required this.onToggleFrameReorder,
   });
@@ -22,7 +22,7 @@ class ViewChromeMenu extends StatelessWidget {
   final AppState state;
   final ViewDisplayMode displayMode;
   final bool frameReorderMode;
-  final ValueChanged<ViewDisplayMode> onDisplayMode;
+  final VoidCallback onToggleDisplayMode;
   final VoidCallback onAddSection;
   final VoidCallback onToggleFrameReorder;
 
@@ -41,23 +41,16 @@ class ViewChromeMenu extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _ChromeIconButton(
-            tooltip: s['bySection'],
-            icon: AppIcons.layout,
-            active: bySection,
-            onPressed: () => onDisplayMode(ViewDisplayMode.bySection),
+            tooltip: bySection ? s['switchToTopics'] : s['switchToSections'],
+            icon: AppIcons.swap,
+            onPressed: onToggleDisplayMode,
           ),
           _ChromeIconButton(
-            tooltip: s['byTopic'],
-            icon: AppIcons.smartList,
-            active: !bySection,
-            onPressed: () => onDisplayMode(ViewDisplayMode.byTopic),
+            tooltip: s['addSection'],
+            icon: AppIcons.add,
+            enabled: bySection,
+            onPressed: bySection ? onAddSection : null,
           ),
-          if (bySection)
-            _ChromeIconButton(
-              tooltip: s['addSection'],
-              icon: AppIcons.add,
-              onPressed: onAddSection,
-            ),
           _ChromeIconButton(
             tooltip: bySection ? s['reorderSections'] : s['reorderTopics'],
             icon: AppIcons.arrange,
@@ -74,35 +67,40 @@ class _ChromeIconButton extends StatelessWidget {
   const _ChromeIconButton({
     required this.tooltip,
     required this.icon,
-    required this.onPressed,
+    this.onPressed,
     this.active = false,
+    this.enabled = true,
   });
 
   final String tooltip;
   final IconData icon;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool active;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: active
+        color: active && enabled
             ? AppColors.primaryBright.withValues(alpha: 0.22)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
-          onTap: onPressed,
+          onTap: enabled ? onPressed : null,
           child: Padding(
             padding: const EdgeInsets.all(8),
             child: AppIcon(
               icon,
               size: ViewChromeMenu._iconSize,
-              color: active
-                  ? AppColors.primary.withValues(alpha: 0.95)
-                  : null,
+              enabled: enabled,
+              color: !enabled
+                  ? null
+                  : active
+                      ? AppColors.primary.withValues(alpha: 0.95)
+                      : null,
             ),
           ),
         ),

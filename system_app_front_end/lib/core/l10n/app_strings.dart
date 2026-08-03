@@ -245,6 +245,11 @@ class AppStrings {
     'sections': 'Sections',
     'reorderSections': 'Reorder sections',
     'reorderTopics': 'Reorder topics',
+    'switchToTopics': 'Show by topic',
+    'switchToSections': 'Show by section',
+    'deleteTaskTitle': 'Delete task?',
+    'deleteTaskFromViewBody':
+        'This deletes the task from its original list as well, not only from this view.',
     'editSection': 'Edit section',
     'sectionColor': 'Section color',
     'clearSectionColor': 'Clear color',
@@ -645,6 +650,11 @@ class AppStrings {
     'sections': 'מדורים',
     'reorderSections': 'סדר מדורים',
     'reorderTopics': 'סדר נושאים',
+    'switchToTopics': 'הצג לפי נושא',
+    'switchToSections': 'הצג לפי מדור',
+    'deleteTaskTitle': 'למחוק משימה?',
+    'deleteTaskFromViewBody':
+        'המשימה תימחק גם מהרשימה המקורית שלה, לא רק מהתצוגה הזו.',
     'editSection': 'עריכת מדור',
     'sectionColor': 'צבע מדור',
     'clearSectionColor': 'נקה צבע',

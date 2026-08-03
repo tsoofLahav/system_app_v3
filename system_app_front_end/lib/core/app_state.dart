@@ -910,6 +910,33 @@ class AppState extends ChangeNotifier {
     await _reloadEmbedsForOpenFiles(notify: notify);
   }
 
+  /// Create a task and membership in the open view (after optional sibling).
+  Future<Task> createTaskInView({
+    String title = '',
+    String status = 'active',
+    int? afterTaskId,
+    String? sectionName,
+    String? sectionFlag,
+    String? topicKey,
+    bool notify = true,
+  }) async {
+    if (selectedView == null) {
+      throw StateError('No view selected');
+    }
+    final task = await _views.createTaskInView(
+      selectedView!.id,
+      title: title,
+      status: status,
+      afterTaskId: afterTaskId,
+      sectionName: sectionName,
+      sectionFlag: sectionFlag,
+      topicKey: topicKey,
+    );
+    viewMemberships = await _views.listMemberships(selectedView!.id);
+    await _reloadEmbedsForOpenFiles(notify: notify);
+    return task;
+  }
+
   Future<void> _reloadEmbedsForOpenFiles({bool notify = true}) async {
     for (final file in selectedDetail?.files ?? const <AppFile>[]) {
       await loadEmbedsForFile(file.id, notify: false);
@@ -1228,15 +1255,33 @@ class AppState extends ChangeNotifier {
     required String viewType,
     required String section,
     required int afterOrder,
-  }) async =>
-      Task(id: 0, blockId: null, title: '', status: 'active');
-  Future<void> deleteTaskInView(Task task) async {}
+  }) async {
+    return createTaskInView(sectionName: section, title: '');
+  }
+
+  Future<void> deleteTaskInView(Task task) async {
+    await deleteTask(task);
+  }
+
   Future<void> pasteTasksInViewAfter({
     required List<String> lines,
     required String viewType,
     required String section,
     required int afterOrder,
-  }) async {}
+  }) async {
+    int? afterId;
+    for (final line in lines) {
+      final created = await createTaskInView(
+        title: line,
+        sectionName: section,
+        afterTaskId: afterId,
+        notify: false,
+      );
+      afterId = created.id;
+    }
+    notifyListeners();
+  }
+
   Future<void> completeAutomationCompanion(int id) async {}
   Future<void> submitProcessDocumentationInput({
     required int id,
