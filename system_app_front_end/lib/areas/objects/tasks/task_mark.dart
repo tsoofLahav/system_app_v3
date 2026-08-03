@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../ui/app_colors.dart';
 
 /// Small outline mark for task completion — gentler than Material checkbox.
+/// Always a square (equal width/height); corners stay tight so it reads as a
+/// box, not a rounded bar.
 class TaskMark extends StatelessWidget {
   const TaskMark({
     super.key,
@@ -16,7 +18,7 @@ class TaskMark extends StatelessWidget {
   final bool done;
   final VoidCallback onToggle;
   final double size;
-  /// Tight tap target for [TaskRow] — avoids 32×32 box pushing below text.
+  /// Tight tap target for dense rows — keeps a square hit box.
   final bool compact;
   final bool accent;
 
@@ -27,13 +29,15 @@ class TaskMark extends StatelessWidget {
         : accent
             ? AppColors.aiCyan.withValues(alpha: 0.55)
             : AppColors.noteBorder.withValues(alpha: 0.85);
+    // Slight radius only — larger values make a 14px mark look pill/rectangular.
+    final corner = BorderRadius.circular(size * 0.15);
 
     final mark = AnimatedContainer(
       duration: const Duration(milliseconds: 140),
       width: size,
       height: size,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: corner,
         color: done
             ? AppColors.aiCyan.withValues(alpha: 0.14)
             : accent
@@ -53,23 +57,19 @@ class TaskMark extends StatelessWidget {
           : null,
     );
 
-    final ink = Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onToggle,
-        borderRadius: BorderRadius.circular(6),
-        child: compact
-            ? Padding(padding: const EdgeInsets.all(2), child: mark)
-            : Center(child: mark),
-      ),
-    );
-
-    if (compact) return ink;
+    final side = compact ? size + 8 : 32.0;
 
     return SizedBox(
-      width: 32,
-      height: 32,
-      child: ink,
+      width: side,
+      height: side,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onToggle,
+          borderRadius: BorderRadius.circular(side * 0.2),
+          child: Center(child: mark),
+        ),
+      ),
     );
   }
 }

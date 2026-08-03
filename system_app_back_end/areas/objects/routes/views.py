@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from models import Task, View, ViewTaskMembership, db
+from models import File, ObjectEmbed, Task, Topic, View, ViewTaskMembership, db
 from shared.helpers import active_query, apply_updates, get_or_404
 from shared.bootstrap import default_workspace_id
 from areas.objects.services.delete_cascade import delete_view_cascade
@@ -64,6 +64,27 @@ def delete_view(view_id):
     return "", 204
 
 
+def _task_dict_with_topic(task: Task) -> dict:
+    """Include home-topic fields so the view pane can colour topic frames."""
+    data = task.to_dict()
+    if not task.task_list_id:
+        return data
+    obj = ObjectEmbed.query.filter_by(task_list_id=task.task_list_id).first()
+    if obj is None:
+        return data
+    file_row = db.session.get(File, obj.file_id)
+    if file_row is None:
+        return data
+    topic = db.session.get(Topic, file_row.topic_id)
+    if topic is None:
+        return data
+    data["topic_id"] = topic.id
+    data["topic_name"] = topic.name
+    data["topic_key"] = f"topic_{topic.id}"
+    data["topic_color"] = topic.color
+    return data
+
+
 @views_bp.route("/views/<int:view_id>/memberships", methods=["GET"])
 def list_memberships(view_id):
     get_or_404(View, view_id)
@@ -78,7 +99,7 @@ def list_memberships(view_id):
         if row.task_id:
             task = db.session.get(Task, row.task_id)
             if task:
-                data["task"] = task.to_dict()
+                data["task"] = _task_dict_with_topic(task)
         result.append(data)
     return jsonify(result)
 

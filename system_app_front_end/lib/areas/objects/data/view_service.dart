@@ -29,6 +29,18 @@ class ViewService {
     return AppView.fromJson(data);
   }
 
+  Future<AppView> updateView(
+    int viewId, {
+    String? name,
+    Map<String, dynamic>? layoutConfig,
+  }) async {
+    final data = await _api.patch('/views/$viewId', {
+      if (name != null) 'name': name,
+      if (layoutConfig != null) 'layout_config': layoutConfig,
+    }) as Map<String, dynamic>;
+    return AppView.fromJson(data);
+  }
+
   Future<List<ViewMembership>> listMemberships(int viewId) async {
     final data =
         await _api.get('/views/$viewId/memberships') as List<dynamic>;

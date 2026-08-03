@@ -27,6 +27,7 @@ class DocumentInsertBar extends StatelessWidget {
         final controller = DocumentEditorRegistry.active;
         if (controller == null) return const SizedBox.shrink();
 
+        final s = state.strings;
         final segment = GlassBarSegment(
           height: AppBottomBarMetrics.barHeight,
           padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -35,20 +36,40 @@ class DocumentInsertBar extends StatelessWidget {
             children: [
               _InsertButton(
                 icon: AppIcons.uploadDetails,
-                tooltip: state.strings['paragraph'],
+                tooltip: s['paragraph'],
                 onPressed: () => controller.insertAtBlock('paragraph'),
               ),
               // One list option only. Points vs numbers is a property of
               // an existing list, switched from its right-click menu.
               _InsertButton(
                 icon: AppIcons.smartList,
-                tooltip: state.strings['list'],
+                tooltip: s['list'],
                 onPressed: () => controller.insertAtBlock('bullet_list'),
               ),
               _InsertButton(
                 icon: AppIcons.layout,
-                tooltip: state.strings['table'],
+                tooltip: s['table'],
                 onPressed: () => controller.insertAtBlock('table'),
+              ),
+              _InsertButton(
+                icon: AppIcons.check,
+                tooltip: s['addTaskList'],
+                onPressed: () => controller.insertAtBlock('task_list'),
+              ),
+              _InsertButton(
+                icon: AppIcons.object,
+                tooltip: s['addDetails'],
+                onPressed: () => controller.insertAtBlock('info'),
+              ),
+              _InsertButton(
+                icon: AppIcons.image,
+                tooltip: s['addImage'],
+                onPressed: () => controller.insertAtBlock('image'),
+              ),
+              _InsertButton(
+                icon: AppIcons.graph,
+                tooltip: s['addGraph'],
+                onPressed: () => controller.insertAtBlock('graph'),
               ),
             ],
           ),
@@ -81,13 +102,12 @@ class _InsertButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: IconButton(
-        icon: AppIcon(icon, size: 20),
-        onPressed: onPressed,
-        visualDensity: VisualDensity.compact,
-      ),
+    return IconButton(
+      tooltip: tooltip,
+      padding: const EdgeInsets.all(4),
+      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+      onPressed: onPressed,
+      icon: AppIcon(icon, size: 20),
     );
   }
 }

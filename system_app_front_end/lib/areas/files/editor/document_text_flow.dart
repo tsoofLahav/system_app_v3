@@ -6,9 +6,9 @@
 /// keys walk out of one segment into the next and a selection can cover parts
 /// of several.
 ///
-/// Segment ids are built by [paragraphSegmentId], [listItemSegmentId] and
-/// [tableCellSegmentId] so that order can be derived from the document tree
-/// without the flow knowing anything about block types.
+/// Segment ids are built by [paragraphSegmentId], [listItemSegmentId],
+/// [tableCellSegmentId] and [embedSegmentId] so that order can be derived from
+/// the document tree without the flow knowing anything about block types.
 library;
 
 import 'package:flutter/rendering.dart';
@@ -20,6 +20,47 @@ String listItemSegmentId(String blockId, int itemIndex) => '$blockId#i$itemIndex
 
 String tableCellSegmentId(String blockId, int row, int column) =>
     '$blockId#c$row:$column';
+
+/// One task title inside a task-list embed — same role as a list bullet.
+String taskItemSegmentId(String blockId, int itemIndex) =>
+    '$blockId#t$itemIndex';
+
+/// One graph cell — same role as a table cell (`row` is 0=label, 1=value).
+String graphCellSegmentId(String blockId, int row, int column) =>
+    '$blockId#g$row:$column';
+
+/// One whole embedded object — atomic for caret and marking (info / image).
+String embedSegmentId(String blockId) => '$blockId#embed';
+
+bool isEmbedSegmentId(String segmentId) => segmentId.endsWith('#embed');
+
+/// Info object title — one line above the body, like a heading line.
+String infoTitleSegmentId(String blockId) => '$blockId#infoTitle';
+
+/// Info object body — continuous text under the title.
+String infoBodySegmentId(String blockId) => '$blockId#infoBody';
+
+bool isTaskItemSegmentId(String segmentId) =>
+    RegExp(r'#t\d+$').hasMatch(segmentId);
+
+bool isGraphCellSegmentId(String segmentId) =>
+    RegExp(r'#g\d+:\d+$').hasMatch(segmentId);
+
+(String blockId, int index)? parseTaskItemSegmentId(String segmentId) {
+  final match = RegExp(r'^(.*)#t(\d+)$').firstMatch(segmentId);
+  if (match == null) return null;
+  return (match.group(1)!, int.parse(match.group(2)!));
+}
+
+(String blockId, int row, int column)? parseGraphCellSegmentId(String segmentId) {
+  final match = RegExp(r'^(.*)#g(\d+):(\d+)$').firstMatch(segmentId);
+  if (match == null) return null;
+  return (
+    match.group(1)!,
+    int.parse(match.group(2)!),
+    int.parse(match.group(3)!),
+  );
+}
 
 /// A caret position expressed against the document rather than one field.
 @immutable

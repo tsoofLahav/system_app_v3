@@ -38,13 +38,16 @@ Tasks are the richest object type — a sub-part of this area, not a separate on
 
 **Empty titles.** `POST /task-lists/:id/tasks` accepts `title: ""` (blank row). Only a missing title key may default; never coerce empty string to `"New task"`.
 
-**Views.** A view is a user-made list that a task can appear in without being copied. Membership lives in `view_task_memberships`, with its own ordering per view.
+**Views.** A view is a user-made list that a task can appear in without being copied. Membership lives in `view_task_memberships`, with its own ordering per view. Section definitions, display mode (`by_section` / `by_topic`), and topic-frame order live in `views.layout_config` (JSON) — not separate tables. Memberships still carry `section_name` / `section_flag` for which section a task sits in.
 
 ```
 tasks ──< view_task_memberships >── views
+                              layout_config: sections, display_mode, topic_order
 ```
 
 Views are membership and filtering only. **Never add per-view status columns** — that would duplicate task state.
+
+**Membership GET enrichment.** Listing memberships includes the nested task plus home-topic fields (`topic_id`, `topic_name`, `topic_key`, `topic_color`) so the frontend can colour topic frames without extra round-trips.
 
 ## Information and the object graph
 

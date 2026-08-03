@@ -7,12 +7,19 @@ import 'package:flutter/services.dart';
 import '../../../core/app_state.dart';
 import '../../../core/l10n/app_strings.dart';
 import '../data/app_file.dart';
+import '../../objects/data/object_embed.dart';
+import '../../objects/data/task.dart';
+import '../../objects/tasks/task_zones.dart';
+import './embeds/graph_embed.dart';
+import './embeds/inline_task_list.dart';
+import './embeds/object_embed_widgets.dart';
 import '../../ui/app_typography.dart';
 import '../model/document_codec.dart';
 import './document_edit_history.dart';
 import './document_editor_controller.dart';
 import './document_structure_prune.dart';
 import './document_text_flow.dart';
+import './embed_block_host.dart';
 import '../model/document_model.dart';
 import '../rich_text/block_text_actions.dart';
 import '../rich_text/block_text_focus.dart';
@@ -34,7 +41,7 @@ class BlockDocumentEditor extends StatefulWidget {
 
   final AppFile file;
   final AppState state;
-  final List<dynamic> embeds;
+  final List<ObjectEmbed> embeds;
 
   @override
   State<BlockDocumentEditor> createState() => _BlockDocumentEditorState();
@@ -55,6 +62,8 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   Offset? _dragOrigin;
   String? _dragOriginSegment;
   bool _draggingAcrossParts = false;
+  List<ObjectEmbed>? _embedsSnapshot;
+  var _embedRebuildScheduled = false;
 
   // Read per build, never cached: the styles carry the font of the current
   // language, and a field caching one would keep Inter under Hebrew text.
@@ -75,7 +84,10 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     if (_doc.blocks.isEmpty) {
       _doc = _doc.copyWith(blocks: [ParagraphNode(id: DocumentCodec.newId('b'), text: '')]);
     }
+    _embedsSnapshot = widget.state.embedsByFileId[widget.file.id] ?? widget.embeds;
     _flow.onPruneStructures = _pruneStructures;
+    _flow.addListener(_rememberCaretBlock);
+    widget.state.addListener(_onAppStateChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       DocumentEditorRegistry.register(
@@ -84,8 +96,76 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
           insertAtBlock: _insertAtBlock,
           focusBlock: (index) => _focusedBlockIndex = index,
           flushPendingChanges: _flushPendingChanges,
+          focusedTaskId: _focusedTaskId,
         ),
       );
+      unawaited(_loadEmbedsQuietly());
+    });
+  }
+
+  /// Keep the last caret block even after focus moves to the insert bar.
+  void _rememberCaretBlock() {
+    final segmentId = _flow.focusedSegmentId;
+    if (segmentId == null) return;
+    final hash = segmentId.indexOf('#');
+    final blockId = hash < 0 ? segmentId : segmentId.substring(0, hash);
+    final i = _doc.blocks.indexWhere((b) => b.id == blockId);
+    if (i >= 0) _focusedBlockIndex = i;
+  }
+
+  /// Task title under the caret, if the focused segment is a task row.
+  int? _focusedTaskId() {
+    final segmentId = _flow.focusedSegmentId;
+    if (segmentId == null) return null;
+    final marker = segmentId.lastIndexOf('#t');
+    if (marker < 0) return null;
+    final blockId = segmentId.substring(0, marker);
+    final index = int.tryParse(segmentId.substring(marker + 2));
+    if (index == null) return null;
+    EmbedNode? block;
+    for (final b in _doc.blocks) {
+      if (b is EmbedNode && b.id == blockId) {
+        block = b;
+        break;
+      }
+    }
+    if (block == null) return null;
+    final embed = _embedFor(block.objectId);
+    if (embed == null || embed.type != 'task_list') return null;
+    final tasks = TaskZones.fromTasks(embed.tasks ?? const <Task>[]).all;
+    if (index < 0 || index >= tasks.length) return null;
+    return tasks[index].id;
+  }
+
+  Future<void> _loadEmbedsQuietly() async {
+    await widget.state.loadEmbedsForFile(widget.file.id, notify: false);
+    if (!mounted) return;
+    _scheduleEmbedRebuildIfNeeded();
+  }
+
+  /// Rebuild for embed data only — never synchronously from a keystroke's
+  /// notifyListeners, or HardwareKeyboard desyncs (see DEVELOPMENT.md).
+  void _onAppStateChanged() {
+    _scheduleEmbedRebuildIfNeeded();
+  }
+
+  void _scheduleEmbedRebuildIfNeeded() {
+    final next = widget.state.embedsByFileId[widget.file.id] ?? widget.embeds;
+    if (identical(next, _embedsSnapshot)) return;
+    if (_embedRebuildScheduled) return;
+    _embedRebuildScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _embedRebuildScheduled = false;
+      if (!mounted) return;
+      // Holding a key while TextFields are swapped desyncs HardwareKeyboard.
+      if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+        _scheduleEmbedRebuildIfNeeded();
+        return;
+      }
+      final latest =
+          widget.state.embedsByFileId[widget.file.id] ?? widget.embeds;
+      if (identical(latest, _embedsSnapshot)) return;
+      setState(() => _embedsSnapshot = latest);
     });
   }
 
@@ -153,6 +233,8 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
 
   @override
   void dispose() {
+    widget.state.removeListener(_onAppStateChanged);
+    _flow.removeListener(_rememberCaretBlock);
     unawaited(_flushPendingChanges());
     DocumentEditorRegistry.unregister(widget.file.id);
     _saveTimer?.cancel();
@@ -170,7 +252,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     _lastSavedJson = json;
     await widget.state.updateFile(_currentFile, {
       'document_json': json,
-    });
+    }, notify: false);
   }
 
   void _scheduleSave() {
@@ -235,8 +317,15 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     );
   }
 
-  FocusNode _focusFor(String blockId) =>
-      _focusNodes.putIfAbsent(blockId, FocusNode.new);
+  FocusNode _focusFor(String blockId) => _focusNodes.putIfAbsent(blockId, () {
+        final node = FocusNode();
+        node.addListener(() {
+          if (!node.hasFocus || !mounted) return;
+          final i = _doc.blocks.indexWhere((b) => b.id == blockId);
+          if (i >= 0) _claimThisFile(i);
+        });
+        return node;
+      });
 
   Future<void> _showTextMenu(TapDownDetails details) async {
     await DocumentContextMenu.showTextMenu(
@@ -250,7 +339,16 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   Future<void> _insertAtBlock(String action) async {
     await _flushPendingChanges();
     _recordHistory(force: true);
-    final index = (_focusedBlockIndex + 1).clamp(0, _doc.blocks.length);
+    final index = _blockIndexForInsert();
+
+    // Objects are created on the server, which also inserts the embed block.
+    if (action == 'task_list' ||
+        action == 'info' ||
+        action == 'image' ||
+        action == 'graph') {
+      await _insertObject(action, index);
+      return;
+    }
 
     final node = switch (action) {
       'paragraph' => ParagraphNode(id: DocumentCodec.newId('b'), text: ''),
@@ -280,8 +378,65 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     _focusFirstPartOf(node.id);
   }
 
+  /// Insert after the block that currently holds the caret — not a stale
+  /// index from another pane or an earlier click.
+  int _blockIndexForInsert() {
+    final segmentId = _flow.focusedSegmentId;
+    if (segmentId != null) {
+      final hash = segmentId.indexOf('#');
+      final blockId = hash < 0 ? segmentId : segmentId.substring(0, hash);
+      final i = _doc.blocks.indexWhere((b) => b.id == blockId);
+      if (i >= 0) return (i + 1).clamp(0, _doc.blocks.length);
+    }
+    return (_focusedBlockIndex + 1).clamp(0, _doc.blocks.length);
+  }
+
+  void _claimThisFile([int? blockIndex]) {
+    DocumentEditorRegistry.claim(widget.file.id);
+    if (blockIndex != null) _focusedBlockIndex = blockIndex;
+  }
+
+  Future<void> _insertObject(String type, int blockIndex) async {
+    Map<String, dynamic>? payload;
+    if (type == 'graph') {
+      payload = {
+        'labels': ['A', 'B'],
+        'values': ['1', '2'],
+        'chartType': 'bar',
+        'colors': ['#37899E', '#58C4D8'],
+        'color': '#37899E',
+      };
+    } else if (type == 'image') {
+      payload = {'url': '', 'caption': ''};
+    }
+
+    final embed = await widget.state.createObjectInDocument(
+      _currentFile,
+      type: type,
+      title: type == 'info' ? '' : null,
+      body: type == 'info' ? '' : null,
+      payload: payload,
+      blockIndex: blockIndex,
+    );
+
+    // Server wrote the embed into document_json; adopt that tree.
+    final updated = await widget.state.reloadFile(widget.file.id);
+    _doc = DocumentCodec.coalesceAdjacentParagraphs(
+      DocumentCodec.parse(updated.documentJson),
+    );
+    _lastSavedJson = updated.documentJson;
+    _dirty = false;
+    if (mounted) setState(() {});
+
+    final embedIndex = DocumentCodec.embedBlockIndex(_doc, embed.id);
+    if (embedIndex != null) {
+      _focusedBlockIndex = embedIndex;
+      _focusFirstPartOf(_doc.blocks[embedIndex].id);
+    }
+  }
+
   /// Puts the caret in the first part of a block: the paragraph itself, the
-  /// first bullet, or the top-left cell.
+  /// first bullet, the top-left cell, the first task, or an atomic embed.
   void _focusFirstPartOf(String blockId) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -292,6 +447,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         ListNode() when block.items.isNotEmpty => listItemSegmentId(blockId, 0),
         TableNode() when block.rows.isNotEmpty && block.rows.first.isNotEmpty =>
           tableCellSegmentId(blockId, 0, 0),
+        EmbedNode() => _embedSegmentIds(block).firstOrNull,
         ParagraphNode() || HeadingNode() => paragraphSegmentId(blockId),
         _ => null,
       };
@@ -301,7 +457,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   }
 
   void _updateParagraph(ParagraphNode block, SpanTextEditingController controller) {
-    _focusedBlockIndex = _doc.blocks.indexWhere((b) => b.id == block.id);
+    _claimThisFile(_doc.blocks.indexWhere((b) => b.id == block.id));
     _mutateDoc(
       DocumentCodec.replaceBlock(
         _doc,
@@ -420,14 +576,230 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     });
   }
 
-  /// Drops the bullets, rows, and blocks a delete emptied completely.
+  /// Continues writing below an embedded object without destroying it —
+  /// same empty-final-exit idea as lists and tables.
+  void _exitEmbedBelow(String blockId) {
+    final index = _doc.blocks.indexWhere((b) => b.id == blockId);
+    if (index < 0) return;
+    final block = _doc.blocks[index];
+    if (block is! EmbedNode) return;
+
+    _recordHistory(force: true);
+    final newParagraphId = DocumentCodec.newId('b');
+    final blocks = [..._doc.blocks];
+    blocks.insert(
+      index + 1,
+      ParagraphNode(id: newParagraphId, text: ''),
+    );
+    _focusedBlockIndex = index + 1;
+    _mutateDoc(_doc.copyWith(blocks: blocks), rebuild: true, recordHistory: false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _flow.placeCaret(
+        DocumentTextPosition(paragraphSegmentId(newParagraphId), 0),
+      );
+    });
+  }
+
+  /// Empty task + Enter — drop that task and continue as a paragraph below,
+  /// mirroring list exit. [emptyTaskId] is the row that was empty (not a
+  /// positional index — Active/Done order can disagree with raw list order).
+  Future<void> _exitTaskListBelow(String blockId, int? emptyTaskId) async {
+    final index = _doc.blocks.indexWhere((b) => b.id == blockId);
+    if (index < 0) return;
+    final block = _doc.blocks[index];
+    if (block is! EmbedNode) return;
+    final embed = _embedFor(block.objectId);
+    if (embed == null || embed.type != 'task_list') return;
+
+    _recordHistory(force: true);
+
+    if (emptyTaskId != null) {
+      Task? toDelete;
+      for (final t in embed.tasks ?? const <Task>[]) {
+        if (t.id == emptyTaskId) {
+          toDelete = t;
+          break;
+        }
+      }
+      if (toDelete != null) {
+        await widget.state.deleteTask(toDelete, notify: false);
+      }
+    }
+
+    final remaining = [
+      for (final t in embed.tasks ?? const <Task>[])
+        if (t.id != emptyTaskId) t,
+    ];
+
+    final newParagraphId = DocumentCodec.newId('b');
+    final blocks = [..._doc.blocks];
+
+    if (remaining.isEmpty) {
+      blocks[index] = ParagraphNode(id: newParagraphId, text: '');
+      _mutateDoc(_doc.copyWith(blocks: blocks), rebuild: true, recordHistory: false);
+      await _flushPendingChanges();
+      await widget.state.deleteObjectEmbed(block.objectId);
+      await _reloadEmbedsQuiet();
+    } else {
+      blocks.insert(
+        index + 1,
+        ParagraphNode(id: newParagraphId, text: ''),
+      );
+      _mutateDoc(_doc.copyWith(blocks: blocks), rebuild: true, recordHistory: false);
+      await _reloadEmbedsQuiet();
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Same landing as graph / list exit — claim the new paragraph field.
+      final node = _focusFor(newParagraphId);
+      if (node.context != null) node.requestFocus();
+      _flow.placeCaret(
+        DocumentTextPosition(paragraphSegmentId(newParagraphId), 0),
+      );
+    });
+  }
+
+  /// Empty graph column + Enter — drop that column and continue below,
+  /// mirroring table exit.
+  Future<void> _exitGraphBelow(String blockId, int emptyCol) async {
+    final index = _doc.blocks.indexWhere((b) => b.id == blockId);
+    if (index < 0) return;
+    final block = _doc.blocks[index];
+    if (block is! EmbedNode) return;
+    final embed = _embedFor(block.objectId);
+    if (embed == null || embed.type != 'graph') return;
+
+    final payload = Map<String, dynamic>.from(embed.payload ?? const {});
+    final labels = [
+      for (final e in payload['labels'] as List? ?? const []) '$e',
+    ];
+    final values = [
+      for (final v in payload['values'] as List? ?? const []) '$v',
+    ];
+    while (values.length < labels.length) {
+      values.add('');
+    }
+
+    if (emptyCol >= 0 && emptyCol < labels.length) {
+      labels.removeAt(emptyCol);
+      values.removeAt(emptyCol);
+    }
+
+    _recordHistory(force: true);
+    final newParagraphId = DocumentCodec.newId('b');
+    final blocks = [..._doc.blocks];
+    final hasContent = labels.any((l) => l.trim().isNotEmpty) ||
+        values.any((v) => v.trim().isNotEmpty);
+
+    if (!hasContent || labels.isEmpty) {
+      blocks[index] = ParagraphNode(id: newParagraphId, text: '');
+      _mutateDoc(_doc.copyWith(blocks: blocks), rebuild: true, recordHistory: false);
+      await _flushPendingChanges();
+      await widget.state.deleteObjectEmbed(block.objectId);
+      await _reloadEmbedsQuiet();
+    } else {
+      _patchEmbedPayloadLocally(
+        embed.id,
+        {...payload, 'labels': labels, 'values': values},
+      );
+      unawaited(
+        widget.state.updateObjectPayload(
+          embed.id,
+          {...payload, 'labels': labels, 'values': values},
+          notify: false,
+        ),
+      );
+      blocks.insert(
+        index + 1,
+        ParagraphNode(id: newParagraphId, text: ''),
+      );
+      _mutateDoc(_doc.copyWith(blocks: blocks), rebuild: true, recordHistory: false);
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Same landing as list / table exit — focus the new paragraph field.
+      final node = _focusFor(newParagraphId);
+      if (node.context != null) node.requestFocus();
+      _flow.placeCaret(
+        DocumentTextPosition(paragraphSegmentId(newParagraphId), 0),
+      );
+    });
+  }
+
+  /// Keep segment order in lockstep with the graph grid — patch the local
+  /// embed snapshot immediately; API write is fire-and-forget.
+  ///
+  /// [rebuild] only when column count changes so typing does not rebuild the
+  /// whole file on every keystroke.
+  void _patchEmbedPayloadLocally(
+    int objectId,
+    Map<String, dynamic> payload, {
+    bool? structureChanged,
+  }) {
+    final live = _embedsSnapshot ??
+        widget.state.embedsByFileId[widget.file.id] ??
+        widget.embeds;
+    final index = live.indexWhere((e) => e.id == objectId);
+    if (index < 0) return;
+    final current = live[index];
+    final oldCols = (current.payload?['labels'] as List?)?.length ?? 0;
+    final newCols = (payload['labels'] as List?)?.length ?? 0;
+    final next = [
+      for (var i = 0; i < live.length; i++)
+        if (i == index)
+          ObjectEmbed(
+            id: current.id,
+            fileId: current.fileId,
+            type: current.type,
+            taskListId: current.taskListId,
+            informationId: current.informationId,
+            anchor: current.anchor,
+            sortKey: current.sortKey,
+            tasks: current.tasks,
+            information: current.information,
+            links: current.links,
+            payload: payload,
+          )
+        else
+          live[i],
+    ];
+    widget.state.embedsByFileId[widget.file.id] = next;
+    final mustRebuild = structureChanged ?? oldCols != newCols;
+    if (mustRebuild) {
+      setState(() => _embedsSnapshot = next);
+    } else {
+      _embedsSnapshot = next;
+    }
+  }
+
+  Future<void> _reloadEmbedsQuiet() async {
+    await widget.state.loadEmbedsForFile(widget.file.id, notify: false);
+    if (!mounted) return;
+    setState(() {
+      _embedsSnapshot = widget.state.embedsByFileId[widget.file.id];
+    });
+  }
+
+  /// Drops the bullets, rows, embeds, and blocks a delete emptied completely.
   ///
   /// Runs after the frame because it restructures the document while the text
   /// fields that triggered the delete are still settling.
   void _pruneStructures(Set<String> fullyEmptied, {required bool spansParts}) {
     if (fullyEmptied.isEmpty) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+
+      final objectPartsTouched = await _pruneTaskAndGraphParts(fullyEmptied);
+
+      final removedObjectIds = <int>[
+        for (final block in _doc.blocks)
+          if (block is EmbedNode &&
+              fullyEmptied.contains(embedSegmentId(block.id)))
+            block.objectId,
+      ];
 
       final caretSegment = _flow.focusedSegmentId;
       final pruned = pruneFullyMarkedStructures(
@@ -435,19 +807,143 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         fullyEmptied: fullyEmptied,
         spansParts: spansParts,
       );
-      if (!pruned.changed) return;
+      if (!pruned.changed &&
+          removedObjectIds.isEmpty &&
+          !objectPartsTouched) {
+        return;
+      }
 
       _flow.clearSelection();
-      _mutateDoc(_doc.copyWith(blocks: pruned.blocks), rebuild: true);
+      if (pruned.changed) {
+        _mutateDoc(_doc.copyWith(blocks: pruned.blocks), rebuild: true);
+        await _flushPendingChanges();
+      }
+
+      // Cascade-delete backing rows so agent text and views stay clean.
+      for (final objectId in removedObjectIds) {
+        await widget.state.deleteObjectEmbed(objectId);
+      }
+      if (removedObjectIds.isNotEmpty) {
+        final updated = await widget.state.reloadFile(widget.file.id);
+        if (!mounted) return;
+        _doc = DocumentCodec.coalesceAdjacentParagraphs(
+          DocumentCodec.parse(updated.documentJson),
+        );
+        _lastSavedJson = updated.documentJson;
+        _dirty = false;
+        setState(() {});
+      }
 
       final caretSurvived =
           caretSegment != null && _segmentOrder().contains(caretSegment);
       if (!caretSurvived) {
         final landing =
-            pruned.firstRemovedIndex.clamp(0, pruned.blocks.length - 1);
-        _focusFirstPartOf(pruned.blocks[landing].id);
+            pruned.firstRemovedIndex.clamp(0, _doc.blocks.length - 1);
+        _focusFirstPartOf(_doc.blocks[landing].id);
       }
     });
+  }
+
+  /// Task-list / graph parts live outside `document_json` — prune them via API
+  /// / payload when their segments were marked end to end.
+  Future<bool> _pruneTaskAndGraphParts(Set<String> fullyEmptied) async {
+    final taskByBlock = <String, List<int>>{};
+    final graphColsByBlock = <String, Set<int>>{};
+
+    for (final id in fullyEmptied) {
+      final task = parseTaskItemSegmentId(id);
+      if (task != null) {
+        taskByBlock.putIfAbsent(task.$1, () => []).add(task.$2);
+        continue;
+      }
+      final graph = parseGraphCellSegmentId(id);
+      if (graph != null) {
+        graphColsByBlock.putIfAbsent(graph.$1, () => {}).add(graph.$3);
+      }
+    }
+    if (taskByBlock.isEmpty && graphColsByBlock.isEmpty) return false;
+
+    for (final entry in taskByBlock.entries) {
+      final blockIndex = _doc.blocks.indexWhere((b) => b.id == entry.key);
+      if (blockIndex < 0) continue;
+      final block = _doc.blocks[blockIndex];
+      if (block is! EmbedNode) continue;
+      final embed = _embedFor(block.objectId);
+      if (embed?.type != 'task_list') continue;
+      final tasks = [...(embed!.tasks ?? const <Task>[])]
+        ..sort((a, b) => a.listOrderIndex.compareTo(b.listOrderIndex));
+      final indexes = entry.value.toSet().toList()..sort((a, b) => b.compareTo(a));
+      for (final i in indexes) {
+        if (i < 0 || i >= tasks.length) continue;
+        await widget.state.deleteTask(tasks[i], notify: false);
+        tasks.removeAt(i);
+      }
+      if (tasks.isEmpty) {
+        final blocks = [..._doc.blocks]..removeAt(blockIndex);
+        _mutateDoc(_doc.copyWith(blocks: blocks), rebuild: true);
+        await _flushPendingChanges();
+        await widget.state.deleteObjectEmbed(block.objectId);
+      }
+    }
+
+    for (final entry in graphColsByBlock.entries) {
+      final blockIndex = _doc.blocks.indexWhere((b) => b.id == entry.key);
+      if (blockIndex < 0) continue;
+      final block = _doc.blocks[blockIndex];
+      if (block is! EmbedNode) continue;
+      final embed = _embedFor(block.objectId);
+      if (embed?.type != 'graph') continue;
+
+      // A column goes only when both of its cells were marked in full.
+      final toDrop = <int>[];
+      for (final col in entry.value) {
+        final labelId = graphCellSegmentId(block.id, 0, col);
+        final valueId = graphCellSegmentId(block.id, 1, col);
+        if (fullyEmptied.contains(labelId) && fullyEmptied.contains(valueId)) {
+          toDrop.add(col);
+        }
+      }
+      if (toDrop.isEmpty) continue;
+
+      final payload = Map<String, dynamic>.from(embed!.payload ?? const {});
+      final labels = [
+        for (final e in payload['labels'] as List? ?? const []) '$e',
+      ];
+      final values = [
+        for (final v in payload['values'] as List? ?? const []) '$v',
+      ];
+      while (values.length < labels.length) {
+        values.add('');
+      }
+      toDrop.sort((a, b) => b.compareTo(a));
+      for (final col in toDrop) {
+        if (col < 0 || col >= labels.length) continue;
+        labels.removeAt(col);
+        values.removeAt(col);
+      }
+
+      if (labels.isEmpty) {
+        final blocks = [..._doc.blocks]..removeAt(blockIndex);
+        _mutateDoc(_doc.copyWith(blocks: blocks), rebuild: true);
+        await _flushPendingChanges();
+        await widget.state.deleteObjectEmbed(block.objectId);
+      } else {
+        _patchEmbedPayloadLocally(
+          embed.id,
+          {...payload, 'labels': labels, 'values': values},
+        );
+        await widget.state.updateObjectPayload(
+          embed.id,
+          {...payload, 'labels': labels, 'values': values},
+          notify: false,
+        );
+      }
+    }
+
+    if (taskByBlock.isNotEmpty || graphColsByBlock.isNotEmpty) {
+      await _reloadEmbedsQuiet();
+    }
+    return true;
   }
 
   /// Switches an existing list between points and numbers. A list has one
@@ -464,8 +960,8 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   }
 
   /// Segment ids in reading order: a paragraph or heading is one segment, a
-  /// list contributes one per bullet, a table one per cell. This is what makes
-  /// the caret able to walk from any part to the next.
+  /// list contributes one per bullet, a table one per cell, a task list one
+  /// per task, a graph one per cell, and other embeds are one atomic unit.
   List<String> _segmentOrder() {
     final ids = <String>[];
     for (final block in _doc.blocks) {
@@ -479,6 +975,8 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
             ids.add(tableCellSegmentId(block.id, r, c));
           }
         }
+      } else if (block is EmbedNode) {
+        ids.addAll(_embedSegmentIds(block));
       } else if (block is ParagraphNode || block is HeadingNode) {
         ids.add(paragraphSegmentId(block.id));
       }
@@ -486,44 +984,100 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     return ids;
   }
 
-  /// Up/down links for table cells: within a table the caret moves by column,
-  /// and from the edge rows it leaves the table into the adjacent block.
+  List<String> _embedSegmentIds(EmbedNode block) {
+    final embed = _embedFor(block.objectId);
+    if (embed?.type == 'task_list') {
+      final count = (embed!.tasks?.length ?? 0).clamp(1, 10000);
+      return [
+        for (var i = 0; i < count; i++) taskItemSegmentId(block.id, i),
+      ];
+    }
+    if (embed?.type == 'graph') {
+      final labels = embed!.payload?['labels'] as List? ?? const ['', ''];
+      final cols = labels.isEmpty ? 2 : labels.length;
+      return [
+        for (var r = 0; r < 2; r++)
+          for (var c = 0; c < cols; c++) graphCellSegmentId(block.id, r, c),
+      ];
+    }
+    if (embed?.type == 'info') {
+      return [
+        infoTitleSegmentId(block.id),
+        infoBodySegmentId(block.id),
+      ];
+    }
+    return [embedSegmentId(block.id)];
+  }
+
+  /// Up/down links for table and graph cells: within the grid the caret moves
+  /// by column, and from the edge rows it leaves into the adjacent block.
   (Map<String, String>, Map<String, String>) _verticalLinks(List<String> order) {
     final above = <String, String>{};
     final below = <String, String>{};
 
     for (var b = 0; b < _doc.blocks.length; b++) {
       final block = _doc.blocks[b];
-      if (block is! TableNode || block.rows.isEmpty) continue;
-
-      final firstCell = tableCellSegmentId(block.id, 0, 0);
-      final firstIndex = order.indexOf(firstCell);
-      final lastRow = block.rows.length - 1;
-      final lastCell =
-          tableCellSegmentId(block.id, lastRow, block.rows[lastRow].length - 1);
-      final lastIndex = order.indexOf(lastCell);
-
-      final beforeTable = firstIndex > 0 ? order[firstIndex - 1] : null;
-      final afterTable =
-          lastIndex >= 0 && lastIndex < order.length - 1 ? order[lastIndex + 1] : null;
-
-      for (var r = 0; r < block.rows.length; r++) {
-        for (var c = 0; c < block.rows[r].length; c++) {
-          final id = tableCellSegmentId(block.id, r, c);
-          if (r > 0 && c < block.rows[r - 1].length) {
-            above[id] = tableCellSegmentId(block.id, r - 1, c);
-          } else if (beforeTable != null) {
-            above[id] = beforeTable;
-          }
-          if (r < lastRow && c < block.rows[r + 1].length) {
-            below[id] = tableCellSegmentId(block.id, r + 1, c);
-          } else if (afterTable != null) {
-            below[id] = afterTable;
-          }
+      if (block is TableNode && block.rows.isNotEmpty) {
+        _linkGridVertically(
+          order: order,
+          above: above,
+          below: below,
+          rowCount: block.rows.length,
+          columnCount: block.rows.first.length,
+          cellId: (r, c) => tableCellSegmentId(block.id, r, c),
+        );
+      } else if (block is EmbedNode) {
+        final embed = _embedFor(block.objectId);
+        if (embed?.type == 'graph') {
+          final labels = embed!.payload?['labels'] as List? ?? const ['', ''];
+          final cols = labels.isEmpty ? 2 : labels.length;
+          _linkGridVertically(
+            order: order,
+            above: above,
+            below: below,
+            rowCount: 2,
+            columnCount: cols,
+            cellId: (r, c) => graphCellSegmentId(block.id, r, c),
+          );
         }
       }
     }
     return (above, below);
+  }
+
+  void _linkGridVertically({
+    required List<String> order,
+    required Map<String, String> above,
+    required Map<String, String> below,
+    required int rowCount,
+    required int columnCount,
+    required String Function(int row, int col) cellId,
+  }) {
+    if (rowCount <= 0 || columnCount <= 0) return;
+    final firstCell = cellId(0, 0);
+    final firstIndex = order.indexOf(firstCell);
+    final lastCell = cellId(rowCount - 1, columnCount - 1);
+    final lastIndex = order.indexOf(lastCell);
+
+    final beforeGrid = firstIndex > 0 ? order[firstIndex - 1] : null;
+    final afterGrid =
+        lastIndex >= 0 && lastIndex < order.length - 1 ? order[lastIndex + 1] : null;
+
+    for (var r = 0; r < rowCount; r++) {
+      for (var c = 0; c < columnCount; c++) {
+        final id = cellId(r, c);
+        if (r > 0) {
+          above[id] = cellId(r - 1, c);
+        } else if (beforeGrid != null) {
+          above[id] = beforeGrid;
+        }
+        if (r < rowCount - 1) {
+          below[id] = cellId(r + 1, c);
+        } else if (afterGrid != null) {
+          below[id] = afterGrid;
+        }
+      }
+    }
   }
 
   @override
@@ -546,9 +1100,19 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
 
   void _onEditorPointerDown(PointerDownEvent event) {
     if (event.buttons != kPrimaryButton) return;
+    final at = _flow.positionAtGlobal(event.position);
     _dragOrigin = event.position;
-    _dragOriginSegment = _flow.positionAtGlobal(event.position)?.segmentId;
+    _dragOriginSegment = at?.segmentId;
     _draggingAcrossParts = false;
+    if (at != null) {
+      final segmentId = at.segmentId;
+      final hash = segmentId.indexOf('#');
+      final blockId = hash < 0 ? segmentId : segmentId.substring(0, hash);
+      final i = _doc.blocks.indexWhere((b) => b.id == blockId);
+      _claimThisFile(i >= 0 ? i : null);
+    } else {
+      _claimThisFile();
+    }
   }
 
   /// Extends the document selection while the pointer is dragged.
@@ -622,13 +1186,147 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
 
   Widget _buildBlock(DocumentNode block, int index) {
     if (block is EmbedNode) {
-      return Text(
-        '[embedded object ${block.objectId}]',
-        style: AppTypography.metaStyle.copyWith(
-          color: Theme.of(context).colorScheme.outline,
-        ),
-      );
+      return _buildEmbed(block, index);
     }
+    final content = _buildEditableBlock(block, index);
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => details.data != block.id,
+      onAcceptWithDetails: (details) => _moveEmbedTo(details.data, index),
+      builder: (context, candidate, rejected) {
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            border: candidate.isNotEmpty
+                ? Border(
+                    top: BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: 2,
+                    ),
+                  )
+                : null,
+          ),
+          child: content,
+        );
+      },
+    );
+  }
+
+  Widget _buildEmbed(EmbedNode block, int index) {
+    final embed = _embedFor(block.objectId);
+    final child = embed == null
+        ? Text(
+            '[object ${block.objectId}]',
+            style: AppTypography.metaStyle.copyWith(
+              color: Theme.of(context).colorScheme.outline,
+            ),
+          )
+        : _embedWidget(embed, block.id);
+
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => details.data != block.id,
+      onAcceptWithDetails: (details) => _moveEmbedTo(details.data, index),
+      builder: (context, candidate, rejected) {
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            border: candidate.isNotEmpty
+                ? Border(
+                    top: BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: 2,
+                    ),
+                  )
+                : null,
+          ),
+          child: EmbedBlockHost(
+            blockId: block.id,
+            registerAsUnit: embed == null ||
+                (embed.type != 'task_list' &&
+                    embed.type != 'graph' &&
+                    embed.type != 'info'),
+            onInteract: () => _claimThisFile(index),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
+  ObjectEmbed? _embedFor(int objectId) {
+    final live = _embedsSnapshot ??
+        widget.state.embedsByFileId[widget.file.id] ??
+        widget.embeds;
+    for (final embed in live) {
+      if (embed.id == objectId) return embed;
+    }
+    return null;
+  }
+
+  Widget _embedWidget(ObjectEmbed embed, String blockId) {
+    Future<void> refresh() => _reloadEmbedsQuiet();
+    void exitBelow() => _exitEmbedBelow(blockId);
+
+    return switch (embed.type) {
+      'task_list' => InlineTaskListWidget(
+          embed: embed,
+          blockId: blockId,
+          state: widget.state,
+          onRefresh: refresh,
+          onFocus: () {
+            final i = _doc.blocks.indexWhere((b) => b.id == blockId);
+            if (i >= 0) _claimThisFile(i);
+          },
+          onExitBelow: (emptyTaskId) =>
+              unawaited(_exitTaskListBelow(blockId, emptyTaskId)),
+        ),
+      'info' => InfoEmbed(
+          embed: embed,
+          blockId: blockId,
+          state: widget.state,
+          onRefresh: () => unawaited(refresh()),
+          onFocus: () {
+            final i = _doc.blocks.indexWhere((b) => b.id == blockId);
+            if (i >= 0) _claimThisFile(i);
+          },
+          onExitBelow: exitBelow,
+        ),
+      'image' => ImageEmbed(
+          embed: embed,
+          state: widget.state,
+          onPayloadChanged: (payload) {
+            unawaited(widget.state.updateObjectPayload(embed.id, payload));
+          },
+        ),
+      'graph' => GraphEmbed(
+          key: ValueKey('graph-${embed.id}'),
+          embed: embed,
+          blockId: blockId,
+          strings: _strings,
+          onPayloadChanged: (payload) {
+            _patchEmbedPayloadLocally(embed.id, payload);
+            unawaited(
+              widget.state.updateObjectPayload(embed.id, payload, notify: false),
+            );
+          },
+          onFocus: () {
+            final i = _doc.blocks.indexWhere((b) => b.id == blockId);
+            if (i >= 0) _claimThisFile(i);
+          },
+          onExitBelow: (emptyCol) =>
+              unawaited(_exitGraphBelow(blockId, emptyCol)),
+        ),
+      _ => Text('[${embed.type}]', style: AppTypography.metaStyle),
+    };
+  }
+
+  void _moveEmbedTo(String blockId, int targetIndex) {
+    final current = _doc.blocks.indexWhere((b) => b.id == blockId);
+    if (current < 0 || current == targetIndex) return;
+    _mutateDoc(
+      DocumentCodec.moveEmbedBlock(_doc, blockId, targetIndex),
+      rebuild: true,
+    );
+  }
+
+  Widget _buildEditableBlock(DocumentNode block, int index) {
     if (block is ParagraphNode) {
       final controller = _controllerFor(block.id, block.text, block.spans);
       return FormattedTextField(
@@ -639,7 +1337,10 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         style: _paragraphStyle,
         maxLines: null,
         minLines: 1,
-        onChanged: (_) => _updateParagraph(block, controller),
+        onChanged: (_) {
+          _claimThisFile(index);
+          _updateParagraph(block, controller);
+        },
         onBackspaceAtStart: () => _mergeOrDeleteParagraph(block, index),
         onSecondaryTapDown: _showTextMenu,
       );
@@ -654,7 +1355,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         style: AppTypography.documentHeadingStyle(block.level),
         maxLines: null,
         onChanged: (_) {
-          _focusedBlockIndex = index;
+          _claimThisFile(index);
           _mutateDoc(
             DocumentCodec.replaceBlock(
               _doc,
@@ -678,9 +1379,9 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         key: ValueKey('l-${block.id}'),
         node: block,
         strings: _strings,
-        onFocus: () => _focusedBlockIndex = index,
+        onFocus: () => _claimThisFile(index),
         onChanged: (updated) {
-          _focusedBlockIndex = index;
+          _claimThisFile(index);
           _mutateDoc(
             DocumentCodec.replaceBlock(_doc, block.id, updated),
             rebuild: false,
@@ -695,9 +1396,9 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         key: ValueKey('t-${block.id}'),
         node: block,
         strings: _strings,
-        onFocus: () => _focusedBlockIndex = index,
+        onFocus: () => _claimThisFile(index),
         onChanged: (updated) {
-          _focusedBlockIndex = index;
+          _claimThisFile(index);
           _mutateDoc(
             DocumentCodec.replaceBlock(_doc, block.id, updated),
             rebuild: false,

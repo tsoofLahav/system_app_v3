@@ -67,6 +67,22 @@ abstract final class AppGlassStyle {
     border: _dialogBorder,
   );
 
+  /// Soft frame for document drag / reorder modes — lighter than floating so
+  /// the content stays readable underneath.
+  static final dragMode = GlassStyleSpec(
+    blurSigma: 14,
+    tintOpacity: 0.38,
+    tintColor: dialogTint,
+    showTopHighlight: true,
+    elevation: 0,
+    border: null,
+  );
+
+  static BoxBorder get dragModeBorder => Border.all(
+        color: Colors.white.withValues(alpha: 0.62),
+        width: 0.9,
+      );
+
   /// Bottom bar segments and `+` — solid white pills with lift shadow.
   static final opaqueChrome = GlassStyleSpec(
     blurSigma: 0,

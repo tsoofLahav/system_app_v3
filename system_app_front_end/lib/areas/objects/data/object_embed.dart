@@ -27,6 +27,27 @@ class ObjectEmbed {
   final List<Map<String, dynamic>>? links;
   final Map<String, dynamic>? payload;
 
+  ObjectEmbed copyWith({
+    List<Task>? tasks,
+    Map<String, dynamic>? information,
+    List<Map<String, dynamic>>? links,
+    Map<String, dynamic>? payload,
+  }) {
+    return ObjectEmbed(
+      id: id,
+      fileId: fileId,
+      type: type,
+      taskListId: taskListId,
+      informationId: informationId,
+      anchor: anchor,
+      sortKey: sortKey,
+      tasks: tasks ?? this.tasks,
+      information: information ?? this.information,
+      links: links ?? this.links,
+      payload: payload ?? this.payload,
+    );
+  }
+
   factory ObjectEmbed.fromJson(Map<String, dynamic> json) {
     return ObjectEmbed(
       id: json['id'] as int,

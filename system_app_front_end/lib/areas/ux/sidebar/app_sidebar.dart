@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
+import '../../../core/l10n/app_strings.dart';
 import '../../../core/models/archive_index.dart';
 import '../../files/data/topic.dart';
+import '../../objects/data/app_view.dart';
+import '../../objects/views/create_view_dialog.dart';
 import '../shortcuts/app_shortcuts.dart';
 import '../shortcuts/shortcut_catalog.dart';
 import '../../ui/app_colors.dart';
@@ -195,27 +198,54 @@ class _AppSidebarState extends State<AppSidebar> {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-                    child: Tooltip(
-                      message: _shortcutTooltip(
-                        s['newTopic'],
-                        ShortcutActionIds.addTopic,
-                      ),
-                      child: TextButton.icon(
-                        onPressed: () => _createTopic(context),
-                        icon: const AppIcon(AppIcons.add, size: 18),
-                        label: Text(
-                          s['newTopic'],
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.text,
-                          alignment: AlignmentDirectional.centerStart,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 10,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Tooltip(
+                          message: _shortcutTooltip(
+                            s['newTopic'],
+                            ShortcutActionIds.addTopic,
+                          ),
+                          child: TextButton.icon(
+                            onPressed: () => _createTopic(context),
+                            icon: const AppIcon(AppIcons.add, size: 18),
+                            label: Text(
+                              s['newTopic'],
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.text,
+                              alignment: AlignmentDirectional.centerStart,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 10,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                        Tooltip(
+                          message: _shortcutTooltip(
+                            s['newView'],
+                            ShortcutActionIds.addView,
+                          ),
+                          child: TextButton.icon(
+                            onPressed: () => _createView(context),
+                            icon: const AppIcon(AppIcons.add, size: 18),
+                            label: Text(
+                              s['newView'],
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.text,
+                              alignment: AlignmentDirectional.centerStart,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   ],
@@ -259,6 +289,14 @@ class _AppSidebarState extends State<AppSidebar> {
     );
   }
 
+  Future<void> _createView(BuildContext context) async {
+    final state = widget.state;
+    _closeDrawerIfOpen();
+    final name = await showCreateViewDialog(context: context, state: state);
+    if (name == null) return;
+    await state.createView(name: name);
+  }
+
   String _shortcutTooltip(String label, String actionId) {
     final suffix = shortcutTooltipSuffix(widget.state, actionId);
     if (suffix == null) return label;
@@ -288,6 +326,16 @@ class _ViewSection extends StatelessWidget {
   final AppState state;
   final Future<void> Function(String viewType) onSelectView;
 
+  Future<void> _renameView(BuildContext context, AppView view) async {
+    final name = await showCreateViewDialog(
+      context: context,
+      state: state,
+      view: view,
+    );
+    if (name == null) return;
+    await state.renameView(view, name: name);
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = state.strings;
@@ -303,6 +351,8 @@ class _ViewSection extends StatelessWidget {
             label: view.name,
             selected: state.selectedViewType == view.type,
             onTap: () => onSelectView(view.type),
+            onEdit: () => _renameView(context, view),
+            strings: s,
           ),
         const SizedBox(height: 2),
       ],
@@ -315,11 +365,36 @@ class _ViewTile extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    required this.onEdit,
+    required this.strings,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final VoidCallback onEdit;
+  final AppStrings strings;
+
+  Future<void> _showContextMenu(
+    BuildContext context,
+    Offset globalPosition,
+  ) async {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+      Offset.zero & overlay.size,
+    );
+
+    final action = await showMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        PopupMenuItem(value: 'edit', child: Text(strings['edit'])),
+      ],
+    );
+
+    if (action == 'edit') onEdit();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -333,6 +408,8 @@ class _ViewTile extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
         onTap: onTap,
+        onSecondaryTapDown: (details) =>
+            _showContextMenu(context, details.globalPosition),
         child: Padding(
           padding: const EdgeInsetsDirectional.fromSTEB(20, 3, 8, 3),
           child: Text(

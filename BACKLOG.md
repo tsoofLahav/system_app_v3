@@ -74,12 +74,16 @@ Code: [`areas/automations/`](system_app_back_end/areas/automations/) · Cron: [`
 
 ## Objects
 
-Code: [`areas/objects/`](system_app_back_end/areas/objects/)
+Code: [`areas/objects/`](system_app_back_end/areas/objects/) · Frontend data/views: [`lib/areas/objects/`](system_app_front_end/lib/areas/objects/) · In-file embeds: [`lib/areas/files/editor/embeds/`](system_app_front_end/lib/areas/files/editor/embeds/)
 
 | # | Sev | Issue |
 |---|-----|-------|
 | O1 | **P1** | Task identity is destroyed by agent applies (see F5). `view_task_memberships` survive pointing at archived tasks. Fixing F5 fixes this. |
 | O2 | **P2** | Tag mutation is unreachable from the app: `POST /tags`, `DELETE /tags/:id`, and `POST`/`DELETE /tags/assign` have no frontend caller, so topics cannot actually be tagged. Tags are the v3 replacement for hardcoded topic types. |
+| O3 | **P2** | Nested caret inside object fields is not yet linked to `DocumentTextFlow` as segments — Exit-below bridges work; full in-flow segments remain. |
+| O4 | **P2** | Convert selected text → Info / list → Task list helpers exist in `AppState` but have no UI entry. |
+| O5 | **P3** | Image resize handles are not built; width lives in payload only. |
+| O6 | **P3** | Agent text for graphs still omits the two-row labels/values table (marker is id/title only). |
 
 ---
 

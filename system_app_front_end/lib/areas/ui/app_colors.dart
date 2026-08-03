@@ -231,6 +231,30 @@ abstract final class AppColors {
       ),
     );
   }
+
+  /// `#RRGGBB` (uppercase). Invalid / empty → [text].
+  static Color colorFromHex(String? hex) {
+    return tryParseHex(hex) ?? text;
+  }
+
+  static Color? tryParseHex(String? hex) {
+    if (hex == null || hex.isEmpty) return null;
+    var v = hex.trim().replaceFirst('#', '');
+    if (v.length == 3) {
+      v = '${v[0]}${v[0]}${v[1]}${v[1]}${v[2]}${v[2]}';
+    }
+    if (v.length != 6) return null;
+    final value = int.tryParse(v, radix: 16);
+    if (value == null) return null;
+    return Color(0xFF000000 | value);
+  }
+
+  static String colorToHex(Color color) {
+    final rgb = color.toARGB32() & 0xFFFFFF;
+    return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
+  }
+
+  static String normalizeHex(String hex) => colorToHex(colorFromHex(hex));
 }
 
 /// The one spacing scale. Small steps, because the app is dense on purpose.

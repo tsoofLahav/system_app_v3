@@ -21,7 +21,7 @@ These two are easy to confuse, so the line is strict:
 | Owns | Colors, fonts, button/toggle/dialog design, glass, spacing | Layout of files, section switching, sidebar, menus, shortcuts |
 | Example | The glass surface used by every dialog | Which dialog opens, and from where |
 
-Neither means "the whole frontend folder". A widget that renders a task belongs to **objects**; a widget that decides *where* that task appears belongs to **ux**; the color it is painted comes from **ui**.
+Neither means "the whole frontend folder". In-file embed presentation belongs to **files**; task **views** / info **links** and object data belong to **objects**; a widget that decides *where* a view appears belongs to **ux**; the color it is painted comes from **ui**.
 
 ## Outside the areas
 

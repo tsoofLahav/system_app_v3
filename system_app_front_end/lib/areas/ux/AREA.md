@@ -88,8 +88,20 @@ How a topic is laid out on screen, top to bottom — matching v1:
 | Section | Entry | Main pane |
 |---------|-------|-----------|
 | Topic | Sidebar topic | [`topic/topic_view.dart`](topic/topic_view.dart) — files laid out |
-| Task view | Sidebar view | [`../objects/views/task_view_pane.dart`](../objects/views/task_view_pane.dart) |
+| Task view | Sidebar view | [`../objects/views/task_view_pane.dart`](../objects/views/task_view_pane.dart) — grid of list frames |
 | Archive | Sidebar archive | [`archive/`](archive/) — archived topics and files, read-mostly |
+
+### Task view page
+
+Opening a view replaces the main pane with a **grid of file-like frames**. Each frame is one list (a section, or a topic when grouped that way). The page chrome is a small floating capsule above the bottom bar (same language as the bottom menus):
+
+| Control | Does |
+|---------|------|
+| Sections / Topics | Switches how frames are grouped (`layout_config.display_mode`) |
+| Add section | Creates a section (sections mode only) |
+| Reorder | Mode: drag frames to reorder sections or topics |
+
+Right-click a **section** frame to edit name, important flag, and section color. **Topic** frames wear the topic colour. Task behaviour inside a frame matches the in-file list: mark/unmark, Active/Done, and right-click **Reorder tasks** (glass chips; tap outside ends the mode).
 
 Phone uses its own shell ([`shell/phone_app_shell.dart`](shell/phone_app_shell.dart)) because the sidebar cannot stay visible, but the same [`topic/topic_view.dart`](topic/topic_view.dart) draws the files — it collapses the layout to one pane per row rather than being a separate screen.
 
@@ -99,6 +111,7 @@ Phone uses its own shell ([`shell/phone_app_shell.dart`](shell/phone_app_shell.d
 - Open user-created task views
 - Reach the archive
 - Create a topic
+- Create a view
 
 The sidebar is navigation only. It never edits content.
 
@@ -109,6 +122,9 @@ The sidebar is navigation only. It never edits content.
 | Topic / file context menu | Right-click in topic view, or the `⋯` on a file | Archive, delete — same bubble either way |
 | Text context menu | Right-click inside a document | Formatting, clipboard, emoji |
 | Table cell menu | Right-click in a table cell | Add column, plus text actions |
+| View section menu | Right-click a section frame on the view page | Edit name / flag / color |
+| View task menu | Right-click a task in a view frame | Reorder tasks (same mode as in-file) |
+| View chrome | Floating capsule on the view page | Sections/topics, add section, reorder frames |
 | AI actions | Bottom bar | Run a prompt or a saved automation — see [production agent](../production_agent/AREA.md) |
 | Automations | Bottom bar | Manage rules — see [automations](../automations/AREA.md) |
 | Preferences | Bottom bar | App settings, shortcut bindings |

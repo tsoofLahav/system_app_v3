@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../core/app_state.dart';
 import './shortcut_catalog.dart';
@@ -31,15 +30,28 @@ class _AppShortcutsScopeState extends State<AppShortcutsScope> {
   @override
   void initState() {
     super.initState();
-    HardwareKeyboard.instance.addHandler(_handleGlobalKey);
+    widget.state.shortcutRebuildListenable.addListener(_onBindingsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _ensureShellFocus());
   }
 
   @override
+  void didUpdateWidget(covariant AppShortcutsScope oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state != widget.state) {
+      oldWidget.state.shortcutRebuildListenable.removeListener(_onBindingsChanged);
+      widget.state.shortcutRebuildListenable.addListener(_onBindingsChanged);
+    }
+  }
+
+  @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_handleGlobalKey);
+    widget.state.shortcutRebuildListenable.removeListener(_onBindingsChanged);
     _shellFocusNode.dispose();
     super.dispose();
+  }
+
+  void _onBindingsChanged() {
+    if (mounted) setState(() {});
   }
 
   void _ensureShellFocus() {
@@ -48,22 +60,32 @@ class _AppShortcutsScopeState extends State<AppShortcutsScope> {
     }
   }
 
-  bool _handleGlobalKey(KeyEvent event) {
-    if (event is! KeyDownEvent) return false;
-    return false;
+  Map<ShortcutActivator, Intent> _shortcutMap() {
+    final out = <ShortcutActivator, Intent>{};
+    for (final action in kShortcutCatalog) {
+      // Only wire actions the dispatcher knows; others stay catalog-only.
+      if (!_dispatchableIds.contains(action.id)) continue;
+      final binding = widget.state.shortcutBindings.bindingFor(action.id);
+      if (!binding.isValid) continue;
+      out[binding.toActivator()] = AppShortcutIntent(action.id);
+    }
+    return out;
   }
+
+  static const _dispatchableIds = {
+    ShortcutActionIds.addTopic,
+    ShortcutActionIds.addView,
+    ShortcutActionIds.addFile,
+    ShortcutActionIds.assignTaskView,
+    ShortcutActionIds.aiConsult,
+  };
 
   @override
   Widget build(BuildContext context) {
-    final shortcuts = <ShortcutActivator, Intent>{
-      const SingleActivator(LogicalKeyboardKey.keyN, meta: true):
-          const AppShortcutIntent(ShortcutActionIds.addTopic),
-    };
-
     return Focus(
       focusNode: _shellFocusNode,
       child: Shortcuts(
-        shortcuts: shortcuts,
+        shortcuts: _shortcutMap(),
         child: Actions(
           actions: {
             AppShortcutIntent: CallbackAction<AppShortcutIntent>(
@@ -80,4 +102,8 @@ class _AppShortcutsScopeState extends State<AppShortcutsScope> {
   }
 }
 
-String? shortcutTooltipSuffix(AppState state, String actionId) => null;
+String? shortcutTooltipSuffix(AppState state, String actionId) {
+  final binding = state.shortcutBindings.bindingFor(actionId);
+  if (!binding.isValid) return null;
+  return binding.displayLabel();
+}

@@ -49,6 +49,8 @@ abstract final class ShortcutActionIds {
   static const cycleMainFiles = 'cycle_main_files';
   static const addFile = 'add_file';
   static const addTopic = 'add_topic';
+  static const addView = 'add_view';
+  static const assignTaskView = 'assign_task_view';
 
   static const aiConsult = 'ai_consult';
   static const aiSummarize = 'ai_summarize';
@@ -135,6 +137,19 @@ final List<ShortcutAction> kShortcutCatalog = [
     category: ShortcutCategory.navigation,
     labelKey: 'shortcutAddTopic',
     defaultBinding: _m(LogicalKeyboardKey.keyN, shift: true),
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.addView,
+    category: ShortcutCategory.navigation,
+    labelKey: 'shortcutAddView',
+    defaultBinding: _m(LogicalKeyboardKey.keyW, shift: true),
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.assignTaskView,
+    category: ShortcutCategory.navigation,
+    labelKey: 'shortcutAssignTaskView',
+    defaultBinding: _m(LogicalKeyboardKey.keyJ),
+    context: ShortcutContextRequirement.textFocus,
   ),
   ShortcutAction(
     id: ShortcutActionIds.aiConsult,

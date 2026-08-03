@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
+import '../../objects/data/object_embed.dart';
 import '../data/app_file.dart';
 import './block_document_editor.dart';
 
@@ -14,14 +15,19 @@ class DocumentEditor extends StatelessWidget {
 
   final AppFile file;
   final AppState state;
-  final List<dynamic> embeds;
+  final List<ObjectEmbed> embeds;
 
   @override
   Widget build(BuildContext context) {
+    // Do NOT wrap this in ListenableBuilder(listenable: state). Rebuilding the
+    // document editor mid-keystroke desyncs Flutter's HardwareKeyboard and
+    // throws "KeyDownEvent … physical key is already pressed" in a loop.
+    // BlockDocumentEditor listens for embed changes itself, carefully.
     return BlockDocumentEditor(
+      key: ValueKey('doc-${file.id}'),
       file: file,
       state: state,
-      embeds: embeds,
+      embeds: state.embedsByFileId[file.id] ?? embeds,
     );
   }
 }

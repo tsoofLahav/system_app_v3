@@ -20,6 +20,7 @@ class Task {
     this.topicId,
     this.topicName,
     this.topicKey,
+    this.topicColor,
     this.subjectTopicName,
     this.companionTaskId,
     this.flowKey,
@@ -47,6 +48,7 @@ class Task {
   final int? topicId;
   final String? topicName;
   final String? topicKey;
+  final String? topicColor;
   final String? subjectTopicName;
   final int? companionTaskId;
   final String? flowKey;
@@ -101,6 +103,7 @@ class Task {
     int? topicId,
     String? topicName,
     String? topicKey,
+    String? topicColor,
     String? subjectTopicName,
     int? companionTaskId,
     String? flowKey,
@@ -134,6 +137,7 @@ class Task {
       topicId: topicId ?? this.topicId,
       topicName: topicName ?? this.topicName,
       topicKey: topicKey ?? this.topicKey,
+      topicColor: topicColor ?? this.topicColor,
       subjectTopicName: subjectTopicName ?? this.subjectTopicName,
       companionTaskId: companionTaskId ?? this.companionTaskId,
       flowKey: flowKey ?? this.flowKey,
@@ -166,6 +170,7 @@ class Task {
       topicId: json['topic_id'] as int?,
       topicName: json['topic_name'] as String?,
       topicKey: json['topic_key'] as String?,
+      topicColor: json['topic_color'] as String?,
       subjectTopicName: json['subject_topic_name'] as String?,
       companionTaskId: json['companion_task_id'] as int?,
       flowKey: json['flow_key'] as String?,

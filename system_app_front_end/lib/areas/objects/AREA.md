@@ -34,11 +34,13 @@ files (presentation) ──thin overlay──► objects (data + type logic)
 
 **Active / Done zones.** Both the in-file list and the view pane split into Active then Done ([`tasks/task_zones.dart`](tasks/task_zones.dart)). Status is canonical on the task row (`active` / `done`); never a per-view done flag. Checking done in a view updates the same row in the file, and vice versa.
 
-**Drag + optimistic UI.** Long-press the checkbox / row to drag ([`tasks/task_drag_data.dart`](tasks/task_drag_data.dart)). Local order updates immediately; list persist uses `PUT …/tasks/order` or `POST …/move` (cross-zone); view persist rewrites memberships (+ toggle when the zone changes). On failure, revert and show `reorderFailed`.
+**Drag + optimistic UI.** Payload in [`tasks/task_drag_data.dart`](tasks/task_drag_data.dart). In-file reorder is a **Reorder Mode** owned by files (glass frames, no handles). Local order updates immediately; list persist uses `PUT …/tasks/order` or `POST …/move` (cross-zone); view persist rewrites memberships (+ toggle when the zone changes). On failure, revert and show `reorderFailed`.
 
 **Empty titles.** New tasks are created with `title: ""` and a hint (`newTaskHint`) — never the literal “New task”. Enter on an empty row exits the list (same as document lists).
 
-**Views.** A user-made list a task can appear in without being copied. [`views/task_view_pane.dart`](views/task_view_pane.dart) is the main pane; [`views/task_view_display.dart`](views/task_view_display.dart) holds display config.
+**Views.** A user-made list a task can appear in without being copied. Create from the sidebar (**New view**); rename via right-click → Edit on a view. Assign from a task’s right-click menu or the **Add task to view** shortcut (caret must be on a task). Assign UI in [`views/assign_task_view_dialog.dart`](views/assign_task_view_dialog.dart).
+
+**View page.** [`views/task_view_pane.dart`](views/task_view_pane.dart) is a **grid of file-like frames** ([`views/view_list_frame.dart`](views/view_list_frame.dart)), each holding one list (section or topic). Floating chrome ([`views/view_chrome_menu.dart`](views/view_chrome_menu.dart), bottom-bar capsule style) switches **sections ↔ topics**, adds a section, and toggles frame-reorder mode. Section defs (name, flag, color) and display mode live in `views.layout_config` ([`data/view_layout.dart`](data/view_layout.dart)); memberships keep `section_name` / `section_flag`. Right-click a section frame to edit. Topic frames use the home topic colour (membership API enriches `topic_*` on the task). Inside a frame: same Active/Done + mark/unmark + **Reorder tasks** mode as the in-file list ([`views/view_task_list.dart`](views/view_task_list.dart)).
 
 ```
 task ──┬── shown inline in its file (files embed)
@@ -86,8 +88,8 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 
 **Shipped (data):** task CRUD/status/order; view membership pane; empty titles; object create/delete with embed insert.
 
-**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order.
+**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder.
 
 **Shipped (presentation, in files):** list-like task embed; info title/body flow; graph table-like embed; Move Mode; right-click text menu on task/info fields.
 
-**Next (this area):** richer view sections; **info links** UI and navigation on the object graph; convert-selection → Info as a product flow using object APIs.
+**Next (this area):** **info links** UI and navigation on the object graph; convert-selection → Info as a product flow using object APIs.

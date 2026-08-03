@@ -192,6 +192,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Image | same | Atomic unit; caption field |
 | Graph | [`embeds/graph_embed.dart`](editor/embeds/graph_embed.dart) | One segment per column (like a table) |
 | Host | [`embed_block_host.dart`](editor/embed_block_host.dart) | Move Mode; optional atomic `#embed` segment |
+| Drag chrome | [`drag_mode_frame.dart`](editor/drag_mode_frame.dart) | Shared gentle glass frame for Move / Reorder modes |
 
 ### Placement rules
 
@@ -200,8 +201,9 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Between blocks only | Never inside a list item or table cell |
 | Create at the caret | Inserts go to the **last-claimed** file, after the block that last held the caret |
 | Document tree is source of truth | Position is `blocks[]` order; the object row holds data, not placement |
-| Right-click on embed text | Same text menu as paragraphs (`DocumentMark`). Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Graphs extend the table cell menu (add column + chart options) |
-| Move Mode | Double-click → whole object draggable; drop/cancel returns to edit. No permanent drag handle |
+| Right-click on embed text | Same text menu as paragraphs (`DocumentMark`). Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Graphs extend the table cell menu (add column + chart options). Task lists add **Add to view…** and **Reorder tasks** |
+| Move Mode | Double-click the object → glass frame around the whole embed; drag from anywhere; **drop or tap outside** ends the mode. No handles, no instructional text |
+| Task Reorder Mode | Right-click → Reorder tasks → glass frame around **each** task; drag tasks (edit/toggle off); drops keep the mode; **tap outside the list** ends it |
 
 ### Segment id
 
@@ -220,7 +222,7 @@ Enter on an empty trailing unit (final task / info body line / graph column) exi
 
 | Type | In the document |
 |------|-----------------|
-| Task list | Active then Done; checkbox gutter (long-press drag); empty title + hint; Enter/Backspace like a list |
+| Task list | Active then Done; Enter adds in the same zone; empty + Enter exits below; Reorder Mode via right-click; empty title + hint |
 | Info | Title ↔ body like adjacent lines; empty final body line + Enter exits below |
 | Graph | Chart on top; two-row grid; max **8** variables; Enter adds columns (blocked at 8); empty column exits below; chart paints in the same reading direction as the table (RTL in Hebrew); right-click → type + palette submenu ([`AppColorPalettes`](../ui/app_color_palettes.dart), 8 colours each) |
 | Image | Display + caption; resize handles deferred |
@@ -266,4 +268,3 @@ Undo/redo is tracked by `document_edit_history.dart` at document level.
 - Undo/redo is still per document mutation, not one stack shared with cross-part edits.
 - Insert still places the embed after the focused block, not by splitting a paragraph at the caret offset.
 - Image resize handles deferred. Convert selection → Info is an objects-area product flow (uses object APIs) with a small files entry point.
-- In-file task lists show Active then Done; long-press the checkbox to drag-reorder (optimistic). Empty new tasks use a hint, not prefilled “New task”.

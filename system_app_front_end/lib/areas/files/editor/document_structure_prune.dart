@@ -1,8 +1,9 @@
 /// Removing structures that a delete emptied completely.
 ///
-/// Marking a whole bullet, a whole row, or a whole table and deleting must
-/// remove it — leaving a blank bullet or an empty row behind would not match
-/// what the user marked. A part only counts here when it was marked end to end.
+/// Marking a whole bullet, a whole row, a whole embed, or a whole table and
+/// deleting must remove it — leaving a blank bullet or an empty row behind
+/// would not match what the user marked. A part only counts here when it was
+/// marked end to end.
 library;
 
 import '../model/document_codec.dart';
@@ -24,7 +25,7 @@ class PruneResult {
   final int firstRemovedIndex;
 }
 
-/// Drops every bullet, row, and block that [fullyEmptied] covers in full.
+  /// Drops every bullet, row, embed, and block that [fullyEmptied] covers in full.
 ///
 /// [spansParts] tells whether the delete crossed part boundaries. A paragraph
 /// swallowed by a larger marking goes with it, but a paragraph marked on its own
@@ -90,6 +91,11 @@ PruneResult pruneFullyMarkedStructures({
     } else if (spansParts &&
         (block is ParagraphNode || block is HeadingNode) &&
         fullyEmptied.contains(paragraphSegmentId(block.id))) {
+      result.removeAt(i);
+      firstRemovedIndex = i;
+      changed = true;
+    } else if (block is EmbedNode &&
+        fullyEmptied.contains(embedSegmentId(block.id))) {
       result.removeAt(i);
       firstRemovedIndex = i;
       changed = true;

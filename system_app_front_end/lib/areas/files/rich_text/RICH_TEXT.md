@@ -51,7 +51,8 @@ Formatting always affects an existing character range. Newly typed characters ar
 
 **Allowed:** a paint-only selection overlay in `FormattedTextField` while the block menu is open:
 
-- Reads `frozenMark` (and `frozenFormatRange` as fallback) only (read-only). It paints this field's share of the mark, so a mark covering several parts is shown highlighted across all of them.
+- Reads `frozenMark` only when a document mark is frozen (read-only). `frozenFormatRange` is paint fallback only for a lone field with no mark. Never paint both.
+- While the overlay is showing the mark, `TextField.selectionColor` is transparent so native selection and the mark never stack as two washes.
 - `_FrozenSelectionOverlay` finds the inner `RenderEditable` in the `TextField` render tree and calls `getBoxesForSelection` on it, then transforms rects into the `CustomPaint` host space. **Do not** recompute boxes with a separate `TextPainter` — that misaligns in RTL and horizontally vs the real field.
 - `FrozenSelectionPainter` only fills precomputed rects.
 - `menuSessionListenable` triggers remeasure/repaint when the menu opens/closes — it must not drive business logic.
@@ -60,7 +61,9 @@ Formatting always affects an existing character range. Newly typed characters ar
 
 ### 7. Per-property format actions
 
-Each menu action (`text:bold`, `text:italic`, `text:underline`, `text:size_up`, `text:size_down`) mutates **one** style attribute per character in the format range via `applyActionToMark` inside `applyFormatActionToRange`. Never merge the selection with `styleForRange` and apply one style over the whole range — that leaks bold onto regular text when only size changes.
+Each menu action (`text:bold`, `text:italic`, `text:underline`, `text:size_up`, `text:size_down`, `text:color:…`) mutates **one** style attribute per character in the format range via `applyActionToMark` inside `applyFormatActionToRange`. Never merge the selection with `styleForRange` and apply one style over the whole range — that leaks bold onto regular text when only size changes.
+
+Text colour: the context menu offers **Choose color** → `showAppColorDialog` (menu session stays open so the mark stays frozen) → `text:color:#RRGGBB`, plus **Clear color**. No hardcoded red/blue/green menu rows.
 
 Toggle semantics: bold/italic/underline flip independently per character in the range.
 
@@ -71,9 +74,9 @@ Before merging any rich-text PR:
 1. Run `flutter test test/span_shift_test.dart test/document_mark_test.dart test/continuous_text_test.dart`
 2. Manual: bold a word → click after it → type (new text stays regular)
 3. Manual: mixed bold + regular lines → size up (bold stays bold, regular stays regular)
-4. Manual: select text → right-click → selection highlight visible during menu and matches selected glyphs (English + Hebrew / RTL)
+4. Manual: select text → right-click → **one** highlight during menu, matching the selection (not selection + whole line)
 5. Manual: mark from a paragraph through a bullet into a cell → right-click → the highlight covers all three, and the action affects all three
-6. Manual: nothing marked → right-click mid-line → the action affects that whole line only
+6. Manual: nothing marked → right-click mid-line → **one** whole-line highlight; action affects that line only
 5. Confirm no edits to `remapSpansForTextEdit` boundary rule (`start <= index < end`) without new tests
 6. Confirm no `setRichState` / `loadFromContent` while `hasFocus || activeController == controller`
 7. Confirm selection overlay still uses `RenderEditable.getBoxesForSelection` (not a duplicate `TextPainter`)

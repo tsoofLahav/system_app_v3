@@ -25,9 +25,27 @@ class AppView {
       name: json['name'] as String,
       layoutConfig: layout is Map<String, dynamic>
           ? Map<String, dynamic>.from(layout)
-          : const {},
+          : layout is Map
+              ? Map<String, dynamic>.from(layout)
+              : const {},
       orderIndex: json['order_index'] as int? ?? 0,
       archivedAt: json['archived_at'] as String?,
+    );
+  }
+
+  AppView copyWith({
+    String? name,
+    Map<String, dynamic>? layoutConfig,
+    int? orderIndex,
+    String? archivedAt,
+  }) {
+    return AppView(
+      id: id,
+      workspaceId: workspaceId,
+      name: name ?? this.name,
+      layoutConfig: layoutConfig ?? this.layoutConfig,
+      orderIndex: orderIndex ?? this.orderIndex,
+      archivedAt: archivedAt ?? this.archivedAt,
     );
   }
 }

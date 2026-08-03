@@ -26,9 +26,13 @@ import '../areas/objects/data/object_service.dart';
 import './services/tag_service.dart';
 import '../areas/objects/data/task_service.dart';
 import '../areas/files/data/topic_service.dart';
+import '../areas/objects/data/view_layout.dart';
 import '../areas/objects/data/view_service.dart';
 import '../areas/ux/layout/topic_file_slots.dart';
+import '../areas/ux/shortcuts/shortcut_binding.dart';
 import '../areas/ux/shortcuts/shortcut_bindings_store.dart';
+import '../areas/ux/topic/topic_appearance.dart';
+import '../areas/ui/app_colors.dart';
 
 class TopicDetail {
   const TopicDetail({required this.topic, required this.files});
@@ -110,9 +114,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setShortcutBinding(String actionId, dynamic binding) async {}
-  Future<void> resetShortcut(String actionId) async {}
-  Future<void> resetAllShortcuts() async {}
+  Future<void> setShortcutBinding(String actionId, dynamic binding) async {
+    if (binding is! ShortcutBinding) return;
+    await shortcutBindings.setBinding(actionId, binding);
+    shortcutRebuildListenable.notifyListeners();
+    notifyListeners();
+  }
+
+  Future<void> resetShortcut(String actionId) async {
+    await shortcutBindings.resetBinding(actionId);
+    shortcutRebuildListenable.notifyListeners();
+    notifyListeners();
+  }
+
+  Future<void> resetAllShortcuts() async {
+    await shortcutBindings.resetAll();
+    shortcutRebuildListenable.notifyListeners();
+    notifyListeners();
+  }
 
   final ChangeNotifier shortcutRebuildListenable = ChangeNotifier();
   final ShortcutBindingsStore shortcutBindings = ShortcutBindingsStore();
@@ -240,6 +259,9 @@ class AppState extends ChangeNotifier {
     selectedViewType = viewType;
     selectedView = userViews.where((v) => v.type == viewType).firstOrNull;
     viewPaneReady = selectedView != null;
+    if (selectedView != null) {
+      viewDisplayMode = _displayModeFromConfig(selectedView!.layoutConfig);
+    }
     loading = true;
     notifyListeners();
     try {
@@ -252,6 +274,24 @@ class AppState extends ChangeNotifier {
       loading = false;
       notifyListeners();
     }
+  }
+
+  ViewDisplayMode _displayModeFromConfig(Map<String, dynamic> config) {
+    return ViewLayoutConfig.displayMode(config) == ViewLayoutConfig.modeByTopic
+        ? ViewDisplayMode.byTopic
+        : ViewDisplayMode.bySection;
+  }
+
+  Future<void> _persistViewLayout(Map<String, dynamic> layoutConfig) async {
+    if (selectedView == null) return;
+    final updated = await _views.updateView(
+      selectedView!.id,
+      layoutConfig: layoutConfig,
+    );
+    userViews = [
+      for (final v in userViews) v.id == updated.id ? updated : v,
+    ];
+    selectedView = updated;
   }
 
   Future<void> selectArchiveTopic(Topic topic) async {
@@ -641,29 +681,46 @@ class AppState extends ChangeNotifier {
     int taskListId, {
     String title = '',
     int? afterTaskId,
+    String status = 'active',
     bool notify = true,
   }) async {
     final task = await _tasks.createInList(
       taskListId: taskListId,
       title: title,
+      status: status,
     );
-    // Keep new tasks in the Active zone: insert after [afterTaskId] among
-    // active tasks, otherwise append to active; then append done ids.
+    // Insert into the matching zone after [afterTaskId], then the other zone.
     final existing = await _tasks.listForTaskList(taskListId);
     final others = existing.where((t) => t.id != task.id).toList();
     final active = others.where((t) => !t.isDone).map((t) => t.id).toList();
     final done = others.where((t) => t.isDone).map((t) => t.id).toList();
+    final targetDone = status == 'done';
     final ordered = <int>[];
-    if (afterTaskId != null && active.contains(afterTaskId)) {
-      for (final id in active) {
-        ordered.add(id);
-        if (id == afterTaskId) ordered.add(task.id);
+    if (targetDone) {
+      ordered.addAll(active);
+      if (afterTaskId != null && done.contains(afterTaskId)) {
+        for (final id in done) {
+          ordered.add(id);
+          if (id == afterTaskId) ordered.add(task.id);
+        }
+      } else {
+        ordered
+          ..addAll(done)
+          ..add(task.id);
       }
     } else {
-      ordered.addAll(active);
-      ordered.add(task.id);
+      if (afterTaskId != null && active.contains(afterTaskId)) {
+        for (final id in active) {
+          ordered.add(id);
+          if (id == afterTaskId) ordered.add(task.id);
+        }
+      } else {
+        ordered
+          ..addAll(active)
+          ..add(task.id);
+      }
+      ordered.addAll(done);
     }
-    ordered.addAll(done);
     await _tasks.reorderInList(taskListId, ordered);
     await _reloadEmbedsForOpenFiles(notify: notify);
     return task;
@@ -696,6 +753,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> assignTaskToView(int taskId, int viewId) async {
     final existing = await loadTaskMemberships(taskId);
+    if (existing.any((m) => m.viewId == viewId)) return;
     await _tasks.replaceTaskMemberships(taskId, [
       ...existing.map(
         (m) => {
@@ -708,6 +766,28 @@ class AppState extends ChangeNotifier {
       ),
       {'view_id': viewId, 'order_index': existing.length},
     ]);
+    if (isViewMode && selectedView?.id == viewId) {
+      viewMemberships = await _views.listMemberships(viewId);
+    }
+    notifyListeners();
+  }
+
+  Future<void> removeTaskFromView(int taskId, int viewId) async {
+    final existing = await loadTaskMemberships(taskId);
+    await _tasks.replaceTaskMemberships(taskId, [
+      for (final m in existing)
+        if (m.viewId != viewId)
+          {
+            'view_id': m.viewId,
+            'section_name': m.sectionName,
+            'order_index': m.orderIndex,
+            'section_flag': m.sectionFlag,
+            'topic_key': m.topicKey,
+          },
+    ]);
+    if (isViewMode && selectedView?.id == viewId) {
+      viewMemberships = await _views.listMemberships(viewId);
+    }
     notifyListeners();
   }
 
@@ -770,7 +850,7 @@ class AppState extends ChangeNotifier {
   Future<void> updateTaskTitle(
     Task task,
     String title, {
-    bool notify = true,
+    bool notify = false,
   }) async {
     try {
       await _api.patch('/tasks/${task.id}', {'title': title});
@@ -778,7 +858,51 @@ class AppState extends ChangeNotifier {
       if (e.statusCode == 404) return;
       rethrow;
     }
-    await _reloadEmbedsForOpenFiles(notify: notify);
+    // Patch caches in place — never reload embeds mid-keystroke (that rebuilds
+    // text fields and desyncs HardwareKeyboard: KeyDownEvent already pressed).
+    _patchCachedTaskTitle(task.id, title);
+    if (notify) notifyListeners();
+  }
+
+  void _patchCachedTaskTitle(int taskId, String title) {
+    for (final entry in embedsByFileId.entries.toList()) {
+      final embeds = entry.value;
+      var changed = false;
+      final next = <ObjectEmbed>[];
+      for (final embed in embeds) {
+        final tasks = embed.tasks;
+        if (tasks == null) {
+          next.add(embed);
+          continue;
+        }
+        final newTasks = <Task>[];
+        var taskChanged = false;
+        for (final t in tasks) {
+          if (t.id == taskId) {
+            newTasks.add(t.copyWith(title: title));
+            taskChanged = true;
+          } else {
+            newTasks.add(t);
+          }
+        }
+        if (taskChanged) {
+          changed = true;
+          next.add(embed.copyWith(tasks: newTasks));
+        } else {
+          next.add(embed);
+        }
+      }
+      if (changed) embedsByFileId[entry.key] = next;
+    }
+    if (isViewMode) {
+      viewMemberships = [
+        for (final m in viewMemberships)
+          if (m.taskId == taskId && m.task != null)
+            m.copyWith(task: {...m.task!, 'title': title})
+          else
+            m,
+      ];
+    }
   }
 
   Future<void> deleteTask(Task task, {bool notify = true}) async {
@@ -822,89 +946,202 @@ class AppState extends ChangeNotifier {
         .toList();
   }
 
-  List<String> sectionsForViewType(String viewType) {
-    final names = viewMemberships
-        .map((m) => m.sectionName)
-        .whereType<String>()
-        .where((s) => s.isNotEmpty)
-        .toSet()
-        .toList();
-    names.sort();
-    return names;
+  List<ViewSectionDef> sectionsForSelectedView() {
+    final view = selectedView;
+    if (view == null) return const [];
+    final defined = ViewLayoutConfig.sections(view.layoutConfig);
+    final known = {for (final s in defined) s.name};
+    final extras = <ViewSectionDef>[];
+    var order = defined.length;
+    for (final m in viewMemberships) {
+      final name = m.sectionName?.trim();
+      if (name == null || name.isEmpty || known.contains(name)) continue;
+      known.add(name);
+      extras.add(
+        ViewSectionDef(
+          name: name,
+          flag: m.sectionFlag,
+          orderIndex: order++,
+        ),
+      );
+    }
+    return [...defined, ...extras];
   }
 
-  void setViewDisplayMode(ViewDisplayMode mode) {
+  /// Legacy helper — section names only.
+  List<String> sectionsForViewType(String viewType) => [
+        for (final s in sectionsForSelectedView()) s.name,
+      ];
+
+  Future<void> setViewDisplayMode(ViewDisplayMode mode) async {
+    if (mode == ViewDisplayMode.flat) mode = ViewDisplayMode.bySection;
     viewDisplayMode = mode;
+    if (selectedView != null) {
+      final next = ViewLayoutConfig.withDisplayMode(
+        selectedView!.layoutConfig,
+        mode == ViewDisplayMode.byTopic
+            ? ViewLayoutConfig.modeByTopic
+            : ViewLayoutConfig.modeBySection,
+      );
+      await _persistViewLayout(next);
+    }
     notifyListeners();
   }
 
   Future<void> createViewSection(String viewType, String name) async {
+    final trimmed = name.trim();
+    if (selectedView == null || trimmed.isEmpty) return;
+    final sections = [...sectionsForSelectedView()];
+    if (sections.any((s) => s.name == trimmed)) return;
+    sections.add(ViewSectionDef(name: trimmed, orderIndex: sections.length));
+    await _persistViewLayout(
+      ViewLayoutConfig.withSections(selectedView!.layoutConfig, sections),
+    );
+    notifyListeners();
+  }
+
+  Future<void> updateViewSection({
+    required String oldName,
+    required ViewSectionDef next,
+  }) async {
     if (selectedView == null) return;
-    final current = viewMemberships
-        .map(
-          (m) => {
-            'task_id': m.taskId,
-            'section_name': m.sectionName,
-            'order_index': m.orderIndex,
-            'section_flag': m.sectionFlag,
-            'topic_key': m.topicKey,
-          },
-        )
-        .toList();
-    current.add({
-      'task_id': null,
-      'section_name': name,
-      'order_index': current.length,
-    });
-    viewMemberships = await _views.replaceMemberships(selectedView!.id, current);
+    final sections = [
+      for (final s in sectionsForSelectedView())
+        s.name == oldName ? next : s,
+    ];
+    await _persistViewLayout(
+      ViewLayoutConfig.withSections(selectedView!.layoutConfig, sections),
+    );
+
+    final flag = next.flag;
+    final memberships = [
+      for (final m in viewMemberships)
+        {
+          'task_id': m.taskId,
+          'section_name':
+              m.sectionName == oldName ? next.name : m.sectionName,
+          'order_index': m.orderIndex,
+          'section_flag':
+              m.sectionName == oldName || m.sectionName == next.name
+                  ? flag
+                  : m.sectionFlag,
+          'topic_key': m.topicKey,
+        },
+    ];
+    viewMemberships =
+        await _views.replaceMemberships(selectedView!.id, memberships);
     notifyListeners();
   }
 
   Future<void> deleteViewSection(String section) async {
     if (selectedView == null) return;
-    final memberships = viewMemberships
-        .where((m) => m.sectionName != section)
-        .map(
-          (m) => {
-            'task_id': m.taskId,
-            'section_name': m.sectionName,
-            'order_index': m.orderIndex,
-            'section_flag': m.sectionFlag,
-            'topic_key': m.topicKey,
-          },
-        )
-        .toList();
-    viewMemberships = await _views.replaceMemberships(selectedView!.id, memberships);
+    final sections = [
+      for (final s in sectionsForSelectedView())
+        if (s.name != section) s,
+    ];
+    await _persistViewLayout(
+      ViewLayoutConfig.withSections(selectedView!.layoutConfig, sections),
+    );
+    final memberships = [
+      for (final m in viewMemberships)
+        {
+          'task_id': m.taskId,
+          'section_name': m.sectionName == section ? null : m.sectionName,
+          'order_index': m.orderIndex,
+          'section_flag':
+              m.sectionName == section ? null : m.sectionFlag,
+          'topic_key': m.topicKey,
+        },
+    ];
+    viewMemberships =
+        await _views.replaceMemberships(selectedView!.id, memberships);
     notifyListeners();
   }
 
   Future<void> setViewSectionImportance(String section, bool important) async {
+    final current = sectionsForSelectedView()
+        .where((s) => s.name == section)
+        .firstOrNull;
+    if (current == null) {
+      await updateViewSection(
+        oldName: section,
+        next: ViewSectionDef(
+          name: section,
+          flag: important ? 'important' : null,
+        ),
+      );
+      return;
+    }
+    await updateViewSection(
+      oldName: section,
+      next: current.copyWith(
+        flag: important ? 'important' : null,
+        clearFlag: !important,
+      ),
+    );
+  }
+
+  Future<void> reorderViewSections(String viewType, int from, int to) async {
     if (selectedView == null) return;
-    final flag = important ? 'important' : null;
-    final memberships = viewMemberships
-        .map(
-          (m) => {
-            'task_id': m.taskId,
-            'section_name': m.sectionName,
-            'order_index': m.orderIndex,
-            'section_flag': m.sectionName == section ? flag : m.sectionFlag,
-            'topic_key': m.topicKey,
-          },
-        )
-        .toList();
-    viewMemberships = await _views.replaceMemberships(selectedView!.id, memberships);
+    final sections = [...sectionsForSelectedView()];
+    if (from < 0 || from >= sections.length) return;
+    var target = to;
+    if (target < 0) target = 0;
+    if (target > sections.length) target = sections.length;
+    final item = sections.removeAt(from);
+    if (target > from) target -= 1;
+    if (target < 0 || target > sections.length) return;
+    sections.insert(target, item);
+    await replaceViewSections(sections);
+  }
+
+  Future<void> replaceViewSections(List<ViewSectionDef> sections) async {
+    if (selectedView == null) return;
+    await _persistViewLayout(
+      ViewLayoutConfig.withSections(selectedView!.layoutConfig, sections),
+    );
     notifyListeners();
   }
 
-  Future<void> reorderViewSections(String viewType, int from, int to) async {}
+  Future<void> reorderViewTopicKeys(List<String> keys) async {
+    if (selectedView == null) return;
+    await _persistViewLayout(
+      ViewLayoutConfig.withTopicOrder(selectedView!.layoutConfig, keys),
+    );
+    notifyListeners();
+  }
 
-  Color? topicAccentForTask(Task task) => null;
+  Color? topicAccentForTask(Task task) {
+    final hex = task.topicColor;
+    if (hex == null || hex.isEmpty) return null;
+    return TopicAppearance.colorFromHex(hex);
+  }
+
   bool topicIsMain(Task task) => false;
+
+  Color? sectionAccent(ViewSectionDef section) {
+    final hex = section.colorHex;
+    if (hex == null || hex.isEmpty) return null;
+    return AppColors.tryParseHex(hex) ?? AppColors.colorFromHex(hex);
+  }
 
   Future<void> createView({required String name}) async {
     if (workspaceId == null) return;
     final view = await _views.createView(workspaceId: workspaceId!, name: name);
     userViews = [...userViews, view];
+    notifyListeners();
+  }
+
+  Future<void> renameView(AppView view, {required String name}) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || trimmed == view.name) return;
+    final updated = await _views.updateView(view.id, name: trimmed);
+    userViews = [
+      for (final v in userViews) v.id == updated.id ? updated : v,
+    ];
+    if (selectedView?.id == updated.id) {
+      selectedView = updated;
+    }
     notifyListeners();
   }
 

@@ -18,6 +18,7 @@ Loudest last:
 |---------|-----------|
 | **Canvas** — the window behind everything | Near-white neutral gradient, with the topic's soft top wash painted full-bleed (including behind the sidebar) |
 | **File panes** — the working surfaces | Topic colour at a gentle strength, thin saturated topic border |
+| **View list frames** — section/topic cards on the view page | Same file-pane treatment (`NoteCard` / `filePaneDecoration`); topic frames use topic colour, section frames use optional section colour |
 | **Sidebar** | Soft glass floating above the canvas — never paints the topic wash itself |
 | **Floating chrome** — bottom bar, insert bar, pills | Glass or solid white with a lift shadow; insert tools join the centered bottom-bar group on the same baseline |
 | **Dialogs** | Glass panels over a light scrim |
@@ -70,7 +71,7 @@ Most variation comes from alpha over the tokens above, not from more tokens. The
 
 ### Topic colour on files
 
-A topic carries a colour (16 presets in [`../ux/topic/topic_appearance.dart`](../ux/topic/topic_appearance.dart), default `#6B7280`), and its **files wear it**. This is the app's main wayfinding cue: you know which topic you are in from the colour of the paper, before reading a word.
+A topic carries any `#RRGGBB` colour (picked in [`color_dialog.dart`](color_dialog.dart); 16 presets remain as shortcuts in [`../ux/topic/topic_appearance.dart`](../ux/topic/topic_appearance.dart), default `#6B7280`), and its **files wear it**. This is the app's main wayfinding cue: you know which topic you are in from the colour of the paper, before reading a word.
 
 | Rule | Why |
 |------|-----|
@@ -143,7 +144,8 @@ Glass is the app's signature surface: a blurred, translucent panel for anything 
 |--------|------|------|-----|
 | `dialog` | 24 | `glassTint` 0.78, elevation 7 | Modals via `AppGlassDialog` |
 | `floating` | 24 | `glassTint` 0.78, elevation 4 | Floating pills, layout tiles |
-| `opaqueChrome` | 0 | Solid white + lift shadow | Bottom bar segments, `+` buttons |
+| `dragMode` | 14 | `glassTint` 0.38, hairline white border | Document Move / task Reorder mode frames ([`../files/editor/drag_mode_frame.dart`](../files/editor/drag_mode_frame.dart)) |
+| `opaqueChrome` | 0 | Solid white + lift shadow | Bottom bar segments, view chrome menu, `+` buttons |
 | `aiAccent` | 0 | Solid, `aiCyan` border | The AI segment, with `AI` on the outline |
 
 Solid chrome is not a contradiction: the bottom bar sits over scrolling text all day, and blur there would shimmer.
@@ -184,6 +186,7 @@ Route every dialog through [`adaptive_dialog.dart`](adaptive_dialog.dart). Field
 | `AppDialogField` | The field's **name sits above it** in 11px meta text — never as a hint inside the field |
 | `AppDialogChoiceField` | Multiple choices as chips; the chosen one is filled in **bright teal** (`primaryBright`) |
 | `AppDialogPickerField` | Opens a **secondary** dialog for the value (colour, emoji) — a dialog never grows a picker inside itself |
+| Colour | [`color_dialog.dart`](color_dialog.dart) → `showAppColorDialog` | Full HSV spectrum + hex field; optional preset swatches. Used for topic theme, text colour, graph colour |
 
 A **secondary** dialog — one opened from a dialog — keeps the same shell and gains no chrome. Depth is expressed by the scrim stacking, not by shadows getting heavier. Topic colour and emoji are picked this way from the create/edit topic dialog.
 
@@ -206,11 +209,12 @@ Every surface must work in English (LTR) and Hebrew (RTL). Use [`bilingual_layou
 | Concern | Files |
 |---------|-------|
 | Colours, spacing scale | [`app_colors.dart`](app_colors.dart) |
+| Chart / multi-series palettes | [`app_color_palettes.dart`](app_color_palettes.dart) — 8 colours per set (`seriesLimit`) |
 | Material theme | [`app_theme.dart`](app_theme.dart) |
 | Text | [`app_typography.dart`](app_typography.dart) |
 | Glass | [`glass_surface.dart`](glass_surface.dart) |
 | Controls | [`app_segmented_toggle.dart`](app_segmented_toggle.dart), [`app_switch.dart`](app_switch.dart) |
-| Dialogs | [`adaptive_dialog.dart`](adaptive_dialog.dart), [`overlay_dialog_shell.dart`](overlay_dialog_shell.dart), [`overlay_dialog_style.dart`](overlay_dialog_style.dart), [`dialog_field_style.dart`](dialog_field_style.dart) |
+| Dialogs | [`adaptive_dialog.dart`](adaptive_dialog.dart), [`color_dialog.dart`](color_dialog.dart), [`overlay_dialog_shell.dart`](overlay_dialog_shell.dart), [`overlay_dialog_style.dart`](overlay_dialog_style.dart), [`dialog_field_style.dart`](dialog_field_style.dart) |
 | Icons | [`app_icons.dart`](app_icons.dart) |
 | Cards and previews | [`note_widgets.dart`](note_widgets.dart), [`overlay_file_preview_card.dart`](overlay_file_preview_card.dart), [`layout_preview_icon.dart`](layout_preview_icon.dart) |
 | Carousel | [`horizontal_carousel.dart`](horizontal_carousel.dart) |

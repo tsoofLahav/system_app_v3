@@ -1,23 +1,28 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/app_state.dart';
 import '../document_text_flow.dart';
+import '../drag_mode_frame.dart';
+import '../embed_move_mode_scope.dart';
 import '../../rich_text/block_text_actions.dart';
 import '../../rich_text/document_context_menu.dart';
 import '../../rich_text/formatted_text_field.dart';
 import '../../rich_text/span_text_editing_controller.dart';
 import '../../../ui/app_colors.dart';
 import '../../../ui/app_typography.dart';
+import '../../../ui/glass_surface.dart';
 import '../../../objects/data/object_embed.dart';
 import '../../../objects/data/task.dart';
 import '../../../objects/tasks/task_drag_data.dart';
 import '../../../objects/tasks/task_mark.dart';
 import '../../../objects/tasks/task_zones.dart';
+import '../../../objects/views/assign_task_view_dialog.dart';
 
-/// Task list as a document list: Active then Done, checkbox gutter, optimistic
-/// drag-reorder. Empty titles stay blank (hint only).
+/// Task list as a document list: Active then Done, optimistic drag-reorder
+/// via Reorder Mode (right-click). Empty titles stay blank (hint only).
 class InlineTaskListWidget extends StatefulWidget {
   const InlineTaskListWidget({
     super.key,
@@ -32,9 +37,10 @@ class InlineTaskListWidget extends StatefulWidget {
   final ObjectEmbed embed;
   final String blockId;
   final AppState state;
-  final VoidCallback onRefresh;
+  final Future<void> Function() onRefresh;
   final VoidCallback? onFocus;
-  final ValueChanged<int>? onExitBelow;
+  /// Called with the empty task's id (null for an unsaved seed row).
+  final ValueChanged<int?>? onExitBelow;
 
   @override
   State<InlineTaskListWidget> createState() => _InlineTaskListWidgetState();
@@ -49,6 +55,7 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
   int? _pendingFocusIndex;
   var _ensuringSeed = false;
   var _persisting = false;
+  var _reorderMode = false;
   List<Task>? _optimistic;
 
   List<Task> get _remoteTasks => TaskZones.fromTasks(
@@ -57,8 +64,9 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
 
   List<Task> get _displayTasks => _optimistic ?? _remoteTasks;
 
-  int get _activeCount =>
-      _displayTasks.where((t) => !t.isDone).length;
+  /// Zone sizes from the on-screen rows — never from remote while local edits
+  /// are ahead (that mismatch caused RangeError on delete).
+  int get _activeCount => _done.where((d) => !d).length;
 
   @override
   void initState() {
@@ -82,7 +90,6 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
       return;
     }
     if (_optimistic != null) {
-      // Keep optimistic order until remote catches up.
       if (_idsMatch(_optimistic!, _remoteTasks)) {
         _optimistic = null;
       } else {
@@ -90,6 +97,12 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
       }
     }
     if (_localMatchesRemote()) return;
+    // Never tear down focused rows mid-keystroke — that leaves Flutter's
+    // HardwareKeyboard thinking a key is still down.
+    if (_focusNodes.any((f) => f.hasFocus) ||
+        HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+      return;
+    }
     final focusIdx =
         _pendingFocusIndex ?? _focusNodes.indexWhere((f) => f.hasFocus);
     _disposeRows();
@@ -120,7 +133,7 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
     for (var i = 0; i < tasks.length; i++) {
       if (_taskIds[i] != tasks[i].id) return false;
       if (_done[i] != tasks[i].isDone) return false;
-      if (_controllers[i].text != tasks[i].title) return false;
+      // Ignore title drift while typing — remote lag must not rebuild rows.
     }
     return true;
   }
@@ -141,6 +154,32 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
       _done.add(task.isDone);
       _saveTimers.add(null);
     }
+  }
+
+  List<Task> _tasksFromLocalRows() {
+    final listId = widget.embed.taskListId;
+    final out = <Task>[];
+    for (var i = 0; i < _taskIds.length; i++) {
+      final id = _taskIds[i];
+      if (id == null) continue;
+      final remote = _taskById(id);
+      out.add(
+        (remote ??
+                Task(
+                  id: id,
+                  taskListId: listId,
+                  title: _controllers[i].text,
+                  status: _done[i] ? 'done' : 'active',
+                  listOrderIndex: i,
+                ))
+            .copyWith(
+          title: _controllers[i].text,
+          status: _done[i] ? 'done' : 'active',
+          listOrderIndex: i,
+        ),
+      );
+    }
+    return out;
   }
 
   void _disposeRows() {
@@ -218,8 +257,9 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
         } else {
           _taskIds[0] = created.id;
         }
+        _optimistic = _tasksFromLocalRows();
       });
-      widget.onRefresh();
+      await widget.onRefresh();
       _pendingFocusIndex = 0;
       WidgetsBinding.instance
           .addPostFrameCallback((_) => _applyPendingFocus());
@@ -253,13 +293,18 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
   Future<void> _handleEnter(int index) async {
     widget.onFocus?.call();
     await _flushTitle(index);
+    if (!mounted) return;
+    if (index < 0 || index >= _controllers.length) return;
     final text = _controllers[index].text;
     if (text.trim().isEmpty) {
-      widget.onExitBelow?.call(index);
+      final emptyId = _taskIds[index];
+      // Unfocus list rows so the new paragraph below can take the caret.
+      for (final f in _focusNodes) {
+        if (f.hasFocus) f.unfocus();
+      }
+      widget.onExitBelow?.call(emptyId);
       return;
     }
-    // New rows are always Active — insert after this task if active, else
-    // append to the active zone.
     await _insertAfter(index);
   }
 
@@ -272,58 +317,93 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
 
   Future<void> _insertAfter(int index) async {
     if (widget.embed.taskListId == null) return;
-    final afterId = _done[index] ? null : _taskIds[index];
-    final created = await widget.state.createTaskInList(
-      widget.embed.taskListId!,
-      title: '',
-      afterTaskId: afterId,
-      notify: false,
-    );
-    if (!mounted) return;
-    final newIndex = _done[index] ? _activeCount : index + 1;
+    if (index < 0 || index >= _taskIds.length) return;
+    final asDone = _done[index];
+    final afterId = _taskIds[index];
+    final newIndex = index + 1;
+
+    // Block remote resync while we paint the row and wait for create.
+    _persisting = true;
     setState(() {
-      _optimistic = null;
       _controllers.insert(newIndex, SpanTextEditingController(text: ''));
       _focusNodes.insert(newIndex, FocusNode());
-      _taskIds.insert(newIndex, created.id);
-      _done.insert(newIndex, false);
+      _taskIds.insert(newIndex, null);
+      _done.insert(newIndex, asDone);
       _saveTimers.insert(newIndex, null);
     });
-    widget.onRefresh();
     _pendingFocusIndex = newIndex;
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
+
+    try {
+      final created = await widget.state.createTaskInList(
+        widget.embed.taskListId!,
+        title: '',
+        afterTaskId: afterId,
+        status: asDone ? 'done' : 'active',
+        notify: false,
+      );
+      if (!mounted) return;
+      if (newIndex < _taskIds.length) {
+        setState(() {
+          _taskIds[newIndex] = created.id;
+          _optimistic = _tasksFromLocalRows();
+        });
+      }
+      await widget.onRefresh();
+    } finally {
+      _persisting = false;
+    }
   }
 
   Future<void> _removeAt(int index) async {
     if (_controllers.length <= 1) {
-      widget.onExitBelow?.call(index);
+      widget.onExitBelow?.call(_taskIds[index]);
       return;
     }
     final id = _taskIds[index];
+    final known = id == null ? null : _taskById(id);
     final removedFocus = _focusNodes[index];
+    final removedController = _controllers[index];
+
+    _persisting = true;
     setState(() {
-      _optimistic = null;
       _saveTimers.removeAt(index)?.cancel();
-      _controllers.removeAt(index).dispose();
+      _controllers.removeAt(index);
       _focusNodes.removeAt(index);
       _taskIds.removeAt(index);
       _done.removeAt(index);
+      _optimistic = _tasksFromLocalRows();
     });
-    if (id != null) {
-      final task = _taskById(id);
-      if (task != null) {
-        await widget.state.deleteTask(task, notify: false);
-      }
-    }
-    widget.onRefresh();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      removedController.dispose();
       removedFocus.dispose();
-      if (!mounted) return;
-      final focusPrev = index > 0 ? index - 1 : 0;
-      if (focusPrev < _focusNodes.length) {
-        _focusNodes[focusPrev].requestFocus();
-      }
     });
+
+    try {
+      if (id != null) {
+        await widget.state.deleteTask(
+          known ??
+              Task(
+                id: id,
+                taskListId: widget.embed.taskListId,
+                title: '',
+                status: 'active',
+              ),
+          notify: false,
+        );
+      }
+      if (!mounted) return;
+      await widget.onRefresh();
+    } finally {
+      _persisting = false;
+    }
+    if (!mounted) return;
+    final focusPrev = index > 0 ? index - 1 : 0;
+    if (focusPrev < _focusNodes.length) {
+      _pendingFocusIndex = focusPrev;
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _applyPendingFocus());
+    }
   }
 
   Future<void> _toggle(int index) async {
@@ -366,7 +446,6 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
       ];
       _disposeRows();
       _syncFromTasks(_optimistic!);
-      // Restore typed titles
       for (var i = 0; i < _taskIds.length; i++) {
         final id = _taskIds[i];
         if (id != null && titles.containsKey(id)) {
@@ -399,8 +478,7 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
         notify: false,
       );
       if (!mounted) return;
-      // Keep optimistic until refresh brings matching order.
-      widget.onRefresh();
+      await widget.onRefresh();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -428,7 +506,7 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
         notify: false,
       );
       if (!mounted) return;
-      widget.onRefresh();
+      await widget.onRefresh();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -477,12 +555,36 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
     }
   }
 
-  Future<void> _showTextMenu(TapDownDetails details) async {
-    await DocumentContextMenu.showTextMenu(
+  void _setReorderMode(bool value) {
+    if (_reorderMode == value) return;
+    setState(() => _reorderMode = value);
+    if (value) {
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
+  }
+
+  Future<void> _showTaskMenu(TapDownDetails details, int index) async {
+    await DocumentContextMenu.showTaskListMenu(
       context: context,
       globalPosition: details.globalPosition,
       strings: widget.state.strings,
-      onAction: runBlockTextAction,
+      onAction: (action) async {
+        if (action == 'tasks:reorder_mode') {
+          _setReorderMode(true);
+          return;
+        }
+        if (action == 'tasks:assign_view') {
+          final id = index >= 0 && index < _taskIds.length ? _taskIds[index] : null;
+          if (id == null || !mounted) return;
+          await showAssignTaskViewDialog(
+            context: context,
+            state: widget.state,
+            taskId: id,
+          );
+          return;
+        }
+        await runBlockTextAction(action);
+      },
     );
   }
 
@@ -503,6 +605,7 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
     required bool targetDone,
     required int indexInZone,
   }) {
+    if (!_reorderMode) return const SizedBox(height: 2);
     return DragTarget<TaskDragPayload>(
       onWillAcceptWithDetails: (d) =>
           d.data.sourceListId == widget.embed.taskListId,
@@ -515,118 +618,163 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
         final hot = candidate.isNotEmpty;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 100),
-          height: hot ? 10 : 2,
-          margin: const EdgeInsets.symmetric(vertical: 1),
+          height: hot ? 12 : 4,
+          margin: const EdgeInsets.symmetric(vertical: 2),
           decoration: BoxDecoration(
             color: hot
-                ? AppColors.primary.withValues(alpha: 0.35)
+                ? AppColors.glassTint.withValues(alpha: 0.55)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(4),
+            border: hot ? AppGlassStyle.dragModeBorder : null,
           ),
         );
       },
     );
   }
 
+  Widget _taskChrome({
+    required int index,
+    required Widget mark,
+    required Widget title,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: mark,
+          ),
+          Expanded(child: title),
+        ],
+      ),
+    );
+  }
+
+  Widget _compactTaskChip(int index, {required bool glass}) {
+    final titleStyle = AppTypography.documentParagraphStyle.copyWith(
+      decoration: _done[index] ? TextDecoration.lineThrough : null,
+      color: _done[index] ? AppColors.textHint : null,
+    );
+    final titleText = _controllers[index].text.trim().isEmpty
+        ? widget.state.strings['newTaskHint']
+        : _controllers[index].text;
+    final mark = TaskMark(
+      done: _done[index],
+      compact: true,
+      onToggle: () {},
+    );
+    final maxChipWidth = MediaQuery.sizeOf(context).width * 0.72;
+    final body = Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        mark,
+        const SizedBox(width: 8),
+        ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxChipWidth - 52),
+          child: Text(titleText, style: titleStyle),
+        ),
+      ],
+    );
+    final chip = glass ? DragModeFrame.chip(child: body) : body;
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: chip,
+    );
+  }
+
   Widget _taskRow(int index) {
+    if (index < 0 || index >= _controllers.length) {
+      return const SizedBox.shrink();
+    }
     final id = _taskIds[index];
     final task = id == null ? null : _taskById(id);
     final listId = widget.embed.taskListId;
+    final zoneIndex = _done[index] ? index - _activeCount : index;
+    // Object Move Mode: compact rows so the host glass frame hugs the text.
+    if (EmbedMoveModeScope.of(context)) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: _compactTaskChip(index, glass: false),
+      );
+    }
+
+    if (_reorderMode) {
+      final framed = _compactTaskChip(index, glass: true);
+      if (task == null || listId == null) return framed;
+      return DragTarget<TaskDragPayload>(
+        onWillAcceptWithDetails: (d) => d.data.sourceListId == listId,
+        onAcceptWithDetails: (d) => _onDrop(
+          payload: d.data,
+          targetDone: _done[index],
+          indexInZone: zoneIndex,
+        ),
+        builder: (context, candidate, rejected) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (candidate.isNotEmpty)
+                Container(
+                  height: 3,
+                  margin: const EdgeInsets.only(bottom: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.glassTint.withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              Draggable<TaskDragPayload>(
+                data: TaskDragPayload(
+                  task: task,
+                  sourceListId: listId,
+                  sourceDone: _done[index],
+                ),
+                feedback: Material(
+                  color: Colors.transparent,
+                  child: _compactTaskChip(index, glass: true),
+                ),
+                childWhenDragging: Opacity(opacity: 0.28, child: framed),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.grab,
+                  child: framed,
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    }
+
+    final titleStyle = AppTypography.documentParagraphStyle.copyWith(
+      decoration: _done[index] ? TextDecoration.lineThrough : null,
+      color: _done[index] ? AppColors.textHint : null,
+    );
     final mark = TaskMark(
       done: _done[index],
       compact: true,
       onToggle: () => unawaited(_toggle(index)),
     );
 
-    final gutter = (task != null && listId != null)
-        ? LongPressDraggable<TaskDragPayload>(
-            data: TaskDragPayload(
-              task: task,
-              sourceListId: listId,
-              sourceDone: _done[index],
-            ),
-            feedback: Material(
-              elevation: 3,
-              borderRadius: BorderRadius.circular(6),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                child: Text(
-                  _controllers[index].text.trim().isEmpty
-                      ? widget.state.strings['newTaskHint']
-                      : _controllers[index].text,
-                  style: AppTypography.documentParagraphStyle,
-                ),
-              ),
-            ),
-            childWhenDragging: Opacity(opacity: 0.35, child: mark),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.grab,
-              child: mark,
-            ),
-          )
-        : mark;
-
-    final zoneIndex = _done[index]
-        ? index - _activeCount
-        : index;
-
-    return DragTarget<TaskDragPayload>(
-      onWillAcceptWithDetails: (d) =>
-          d.data.sourceListId == widget.embed.taskListId,
-      onAcceptWithDetails: (d) => _onDrop(
-        payload: d.data,
-        targetDone: _done[index],
-        indexInZone: zoneIndex,
+    return _taskChrome(
+      index: index,
+      mark: mark,
+      title: FormattedTextField(
+        controller: _controllers[index],
+        focusNode: _focusNodes[index],
+        segmentId: taskItemSegmentId(widget.blockId, index),
+        style: titleStyle,
+        hintText: widget.state.strings['newTaskHint'],
+        maxLines: null,
+        minLines: 1,
+        onChanged: (_) {
+          widget.onFocus?.call();
+          _scheduleSave(index);
+        },
+        onEnter: () => unawaited(_handleEnter(index)),
+        onBackspaceAtStart: () => _handleBackspace(index),
+        onSecondaryTapDown: (d) => _showTaskMenu(d, index),
       ),
-      builder: (context, candidate, rejected) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (candidate.isNotEmpty)
-              Container(
-                height: 2,
-                color: AppColors.primary.withValues(alpha: 0.45),
-              ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 28,
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 3),
-                      child: gutter,
-                    ),
-                  ),
-                  Expanded(
-                    child: FormattedTextField(
-                      controller: _controllers[index],
-                      focusNode: _focusNodes[index],
-                      segmentId: taskItemSegmentId(widget.blockId, index),
-                      style: AppTypography.documentParagraphStyle.copyWith(
-                        decoration:
-                            _done[index] ? TextDecoration.lineThrough : null,
-                        color: _done[index] ? AppColors.textHint : null,
-                      ),
-                      hintText: widget.state.strings['newTaskHint'],
-                      maxLines: null,
-                      minLines: 1,
-                      onChanged: (_) {
-                        widget.onFocus?.call();
-                        _scheduleSave(index);
-                      },
-                      onEnter: () => unawaited(_handleEnter(index)),
-                      onBackspaceAtStart: () => _handleBackspace(index),
-                      onSecondaryTapDown: _showTextMenu,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 
@@ -637,8 +785,10 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
     final showDoneHeader = doneCount > 0;
     final s = widget.state.strings;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final moveMode = EmbedMoveModeScope.of(context);
+    final list = Column(
+      crossAxisAlignment:
+          moveMode || _reorderMode ? CrossAxisAlignment.start : CrossAxisAlignment.stretch,
       children: [
         if (showDoneHeader) _zoneLabel(s['tasksActive']),
         for (var i = 0; i < activeCount; i++) _taskRow(i),
@@ -649,6 +799,14 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
           _dropGap(targetDone: true, indexInZone: doneCount),
         ],
       ],
+    );
+
+    if (!_reorderMode) return list;
+
+    // Stay in reorder mode across drops; tap outside the list ends it.
+    return TapRegion(
+      onTapOutside: (_) => _setReorderMode(false),
+      child: list,
     );
   }
 }

@@ -57,7 +57,17 @@ Table cells hold `{ text, spans }`. Rows are padded to a uniform column count on
 
 An **embed** block is a pointer: `{ "type": "embed", "object_id": 42 }`. The content lives in the `objects` table ([objects area](../objects/AREA.md)).
 
-The document owns **where** an object sits; the objects area owns **what** it contains. Deleting an embed block must go through the objects area cascade so the object row is cleaned up too.
+The document owns **where** an object sits; the objects area owns **what** it contains (data, views, links). In-file presentation (caret, menus, embed widgets) is frontend **files**.
+
+| Rule | Meaning |
+|------|---------|
+| Top-level only | Embeds are siblings of paragraphs, lists, and tables — never nested inside a list or table |
+| Array order is position | No character offsets between blocks |
+| Delete cascades | Removing an embed must go through the objects cascade so the object row (and tasks, info, …) are cleaned up |
+
+Creating via `POST /files/:id/objects` inserts the embed block at `block_index` in the same transaction.
+
+Empty-final Enter exit (task / info / graph continuing as a paragraph below the object) is a **frontend document edit** — it does not change object rows, only inserts a paragraph after the embed in `document_json`.
 
 ## Two representations of the same file
 
