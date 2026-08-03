@@ -42,6 +42,7 @@ class AppBottomBar extends StatelessWidget {
       !isPhoneLayout &&
       !state.isArchiveMode &&
       !state.isViewMode &&
+      !state.isDiagramMode &&
       state.selectedDetail != null;
 
   bool get _showArchiveDelete =>

@@ -181,6 +181,7 @@ class Tag(db.Model):
     workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id"), nullable=False)
     name = db.Column(db.Text, nullable=False)
     color = db.Column(db.Text)
+    icon = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -189,6 +190,7 @@ class Tag(db.Model):
             "workspace_id": self.workspace_id,
             "name": self.name,
             "color": self.color,
+            "icon": self.icon,
             "created_at": _iso(self.created_at),
         }
 
@@ -221,6 +223,8 @@ class Link(db.Model):
     source_id = db.Column(db.Integer, nullable=False)
     target_type = db.Column(db.Text, nullable=False)
     target_id = db.Column(db.Integer, nullable=False)
+    kind = db.Column(db.Text, nullable=False, default="related")
+    anchor = db.Column(JSONB)
     label = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -232,6 +236,8 @@ class Link(db.Model):
             "source_id": self.source_id,
             "target_type": self.target_type,
             "target_id": self.target_id,
+            "kind": self.kind or "related",
+            "anchor": self.anchor if self.anchor is not None else None,
             "label": self.label,
             "created_at": _iso(self.created_at),
         }

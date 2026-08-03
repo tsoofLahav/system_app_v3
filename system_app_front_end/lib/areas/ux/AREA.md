@@ -89,6 +89,7 @@ How a topic is laid out on screen, top to bottom — matching v1:
 |---------|-------|-----------|
 | Topic | Sidebar topic | [`topic/topic_view.dart`](topic/topic_view.dart) — files laid out |
 | Task view | Sidebar view | [`../objects/views/task_view_pane.dart`](../objects/views/task_view_pane.dart) — grid of list frames |
+| Diagram | Sidebar **Diagram** | [`../objects/diagram/object_diagram_pane.dart`](../objects/diagram/object_diagram_pane.dart) — info nodes + related edges |
 | Archive | Sidebar archive | [`archive/`](archive/) — archived topics and files, read-mostly |
 
 ### Task view page
@@ -109,9 +110,12 @@ Phone uses its own shell ([`shell/phone_app_shell.dart`](shell/phone_app_shell.d
 
 - Browse topics and open one in the main pane
 - Open user-created task views
+- Open the **Diagram** (info object graph)
+- Browse **Tags** (freeform object tags) and create a tag
 - Reach the archive
 - Create a topic
 - Create a view
+- Create a tag
 
 The sidebar is navigation only. It never edits content.
 
@@ -120,7 +124,7 @@ The sidebar is navigation only. It never edits content.
 | Menu | Where | Purpose |
 |------|-------|---------|
 | Topic / file context menu | Right-click in topic view, or the `⋯` on a file | Archive, delete — same bubble either way |
-| Text context menu | Right-click inside a document | Formatting, clipboard, emoji |
+| Text context menu | Right-click inside a document | Formatting, clipboard, **Connect info…**, emoji |
 | Table cell menu | Right-click in a table cell | Add column, plus text actions |
 | View section menu | Right-click a section frame on the view page | Edit name / flag / color |
 | View task menu | Right-click a task in a view frame | Reorder tasks (same mode as in-file) |

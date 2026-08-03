@@ -15,6 +15,18 @@ import './span_text_editing_controller.dart';
 import './text_emoji_picker.dart';
 
 /// Text field that registers for block context-menu clipboard/format actions.
+class DescriptionTextRange {
+  const DescriptionTextRange({
+    required this.start,
+    required this.end,
+    required this.link,
+  });
+
+  final int start;
+  final int end;
+  final Map<String, dynamic> link;
+}
+
 class FormattedTextField extends StatefulWidget {
   const FormattedTextField({
     super.key,
@@ -39,6 +51,9 @@ class FormattedTextField extends StatefulWidget {
     this.segmentId,
     this.emojiSearchHint = 'Search emoji',
     this.emojiPickerTitle = 'Insert emoji…',
+    this.descriptionRanges = const [],
+    this.onDescriptionHover,
+    this.onDescriptionDoubleTap,
   });
 
   final TextEditingController controller;
@@ -67,6 +82,10 @@ class FormattedTextField extends StatefulWidget {
 
   final String emojiSearchHint;
   final String emojiPickerTitle;
+
+  final List<DescriptionTextRange> descriptionRanges;
+  final ValueChanged<DescriptionTextRange?>? onDescriptionHover;
+  final ValueChanged<DescriptionTextRange>? onDescriptionDoubleTap;
 
   @override
   State<FormattedTextField> createState() => _FormattedTextFieldState();
@@ -704,76 +723,122 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
           }
         }
       },
-      child: AnimatedBuilder(
-        animation: Listenable.merge([
-          BlockTextFocusRegistry.menuSessionListenable,
-          ?_flow,
-        ]),
-        builder: (context, _) {
-          final inMenu = BlockTextFocusRegistry.isInMenuSession;
-          final theme = Theme.of(context);
-          final selectionColor = theme.textSelectionTheme.selectionColor ??
-              theme.colorScheme.primary.withValues(alpha: 0.3);
-          // Overlay paints the mark (menu) or a multi-part selection — never
-          // stack that on top of the field's own selection wash.
-          final hideNativeSelection =
-              inMenu || (_flow?.spansSegments ?? false);
+      child: MouseRegion(
+        onHover: widget.descriptionRanges.isEmpty
+            ? null
+            : (event) => _handleDescriptionHover(event.localPosition),
+        onExit: widget.descriptionRanges.isEmpty
+            ? null
+            : (_) => widget.onDescriptionHover?.call(null),
+        child: GestureDetector(
+          onDoubleTapDown: widget.descriptionRanges.isEmpty
+              ? null
+              : (details) {
+                  final hit = _descriptionAt(details.localPosition);
+                  if (hit != null) {
+                    widget.onDescriptionDoubleTap?.call(hit);
+                  }
+                },
+          child: AnimatedBuilder(
+            animation: Listenable.merge([
+              BlockTextFocusRegistry.menuSessionListenable,
+              ?_flow,
+            ]),
+            builder: (context, _) {
+              final inMenu = BlockTextFocusRegistry.isInMenuSession;
+              final theme = Theme.of(context);
+              final selectionColor = theme.textSelectionTheme.selectionColor ??
+                  theme.colorScheme.primary.withValues(alpha: 0.3);
+              // Overlay paints the mark (menu) or a multi-part selection — never
+              // stack that on top of the field's own selection wash.
+              final hideNativeSelection =
+                  inMenu || (_flow?.spansSegments ?? false);
 
-          final field = TextSelectionTheme(
-            data: TextSelectionThemeData(
-              selectionColor:
-                  hideNativeSelection ? Colors.transparent : selectionColor,
-              cursorColor: style.color,
-            ),
-            child: TextField(
-              controller: widget.controller,
-              focusNode: _focusNode,
-              style: style,
-              textAlignVertical: widget.textAlignVertical,
-              maxLines: widget.maxLines,
-              minLines: widget.minLines,
-              decoration: InputDecoration(
-                isDense: true,
-                border: InputBorder.none,
-                hintText: widget.hintText,
-                hintStyle: style.copyWith(
-                  color: style.color?.withValues(alpha: 0.35),
+              final field = TextSelectionTheme(
+                data: TextSelectionThemeData(
+                  selectionColor:
+                      hideNativeSelection ? Colors.transparent : selectionColor,
+                  cursorColor: style.color,
                 ),
-                contentPadding: EdgeInsets.zero,
-              ),
-              textInputAction: widget.onEnter != null
-                  ? TextInputAction.none
-                  : widget.textInputAction,
-              onChanged: (_) => _notifyChanged(),
-              onSubmitted: widget.onSubmitted,
-              onTap: () {
-                _onFocusChanged();
-                _handleTap();
-              },
-              inputFormatters: formatters.isEmpty ? null : formatters,
-              contextMenuBuilder: (context, editableTextState) {
-                return const SizedBox.shrink();
-              },
-            ),
-          );
+                child: TextField(
+                  controller: widget.controller,
+                  focusNode: _focusNode,
+                  style: style,
+                  textAlignVertical: widget.textAlignVertical,
+                  maxLines: widget.maxLines,
+                  minLines: widget.minLines,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                    hintText: widget.hintText,
+                    hintStyle: style.copyWith(
+                      color: style.color?.withValues(alpha: 0.35),
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  textInputAction: widget.onEnter != null
+                      ? TextInputAction.none
+                      : widget.textInputAction,
+                  onChanged: (_) => _notifyChanged(),
+                  onSubmitted: widget.onSubmitted,
+                  onTap: () {
+                    _onFocusChanged();
+                    _handleTap();
+                  },
+                  inputFormatters: formatters.isEmpty ? null : formatters,
+                  contextMenuBuilder: (context, editableTextState) {
+                    return const SizedBox.shrink();
+                  },
+                ),
+              );
 
-          final body = _withFlowVerticalIntents(
-            _withVisualCaretMotion(_withCrossSegmentHighlight(field)),
-          );
+              var body = _withFlowVerticalIntents(
+                _withVisualCaretMotion(_withCrossSegmentHighlight(field)),
+              );
 
-          if (!inMenu) return body;
+              if (widget.descriptionRanges.isNotEmpty) {
+                body = _DescriptionUnderlineOverlay(
+                  ranges: widget.descriptionRanges,
+                  text: widget.controller.text,
+                  style: style,
+                  child: body,
+                );
+              }
 
-          final range = _frozenMarkRange();
-          if (range == null) return body;
+              if (!inMenu) return body;
 
-          return _FrozenSelectionOverlay(
-            selection: range,
-            selectionColor: selectionColor,
-            child: body,
-          );
-        },
+              final range = _frozenMarkRange();
+              if (range == null) return body;
+
+              return _FrozenSelectionOverlay(
+                selection: range,
+                selectionColor: selectionColor,
+                child: body,
+              );
+            },
+          ),
+        ),
       ),
     );
+  }
+
+  DescriptionTextRange? _descriptionAt(Offset local) {
+    final host = context.findRenderObject();
+    if (host == null) return null;
+    final editable = _findRenderEditable(host);
+    if (editable == null) return null;
+    final position = editable.getPositionForPoint(
+      editable.localToGlobal(local),
+    );
+    final offset = position.offset;
+    for (final range in widget.descriptionRanges) {
+      if (offset >= range.start && offset < range.end) return range;
+    }
+    return null;
+  }
+
+  void _handleDescriptionHover(Offset local) {
+    widget.onDescriptionHover?.call(_descriptionAt(local));
   }
 
   /// macOS sends vertical arrows as selection intents, not only key events.
@@ -940,6 +1005,102 @@ RenderEditable? _findRenderEditable(RenderObject root) {
     found ??= _findRenderEditable(child);
   });
   return found;
+}
+
+class _DescriptionUnderlineOverlay extends StatefulWidget {
+  const _DescriptionUnderlineOverlay({
+    required this.ranges,
+    required this.text,
+    required this.style,
+    required this.child,
+  });
+
+  final List<DescriptionTextRange> ranges;
+  final String text;
+  final TextStyle style;
+  final Widget child;
+
+  @override
+  State<_DescriptionUnderlineOverlay> createState() =>
+      _DescriptionUnderlineOverlayState();
+}
+
+class _DescriptionUnderlineOverlayState
+    extends State<_DescriptionUnderlineOverlay> {
+  List<Rect> _rects = const [];
+
+  @override
+  void didUpdateWidget(covariant _DescriptionUnderlineOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.ranges != widget.ranges || oldWidget.text != widget.text) {
+      _scheduleMeasure();
+    }
+  }
+
+  void _scheduleMeasure() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _measure();
+    });
+  }
+
+  void _measure() {
+    final host = context.findRenderObject() as RenderBox?;
+    final editable = host == null ? null : _findRenderEditable(host);
+    if (editable == null || host == null || !host.hasSize) {
+      if (_rects.isNotEmpty) setState(() => _rects = const []);
+      return;
+    }
+    final transform = editable.getTransformTo(host);
+    final next = <Rect>[];
+    for (final range in widget.ranges) {
+      final start = range.start.clamp(0, widget.text.length);
+      final end = range.end.clamp(0, widget.text.length);
+      if (end <= start) continue;
+      final boxes = editable.getBoxesForSelection(
+        TextSelection(baseOffset: start, extentOffset: end),
+      );
+      for (final box in boxes) {
+        final rect = MatrixUtils.transformRect(transform, box.toRect());
+        next.add(Rect.fromLTWH(rect.left, rect.bottom - 2, rect.width, 2));
+      }
+    }
+    if (!FrozenSelectionPainter.rectsEqual(_rects, next)) {
+      setState(() => _rects = next);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _scheduleMeasure();
+    return CustomPaint(
+      foregroundPainter: _UnderlinePainter(rects: _rects),
+      child: widget.child,
+    );
+  }
+}
+
+class _UnderlinePainter extends CustomPainter {
+  _UnderlinePainter({required this.rects});
+
+  final List<Rect> rects;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF3B82C4).withValues(alpha: 0.85)
+      ..style = PaintingStyle.fill;
+    for (final rect in rects) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(1)),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _UnderlinePainter oldDelegate) =>
+      !FrozenSelectionPainter.rectsEqual(rects, oldDelegate.rects);
 }
 
 class _StripNewlinesFormatter extends TextInputFormatter {

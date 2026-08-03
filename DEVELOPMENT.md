@@ -80,6 +80,7 @@ _(Dated bullets — added when the user asks to remember something.)_
 - **2026-07-31** — **Files vs objects split:** in-file embed widgets live under [`files/editor/embeds/`](system_app_front_end/lib/areas/files/editor/embeds/) (presentation, flow, menus, Move Mode). Objects owns data + special qualities — **tasks/views**, **info links**, payloads (e.g. `tasks.status`). Thin overlay: embeds call object services/controls; they do not own those fields. See both [`AREA.md`](system_app_front_end/lib/areas/files/AREA.md) files.
 - **2026-07-27** — **Objects in a file** are top-level embed blocks. The document owns position; the object owns data. Double-click enters Move Mode. Enter on an empty final task / info line / graph column exits below without destroying the object.
 - **2026-07-27** — **Never rebuild the document editor (or the Shortcuts tree) from `AppState.notifyListeners` mid-keystroke.** That desyncs Flutter's `HardwareKeyboard` and loops `KeyDownEvent … physical key is already pressed` (same class of bug as 2026-07-15). Silent document/object saves (`notify: false`), debounce embed field saves, and only schedule embed rebuilds post-frame. Hot reload can leave keys stuck — use a **full restart** to clear it.
+- **2026-08-03** — Object graph / tags / diagram need migration **`006_object_graph.sql`** applied manually on the Render Postgres DB before (or right after) deploying the backend that uses `tags.icon`, `links.kind`, and `links.anchor`.
 
 ---
 

@@ -16,6 +16,10 @@ from models import (
     db,
 )
 from areas.files.services.document_v3 import remove_object_embeds
+from areas.objects.services.object_graph import (
+    delete_links_for_file,
+    delete_links_for_object,
+)
 
 
 def delete_task_cascade(task_id: int) -> None:
@@ -62,11 +66,17 @@ def delete_object_embed_cascade(embed: ObjectEmbed, *, remove_from_document: boo
     if file and remove_from_document:
         file.document_json = remove_object_embeds(file.document_json or "", embed.id)
 
+    delete_links_for_object(embed.id, embed.type)
+    EntityTag.query.filter_by(
+        entity_type="object", entity_id=embed.id
+    ).delete(synchronize_session=False)
+
     if embed.type == "task_list" and embed.task_list_id:
         delete_task_list_cascade(embed.task_list_id)
     elif embed.type == "info" and embed.information_id:
         info = db.session.get(InformationPiece, embed.information_id)
         if info:
+            # Legacy rows that still key by information_id.
             Link.query.filter_by(
                 source_type="info", source_id=info.id
             ).delete(synchronize_session=False)
@@ -80,6 +90,7 @@ def delete_file_cascade(file_id: int) -> None:
     if file is None:
         return
 
+    delete_links_for_file(file_id)
     embeds = ObjectEmbed.query.filter_by(file_id=file_id).all()
     for embed in embeds:
         delete_object_embed_cascade(embed, remove_from_document=False)

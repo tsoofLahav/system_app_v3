@@ -1,3 +1,4 @@
+import '../../../core/models/tag.dart';
 import './task.dart';
 
 class ObjectEmbed {
@@ -13,6 +14,8 @@ class ObjectEmbed {
     this.tasks,
     this.information,
     this.links,
+    this.connections = const [],
+    this.tags = const [],
     this.payload,
   });
 
@@ -27,12 +30,16 @@ class ObjectEmbed {
   final List<Task>? tasks;
   final Map<String, dynamic>? information;
   final List<Map<String, dynamic>>? links;
+  final List<Map<String, dynamic>> connections;
+  final List<AppTag> tags;
   final Map<String, dynamic>? payload;
 
   ObjectEmbed copyWith({
     List<Task>? tasks,
     Map<String, dynamic>? information,
     List<Map<String, dynamic>>? links,
+    List<Map<String, dynamic>>? connections,
+    List<AppTag>? tags,
     Map<String, dynamic>? payload,
     String? taskListTitle,
   }) {
@@ -48,6 +55,8 @@ class ObjectEmbed {
       tasks: tasks ?? this.tasks,
       information: information ?? this.information,
       links: links ?? this.links,
+      connections: connections ?? this.connections,
+      tags: tags ?? this.tags,
       payload: payload ?? this.payload,
     );
   }
@@ -55,6 +64,7 @@ class ObjectEmbed {
   factory ObjectEmbed.fromJson(Map<String, dynamic> json) {
     final taskList = json['task_list'];
     final listTitle = taskList is Map ? '${taskList['title'] ?? ''}' : '';
+    final connectionRaw = json['connections'] ?? json['links'];
     return ObjectEmbed(
       id: json['id'] as int,
       fileId: json['file_id'] as int,
@@ -75,12 +85,24 @@ class ObjectEmbed {
       information: json['information'] is Map<String, dynamic>
           ? Map<String, dynamic>.from(json['information'] as Map)
           : null,
-      links: json['links'] is List
+      links: connectionRaw is List
           ? [
-              for (final l in json['links'] as List)
+              for (final l in connectionRaw)
                 Map<String, dynamic>.from(l as Map),
             ]
           : null,
+      connections: connectionRaw is List
+          ? [
+              for (final l in connectionRaw)
+                Map<String, dynamic>.from(l as Map),
+            ]
+          : const [],
+      tags: json['tags'] is List
+          ? [
+              for (final t in json['tags'] as List)
+                AppTag.fromJson(Map<String, dynamic>.from(t as Map)),
+            ]
+          : const [],
       payload: json['payload'] is Map<String, dynamic>
           ? Map<String, dynamic>.from(json['payload'] as Map)
           : null,

@@ -53,9 +53,22 @@ task ──┬── shown inline in its file (files embed)
 
 ## Info and the object graph
 
-An info object holds knowledge (`title`, `body`, …). Links connect **any** object to any other (info↔task, info↔info, …) via the backend `links` table — a workspace-wide graph, independent of which file each object lives in.
+An info object holds knowledge (`title`, `body`, …). Graph edges are keyed by **`objects.id`**.
 
-In-file editing of title/body is presentation (files). **Link create/navigate/query UI and rules belong here** as they grow — not inside the embed widget beyond a small entry point.
+| Kind | Meaning |
+|------|---------|
+| `related` | Object ↔ object (stored directed; UI treats undirected) |
+| `description` | Info → marked span in a file (`anchor`: file/block/segment + offsets) |
+
+**Tags.** Freeform workspace tags (`tags.icon` + colour) assign to objects via `entity_type=object`. Topic type tags (`project` / `process` / …) stay for topic classification and are excluded from the object-tag UI.
+
+**UI here:**
+- Sidebar **New tag** + tag list; assign tags on info embeds
+- Related connections list + picker on info
+- Description: document **Connect info…**, hover bubble, double-tap opens the info
+- **Diagram** pane: info nodes only, related edges, force layout, tag OR-filter
+
+In-file editing of title/body is presentation (files).
 
 ## Image and graph (data)
 
@@ -73,6 +86,9 @@ Agent text and API shapes: backend objects `AREA.md` + production agent prompt.
 | [`data/`](data/) | Models and API services (objects, tasks, views, …) |
 | [`tasks/`](tasks/) | Shared task UI: row, mark, drag payload, Active/Done zone helper |
 | [`views/`](views/) | Task view pane and display config |
+| [`tags/`](tags/) | Create / assign object tags |
+| [`links/`](links/) | Connection picker + description hover bubble |
+| [`diagram/`](diagram/) | Object diagram pane |
 
 In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 
@@ -90,8 +106,8 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 
 **Shipped (data):** task CRUD/status/order; view membership pane; empty titles; object create/delete with embed insert.
 
-**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder.
+**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder; object tags; related + description links; diagram pane with tag filter.
 
-**Shipped (presentation, in files):** list-like task embed; info title/body flow; graph table-like embed; Move Mode; right-click text menu on task/info fields.
+**Shipped (presentation, in files):** list-like task embed; info title/body flow + tags/connections chrome; graph table-like embed; Move Mode; right-click text menu including Connect info; description underlines + hover/double-tap.
 
-**Next (this area):** **info links** UI and navigation on the object graph; convert-selection → Info as a product flow using object APIs.
+**Next (this area):** non-info diagram nodes; persisted diagram layout; convert-selection → create Info.

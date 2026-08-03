@@ -77,6 +77,7 @@ CREATE TABLE tags (
     workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     color TEXT,
+    icon TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (workspace_id, name)
 );
@@ -97,6 +98,8 @@ CREATE TABLE links (
     source_id INTEGER NOT NULL,
     target_type TEXT NOT NULL,
     target_id INTEGER NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'related',
+    anchor JSONB,
     label TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

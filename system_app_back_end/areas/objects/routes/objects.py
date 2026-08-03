@@ -1,18 +1,32 @@
 from flask import Blueprint, jsonify, request
 
-from models import File, InformationPiece, Link, ObjectEmbed, TaskList, Topic, db
+from models import (
+    EntityTag,
+    File,
+    InformationPiece,
+    Link,
+    ObjectEmbed,
+    TaskList,
+    Topic,
+    db,
+)
 from shared.helpers import get_or_404
 from shared.bootstrap import default_workspace_id
 from areas.objects.services.delete_cascade import delete_object_embed_cascade
 from areas.files.services.document_v3 import (
     insert_embed_block,
     parse_document,
-    remove_object_embeds,
-    serialize_document,
     sync_object_anchors,
 )
 from areas.files.services.document_promote import promote_legacy_embeds
 from areas.objects.services.task_list_order import tasks_for_list
+from areas.objects.services.object_graph import (
+    LINK_KINDS,
+    OBJECT_LINK_TYPES,
+    build_workspace_graph,
+    connection_dicts_for_object,
+    tags_for_object,
+)
 
 objects_bp = Blueprint("objects", __name__)
 
@@ -38,11 +52,10 @@ def _resolve_embed(obj: ObjectEmbed) -> dict:
         else None
     )
     data = obj.to_dict(task_list=task_list, tasks=tasks, information=info)
-    if obj.type == "info" and obj.information_id:
-        links = Link.query.filter_by(
-            source_type="info", source_id=obj.information_id
-        ).all()
-        data["links"] = [link.to_dict() for link in links]
+    data["tags"] = tags_for_object(obj.id)
+    data["connections"] = connection_dicts_for_object(obj)
+    # Legacy alias for older clients.
+    data["links"] = data["connections"]
     return data
 
 
@@ -77,6 +90,14 @@ def _create_embed_entity(type_: str, data: dict) -> ObjectEmbed:
     )
 
 
+@objects_bp.route("/objects/graph", methods=["GET"])
+def workspace_graph():
+    workspace_id = request.args.get("workspace_id", type=int) or default_workspace_id()
+    if not workspace_id:
+        return jsonify({"error": "workspace_id is required"}), 400
+    return jsonify(build_workspace_graph(workspace_id))
+
+
 @objects_bp.route("/files/<int:file_id>/objects", methods=["GET"])
 def list_objects(file_id):
     get_or_404(File, file_id)
@@ -86,6 +107,34 @@ def list_objects(file_id):
         .all()
     )
     return jsonify([_resolve_embed(e) for e in embeds])
+
+
+@objects_bp.route("/files/<int:file_id>/description-links", methods=["GET"])
+def list_file_description_links(file_id):
+    get_or_404(File, file_id)
+    rows = Link.query.filter_by(
+        kind="description",
+        target_type="file",
+        target_id=file_id,
+    ).all()
+    out = []
+    for link in rows:
+        data = link.to_dict()
+        peer = db.session.get(ObjectEmbed, link.source_id)
+        info = (
+            db.session.get(InformationPiece, peer.information_id)
+            if peer is not None and peer.information_id
+            else None
+        )
+        data["peer"] = {
+            "type": "info",
+            "id": link.source_id,
+            "title": (info.title if info else "") or "Info",
+            "body": (info.body if info else "") or "",
+            "file_id": peer.file_id if peer else None,
+        }
+        out.append(data)
+    return jsonify(out)
 
 
 @objects_bp.route("/files/<int:file_id>/objects", methods=["POST"])
@@ -156,32 +205,58 @@ def delete_object(object_id):
 @objects_bp.route("/objects/<int:object_id>/links", methods=["GET"])
 def list_object_links(object_id):
     embed = get_or_404(ObjectEmbed, object_id)
-    if embed.type != "info" or not embed.information_id:
-        return jsonify([])
-    rows = Link.query.filter_by(
-        source_type="info", source_id=embed.information_id
-    ).all()
-    return jsonify([r.to_dict() for r in rows])
+    return jsonify(connection_dicts_for_object(embed))
 
 
 @objects_bp.route("/objects/<int:object_id>/links", methods=["POST"])
 def create_object_link(object_id):
     embed = get_or_404(ObjectEmbed, object_id)
-    if embed.type != "info" or not embed.information_id:
-        return jsonify({"error": "links only supported for info objects"}), 400
     data = request.get_json(silent=True) or {}
-    target_type = data.get("target_type")
-    target_id = data.get("target_id")
-    if not target_type or target_id is None:
-        return jsonify({"error": "target_type and target_id required"}), 400
+    kind = data.get("kind") or "related"
+    if kind not in LINK_KINDS:
+        return jsonify({"error": f"kind must be one of {sorted(LINK_KINDS)}"}), 400
 
     workspace_id = _workspace_for_object(embed) or default_workspace_id()
+    if not workspace_id:
+        return jsonify({"error": "workspace_id required"}), 400
+
+    if kind == "description":
+        if embed.type != "info":
+            return jsonify({"error": "description links require an info source"}), 400
+        anchor = data.get("anchor")
+        if not isinstance(anchor, dict) or not anchor.get("file_id"):
+            return jsonify({"error": "anchor.file_id required for description"}), 400
+        file_id = int(anchor["file_id"])
+        get_or_404(File, file_id)
+        link = Link(
+            workspace_id=workspace_id,
+            source_type="info",
+            source_id=embed.id,
+            target_type="file",
+            target_id=file_id,
+            kind="description",
+            anchor=anchor,
+            label=data.get("label"),
+        )
+        db.session.add(link)
+        db.session.commit()
+        return jsonify(link.to_dict()), 201
+
+    # related: target is another object
+    target_object_id = data.get("target_object_id") or data.get("target_id")
+    if target_object_id is None:
+        return jsonify({"error": "target_object_id required"}), 400
+    target = get_or_404(ObjectEmbed, int(target_object_id))
+    if target.id == embed.id:
+        return jsonify({"error": "cannot link an object to itself"}), 400
+
     link = Link(
         workspace_id=workspace_id,
-        source_type="info",
-        source_id=embed.information_id,
-        target_type=target_type,
-        target_id=int(target_id),
+        source_type=embed.type,
+        source_id=embed.id,
+        target_type=target.type,
+        target_id=target.id,
+        kind="related",
         label=data.get("label"),
     )
     db.session.add(link)
@@ -191,14 +266,47 @@ def create_object_link(object_id):
 
 @objects_bp.route("/objects/<int:object_id>/links/<int:link_id>", methods=["DELETE"])
 def delete_object_link(object_id, link_id):
-    embed = get_or_404(ObjectEmbed, object_id)
-    if embed.type != "info" or not embed.information_id:
-        return jsonify({"error": "not found"}), 404
-    link = Link.query.filter_by(
-        id=link_id, source_type="info", source_id=embed.information_id
-    ).first()
+    get_or_404(ObjectEmbed, object_id)
+    link = Link.query.filter_by(id=link_id).first()
     if link is None:
+        return jsonify({"error": "not found"}), 404
+    touches = (
+        (link.source_type in OBJECT_LINK_TYPES and link.source_id == object_id)
+        or (link.target_type in OBJECT_LINK_TYPES and link.target_id == object_id)
+        or (
+            (link.kind or "related") == "description"
+            and link.source_type == "info"
+            and link.source_id == object_id
+        )
+    )
+    if not touches:
         return jsonify({"error": "not found"}), 404
     db.session.delete(link)
     db.session.commit()
     return "", 204
+
+
+@objects_bp.route("/objects/<int:object_id>/tags", methods=["GET"])
+def list_object_tags(object_id):
+    get_or_404(ObjectEmbed, object_id)
+    return jsonify(tags_for_object(object_id))
+
+
+@objects_bp.route("/objects/<int:object_id>/tags", methods=["PUT"])
+def replace_object_tags(object_id):
+    get_or_404(ObjectEmbed, object_id)
+    data = request.get_json(silent=True) or {}
+    tag_ids = data.get("tag_ids") or []
+    EntityTag.query.filter_by(
+        entity_type="object", entity_id=object_id
+    ).delete(synchronize_session=False)
+    for tag_id in tag_ids:
+        db.session.add(
+            EntityTag(
+                tag_id=int(tag_id),
+                entity_type="object",
+                entity_id=object_id,
+            )
+        )
+    db.session.commit()
+    return jsonify(tags_for_object(object_id))

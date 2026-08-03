@@ -11,7 +11,10 @@ typedef DocumentMenuHandler = Future<void> Function(String action);
 class DocumentContextMenu {
   const DocumentContextMenu._();
 
-  static List<AppContextMenuEntry> buildTextEntries(AppStrings strings) => [
+  static List<AppContextMenuEntry> buildTextEntries(
+    AppStrings strings, {
+    bool includeConnectInfo = false,
+  }) => [
     AppContextMenuItem(value: 'text:bold', label: strings['bold'] ?? 'Bold'),
     AppContextMenuItem(value: 'text:italic', label: strings['italic'] ?? 'Italic'),
     AppContextMenuItem(
@@ -35,6 +38,13 @@ class DocumentContextMenu {
       value: 'text:color:clear',
       label: strings['clearColor'] ?? 'Clear color',
     ),
+    if (includeConnectInfo) ...[
+      const AppContextMenuDivider(),
+      AppContextMenuItem(
+        value: 'text:connect_info',
+        label: strings['connectInfo'] ?? 'Connect info…',
+      ),
+    ],
     const AppContextMenuDivider(),
     AppContextMenuItem(value: 'text:cut', label: strings['cut'] ?? 'Cut'),
     AppContextMenuItem(value: 'text:copy', label: strings['copy'] ?? 'Copy'),
@@ -77,13 +87,17 @@ class DocumentContextMenu {
     required Offset globalPosition,
     required AppStrings strings,
     required DocumentMenuHandler onAction,
+    bool includeConnectInfo = false,
   }) {
     return _showMenu(
       context: context,
       globalPosition: globalPosition,
       strings: strings,
       onAction: onAction,
-      entries: buildTextEntries(strings),
+      entries: buildTextEntries(
+        strings,
+        includeConnectInfo: includeConnectInfo,
+      ),
     );
   }
 
@@ -105,7 +119,7 @@ class DocumentContextMenu {
       strings: strings,
       onAction: onAction,
       entries: [
-        ...buildTextEntries(strings),
+        ...buildTextEntries(strings, includeConnectInfo: true),
         const AppContextMenuDivider(),
         AppContextMenuItem(
           value: isOrdered ? 'list:style:bullet' : 'list:style:numbered',
@@ -129,7 +143,7 @@ class DocumentContextMenu {
       strings: strings,
       onAction: onAction,
       entries: [
-        ...buildTextEntries(strings),
+        ...buildTextEntries(strings, includeConnectInfo: true),
         const AppContextMenuDivider(),
         AppContextMenuItem(
           value: 'table:add_column',

@@ -1,5 +1,80 @@
 import './object_embed.dart';
+import '../../../core/models/tag.dart';
 import '../../../core/services/api_service.dart';
+
+class ObjectGraphData {
+  const ObjectGraphData({required this.nodes, required this.edges});
+
+  final List<ObjectGraphNode> nodes;
+  final List<ObjectGraphEdge> edges;
+
+  factory ObjectGraphData.fromJson(Map<String, dynamic> json) {
+    return ObjectGraphData(
+      nodes: [
+        for (final n in (json['nodes'] as List? ?? const []))
+          ObjectGraphNode.fromJson(Map<String, dynamic>.from(n as Map)),
+      ],
+      edges: [
+        for (final e in (json['edges'] as List? ?? const []))
+          ObjectGraphEdge.fromJson(Map<String, dynamic>.from(e as Map)),
+      ],
+    );
+  }
+}
+
+class ObjectGraphNode {
+  const ObjectGraphNode({
+    required this.objectId,
+    required this.type,
+    required this.title,
+    required this.fileId,
+    required this.tagIds,
+  });
+
+  final int objectId;
+  final String type;
+  final String title;
+  final int fileId;
+  final List<int> tagIds;
+
+  factory ObjectGraphNode.fromJson(Map<String, dynamic> json) {
+    return ObjectGraphNode(
+      objectId: json['object_id'] as int,
+      type: json['type'] as String? ?? 'info',
+      title: json['title'] as String? ?? '',
+      fileId: json['file_id'] as int? ?? 0,
+      tagIds: [
+        for (final id in (json['tag_ids'] as List? ?? const [])) id as int,
+      ],
+    );
+  }
+}
+
+class ObjectGraphEdge {
+  const ObjectGraphEdge({
+    required this.id,
+    required this.kind,
+    required this.sourceId,
+    required this.targetId,
+    this.label,
+  });
+
+  final int id;
+  final String kind;
+  final int sourceId;
+  final int targetId;
+  final String? label;
+
+  factory ObjectGraphEdge.fromJson(Map<String, dynamic> json) {
+    return ObjectGraphEdge(
+      id: json['id'] as int,
+      kind: json['kind'] as String? ?? 'related',
+      sourceId: json['source_id'] as int,
+      targetId: json['target_id'] as int,
+      label: json['label'] as String?,
+    );
+  }
+}
 
 class ObjectService {
   ObjectService(this._api);
@@ -11,6 +86,12 @@ class ObjectService {
     return data
         .map((e) => ObjectEmbed.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<ObjectEmbed> getObject(int objectId) async {
+    final data =
+        await _api.get('/objects/$objectId') as Map<String, dynamic>;
+    return ObjectEmbed.fromJson(data);
   }
 
   Future<ObjectEmbed> createObject({
@@ -43,20 +124,43 @@ class ObjectService {
     await _api.delete('/objects/$objectId');
   }
 
+  Future<ObjectGraphData> loadGraph({required int workspaceId}) async {
+    final data = await _api.get('/objects/graph?workspace_id=$workspaceId')
+        as Map<String, dynamic>;
+    return ObjectGraphData.fromJson(data);
+  }
+
   Future<List<Map<String, dynamic>>> listLinks(int objectId) async {
     return (await _api.get('/objects/$objectId/links') as List<dynamic>)
         .cast<Map<String, dynamic>>();
   }
 
-  Future<Map<String, dynamic>> createLink(
+  Future<List<Map<String, dynamic>>> listFileDescriptionLinks(int fileId) async {
+    return (await _api.get('/files/$fileId/description-links') as List<dynamic>)
+        .cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> createRelatedLink(
     int objectId, {
-    required String targetType,
-    required int targetId,
+    required int targetObjectId,
     String? label,
   }) async {
     return await _api.post('/objects/$objectId/links', {
-          'target_type': targetType,
-          'target_id': targetId,
+          'kind': 'related',
+          'target_object_id': targetObjectId,
+          if (label != null) 'label': label,
+        })
+        as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> createDescriptionLink(
+    int objectId, {
+    required Map<String, dynamic> anchor,
+    String? label,
+  }) async {
+    return await _api.post('/objects/$objectId/links', {
+          'kind': 'description',
+          'anchor': anchor,
           if (label != null) 'label': label,
         })
         as Map<String, dynamic>;
@@ -64,5 +168,15 @@ class ObjectService {
 
   Future<void> deleteLink(int objectId, int linkId) async {
     await _api.delete('/objects/$objectId/links/$linkId');
+  }
+
+  Future<List<AppTag>> replaceObjectTags(
+    int objectId,
+    List<int> tagIds,
+  ) async {
+    final data = await _api.put('/objects/$objectId/tags', {
+      'tag_ids': tagIds,
+    }) as List<dynamic>;
+    return data.map((e) => AppTag.fromJson(e as Map<String, dynamic>)).toList();
   }
 }

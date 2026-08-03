@@ -57,14 +57,26 @@ Views are membership and filtering only. **Never add per-view status columns** �
 
 An `info` object holds a piece of knowledge (`title`, `body`, `metadata`).
 
-Info objects can be **linked** — and links are not restricted to info. The `links` table connects any entity to any other:
+The `links` table is the workspace **object graph**, keyed by **`objects.id`** for object endpoints (migration `006` also adds `links.kind`, `links.anchor`, `tags.icon`).
 
 | Column | Meaning |
 |--------|---------|
-| `source_type`, `source_id` | One endpoint |
+| `source_type`, `source_id` | One endpoint (`info` / `task_list` / … or `file` for description targets) |
 | `target_type`, `target_id` | The other endpoint |
+| `kind` | `related` (default) or `description` |
+| `anchor` | JSON for description spans: `{ file_id, block_id, segment_id, start, end }` |
 
-So an info piece can link to a task, a task to another task, an info to several infos. Together these edges form a **graph of objects** across the whole workspace, independent of which file each object sits in.
+**Related** edges connect objects. **Description** edges attach an info object to a marked span in a file (`target_type=file`).
+
+| Endpoint | Role |
+|----------|------|
+| `GET /objects/graph?workspace_id=` | Info nodes + related info↔info edges for the diagram |
+| `GET/POST /objects/:id/links` | List / create connections (`target_object_id` or description `anchor`) |
+| `GET /files/:id/description-links` | Description links targeting that file |
+| `PUT /objects/:id/tags` | Replace object tags |
+| `PATCH /tags/:id` | Update tag name/color/icon |
+
+Object GET / file object list payloads include `tags[]` and `connections[]` (undirected related + description rows with a `peer` summary). Deleting an object or file removes links where it is source **or** target.
 
 ## Image and graph payloads
 
@@ -85,7 +97,8 @@ Deleting anything that contains objects must cascade, or the database keeps orph
 
 | Module | Role |
 |--------|------|
-| [`routes/objects.py`](routes/objects.py) | Create/update/delete embeds; insert the embed block into the file |
+| [`routes/objects.py`](routes/objects.py) | Create/update/delete embeds; links; graph; object tags; insert embed blocks |
+| [`services/object_graph.py`](services/object_graph.py) | Graph build, connection dicts, link/tag helpers |
 | [`routes/tasks.py`](routes/tasks.py) | Task CRUD, status, due date |
 | [`routes/task_lists.py`](routes/task_lists.py) | Task list contents and reorder |
 | [`routes/information.py`](routes/information.py) | Info pieces |

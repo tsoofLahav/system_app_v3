@@ -5,6 +5,7 @@ import '../../../core/l10n/app_strings.dart';
 import '../../../core/models/archive_index.dart';
 import '../../files/data/topic.dart';
 import '../../objects/data/app_view.dart';
+import '../../objects/tags/create_tag_dialog.dart';
 import '../../objects/views/create_view_dialog.dart';
 import '../shortcuts/app_shortcuts.dart';
 import '../shortcuts/shortcut_catalog.dart';
@@ -17,6 +18,7 @@ import '../../ui/glass_surface.dart';
 import '../widgets/topic_emoji.dart';
 import '../widgets/disclosure_icon.dart';
 import '../create_topic/create_topic_dialog.dart';
+import '../topic/topic_appearance.dart';
 
 abstract final class AppSidebarMetrics {
   static const defaultWidth = 200.0;
@@ -136,6 +138,7 @@ class _AppSidebarState extends State<AppSidebar> {
                         backgroundColor:
                             !state.isViewMode &&
                                 !state.isArchiveMode &&
+                                !state.isDiagramMode &&
                                 state.selectedTopic?.isMain == true
                             ? AppColors.noteBorder.withValues(alpha: 0.35)
                             : Colors.transparent,
@@ -157,11 +160,15 @@ class _AppSidebarState extends State<AppSidebar> {
                       children: [
                         _ViewSection(state: state, onSelectView: _selectView),
                         const _SidebarDivider(),
+                        _DiagramEntry(state: state, onOpen: _openDiagram),
+                        const _SidebarDivider(),
                         _TopicSection(
                           title: s['projects'],
                           topics: state.projects,
                           selected: state.selectedTopic,
-                          isViewMode: state.isViewMode || state.isArchiveMode,
+                          isViewMode: state.isViewMode ||
+                              state.isArchiveMode ||
+                              state.isDiagramMode,
                           state: state,
                           onSelect: _selectTopic,
                         ),
@@ -169,7 +176,8 @@ class _AppSidebarState extends State<AppSidebar> {
                           title: s['processes'],
                           topics: state.processes,
                           selected: state.selectedTopic,
-                          isViewMode: state.isViewMode,
+                          isViewMode:
+                              state.isViewMode || state.isDiagramMode,
                           state: state,
                           onSelect: _selectTopic,
                         ),
@@ -177,7 +185,8 @@ class _AppSidebarState extends State<AppSidebar> {
                           title: s['areas'],
                           topics: state.areas,
                           selected: state.selectedTopic,
-                          isViewMode: state.isViewMode,
+                          isViewMode:
+                              state.isViewMode || state.isDiagramMode,
                           state: state,
                           onSelect: _selectTopic,
                         ),
@@ -185,10 +194,13 @@ class _AppSidebarState extends State<AppSidebar> {
                           title: s['others'],
                           topics: state.others,
                           selected: state.selectedTopic,
-                          isViewMode: state.isViewMode,
+                          isViewMode:
+                              state.isViewMode || state.isDiagramMode,
                           state: state,
                           onSelect: _selectTopic,
                         ),
+                        const _SidebarDivider(),
+                        _TagsSection(state: state),
                         if (!widget.isPhone) ...[
                           const _SidebarDivider(),
                           _ArchiveSection(state: state),
@@ -245,6 +257,22 @@ class _AppSidebarState extends State<AppSidebar> {
                             ),
                           ),
                         ),
+                        TextButton.icon(
+                          onPressed: () => _createTag(context),
+                          icon: const AppIcon(AppIcons.add, size: 18),
+                          label: Text(
+                            s['newTag'],
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.text,
+                            alignment: AlignmentDirectional.centerStart,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 10,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -297,10 +325,130 @@ class _AppSidebarState extends State<AppSidebar> {
     await state.createView(name: name);
   }
 
+  Future<void> _createTag(BuildContext context) async {
+    final state = widget.state;
+    _closeDrawerIfOpen();
+    final result = await showCreateTagDialog(context: context, state: state);
+    if (result == null) return;
+    await state.createWorkspaceTag(
+      name: result.name,
+      icon: result.icon,
+      color: result.color,
+    );
+  }
+
+  Future<void> _openDiagram() async {
+    _closeDrawerIfOpen();
+    await widget.state.openDiagram();
+  }
+
   String _shortcutTooltip(String label, String actionId) {
     final suffix = shortcutTooltipSuffix(widget.state, actionId);
     if (suffix == null) return label;
     return '$label ($suffix)';
+  }
+}
+
+class _DiagramEntry extends StatelessWidget {
+  const _DiagramEntry({required this.state, required this.onOpen});
+
+  final AppState state;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = state.strings;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: TextButton(
+        onPressed: onOpen,
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.text,
+          backgroundColor: state.isDiagramMode
+              ? AppColors.noteBorder.withValues(alpha: 0.35)
+              : Colors.transparent,
+          alignment: AlignmentDirectional.centerStart,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        ),
+        child: Text(s['diagram'], overflow: TextOverflow.ellipsis),
+      ),
+    );
+  }
+}
+
+class _TagsSection extends StatefulWidget {
+  const _TagsSection({required this.state});
+
+  final AppState state;
+
+  @override
+  State<_TagsSection> createState() => _TagsSectionState();
+}
+
+class _TagsSectionState extends State<_TagsSection> {
+  var expanded = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.state.strings;
+    final tags = widget.state.objectTags;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => setState(() => expanded = !expanded),
+          child: Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(8, 4, 8, 2),
+            child: Row(
+              children: [
+                DisclosureIcon(expanded: expanded, color: AppColors.text),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    s['tags'],
+                    style: AppTypography.sidebarSectionStyle,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (expanded)
+          for (final tag in tags)
+            Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(28, 2, 8, 2),
+              child: Row(
+                children: [
+                  Text(
+                    tag.icon?.isNotEmpty == true
+                        ? tag.icon!
+                        : TopicAppearance.defaultEmoji,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      tag.name,
+                      style: AppTypography.metaStyle,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        if (expanded && tags.isEmpty)
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(28, 4, 8, 4),
+            child: Text(
+              s['noTagsYet'],
+              style: AppTypography.metaStyle.copyWith(
+                color: AppColors.textHint,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }
 

@@ -9,6 +9,8 @@ import '../../../core/l10n/app_strings.dart';
 import '../data/app_file.dart';
 import '../../objects/data/object_embed.dart';
 import '../../objects/data/task.dart';
+import '../../objects/links/add_connection_dialog.dart';
+import '../../objects/links/info_description_bubble.dart';
 import '../../objects/tasks/task_zones.dart';
 import './embeds/graph_embed.dart';
 import './embeds/inline_task_list.dart';
@@ -64,6 +66,8 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   bool _draggingAcrossParts = false;
   List<ObjectEmbed>? _embedsSnapshot;
   var _embedRebuildScheduled = false;
+  OverlayEntry? _descriptionBubble;
+  List<Map<String, dynamic>>? _descriptionLinksSnapshot;
 
   // Read per build, never cached: the styles carry the font of the current
   // language, and a field caching one would keep Inter under Hebrew text.
@@ -100,6 +104,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         ),
       );
       unawaited(_loadEmbedsQuietly());
+      _tryFocusPendingObject();
     });
   }
 
@@ -147,6 +152,32 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   /// notifyListeners, or HardwareKeyboard desyncs (see DEVELOPMENT.md).
   void _onAppStateChanged() {
     _scheduleEmbedRebuildIfNeeded();
+    _tryFocusPendingObject();
+    final links =
+        widget.state.descriptionLinksByFileId[widget.file.id] ?? const [];
+    if (!identical(links, _descriptionLinksSnapshot) && mounted) {
+      setState(() => _descriptionLinksSnapshot = links);
+    }
+  }
+
+  void _tryFocusPendingObject() {
+    final pending = widget.state.pendingFocusObjectId;
+    if (pending == null) return;
+    final embeds =
+        widget.state.embedsByFileId[widget.file.id] ?? widget.embeds;
+    final hit = embeds.where((e) => e.id == pending).firstOrNull;
+    if (hit == null) return;
+    widget.state.takePendingFocusObjectId();
+    final block = _doc.blocks.whereType<EmbedNode>().where((b) => b.objectId == pending).firstOrNull;
+    if (block == null) return;
+    final i = _doc.blocks.indexWhere((b) => b.id == block.id);
+    if (i >= 0) _claimThisFile(i);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _flow.placeCaret(
+        DocumentTextPosition(infoTitleSegmentId(block.id), 0),
+      );
+    });
   }
 
   void _scheduleEmbedRebuildIfNeeded() {
@@ -233,6 +264,8 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
 
   @override
   void dispose() {
+    _descriptionBubble?.remove();
+    _descriptionBubble = null;
     widget.state.removeListener(_onAppStateChanged);
     _flow.removeListener(_rememberCaretBlock);
     unawaited(_flushPendingChanges());
@@ -332,8 +365,96 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
       context: context,
       globalPosition: details.globalPosition,
       strings: _strings,
-      onAction: runBlockTextAction,
+      includeConnectInfo: true,
+      onAction: _handleDocumentMenuAction,
     );
+  }
+
+  Future<void> _handleDocumentMenuAction(String action) async {
+    if (action == 'text:connect_info') {
+      await _connectInfoFromMark();
+      return;
+    }
+    await runBlockTextAction(action);
+  }
+
+  Future<void> _connectInfoFromMark() async {
+    final mark = BlockTextFocusRegistry.resolveMark();
+    if (!mark.isValid || mark.spansParts) return;
+    final span = mark.first;
+    if (span == null || span.segmentId == null) return;
+    final pick = await showPickInfoObjectDialog(
+      context: context,
+      state: widget.state,
+    );
+    if (pick == null) return;
+    final blockId = span.segmentId!.contains('#')
+        ? span.segmentId!.substring(0, span.segmentId!.indexOf('#'))
+        : span.segmentId!;
+    final snippet = span.text.trim();
+    await widget.state.createDescriptionLink(
+      infoObjectId: pick.objectId,
+      anchor: {
+        'file_id': widget.file.id,
+        'block_id': blockId,
+        'segment_id': span.segmentId,
+        'start': span.safeStart,
+        'end': span.safeEnd,
+      },
+      label: snippet.isEmpty ? null : snippet,
+    );
+    if (mounted) setState(() {});
+  }
+
+  List<DescriptionTextRange> _descriptionRangesFor(String segmentId) {
+    final links = widget.state.descriptionLinksForSegment(
+      fileId: widget.file.id,
+      segmentId: segmentId,
+    );
+    return [
+      for (final link in links)
+        if (link['anchor'] is Map)
+          DescriptionTextRange(
+            start: (link['anchor'] as Map)['start'] as int? ?? 0,
+            end: (link['anchor'] as Map)['end'] as int? ?? 0,
+            link: link,
+          ),
+    ];
+  }
+
+  void _onDescriptionHover(DescriptionTextRange? range, Offset globalAnchor) {
+    _descriptionBubble?.remove();
+    _descriptionBubble = null;
+    if (range == null) return;
+    final peer = range.link['peer'];
+    final title = peer is Map
+        ? (peer['title'] as String? ?? '').trim().isNotEmpty
+            ? (peer['title'] as String).trim()
+            : (range.link['label'] as String? ?? 'Info')
+        : (range.link['label'] as String? ?? 'Info');
+    final body = peer is Map
+        ? (peer['body'] as String? ?? '').trim()
+        : '';
+    final overlay = Overlay.of(context);
+    _descriptionBubble = OverlayEntry(
+      builder: (context) => Positioned(
+        left: globalAnchor.dx + 12,
+        top: globalAnchor.dy + 18,
+        child: IgnorePointer(
+          child: InfoDescriptionBubble(
+            title: title,
+            body: body.length > 220 ? '${body.substring(0, 220)}…' : body,
+          ),
+        ),
+      ),
+    );
+    overlay.insert(_descriptionBubble!);
+  }
+
+  Future<void> _onDescriptionDoubleTap(DescriptionTextRange range) async {
+    final sourceId = range.link['source_id'] as int?;
+    if (sourceId == null) return;
+    await widget.state.openObjectInFile(objectId: sourceId);
   }
 
   Future<void> _insertAtBlock(String action) async {
@@ -1329,15 +1450,24 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
 
   Widget _buildEditableBlock(DocumentNode block, int index) {
     if (block is ParagraphNode) {
+      final segmentId = paragraphSegmentId(block.id);
       final controller = _controllerFor(block.id, block.text, block.spans);
       return FormattedTextField(
         key: ValueKey('p-${block.id}'),
         controller: controller,
         focusNode: _focusFor(block.id),
-        segmentId: paragraphSegmentId(block.id),
+        segmentId: segmentId,
         style: _paragraphStyle,
         maxLines: null,
         minLines: 1,
+        descriptionRanges: _descriptionRangesFor(segmentId),
+        onDescriptionHover: (range) {
+          final box = context.findRenderObject() as RenderBox?;
+          final anchor = box?.localToGlobal(Offset.zero) ?? Offset.zero;
+          _onDescriptionHover(range, anchor);
+        },
+        onDescriptionDoubleTap: (range) =>
+            unawaited(_onDescriptionDoubleTap(range)),
         onChanged: (_) {
           _claimThisFile(index);
           _updateParagraph(block, controller);
@@ -1347,14 +1477,23 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
       );
     }
     if (block is HeadingNode) {
+      final segmentId = paragraphSegmentId(block.id);
       final controller = _controllerFor(block.id, block.text, block.spans);
       return FormattedTextField(
         key: ValueKey('h-${block.id}'),
         controller: controller,
         focusNode: _focusFor(block.id),
-        segmentId: paragraphSegmentId(block.id),
+        segmentId: segmentId,
         style: AppTypography.documentHeadingStyle(block.level),
         maxLines: null,
+        descriptionRanges: _descriptionRangesFor(segmentId),
+        onDescriptionHover: (range) {
+          final box = context.findRenderObject() as RenderBox?;
+          final anchor = box?.localToGlobal(Offset.zero) ?? Offset.zero;
+          _onDescriptionHover(range, anchor);
+        },
+        onDescriptionDoubleTap: (range) =>
+            unawaited(_onDescriptionDoubleTap(range)),
         onChanged: (_) {
           _claimThisFile(index);
           _mutateDoc(

@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import '../../../../config/api_config.dart';
 import '../../../../core/app_state.dart';
 import '../../../objects/data/object_embed.dart';
+import '../../../objects/links/add_connection_dialog.dart';
+import '../../../objects/tags/assign_object_tags_dialog.dart';
+import '../../../ux/topic/topic_appearance.dart';
 import '../document_text_flow.dart';
 import '../../rich_text/block_text_actions.dart';
 import '../../rich_text/document_context_menu.dart';
@@ -196,8 +199,56 @@ class _InfoEmbedState extends State<InfoEmbed> {
     );
   }
 
+  Future<void> _addConnection() async {
+    final pick = await showAddConnectionDialog(
+      context: context,
+      state: widget.state,
+      source: widget.embed,
+    );
+    if (pick == null) return;
+    await widget.state.addRelatedObjectLink(
+      widget.embed,
+      targetObjectId: pick.objectId,
+    );
+    widget.onRefresh();
+  }
+
+  Future<void> _assignTags() async {
+    await showAssignObjectTagsDialog(
+      context: context,
+      state: widget.state,
+      embed: widget.embed,
+    );
+    widget.onRefresh();
+  }
+
+  Future<void> _openConnection(Map<String, dynamic> link) async {
+    final peer = link['peer'];
+    if (peer is! Map) return;
+    final kind = link['kind'] as String? ?? 'related';
+    if (kind == 'description') {
+      final anchor = link['anchor'];
+      final fileId = anchor is Map
+          ? anchor['file_id'] as int?
+          : peer['id'] as int?;
+      if (fileId == null) return;
+      await widget.state.openObjectInFile(
+        objectId: widget.embed.id,
+        fileId: fileId,
+      );
+      return;
+    }
+    final objectId = peer['id'] as int?;
+    final fileId = peer['file_id'] as int?;
+    if (objectId == null || fileId == null) return;
+    await widget.state.openObjectInFile(objectId: objectId, fileId: fileId);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final s = widget.state.strings;
+    final tags = widget.embed.tags;
+    final connections = widget.embed.connections;
     return DecoratedBox(
       decoration: AppColors.detailsBlockDecoration(),
       child: Padding(
@@ -210,7 +261,7 @@ class _InfoEmbedState extends State<InfoEmbed> {
               focusNode: _titleFocus,
               segmentId: infoTitleSegmentId(widget.blockId),
               style: AppTypography.noteTitleStyle,
-              hintText: widget.state.strings['detailsTitleHint'],
+              hintText: s['detailsTitleHint'],
               maxLines: 1,
               minLines: 1,
               onChanged: (_) => _scheduleSave(),
@@ -230,10 +281,90 @@ class _InfoEmbedState extends State<InfoEmbed> {
               onBackspaceAtStart: _onBodyBackspaceAtStart,
               onSecondaryTapDown: _showTextMenu,
             ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                for (final tag in tags)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: TopicAppearance.colorFromHex(
+                        tag.color ?? TopicAppearance.defaultColor,
+                      ).withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${tag.icon?.isNotEmpty == true ? '${tag.icon} ' : ''}${tag.name}',
+                      style: AppTypography.metaStyle.copyWith(fontSize: 11),
+                    ),
+                  ),
+                TextButton(
+                  onPressed: () => unawaited(_assignTags()),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    foregroundColor: AppColors.textHint,
+                  ),
+                  child: Text(s['addTag'], style: AppTypography.metaStyle),
+                ),
+              ],
+            ),
+            if (connections.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              for (final link in connections)
+                InkWell(
+                  onTap: () => unawaited(_openConnection(link)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Text(
+                      _connectionLabel(link, s),
+                      style: AppTypography.metaStyle.copyWith(
+                        color: AppColors.text.withValues(alpha: 0.72),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+            ],
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton(
+                onPressed: () => unawaited(_addConnection()),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  foregroundColor: AppColors.textHint,
+                ),
+                child: Text(s['addConnection'], style: AppTypography.metaStyle),
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  String _connectionLabel(Map<String, dynamic> link, dynamic s) {
+    final kind = link['kind'] as String? ?? 'related';
+    final peer = link['peer'];
+    final title = peer is Map
+        ? (peer['title'] as String? ?? '').trim()
+        : (link['label'] as String? ?? '');
+    if (kind == 'description') {
+      final label = (link['label'] as String?)?.trim();
+      if (label != null && label.isNotEmpty) {
+        return '${s['descriptionInFile']}: “$label”';
+      }
+      return s['descriptionInFile'] as String;
+    }
+    return title.isEmpty ? (s['connection'] as String) : title;
   }
 }
 

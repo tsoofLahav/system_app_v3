@@ -5,6 +5,7 @@ import '../../ui/app_colors.dart';
 import '../../ui/glass_surface.dart';
 import '../archive/archive_topic_view.dart';
 import '../sidebar/app_sidebar.dart';
+import '../../objects/diagram/object_diagram_pane.dart';
 import '../../objects/views/task_view_pane.dart';
 import '../topic/topic_appearance.dart';
 import '../topic/topic_view.dart';
@@ -55,7 +56,12 @@ class _DesktopAppShellState extends State<DesktopAppShell> {
                                 duration: const Duration(milliseconds: 200),
                                 switchInCurve: Curves.easeOut,
                                 switchOutCurve: Curves.easeIn,
-                                child: state.isArchiveMode
+                                child: state.isDiagramMode
+                                    ? ObjectDiagramPane(
+                                        key: const ValueKey('diagram'),
+                                        state: state,
+                                      )
+                                    : state.isArchiveMode
                                     ? ArchiveTopicView(
                                         key: ValueKey(
                                           'archive-${state.selectedArchiveTopic?.id}',

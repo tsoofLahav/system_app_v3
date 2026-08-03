@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from models import EntityTag, Tag, db
-from shared.helpers import get_or_404
+from shared.helpers import get_or_404, apply_updates
 from shared.bootstrap import default_workspace_id
 from areas.objects.services.delete_cascade import delete_tag_cascade
 
@@ -28,12 +28,24 @@ def create_tag():
         return jsonify({"error": "workspace_id is required"}), 400
     tag = Tag(
         workspace_id=workspace_id,
-        name=data["name"],
+        name=data["name"].strip(),
         color=data.get("color"),
+        icon=data.get("icon"),
     )
     db.session.add(tag)
     db.session.commit()
     return jsonify(tag.to_dict()), 201
+
+
+@tags_bp.route("/tags/<int:tag_id>", methods=["PATCH"])
+def update_tag(tag_id):
+    tag = get_or_404(Tag, tag_id)
+    data = request.get_json(silent=True) or {}
+    apply_updates(tag, data, {"name", "color", "icon"})
+    if "name" in data and data["name"] is not None:
+        tag.name = str(data["name"]).strip()
+    db.session.commit()
+    return jsonify(tag.to_dict())
 
 
 @tags_bp.route("/tags/<int:tag_id>", methods=["DELETE"])

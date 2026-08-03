@@ -94,6 +94,12 @@ class AppState extends ChangeNotifier {
   Topic? selectedArchiveTopic;
   ArchiveIndex archiveIndex = ArchiveIndex.empty;
 
+  bool isDiagramMode = false;
+  ObjectGraphData? objectGraph;
+  final Set<int> diagramFilterTagIds = {};
+  final Map<int, List<Map<String, dynamic>>> descriptionLinksByFileId = {};
+  int? pendingFocusObjectId;
+
   final Map<int, List<ObjectEmbed>> embedsByFileId = {};
   int? editingFileId;
   String? _automationNotice;
@@ -148,6 +154,12 @@ class AppState extends ChangeNotifier {
   List<Topic> get others => allTopics
       .where((t) => t.primaryTag == null || t.primaryTag == 'other')
       .toList();
+
+  static const topicTypeTagNames = {'project', 'process', 'area', 'other'};
+
+  /// Freeform object tags (excludes topic classification tags).
+  List<AppTag> get objectTags =>
+      allTags.where((t) => !topicTypeTagNames.contains(t.name)).toList();
 
   List<Topic> _topicsForTag(String tag) =>
       allTopics.where((t) => t.primaryTag == tag).toList();
@@ -227,6 +239,7 @@ class AppState extends ChangeNotifier {
   Future<void> goHome() async {
     isViewMode = false;
     isArchiveMode = false;
+    isDiagramMode = false;
     selectedViewType = null;
     selectedView = null;
     final home = allTopics.where((t) => t.isMain).firstOrNull ?? allTopics.firstOrNull;
@@ -236,6 +249,7 @@ class AppState extends ChangeNotifier {
   Future<void> selectTopic(Topic topic) async {
     isViewMode = false;
     isArchiveMode = false;
+    isDiagramMode = false;
     selectedTopic = topic;
     selectedDetail = null;
     topicDetailStale = true;
@@ -256,6 +270,7 @@ class AppState extends ChangeNotifier {
   Future<void> selectView(String viewType) async {
     isViewMode = true;
     isArchiveMode = false;
+    isDiagramMode = false;
     selectedViewType = viewType;
     selectedView = userViews.where((v) => v.type == viewType).firstOrNull;
     viewPaneReady = selectedView != null;
@@ -297,8 +312,164 @@ class AppState extends ChangeNotifier {
   Future<void> selectArchiveTopic(Topic topic) async {
     isArchiveMode = true;
     isViewMode = false;
+    isDiagramMode = false;
     selectedArchiveTopic = topic;
     notifyListeners();
+  }
+
+  Future<void> openDiagram() async {
+    isDiagramMode = true;
+    isViewMode = false;
+    isArchiveMode = false;
+    selectedViewType = null;
+    selectedView = null;
+    notifyListeners();
+    await loadObjectGraph();
+  }
+
+  Future<void> loadObjectGraph() async {
+    if (workspaceId == null) return;
+    try {
+      objectGraph = await _objects.loadGraph(workspaceId: workspaceId!);
+    } catch (e) {
+      error = e.toString();
+    }
+    notifyListeners();
+  }
+
+  void toggleDiagramFilterTag(int tagId) {
+    if (diagramFilterTagIds.contains(tagId)) {
+      diagramFilterTagIds.remove(tagId);
+    } else {
+      diagramFilterTagIds.add(tagId);
+    }
+    notifyListeners();
+  }
+
+  Future<AppTag?> createWorkspaceTag({
+    required String name,
+    String? color,
+    String? icon,
+  }) async {
+    if (workspaceId == null) return null;
+    final tag = await _tags.createTag(
+      workspaceId: workspaceId!,
+      name: name,
+      color: color,
+      icon: icon,
+    );
+    allTags = [...allTags, tag];
+    notifyListeners();
+    return tag;
+  }
+
+  Future<void> setObjectTags(ObjectEmbed embed, List<int> tagIds) async {
+    final tags = await _objects.replaceObjectTags(embed.id, tagIds);
+    await loadEmbedsForFile(embed.fileId);
+    // Keep tags on the cached embed even if list reload races.
+    final list = embedsByFileId[embed.fileId];
+    if (list != null) {
+      final i = list.indexWhere((e) => e.id == embed.id);
+      if (i >= 0) {
+        embedsByFileId[embed.fileId] = [
+          for (var j = 0; j < list.length; j++)
+            j == i ? list[j].copyWith(tags: tags) : list[j],
+        ];
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> addRelatedObjectLink(
+    ObjectEmbed embed, {
+    required int targetObjectId,
+  }) async {
+    await _objects.createRelatedLink(
+      embed.id,
+      targetObjectId: targetObjectId,
+    );
+    await loadEmbedsForFile(embed.fileId);
+  }
+
+  Future<void> removeObjectLink(ObjectEmbed embed, int linkId) async {
+    await _objects.deleteLink(embed.id, linkId);
+    await loadEmbedsForFile(embed.fileId);
+  }
+
+  Future<void> createDescriptionLink({
+    required int infoObjectId,
+    required Map<String, dynamic> anchor,
+    String? label,
+  }) async {
+    await _objects.createDescriptionLink(
+      infoObjectId,
+      anchor: anchor,
+      label: label,
+    );
+    final fileId = anchor['file_id'] as int?;
+    if (fileId != null) {
+      await loadDescriptionLinksForFile(fileId);
+    }
+    final infoFileId = embedsByFileId.entries
+        .where((e) => e.value.any((o) => o.id == infoObjectId))
+        .map((e) => e.key)
+        .firstOrNull;
+    if (infoFileId != null) {
+      await loadEmbedsForFile(infoFileId);
+    }
+  }
+
+  Future<void> loadDescriptionLinksForFile(int fileId) async {
+    if (fileId <= 0) return;
+    try {
+      descriptionLinksByFileId[fileId] =
+          await _objects.listFileDescriptionLinks(fileId);
+    } catch (e) {
+      error = e.toString();
+    }
+    notifyListeners();
+  }
+
+  List<Map<String, dynamic>> descriptionLinksForSegment({
+    required int fileId,
+    required String segmentId,
+  }) {
+    final links = descriptionLinksByFileId[fileId] ?? const [];
+    return [
+      for (final link in links)
+        if (link['kind'] == 'description' &&
+            (link['anchor'] is Map) &&
+            '${(link['anchor'] as Map)['segment_id']}' == segmentId)
+          link,
+    ];
+  }
+
+  /// Open the topic/file that hosts [objectId] and focus its embed.
+  Future<void> openObjectInFile({
+    required int objectId,
+    int? fileId,
+  }) async {
+    var resolvedFileId = fileId;
+    if (resolvedFileId == null || resolvedFileId <= 0) {
+      final embed = await _objects.getObject(objectId);
+      resolvedFileId = embed.fileId;
+    }
+    pendingFocusObjectId = objectId;
+    final file = await _files.getFile(resolvedFileId);
+    final topic = allTopics.where((t) => t.id == file.topicId).firstOrNull;
+    if (topic == null) {
+      pendingFocusObjectId = null;
+      return;
+    }
+    await selectTopic(topic);
+    setEditingFileId(resolvedFileId);
+    notifyListeners();
+  }
+
+  int? takePendingFocusObjectId() {
+    final id = pendingFocusObjectId;
+    pendingFocusObjectId = null;
+    return id;
   }
 
   Future<void> loadArchive() async {
@@ -539,6 +710,12 @@ class AppState extends ChangeNotifier {
   }) async {
     final embeds = await _objects.listForFile(fileId);
     embedsByFileId[fileId] = embeds;
+    try {
+      descriptionLinksByFileId[fileId] =
+          await _objects.listFileDescriptionLinks(fileId);
+    } catch (_) {
+      // Older backends without description-links still load embeds.
+    }
     if (notify) notifyListeners();
     return embeds;
   }
@@ -583,22 +760,7 @@ class AppState extends ChangeNotifier {
       final current = list[index];
       embedsByFileId[entry.key] = [
         for (var i = 0; i < list.length; i++)
-          if (i == index)
-            ObjectEmbed(
-              id: current.id,
-              fileId: current.fileId,
-              type: current.type,
-              taskListId: current.taskListId,
-              informationId: current.informationId,
-              anchor: current.anchor,
-              sortKey: current.sortKey,
-              tasks: current.tasks,
-              information: current.information,
-              links: current.links,
-              payload: payload,
-            )
-          else
-            list[i],
+          if (i == index) current.copyWith(payload: payload) else list[i],
       ];
       break;
     }
@@ -816,12 +978,7 @@ class AppState extends ChangeNotifier {
     String targetType,
     int targetId,
   ) async {
-    await _objects.createLink(
-      embed.id,
-      targetType: targetType,
-      targetId: targetId,
-    );
-    await loadEmbedsForFile(embed.fileId);
+    await addRelatedObjectLink(embed, targetObjectId: targetId);
   }
 
   Future<void> toggleTaskStatus(Task task, {bool notify = true}) async {

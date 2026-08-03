@@ -7,6 +7,7 @@ import '../../ui/app_typography.dart';
 import '../../ui/glass_surface.dart';
 import '../create_topic/add_file_dialog.dart';
 import '../sidebar/app_sidebar.dart';
+import '../../objects/diagram/object_diagram_pane.dart';
 import '../../objects/views/task_view_pane.dart';
 import '../topic/topic_appearance.dart';
 import '../topic/topic_view.dart';
@@ -34,6 +35,7 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
 
   String _title() {
     final s = state.strings;
+    if (state.isDiagramMode) return s['diagram'];
     if (state.isViewMode && state.selectedViewType != null) {
       return state.viewLabel(state.selectedViewType!);
     }
@@ -45,6 +47,7 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
 
   bool get _showAddFile =>
       !state.isViewMode &&
+      !state.isDiagramMode &&
       state.selectedDetail != null &&
       !state.topicDetailStale;
 
@@ -141,7 +144,12 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
                         ? const MainPaneLoader()
                         : AnimatedSwitcher(
                             duration: const Duration(milliseconds: 200),
-                            child: state.isViewMode && state.viewPaneReady
+                            child: state.isDiagramMode
+                                ? ObjectDiagramPane(
+                                    key: const ValueKey('diagram'),
+                                    state: state,
+                                  )
+                                : state.isViewMode && state.viewPaneReady
                                 ? TaskViewPane(
                                     key: ValueKey(
                                       'view-${state.selectedViewType}',
