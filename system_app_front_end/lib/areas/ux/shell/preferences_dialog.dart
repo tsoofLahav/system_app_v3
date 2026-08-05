@@ -32,7 +32,6 @@ class PreferencesDialog extends StatelessWidget {
 
         return AppAdaptiveDialogShell(
           title: Text(s['preferences']),
-          width: 480,
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -59,7 +58,7 @@ class PreferencesDialog extends StatelessWidget {
                 onSelected: state.setLanguage,
               ),
               if (!isPhoneLayout) ...[
-                const SizedBox(height: 22),
+                const SizedBox(height: DialogFieldStyle.fieldGap),
                 AppDialogField(
                   label: s['shortcuts'],
                   hint: s['shortcutHint'],

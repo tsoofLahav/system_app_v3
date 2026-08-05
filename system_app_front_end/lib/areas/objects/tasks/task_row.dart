@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../core/app_state.dart';
+import '../../files/rich_text/formatted_text_field.dart';
+import '../../files/rich_text/span_text_editing_controller.dart';
 import '../data/task.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
@@ -46,14 +47,14 @@ class TaskRow extends StatefulWidget {
 }
 
 class _TaskRowState extends State<TaskRow> {
-  late final TextEditingController _controller;
+  late final SpanTextEditingController _controller;
   late final FocusNode _focusNode;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.task.title);
-    _focusNode = FocusNode(onKeyEvent: _onKeyEvent);
+    _controller = SpanTextEditingController(text: widget.task.title);
+    _focusNode = FocusNode();
     if (widget.autofocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -86,71 +87,47 @@ class _TaskRowState extends State<TaskRow> {
     super.dispose();
   }
 
-  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
-    if (widget.readOnly || event is! KeyDownEvent) {
-      return KeyEventResult.ignored;
-    }
-    final isEnter = event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.numpadEnter;
-    if (isEnter && !HardwareKeyboard.instance.isShiftPressed) {
-      if (widget.onEnter != null) {
-        widget.onEnter!(_controller.text);
-        return KeyEventResult.handled;
-      }
-    }
-    if (event.logicalKey == LogicalKeyboardKey.backspace &&
-        widget.onBackspaceAtStart != null &&
-        _controller.text.isEmpty) {
-      widget.onBackspaceAtStart!();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
   @override
   Widget build(BuildContext context) {
     final done = widget.task.isDone;
-    final field = TextField(
-      controller: _controller,
-      focusNode: _focusNode,
-      readOnly: widget.readOnly,
-      style: AppTypography.noteBodyStyle.copyWith(
-        decoration: done ? TextDecoration.lineThrough : null,
-        color: done ? AppColors.textHint : null,
-      ),
-      decoration: InputDecoration(
-        isDense: true,
-        border: InputBorder.none,
-        hintText: widget.state.strings['newTaskHint'],
-        hintStyle: AppTypography.noteBodyStyle.copyWith(
-          color: AppColors.textHint.withValues(alpha: 0.55),
-        ),
-      ),
-      maxLines: null,
-      minLines: 1,
-      textInputAction: TextInputAction.newline,
-      onChanged: widget.onTitleChanged,
+    final titleStyle = AppTypography.taskRowStyle.copyWith(
+      decoration: done ? TextDecoration.lineThrough : null,
+      color: done ? AppColors.textHint : null,
     );
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.only(bottom: 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TaskMark(
-            done: done,
-            onToggle: widget.toggleEnabled && !widget.readOnly
-                ? widget.onToggle
-                : () {},
+          Padding(
+            // Nudge the compact mark down to the first-line text center.
+            padding: const EdgeInsets.only(top: 2),
+            child: TaskMark(
+              done: done,
+              compact: true,
+              onToggle: widget.toggleEnabled && !widget.readOnly
+                  ? widget.onToggle
+                  : () {},
+            ),
           ),
-          const SizedBox(width: 8),
           Expanded(
-            child: widget.onSecondaryTapDown == null
-                ? field
-                : GestureDetector(
-                    onSecondaryTapDown: widget.onSecondaryTapDown,
-                    child: field,
-                  ),
+            child: FormattedTextField(
+              controller: _controller,
+              focusNode: _focusNode,
+              style: titleStyle,
+              hintText: widget.state.strings['newTaskHint'],
+              maxLines: null,
+              minLines: 1,
+              textAlignVertical: TextAlignVertical.center,
+              onChanged: widget.readOnly ? null : widget.onTitleChanged,
+              onEnter: widget.onEnter == null || widget.readOnly
+                  ? null
+                  : () => widget.onEnter!(_controller.text),
+              onBackspaceAtStart:
+                  widget.readOnly ? null : widget.onBackspaceAtStart,
+              onSecondaryTapDown: widget.onSecondaryTapDown,
+            ),
           ),
         ],
       ),

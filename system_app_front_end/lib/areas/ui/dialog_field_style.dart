@@ -7,14 +7,14 @@ import './app_typography.dart';
 
 abstract final class DialogFieldStyle {
   /// Gap between a field's name and the field itself.
-  static const labelGap = 5.0;
+  static const labelGap = 3.0;
 
   /// Gap between one field and the next.
-  static const fieldGap = 14.0;
+  static const fieldGap = 8.0;
 
   static InputDecoration decoration({String? hintText}) {
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(8),
       borderSide: BorderSide(
         color: AppColors.noteBorder.withValues(alpha: 0.68),
         width: 0.85,
@@ -24,7 +24,7 @@ abstract final class DialogFieldStyle {
       hintText: hintText,
       isDense: true,
       filled: false,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       enabledBorder: border,
       focusedBorder: border.copyWith(
         borderSide: BorderSide(
@@ -163,7 +163,7 @@ class AppDialogPickerField extends StatelessWidget {
                 width: 0.85,
               ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
             child: Row(
               children: [
                 preview,

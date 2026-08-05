@@ -3,11 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../core/app_state.dart';
 import '../../files/editor/document_editor_controller.dart';
 import '../../objects/views/assign_task_view_dialog.dart';
-import '../../objects/views/create_view_dialog.dart';
 import '../create_topic/add_file_dialog.dart';
-import '../create_topic/create_topic_dialog.dart';
+import '../sidebar/sidebar_create_menu.dart';
 import '../../production_agent/ai_tool_bar.dart';
-import '../../ui/adaptive_dialog.dart';
 import './shortcut_catalog.dart';
 
 Future<void> dispatchShortcutAction(
@@ -17,22 +15,10 @@ Future<void> dispatchShortcutAction(
 ) async {
   switch (actionId) {
     case ShortcutActionIds.addTopic:
-      final result = await showAppDialog<CreateTopicResult>(
-        context: context,
-        builder: (_) => CreateTopicDialog(state: state),
-      );
-      if (result == null || !context.mounted) return;
-      await state.createTopic(
-        name: result.name,
-        type: result.type,
-        icon: result.icon,
-        color: result.color,
-      );
+      await createTopicFromDialog(context, state);
       return;
     case ShortcutActionIds.addView:
-      final name = await showCreateViewDialog(context: context, state: state);
-      if (name == null || !context.mounted) return;
-      await state.createView(name: name);
+      await createViewFromDialog(context, state);
       return;
     case ShortcutActionIds.addFile:
       final topic = state.selectedTopic;

@@ -101,12 +101,23 @@ def build_workspace_graph(workspace_id: int) -> dict:
     for embed in embeds:
         if embed.type != "info":
             continue
+        file_row = db.session.get(File, embed.file_id)
+        topic = db.session.get(Topic, file_row.topic_id) if file_row else None
+        info = (
+            db.session.get(InformationPiece, embed.information_id)
+            if embed.information_id
+            else None
+        )
         nodes.append(
             {
                 "object_id": embed.id,
                 "type": embed.type,
                 "title": object_title(embed),
+                "body": (info.body or "") if info is not None else "",
+                "information_id": embed.information_id,
                 "file_id": embed.file_id,
+                "topic_id": topic.id if topic is not None else None,
+                "topic_color": topic.color if topic is not None else None,
                 "tag_ids": tag_ids_for_object(embed.id),
             }
         )

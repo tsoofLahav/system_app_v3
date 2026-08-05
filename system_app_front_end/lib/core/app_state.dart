@@ -97,6 +97,8 @@ class AppState extends ChangeNotifier {
   bool isDiagramMode = false;
   ObjectGraphData? objectGraph;
   final Set<int> diagramFilterTagIds = {};
+  /// Objects map node tint: topic wash vs first-tag color.
+  DiagramColorMode diagramColorMode = DiagramColorMode.byTopic;
   final Map<int, List<Map<String, dynamic>>> descriptionLinksByFileId = {};
   int? pendingFocusObjectId;
 
@@ -342,6 +344,36 @@ class AppState extends ChangeNotifier {
       diagramFilterTagIds.remove(tagId);
     } else {
       diagramFilterTagIds.add(tagId);
+    }
+    notifyListeners();
+  }
+
+  void setDiagramColorMode(DiagramColorMode mode) {
+    if (diagramColorMode == mode) return;
+    diagramColorMode = mode;
+    notifyListeners();
+  }
+
+  /// Patch info content from the objects map without leaving diagram mode.
+  Future<void> updateInfoFromDiagram({
+    required int informationId,
+    required int objectId,
+    required String title,
+    required String body,
+  }) async {
+    await _api.patch('/information/$informationId', {
+      'title': title,
+      'body': body,
+    });
+    final graph = objectGraph;
+    if (graph != null) {
+      objectGraph = ObjectGraphData(
+        nodes: [
+          for (final n in graph.nodes)
+            if (n.objectId == objectId) n.copyWith(title: title, body: body) else n,
+        ],
+        edges: graph.edges,
+      );
     }
     notifyListeners();
   }
@@ -908,49 +940,87 @@ class AppState extends ChangeNotifier {
     if (notify) notifyListeners();
   }
 
+  /// Update one view membership's section and/or topic placement.
+  Future<void> updateViewTaskPlacement({
+    required int taskId,
+    String? sectionName,
+    String? sectionFlag,
+    String? topicKey,
+    bool clearSection = false,
+    bool clearTopic = false,
+    bool notify = true,
+  }) async {
+    if (selectedView == null) return;
+    final memberships = <Map<String, dynamic>>[];
+    var index = 0;
+    for (final m in viewMemberships) {
+      final isTarget = m.taskId == taskId;
+      memberships.add({
+        'task_id': m.taskId,
+        'section_name': isTarget
+            ? (clearSection ? null : (sectionName ?? m.sectionName))
+            : m.sectionName,
+        'order_index': index++,
+        'section_flag': isTarget
+            ? (clearSection ? null : (sectionFlag ?? m.sectionFlag))
+            : m.sectionFlag,
+        'topic_key': isTarget
+            ? (clearTopic ? null : (topicKey ?? m.topicKey))
+            : m.topicKey,
+      });
+    }
+    await reorderViewMemberships(memberships, notify: notify);
+  }
+
   Future<List<ViewMembership>> loadTaskMemberships(int taskId) async {
     final rows = await _tasks.getTaskMemberships(taskId);
     return rows.map((e) => ViewMembership.fromJson(e)).toList();
   }
 
-  Future<void> assignTaskToView(int taskId, int viewId) async {
+  /// A task belongs to at most one view — [viewId] replaces any previous one.
+  Future<void> setTaskView(int taskId, int? viewId) async {
     final existing = await loadTaskMemberships(taskId);
-    if (existing.any((m) => m.viewId == viewId)) return;
-    await _tasks.replaceTaskMemberships(taskId, [
-      ...existing.map(
-        (m) => {
-          'view_id': m.viewId,
-          'section_name': m.sectionName,
-          'order_index': m.orderIndex,
-          'section_flag': m.sectionFlag,
-          'topic_key': m.topicKey,
+    final previousIds = {for (final m in existing) m.viewId};
+    if (viewId == null) {
+      if (existing.isEmpty) return;
+      await _tasks.replaceTaskMemberships(taskId, const []);
+    } else {
+      final keep = existing.where((m) => m.viewId == viewId).firstOrNull;
+      if (existing.length == 1 && keep != null) return;
+      await _tasks.replaceTaskMemberships(taskId, [
+        {
+          'view_id': viewId,
+          'section_name': keep?.sectionName,
+          'order_index': 0,
+          'section_flag': keep?.sectionFlag,
+          'topic_key': keep?.topicKey,
         },
-      ),
-      {'view_id': viewId, 'order_index': existing.length},
-    ]);
-    if (isViewMode && selectedView?.id == viewId) {
-      viewMemberships = await _views.listMemberships(viewId);
+      ]);
+      previousIds.add(viewId);
+    }
+    if (isViewMode &&
+        selectedView != null &&
+        previousIds.contains(selectedView!.id)) {
+      viewMemberships = await _views.listMemberships(selectedView!.id);
     }
     notifyListeners();
   }
 
+  Future<void> assignTaskToView(int taskId, int viewId) =>
+      setTaskView(taskId, viewId);
+
   Future<void> removeTaskFromView(int taskId, int viewId) async {
     final existing = await loadTaskMemberships(taskId);
-    await _tasks.replaceTaskMemberships(taskId, [
-      for (final m in existing)
-        if (m.viewId != viewId)
-          {
-            'view_id': m.viewId,
-            'section_name': m.sectionName,
-            'order_index': m.orderIndex,
-            'section_flag': m.sectionFlag,
-            'topic_key': m.topicKey,
-          },
-    ]);
-    if (isViewMode && selectedView?.id == viewId) {
-      viewMemberships = await _views.listMemberships(viewId);
-    }
-    notifyListeners();
+    if (!existing.any((m) => m.viewId == viewId)) return;
+    // One-view rule: removing the current view clears membership entirely.
+    await setTaskView(taskId, null);
+  }
+
+  /// Clears home-list membership (orphan). Used when a view topic change
+  /// leaves the original list.
+  Future<void> clearTaskHomeList(int taskId) async {
+    await _tasks.updateTask(taskId, {'task_list_id': null});
+    await _reloadEmbedsForOpenFiles(notify: true);
   }
 
   Future<void> updateInfoObject(
@@ -1064,6 +1134,9 @@ class AppState extends ChangeNotifier {
 
   Future<void> deleteTask(Task task, {bool notify = true}) async {
     await _tasks.deleteTask(task.id);
+    if (isViewMode && selectedView != null) {
+      viewMemberships = await _views.listMemberships(selectedView!.id);
+    }
     await _reloadEmbedsForOpenFiles(notify: notify);
   }
 
@@ -1277,9 +1350,17 @@ class AppState extends ChangeNotifier {
       for (final s in sectionsForSelectedView())
         if (s.name != section) s,
     ];
-    await _persistViewLayout(
-      ViewLayoutConfig.withSections(selectedView!.layoutConfig, sections),
+    final removedKey = 'section:$section';
+    final order = [
+      for (final key in ViewLayoutConfig.sectionOrder(selectedView!.layoutConfig))
+        if (key != removedKey) key,
+    ];
+    var layout = ViewLayoutConfig.withSections(
+      selectedView!.layoutConfig,
+      sections,
     );
+    layout = ViewLayoutConfig.withSectionOrder(layout, order);
+    await _persistViewLayout(layout);
     final memberships = [
       for (final m in viewMemberships)
         {
@@ -1346,6 +1427,33 @@ class AppState extends ChangeNotifier {
     await _persistViewLayout(
       ViewLayoutConfig.withTopicOrder(selectedView!.layoutConfig, keys),
     );
+    notifyListeners();
+  }
+
+  Future<void> reorderViewSectionKeys(List<String> keys) async {
+    if (selectedView == null) return;
+    // Keep section defs in sync with the new frame order (metadata preserved).
+    final byName = {
+      for (final s in sectionsForSelectedView()) s.name: s,
+    };
+    final defs = <ViewSectionDef>[];
+    for (final key in keys) {
+      if (!key.startsWith('section:')) continue;
+      final name = key.substring('section:'.length);
+      if (name.isEmpty) continue;
+      final existing = byName[name];
+      defs.add(
+        (existing ?? ViewSectionDef(name: name)).copyWith(orderIndex: defs.length),
+      );
+    }
+    var layout = ViewLayoutConfig.withSectionOrder(
+      selectedView!.layoutConfig,
+      keys,
+    );
+    if (defs.isNotEmpty) {
+      layout = ViewLayoutConfig.withSections(layout, defs);
+    }
+    await _persistViewLayout(layout);
     notifyListeners();
   }
 
@@ -1471,7 +1579,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteTaskInView(Task task) async {
-    await deleteTask(task);
+    await deleteTask(task, notify: true);
   }
 
   Future<void> pasteTasksInViewAfter({

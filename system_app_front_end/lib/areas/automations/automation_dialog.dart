@@ -7,6 +7,7 @@ import '../ui/adaptive_dialog.dart';
 import '../ui/app_icons.dart';
 import '../ui/app_segmented_toggle.dart';
 import '../ui/dialog_field_style.dart';
+import '../ui/dialog_metrics.dart';
 import '../production_agent/ai_tool_bar.dart';
 
 Future<void> showAutomationDialog({
@@ -110,13 +111,11 @@ class _AutomationDialogState extends State<_AutomationDialog>
 
     return AppAdaptiveDialogShell(
       title: Text(s['automations']),
-      width: 520,
+      width: AppDialogMetrics.wideWidth,
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(s['close'])),
       ],
-      child: SizedBox(
-        width: 480,
-        child: Column(
+      child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -127,11 +126,11 @@ class _AutomationDialogState extends State<_AutomationDialog>
                 Tab(text: s['scheduledAutomations']),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: DialogFieldStyle.fieldGap),
             _buildCreateForm(s),
-            const SizedBox(height: 16),
+            const SizedBox(height: DialogFieldStyle.fieldGap),
             SizedBox(
-              height: 220,
+              height: 200,
               child: TabBarView(
                 controller: _tabs,
                 children: [
@@ -151,7 +150,6 @@ class _AutomationDialogState extends State<_AutomationDialog>
               ),
             ),
           ],
-        ),
       ),
     );
   }

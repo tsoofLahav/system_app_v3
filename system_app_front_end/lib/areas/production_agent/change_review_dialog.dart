@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/app_colors.dart';
+import '../ui/dialog_metrics.dart';
 import '../ui/glass_surface.dart';
 
 class ChangeReviewDialogShell extends StatelessWidget {
@@ -19,28 +20,28 @@ class ChangeReviewDialogShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.all(24),
+      insetPadding: AppDialogMetrics.windowInset,
       child: GlassSurface(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppGlassStyle.dialogRadius),
         tintOpacity: 0.92,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720, maxHeight: 560),
+          constraints: const BoxConstraints(maxWidth: 640, maxHeight: 520),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: AppDialogMetrics.padding,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
                   title,
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                     color: AppColors.text,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppDialogMetrics.titleGap),
                 Expanded(child: child),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppDialogMetrics.actionsGap),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [

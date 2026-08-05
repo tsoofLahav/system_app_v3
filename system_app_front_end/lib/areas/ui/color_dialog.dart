@@ -5,6 +5,8 @@ import '../../core/l10n/app_strings.dart';
 import './adaptive_dialog.dart';
 import './app_colors.dart';
 import './app_typography.dart';
+import './dialog_metrics.dart';
+import './dialog_field_style.dart';
 
 /// Full-spectrum colour picker used by topic theme, text colour, graphs, etc.
 ///
@@ -81,7 +83,7 @@ class _AppColorDialogState extends State<_AppColorDialog> {
     final s = widget.strings;
     return AppAdaptiveDialogShell(
       title: Text(s['chooseColor']),
-      width: 360,
+      width: AppDialogMetrics.wideWidth,
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
@@ -109,7 +111,7 @@ class _AppColorDialogState extends State<_AppColorDialog> {
                   ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: DialogFieldStyle.fieldGap),
           ],
           // Portrait stack + LTR: the package's landscape Row overflows in a
           // narrow dialog, and RTL mirrors the HSV area incorrectly.

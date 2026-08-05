@@ -6,6 +6,7 @@ import './app_colors.dart';
 import './app_icons.dart';
 import './app_typography.dart';
 import './bilingual_layout.dart';
+import './dialog_metrics.dart';
 
 /// Shared glass parameters — use presets instead of ad-hoc values.
 class GlassStyleSpec {
@@ -31,7 +32,7 @@ class GlassStyleSpec {
 abstract final class AppGlassStyle {
   static const dialogTint = AppColors.glassTint;
   static const floatingRadius = 16.0;
-  static const dialogRadius = 22.0;
+  static const dialogRadius = 16.0;
   static const pillRadius = 999.0;
 
   static BoxBorder get _dialogBorder => Border.all(
@@ -513,7 +514,7 @@ class AppGlassDialog extends StatelessWidget {
     required this.title,
     required this.child,
     this.actions = const [],
-    this.width = 420,
+    this.width = AppDialogMetrics.maxWidth,
     this.scrollable = true,
   });
 
@@ -531,13 +532,14 @@ class AppGlassDialog extends StatelessWidget {
       fontSize: 12,
     );
 
-    final insetPadding = 28.0 * 2;
-    final maxDialogHeight = MediaQuery.sizeOf(context).height - insetPadding;
+    final inset = AppDialogMetrics.windowInset;
+    final maxDialogHeight =
+        MediaQuery.sizeOf(context).height - inset.vertical;
 
     return Dialog(
       elevation: 0,
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 28),
+      insetPadding: inset,
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: width,
@@ -547,7 +549,7 @@ class AppGlassDialog extends StatelessWidget {
           style: AppGlassStyle.dialog,
           borderRadius: BorderRadius.circular(AppGlassStyle.dialogRadius),
           border: AppGlassStyle._dialogBorder,
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+          padding: AppDialogMetrics.padding,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -557,15 +559,15 @@ class AppGlassDialog extends StatelessWidget {
                 child: DefaultTextStyle(
                   textAlign: TextAlign.center,
                   style: AppTypography.noteTitleStyle.copyWith(
-                    fontSize: 15,
+                    fontSize: 13.5,
                     color: AppColors.text.withValues(alpha: 0.94),
                   ),
                   child: title,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppDialogMetrics.titleGap),
               _GlassDivider(color: separator),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppDialogMetrics.bodyGap),
               Flexible(
                 child: scrollable
                     ? SingleChildScrollView(
@@ -586,9 +588,9 @@ class AppGlassDialog extends StatelessWidget {
                       ),
               ),
               if (actions.isNotEmpty) ...[
-                const SizedBox(height: 14),
+                const SizedBox(height: AppDialogMetrics.actionsGap),
                 _GlassDivider(color: separator),
-                const SizedBox(height: 10),
+                const SizedBox(height: AppDialogMetrics.bodyGap),
                 DefaultTextStyle(
                   style: actionText,
                   child: DialogActionsRow(children: actions),

@@ -5,7 +5,6 @@ import '../../../core/l10n/app_strings.dart';
 import '../../../core/models/archive_index.dart';
 import '../../files/data/topic.dart';
 import '../../objects/data/app_view.dart';
-import '../../objects/tags/create_tag_dialog.dart';
 import '../../objects/views/create_view_dialog.dart';
 import '../shortcuts/app_shortcuts.dart';
 import '../shortcuts/shortcut_catalog.dart';
@@ -18,7 +17,7 @@ import '../../ui/glass_surface.dart';
 import '../widgets/topic_emoji.dart';
 import '../widgets/disclosure_icon.dart';
 import '../create_topic/create_topic_dialog.dart';
-import '../topic/topic_appearance.dart';
+import './sidebar_create_menu.dart';
 
 abstract final class AppSidebarMetrics {
   static const defaultWidth = 200.0;
@@ -160,8 +159,6 @@ class _AppSidebarState extends State<AppSidebar> {
                       children: [
                         _ViewSection(state: state, onSelectView: _selectView),
                         const _SidebarDivider(),
-                        _DiagramEntry(state: state, onOpen: _openDiagram),
-                        const _SidebarDivider(),
                         _TopicSection(
                           title: s['projects'],
                           topics: state.projects,
@@ -200,7 +197,7 @@ class _AppSidebarState extends State<AppSidebar> {
                           onSelect: _selectTopic,
                         ),
                         const _SidebarDivider(),
-                        _TagsSection(state: state),
+                        _DiagramEntry(state: state, onOpen: _openDiagram),
                         if (!widget.isPhone) ...[
                           const _SidebarDivider(),
                           _ArchiveSection(state: state),
@@ -209,71 +206,30 @@ class _AppSidebarState extends State<AppSidebar> {
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Tooltip(
-                          message: _shortcutTooltip(
-                            s['newTopic'],
-                            ShortcutActionIds.addTopic,
-                          ),
-                          child: TextButton.icon(
-                            onPressed: () => _createTopic(context),
-                            icon: const AppIcon(AppIcons.add, size: 18),
-                            label: Text(
-                              s['newTopic'],
-                              overflow: TextOverflow.ellipsis,
+                    padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
+                    child: Center(
+                      child: Builder(
+                        builder: (buttonContext) {
+                          return Tooltip(
+                            message: _shortcutTooltip(
+                              s['create'],
+                              ShortcutActionIds.addTopic,
                             ),
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppColors.text,
-                              alignment: AlignmentDirectional.centerStart,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 10,
+                            child: IconButton(
+                              onPressed: () =>
+                                  _openCreateMenu(buttonContext),
+                              icon: const AppIcon(AppIcons.add, size: 28),
+                              iconSize: 28,
+                              color: AppColors.text,
+                              padding: const EdgeInsets.all(10),
+                              constraints: const BoxConstraints(
+                                minWidth: 48,
+                                minHeight: 48,
                               ),
                             ),
-                          ),
-                        ),
-                        Tooltip(
-                          message: _shortcutTooltip(
-                            s['newView'],
-                            ShortcutActionIds.addView,
-                          ),
-                          child: TextButton.icon(
-                            onPressed: () => _createView(context),
-                            icon: const AppIcon(AppIcons.add, size: 18),
-                            label: Text(
-                              s['newView'],
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppColors.text,
-                              alignment: AlignmentDirectional.centerStart,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 10,
-                              ),
-                            ),
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: () => _createTag(context),
-                          icon: const AppIcon(AppIcons.add, size: 18),
-                          label: Text(
-                            s['newTag'],
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppColors.text,
-                            alignment: AlignmentDirectional.centerStart,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 10,
-                            ),
-                          ),
-                        ),
-                      ],
+                          );
+                        },
+                      ),
                     ),
                   ),
                   ],
@@ -301,39 +257,17 @@ class _AppSidebarState extends State<AppSidebar> {
     );
   }
 
-  Future<void> _createTopic(BuildContext context) async {
-    final state = widget.state;
-    _closeDrawerIfOpen();
-    final result = await showAppDialog<CreateTopicResult>(
-      context: context,
-      builder: (_) => CreateTopicDialog(state: state),
-    );
-    if (result == null) return;
-    await state.createTopic(
-      name: result.name,
-      type: result.type,
-      icon: result.icon,
-      color: result.color,
-    );
-  }
-
-  Future<void> _createView(BuildContext context) async {
-    final state = widget.state;
-    _closeDrawerIfOpen();
-    final name = await showCreateViewDialog(context: context, state: state);
-    if (name == null) return;
-    await state.createView(name: name);
-  }
-
-  Future<void> _createTag(BuildContext context) async {
-    final state = widget.state;
-    _closeDrawerIfOpen();
-    final result = await showCreateTagDialog(context: context, state: state);
-    if (result == null) return;
-    await state.createWorkspaceTag(
-      name: result.name,
-      icon: result.icon,
-      color: result.color,
+  Future<void> _openCreateMenu(BuildContext buttonContext) async {
+    final box = buttonContext.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    // Tip of the downward caret points at the top center of the +.
+    final anchor = box.localToGlobal(Offset(box.size.width / 2, 2));
+    // Use the button's context (under the Overlay). Navigator.context sits
+    // *above* the Overlay and makes Overlay.of throw.
+    await showSidebarCreateMenu(
+      context: buttonContext,
+      state: widget.state,
+      globalPosition: anchor,
     );
   }
 
@@ -370,84 +304,8 @@ class _DiagramEntry extends StatelessWidget {
           alignment: AlignmentDirectional.centerStart,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         ),
-        child: Text(s['diagram'], overflow: TextOverflow.ellipsis),
+        child: Text(s['objectsMap'], overflow: TextOverflow.ellipsis),
       ),
-    );
-  }
-}
-
-class _TagsSection extends StatefulWidget {
-  const _TagsSection({required this.state});
-
-  final AppState state;
-
-  @override
-  State<_TagsSection> createState() => _TagsSectionState();
-}
-
-class _TagsSectionState extends State<_TagsSection> {
-  var expanded = true;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = widget.state.strings;
-    final tags = widget.state.objectTags;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InkWell(
-          onTap: () => setState(() => expanded = !expanded),
-          child: Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(8, 4, 8, 2),
-            child: Row(
-              children: [
-                DisclosureIcon(expanded: expanded, color: AppColors.text),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    s['tags'],
-                    style: AppTypography.sidebarSectionStyle,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (expanded)
-          for (final tag in tags)
-            Padding(
-              padding: const EdgeInsetsDirectional.fromSTEB(28, 2, 8, 2),
-              child: Row(
-                children: [
-                  Text(
-                    tag.icon?.isNotEmpty == true
-                        ? tag.icon!
-                        : TopicAppearance.defaultEmoji,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      tag.name,
-                      style: AppTypography.metaStyle,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        if (expanded && tags.isEmpty)
-          Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(28, 4, 8, 4),
-            child: Text(
-              s['noTagsYet'],
-              style: AppTypography.metaStyle.copyWith(
-                color: AppColors.textHint,
-              ),
-            ),
-          ),
-      ],
     );
   }
 }

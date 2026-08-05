@@ -81,4 +81,19 @@ class TaskZones {
     zone.insert(at, placed);
     return TaskZones(active: nextActive, done: nextDone);
   }
+
+  /// Insert [task] into a zone (adding it if it is not already in this set).
+  TaskZones inserted({
+    required Task task,
+    required bool targetDone,
+    required int indexInZone,
+  }) {
+    final nextActive = [for (final t in active) if (t.id != task.id) t];
+    final nextDone = [for (final t in done) if (t.id != task.id) t];
+    final placed = task.copyWith(status: targetDone ? 'done' : 'active');
+    final zone = targetDone ? nextDone : nextActive;
+    final at = indexInZone.clamp(0, zone.length);
+    zone.insert(at, placed);
+    return TaskZones(active: nextActive, done: nextDone);
+  }
 }

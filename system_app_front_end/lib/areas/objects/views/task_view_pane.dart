@@ -5,16 +5,18 @@ import 'package:flutter/material.dart';
 import '../../../core/app_state.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
+import '../../ui/confirm_dialog.dart';
 import '../../ux/shell/app_bottom_bar.dart';
 import '../../ux/topic/topic_appearance.dart';
 import '../../ux/widgets/app_context_menu.dart';
 import '../data/task.dart';
 import '../data/view_layout.dart';
+import '../tasks/task_drag_data.dart';
 import '../tasks/task_zones.dart';
 import './edit_view_section_dialog.dart';
 import './view_chrome_menu.dart';
+import './view_frame_options.dart';
 import './view_list_frame.dart';
-import './view_task_list.dart';
 
 class _ViewFrame {
   const _ViewFrame({
@@ -23,6 +25,7 @@ class _ViewFrame {
     required this.tasks,
     this.section,
     this.sectionName,
+    this.sectionFlag,
     this.topicKey,
     this.accent,
     this.tintSeed = 1,
@@ -35,6 +38,7 @@ class _ViewFrame {
   final List<Task> tasks;
   final ViewSectionDef? section;
   final String? sectionName;
+  final String? sectionFlag;
   final String? topicKey;
   final Color? accent;
   final int tintSeed;
@@ -42,6 +46,8 @@ class _ViewFrame {
   final bool editableSection;
 }
 
+/// View page: grid of section/topic frames. Each frame hosts [TaskListSurface]
+/// for file-like task interaction; this pane owns placement chrome only.
 class TaskViewPane extends StatefulWidget {
   const TaskViewPane({super.key, required this.state});
 
@@ -52,9 +58,8 @@ class TaskViewPane extends StatefulWidget {
 }
 
 class _TaskViewPaneState extends State<TaskViewPane> {
-  List<Task>? _optimisticTasks;
-  var _persisting = false;
   var _frameReorderMode = false;
+  var _taskReorderMode = false;
 
   AppState get state => widget.state;
 
@@ -66,26 +71,6 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     }
     withOrder.sort((a, b) => a.order.compareTo(b.order));
     return TaskZones.fromOrdered([for (final e in withOrder) e.task]).all;
-  }
-
-  List<Task> get _displayTasks => _optimisticTasks ?? _remoteTasks;
-
-  @override
-  void didUpdateWidget(TaskViewPane oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (_persisting) return;
-    if (_optimisticTasks != null &&
-        _idsMatch(_optimisticTasks!, _remoteTasks)) {
-      setState(() => _optimisticTasks = null);
-    }
-  }
-
-  bool _idsMatch(List<Task> a, List<Task> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i].id != b[i].id || a[i].isDone != b[i].isDone) return false;
-    }
-    return true;
   }
 
   int _stableSeed(String key) {
@@ -104,12 +89,59 @@ class _TaskViewPaneState extends State<TaskViewPane> {
   }
 
   String _topicKeyFor(Task task) {
+    for (final m in state.viewMemberships) {
+      if (m.taskId == task.id &&
+          m.topicKey != null &&
+          m.topicKey!.isNotEmpty) {
+        return m.topicKey!;
+      }
+    }
     if (task.topicKey != null && task.topicKey!.isNotEmpty) {
       return task.topicKey!;
     }
     if (task.topicId != null) return 'topic_${task.topicId}';
     return 'no_topic';
   }
+
+  String _topicTitle(String key, List<Task> tasksInFrame) {
+    final s = state.strings;
+    if (key == 'no_topic') return s['noTopic'];
+    for (final t in tasksInFrame) {
+      final name = t.topicName?.trim();
+      if (name != null && name.isNotEmpty) {
+        return state.strings.displayTopicName(name);
+      }
+    }
+    final id = int.tryParse(key.replaceFirst('topic_', ''));
+    final topic = state.allTopics.where((t) => t.id == id).firstOrNull;
+    if (topic != null) return state.topicDisplayName(topic);
+    return key;
+  }
+
+  Color? _topicAccent(String key, List<Task> tasksInFrame) {
+    if (key == 'no_topic') return null;
+    for (final t in tasksInFrame) {
+      if (t.topicColor != null && t.topicColor!.isNotEmpty) {
+        return TopicAppearance.colorFromHex(t.topicColor);
+      }
+    }
+    final id = int.tryParse(key.replaceFirst('topic_', ''));
+    final topic = state.allTopics.where((t) => t.id == id).firstOrNull;
+    return topic == null ? null : TopicAppearance.accentFor(topic);
+  }
+
+  List<ViewSectionOption> get _sectionOptions => [
+        for (final section in state.sectionsForSelectedView())
+          ViewSectionOption(name: section.name, flag: section.flag),
+      ];
+
+  List<ViewTopicOption> get _topicOptions => [
+        for (final topic in state.activeTopics)
+          ViewTopicOption(
+            key: 'topic_${topic.id}',
+            label: state.topicDisplayName(topic),
+          ),
+      ];
 
   List<_ViewFrame> _framesForSections(List<Task> tasks) {
     final s = state.strings;
@@ -126,50 +158,66 @@ class _TaskViewPaneState extends State<TaskViewPane> {
       }
     }
 
-    final frames = <_ViewFrame>[];
+    final byKey = <String, _ViewFrame>{};
     for (final section in sections) {
-      frames.add(
-        _ViewFrame(
-          key: 'section:${section.name}',
-          title: section.name,
-          tasks: bySection[section.name] ?? const [],
-          section: section,
-          sectionName: section.name,
-          accent: state.sectionAccent(section),
-          tintSeed: _stableSeed(section.name),
-          isImportant: section.isImportant,
-          editableSection: true,
-        ),
+      final key = 'section:${section.name}';
+      byKey[key] = _ViewFrame(
+        key: key,
+        title: section.name,
+        tasks: bySection[section.name] ?? const [],
+        section: section,
+        sectionName: section.name,
+        sectionFlag: section.flag,
+        accent: state.sectionAccent(section),
+        tintSeed: _stableSeed(section.name),
+        isImportant: section.isImportant,
+        editableSection: true,
       );
       bySection.remove(section.name);
     }
     for (final entry in bySection.entries) {
-      frames.add(
-        _ViewFrame(
-          key: 'section:${entry.key}',
-          title: entry.key,
-          tasks: entry.value,
-          section: ViewSectionDef(name: entry.key),
-          sectionName: entry.key,
-          tintSeed: _stableSeed(entry.key),
-          editableSection: true,
-        ),
+      final key = 'section:${entry.key}';
+      byKey[key] = _ViewFrame(
+        key: key,
+        title: entry.key,
+        tasks: entry.value,
+        section: ViewSectionDef(name: entry.key),
+        sectionName: entry.key,
+        tintSeed: _stableSeed(entry.key),
+        editableSection: true,
       );
     }
-    // Always keep a non-section frame for orphans / unsectioned tasks.
-    frames.add(
-      _ViewFrame(
-        key: 'section:',
-        title: s['uncategorized'],
-        tasks: uncategorized,
-        tintSeed: 1,
-      ),
+    byKey['section:'] = _ViewFrame(
+      key: 'section:',
+      title: s['uncategorized'],
+      tasks: uncategorized,
+      tintSeed: 1,
     );
-    return frames;
+
+    final preferred = state.selectedView == null
+        ? const <String>[]
+        : ViewLayoutConfig.sectionOrder(state.selectedView!.layoutConfig);
+    final keys = <String>[];
+    final seen = <String>{};
+    for (final k in preferred) {
+      if (!byKey.containsKey(k)) continue;
+      if (seen.add(k)) keys.add(k);
+    }
+    // Fallback: defined/orphan section order, then uncategorized once.
+    for (final section in sections) {
+      final k = 'section:${section.name}';
+      if (seen.add(k)) keys.add(k);
+    }
+    for (final k in byKey.keys) {
+      if (k == 'section:') continue;
+      if (seen.add(k)) keys.add(k);
+    }
+    if (seen.add('section:')) keys.add('section:');
+
+    return [for (final k in keys) byKey[k]!];
   }
 
   List<_ViewFrame> _framesForTopics(List<Task> tasks) {
-    final s = state.strings;
     final byTopic = <String, List<Task>>{};
     for (final t in tasks) {
       (byTopic[_topicKeyFor(t)] ??= []).add(t);
@@ -178,28 +226,28 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     final preferred = state.selectedView == null
         ? const <String>[]
         : ViewLayoutConfig.topicOrder(state.selectedView!.layoutConfig);
-    final keys = <String>[
-      for (final k in preferred)
-        if (byTopic.containsKey(k)) k,
-      for (final k in byTopic.keys)
-        if (!preferred.contains(k) && k != 'no_topic') k,
-      'no_topic', // always keep a non-topic frame for orphans
-    ];
+    // Dedupe. Prefer saved order (including no_topic if the user moved it);
+    // append no_topic once at the end only when it was never listed.
+    final keys = <String>[];
+    final seen = <String>{};
+    for (final k in preferred) {
+      if (k != 'no_topic' && !byTopic.containsKey(k)) continue;
+      if (seen.add(k)) keys.add(k);
+    }
+    for (final k in byTopic.keys) {
+      if (k == 'no_topic') continue;
+      if (seen.add(k)) keys.add(k);
+    }
+    if (seen.add('no_topic')) keys.add('no_topic');
 
     return [
       for (final key in keys)
         _ViewFrame(
           key: 'topic:$key',
-          title: key == 'no_topic'
-              ? s['noTopic']
-              : (byTopic[key]!.first.topicName?.trim().isNotEmpty == true
-                  ? byTopic[key]!.first.topicName!
-                  : key),
+          title: _topicTitle(key, byTopic[key] ?? const []),
           tasks: byTopic[key] ?? const [],
           topicKey: key == 'no_topic' ? null : key,
-          accent: key == 'no_topic' || (byTopic[key]?.isEmpty ?? true)
-              ? null
-              : TopicAppearance.colorFromHex(byTopic[key]!.first.topicColor),
+          accent: _topicAccent(key, byTopic[key] ?? const []),
           tintSeed: key == 'no_topic'
               ? 1
               : ((byTopic[key]?.isNotEmpty ?? false)
@@ -210,99 +258,114 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     ];
   }
 
-
-  List<Map<String, dynamic>> _membershipPayload(List<Task> ordered) {
-    final byTaskId = {
-      for (final m in state.viewMemberships)
-        if (m.taskId != null) m.taskId!: m,
-    };
-    final placeholders = [
-      for (final m in state.viewMemberships)
-        if (m.taskId == null) m,
-    ];
-    final out = <Map<String, dynamic>>[];
-    var index = 0;
-    for (final t in ordered) {
-      final existing = byTaskId[t.id];
-      out.add({
-        'task_id': t.id,
-        'section_name': existing?.sectionName,
-        'order_index': index++,
-        'section_flag': existing?.sectionFlag,
-        'topic_key': existing?.topicKey ?? t.topicKey,
-      });
-    }
-    for (final m in placeholders) {
-      out.add({
-        'task_id': null,
-        'section_name': m.sectionName,
-        'order_index': index++,
-        'section_flag': m.sectionFlag,
-        'topic_key': m.topicKey,
-      });
-    }
-    return out;
-  }
-
-  List<Task> _mergeFrameOrder({
-    required List<Task> all,
-    required Set<int> frameIds,
-    required List<Task> newFrameOrder,
-  }) {
-    final queue = List<Task>.of(newFrameOrder);
-    final out = <Task>[];
-    for (final t in all) {
-      if (frameIds.contains(t.id)) {
-        if (queue.isNotEmpty) out.add(queue.removeAt(0));
-      } else {
-        out.add(t);
-      }
-    }
-    out.addAll(queue);
-    return out;
-  }
-
-  Future<void> _persistZones(TaskZones next, TaskZones snapshot) async {
-    _persisting = true;
+  Future<void> _onForeignDrop({
+    required _ViewFrame frame,
+    required TaskDragPayload payload,
+    required bool targetDone,
+    required int indexInZone,
+  }) async {
+    final byTopic = state.viewDisplayMode == ViewDisplayMode.byTopic;
     try {
-      final before = {for (final t in snapshot.all) t.id: t};
-      for (final t in next.all) {
-        final was = before[t.id];
-        if (was != null && was.isDone != t.isDone) {
-          await state.toggleTaskStatus(was, notify: false);
+      if (byTopic) {
+        await state.updateViewTaskPlacement(
+          taskId: payload.task.id,
+          topicKey: frame.topicKey,
+          clearTopic: frame.topicKey == null,
+          notify: false,
+        );
+      } else {
+        await state.updateViewTaskPlacement(
+          taskId: payload.task.id,
+          sectionName: frame.sectionName,
+          sectionFlag: frame.sectionFlag ?? frame.section?.flag,
+          clearSection: frame.sectionName == null,
+          notify: false,
+        );
+      }
+      if (payload.task.isDone != targetDone) {
+        await state.toggleTaskStatus(payload.task, notify: false);
+      }
+
+      // Place the task at the drop index inside the target frame's zone.
+      final frameIds = {for (final t in frame.tasks) t.id}..add(payload.task.id);
+      final global = [
+        for (final m in state.viewMemberships)
+          if (m.taskId != null) m.taskId!,
+      ];
+      final moved = payload.task.copyWith(
+        status: targetDone ? 'done' : 'active',
+      );
+      final frameTasks = <Task>[
+        for (final id in global)
+          if (frameIds.contains(id))
+            id == moved.id
+                ? moved
+                : Task.fromJson(
+                    state.viewMemberships
+                        .firstWhere((m) => m.taskId == id)
+                        .task!,
+                  ),
+      ];
+      // Ensure dropped task is present.
+      if (!frameTasks.any((t) => t.id == moved.id)) {
+        frameTasks.add(moved);
+      }
+      final zones = TaskZones.fromOrdered(frameTasks);
+      final next = zones.moved(
+        taskId: moved.id,
+        targetDone: targetDone,
+        indexInZone: indexInZone,
+      );
+      final frameOrdered = next.orderedIds;
+      final merged = <int>[];
+      var qi = 0;
+      final frameSet = frameOrdered.toSet();
+      for (final id in global) {
+        if (frameSet.contains(id) || id == moved.id) {
+          if (qi < frameOrdered.length) merged.add(frameOrdered[qi++]);
+        } else {
+          merged.add(id);
         }
       }
-      await state.reorderViewMemberships(
-        _membershipPayload(next.all),
-        notify: false,
-      );
+      while (qi < frameOrdered.length) {
+        merged.add(frameOrdered[qi++]);
+      }
+      if (!merged.contains(moved.id)) {
+        merged.add(moved.id);
+      }
+
+      final byTaskId = {
+        for (final m in state.viewMemberships)
+          if (m.taskId != null) m.taskId!: m,
+      };
+      final memberships = <Map<String, dynamic>>[];
+      var index = 0;
+      for (final id in merged) {
+        final existing = byTaskId[id];
+        final isDropped = id == moved.id;
+        memberships.add({
+          'task_id': id,
+          'section_name': isDropped && !byTopic
+              ? frame.sectionName
+              : existing?.sectionName,
+          'order_index': index++,
+          'section_flag': isDropped && !byTopic
+              ? (frame.sectionFlag ?? frame.section?.flag)
+              : existing?.sectionFlag,
+          'topic_key': isDropped && byTopic
+              ? frame.topicKey
+              : existing?.topicKey,
+        });
+      }
+      await state.reorderViewMemberships(memberships, notify: false);
       await state.refreshOpenTaskSurfaces(notify: true);
-      if (mounted) setState(() => _optimisticTasks = null);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _optimisticTasks = snapshot.all);
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(content: Text(state.strings['reorderFailed'])),
       );
-    } finally {
-      _persisting = false;
+      await state.refreshOpenTaskSurfaces(notify: true);
     }
-  }
-
-  void _onFrameZonesChanged(_ViewFrame frame, TaskZones nextZones) {
-    final all = _displayTasks;
-    final snapshot = TaskZones.fromOrdered(all);
-    final frameIds = {for (final t in frame.tasks) t.id};
-    final merged = _mergeFrameOrder(
-      all: all,
-      frameIds: frameIds,
-      newFrameOrder: nextZones.all,
-    );
-    final byId = {for (final t in nextZones.all) t.id: t};
-    final withStatus = [for (final t in merged) byId[t.id] ?? t];
-    final next = TaskZones.fromOrdered(withStatus);
-    setState(() => _optimisticTasks = next.all);
-    unawaited(_persistZones(next, snapshot));
   }
 
   Future<void> _addSection() async {
@@ -332,7 +395,7 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     await state.updateViewSection(oldName: section.name, next: next);
   }
 
-  Future<void> _onSectionContextMenu(
+  Future<void> _onSectionTitleMenu(
     Offset globalPosition,
     ViewSectionDef section,
   ) async {
@@ -344,40 +407,68 @@ class _TaskViewPaneState extends State<TaskViewPane> {
       entries: [
         AppContextMenuItem(value: 'edit', label: s['editSection']),
         AppContextMenuItem(
-          value: 'flag',
-          label: section.isImportant
-              ? s['unmarkSectionImportant']
-              : s['markSectionImportant'],
+          value: 'delete',
+          label: s['deleteSection'],
+          destructive: true,
         ),
-        AppContextMenuItem(value: 'color', label: s['sectionColor']),
       ],
     );
     if (!mounted || action == null) return;
-    if (action == 'edit' || action == 'color') {
+    if (action == 'edit') {
       await _editSection(section);
       return;
     }
-    if (action == 'flag') {
-      await state.setViewSectionImportance(section.name, !section.isImportant);
+    if (action == 'delete') {
+      await _deleteSection(section);
     }
+  }
+
+  Future<void> _deleteSection(ViewSectionDef section) async {
+    final s = state.strings;
+    final ok = await showAppConfirmDialog(
+      context: context,
+      title: s['deleteSectionTitle'],
+      message: s['deleteSectionBody'],
+      confirmLabel: s['delete'],
+      cancelLabel: s['cancel'],
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    await state.deleteViewSection(section.name);
   }
 
   Future<void> _applyFrameOrder(List<_ViewFrame> ordered) async {
     if (state.viewDisplayMode == ViewDisplayMode.byTopic) {
-      final keys = [
+      final seen = <String>{};
+      final keys = <String>[
         for (final f in ordered)
-          if (f.key.startsWith('topic:')) f.key.substring('topic:'.length),
+          if (f.key.startsWith('topic:'))
+            if (seen.add(f.key.substring('topic:'.length)))
+              f.key.substring('topic:'.length),
       ];
       await state.reorderViewTopicKeys(keys);
       return;
     }
-    final defs = [
-      for (var i = 0; i < ordered.length; i++)
-        if (ordered[i].section != null)
-          ordered[i].section!.copyWith(orderIndex: i),
+    // Frame keys (`section:<name>`, `section:` for uncategorized) — own order
+    // from topic mode's `topic_order`.
+    final seen = <String>{};
+    final keys = <String>[
+      for (final f in ordered)
+        if (f.key.startsWith('section:') && seen.add(f.key)) f.key,
     ];
-    if (defs.isEmpty) return;
-    await state.replaceViewSections(defs);
+    await state.reorderViewSectionKeys(keys);
+  }
+
+  void _exitFrameReorder() {
+    if (!_frameReorderMode) return;
+    setState(() => _frameReorderMode = false);
+  }
+
+  void _startFrameReorder() {
+    setState(() {
+      _taskReorderMode = false;
+      _frameReorderMode = true;
+    });
   }
 
   void _moveFrame(List<_ViewFrame> frames, String fromKey, String toKey) {
@@ -401,23 +492,35 @@ class _TaskViewPaneState extends State<TaskViewPane> {
       listenable: state,
       builder: (context, _) {
         final label = state.viewLabel(viewType);
-        final tasks = _displayTasks;
+        final tasks = _remoteTasks;
         final byTopic = state.viewDisplayMode == ViewDisplayMode.byTopic;
         final frames =
             byTopic ? _framesForTopics(tasks) : _framesForSections(tasks);
 
+        final homeLists = _homeListsFromView(state);
         Widget grid = _FrameGrid(
           frames: frames,
           frameReorderMode: _frameReorderMode,
+          taskReorderMode: _taskReorderMode,
           state: state,
-          onZonesChanged: _onFrameZonesChanged,
-          onSectionMenu: _onSectionContextMenu,
+          homeLists: homeLists,
+          sectionOptions: _sectionOptions,
+          topicOptions: _topicOptions,
+          onForeignDrop: _onForeignDrop,
+          onTaskReorderModeChanged: (value) {
+            setState(() => _taskReorderMode = value);
+          },
+          onSectionTitleMenu: _onSectionTitleMenu,
+          onEditSection: _editSection,
+          onDeleteSection: _deleteSection,
           onMoveFrame: (fromKey, toKey) => _moveFrame(frames, fromKey, toKey),
+          onExitFrameReorder: _exitFrameReorder,
         );
 
-        if (_frameReorderMode) {
+        // Task reorder: tap outside the grid ends the mode.
+        if (_taskReorderMode && !_frameReorderMode) {
           grid = TapRegion(
-            onTapOutside: (_) => setState(() => _frameReorderMode = false),
+            onTapOutside: (_) => setState(() => _taskReorderMode = false),
             child: grid,
           );
         }
@@ -438,12 +541,39 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                       52,
                 ),
                 children: [
-                  Text(label, style: AppTypography.pageTitleStyle),
-                  const SizedBox(height: 16),
+                  // Frame reorder exits on empty canvas (title / space around
+                  // frames), not via the chrome button — and not TapRegion,
+                  // which used to cancel mid-drag drops.
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _frameReorderMode ? _exitFrameReorder : null,
+                    child: Text(label, style: AppTypography.pageTitleStyle),
+                  ),
+                  SizedBox(
+                    height: 16,
+                    child: _frameReorderMode
+                        ? GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: _exitFrameReorder,
+                          )
+                        : null,
+                  ),
                   grid,
+                  if (_frameReorderMode)
+                    SizedBox(
+                      height: MediaQuery.sizeOf(context).height,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _exitFrameReorder,
+                      ),
+                    ),
                 ],
               ),
             ),
+            // Dimmed full-bleed catcher behind chrome only — taps on the bar
+            // outside its icons still fall through to ListView below when the
+            // bar doesn't fill width; center chrome stays tappable to *start*
+            // reorder without acting as the exit control.
             Positioned(
               left: 0,
               right: 0,
@@ -454,7 +584,10 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                   displayMode: state.viewDisplayMode,
                   frameReorderMode: _frameReorderMode,
                   onToggleDisplayMode: () {
-                    setState(() => _frameReorderMode = false);
+                    setState(() {
+                      _frameReorderMode = false;
+                      _taskReorderMode = false;
+                    });
                     final next =
                         state.viewDisplayMode == ViewDisplayMode.byTopic
                             ? ViewDisplayMode.bySection
@@ -462,9 +595,7 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                     unawaited(state.setViewDisplayMode(next));
                   },
                   onAddSection: () => unawaited(_addSection()),
-                  onToggleFrameReorder: () {
-                    setState(() => _frameReorderMode = !_frameReorderMode);
-                  },
+                  onStartFrameReorder: _startFrameReorder,
                 ),
               ),
             ),
@@ -479,25 +610,46 @@ class _FrameGrid extends StatelessWidget {
   const _FrameGrid({
     required this.frames,
     required this.frameReorderMode,
+    required this.taskReorderMode,
     required this.state,
-    required this.onZonesChanged,
-    required this.onSectionMenu,
+    required this.homeLists,
+    required this.sectionOptions,
+    required this.topicOptions,
+    required this.onForeignDrop,
+    required this.onTaskReorderModeChanged,
+    required this.onSectionTitleMenu,
+    required this.onEditSection,
+    required this.onDeleteSection,
     required this.onMoveFrame,
+    required this.onExitFrameReorder,
   });
 
   final List<_ViewFrame> frames;
   final bool frameReorderMode;
+  final bool taskReorderMode;
   final AppState state;
-  final void Function(_ViewFrame frame, TaskZones zones) onZonesChanged;
-  final Future<void> Function(Offset, ViewSectionDef) onSectionMenu;
+  final List<ViewFrameListOption> homeLists;
+  final List<ViewSectionOption> sectionOptions;
+  final List<ViewTopicOption> topicOptions;
+  final void Function({
+    required _ViewFrame frame,
+    required TaskDragPayload payload,
+    required bool targetDone,
+    required int indexInZone,
+  }) onForeignDrop;
+  final ValueChanged<bool> onTaskReorderModeChanged;
+  final Future<void> Function(Offset, ViewSectionDef) onSectionTitleMenu;
+  final Future<void> Function(ViewSectionDef) onEditSection;
+  final Future<void> Function(ViewSectionDef) onDeleteSection;
   final void Function(String fromKey, String toKey) onMoveFrame;
+  final VoidCallback onExitFrameReorder;
 
   static const frameWidth = 260.0;
   static const gap = 12.0;
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
+    final wrap = Wrap(
       spacing: gap,
       runSpacing: gap,
       children: [
@@ -507,12 +659,33 @@ class _FrameGrid extends StatelessWidget {
             child: _DraggableFrame(
               frame: frame,
               frameReorderMode: frameReorderMode,
+              taskReorderMode: taskReorderMode,
               state: state,
-              onZonesChanged: onZonesChanged,
-              onSectionMenu: onSectionMenu,
+              homeLists: homeLists,
+              sectionOptions: sectionOptions,
+              topicOptions: topicOptions,
+              onForeignDrop: onForeignDrop,
+              onTaskReorderModeChanged: onTaskReorderModeChanged,
+              onSectionTitleMenu: onSectionTitleMenu,
+              onEditSection: onEditSection,
+              onDeleteSection: onDeleteSection,
               onMoveFrame: onMoveFrame,
             ),
           ),
+      ],
+    );
+    if (!frameReorderMode) return wrap;
+    // Gaps / empty space inside the grid bounds exit reorder; frames sit
+    // above and absorb their own pointer events (including mid-drag).
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onExitFrameReorder,
+          ),
+        ),
+        wrap,
       ],
     );
   }
@@ -522,36 +695,77 @@ class _DraggableFrame extends StatelessWidget {
   const _DraggableFrame({
     required this.frame,
     required this.frameReorderMode,
+    required this.taskReorderMode,
     required this.state,
-    required this.onZonesChanged,
-    required this.onSectionMenu,
+    required this.homeLists,
+    required this.sectionOptions,
+    required this.topicOptions,
+    required this.onForeignDrop,
+    required this.onTaskReorderModeChanged,
+    required this.onSectionTitleMenu,
+    required this.onEditSection,
+    required this.onDeleteSection,
     required this.onMoveFrame,
   });
 
   final _ViewFrame frame;
   final bool frameReorderMode;
+  final bool taskReorderMode;
   final AppState state;
-  final void Function(_ViewFrame frame, TaskZones zones) onZonesChanged;
-  final Future<void> Function(Offset, ViewSectionDef) onSectionMenu;
+  final List<ViewFrameListOption> homeLists;
+  final List<ViewSectionOption> sectionOptions;
+  final List<ViewTopicOption> topicOptions;
+  final void Function({
+    required _ViewFrame frame,
+    required TaskDragPayload payload,
+    required bool targetDone,
+    required int indexInZone,
+  }) onForeignDrop;
+  final ValueChanged<bool> onTaskReorderModeChanged;
+  final Future<void> Function(Offset, ViewSectionDef) onSectionTitleMenu;
+  final Future<void> Function(ViewSectionDef) onEditSection;
+  final Future<void> Function(ViewSectionDef) onDeleteSection;
   final void Function(String fromKey, String toKey) onMoveFrame;
 
   @override
   Widget build(BuildContext context) {
+    final section = frame.section;
+    final canEditSection = frame.editableSection && section != null;
     final card = ViewListFrame(
       state: state,
       title: frame.title,
       tasks: frame.tasks,
       sectionName: frame.sectionName,
+      sectionFlag: frame.sectionFlag,
       topicKey: frame.topicKey,
-      frameLists: _frameListsFromTasks(state, frame.tasks),
+      editableSection: canEditSection,
+      onEditSection:
+          canEditSection ? () => onEditSection(section) : null,
+      onDeleteSection:
+          canEditSection ? () => onDeleteSection(section) : null,
+      onSectionTitleMenu: canEditSection
+          ? (d) => unawaited(onSectionTitleMenu(d.globalPosition, section))
+          : null,
+      homeLists: homeLists,
+      sectionOptions: sectionOptions,
+      topicOptions: topicOptions,
       accent: frame.accent,
       tintSeed: frame.tintSeed,
       isImportant: frame.isImportant,
       frameReorderMode: frameReorderMode,
-      onZonesChanged: (zones) => onZonesChanged(frame, zones),
-      onSecondaryTapDown: frame.editableSection && frame.section != null
-          ? (d) => unawaited(onSectionMenu(d.globalPosition, frame.section!))
-          : null,
+      taskReorderMode: taskReorderMode,
+      onTaskReorderModeChanged: onTaskReorderModeChanged,
+      onForeignDrop: ({
+        required payload,
+        required targetDone,
+        required indexInZone,
+      }) =>
+          onForeignDrop(
+            frame: frame,
+            payload: payload,
+            targetDone: targetDone,
+            indexInZone: indexInZone,
+          ),
     );
 
     if (!frameReorderMode) return card;
@@ -595,26 +809,24 @@ class _DraggableFrame extends StatelessWidget {
   }
 }
 
-List<ViewFrameListOption> _frameListsFromTasks(
-  AppState state,
-  List<Task> tasks,
-) {
-  final s = state.strings;
+/// Home lists available anywhere in the view — so orphan tasks can still
+/// choose an origin list.
+List<ViewFrameListOption> _homeListsFromView(AppState state) {
   final seen = <int>{};
   final out = <ViewFrameListOption>[];
-  for (final t in tasks) {
+  for (final t in state.viewTasks) {
     final id = t.taskListId;
-    if (id == null || seen.contains(id)) continue;
-    seen.add(id);
-    final title = t.taskListTitle?.trim();
-    out.add(
-      ViewFrameListOption(
-        taskListId: id,
-        title: (title == null || title.isEmpty)
-            ? s['untitledTaskList']
-            : title,
-      ),
-    );
+    if (id == null || !seen.add(id)) continue;
+    final title = t.taskListTitle?.trim() ?? '';
+    out.add(ViewFrameListOption(taskListId: id, title: title));
   }
   return out;
+}
+
+extension _FirstOrNull<E> on Iterable<E> {
+  E? get firstOrNull {
+    final it = iterator;
+    if (!it.moveNext()) return null;
+    return it.current;
+  }
 }

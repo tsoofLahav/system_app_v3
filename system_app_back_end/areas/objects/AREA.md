@@ -38,7 +38,7 @@ Tasks are the richest object type — a sub-part of this area, not a separate on
 
 **Empty titles.** `POST /task-lists/:id/tasks` accepts `title: ""` (blank row). Only a missing title key may default; never coerce empty string to `"New task"`.
 
-**Views.** A view is a user-made list that a task can appear in without being copied. Membership lives in `view_task_memberships`, with its own ordering per view. Section definitions, display mode (`by_section` / `by_topic`), and topic-frame order live in `views.layout_config` (JSON) — not separate tables. Memberships still carry `section_name` / `section_flag` for which section a task sits in.
+**Views.** A view is a user-made list that a task can appear in without being copied. Membership lives in `view_task_memberships`, with its own ordering per view. **Product rule: a task belongs to at most one view at a time** (the client replaces memberships rather than stacking them). Section definitions, display mode (`by_section` / `by_topic`), and topic-frame order live in `views.layout_config` (JSON) — not separate tables. Memberships still carry `section_name` / `section_flag` for which section a task sits in.
 
 ```
 tasks ──< view_task_memberships >── views
@@ -70,7 +70,7 @@ The `links` table is the workspace **object graph**, keyed by **`objects.id`** f
 
 | Endpoint | Role |
 |----------|------|
-| `GET /objects/graph?workspace_id=` | Info nodes + related info↔info edges for the diagram |
+| `GET /objects/graph?workspace_id=` | Info nodes (title, body, topic_id/color, tag_ids) + related info↔info edges for the objects map |
 | `GET/POST /objects/:id/links` | List / create connections (`target_object_id` or description `anchor`) |
 | `GET /files/:id/description-links` | Description links targeting that file |
 | `PUT /objects/:id/tags` | Replace object tags |

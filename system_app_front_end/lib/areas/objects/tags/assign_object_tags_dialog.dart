@@ -62,7 +62,6 @@ class _AssignObjectTagsDialogState extends State<_AssignObjectTagsDialog> {
 
     return AppAdaptiveDialogShell(
       title: Text(s['addTag']),
-      width: 360,
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),

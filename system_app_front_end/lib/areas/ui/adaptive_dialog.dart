@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/platform/app_form_factor.dart';
 import './app_typography.dart';
+import './dialog_metrics.dart';
 import './glass_surface.dart';
 
 Future<T?> showAppDialog<T>({
@@ -33,7 +34,7 @@ class AppAdaptiveDialogShell extends StatelessWidget {
     required this.title,
     required this.child,
     this.actions = const [],
-    this.width = 420,
+    this.width = AppDialogMetrics.maxWidth,
   });
 
   final Widget title;
@@ -45,7 +46,7 @@ class AppAdaptiveDialogShell extends StatelessWidget {
   Widget build(BuildContext context) {
     if (isPhoneLayout) {
       return Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        insetPadding: AppDialogMetrics.phoneInset,
         backgroundColor: Colors.transparent,
         elevation: 0,
         child: ConstrainedBox(
@@ -54,13 +55,13 @@ class AppAdaptiveDialogShell extends StatelessWidget {
             maxWidth: double.infinity,
           ),
           child: GlassSurface(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16),
             tintOpacity: 0.94,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  padding: AppDialogMetrics.phoneTitlePadding,
                   child: DefaultTextStyle(
                     style: AppTypography.noteTitleStyle,
                     child: title,
@@ -68,13 +69,13 @@ class AppAdaptiveDialogShell extends StatelessWidget {
                 ),
                 Flexible(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                    padding: AppDialogMetrics.phoneBodyPadding,
                     child: child,
                   ),
                 ),
                 if (actions.isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                    padding: AppDialogMetrics.phoneActionsPadding,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: actions,

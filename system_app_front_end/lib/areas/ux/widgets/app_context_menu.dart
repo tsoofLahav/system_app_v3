@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../ui/app_colors.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/glass_surface.dart';
 import './disclosure_icon.dart';
@@ -19,12 +20,15 @@ class AppContextMenuItem extends AppContextMenuEntry {
     required this.label,
     this.enabled = true,
     this.destructive = false,
+    this.checked = false,
   });
 
   final String value;
   final String label;
   final bool enabled;
   final bool destructive;
+  /// When true, a check mark is shown beside the label (e.g. current choice).
+  final bool checked;
 }
 
 class AppContextMenuSubmenu extends AppContextMenuEntry {
@@ -41,13 +45,24 @@ class AppContextMenuDivider extends AppContextMenuEntry {
   const AppContextMenuDivider();
 }
 
+/// Optional caret on a context-menu bubble, pointing at an anchor.
+enum ContextMenuArrow {
+  none,
+  /// Triangle on the bottom edge, tip toward the anchor below.
+  down,
+}
+
 abstract final class AppContextMenu {
   static const _itemHeight = 28.0;
   static const _menuWidth = 196.0;
+  /// Compact width for short choice lists (e.g. sidebar create).
+  static const compactMenuWidth = 128.0;
   static const _submenuWidth = 188.0;
   static const _horizontalPadding = 10.0;
   static const _bubbleRadius = 12.0;
   static const _submenuGap = 4.0;
+  static const _arrowHeight = 7.0;
+  static const _arrowHalfWidth = 7.0;
 
   static VoidCallback? _dismissActive;
   static Object? _dismissActiveSession;
@@ -96,6 +111,8 @@ abstract final class AppContextMenu {
     required Offset globalPosition,
     required List<AppContextMenuEntry> entries,
     required bool isRtl,
+    double width = _menuWidth,
+    ContextMenuArrow arrow = ContextMenuArrow.none,
   }) {
     dismissActive();
 
@@ -128,6 +145,8 @@ abstract final class AppContextMenu {
           globalPosition: globalPosition,
           entries: entries,
           isRtl: isRtl,
+          menuWidth: width,
+          arrow: arrow,
           onSelect: close,
           onDismiss: () => close(null),
         ),
@@ -196,6 +215,8 @@ class _BubbleContextMenuHost extends StatefulWidget {
     required this.globalPosition,
     required this.entries,
     required this.isRtl,
+    required this.menuWidth,
+    required this.arrow,
     required this.onSelect,
     required this.onDismiss,
   });
@@ -203,6 +224,8 @@ class _BubbleContextMenuHost extends StatefulWidget {
   final Offset globalPosition;
   final List<AppContextMenuEntry> entries;
   final bool isRtl;
+  final double menuWidth;
+  final ContextMenuArrow arrow;
   final ValueChanged<String> onSelect;
   final VoidCallback onDismiss;
 
@@ -254,21 +277,31 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
             as RenderBox;
     final local = overlayBox.globalToLocal(widget.globalPosition);
     final isRtl = widget.isRtl;
+    final menuWidth = widget.menuWidth;
+    final arrowDown = widget.arrow == ContextMenuArrow.down;
+    final arrowH = arrowDown ? AppContextMenu._arrowHeight : 0.0;
 
     final mainHeight = _menuHeight(widget.entries);
     final hostHeight = _hostHeight(_openSubmenuIndex);
 
-    final totalWidth = AppContextMenu._menuWidth +
+    final totalWidth = menuWidth +
         (_openSubmenuIndex == null
             ? 0
             : AppContextMenu._submenuWidth + AppContextMenu._submenuGap);
-    final totalHeight = hostHeight;
+    final totalHeight = hostHeight + arrowH;
 
-    var left = local.dx;
-    var top = local.dy;
-
-    if (isRtl) {
-      left -= totalWidth;
+    double left;
+    double top;
+    if (arrowDown) {
+      // Center on the anchor and sit just above it so the caret points at +.
+      left = local.dx - menuWidth / 2;
+      top = local.dy - totalHeight - 2;
+    } else {
+      left = local.dx;
+      top = local.dy;
+      if (isRtl) {
+        left -= totalWidth;
+      }
     }
     if (left + totalWidth > overlayBox.size.width - 8) {
       left = overlayBox.size.width - totalWidth - 8;
@@ -278,6 +311,10 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
       top = overlayBox.size.height - totalHeight - 8;
     }
     if (top < 8) top = 8;
+
+    final panelLeft = _openSubmenuIndex != null && isRtl
+        ? AppContextMenu._submenuWidth + AppContextMenu._submenuGap
+        : 0.0;
 
     return Positioned(
       left: left,
@@ -293,15 +330,19 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
               if (_openSubmenuIndex != null && isRtl)
                 _positionedSubmenu(isRtl: true, mainHeight: mainHeight),
               Positioned(
-                left: _openSubmenuIndex != null && isRtl
-                    ? AppContextMenu._submenuWidth + AppContextMenu._submenuGap
-                    : 0,
+                left: panelLeft,
                 top: 0,
                 child: _BubbleMenuPanel(
-                  width: AppContextMenu._menuWidth,
+                  width: menuWidth,
                   children: _buildMainEntries(context),
                 ),
               ),
+              if (arrowDown)
+                Positioned(
+                  left: panelLeft + menuWidth / 2 - AppContextMenu._arrowHalfWidth,
+                  top: mainHeight - 0.5,
+                  child: const _BubbleArrowDown(),
+                ),
               if (_openSubmenuIndex != null && !isRtl) ...[
                 _submenuBridge(isRtl: false),
                 _positionedSubmenu(isRtl: false, mainHeight: mainHeight),
@@ -345,7 +386,7 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
 
     return Positioned(
       top: top,
-      left: isRtl ? AppContextMenu._submenuWidth : AppContextMenu._menuWidth,
+      left: isRtl ? AppContextMenu._submenuWidth : widget.menuWidth,
       width: AppContextMenu._submenuGap,
       height: height,
       child: MouseRegion(
@@ -364,7 +405,7 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
 
     return Positioned(
       top: _submenuTop(_openSubmenuIndex!, mainHeight),
-      left: isRtl ? 0 : AppContextMenu._menuWidth + AppContextMenu._submenuGap,
+      left: isRtl ? 0 : widget.menuWidth + AppContextMenu._submenuGap,
       child: MouseRegion(
         onEnter: (_) => _submenuCloseTimer?.cancel(),
         child: _BubbleMenuPanel(
@@ -429,6 +470,7 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
           label: item.label,
           enabled: item.enabled,
           destructive: item.destructive,
+          checked: item.checked,
           onTap: item.enabled ? () => widget.onSelect(item.value) : null,
         ),
       );
@@ -438,12 +480,15 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
 
   List<Widget> _buildSubmenuEntries(AppContextMenuSubmenu? submenu) {
     if (submenu == null) return const [];
+    final anyChecked = submenu.children.any((c) => c.checked);
     return [
       for (final item in submenu.children)
         _MenuActionRow(
           label: item.label,
           enabled: item.enabled,
           destructive: item.destructive,
+          checked: item.checked,
+          reserveCheckSlot: anyChecked,
           onTap: item.enabled ? () => widget.onSelect(item.value) : null,
         ),
     ];
@@ -454,6 +499,48 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
     _submenuCloseTimer?.cancel();
     super.dispose();
   }
+}
+
+class _BubbleArrowDown extends StatelessWidget {
+  const _BubbleArrowDown();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: const Size(
+        AppContextMenu._arrowHalfWidth * 2,
+        AppContextMenu._arrowHeight,
+      ),
+      painter: _BubbleArrowDownPainter(),
+    );
+  }
+}
+
+class _BubbleArrowDownPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..lineTo(size.width, 0)
+      ..close();
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = AppColors.menuTint.withValues(alpha: 0.94)
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.1)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.65,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _BubbleMenuPanel extends StatelessWidget {
@@ -569,6 +656,8 @@ class _MenuActionRow extends StatefulWidget {
     this.enabled = true,
     this.destructive = false,
     this.keyboardSelected = false,
+    this.checked = false,
+    this.reserveCheckSlot = false,
   });
 
   final String label;
@@ -576,6 +665,8 @@ class _MenuActionRow extends StatefulWidget {
   final bool enabled;
   final bool destructive;
   final bool keyboardSelected;
+  final bool checked;
+  final bool reserveCheckSlot;
 
   @override
   State<_MenuActionRow> createState() => _MenuActionRowState();
@@ -588,6 +679,17 @@ class _MenuActionRowState extends State<_MenuActionRow> {
   Widget build(BuildContext context) {
     final highlighted =
         (widget.keyboardSelected || _hovered) && widget.enabled;
+    final showSlot = widget.reserveCheckSlot || widget.checked;
+    final iconColor = highlighted
+        ? Colors.white
+        : AppColors.text.withValues(alpha: 0.85);
+    final label = AppContextMenu._menuLabel(
+      widget.label,
+      AppContextMenu._labelStyle(
+        destructive: widget.destructive && !highlighted,
+        highlighted: highlighted,
+      ),
+    );
     return MouseRegion(
       onEnter: widget.enabled ? (_) => setState(() => _hovered = true) : null,
       onExit: widget.enabled ? (_) => setState(() => _hovered = false) : null,
@@ -596,13 +698,24 @@ class _MenuActionRowState extends State<_MenuActionRow> {
         behavior: HitTestBehavior.opaque,
         child: _MenuRowChrome(
           highlighted: highlighted,
-          child: AppContextMenu._menuLabel(
-            widget.label,
-            AppContextMenu._labelStyle(
-              destructive: widget.destructive && !highlighted,
-              highlighted: highlighted,
-            ),
-          ),
+          child: showSlot
+              ? Row(
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      child: widget.checked
+                          ? AppIcon(
+                              AppIcons.check,
+                              size: 14,
+                              color: iconColor,
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(child: label),
+                  ],
+                )
+              : label,
         ),
       ),
     );

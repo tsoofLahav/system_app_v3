@@ -2,6 +2,8 @@ import './object_embed.dart';
 import '../../../core/models/tag.dart';
 import '../../../core/services/api_service.dart';
 
+enum DiagramColorMode { byTopic, byTag }
+
 class ObjectGraphData {
   const ObjectGraphData({required this.nodes, required this.edges});
 
@@ -29,12 +31,20 @@ class ObjectGraphNode {
     required this.title,
     required this.fileId,
     required this.tagIds,
+    this.body = '',
+    this.informationId,
+    this.topicId,
+    this.topicColor,
   });
 
   final int objectId;
   final String type;
   final String title;
+  final String body;
+  final int? informationId;
   final int fileId;
+  final int? topicId;
+  final String? topicColor;
   final List<int> tagIds;
 
   factory ObjectGraphNode.fromJson(Map<String, dynamic> json) {
@@ -42,10 +52,28 @@ class ObjectGraphNode {
       objectId: json['object_id'] as int,
       type: json['type'] as String? ?? 'info',
       title: json['title'] as String? ?? '',
+      body: json['body'] as String? ?? '',
+      informationId: json['information_id'] as int?,
       fileId: json['file_id'] as int? ?? 0,
+      topicId: json['topic_id'] as int?,
+      topicColor: json['topic_color'] as String?,
       tagIds: [
         for (final id in (json['tag_ids'] as List? ?? const [])) id as int,
       ],
+    );
+  }
+
+  ObjectGraphNode copyWith({String? title, String? body}) {
+    return ObjectGraphNode(
+      objectId: objectId,
+      type: type,
+      title: title ?? this.title,
+      body: body ?? this.body,
+      informationId: informationId,
+      fileId: fileId,
+      topicId: topicId,
+      topicColor: topicColor,
+      tagIds: tagIds,
     );
   }
 }

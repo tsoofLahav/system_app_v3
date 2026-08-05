@@ -136,7 +136,7 @@ class _ViewSectionDialogState extends State<_ViewSectionDialog> {
               onSubmitted: (_) => _submit(),
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: DialogFieldStyle.fieldGap),
           Row(
             children: [
               Tooltip(

@@ -153,8 +153,8 @@ class DocumentContextMenu {
     );
   }
 
-  /// Task list menu: text actions, assign to views, Reorder Mode.
-  static Future<void> showTaskListMenu({
+  /// Info embed menu: text actions + Add tag / Add connection.
+  static Future<void> showInfoMenu({
     required BuildContext context,
     required Offset globalPosition,
     required AppStrings strings,
@@ -169,13 +169,44 @@ class DocumentContextMenu {
         ...buildTextEntries(strings),
         const AppContextMenuDivider(),
         AppContextMenuItem(
-          value: 'tasks:assign_view',
-          label: strings['assignTaskViews'],
+          value: 'info:add_tag',
+          label: strings['addTag'],
         ),
+        AppContextMenuItem(
+          value: 'info:add_connection',
+          label: strings['addConnection'],
+        ),
+      ],
+    );
+  }
+
+  /// Task list menu: text actions, assign to views, Reorder Mode.
+  static Future<void> showTaskListMenu({
+    required BuildContext context,
+    required Offset globalPosition,
+    required AppStrings strings,
+    required DocumentMenuHandler onAction,
+    List<AppContextMenuEntry> extraEntries = const [],
+    bool includeAssignView = true,
+  }) {
+    return _showMenu(
+      context: context,
+      globalPosition: globalPosition,
+      strings: strings,
+      onAction: onAction,
+      entries: [
+        ...buildTextEntries(strings),
+        const AppContextMenuDivider(),
+        if (includeAssignView)
+          AppContextMenuItem(
+            value: 'tasks:assign_view',
+            label: strings['assignTaskViews'],
+          ),
         AppContextMenuItem(
           value: 'tasks:reorder_mode',
           label: strings['reorderTasks'],
         ),
+        ...extraEntries,
       ],
     );
   }

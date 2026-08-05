@@ -7,8 +7,9 @@ import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/note_widgets.dart';
 import '../data/task.dart';
-import '../tasks/task_zones.dart';
-import './view_task_list.dart';
+import '../tasks/task_list_surface.dart';
+import './view_frame_options.dart';
+import './view_frame_task_list.dart';
 
 /// One file-like frame holding a section or topic task list.
 class ViewListFrame extends StatelessWidget {
@@ -17,29 +18,47 @@ class ViewListFrame extends StatelessWidget {
     required this.state,
     required this.title,
     required this.tasks,
-    required this.onZonesChanged,
+    this.onForeignDrop,
     this.sectionName,
+    this.sectionFlag,
     this.topicKey,
-    this.frameLists = const [],
+    this.editableSection = false,
+    this.onEditSection,
+    this.onDeleteSection,
+    this.onSectionTitleMenu,
+    this.homeLists = const [],
+    this.sectionOptions = const [],
+    this.topicOptions = const [],
     this.accent,
     this.tintSeed = 1,
     this.isImportant = false,
     this.frameReorderMode = false,
-    this.onSecondaryTapDown,
+    this.taskReorderMode = false,
+    this.onTaskReorderModeChanged,
   });
 
   final AppState state;
   final String title;
   final List<Task> tasks;
-  final ValueChanged<TaskZones> onZonesChanged;
+  final TaskListForeignDrop? onForeignDrop;
   final String? sectionName;
+  final String? sectionFlag;
   final String? topicKey;
-  final List<ViewFrameListOption> frameLists;
+  final bool editableSection;
+  final Future<void> Function()? onEditSection;
+  final Future<void> Function()? onDeleteSection;
+  /// Right-click on the title only (edit / delete section). Task rows use the
+  /// combined menu inside [ViewFrameTaskList].
+  final GestureTapDownCallback? onSectionTitleMenu;
+  final List<ViewFrameListOption> homeLists;
+  final List<ViewSectionOption> sectionOptions;
+  final List<ViewTopicOption> topicOptions;
   final Color? accent;
   final int tintSeed;
   final bool isImportant;
   final bool frameReorderMode;
-  final GestureTapDownCallback? onSecondaryTapDown;
+  final bool taskReorderMode;
+  final ValueChanged<bool>? onTaskReorderModeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -51,36 +70,47 @@ class ViewListFrame extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                if (isImportant) ...[
-                  AppIcon(
-                    AppIcons.flag,
-                    size: 14,
-                    color: AppColors.primary.withValues(alpha: 0.85),
+            GestureDetector(
+              onSecondaryTapDown: onSectionTitleMenu,
+              child: Row(
+                children: [
+                  if (isImportant) ...[
+                    AppIcon(
+                      AppIcons.flag,
+                      size: 14,
+                      color: AppColors.primary.withValues(alpha: 0.85),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: AppTypography.noteTitleStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  const SizedBox(width: 6),
                 ],
-                Expanded(
-                  child: Text(
-                    title,
-                    style: AppTypography.noteTitleStyle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+              ),
             ),
             const SizedBox(height: 8),
             IgnorePointer(
               ignoring: frameReorderMode,
-              child: ViewTaskList(
+              child: ViewFrameTaskList(
                 state: state,
                 tasks: tasks,
                 sectionName: sectionName,
+                sectionFlag: sectionFlag,
                 topicKey: topicKey,
-                frameLists: frameLists,
-                onZonesChanged: onZonesChanged,
+                editableSection: editableSection,
+                onEditSection: onEditSection,
+                onDeleteSection: onDeleteSection,
+                homeLists: homeLists,
+                sectionOptions: sectionOptions,
+                topicOptions: topicOptions,
+                reorderMode: taskReorderMode,
+                onReorderModeChanged: onTaskReorderModeChanged,
+                onForeignDrop: onForeignDrop,
                 enabled: !frameReorderMode,
               ),
             ),
@@ -96,10 +126,7 @@ class ViewListFrame extends StatelessWidget {
           )
         : body;
 
-    return GestureDetector(
-      onSecondaryTapDown: onSecondaryTapDown,
-      child: framed,
-    );
+    return framed;
   }
 }
 

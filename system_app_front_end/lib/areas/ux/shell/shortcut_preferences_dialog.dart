@@ -8,6 +8,7 @@ import '../../../core/platform/app_form_factor.dart';
 import '../shortcuts/shortcut_catalog.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_typography.dart';
+import '../../ui/dialog_metrics.dart';
 
 Future<void> showShortcutPreferencesDialog({
   required BuildContext context,
@@ -61,7 +62,7 @@ class _ShortcutPreferencesDialogState extends State<ShortcutPreferencesDialog>
 
         return AppAdaptiveDialogShell(
           title: Text(s['shortcuts']),
-          width: 560,
+          width: AppDialogMetrics.wideWidth,
           actions: [
             TextButton(
               onPressed: () => state.resetAllShortcuts(),

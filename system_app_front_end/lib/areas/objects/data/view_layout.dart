@@ -54,6 +54,8 @@ abstract final class ViewLayoutConfig {
   static const displayModeKey = 'display_mode';
   static const sectionsKey = 'sections';
   static const topicOrderKey = 'topic_order';
+  /// Frame keys (`section:<name>`, `section:` for uncategorized) — like [topicOrderKey].
+  static const sectionOrderKey = 'section_order';
 
   static const modeBySection = 'by_section';
   static const modeByTopic = 'by_topic';
@@ -107,18 +109,41 @@ abstract final class ViewLayoutConfig {
   }
 
   static List<String> topicOrder(Map<String, dynamic> config) {
-    final raw = config[topicOrderKey];
-    if (raw is! List) return const [];
-    return [
-      for (final item in raw)
-        if ('$item'.trim().isNotEmpty) '$item',
-    ];
+    return _dedupeStringList(config[topicOrderKey]);
   }
 
   static Map<String, dynamic> withTopicOrder(
     Map<String, dynamic> config,
     List<String> keys,
   ) {
-    return {...config, topicOrderKey: keys};
+    return {...config, topicOrderKey: _dedupeKeys(keys)};
+  }
+
+  static List<String> sectionOrder(Map<String, dynamic> config) {
+    return _dedupeStringList(config[sectionOrderKey]);
+  }
+
+  static Map<String, dynamic> withSectionOrder(
+    Map<String, dynamic> config,
+    List<String> keys,
+  ) {
+    return {...config, sectionOrderKey: _dedupeKeys(keys)};
+  }
+
+  static List<String> _dedupeStringList(dynamic raw) {
+    if (raw is! List) return const [];
+    final seen = <String>{};
+    return [
+      for (final item in raw)
+        if (seen.add('$item')) '$item',
+    ];
+  }
+
+  static List<String> _dedupeKeys(List<String> keys) {
+    final seen = <String>{};
+    return [
+      for (final k in keys)
+        if (seen.add(k)) k,
+    ];
   }
 }

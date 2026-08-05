@@ -16,7 +16,7 @@ class ViewChromeMenu extends StatelessWidget {
     required this.frameReorderMode,
     required this.onToggleDisplayMode,
     required this.onAddSection,
-    required this.onToggleFrameReorder,
+    required this.onStartFrameReorder,
   });
 
   final AppState state;
@@ -24,7 +24,8 @@ class ViewChromeMenu extends StatelessWidget {
   final bool frameReorderMode;
   final VoidCallback onToggleDisplayMode;
   final VoidCallback onAddSection;
-  final VoidCallback onToggleFrameReorder;
+  /// Enters frame-reorder mode; exit is tap-outside-frames on the view pane.
+  final VoidCallback onStartFrameReorder;
 
   static const _segmentPadding = EdgeInsets.symmetric(horizontal: 4);
   static const _iconSize = 20.0;
@@ -55,7 +56,7 @@ class ViewChromeMenu extends StatelessWidget {
             tooltip: bySection ? s['reorderSections'] : s['reorderTopics'],
             icon: AppIcons.arrange,
             active: frameReorderMode,
-            onPressed: onToggleFrameReorder,
+            onPressed: frameReorderMode ? null : onStartFrameReorder,
           ),
         ],
       ),

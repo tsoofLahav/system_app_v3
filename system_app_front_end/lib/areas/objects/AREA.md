@@ -34,21 +34,26 @@ files (presentation) ──thin overlay──► objects (data + type logic)
 
 **Active / Done zones.** Both the in-file list and the view pane split into Active then Done ([`tasks/task_zones.dart`](tasks/task_zones.dart)). Status is canonical on the task row (`active` / `done`); never a per-view done flag. Checking done in a view updates the same row in the file, and vice versa.
 
-**Drag + optimistic UI.** Payload in [`tasks/task_drag_data.dart`](tasks/task_drag_data.dart). In-file reorder is a **Reorder Mode** owned by files (glass frames, no handles). Local order updates immediately; list persist uses `PUT …/tasks/order` or `POST …/move` (cross-zone); view persist rewrites memberships (+ toggle when the zone changes). On failure, revert and show `reorderFailed`.
+**Shared task surface.** [`tasks/task_list_surface.dart`](tasks/task_list_surface.dart) owns the local-row model (controllers / focus / ids / done + optimistic order). It mutates UI **before** the API. Persistence goes through [`tasks/task_list_bridge.dart`](tasks/task_list_bridge.dart):
 
-**Empty titles.** New tasks are created with `title: ""` and a hint (`newTaskHint`) — never the literal “New task”. Enter on an empty row exits the list (same as document lists).
+| Host | Bridge |
+|------|--------|
+| In-file embed | [`tasks/file_task_list_bridge.dart`](tasks/file_task_list_bridge.dart) → list order / move APIs |
+| View frame | [`views/view_frame_task_list_bridge.dart`](views/view_frame_task_list_bridge.dart) → membership rewrite + `createTaskInView` |
 
-**Views.** A user-made list a task can appear in without being copied. Create from the sidebar (**New view**); rename via right-click → Edit on a view. Assign from a task’s right-click menu or the **Add task to view** shortcut (caret must be on a task). Assign UI in [`views/assign_task_view_dialog.dart`](views/assign_task_view_dialog.dart).
+**Drag + Reorder Mode.** Payload in [`tasks/task_drag_data.dart`](tasks/task_drag_data.dart). Glass chips, no handles. Same surface for files and view frames. Cross-frame drops in a view update membership section/topic then refresh.
 
-**View page.** [`views/task_view_pane.dart`](views/task_view_pane.dart) is a **grid of fixed-width file-like frames** ([`views/view_list_frame.dart`](views/view_list_frame.dart)), each holding one list (section or topic), plus a standing **uncategorized / no-topic** frame. Floating chrome toggles sections↔topics, adds sections, and reorders frames. View-created tasks are **orphans** (no home list) unless the user assigns them to a list that already has tasks in that frame (`Add to list…` / `Create in list…`). Delete warns only when the task has a home list.
+**Empty titles.** Created with `title: ""` and hint (`newTaskHint`) — never the literal “New task”. Enter on empty exits / unfocuses; Backspace on empty removes the row (files climb to list title when it is the last row).
 
-**Task list header.** In-file task lists show a title line above the rows (like info) — `task_lists.title`.
+**Views.** A user-made list a task can appear in without being copied. **A task belongs to at most one view** — choosing a view replaces any previous one (`setTaskView`). Create from the sidebar **+**; rename via right-click → Edit on a view. Assign from a task’s right-click **Choose view…** (files and views) or the shortcut. UI: [`views/assign_task_view_dialog.dart`](views/assign_task_view_dialog.dart).
+
+**View page.** [`views/task_view_pane.dart`](views/task_view_pane.dart) is placement chrome only: grid of section/topic frames ([`views/view_list_frame.dart`](views/view_list_frame.dart) → [`views/view_frame_task_list.dart`](views/view_frame_task_list.dart)). Each frame hosts `TaskListSurface`. Floating chrome toggles sections↔topics, adds sections, and starts frame reorder (exit by tapping empty canvas, not frames). Each display mode keeps its own order in `layout_config`: `section_order` / `topic_order`. Right-click menu groups **list + topic** (leave the origin list — confirm when the task has a home list) separately from **section + view** (view-only placement; view choice replaces). Title right-click is edit/delete section only; deleting a section moves its tasks to Uncategorized. Delete warns only when the task has a home list.
+
+**Task list header.** In-file lists show a title line (`task_lists.title`) via the surface when the file bridge enables it; view frames use the frame title instead.
 
 ```
-task ──┬── shown inline in its file (files embed)
-       ├── shown in view "This week"
-       └── shown in view "Errands"
-        (one row, three places)
+task ──┬── shown inline in its file (home list)
+       └── shown in at most one view
 ```
 
 ## Info and the object graph
@@ -63,10 +68,10 @@ An info object holds knowledge (`title`, `body`, …). Graph edges are keyed by 
 **Tags.** Freeform workspace tags (`tags.icon` + colour) assign to objects via `entity_type=object`. Topic type tags (`project` / `process` / …) stay for topic classification and are excluded from the object-tag UI.
 
 **UI here:**
-- Sidebar **New tag** + tag list; assign tags on info embeds
-- Related connections list + picker on info
+- Create tag via sidebar **+**; assign tags on info embeds (context menu)
+- Info frame shows tag chips only; Add connection via context menu (no links list)
 - Description: document **Connect info…**, hover bubble, double-tap opens the info
-- **Diagram** pane: info nodes only, related edges, force layout, tag OR-filter
+- **Objects map**: info nodes + related edges; tag filter above bottom bar; topic/tag color modes; click expands editable card with ×
 
 In-file editing of title/body is presentation (files).
 
@@ -88,7 +93,7 @@ Agent text and API shapes: backend objects `AREA.md` + production agent prompt.
 | [`views/`](views/) | Task view pane and display config |
 | [`tags/`](tags/) | Create / assign object tags |
 | [`links/`](links/) | Connection picker + description hover bubble |
-| [`diagram/`](diagram/) | Object diagram pane |
+| [`diagram/`](diagram/) | Objects map pane |
 
 In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 
@@ -106,8 +111,8 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 
 **Shipped (data):** task CRUD/status/order; view membership pane; empty titles; object create/delete with embed insert.
 
-**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder; object tags; related + description links; diagram pane with tag filter.
+**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder; object tags; related + description links; objects map with tag filter, color modes, in-map expand/edit.
 
-**Shipped (presentation, in files):** list-like task embed; info title/body flow + tags/connections chrome; graph table-like embed; Move Mode; right-click text menu including Connect info; description underlines + hover/double-tap.
+**Shipped (presentation, in files):** list-like task embed; info title/body + tag chips (add tag/link via context menu); graph table-like embed; Move Mode; right-click text menu including Connect info; description underlines + hover/double-tap.
 
-**Next (this area):** non-info diagram nodes; persisted diagram layout; convert-selection → create Info.
+**Next (this area):** non-info map nodes; persisted map layout; convert-selection → create Info.

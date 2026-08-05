@@ -191,11 +191,21 @@ class _InfoEmbedState extends State<InfoEmbed> {
   }
 
   Future<void> _showTextMenu(TapDownDetails details) async {
-    await DocumentContextMenu.showTextMenu(
+    await DocumentContextMenu.showInfoMenu(
       context: context,
       globalPosition: details.globalPosition,
       strings: widget.state.strings,
-      onAction: runBlockTextAction,
+      onAction: (action) async {
+        if (action == 'info:add_tag') {
+          await _assignTags();
+          return;
+        }
+        if (action == 'info:add_connection') {
+          await _addConnection();
+          return;
+        }
+        await runBlockTextAction(action);
+      },
     );
   }
 
@@ -222,33 +232,10 @@ class _InfoEmbedState extends State<InfoEmbed> {
     widget.onRefresh();
   }
 
-  Future<void> _openConnection(Map<String, dynamic> link) async {
-    final peer = link['peer'];
-    if (peer is! Map) return;
-    final kind = link['kind'] as String? ?? 'related';
-    if (kind == 'description') {
-      final anchor = link['anchor'];
-      final fileId = anchor is Map
-          ? anchor['file_id'] as int?
-          : peer['id'] as int?;
-      if (fileId == null) return;
-      await widget.state.openObjectInFile(
-        objectId: widget.embed.id,
-        fileId: fileId,
-      );
-      return;
-    }
-    final objectId = peer['id'] as int?;
-    final fileId = peer['file_id'] as int?;
-    if (objectId == null || fileId == null) return;
-    await widget.state.openObjectInFile(objectId: objectId, fileId: fileId);
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = widget.state.strings;
     final tags = widget.embed.tags;
-    final connections = widget.embed.connections;
     return DecoratedBox(
       decoration: AppColors.detailsBlockDecoration(),
       child: Padding(
@@ -281,90 +268,37 @@ class _InfoEmbedState extends State<InfoEmbed> {
               onBackspaceAtStart: _onBodyBackspaceAtStart,
               onSecondaryTapDown: _showTextMenu,
             ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                for (final tag in tags)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: TopicAppearance.colorFromHex(
-                        tag.color ?? TopicAppearance.defaultColor,
-                      ).withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      '${tag.icon?.isNotEmpty == true ? '${tag.icon} ' : ''}${tag.name}',
-                      style: AppTypography.metaStyle.copyWith(fontSize: 11),
-                    ),
-                  ),
-                TextButton(
-                  onPressed: () => unawaited(_assignTags()),
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    foregroundColor: AppColors.textHint,
-                  ),
-                  child: Text(s['addTag'], style: AppTypography.metaStyle),
-                ),
-              ],
-            ),
-            if (connections.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              for (final link in connections)
-                InkWell(
-                  onTap: () => unawaited(_openConnection(link)),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Text(
-                      _connectionLabel(link, s),
-                      style: AppTypography.metaStyle.copyWith(
-                        color: AppColors.text.withValues(alpha: 0.72),
+            if (tags.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  for (final tag in tags)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      decoration: BoxDecoration(
+                        color: TopicAppearance.colorFromHex(
+                          tag.color ?? TopicAppearance.defaultColor,
+                        ).withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '${tag.icon?.isNotEmpty == true ? '${tag.icon} ' : ''}${tag.name}',
+                        style: AppTypography.metaStyle.copyWith(fontSize: 11),
+                      ),
                     ),
-                  ),
-                ),
-            ],
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton(
-                onPressed: () => unawaited(_addConnection()),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  foregroundColor: AppColors.textHint,
-                ),
-                child: Text(s['addConnection'], style: AppTypography.metaStyle),
+                ],
               ),
-            ),
+            ],
           ],
         ),
       ),
     );
-  }
-
-  String _connectionLabel(Map<String, dynamic> link, dynamic s) {
-    final kind = link['kind'] as String? ?? 'related';
-    final peer = link['peer'];
-    final title = peer is Map
-        ? (peer['title'] as String? ?? '').trim()
-        : (link['label'] as String? ?? '');
-    if (kind == 'description') {
-      final label = (link['label'] as String?)?.trim();
-      if (label != null && label.isNotEmpty) {
-        return '${s['descriptionInFile']}: “$label”';
-      }
-      return s['descriptionInFile'] as String;
-    }
-    return title.isEmpty ? (s['connection'] as String) : title;
   }
 }
 

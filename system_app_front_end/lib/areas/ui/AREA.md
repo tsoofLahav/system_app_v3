@@ -8,7 +8,7 @@ Backend twin: none. This area is frontend-only.
 
 The app is a personal workspace, so the interface should **reduce mental load rather than ask for attention**. Calm, mature, practical, quietly colour-supported. Text is small and dense, spaces are tight, edges are soft, and nothing pulses or shouts. The user's own content is the loudest thing on screen; every piece of chrome is deliberately quieter than the file it sits next to.
 
-Concretely, that means: small type (12–14px for almost everything), 4–18px spacing, thin borders under 1px, gentle translucent fills instead of solid blocks, and no saturated alert colours anywhere.
+Concretely, that means: small type (12–14px for almost everything), 4–18px spacing, thin borders under 1px, gentle translucent fills instead of solid blocks, and no saturated alert colours anywhere. **Dialogs and menus hug their content** — never large empty panels around a few fields (see [Dialogs and menus](#dialogs-and-menus)).
 
 ## Surface hierarchy
 
@@ -167,15 +167,18 @@ Marking and selection are **gentle by rule**: a translucent fill or a hairline r
 
 ## Dialogs and menus
 
+**Hug the content.** Dialogs and choice bubbles are sized and padded for what they hold — not for empty air. Default max width is `AppDialogMetrics.maxWidth` (280); only pickers/lists that need room use `wideWidth` (400). Chrome padding is 12/10/12/8; field gaps are 8. Do not pass a custom `width:` on a dialog unless the body truly overflows at 280. Metrics live in [`dialog_metrics.dart`](dialog_metrics.dart).
+
 The preferences dialog is the **reference** glass dialog. Every other dialog uses the same shell and the same field language.
 
 | Kind | Widget | Shape |
 |------|--------|-------|
-| Standard dialog | `AppAdaptiveDialogShell` → `AppGlassDialog` | Width 420, radius 22, padding 20/18/20/14, hairline dividers |
-| Phone dialog | `AppAdaptiveDialogShell` | Radius 20, inset 16×24, tint 0.94 |
+| Standard dialog | `AppAdaptiveDialogShell` → `AppGlassDialog` | Max width 280, radius 16, padding 12/10/12/8, tight hairline dividers |
+| Phone dialog | `AppAdaptiveDialogShell` | Radius 16, inset 14×16, tint 0.94, matching tight padding |
+| Wide dialog | same shell + `wideWidth` | 400 — colour/emoji pickers, shortcut list, automations |
 | Confirm | `showAppConfirmDialog` | Same shell; destructive answers use amber-brown text |
 | Full-screen overlay | `OverlayDialogShell` + `OverlayDialogStyle` | Scrim black 18%, cards radius 14 |
-| Context menu (right-click **and** file `⋯`) | `../ux/widgets/app_context_menu.dart` | Bubble radius 12, rows 28 high, 11.5px labels, `menuTint` frost, highlight in `primary` |
+| Context menu (right-click **and** file `⋯`) | `../ux/widgets/app_context_menu.dart` | Bubble radius 12, rows 28 high, 11.5px labels, `menuTint` frost, highlight in `primary`; compact width 128 + downward caret for anchored create menus |
 | Hover bubble | `../ux/widgets/details_hover_bubble.dart` | Radius 10, blur 18, white 82%, max 320×240 |
 | Native popup menu | Avoid — use `AppContextMenu` | — |
 
@@ -214,7 +217,7 @@ Every surface must work in English (LTR) and Hebrew (RTL). Use [`bilingual_layou
 | Text | [`app_typography.dart`](app_typography.dart) |
 | Glass | [`glass_surface.dart`](glass_surface.dart) |
 | Controls | [`app_segmented_toggle.dart`](app_segmented_toggle.dart), [`app_switch.dart`](app_switch.dart) |
-| Dialogs | [`adaptive_dialog.dart`](adaptive_dialog.dart), [`color_dialog.dart`](color_dialog.dart), [`overlay_dialog_shell.dart`](overlay_dialog_shell.dart), [`overlay_dialog_style.dart`](overlay_dialog_style.dart), [`dialog_field_style.dart`](dialog_field_style.dart) |
+| Dialogs | [`adaptive_dialog.dart`](adaptive_dialog.dart), [`dialog_metrics.dart`](dialog_metrics.dart), [`color_dialog.dart`](color_dialog.dart), [`overlay_dialog_shell.dart`](overlay_dialog_shell.dart), [`overlay_dialog_style.dart`](overlay_dialog_style.dart), [`dialog_field_style.dart`](dialog_field_style.dart) |
 | Icons | [`app_icons.dart`](app_icons.dart) |
 | Cards and previews | [`note_widgets.dart`](note_widgets.dart), [`overlay_file_preview_card.dart`](overlay_file_preview_card.dart), [`layout_preview_icon.dart`](layout_preview_icon.dart) |
 | Carousel | [`horizontal_carousel.dart`](horizontal_carousel.dart) |

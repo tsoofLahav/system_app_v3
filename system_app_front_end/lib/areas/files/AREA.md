@@ -187,8 +187,8 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 
 | Embed | Widget | Flow role |
 |-------|--------|-----------|
-| Task list | [`embeds/inline_task_list.dart`](editor/embeds/inline_task_list.dart) | Header segment + one segment per task |
-| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | Title + body segments; gentle frame |
+| Task list | [`embeds/inline_task_list.dart`](editor/embeds/inline_task_list.dart) | Thin host: document segments + Move Mode; rows via objects [`TaskListSurface`](../objects/tasks/task_list_surface.dart) |
+| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | Title + body segments; tag chips; Add tag / Add connection via info context menu (no links list) |
 | Image | same | Atomic unit; caption field |
 | Graph | [`embeds/graph_embed.dart`](editor/embeds/graph_embed.dart) | One segment per column (like a table) |
 | Host | [`embed_block_host.dart`](editor/embed_block_host.dart) | Move Mode; optional atomic `#embed` segment |
@@ -203,7 +203,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Document tree is source of truth | Position is `blocks[]` order; the object row holds data, not placement |
 | Right-click on embed text | Same text menu as paragraphs (`DocumentMark`). Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Graphs extend the table cell menu (add column + chart options). Task lists add **Add to view…** and **Reorder tasks** |
 | Move Mode | Double-click the object → glass frame around the whole embed; drag from anywhere; **drop or tap outside** ends the mode. No handles, no instructional text |
-| Task Reorder Mode | Right-click → Reorder tasks → glass frame around **each** task; drag tasks (edit/toggle off); drops keep the mode; **tap outside the list** ends it |
+| Task Reorder Mode | Owned by `TaskListSurface` (objects): right-click → Reorder tasks → glass per task; **tap outside the list** ends it |
 
 ### Segment id
 
@@ -223,7 +223,7 @@ Enter on an empty trailing unit (final task / info body line / graph column) exi
 | Type | In the document |
 |------|-----------------|
 | Task list | Active then Done; Enter adds in the same zone; empty + Enter exits below; Reorder Mode via right-click; empty title + hint |
-| Info | Title ↔ body like adjacent lines; empty final body line + Enter exits below |
+| Info | Title ↔ body like adjacent lines; empty final body line + Enter exits below; right-click → text + Add tag / Add connection |
 | Graph | Chart on top; two-row grid; max **8** variables; Enter adds columns (blocked at 8); empty column exits below; chart paints in the same reading direction as the table (RTL in Hebrew); right-click → type + palette submenu ([`AppColorPalettes`](../ui/app_color_palettes.dart), 8 colours each) |
 | Image | Display + caption; resize handles deferred |
 

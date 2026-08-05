@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import './adaptive_dialog.dart';
 import './app_colors.dart';
 import './app_typography.dart';
+import './dialog_metrics.dart';
 
 /// Asks one question and takes one answer.
 ///
@@ -21,7 +22,7 @@ Future<bool> showAppConfirmDialog({
     context: context,
     builder: (ctx) => AppAdaptiveDialogShell(
       title: Text(title),
-      width: 360,
+      width: AppDialogMetrics.maxWidth,
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, false),

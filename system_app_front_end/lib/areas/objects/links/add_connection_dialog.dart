@@ -106,7 +106,6 @@ class _AddConnectionDialogState extends State<_AddConnectionDialog> {
     final s = widget.state.strings;
     return AppAdaptiveDialogShell(
       title: Text(s['addConnection']),
-      width: 380,
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
@@ -154,7 +153,6 @@ Future<ObjectGraphNode?> showPickInfoObjectDialog({
     context: context,
     builder: (_) => AppAdaptiveDialogShell(
       title: Text(state.strings['connectInfo']),
-      width: 380,
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),

@@ -89,7 +89,7 @@ How a topic is laid out on screen, top to bottom — matching v1:
 |---------|-------|-----------|
 | Topic | Sidebar topic | [`topic/topic_view.dart`](topic/topic_view.dart) — files laid out |
 | Task view | Sidebar view | [`../objects/views/task_view_pane.dart`](../objects/views/task_view_pane.dart) — grid of list frames |
-| Diagram | Sidebar **Diagram** | [`../objects/diagram/object_diagram_pane.dart`](../objects/diagram/object_diagram_pane.dart) — info nodes + related edges |
+| Objects map | Sidebar **Objects map** (below topics) | [`../objects/diagram/object_diagram_pane.dart`](../objects/diagram/object_diagram_pane.dart) — info nodes + related edges, tag filter, color modes |
 | Archive | Sidebar archive | [`archive/`](archive/) — archived topics and files, read-mostly |
 
 ### Task view page
@@ -110,12 +110,9 @@ Phone uses its own shell ([`shell/phone_app_shell.dart`](shell/phone_app_shell.d
 
 - Browse topics and open one in the main pane
 - Open user-created task views
-- Open the **Diagram** (info object graph)
-- Browse **Tags** (freeform object tags) and create a tag
+- Open the **Objects map** (info object graph) — listed after topics
 - Reach the archive
-- Create a topic
-- Create a view
-- Create a tag
+- Create a topic, view, or tag from the centered sidebar **+** — a context-menu bubble lists the three choices; each opens its own create dialog (tags are filtered on the objects map, not listed as a sidebar section)
 
 The sidebar is navigation only. It never edits content.
 

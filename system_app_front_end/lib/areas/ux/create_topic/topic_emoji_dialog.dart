@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/app_strings.dart';
 import '../../ui/adaptive_dialog.dart';
+import '../../ui/dialog_metrics.dart';
 import './icon_category_picker.dart';
 
 /// Picks a topic's emoji, on its own.
@@ -18,7 +19,7 @@ Future<String?> showTopicEmojiDialog({
     context: context,
     builder: (ctx) => AppAdaptiveDialogShell(
       title: Text(strings['chooseEmoji']),
-      width: 380,
+      width: AppDialogMetrics.wideWidth,
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx),
