@@ -106,6 +106,15 @@ Body text
 [GRAPH id="8" title="Chart"]
 ```
 
+Use `open_file` to load a file. It returns:
+
+| Field | Meaning |
+|-------|---------|
+| `document_plain` | Agent text with the fences above |
+| `object_extras` | Only when useful — for **info**, optional `title` and **`Links`** |
+
+Each **Links** entry is `{ id, type, title }` (related object or description target). Related peers may also include `file_id`. Do not invent ids; only use ids from tools or scope. Archived files are readable; never write to them.
+
 ## Code reference (implementation)
 
 | Module | Role |

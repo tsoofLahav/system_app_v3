@@ -49,10 +49,12 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 
 | Tool | Behavior |
 |------|----------|
-| `search` | Substring match on file name and **agent text** within scope |
-| `open_file` | Returns `document_plain` (agent text) plus minimal object id/title/type |
-| `update_file` | Full replacement — takes `document_text` in agent text format |
-| `search_tasks` | Substring match on task titles within scoped files |
+| `search` | Substring match on file name and **agent text** within scope (includes archived, flagged) |
+| `open_file` | Returns `document_plain` (agent text) + `object_extras` (info `title` / `Links` when useful). Archived readable. |
+| `update_file` | Full replacement — takes `document_text` in agent text format; rejects archived |
+| `search_tasks` | Substring match on task titles within scoped (live) files |
+
+`open_file` payload shape is built by [`services/open_file_tool.py`](services/open_file_tool.py) — no ORM dumps.
 
 The agent never sees or writes raw JSON. It reads and writes **agent text**; the [files area](../files/AREA.md) converts in both directions.
 
@@ -91,6 +93,7 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 | Module | Role |
 |--------|------|
 | [`services/runner.py`](services/runner.py) | Conversation lifecycle, tool dispatch, apply modes, diff |
+| [`services/open_file_tool.py`](services/open_file_tool.py) | `open_file` payload (agent text + extras) |
 | [`services/prompt.py`](services/prompt.py) | Load/seed/sync the system prompt from the DB |
 | [`services/openai_service.py`](services/openai_service.py) | Responses conversation helpers + legacy chat/image helpers |
 | [`routes/agent.py`](routes/agent.py) | `POST /agent/run` (`prompt`, `scope`, `hints`, `apply_mode`) |
@@ -110,5 +113,5 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 
 - Write tools still use `update_file` (pending `patch_file` / `move_text` / `rewrite_file`).
 - Pending reviews are still returned in the HTTP response, not yet persisted independently in DB.
-- `open_file` extras are minimal (links polish is step 2).
+- Fence shapes (info title+body, graph table) still to freeze in step 3.
 - `agent_configs.tool_allowlist` is not yet honored.

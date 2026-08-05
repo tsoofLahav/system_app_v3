@@ -22,5 +22,6 @@ def test_system_prompt_for_workspace_uses_db_and_suffix():
         prompt = system_prompt_for_workspace(1)
     assert "Stored production rules." in prompt
     assert "open_file" in prompt
+    assert "Links" in prompt
     assert "Never invent file or object ids" in prompt
     assert operational_suffix() in prompt

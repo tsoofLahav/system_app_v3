@@ -31,6 +31,7 @@ from areas.production_agent.services.openai_service import (
     function_calls_from_response,
     output_text_from_response,
 )
+from areas.production_agent.services.open_file_tool import build_open_file_payload
 from config import OPENAI_MODEL
 
 logger = logging.getLogger(__name__)
@@ -85,8 +86,10 @@ def _file_in_scope(file: File, scope: dict) -> bool:
     return False
 
 
-def _scoped_files_query(scope: dict):
-    q = File.query.filter(File.archived_at.is_(None))
+def _scoped_files_query(scope: dict, *, include_archived: bool = False):
+    q = File.query
+    if not include_archived:
+        q = q.filter(File.archived_at.is_(None))
     file_ids = _scope_file_ids(scope)
     topic_ids = _scope_topic_ids(scope)
     if file_ids:
@@ -97,16 +100,23 @@ def _scoped_files_query(scope: dict):
 
 
 def _search_files(scope: dict, query: str) -> list[dict]:
-    rows = _scoped_files_query(scope).all()
+    # Include archived so the agent can find them when needed; writes stay blocked.
+    rows = _scoped_files_query(scope, include_archived=True).all()
     query_lower = (query or "").lower()
     hits: list[dict] = []
     for f in rows:
         objects_by_id = load_objects_by_id(f.id)
         plain = document_to_agent_text(f.document_json or "", objects_by_id=objects_by_id)
         if query_lower in (f.name or "").lower() or query_lower in plain.lower():
-            data = f.to_dict(include_document=False)
-            data["snippet"] = plain[:240]
-            hits.append(data)
+            hits.append(
+                {
+                    "id": f.id,
+                    "name": f.name,
+                    "topic_id": f.topic_id,
+                    "archived": f.archived_at is not None,
+                    "snippet": plain[:240],
+                }
+            )
     return hits
 
 
@@ -116,41 +126,8 @@ def _open_file(file_id: int, scope: dict) -> dict:
         return {"error": "file not found"}
     if not _file_in_scope(file, scope):
         return {"error": "file out of scope"}
-    objects_by_id = load_objects_by_id(file_id)
-    return {
-        "id": file.id,
-        "name": file.name,
-        "topic_id": file.topic_id,
-        "archived": file.archived_at is not None,
-        "document_plain": document_to_agent_text(
-            file.document_json or "",
-            objects_by_id=objects_by_id,
-        ),
-        # Minimal extras — full object dumps wait for step 2 polish.
-        "objects": [
-            {
-                "id": oid,
-                "type": obj.get("type"),
-                "title": _object_title(obj),
-            }
-            for oid, obj in objects_by_id.items()
-        ],
-    }
-
-
-def _object_title(obj: dict) -> str | None:
-    info = obj.get("information") or {}
-    if isinstance(info, dict) and info.get("title"):
-        return str(info["title"])
-    task_list = obj.get("task_list") or {}
-    if isinstance(task_list, dict) and task_list.get("title"):
-        return str(task_list["title"])
-    payload = obj.get("payload") or {}
-    if isinstance(payload, dict):
-        for key in ("title", "caption", "name"):
-            if payload.get(key):
-                return str(payload[key])
-    return None
+    # Archived files are readable; update_file rejects writes.
+    return build_open_file_payload(file)
 
 
 def _known_object_ids(file_id: int) -> set[int]:
@@ -252,8 +229,10 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "type": "function",
         "name": "open_file",
         "description": (
-            "Open one in-scope file. Returns agent text (document_plain) plus "
-            "minimal object id/title/type extras. Never invent file ids."
+            "Open one in-scope file (including archived — read-only). "
+            "Returns document_plain (agent text with fenced embeds) and "
+            "object_extras when useful (info title + Links: id/type/title). "
+            "Never invent file or object ids."
         ),
         "strict": True,
         "parameters": {
