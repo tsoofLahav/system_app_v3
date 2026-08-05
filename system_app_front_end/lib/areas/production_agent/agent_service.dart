@@ -9,6 +9,7 @@ class AgentService {
     required String prompt,
     required int workspaceId,
     Map<String, dynamic>? scope,
+    Map<String, dynamic>? hints,
     String applyMode = 'review',
   }) async {
     final data =
@@ -16,6 +17,7 @@ class AgentService {
               'prompt': prompt,
               'workspace_id': workspaceId,
               'scope': scope ?? {},
+              'hints': hints ?? {},
               'apply_mode': applyMode,
             })
             as Map<String, dynamic>;

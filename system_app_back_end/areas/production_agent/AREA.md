@@ -4,6 +4,8 @@ The runtime AI that reads and edits the user's files. Frontend counterpart: [`sy
 
 **Not the coding agent.** Cursor/dev-agent guidance lives in [`DEVELOPMENT.md`](../../../DEVELOPMENT.md).
 
+Interaction plan: [`working on the agent interaction.md`](../../../working%20on%20the%20agent%20interaction.md).
+
 ## The agent has its own markdown file
 
 The agent's standing instructions are a real document it is allowed to read:
@@ -18,40 +20,49 @@ Bootstrap seeds the DB row on first launch. The runner never reads the markdown 
 
 ## What is passed to the agent
 
-Every run sends two messages:
+| Piece | Contents |
+|-------|----------|
+| **instructions** | `agent_configs.system_prompt` + operational suffix (attached on each Responses turn) |
+| **First user input** | `prompt` + hard `scope` + optional tiny `hints` — **no file bodies** |
+| **Tools** | Native Responses function tools (`search`, `open_file`, `update_file`, `search_tasks`) |
+| **Follow-up input** | Tool results only (`function_call_output` items) |
 
-| Message | Contents |
-|---------|----------|
-| **system** | `agent_configs.system_prompt` + a fixed operational suffix (tool-call JSON contract) |
-| **user** | `prompt`, `scope`, `context`, the workspace's topics, and the tool definitions |
+`scope` is a hard allow-list: `{ "topic_ids": [...] }` and/or `{ "file_ids": [...] }`. Empty scope is rejected.
 
-`scope` limits what the agent can reach: `{ "topic_ids": [...] }` or `{ "file_ids": [...] }`. Nothing outside scope is searchable.
+`hints` are optional pointers on the first turn only (e.g. `focused_file_id`, `selected_text`, `for_date`). Never dump file content there.
+
+## Run loop (Responses API)
+
+```
+create OpenAI conversation
+  → responses.create(instructions, tools, prompt+scope+hints)
+  → while function_call items:
+        run tools (enforce scope; reject archived writes)
+        responses.create(tool results only)
+  → plain-text summary
+delete conversation
+```
+
+Short-term memory is the OpenAI conversation for that run only. It is dropped when the run ends. Pending reviews / undo stay in our DB (later steps).
 
 ## Tools
 
 | Tool | Behavior |
 |------|----------|
 | `search` | Substring match on file name and **agent text** within scope |
-| `open_file` | Returns `document_plain` (agent text) plus the file's embedded objects |
+| `open_file` | Returns `document_plain` (agent text) plus minimal object id/title/type |
 | `update_file` | Full replacement — takes `document_text` in agent text format |
-| `search_tasks` | Substring match on task titles |
+| `search_tasks` | Substring match on task titles within scoped files |
 
 The agent never sees or writes raw JSON. It reads and writes **agent text**; the [files area](../files/AREA.md) converts in both directions.
-
-## Run loop
-
-```
-prompt → system + user message
-  → up to 6 rounds of { "tool_calls": [...] }
-  → { "final": "summary" }
-```
 
 Each `update_file` call:
 
 1. Parse agent text → block tree + object payload updates
 2. Reject if any embed `object_id` is unknown or was dropped
-3. Save a file version
-4. Write `document_json`, then apply object updates
+3. Reject archived files
+4. Save a file version (direct apply only)
+5. Write `document_json`, then apply object updates
 
 ## Apply modes
 
@@ -79,19 +90,25 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 
 | Module | Role |
 |--------|------|
-| [`services/runner.py`](services/runner.py) | Tool dispatch, run loop, apply modes, diff |
+| [`services/runner.py`](services/runner.py) | Conversation lifecycle, tool dispatch, apply modes, diff |
 | [`services/prompt.py`](services/prompt.py) | Load/seed/sync the system prompt from the DB |
-| [`services/openai_service.py`](services/openai_service.py) | Model call returning JSON |
-| [`routes/agent.py`](routes/agent.py) | `POST /agent/run` |
+| [`services/openai_service.py`](services/openai_service.py) | Responses conversation helpers + legacy chat/image helpers |
+| [`routes/agent.py`](routes/agent.py) | `POST /agent/run` (`prompt`, `scope`, `hints`, `apply_mode`) |
 
 ## Rules
 
 - Scope is a hard boundary — never widen it inside a tool.
+- Never put file bodies in the first turn; load only via tools.
+- Follow-up turns send tool results only.
 - Never persist agent text.
 - Never apply a partial update: if parsing produced errors, write nothing.
 - `review` and `notify_only` must roll back the session.
+- Drop the OpenAI conversation when the run ends.
 - Changing the agent's behavior means editing the markdown source and syncing — not hardcoding prompt text in `runner.py`.
 
-## Known gaps
+## Known gaps (later plan steps)
 
-`agent_configs.model` and `agent_configs.tool_allowlist` exist but are not honored yet — the model and tool set are still fixed in code.
+- Write tools still use `update_file` (pending `patch_file` / `move_text` / `rewrite_file`).
+- Pending reviews are still returned in the HTTP response, not yet persisted independently in DB.
+- `open_file` extras are minimal (links polish is step 2).
+- `agent_configs.tool_allowlist` is not yet honored.

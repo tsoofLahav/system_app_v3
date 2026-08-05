@@ -21,5 +21,6 @@ def test_system_prompt_for_workspace_uses_db_and_suffix():
     with patch("areas.production_agent.services.prompt.ensure_agent_config", return_value=config):
         prompt = system_prompt_for_workspace(1)
     assert "Stored production rules." in prompt
-    assert "tool_calls" in prompt
+    assert "open_file" in prompt
+    assert "Never invent file or object ids" in prompt
     assert operational_suffix() in prompt

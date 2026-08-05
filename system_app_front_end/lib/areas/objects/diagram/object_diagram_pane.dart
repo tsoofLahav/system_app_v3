@@ -102,11 +102,18 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane>
   }
 
   void _startSim() {
+    if (_expandedObjectId != null) return;
     _settled = false;
     if (_ticker?.isActive != true) _ticker?.start();
   }
 
   void _tick(Duration elapsed) {
+    // Freeze the whole sim while editing so setState doesn't rebuild TextFields
+    // under a held key (HardwareKeyboard "already pressed" assertion).
+    if (_expandedObjectId != null) {
+      _ticker?.stop();
+      return;
+    }
     final nodes = _visibleNodes;
     final edges = _visibleEdges;
     if (nodes.isEmpty || _size.isEmpty) {
@@ -156,11 +163,6 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane>
     var maxSpeed = 0.0;
     for (final n in nodes) {
       final id = n.objectId;
-      // Pin the expanded card so editing isn't yanked by the sim.
-      if (id == _expandedObjectId) {
-        _velocities[id] = Offset.zero;
-        continue;
-      }
       var f = forces[id]! + (center - _positions[id]!) * centerPull;
       var v = (_velocities[id]! + f) * damping;
       var p = _positions[id]! + v;
@@ -202,12 +204,15 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane>
         _expandedObjectId = null;
       } else {
         _expandedObjectId = node.objectId;
+        _ticker?.stop();
       }
     });
+    if (_expandedObjectId == null) _startSim();
   }
 
   void _closeExpand() {
     setState(() => _expandedObjectId = null);
+    _startSim();
   }
 
   @override
@@ -269,6 +274,9 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane>
                                   top: _positions[n.objectId]!.dy - halfH,
                                   child: expanded
                                       ? _ExpandedInfoCard(
+                                          key: ValueKey(
+                                            'diagram-expand-${n.objectId}',
+                                          ),
                                           node: n,
                                           accent: _accentFor(n),
                                           onClose: _closeExpand,
@@ -369,6 +377,7 @@ class _InfoNodeCard extends StatelessWidget {
 
 class _ExpandedInfoCard extends StatefulWidget {
   const _ExpandedInfoCard({
+    super.key,
     required this.node,
     required this.onClose,
     required this.onSave,

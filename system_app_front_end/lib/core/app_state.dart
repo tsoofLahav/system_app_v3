@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../areas/files/editor/document_editor_controller.dart';
 import '../areas/files/model/document_codec.dart';
 import '../areas/files/model/document_model.dart';
 import './l10n/app_language.dart';
@@ -355,6 +356,9 @@ class AppState extends ChangeNotifier {
   }
 
   /// Patch info content from the objects map without leaving diagram mode.
+  ///
+  /// Does not [notifyListeners] — the expanded map card owns local controllers,
+  /// and a rebuild mid-keystroke desyncs [HardwareKeyboard].
   Future<void> updateInfoFromDiagram({
     required int informationId,
     required int objectId,
@@ -366,16 +370,17 @@ class AppState extends ChangeNotifier {
       'body': body,
     });
     final graph = objectGraph;
-    if (graph != null) {
-      objectGraph = ObjectGraphData(
-        nodes: [
-          for (final n in graph.nodes)
-            if (n.objectId == objectId) n.copyWith(title: title, body: body) else n,
-        ],
-        edges: graph.edges,
-      );
-    }
-    notifyListeners();
+    if (graph == null) return;
+    objectGraph = ObjectGraphData(
+      nodes: [
+        for (final n in graph.nodes)
+          if (n.objectId == objectId)
+            n.copyWith(title: title, body: body)
+          else
+            n,
+      ],
+      edges: graph.edges,
+    );
   }
 
   Future<AppTag?> createWorkspaceTag({
@@ -1512,6 +1517,7 @@ class AppState extends ChangeNotifier {
     aiRunning = true;
     notifyListeners();
     try {
+      final focusedFileId = DocumentEditorRegistry.activeFileId;
       final result = await _agent.run(
         prompt: prompt,
         workspaceId: workspaceId!,
@@ -1519,6 +1525,9 @@ class AppState extends ChangeNotifier {
           if (selectedTopic != null) 'topic_ids': [selectedTopic!.id],
           if (selectedDetail != null)
             'file_ids': selectedDetail!.files.map((f) => f.id).toList(),
+        },
+        hints: {
+          if (focusedFileId != null) 'focused_file_id': focusedFileId,
         },
         applyMode: applyMode,
       );

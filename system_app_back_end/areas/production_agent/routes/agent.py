@@ -19,6 +19,7 @@ def agent_run():
         scope=data.get("scope") or {},
         apply_mode=data.get("apply_mode", "review"),
         context=data.get("context") or {},
+        hints=data.get("hints") or {},
     )
     status_code = 200 if result.get("status") == "ok" else 500
     return jsonify(result), status_code

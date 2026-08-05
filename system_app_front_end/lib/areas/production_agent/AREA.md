@@ -15,16 +15,18 @@ Lives in the bottom bar ([`ai_tool_bar.dart`](ai_tool_bar.dart)) and has two con
 
 Both are disabled when there is no AI context (nothing selected) or a run is already in flight. `AppState.hasAiContext` and `aiRunning` gate them; `aiRunning` also drives the busy state so the user cannot double-fire.
 
-## Scope comes from what is open
+## Scope and hints come from what is open
 
 The frontend does not ask the user what the AI may touch. It sends the current selection:
 
 ```
 selected topic  → scope.topic_ids
 selected topic's files → scope.file_ids
+active editor file → hints.focused_file_id   (tiny pointer; not the file body)
 ```
 
 This is why the buttons are dead with nothing open — an unscoped agent run is not allowed.
+The backend loads content only via tools; the first turn never includes file bodies.
 
 ## Diff review dialog
 
