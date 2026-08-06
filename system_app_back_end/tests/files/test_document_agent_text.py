@@ -163,9 +163,78 @@ def test_apply_agent_text_rejects_unknown_object_id():
     assert "unknown object id: 17" in errors[0]
 
 
-def test_parse_agent_text_info():
+def test_parse_agent_text_info_legacy_body_only():
     parsed = parse_agent_text('[INFO id="17"]\nHello info\n[/INFO]')
     assert parsed["object_updates"][17]["body"] == "Hello info"
+    assert "title" not in parsed["object_updates"][17]
+
+
+def test_info_title_body_round_trip():
+    objects = {
+        17: {
+            "type": "info",
+            "information": {"title": "Lens notes", "body": "Practice daily.\nTrack weekly."},
+        }
+    }
+    original = serialize_document(
+        {"version": 3, "blocks": [{"id": "b1", "type": "embed", "object_id": 17}]}
+    )
+    text = document_to_agent_text(original, objects_by_id=objects)
+    assert '[INFO id="17"]' in text
+    assert "Lens notes\nPractice daily.\nTrack weekly." in text
+    parsed = parse_agent_text(text)
+    assert parsed["object_updates"][17]["title"] == "Lens notes"
+    assert parsed["object_updates"][17]["body"] == "Practice daily.\nTrack weekly."
+    doc, updates, errors = apply_agent_text(original, text, known_object_ids={17})
+    assert not errors
+    assert updates[17]["title"] == "Lens notes"
+
+
+def test_graph_table_round_trip():
+    objects = {
+        8: {
+            "type": "graph",
+            "payload": {
+                "labels": ["A", "B"],
+                "values": ["1", "2"],
+                "chartType": "bar",
+                "colors": ["#111111", "#222222"],
+            },
+        }
+    }
+    original = serialize_document(
+        {"version": 3, "blocks": [{"id": "b1", "type": "embed", "object_id": 8}]}
+    )
+    text = document_to_agent_text(original, objects_by_id=objects)
+    assert 'chartType="bar"' in text
+    assert "A\tB" in text
+    assert "1\t2" in text
+    assert "#111111\t#222222" in text
+    assert "[/GRAPH]" in text
+    parsed = parse_agent_text(text)
+    payload = parsed["object_updates"][8]["payload"]
+    assert payload["chartType"] == "bar"
+    assert payload["labels"] == ["A", "B"]
+    assert payload["values"] == ["1", "2"]
+    assert payload["colors"] == ["#111111", "#222222"]
+
+
+def test_image_caption_and_url():
+    objects = {
+        5: {
+            "type": "image",
+            "payload": {"caption": "Shot", "url": "/uploads/a.png"},
+        }
+    }
+    original = serialize_document(
+        {"version": 3, "blocks": [{"id": "b1", "type": "embed", "object_id": 5}]}
+    )
+    text = document_to_agent_text(original, objects_by_id=objects)
+    assert 'caption="Shot"' in text
+    assert 'url="/uploads/a.png"' in text
+    parsed = parse_agent_text(text)
+    assert parsed["object_updates"][5]["payload"]["caption"] == "Shot"
+    assert parsed["object_updates"][5]["payload"]["url"] == "/uploads/a.png"
 
 
 def test_parse_agent_text_bullet_list_and_table():

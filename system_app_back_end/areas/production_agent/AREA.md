@@ -113,5 +113,4 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 
 - Write tools still use `update_file` (pending `patch_file` / `move_text` / `rewrite_file`).
 - Pending reviews are still returned in the HTTP response, not yet persisted independently in DB.
-- Fence shapes (info title+body, graph table) still to freeze in step 3.
 - `agent_configs.tool_allowlist` is not yet honored.

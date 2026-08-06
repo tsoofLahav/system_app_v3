@@ -85,7 +85,7 @@ Object GET / file object list payloads include `tags[]` and `connections[]` (und
 | `image` | `{ "url", "path", "width", "caption" }` |
 | `graph` | `{ "labels": [...], "values": [...], "chartType"?, "colors": ["#…", …], "color"? }` — one column and one colour per variable (`color` is legacy alias for the first) |
 
-Agent text expands task lists and info fully; images contribute reference + caption; graphs contribute the two-row table only. Spec: production agent system prompt.
+Agent text (frozen): task lists = ACTIVE/DONE checkboxes; info = title line + body; image = caption + optional url; graph = labels/values (+ optional colors) table with optional chartType. Spec: production agent system prompt.
 
 ## Deletion
 

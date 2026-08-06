@@ -76,7 +76,16 @@ Empty-final Enter exit (task / info / graph continuing as a paragraph below the 
 | **Full version** — block tree | `files.document_json` | The editor, persistence, source of truth |
 | **Text version** — agent text | Computed on demand | AI reading/writing, search, diffs |
 
-The text version flattens the tree into deterministic plain text with fenced regions (`[TABLE]`, `[BULLET_LIST]`, `[TASK_LIST id="…"]`). Embedded object content is expanded inline so the agent sees real content, not ids alone.
+The text version flattens the tree into deterministic plain text with fenced regions (`[TABLE]`, `[BULLET_LIST]`, `[TASK_LIST id="…"]`, `[INFO]`, `[IMAGE]`, `[GRAPH]`). Embedded object content is expanded inline so the agent sees real content, not ids alone.
+
+Frozen embed shapes (see production agent prompt):
+
+| Fence | Shape |
+|-------|--------|
+| `TASK_LIST` | ACTIVE/DONE checkbox lines |
+| `INFO` | First line title, remaining body |
+| `IMAGE` | Single-line `caption` + optional `url` |
+| `GRAPH` | Optional `chartType`; labels / values / optional colors as tab rows |
 
 It is **never persisted**. Converting back (`apply_agent_text`) rebuilds a block tree and rejects any result that would silently drop an existing embed.
 

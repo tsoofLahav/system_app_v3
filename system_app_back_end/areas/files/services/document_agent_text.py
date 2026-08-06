@@ -18,8 +18,21 @@ _INFO_RE = re.compile(
     r"\[INFO id=\"(\d+)\"]\s*(.*?)\s*\[/INFO]",
     re.DOTALL | re.IGNORECASE,
 )
-_IMAGE_RE = re.compile(r'\[IMAGE id="(\d+)"(?: caption="([^"]*)")?]', re.IGNORECASE)
-_GRAPH_RE = re.compile(r'\[GRAPH id="(\d+)"(?: title="([^"]*)")?]', re.IGNORECASE)
+_IMAGE_RE = re.compile(
+    r'\[IMAGE id="(\d+)"'
+    r'(?: caption="([^"]*)")?'
+    r'(?: url="([^"]*)")?'
+    r']',
+    re.IGNORECASE,
+)
+# Block form (frozen). Legacy single-line `[GRAPH id="N" title="…"]` still matches.
+_GRAPH_RE = re.compile(
+    r'\[GRAPH id="(\d+)"'
+    r'(?:(?:\s+chartType="([^"]*)")|(?:\s+title="([^"]*)"))*'
+    r'\]'
+    r'(?:\s*(.*?)\s*\[/GRAPH])?',
+    re.DOTALL | re.IGNORECASE,
+)
 _BULLET_LIST_RE = re.compile(
     r"\[BULLET_LIST]\s*(.*?)\s*\[/BULLET_LIST]",
     re.DOTALL | re.IGNORECASE,
@@ -201,23 +214,76 @@ def document_to_agent_text(
         if obj_type == "task_list":
             lines.append(_task_list_section(int(object_id), obj))
         elif obj_type == "info":
-            info = obj.get("information") or {}
-            body_text = str(info.get("body") or info.get("title") or "")
-            section = [f'[INFO id="{object_id}"]']
-            if body_text:
-                section.append(body_text)
-            section.append("[/INFO]")
-            lines.append("\n".join(section))
+            lines.append(_info_section(int(object_id), obj))
         elif obj_type == "image":
-            payload = obj.get("payload") or {}
-            caption = payload.get("caption") or payload.get("url") or ""
-            lines.append(f'[IMAGE id="{object_id}" caption="{caption}"]')
+            lines.append(_image_section(int(object_id), obj))
         elif obj_type == "graph":
-            payload = obj.get("payload") or {}
-            title = payload.get("title") or ""
-            lines.append(f'[GRAPH id="{object_id}" title="{title}"]')
+            lines.append(_graph_section(int(object_id), obj))
 
     return "\n\n".join(line for line in lines if line is not None)
+
+
+def _attr_escape(value: str) -> str:
+    return value.replace('"', "'").replace("\n", " ")
+
+
+def _info_section(object_id: int, obj: dict[str, Any]) -> str:
+    """Frozen shape: first line title, remaining lines body."""
+    info = obj.get("information") or {}
+    title = str(info.get("title") or "").strip()
+    body = str(info.get("body") or "").strip()
+    section = [f'[INFO id="{object_id}"]', title]
+    if body:
+        section.append(body)
+    section.append("[/INFO]")
+    return "\n".join(section)
+
+
+def _image_section(object_id: int, obj: dict[str, Any]) -> str:
+    """Frozen shape: caption + optional url/path ref."""
+    payload = obj.get("payload") or {}
+    caption = str(payload.get("caption") or "").strip()
+    ref = str(payload.get("url") or payload.get("path") or "").strip()
+    attrs = [f'id="{object_id}"']
+    if caption:
+        attrs.append(f'caption="{_attr_escape(caption)}"')
+    if ref:
+        attrs.append(f'url="{_attr_escape(ref)}"')
+    return f'[IMAGE {" ".join(attrs)}]'
+
+
+def _graph_section(object_id: int, obj: dict[str, Any]) -> str:
+    """Frozen shape: optional chartType; two-row labels/values table; optional colors row."""
+    payload = obj.get("payload") or {}
+    labels = [str(x) for x in (payload.get("labels") or [])]
+    values = [str(x) for x in (payload.get("values") or [])]
+    colors_raw = payload.get("colors")
+    if not colors_raw and payload.get("color"):
+        colors_raw = [payload.get("color")]
+    colors = [str(x) for x in (colors_raw or [])] if colors_raw else []
+    chart_type = str(
+        payload.get("chartType") or payload.get("chart_type") or ""
+    ).strip()
+
+    n = max(len(labels), len(values), len(colors), 1)
+    labels = (labels + [""] * n)[:n]
+    values = (values + [""] * n)[:n]
+
+    open_tag = f'[GRAPH id="{object_id}"'
+    if chart_type:
+        open_tag += f' chartType="{_attr_escape(chart_type)}"'
+    open_tag += "]"
+
+    lines = [
+        open_tag,
+        "\t".join(_escape_cell(c) for c in labels),
+        "\t".join(_escape_cell(c) for c in values),
+    ]
+    if colors:
+        colors = (colors + [""] * n)[:n]
+        lines.append("\t".join(_escape_cell(c) for c in colors))
+    lines.append("[/GRAPH]")
+    return "\n".join(lines)
 
 
 def _task_list_section(object_id: int, obj: dict[str, Any]) -> str:
@@ -336,7 +402,7 @@ def apply_object_updates(
         if update_type == "task_list":
             _sync_task_list(embed, update.get("tasks") or [])
         elif update_type == "info":
-            _sync_info(embed, update.get("body") or "")
+            _sync_info(embed, update)
         elif update_type in {"image", "graph"}:
             payload = update.get("payload") or {}
             embed.payload = {**(embed.payload or {}), **payload}
@@ -363,13 +429,16 @@ def _sync_task_list(embed: ObjectEmbed, tasks_data: list[dict[str, Any]]) -> Non
         )
 
 
-def _sync_info(embed: ObjectEmbed, body: str) -> None:
+def _sync_info(embed: ObjectEmbed, update: dict[str, Any]) -> None:
     if not embed.information_id:
         return
     info = db.session.get(InformationPiece, embed.information_id)
     if info is None:
         return
-    info.body = body
+    if "title" in update:
+        info.title = str(update.get("title") or "")
+    if "body" in update:
+        info.body = str(update.get("body") or "")
 
 
 def agent_text_from_document_json(
@@ -549,27 +618,60 @@ def _parse_task_list(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
 
 
 def _parse_info(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
+    """First line = title, remaining = body. Single-line legacy = body only."""
     object_id = int(match.group(1))
-    body = match.group(2).strip()
+    content = (match.group(2) or "").strip("\n")
+    update: dict[str, Any] = {"type": "info"}
+    if "\n" in content:
+        title, _, rest = content.partition("\n")
+        update["title"] = title.strip()
+        update["body"] = rest.lstrip("\n")
+    else:
+        # Legacy body-only fence — do not clobber title.
+        update["body"] = content.strip()
     return (
         {"id": new_id("b"), "type": "embed", "object_id": object_id},
-        {object_id: {"type": "info", "body": body}},
+        {object_id: update},
     )
 
 
 def _parse_image_marker(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
     object_id = int(match.group(1))
     caption = match.group(2) or ""
+    url = match.group(3) or ""
+    payload: dict[str, Any] = {}
+    if caption:
+        payload["caption"] = caption
+    if url:
+        payload["url"] = url
     return (
         {"id": new_id("b"), "type": "embed", "object_id": object_id},
-        {object_id: {"type": "image", "payload": {"caption": caption}}},
+        {object_id: {"type": "image", "payload": payload}},
     )
 
 
 def _parse_graph_marker(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
     object_id = int(match.group(1))
-    title = match.group(2) or ""
+    chart_type = (match.group(2) or "").strip()
+    legacy_title = (match.group(3) or "").strip()
+    body = (match.group(4) or "").strip()
+    payload: dict[str, Any] = {}
+    if chart_type:
+        payload["chartType"] = chart_type
+    elif legacy_title and not body:
+        # Legacy single-line marker used title= as a display label.
+        payload["title"] = legacy_title
+
+    data_lines = [ln for ln in body.splitlines() if ln.strip()]
+    if data_lines:
+        labels = _split_table_row(data_lines[0])
+        values = _split_table_row(data_lines[1]) if len(data_lines) > 1 else []
+        payload["labels"] = labels
+        payload["values"] = values
+        if len(data_lines) > 2:
+            payload["colors"] = _split_table_row(data_lines[2])
+
     return (
         {"id": new_id("b"), "type": "embed", "object_id": object_id},
-        {object_id: {"type": "graph", "payload": {"title": title}}},
+        {object_id: {"type": "graph", "payload": payload}},
     )

@@ -88,7 +88,9 @@ Value 1	Value 2
 - One row per line; cells separated by tab (`\t`).
 - Literal tab or backslash inside a cell: escape as `\t` and `\\`.
 
-### Embedded objects
+### Embedded objects (frozen shapes)
+
+**Task list** — checkbox lines under ACTIVE / DONE:
 
 ```text
 [TASK_LIST id="42"]
@@ -97,14 +99,35 @@ ACTIVE:
 DONE:
 - [x] Done item
 [/TASK_LIST]
-
-[INFO id="17"]
-Body text
-[/INFO]
-
-[IMAGE id="5" caption="Screenshot"]
-[GRAPH id="8" title="Chart"]
 ```
+
+**Info** — first line is **title**, remaining lines are **body**:
+
+```text
+[INFO id="17"]
+Lens notes
+Practice morning and evening.
+Track progress weekly.
+[/INFO]
+```
+
+**Image** — caption and optional url/path ref (single-line marker):
+
+```text
+[IMAGE id="5" caption="Screenshot" url="/uploads/shot.png"]
+```
+
+**Graph** — optional `chartType`; tab-separated **labels** row, **values** row, optional **colors** row:
+
+```text
+[GRAPH id="8" chartType="bar"]
+Week1	Week2	Week3
+10	20	15
+#4A90D9	#E07A5F	#3D405B
+[/GRAPH]
+```
+
+Preserve every `id="…"` when editing. Never invent object ids.
 
 Use `open_file` to load a file. It returns:
 
