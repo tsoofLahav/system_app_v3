@@ -100,6 +100,14 @@ def sync_all_workspace_prompts(*, overwrite: bool = True) -> list[int]:
     return ids
 
 
+def _on_render() -> bool:
+    # Render sets several of these; any one is enough.
+    return any(
+        (os.environ.get(key) or "").strip()
+        for key in ("RENDER", "RENDER_SERVICE_ID", "RENDER_EXTERNAL_URL")
+    )
+
+
 def should_sync_prompt_on_boot() -> bool:
     """On Render, sync by default (internal DATABASE_URL). Locally opt-in via env."""
     flag = (os.environ.get("SYNC_AGENT_PROMPT_ON_DEPLOY") or "").strip().lower()
@@ -107,26 +115,33 @@ def should_sync_prompt_on_boot() -> bool:
         return False
     if flag in {"1", "true", "yes", "on"}:
         return True
-    # Render sets RENDER=true on web services.
-    return (os.environ.get("RENDER") or "").strip().lower() == "true"
+    return _on_render()
+
+
+def _boot_log(message: str) -> None:
+    # print() so Render deploy logs show it even when app loggers are quiet.
+    print(f"[agent-prompt] {message}", flush=True)
+    logger.info(message)
 
 
 def maybe_sync_prompts_on_boot() -> None:
     """Push git prompt into DB via the service's DATABASE_URL (internal on Render)."""
     if not should_sync_prompt_on_boot():
+        _boot_log(
+            "sync skipped "
+            f"(RENDER={os.environ.get('RENDER')!r} "
+            f"SYNC_AGENT_PROMPT_ON_DEPLOY={os.environ.get('SYNC_AGENT_PROMPT_ON_DEPLOY')!r})"
+        )
         return
     path = resolve_prompt_file()
     if not path.is_file():
-        logger.warning("agent prompt sync skipped — file missing: %s", path)
+        _boot_log(f"sync skipped — file missing: {path}")
         return
     try:
         ids = sync_all_workspace_prompts(overwrite=True)
-        logger.info(
-            "Synced production agent prompt from %s for workspace(s): %s",
-            path,
-            ids,
-        )
-    except Exception:
+        _boot_log(f"synced from {path} for workspace(s): {ids}")
+    except Exception as error:
         # Never block boot if DB is briefly unavailable.
+        _boot_log(f"sync failed: {error}")
         logger.exception("agent prompt sync on boot failed")
 
