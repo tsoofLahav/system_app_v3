@@ -162,10 +162,8 @@ def load_objects_by_id(file_id: int) -> dict[int, dict[str, Any]]:
             if embed.information_id
             else None
         )
-        data = embed.to_dict(
-            tasks=[t.to_dict() for t in tasks] if tasks is not None else None,
-            information=info.to_dict() if info is not None else None,
-        )
+        # Pass model instances — ObjectEmbed.to_dict serializes them.
+        data = embed.to_dict(tasks=tasks, information=info)
         by_id[embed.id] = data
     return by_id
 

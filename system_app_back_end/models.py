@@ -166,11 +166,19 @@ class ObjectEmbed(db.Model):
             "created_at": _iso(self.created_at),
         }
         if task_list is not None:
-            data["task_list"] = task_list.to_dict()
+            data["task_list"] = (
+                task_list if isinstance(task_list, dict) else task_list.to_dict()
+            )
         if tasks is not None:
-            data["tasks"] = [t.to_dict() for t in tasks]
+            data["tasks"] = [
+                t if isinstance(t, dict) else t.to_dict() for t in tasks
+            ]
         if information is not None:
-            data["information"] = information.to_dict()
+            data["information"] = (
+                information
+                if isinstance(information, dict)
+                else information.to_dict()
+            )
         return data
 
 

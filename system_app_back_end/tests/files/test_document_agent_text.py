@@ -194,12 +194,17 @@ def test_runner_update_file_applies_agent_text(
     mock_apply_objects,
 ):
     file_row = MagicMock()
+    file_row.id = 1
+    file_row.topic_id = 1
+    file_row.archived_at = None
     file_row.document_json = serialize_document({"version": 3, "blocks": []})
     mock_session.get.return_value = file_row
     mock_embed_model.query.filter_by.return_value.all.return_value = []
 
     agent_text = "## Title\n\nHello world"
-    result = _update_file(1, agent_text, apply_mode="direct_apply")
+    result = _update_file(
+        1, agent_text, scope={"file_ids": [1]}, apply_mode="direct_apply"
+    )
 
     assert result.get("applied") is True
     assert "Title" in (file_row.document_json or "")
@@ -210,6 +215,9 @@ def test_runner_update_file_applies_agent_text(
 @patch("areas.production_agent.services.runner.ObjectEmbed")
 def test_runner_update_file_review_returns_agent_text_diff(mock_embed_model, mock_session):
     file_row = MagicMock()
+    file_row.id = 1
+    file_row.topic_id = 1
+    file_row.archived_at = None
     file_row.document_json = serialize_document(
         {
             "version": 3,
@@ -219,7 +227,9 @@ def test_runner_update_file_review_returns_agent_text_diff(mock_embed_model, moc
     mock_session.get.return_value = file_row
     mock_embed_model.query.filter_by.return_value.all.return_value = []
 
-    result = _update_file(1, "After text", apply_mode="review")
+    result = _update_file(
+        1, "After text", scope={"file_ids": [1]}, apply_mode="review"
+    )
 
     assert result.get("applied") is False
     assert "review" in result
