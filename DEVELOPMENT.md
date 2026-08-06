@@ -52,7 +52,8 @@ Area maps: [backend](system_app_back_end/areas/README.md) · [frontend](system_a
 |-------|----------|
 | Git source (edit here) | [`content/production_agent/system_prompt.md`](content/production_agent/system_prompt.md) |
 | Runtime | `agent_configs.system_prompt` in PostgreSQL |
-| Sync | `python system_app_back_end/scripts/sync_agent_prompt.py --overwrite` |
+| Sync (local) | `python system_app_back_end/scripts/sync_agent_prompt.py --overwrite` |
+| Sync (Render) | Automatic on web boot (`RENDER=true`) via internal DB URL |
 
 ---
 

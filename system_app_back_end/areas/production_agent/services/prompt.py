@@ -2,18 +2,37 @@
 
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 
-from models import AgentConfig, db
+from models import AgentConfig, Workspace, db
 
 DEFAULT_CONFIG_NAME = "default"
 DEFAULT_TOOL_ALLOWLIST = ["search", "open_file", "update_file", "search_tasks"]
-REPO_ROOT = Path(__file__).resolve().parents[4]
+_HERE = Path(__file__).resolve()
+# Monorepo root (…/system_app) when services live under system_app_back_end/areas/…
+REPO_ROOT = _HERE.parents[4]
 PROMPT_FILE = REPO_ROOT / "content" / "production_agent" / "system_prompt.md"
+# Fallback if Root Directory packaging ever omits the sibling content/ tree.
+_BACKEND_PROMPT_FILE = (
+    _HERE.parents[3] / "content" / "production_agent" / "system_prompt.md"
+)
+
+logger = logging.getLogger(__name__)
+
+
+def resolve_prompt_file() -> Path:
+    if PROMPT_FILE.is_file():
+        return PROMPT_FILE
+    if _BACKEND_PROMPT_FILE.is_file():
+        return _BACKEND_PROMPT_FILE
+    return PROMPT_FILE
 
 
 def load_prompt_file() -> str:
-    return PROMPT_FILE.read_text(encoding="utf-8")
+    path = resolve_prompt_file()
+    return path.read_text(encoding="utf-8")
 
 
 def operational_suffix() -> str:
@@ -69,3 +88,45 @@ def sync_prompt_from_file(workspace_id: int, *, overwrite: bool = False) -> Agen
         config.system_prompt = load_prompt_file()
         db.session.flush()
     return config
+
+
+def sync_all_workspace_prompts(*, overwrite: bool = True) -> list[int]:
+    """Overwrite (or seed) system_prompt for every workspace. Returns workspace ids."""
+    ids = [row.id for row in Workspace.query.order_by(Workspace.id).all()]
+    for workspace_id in ids:
+        sync_prompt_from_file(workspace_id, overwrite=overwrite)
+    if ids:
+        db.session.commit()
+    return ids
+
+
+def should_sync_prompt_on_boot() -> bool:
+    """On Render, sync by default (internal DATABASE_URL). Locally opt-in via env."""
+    flag = (os.environ.get("SYNC_AGENT_PROMPT_ON_DEPLOY") or "").strip().lower()
+    if flag in {"0", "false", "no", "off"}:
+        return False
+    if flag in {"1", "true", "yes", "on"}:
+        return True
+    # Render sets RENDER=true on web services.
+    return (os.environ.get("RENDER") or "").strip().lower() == "true"
+
+
+def maybe_sync_prompts_on_boot() -> None:
+    """Push git prompt into DB via the service's DATABASE_URL (internal on Render)."""
+    if not should_sync_prompt_on_boot():
+        return
+    path = resolve_prompt_file()
+    if not path.is_file():
+        logger.warning("agent prompt sync skipped — file missing: %s", path)
+        return
+    try:
+        ids = sync_all_workspace_prompts(overwrite=True)
+        logger.info(
+            "Synced production agent prompt from %s for workspace(s): %s",
+            path,
+            ids,
+        )
+    except Exception:
+        # Never block boot if DB is briefly unavailable.
+        logger.exception("agent prompt sync on boot failed")
+

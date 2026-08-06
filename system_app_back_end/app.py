@@ -39,6 +39,13 @@ def create_app():
     def health():
         return jsonify({"status": "ok"})
 
+    # On Render, push content/production_agent/system_prompt.md into the DB
+    # using the service's internal DATABASE_URL (external psql is flaky).
+    with app.app_context():
+        from areas.production_agent.services.prompt import maybe_sync_prompts_on_boot
+
+        maybe_sync_prompts_on_boot()
+
     return app
 
 
