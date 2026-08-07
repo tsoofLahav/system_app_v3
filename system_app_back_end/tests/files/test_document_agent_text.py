@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from areas.production_agent.services.runner import _update_file
+from areas.production_agent.services.write_tools import apply_document_text
 from areas.files.services.document_agent_text import (
     apply_agent_text,
     apply_agent_text_to_file,
@@ -252,11 +252,11 @@ def test_parse_agent_text_bullet_list_and_table():
     assert table["rows"][1][1]["text"] == "V2"
 
 
-@patch("areas.production_agent.services.runner.apply_object_updates", return_value=[])
-@patch("areas.production_agent.services.runner.save_file_version")
-@patch("areas.production_agent.services.runner.db.session")
-@patch("areas.production_agent.services.runner.ObjectEmbed")
-def test_runner_update_file_applies_agent_text(
+@patch("areas.production_agent.services.write_tools.apply_object_updates", return_value=[])
+@patch("areas.production_agent.services.write_tools.save_file_version")
+@patch("areas.production_agent.services.write_tools.db.session")
+@patch("areas.production_agent.services.write_tools.ObjectEmbed")
+def test_apply_document_text_direct_apply(
     mock_embed_model,
     mock_session,
     mock_save_version,
@@ -271,8 +271,12 @@ def test_runner_update_file_applies_agent_text(
     mock_embed_model.query.filter_by.return_value.all.return_value = []
 
     agent_text = "## Title\n\nHello world"
-    result = _update_file(
-        1, agent_text, scope={"file_ids": [1]}, apply_mode="direct_apply"
+    result = apply_document_text(
+        1,
+        agent_text,
+        scope={"file_ids": [1]},
+        write_mode="direct_apply",
+        tool_name="patch_file",
     )
 
     assert result.get("applied") is True
@@ -280,9 +284,11 @@ def test_runner_update_file_applies_agent_text(
     mock_apply_objects.assert_called_once()
 
 
-@patch("areas.production_agent.services.runner.db.session")
-@patch("areas.production_agent.services.runner.ObjectEmbed")
-def test_runner_update_file_review_returns_agent_text_diff(mock_embed_model, mock_session):
+@patch("areas.production_agent.services.write_tools.db.session")
+@patch("areas.production_agent.services.write_tools.ObjectEmbed")
+def test_apply_document_text_review_returns_agent_text_diff(
+    mock_embed_model, mock_session
+):
     file_row = MagicMock()
     file_row.id = 1
     file_row.topic_id = 1
@@ -296,8 +302,12 @@ def test_runner_update_file_review_returns_agent_text_diff(mock_embed_model, moc
     mock_session.get.return_value = file_row
     mock_embed_model.query.filter_by.return_value.all.return_value = []
 
-    result = _update_file(
-        1, "After text", scope={"file_ids": [1]}, apply_mode="review"
+    result = apply_document_text(
+        1,
+        "After text",
+        scope={"file_ids": [1]},
+        write_mode="review",
+        tool_name="patch_file",
     )
 
     assert result.get("applied") is False

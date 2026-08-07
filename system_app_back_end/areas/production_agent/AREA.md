@@ -52,10 +52,14 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 |------|----------|
 | `search` | Substring match on file name and **agent text** within scope (includes archived, flagged) |
 | `open_file` | Returns `document_plain` (agent text) + `object_extras` (info `title` / `Links` when useful). Archived readable. |
-| `update_file` | Full replacement — takes `document_text` in agent text format; rejects archived |
+| `move_text` | Insert a content slice at an anchor (`end` / `start` / `after_line` / `before_line` / `after_text`) |
+| `patch_file` | Full new agent text; typical outcome **review** |
+| `rewrite_file` | Full new agent text for a true rewrite; typical outcome **apply** when run allows |
 | `search_tasks` | Substring match on task titles within scoped (live) files |
 
-`open_file` payload shape is built by [`services/open_file_tool.py`](services/open_file_tool.py) — no ORM dumps.
+`open_file` payload: [`services/open_file_tool.py`](services/open_file_tool.py). Writes: [`services/write_tools.py`](services/write_tools.py).
+
+**Apply vs review:** the run’s `apply_mode` is a ceiling (`review` → everything reviewed). Under `direct_apply`, tools keep defaults (`patch_file` → review, `move_text` / `rewrite_file` → apply). The model does not choose the dialog.
 
 The agent never sees or writes raw JSON. It reads and writes **agent text**; the [files area](../files/AREA.md) converts in both directions.
 
@@ -93,7 +97,8 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 
 | Module | Role |
 |--------|------|
-| [`services/runner.py`](services/runner.py) | Conversation lifecycle, tool dispatch, apply modes, diff |
+| [`services/runner.py`](services/runner.py) | Conversation lifecycle, tool dispatch |
+| [`services/write_tools.py`](services/write_tools.py) | `patch_file` / `move_text` / `rewrite_file`, diff, mode resolution |
 | [`services/open_file_tool.py`](services/open_file_tool.py) | `open_file` payload (agent text + extras) |
 | [`services/prompt.py`](services/prompt.py) | Load/seed/sync the system prompt from the DB |
 | [`services/openai_service.py`](services/openai_service.py) | Responses conversation helpers + legacy chat/image helpers |
@@ -112,6 +117,5 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 
 ## Known gaps (later plan steps)
 
-- Write tools still use `update_file` (pending `patch_file` / `move_text` / `rewrite_file`).
-- Pending reviews are still returned in the HTTP response, not yet persisted independently in DB.
+- Pending reviews are still returned in the HTTP response, not yet persisted independently in DB (step 5).
 - `agent_configs.tool_allowlist` is not yet honored.

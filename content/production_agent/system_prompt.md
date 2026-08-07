@@ -22,11 +22,21 @@ sequenceDiagram
   Runner->>Mapper: document_to_agent_text(document_json, objects_by_id)
   Runner->>Agent: document_plain
 
-  Agent->>Runner: update_file(file_id, document_text)
+  Agent->>Runner: move_text / patch_file / rewrite_file
   Runner->>Mapper: apply_agent_text(current, document_text, known_object_ids)
   Mapper-->>Runner: document tree + object_updates + errors
   Runner->>DB: serialize_document + apply_object_updates
 ```
+
+## Write tools
+
+| Tool | When | Model sends |
+|------|------|-------------|
+| `move_text` | One insert (line, paragraph, fenced slice) | `content` + `anchor_type` (`end` / `start` / `after_line` / `before_line` / `after_text`) + `line` / `text` as needed |
+| `patch_file` | Multi-spot edit; user should see a diff | **Full** new agent text (unchanged parts identical) |
+| `rewrite_file` | True whole-file rewrite | Full new agent text |
+
+Prefer `move_text` for small adds. Never invent object ids. Keep every existing fenced `id="…"`.
 
 ## Principles
 

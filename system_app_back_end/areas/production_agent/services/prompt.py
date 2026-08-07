@@ -9,7 +9,14 @@ from pathlib import Path
 from models import AgentConfig, Workspace, db
 
 DEFAULT_CONFIG_NAME = "default"
-DEFAULT_TOOL_ALLOWLIST = ["search", "open_file", "update_file", "search_tasks"]
+DEFAULT_TOOL_ALLOWLIST = [
+    "search",
+    "open_file",
+    "patch_file",
+    "move_text",
+    "rewrite_file",
+    "search_tasks",
+]
 _HERE = Path(__file__).resolve()
 # Monorepo root (…/system_app) when services live under system_app_back_end/areas/…
 REPO_ROOT = _HERE.parents[4]
@@ -46,8 +53,11 @@ def operational_suffix() -> str:
         "Links (each link: id, type, title; related peers may include file_id). "
         "Never invent file or object ids; only use ids returned by tools or listed in scope. "
         "Archived files are searchable/readable but never writable. "
-        "When updating a file, call update_file with the FULL new document_text. "
+        "Write tools: prefer move_text to insert one slice; patch_file for "
+        "multi-spot edits (full new agent text); rewrite_file only for a true rewrite. "
         "Preserve every existing embed object_id; never omit fenced object blocks. "
+        "When the user asks to add or change content, you must call a write tool — "
+        "a text summary alone does not change the file. "
         "When finished, reply with a short plain-text summary (no JSON wrapper)."
     )
 

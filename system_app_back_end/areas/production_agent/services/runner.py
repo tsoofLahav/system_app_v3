@@ -7,15 +7,12 @@ only. The OpenAI conversation is deleted when the run ends.
 
 from __future__ import annotations
 
-import difflib
 import json
 import logging
 from typing import Any
 
 from models import File, ObjectEmbed, Task, db
 from areas.files.services.document_agent_text import (
-    apply_agent_text_to_file,
-    apply_object_updates,
     document_to_agent_text,
     load_objects_by_id,
 )
@@ -23,7 +20,6 @@ from areas.production_agent.services.prompt import (
     ensure_agent_config,
     system_prompt_for_workspace,
 )
-from areas.files.services.file_versions import save_file_version
 from areas.production_agent.services.openai_service import (
     create_conversation,
     create_response,
@@ -32,40 +28,21 @@ from areas.production_agent.services.openai_service import (
     output_text_from_response,
 )
 from areas.production_agent.services.open_file_tool import build_open_file_payload
+from areas.production_agent.services.write_tools import (
+    WRITE_TOOL_NAMES,
+    apply_document_text,
+    compute_diff,
+    move_text,
+    resolve_write_mode,
+)
 from config import OPENAI_MODEL
 
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 8
 
-
-def compute_diff(
-    old_document_json: str,
-    new_document_json: str,
-    *,
-    file_id: int | None = None,
-    objects_by_id: dict[int, dict[str, Any]] | None = None,
-) -> dict:
-    if objects_by_id is None and file_id is not None:
-        objects_by_id = load_objects_by_id(file_id)
-    objects_by_id = objects_by_id or {}
-    old_plain = document_to_agent_text(old_document_json, objects_by_id=objects_by_id)
-    new_plain = document_to_agent_text(new_document_json, objects_by_id=objects_by_id)
-    old_lines = old_plain.splitlines(keepends=True)
-    new_lines = new_plain.splitlines(keepends=True)
-    hunks = list(
-        difflib.unified_diff(
-            old_lines,
-            new_lines,
-            fromfile="before",
-            tofile="after",
-        )
-    )
-    return {
-        "diff_hunks": "".join(hunks),
-        "old_document_text": old_plain,
-        "new_document_text": new_plain,
-    }
+# Re-export for file_versions / tests.
+__all__ = ["compute_diff", "run_agent"]
 
 
 def _scope_file_ids(scope: dict) -> list[int]:
@@ -130,64 +107,6 @@ def _open_file(file_id: int, scope: dict) -> dict:
     return build_open_file_payload(file)
 
 
-def _known_object_ids(file_id: int) -> set[int]:
-    embeds = ObjectEmbed.query.filter_by(file_id=file_id).all()
-    return {int(e.id) for e in embeds}
-
-
-def _update_file(file_id: int, document_text: str, *, scope: dict, apply_mode: str) -> dict:
-    file = db.session.get(File, file_id)
-    if file is None:
-        return {"error": "file not found"}
-    if not _file_in_scope(file, scope):
-        return {"error": "file out of scope"}
-    if file.archived_at is not None:
-        return {"error": "archived files are read-only"}
-
-    old_document = file.document_json or ""
-    known_ids = _known_object_ids(file_id)
-    new_document_json, object_updates, errors = apply_agent_text_to_file(
-        file_id,
-        old_document,
-        document_text,
-        known_object_ids=known_ids,
-    )
-    if errors:
-        return {"error": "; ".join(errors)}
-
-    if apply_mode == "notify_only":
-        return {
-            "file_id": file_id,
-            "old_document_json": old_document,
-            "new_document_json": new_document_json,
-            "document_text": document_text,
-            "applied": False,
-        }
-    if apply_mode == "review":
-        return {
-            "file_id": file_id,
-            "old_document_json": old_document,
-            "new_document_json": new_document_json,
-            "document_text": document_text,
-            "applied": False,
-            "review": compute_diff(old_document, new_document_json or "", file_id=file_id),
-        }
-
-    save_file_version(file, source="agent")
-    file.document_json = new_document_json
-    update_errors = apply_object_updates(file_id, object_updates)
-    if update_errors:
-        return {"error": "; ".join(update_errors)}
-    db.session.flush()
-    return {
-        "file_id": file_id,
-        "old_document_json": old_document,
-        "new_document_json": new_document_json,
-        "document_text": document_text,
-        "applied": True,
-    }
-
-
 def _search_tasks(scope: dict, query: str) -> list[dict]:
     query_lower = (query or "").lower()
     file_rows = _scoped_files_query(scope).all()
@@ -244,10 +163,58 @@ TOOL_DEFS: list[dict[str, Any]] = [
     },
     {
         "type": "function",
-        "name": "update_file",
+        "name": "patch_file",
         "description": (
-            "Propose or apply a full document replacement in agent text format. "
-            "Preserve every existing embed object_id; never omit fenced object blocks."
+            "Edit a file by sending the FULL new agent text (keep unchanged parts "
+            "identical). Prefer for multi-spot edits the user should review. "
+            "Preserve every embed object_id; never omit fenced object blocks. "
+            "Do not use for a single insert — use move_text."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_id": {"type": "integer"},
+                "document_text": {"type": "string"},
+            },
+            "required": ["file_id", "document_text"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "move_text",
+        "description": (
+            "Insert a content slice into a file (add a line, paragraph, or fenced "
+            "block). Prefer for one-point adds. "
+            "anchor_type: end | start | after_line | before_line | after_text. "
+            "For after_line/before_line set line (1-based). "
+            "For after_text set text to a unique substring of the target line."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_id": {"type": "integer"},
+                "content": {"type": "string"},
+                "anchor_type": {
+                    "type": "string",
+                    "description": "end|start|after_line|before_line|after_text",
+                },
+                "line": {"type": "integer"},
+                "text": {"type": "string"},
+            },
+            "required": ["file_id", "content", "anchor_type", "line", "text"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "rewrite_file",
+        "description": (
+            "Replace an entire file with new agent text when the user asked for a "
+            "true rewrite. Preserve embed object_ids that must survive. "
+            "Prefer patch_file or move_text for smaller edits."
         ),
         "strict": True,
         "parameters": {
@@ -284,19 +251,33 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
         except (KeyError, TypeError, ValueError):
             return {"error": "file_id required"}
         return _open_file(file_id, scope)
-    if name == "update_file":
+    if name in WRITE_TOOL_NAMES or name == "update_file":
+        # update_file kept as alias → patch_file for older prompts.
+        tool_name = "patch_file" if name == "update_file" else name
         try:
             file_id = int(args["file_id"])
         except (KeyError, TypeError, ValueError):
             return {"error": "file_id required"}
+        write_mode = resolve_write_mode(tool_name, apply_mode)
+        if tool_name == "move_text":
+            return move_text(
+                file_id,
+                str(args.get("content") or ""),
+                scope=scope,
+                write_mode=write_mode,
+                anchor_type=str(args.get("anchor_type") or "end"),
+                line=int(args.get("line") or 0),
+                text=str(args.get("text") or ""),
+            )
         document_text = args.get("document_text")
         if document_text is None:
             document_text = args.get("body", "")
-        return _update_file(
+        return apply_document_text(
             file_id,
-            document_text,
+            str(document_text or ""),
             scope=scope,
-            apply_mode=apply_mode,
+            write_mode=write_mode,
+            tool_name=tool_name,
         )
     if name == "search_tasks":
         return _search_tasks(scope, args.get("query", ""))
@@ -405,9 +386,18 @@ def run_agent(
                 tool_trace.append(
                     {"name": name, "arguments": args, "result": result}
                 )
+                result_tool = (
+                    result.get("tool")
+                    if isinstance(result, dict)
+                    else None
+                ) or name
                 if (
-                    name == "update_file"
-                    and isinstance(result, dict)
+                    isinstance(result, dict)
+                    and (
+                        result_tool in WRITE_TOOL_NAMES
+                        or name in WRITE_TOOL_NAMES
+                        or name == "update_file"
+                    )
                     and (result.get("review") or result.get("applied"))
                 ):
                     proposed_changes.append(result)
@@ -459,10 +449,18 @@ def run_agent(
     applied = any(
         isinstance(c, dict) and c.get("applied") for c in proposed_changes
     )
-    if apply_mode == "direct_apply":
+    # Commit if any write tool applied; otherwise roll back (review/notify paths).
+    if applied:
         db.session.commit()
     else:
         db.session.rollback()
+
+    print(
+        f"[agent-run] tools={[t.get('name') for t in tool_trace]} "
+        f"proposed={len(proposed_changes)} applied={applied} "
+        f"summary_len={len(final_summary)}",
+        flush=True,
+    )
 
     return {
         "status": "ok",
