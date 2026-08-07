@@ -159,22 +159,35 @@ def _append_spacer(lines: list[str], n: int = 1) -> None:
 
 
 def _append_paragraph_agent_parts(lines: list[str], text: str) -> None:
-    """Emit paragraph text; blank-line runs become ``[SPACER]`` markers."""
+    """Emit paragraph text; ``\\n\\n`` gaps become ``[SPACER]`` markers.
+
+    In ``document_json``, section gaps are usually blank lines *inside* one
+    paragraph's ``text`` (often after the editor coalesces blocks). A single
+    ``\\n\\n`` between two chunks must become ``[SPACER n="1"]`` — otherwise the
+    agent text looks like a normal block break and round-trip coalesces it to
+    a soft ``\\n`` and the gap disappears.
+    """
     if text == "":
         _append_spacer(lines, 1)
         return
     parts = text.split("\n\n")
-    pending = 0
+    pending_empty = 0
+    seen_text = False
     for part in parts:
         if not part.strip():
-            pending += 1
+            pending_empty += 1
             continue
-        if pending:
-            _append_spacer(lines, pending)
-            pending = 0
+        if seen_text:
+            # One blank line per ``\n\n`` boundary, plus two per extra empty part.
+            _append_spacer(lines, 2 * pending_empty + 1)
+            pending_empty = 0
+        elif pending_empty:
+            _append_spacer(lines, pending_empty)
+            pending_empty = 0
         lines.append(part)
-    if pending:
-        _append_spacer(lines, pending)
+        seen_text = True
+    if pending_empty:
+        _append_spacer(lines, pending_empty)
 
 
 def _empty_paragraph() -> dict[str, Any]:

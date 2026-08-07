@@ -46,7 +46,7 @@ This is why there is no flag on the file. Prominence is a property of the topic'
 - `spans` carry inline formatting (bold, italic, underline, size, color) as ranges on `text`.
 - Legacy `list` + `list_style` normalizes to `bullet_list` / `ordered_list` on read.
 - Reads accept v1/v2 shapes and migrate; **writes always normalize to v3**.
-- Extra blank lines live as empty paragraphs or `\n\n` inside paragraph `text`. Agent text maps those ↔ `[SPACER n="…"]` in the mapper only (no editor `spacer` type). Legacy `type: "spacer"` blocks normalize to empty paragraphs.
+- Extra blank lines usually live as `\n\n` **inside** a paragraph’s `text` (the editor coalesces adjacent paragraphs with `\n`, so a visible blank line is `\n\n` in that string). The agent-text mapper turns each such gap into `[SPACER n="…"]` and back into empty paragraphs (no editor `spacer` type). Legacy `type: "spacer"` blocks normalize to empty paragraphs.
 
 ### Lists and tables
 

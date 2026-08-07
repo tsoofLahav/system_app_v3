@@ -101,7 +101,45 @@ def test_empty_paragraphs_round_trip_as_spacer_markers():
     assert len(empties) == 2
 
 
-def test_blank_lines_inside_paragraph_become_spacer_markers():
+def test_single_blank_line_in_paragraph_becomes_spacer():
+    """The common stored form: one \\n\\n inside paragraph text (after coalesce)."""
+    original = serialize_document(
+        {
+            "version": 3,
+            "blocks": [
+                {
+                    "id": "b1",
+                    "type": "paragraph",
+                    "text": "Breakfast\n\nLunch",
+                    "spans": [],
+                },
+            ],
+        }
+    )
+    text = document_to_agent_text(original)
+    assert '[SPACER n="1"]' in text
+    doc, _, errors = apply_agent_text(original, text, known_object_ids=set())
+    assert not errors
+    assert any(b.get("text") == "" for b in doc["blocks"])
+    # After editor-style coalesce, the blank line is back inside one paragraph.
+    coalesced = []
+    run = None
+    for b in doc["blocks"]:
+        if b["type"] == "paragraph":
+            if run is None:
+                run = b["text"]
+            else:
+                run = f"{run}\n{b['text']}"
+        else:
+            if run is not None:
+                coalesced.append(run)
+                run = None
+    if run is not None:
+        coalesced.append(run)
+    assert any("Breakfast\n\nLunch" == c for c in coalesced)
+
+
+def test_double_blank_run_in_paragraph_becomes_spacer_n3():
     original = serialize_document(
         {
             "version": 3,
@@ -116,13 +154,7 @@ def test_blank_lines_inside_paragraph_become_spacer_markers():
         }
     )
     text = document_to_agent_text(original)
-    assert '[SPACER n="1"]' in text
-    doc, _, errors = apply_agent_text(original, text, known_object_ids=set())
-    assert not errors
-    assert all(b["type"] != "spacer" for b in doc["blocks"])
-    texts = [b["text"] for b in doc["blocks"] if b["type"] == "paragraph"]
-    assert "Breakfast" in texts and "Lunch" in texts
-    assert any(t == "" for t in texts)
+    assert '[SPACER n="3"]' in text
 
 
 def test_empty_file_agent_text_is_empty():
