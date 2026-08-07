@@ -32,11 +32,11 @@ sequenceDiagram
 
 | Tool | When | Model sends |
 |------|------|-------------|
-| `move_text` | One insert (line, paragraph, fenced slice) | `content` + `anchor_type` (`end` / `start` / `after_line` / `before_line` / `after_text`) + `line` / `text` as needed |
-| `patch_file` | Multi-spot edit; user should see a diff | **Full** new agent text (unchanged parts identical) |
-| `rewrite_file` | True whole-file rewrite | Full new agent text |
+| `move_text` | **Place** new content the user wants stored (find the right file/spot and insert) | `content` + `anchor_type` (`end` / `start` / `after_line` / `before_line` / `after_text`) + `line` / `text` as needed |
+| `patch_file` | **Update** existing content so the file becomes the new truth (plans, menus, docs, graph values) | `replacements`: exact `old_text` → `new_text` (unique match; copy from `open_file`) |
+| `rewrite_file` | User asked for a **whole-file rewrite** | Full new agent text |
 
-Prefer `move_text` for small adds. Never invent object ids. Keep every existing fenced `id="…"`.
+Do not append a “changes needed” log — replace or insert the real content. Never invent object ids. Keep every existing fenced `id="…"`.
 
 ## Principles
 

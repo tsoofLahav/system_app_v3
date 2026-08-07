@@ -70,11 +70,11 @@ Omit when unused. Extend the set as actions need — keep them tiny.
 
 | Tool | When | Model sends | Typical outcome |
 |------|------|-------------|-----------------|
-| **`patch_file`** | Edit with review/diff | **Full new agent text** (keep rest identical) | Review / pending |
-| **`move_text`** | Insert or relocate a slice (add a line/task/point) | **Content + destination** (`file_id` + anchor) + markers if fenced | Usually apply |
+| **`move_text`** | **Place** user content (find topic/file/spot; insert) | Content + destination anchor | Usually apply |
+| **`patch_file`** | **Update** existing content in place | Exact `old_text` → `new_text` replacements (unique) | Review / pending |
 | **`rewrite_file`** | True whole-file rewrite | Full new agent text | Usually apply |
 
-Anti-drift: prefer `move_text` for one-point applies; `patch_file` when the user should see a diff; `rewrite_file` only when the ask is a rewrite.
+Tool choice is guided by accurate descriptions (and standing prompt) — not hard bans. `patch_file` must not rewrite the whole file: only matched spans change, so blank lines and other whitespace outside hunks stay identical for the future side-by-side diff.
 
 Read tools: `open_file`, `search`, object/task search.
 

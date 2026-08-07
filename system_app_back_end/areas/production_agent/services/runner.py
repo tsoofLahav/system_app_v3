@@ -33,6 +33,7 @@ from areas.production_agent.services.write_tools import (
     apply_document_text,
     compute_diff,
     move_text,
+    patch_file,
     resolve_write_mode,
 )
 from config import OPENAI_MODEL
@@ -166,19 +167,31 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "type": "function",
         "name": "patch_file",
         "description": (
-            "Edit a file by sending the FULL new agent text (keep unchanged parts "
-            "identical). Prefer for multi-spot edits the user should review. "
-            "Preserve every embed object_id; never omit fenced object blocks. "
-            "Do not use for a single insert — use move_text."
+            "Update existing content in a file (plans, menus, docs, graph values). "
+            "Send one or more exact replacements: old_text must match the current "
+            "agent text uniquely (copy from open_file). Text outside those spans "
+            "is left unchanged — including blank lines. Do not append a change-log; "
+            "replace the lines that should change. Preserve every embed id=\"…\"."
         ),
         "strict": True,
         "parameters": {
             "type": "object",
             "properties": {
                 "file_id": {"type": "integer"},
-                "document_text": {"type": "string"},
+                "replacements": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "old_text": {"type": "string"},
+                            "new_text": {"type": "string"},
+                        },
+                        "required": ["old_text", "new_text"],
+                        "additionalProperties": False,
+                    },
+                },
             },
-            "required": ["file_id", "document_text"],
+            "required": ["file_id", "replacements"],
             "additionalProperties": False,
         },
     },
@@ -186,11 +199,13 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "type": "function",
         "name": "move_text",
         "description": (
-            "Insert a content slice into a file (add a line, paragraph, or fenced "
-            "block). Prefer for one-point adds. "
+            "Place new content the user wants stored somewhere: find the right "
+            "file and insert it (task line, note, paragraph, fenced block). "
+            "Insert only — not for updating existing lines (use patch_file). "
             "anchor_type: end | start | after_line | before_line | after_text. "
             "For after_line/before_line set line (1-based). "
-            "For after_text set text to a unique substring of the target line."
+            "For after_text set text to a unique substring of the target line. "
+            "When unused, pass line=0 and text=\"\"."
         ),
         "strict": True,
         "parameters": {
@@ -214,8 +229,9 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "name": "rewrite_file",
         "description": (
             "Replace an entire file with new agent text when the user asked for a "
-            "true rewrite. Preserve embed object_ids that must survive. "
-            "Prefer patch_file or move_text for smaller edits."
+            "true whole-file rewrite. Preserve embed object_ids that must survive. "
+            "For updating parts of a file use patch_file; for placing new material "
+            "use move_text."
         ),
         "strict": True,
         "parameters": {
@@ -270,6 +286,31 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
                 line=int(args.get("line") or 0),
                 text=str(args.get("text") or ""),
             )
+        if tool_name == "patch_file":
+            replacements = args.get("replacements")
+            if isinstance(replacements, list):
+                return patch_file(
+                    file_id,
+                    replacements,
+                    scope=scope,
+                    write_mode=write_mode,
+                )
+            # Legacy update_file / old patch shape: full document_text.
+            document_text = args.get("document_text")
+            if document_text is None:
+                document_text = args.get("body", "")
+            if document_text is not None and str(document_text) != "":
+                return apply_document_text(
+                    file_id,
+                    str(document_text),
+                    scope=scope,
+                    write_mode=write_mode,
+                    tool_name="patch_file",
+                )
+            return {
+                "error": "replacements array required (old_text → new_text)",
+                "tool": "patch_file",
+            }
         document_text = args.get("document_text")
         if document_text is None:
             document_text = args.get("body", "")

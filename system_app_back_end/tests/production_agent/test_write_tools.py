@@ -5,8 +5,10 @@ from unittest.mock import MagicMock, patch
 from areas.files.services.document_v3 import serialize_document
 from areas.production_agent.services.write_tools import (
     apply_document_text,
+    apply_replacements,
     insert_agent_text,
     move_text,
+    patch_file,
     resolve_write_mode,
 )
 
@@ -105,3 +107,57 @@ def test_move_text_uses_insert(
     args, kwargs = mock_apply.call_args
     assert "World" in args[1]
     assert kwargs["tool_name"] == "move_text"
+
+
+def test_apply_replacements_preserves_blank_lines():
+    current = "Breakfast\n\nLunch: salad\n\nDinner\n"
+    new, err = apply_replacements(
+        current,
+        [{"old_text": "Lunch: salad", "new_text": "Lunch: soup"}],
+    )
+    assert err is None
+    assert new == "Breakfast\n\nLunch: soup\n\nDinner\n"
+
+
+def test_apply_replacements_requires_unique_match():
+    current = "x\nx\n"
+    new, err = apply_replacements(
+        current, [{"old_text": "x", "new_text": "y"}]
+    )
+    assert new is None
+    assert "matched 2 times" in (err or "")
+
+
+def test_apply_replacements_not_found():
+    new, err = apply_replacements(
+        "Hello\n", [{"old_text": "Missing", "new_text": "X"}]
+    )
+    assert new is None
+    assert "not found" in (err or "")
+
+
+@patch("areas.production_agent.services.write_tools.apply_document_text")
+@patch("areas.production_agent.services.write_tools._current_agent_text")
+@patch("areas.production_agent.services.write_tools.db.session")
+def test_patch_file_uses_replacements(
+    mock_session, mock_current, mock_apply
+):
+    file_row = MagicMock()
+    file_row.id = 5
+    file_row.topic_id = 1
+    file_row.archived_at = None
+    mock_session.get.return_value = file_row
+    mock_current.return_value = "A\n\nB\n"
+    mock_apply.return_value = {"applied": True, "tool": "patch_file", "file_id": 5}
+
+    result = patch_file(
+        5,
+        [{"old_text": "B", "new_text": "C"}],
+        scope={"file_ids": [5]},
+        write_mode="direct_apply",
+    )
+    assert result.get("applied") is True
+    assert result.get("replacements") == 1
+    args, kwargs = mock_apply.call_args
+    assert args[1] == "A\n\nC\n"
+    assert kwargs["tool_name"] == "patch_file"

@@ -2,6 +2,10 @@
 
 Apply vs review is decided by the run's action config plus per-tool defaults —
 the model does not choose the dialog.
+
+- ``move_text`` — place new content at an anchor (insert only)
+- ``patch_file`` — update in place via exact old→new replacements
+- ``rewrite_file`` — replace the whole file's agent text
 """
 
 from __future__ import annotations
@@ -92,6 +96,44 @@ def _current_agent_text(file: File) -> str:
     return document_to_agent_text(file.document_json or "", objects_by_id=objects_by_id)
 
 
+def apply_replacements(
+    current: str,
+    replacements: list[dict[str, Any]],
+) -> tuple[str | None, str | None]:
+    """Apply exact unique old→new replacements. Return (new_text, error).
+
+    Unmatched or ambiguous ``old_text`` fails — callers should re-open the file.
+    Text outside the matched spans (including blank lines) is untouched.
+    """
+    if not replacements:
+        return None, "replacements is empty"
+
+    text = current
+    for index, raw in enumerate(replacements, start=1):
+        if not isinstance(raw, dict):
+            return None, f"replacement {index}: must be an object"
+        old = raw.get("old_text")
+        if old is None:
+            return None, f"replacement {index}: old_text is required"
+        old = str(old)
+        if old == "":
+            return None, f"replacement {index}: old_text is empty"
+        new = "" if raw.get("new_text") is None else str(raw.get("new_text"))
+        count = text.count(old)
+        if count == 0:
+            return None, (
+                f"replacement {index}: old_text not found — open_file and copy "
+                "the exact span to replace"
+            )
+        if count > 1:
+            return None, (
+                f"replacement {index}: old_text matched {count} times — include "
+                "more surrounding context so it is unique"
+            )
+        text = text.replace(old, new, 1)
+    return text, None
+
+
 def apply_document_text(
     file_id: int,
     document_text: str,
@@ -100,7 +142,7 @@ def apply_document_text(
     write_mode: WriteMode,
     tool_name: str,
 ) -> dict[str, Any]:
-    """Shared replace path used by patch_file and rewrite_file."""
+    """Shared path: agent text → document_json (+ object updates)."""
     file = db.session.get(File, file_id)
     if file is None:
         return {"error": "file not found"}
@@ -248,4 +290,36 @@ def move_text(
             "line": line,
             "text": text,
         }
+    return result
+
+
+def patch_file(
+    file_id: int,
+    replacements: list[dict[str, Any]],
+    *,
+    scope: dict,
+    write_mode: WriteMode,
+) -> dict[str, Any]:
+    """Update a file in place via exact unique string replacements."""
+    file = db.session.get(File, file_id)
+    if file is None:
+        return {"error": "file not found"}
+    if not _file_in_scope(file, scope):
+        return {"error": "file out of scope"}
+    if file.archived_at is not None:
+        return {"error": "archived files are read-only"}
+
+    current = _current_agent_text(file)
+    new_text, error = apply_replacements(current, replacements)
+    if error:
+        return {"error": error, "tool": "patch_file"}
+    result = apply_document_text(
+        file_id,
+        new_text or "",
+        scope=scope,
+        write_mode=write_mode,
+        tool_name="patch_file",
+    )
+    if "error" not in result:
+        result["replacements"] = len(replacements)
     return result
