@@ -17,6 +17,7 @@ from areas.files.services.document_agent_text import (
     load_objects_by_id,
 )
 from areas.files.services.file_versions import save_file_version
+from shared.run_config import DEFAULT_MANUAL_APPLY_MODE
 
 WriteMode = Literal["review", "direct_apply", "notify_only"]
 
@@ -60,12 +61,8 @@ WRITE_TOOL_NAMES = frozenset(TOOL_WRITE_DEFAULTS)
 
 
 def resolve_write_mode(tool_name: str, run_apply_mode: str) -> WriteMode:
-    """Run apply_mode wins. Tool defaults apply only when the run mode is unset/unknown.
-
-    Manual consult currently uses direct_apply so the rough review dialog is not
-    in the way until the real diff UI (step 6) ships.
-    """
-    run_mode = (run_apply_mode or "review").strip()
+    """Run apply_mode wins. Unknown modes fall back to per-tool defaults."""
+    run_mode = (run_apply_mode or DEFAULT_MANUAL_APPLY_MODE).strip()
     if run_mode == "notify_only":
         return "notify_only"
     if run_mode == "review":

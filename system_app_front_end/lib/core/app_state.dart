@@ -661,8 +661,10 @@ class AppState extends ChangeNotifier {
     try {
       final result = await _automations.run(automation.id);
       final agent = result['agent'];
-      if (agent is Map && (agent['proposed_changes'] as List?)?.isNotEmpty == true) {
-        pendingAgentReview = Map<String, dynamic>.from(agent);
+      final changes = agent is Map ? agent['proposed_changes'] : null;
+      if (changes is List &&
+          changes.any((c) => c is Map && c['review'] != null)) {
+        pendingAgentReview = Map<String, dynamic>.from(agent as Map);
       }
       return result;
     } finally {
@@ -1511,7 +1513,7 @@ class AppState extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> runAgentPrompt(
     String prompt, {
-    String applyMode = 'direct_apply',
+    String? applyMode,
   }) async {
     if (workspaceId == null) return null;
     aiRunning = true;
@@ -1532,7 +1534,8 @@ class AppState extends ChangeNotifier {
         applyMode: applyMode,
       );
       final changes = result['proposed_changes'];
-      if (applyMode == 'review' && changes is List && changes.isNotEmpty) {
+      if (changes is List &&
+          changes.any((c) => c is Map && c['review'] != null)) {
         pendingAgentReview = result;
       }
       return result;

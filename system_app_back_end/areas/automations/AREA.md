@@ -15,7 +15,7 @@ Row in `automations`:
 | `name` | Shown in the automations menu |
 | `prompt` | The task text sent to the agent |
 | `scope` | `{ "topic_ids": [...] }` / `{ "file_ids": [...] }` — what it may touch |
-| `apply_mode` | `direct_apply`, `review`, or `notify_only` |
+| `apply_mode` | `direct_apply`, `review`, or `notify_only` — create/DB default from [`shared/run_config.py`](../../shared/run_config.py) (`DEFAULT_AUTOMATION_APPLY_MODE`) |
 | `schedule` | `daily HH:MM`, `weekly DAY HH:MM`, `monthly PLACEMENT DAY HH:MM`, `quarterly INTERVAL PLACEMENT DAY HH:MM` |
 | `timezone` | Schedule is interpreted in this zone, stored UTC |
 | `trigger` | JSONB — reserved for event triggers |

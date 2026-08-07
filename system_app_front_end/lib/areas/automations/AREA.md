@@ -13,7 +13,7 @@ An automation is a **saved AI run**. Creating one is the same act as typing a pr
 | Name | Shown in the automations list and the AI actions menu |
 | Prompt | The instruction sent to the agent |
 | Scope | Which topic or files it may touch |
-| Apply mode | `direct_apply` writes, `review` proposes, `notify_only` reports |
+| Apply mode | `direct_apply` writes, `review` proposes, `notify_only` reports — create-form default is `defaultAutomationApplyMode` (must match backend `DEFAULT_AUTOMATION_APPLY_MODE`) |
 | Schedule | Once a day / week / month, with structured time controls |
 | Enabled | Off means it never fires automatically |
 
@@ -29,7 +29,7 @@ Timing uses locked structured controls rather than free text, so an invalid sche
 
 Run now is **non-blocking**. The app does not sit on the request; it polls `automation_runs` and refreshes the open topic or view when a run completes so new or archived files appear.
 
-Automations with `apply_mode: 'review'` surface their result through the same diff dialog as a manual run.
+Results go through `presentAgentRunResult` (production agent area) — review proposals open the diff dialog; applied runs snackbar + reload.
 
 | File | Role |
 |------|------|

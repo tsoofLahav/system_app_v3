@@ -3,6 +3,8 @@ from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects.postgresql import JSONB
 
+from shared.run_config import DEFAULT_AUTOMATION_APPLY_MODE
+
 db = SQLAlchemy()
 
 
@@ -308,7 +310,9 @@ class Automation(db.Model):
     trigger = db.Column(JSONB, nullable=False, default=dict)
     scope = db.Column(JSONB, nullable=False, default=dict)
     prompt = db.Column(db.Text, nullable=False, default="")
-    apply_mode = db.Column(db.Text, nullable=False, default="review")
+    apply_mode = db.Column(
+        db.Text, nullable=False, default=DEFAULT_AUTOMATION_APPLY_MODE
+    )
     schedule = db.Column(db.Text)
     timezone = db.Column(db.Text, nullable=False, default="UTC")
     enabled = db.Column(db.Boolean, nullable=False, default=True)

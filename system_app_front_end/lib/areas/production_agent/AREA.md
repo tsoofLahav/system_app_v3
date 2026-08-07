@@ -28,21 +28,27 @@ active editor file → hints.focused_file_id   (tiny pointer; not the file body)
 This is why the buttons are dead with nothing open — an unscoped agent run is not allowed.
 The backend loads content only via tools; the first turn never includes file bodies.
 
-## Diff review dialog
+## Apply mode defaults
 
-**Temporary:** manual consult uses `apply_mode: 'direct_apply'` and shows a snackbar summary — the rough review dialog is skipped until the lookalike diff UI (plan step 6). Automations still choose their own apply mode.
+Manual consult **omits** `apply_mode` on `POST /agent/run`. The backend owns the default in [`shared/run_config.py`](../../../../system_app_back_end/shared/run_config.py) — do not re-default it in `AppState` / `AgentService` / the toolbar.
 
-When review mode is used again:
+Automation create UI uses [`agent_run_defaults.dart`](agent_run_defaults.dart) (`defaultAutomationApplyMode`), which must match `DEFAULT_AUTOMATION_APPLY_MODE` on the backend.
+
+## Presenting a run result
+
+[`agent_result_ui.dart`](agent_result_ui.dart) branches on the **result**, not a copied mode string:
+
+- any `proposed_changes[].review` → rough `TextDiffDialog` (until lookalike UI, plan step 6)
+- else → snackbar summary; reload topic when `applied`
 
 ```
-run → result.proposed_changes[0].review.diff_hunks
+run → presentAgentRunResult(result)
         ↓
-   TextDiffDialog
-        ↓
- accept → applyAgentReview()  → PATCH document_json
+ review? → TextDiffDialog → accept/cancel
+ else    → snackbar (+ reload if applied)
 ```
 
-Key points (review mode):
+Key points (review path):
 
 - The diff is over **agent text**, not JSON — the user reads sentences, not braces.
 - Nothing is written until the user accepts. The backend rolled its session back already.
@@ -52,6 +58,8 @@ Key points (review mode):
 | File | Role |
 |------|------|
 | [`ai_tool_bar.dart`](ai_tool_bar.dart) | Actions menu, prompt dialog, run orchestration |
+| [`agent_result_ui.dart`](agent_result_ui.dart) | Result → dialog or snackbar |
+| [`agent_run_defaults.dart`](agent_run_defaults.dart) | FE twin of automation apply-mode default |
 | [`text_diff_dialog.dart`](text_diff_dialog.dart) | Renders `diff_hunks` and returns accept/cancel |
 | [`change_review_dialog.dart`](change_review_dialog.dart) | Richer structured review surface |
 | [`agent_service.dart`](agent_service.dart) | `POST /agent/run` |
@@ -59,8 +67,9 @@ Key points (review mode):
 
 ## Rules
 
-- Never write a file from an agent result without explicit user acceptance in `review` mode.
+- Never write a file from an agent result without explicit user acceptance when the result includes a review proposal.
 - Never send a run without scope.
+- Never hardcode manual `apply_mode` defaults on the frontend.
 - Never show raw JSON to the user — always the agent-text diff.
 - Clear `pendingAgentReview` on both accept and cancel so a stale proposal cannot be applied later.
 - Refresh the open topic after applying, or the editor will keep showing the pre-agent document.

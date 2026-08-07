@@ -8,7 +8,7 @@ import '../ui/app_colors.dart';
 import '../ui/app_icons.dart';
 import '../ui/dialog_field_style.dart';
 import '../ui/glass_surface.dart';
-import './text_diff_dialog.dart';
+import './agent_result_ui.dart';
 
 const aiToolIconSize = 22.0;
 const aiToolTapPadding = 4.0;
@@ -18,36 +18,12 @@ Future<void> runSavedAgentAction(
   AppState state,
   Automation automation,
 ) async {
-  final s = state.strings;
   try {
     final result = await state.runAutomationRecord(automation);
     if (!context.mounted) return;
     final agent = result['agent'];
     if (agent is! Map) return;
-
-    if (automation.applyMode == 'review') {
-      final changes = agent['proposed_changes'] as List?;
-      if (changes != null && changes.isNotEmpty) {
-        final first = changes.first as Map;
-        final review = first['review'] as Map?;
-        final diff = review?['diff_hunks']?.toString() ?? '';
-        final apply = await TextDiffDialog.show(
-          context,
-          title: s['reviewChanges'] ?? 'Review changes',
-          diffHunks: diff,
-        );
-        if (apply == true) {
-          await state.applyAgentReview();
-        } else {
-          state.dismissAgentReview();
-        }
-        return;
-      }
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(agent['summary']?.toString() ?? s['aiDone'])),
-    );
+    await presentAgentRunResult(context, state, agent);
   } catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -91,25 +67,10 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
   if (prompt == null || prompt.isEmpty || !context.mounted) return;
 
   try {
-    // Temporary: skip review dialog until the real lookalike diff UI exists.
-    final result = await state.runAgentPrompt(
-      prompt,
-      applyMode: 'direct_apply',
-    );
+    // No apply_mode — backend `DEFAULT_MANUAL_APPLY_MODE` is the only default.
+    final result = await state.runAgentPrompt(prompt);
     if (!context.mounted || result == null) return;
-    final summary = result['summary']?.toString().trim() ?? '';
-    final applied = result['applied'] == true;
-    final message = summary.isNotEmpty
-        ? summary
-        : (applied
-            ? (s['aiAgentApplied'] ?? 'Changes applied.')
-            : (s['aiAgentNoChanges'] ?? 'No file changes.'));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-    if (applied && state.selectedTopic != null) {
-      await state.selectTopic(state.selectedTopic!);
-    }
+    await presentAgentRunResult(context, state, result);
   } catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

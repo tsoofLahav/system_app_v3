@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from areas.production_agent.services.runner import run_agent
+from shared.run_config import DEFAULT_MANUAL_APPLY_MODE
 
 agent_bp = Blueprint("agent", __name__)
 
@@ -13,11 +14,12 @@ def agent_run():
     if not prompt or not workspace_id:
         return jsonify({"error": "prompt and workspace_id are required"}), 400
 
+    apply_mode = data.get("apply_mode") or DEFAULT_MANUAL_APPLY_MODE
     result = run_agent(
         prompt=prompt,
         workspace_id=int(workspace_id),
         scope=data.get("scope") or {},
-        apply_mode=data.get("apply_mode", "direct_apply"),
+        apply_mode=apply_mode,
         context=data.get("context") or {},
         hints=data.get("hints") or {},
     )

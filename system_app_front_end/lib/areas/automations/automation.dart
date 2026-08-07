@@ -1,3 +1,5 @@
+import '../production_agent/agent_run_defaults.dart';
+
 class Automation {
   const Automation({
     required this.id,
@@ -35,7 +37,8 @@ class Automation {
       workspaceId: json['workspace_id'] as int,
       name: json['name'] as String,
       prompt: json['prompt'] as String? ?? '',
-      applyMode: json['apply_mode'] as String? ?? 'review',
+      applyMode:
+          json['apply_mode'] as String? ?? defaultAutomationApplyMode,
       trigger: trigger is Map<String, dynamic>
           ? Map<String, dynamic>.from(trigger)
           : const {},

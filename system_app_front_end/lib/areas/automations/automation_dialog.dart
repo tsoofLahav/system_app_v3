@@ -8,6 +8,7 @@ import '../ui/app_icons.dart';
 import '../ui/app_segmented_toggle.dart';
 import '../ui/dialog_field_style.dart';
 import '../ui/dialog_metrics.dart';
+import '../production_agent/agent_run_defaults.dart';
 import '../production_agent/ai_tool_bar.dart';
 
 Future<void> showAutomationDialog({
@@ -38,7 +39,7 @@ class _AutomationDialogState extends State<_AutomationDialog>
   final _nameController = TextEditingController();
   final _promptController = TextEditingController();
   final _scheduleController = TextEditingController(text: '0 8 * * *');
-  var _applyMode = 'review';
+  var _applyMode = defaultAutomationApplyMode;
 
   @override
   void initState() {

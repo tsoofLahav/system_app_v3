@@ -170,12 +170,14 @@ Successful DELETE returns `204` with empty body.
   "prompt": "Update the daily file…",
   "workspace_id": 1,
   "scope": { "topic_ids": [1], "file_ids": [2] },
-  "apply_mode": "review",
+  "apply_mode": "direct_apply",
   "context": {}
 }
 ```
 
-**Response:** `{ "run_id", "status", "messages", "proposed_changes?", "applied?" }`
+`apply_mode` is optional; when omitted the server uses `DEFAULT_MANUAL_APPLY_MODE` from `shared/run_config.py`.
+
+**Response:** `{ "status", "messages", "proposed_changes?", "applied?", "apply_mode?", … }`
 
 ---
 

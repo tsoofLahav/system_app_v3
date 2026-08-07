@@ -6,6 +6,7 @@ from models import Automation, AutomationRun, db
 from shared.helpers import apply_updates, get_or_404
 from areas.production_agent.services.runner import run_agent
 from shared.bootstrap import default_workspace_id
+from shared.run_config import DEFAULT_AUTOMATION_APPLY_MODE
 from areas.objects.services.delete_cascade import delete_automation_cascade
 
 automations_bp = Blueprint("automations", __name__)
@@ -35,7 +36,7 @@ def create_automation():
         trigger=data.get("trigger") or {},
         scope=data.get("scope") or {},
         prompt=data.get("prompt") or "",
-        apply_mode=data.get("apply_mode", "review"),
+        apply_mode=data.get("apply_mode") or DEFAULT_AUTOMATION_APPLY_MODE,
         schedule=data.get("schedule"),
         timezone=data.get("timezone", "UTC"),
         enabled=bool(data.get("enabled", True)),

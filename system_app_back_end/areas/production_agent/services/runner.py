@@ -36,6 +36,7 @@ from areas.production_agent.services.write_tools import (
     resolve_write_mode,
 )
 from config import OPENAI_MODEL
+from shared.run_config import DEFAULT_MANUAL_APPLY_MODE
 
 logger = logging.getLogger(__name__)
 
@@ -317,11 +318,12 @@ def run_agent(
     prompt: str,
     workspace_id: int,
     scope: dict | None,
-    apply_mode: str = "direct_apply",
+    apply_mode: str | None = None,
     context: dict | None = None,
     hints: dict | None = None,
 ) -> dict:
     scope = scope or {}
+    apply_mode = (apply_mode or DEFAULT_MANUAL_APPLY_MODE).strip()
     # `context` is legacy; merge into hints (hints win on key clash).
     merged_hints = {**(context or {}), **(hints or {})}
     hints = _clean_hints(merged_hints)
@@ -470,4 +472,5 @@ def run_agent(
         "summary": final_summary,
         "proposed_changes": proposed_changes,
         "applied": applied,
+        "apply_mode": apply_mode,
     }

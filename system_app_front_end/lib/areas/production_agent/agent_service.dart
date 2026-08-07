@@ -10,7 +10,7 @@ class AgentService {
     required int workspaceId,
     Map<String, dynamic>? scope,
     Map<String, dynamic>? hints,
-    String applyMode = 'direct_apply',
+    String? applyMode,
   }) async {
     final data =
         await _api.post('/agent/run', {
@@ -18,7 +18,8 @@ class AgentService {
               'workspace_id': workspaceId,
               'scope': scope ?? {},
               'hints': hints ?? {},
-              'apply_mode': applyMode,
+              // Omit apply_mode so backend `DEFAULT_MANUAL_APPLY_MODE` wins.
+              if (applyMode != null) 'apply_mode': applyMode,
             })
             as Map<String, dynamic>;
     return Map<String, dynamic>.from(data);
