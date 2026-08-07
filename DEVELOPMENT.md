@@ -83,6 +83,7 @@ _(Dated bullets — added when the user asks to remember something.)_
 - **2026-07-27** — **Never rebuild the document editor (or the Shortcuts tree) from `AppState.notifyListeners` mid-keystroke.** That desyncs Flutter's `HardwareKeyboard` and loops `KeyDownEvent … physical key is already pressed` (same class of bug as 2026-07-15). Silent document/object saves (`notify: false`), debounce embed field saves, and only schedule embed rebuilds post-frame. Hot reload can leave keys stuck — use a **full restart** to clear it.
 - **2026-08-03** — Object graph / tags / diagram need migration **`006_object_graph.sql`** applied manually on the Render Postgres DB before (or right after) deploying the backend that uses `tags.icon`, `links.kind`, and `links.anchor`.
 - **2026-08-07** — Agent/automation **run defaults** (`apply_mode`, etc.) live in [`shared/run_config.py`](system_app_back_end/shared/run_config.py). Call sites import them; do not re-hardcode fallbacks in routes, runner, or FE services. Manual consult omits `apply_mode` so the backend default wins. FE UI for automation create may keep a twin constant in `agent_run_defaults.dart` that must match.
+- **2026-08-07** — Production-agent **writing/editing guidance** must be written as short, structured **instructions** (numbered steps, MUST / MUST NOT), not tip-style prose. The model already gets a lot of context; soft advice gets ignored. Scenario-specific jobs (e.g. “notes → update plan”) belong in topic/automation prompts, not in generic tool descriptions.
 
 ---
 

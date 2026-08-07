@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 
 from models import AgentConfig, Workspace, db
@@ -12,6 +13,7 @@ DEFAULT_CONFIG_NAME = "default"
 DEFAULT_TOOL_ALLOWLIST = [
     "search",
     "open_file",
+    "reference",
     "patch_file",
     "move_text",
     "rewrite_file",
@@ -20,11 +22,15 @@ DEFAULT_TOOL_ALLOWLIST = [
 _HERE = Path(__file__).resolve()
 # Monorepo root (…/system_app) when services live under system_app_back_end/areas/…
 REPO_ROOT = _HERE.parents[4]
-PROMPT_FILE = REPO_ROOT / "content" / "production_agent" / "system_prompt.md"
+_CONTENT_DIR = REPO_ROOT / "content" / "production_agent"
+PROMPT_FILE = _CONTENT_DIR / "system_prompt.md"
+REFERENCE_FILE = _CONTENT_DIR / "reference.md"
 # Fallback if Root Directory packaging ever omits the sibling content/ tree.
-_BACKEND_PROMPT_FILE = (
-    _HERE.parents[3] / "content" / "production_agent" / "system_prompt.md"
-)
+_BACKEND_CONTENT_DIR = _HERE.parents[3] / "content" / "production_agent"
+_BACKEND_PROMPT_FILE = _BACKEND_CONTENT_DIR / "system_prompt.md"
+_BACKEND_REFERENCE_FILE = _BACKEND_CONTENT_DIR / "reference.md"
+
+REFERENCE_SECTIONS = frozenset({"agent_text", "tools", "all"})
 
 logger = logging.getLogger(__name__)
 
@@ -42,23 +48,44 @@ def load_prompt_file() -> str:
     return path.read_text(encoding="utf-8")
 
 
+def resolve_reference_file() -> Path:
+    if REFERENCE_FILE.is_file():
+        return REFERENCE_FILE
+    if _BACKEND_REFERENCE_FILE.is_file():
+        return _BACKEND_REFERENCE_FILE
+    return REFERENCE_FILE
+
+
+_H2_SECTION_RE = re.compile(r"^## ([a-z_]+)\s*$", re.MULTILINE)
+
+
+def load_reference_section(section: str) -> str:
+    """Return a slice of content/production_agent/reference.md for the agent."""
+    key = (section or "all").strip().lower()
+    if key not in REFERENCE_SECTIONS:
+        return (
+            f"Unknown section {section!r}. Use one of: "
+            + ", ".join(sorted(REFERENCE_SECTIONS))
+        )
+    path = resolve_reference_file()
+    if not path.is_file():
+        return "Reference file missing on server."
+    text = path.read_text(encoding="utf-8")
+    if key == "all":
+        return text
+    match = re.search(rf"^## {re.escape(key)}\s*$", text, re.MULTILINE)
+    if not match:
+        return f"Section {key!r} not found in reference."
+    next_h2 = _H2_SECTION_RE.search(text, match.end())
+    end = next_h2.start() if next_h2 else len(text)
+    return text[match.start() : end].strip() + "\n"
+
+
 def operational_suffix() -> str:
     return (
-        "\n\nYou are the system_app production document assistant. "
-        "The first user message is prompt + hard scope (+ tiny hints) only — "
-        "never assume file bodies are already loaded. "
-        "Use tools to search and open_file before editing. "
-        "open_file returns document_plain (fenced agent text) and optional "
-        "object_extras. For info objects, object_extras may include title and "
-        "Links (each link: id, type, title; related peers may include file_id). "
-        "Never invent file or object ids; only use ids returned by tools or listed in scope. "
-        "Archived files are searchable/readable but never writable. "
-        "Write tools: prefer move_text to insert one slice; patch_file for "
-        "multi-spot edits (full new agent text); rewrite_file only for a true rewrite. "
-        "Preserve every existing embed object_id; never omit fenced object blocks. "
-        "When the user asks to add or change content, you must call a write tool — "
-        "a text summary alone does not change the file. "
-        "When finished, reply with a short plain-text summary (no JSON wrapper)."
+        "\n\nOperational: first message = prompt + scope (+ hints); no file bodies. "
+        "A summary alone does not save — call write tools. "
+        "reference(section) for examples when needed."
     )
 
 

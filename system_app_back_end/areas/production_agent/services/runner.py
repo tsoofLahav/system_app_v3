@@ -18,6 +18,7 @@ from areas.files.services.document_agent_text import (
 )
 from areas.production_agent.services.prompt import (
     ensure_agent_config,
+    load_reference_section,
     system_prompt_for_workspace,
 )
 from areas.production_agent.services.openai_service import (
@@ -165,6 +166,26 @@ TOOL_DEFS: list[dict[str, Any]] = [
     },
     {
         "type": "function",
+        "name": "reference",
+        "description": (
+            "Load format or tool-usage examples. Call when unsure how agent text "
+            "or a write tool looks. section: agent_text | tools | all."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "section": {
+                    "type": "string",
+                    "description": "agent_text | tools | all",
+                },
+            },
+            "required": ["section"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
         "name": "patch_file",
         "description": (
             "Update existing content in a file (plans, menus, docs, graph values). "
@@ -268,6 +289,11 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
         except (KeyError, TypeError, ValueError):
             return {"error": "file_id required"}
         return _open_file(file_id, scope)
+    if name == "reference":
+        return {
+            "section": str(args.get("section") or "all"),
+            "content": load_reference_section(str(args.get("section") or "all")),
+        }
     if name in WRITE_TOOL_NAMES or name == "update_file":
         # update_file kept as alias → patch_file for older prompts.
         tool_name = "patch_file" if name == "update_file" else name

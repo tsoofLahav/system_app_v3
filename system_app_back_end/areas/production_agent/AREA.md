@@ -19,13 +19,15 @@ The agent's standing instructions are a real document it is allowed to read:
 
 Bootstrap seeds the DB row on first launch. The runner never reads the markdown file at request time — only the DB. Deploying the backend refreshes the prompt over the internal DB link (no laptop → external Postgres needed).
 
+That file is **for the model**: short system explainer + how to work + write-tool rules. Keep it instructional and short. Bulky fence/tool **examples** live in [`content/production_agent/reference.md`](../../../content/production_agent/reference.md) and are loaded on demand via the `reference` tool (`agent_text` | `tools` | `all`). Maintainer notes stay in this `AREA.md`. Scenario-specific jobs belong in topic/automation prompts later — not in generic tool descriptions.
+
 ## What is passed to the agent
 
 | Piece | Contents |
 |-------|----------|
 | **instructions** | `agent_configs.system_prompt` + operational suffix (attached on each Responses turn) |
 | **First user input** | `prompt` + hard `scope` + optional tiny `hints` — **no file bodies** |
-| **Tools** | Native Responses function tools (`search`, `open_file`, `move_text`, `patch_file`, `rewrite_file`, `search_tasks`) |
+| **Tools** | Native Responses function tools (`search`, `open_file`, `reference`, `move_text`, `patch_file`, `rewrite_file`, `search_tasks`) |
 | **Follow-up input** | Tool results only (`function_call_output` items) |
 
 `scope` is a hard allow-list: `{ "topic_ids": [...] }` and/or `{ "file_ids": [...] }`. Empty scope is rejected.
@@ -52,6 +54,7 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 |------|----------|
 | `search` | Substring match on file name and **agent text** within scope (includes archived, flagged) |
 | `open_file` | Returns `document_plain` (agent text) + `object_extras` (info `title` / `Links` when useful). Archived readable. |
+| `reference` | On-demand examples from `content/production_agent/reference.md` (`agent_text` / `tools` / `all`) |
 | `move_text` | **Place** new content at an anchor (`end` / `start` / `after_line` / `before_line` / `after_text`) |
 | `patch_file` | **Update** via exact unique `old_text` → `new_text` replacements (rest of file untouched); typical outcome **review** |
 | `rewrite_file` | Full new agent text for a true whole-file rewrite; typical outcome **apply** when run allows |
