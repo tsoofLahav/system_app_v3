@@ -143,12 +143,46 @@ def _list_body(block: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _spacer_marker(n: int) -> str:
+    n = max(SPACER_N_MIN, min(int(n), SPACER_N_MAX))
+    return f'[SPACER n="{n}"]'
+
+
+def _append_spacer(lines: list[str], n: int = 1) -> None:
+    """Append a spacer, merging into a trailing spacer marker when present."""
+    n = max(SPACER_N_MIN, min(int(n), SPACER_N_MAX))
+    if lines:
+        match = _SPACER_RE.fullmatch(lines[-1].strip())
+        if match:
+            prev = int(match.group(1) or 1)
+            lines[-1] = _spacer_marker(prev + n)
+            return
+    lines.append(_spacer_marker(n))
+
+
+def _append_paragraph_agent_parts(lines: list[str], text: str) -> None:
+    """Emit paragraph text; blank-line runs become ``[SPACER]`` markers."""
+    if text == "":
+        _append_spacer(lines, 1)
+        return
+    parts = text.split("\n\n")
+    pending = 0
+    for part in parts:
+        if not part.strip():
+            pending += 1
+            continue
+        if pending:
+            _append_spacer(lines, pending)
+            pending = 0
+        lines.append(part)
+    if pending:
+        _append_spacer(lines, pending)
+
+
 def _block_plain_text(block: dict[str, Any]) -> str:
     block_type = block.get("type")
     if block_type == "spacer":
-        n = int(block.get("n") or 1)
-        n = max(SPACER_N_MIN, min(n, SPACER_N_MAX))
-        return f'[SPACER n="{n}"]'
+        return _spacer_marker(int(block.get("n") or 1))
     if block_type == "paragraph":
         return str(block.get("text") or "")
     if block_type == "heading":
@@ -205,18 +239,21 @@ def document_to_agent_text(
     objects_by_id = objects_by_id or {}
     lines: list[str] = []
 
-    inline_types = {
-        "paragraph",
-        "heading",
-        "list",
-        "bullet_list",
-        "ordered_list",
-        "table",
-        "spacer",
-    }
     for block in doc["blocks"]:
         block_type = block.get("type")
-        if block_type in inline_types:
+        if block_type == "paragraph":
+            _append_paragraph_agent_parts(lines, str(block.get("text") or ""))
+            continue
+        if block_type == "spacer":
+            _append_spacer(lines, int(block.get("n") or 1))
+            continue
+        if block_type in {
+            "heading",
+            "list",
+            "bullet_list",
+            "ordered_list",
+            "table",
+        }:
             text = _block_plain_text(block)
             if text:
                 lines.append(text)
@@ -504,11 +541,30 @@ def _find_next_special(text: str, start: int) -> int | None:
 
 
 def _text_to_blocks(text: str) -> list[dict[str, Any]]:
+    """Plain text → paragraphs/headings; empty ``\\n\\n`` runs → spacer blocks."""
     blocks: list[dict[str, Any]] = []
+    pending_spacer = 0
+
+    def flush_spacer() -> None:
+        nonlocal pending_spacer
+        if pending_spacer <= 0:
+            return
+        n = max(SPACER_N_MIN, min(pending_spacer, SPACER_N_MAX))
+        if blocks and blocks[-1].get("type") == "spacer":
+            blocks[-1]["n"] = max(
+                SPACER_N_MIN,
+                min(int(blocks[-1].get("n") or 1) + n, SPACER_N_MAX),
+            )
+        else:
+            blocks.append({"id": new_id("b"), "type": "spacer", "n": n})
+        pending_spacer = 0
+
     for part in text.split("\n\n"):
         stripped = part.strip()
         if not stripped:
+            pending_spacer += 1
             continue
+        flush_spacer()
         if stripped.startswith("#"):
             level = 0
             while level < len(stripped) and stripped[level] == "#":
@@ -531,6 +587,7 @@ def _text_to_blocks(text: str) -> list[dict[str, Any]]:
                     "spans": [],
                 }
             )
+    flush_spacer()
     return blocks
 
 

@@ -100,10 +100,58 @@ def test_spacer_round_trip_preserves_n():
     assert doc["blocks"][1]["n"] == 2
 
 
+def test_blank_lines_inside_paragraph_become_spacers():
+    """Legacy coalesced blank lines must surface as SPACER for the agent."""
+    original = serialize_document(
+        {
+            "version": 3,
+            "blocks": [
+                {
+                    "id": "b1",
+                    "type": "paragraph",
+                    "text": "Breakfast\n\n\n\nLunch",
+                    "spans": [],
+                },
+            ],
+        }
+    )
+    text = document_to_agent_text(original)
+    assert '[SPACER n="1"]' in text
+    doc, _, errors = apply_agent_text(original, text, known_object_ids=set())
+    assert not errors
+    assert [b["type"] for b in doc["blocks"]] == ["paragraph", "spacer", "paragraph"]
+    assert doc["blocks"][0]["text"] == "Breakfast"
+    assert doc["blocks"][2]["text"] == "Lunch"
+
+
+def test_empty_paragraph_becomes_spacer():
+    original = serialize_document(
+        {
+            "version": 3,
+            "blocks": [
+                {"id": "b1", "type": "paragraph", "text": "A", "spans": []},
+                {"id": "b2", "type": "paragraph", "text": "", "spans": []},
+                {"id": "b3", "type": "paragraph", "text": "B", "spans": []},
+            ],
+        }
+    )
+    text = document_to_agent_text(original)
+    assert "[SPACER" in text
+    doc, _, errors = apply_agent_text(original, text, known_object_ids=set())
+    assert not errors
+    assert [b["type"] for b in doc["blocks"]] == ["paragraph", "spacer", "paragraph"]
+
+
 def test_parse_spacer_default_n():
     parsed = parse_agent_text("Above\n\n[SPACER]\n\nBelow")
     types = [b["type"] for b in parsed["blocks"]]
     assert types == ["paragraph", "spacer", "paragraph"]
+    assert parsed["blocks"][1]["n"] == 1
+
+
+def test_text_to_blocks_empty_runs_become_spacers():
+    parsed = parse_agent_text("A\n\n\n\nB")
+    assert [b["type"] for b in parsed["blocks"]] == ["paragraph", "spacer", "paragraph"]
     assert parsed["blocks"][1]["n"] == 1
 
 

@@ -44,7 +44,7 @@ This is why there is no flag on the file. Prominence is a property of the topic'
 ```
 
 - Order is **array order** — there are no character offsets between blocks.
-- **`spacer`** — visual gap (`n` = blank-line weight, 1–12). Agent text: `[SPACER n="2"]`. Not raw blank lines.
+- **`spacer`** — visual gap (`n` = blank-line weight, 1–12). Agent text: `[SPACER n="2"]`. Raw blank-line runs inside paragraphs (and empty paragraph blocks) are expanded to spacers on serialize/parse so agent edits cannot silently drop them.
 - `spans` carry inline formatting (bold, italic, underline, size, color) as ranges on `text`.
 - Legacy `list` + `list_style` normalizes to `bullet_list` / `ordered_list` on read.
 - Reads accept v1/v2 shapes and migrate; **writes always normalize to v3**.

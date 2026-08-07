@@ -50,7 +50,7 @@ Position is array order in `blocks[]`.
 
 The empty-line-exits rule is what makes lists and tables feel like part of the text: the user presses Enter twice and simply keeps writing, exactly as they would in a word processor.
 
-Adjacent paragraphs are coalesced on load so a document that was split into many blocks reads as one body.
+Adjacent non-empty paragraphs are coalesced on load so a document that was split into many blocks reads as one body. Empty paragraphs and blank-line runs (`\n\n` inside text) become `spacer` blocks so section gaps survive agent edits.
 
 A newly inserted list or table gets the caret in its first bullet or its top-left cell, so inserting one is the same gesture as starting a new paragraph — insert and type.
 
