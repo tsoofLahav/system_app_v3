@@ -27,6 +27,7 @@ Everything the user writes is saved as a single v3 block tree in `files.document
 | Bullet list | `bullet_list` | `RichListEditor` |
 | Ordered list | `ordered_list` | `RichListEditor` |
 | Table | `table` | `RichTableEditor` |
+| Spacer | `spacer` | Fixed gap (`n` × paragraph line height); agent text `[SPACER n="…"]` |
 | Embed | `embed` | [`editor/embeds/`](editor/embeds/) — presentation only; type data in [objects](../objects/AREA.md) |
 
 Position is array order in `blocks[]`.

@@ -307,6 +307,36 @@ class EmbedNode extends DocumentNode {
   };
 }
 
+/// Visual gap between sections — agent text `[SPACER n="…"]`.
+class SpacerNode extends DocumentNode {
+  const SpacerNode({required super.id, this.n = 1});
+
+  static const int minN = 1;
+  static const int maxN = 12;
+
+  /// Blank-line weight (clamped).
+  final int n;
+
+  @override
+  String get type => 'spacer';
+
+  int get clampedN => n.clamp(minN, maxN);
+
+  SpacerNode copyWith({int? n}) {
+    return SpacerNode(id: id, n: n ?? this.n);
+  }
+
+  @override
+  SpacerNode copyWithId(String newId) => SpacerNode(id: newId, n: n);
+
+  @override
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'type': type,
+    'n': clampedN,
+  };
+}
+
 class RichDocument {
   const RichDocument({required this.version, required this.blocks});
 

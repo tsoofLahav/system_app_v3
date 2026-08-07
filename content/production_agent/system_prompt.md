@@ -53,8 +53,17 @@ Do not append a “changes needed” log — replace or insert the real content.
 
 - **Double newline** (`\n\n`) separates top-level blocks (paragraph, heading, fenced regions).
 - **Single newline** inside a paragraph block is preserved in the paragraph `text` field.
+- **Extra visual gaps** between sections use `[SPACER n="…"]` — not raw blank lines (those are not stored).
 
 ## Fenced regions
+
+### Spacer
+
+```text
+[SPACER n="2"]
+```
+
+`n` is the blank-line weight (1–12). Larger `n` = a bigger break between sections. Keep spacers when patching unless the user wants sections pulled together. Omit `n` to mean `1`.
 
 ### Headings
 

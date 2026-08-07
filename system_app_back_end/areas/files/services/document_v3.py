@@ -12,8 +12,18 @@ DOCUMENT_VERSION_V2 = 2
 DOCUMENT_VERSION_V1 = 1
 EMBED_CHAR = "\uFFFC"
 
-INLINE_BLOCK_TYPES = {"paragraph", "heading", "list", "bullet_list", "ordered_list", "table"}
+INLINE_BLOCK_TYPES = {
+    "paragraph",
+    "heading",
+    "list",
+    "bullet_list",
+    "ordered_list",
+    "table",
+    "spacer",
+}
 OBJECT_TYPES = {"task_list", "info", "image", "graph"}
+SPACER_N_MIN = 1
+SPACER_N_MAX = 12
 
 _TASK_MARKER = re.compile(r"^\{\{task:(\d+)\}\}$")
 _INFO_MARKER = re.compile(r"^\{\{info:(\d+)\}\}$")
@@ -118,6 +128,13 @@ def _normalize_block(item: dict[str, Any]) -> dict[str, Any] | None:
         if not rows:
             rows = [[_empty_cell(), _empty_cell()]]
         return {"id": block_id, "type": "table", "rows": rows}
+    if block_type == "spacer":
+        n = int(item.get("n") or 1)
+        return {
+            "id": block_id,
+            "type": "spacer",
+            "n": max(SPACER_N_MIN, min(n, SPACER_N_MAX)),
+        }
     if block_type == "embed":
         object_id = item.get("object_id")
         block: dict[str, Any] = {"id": block_id, "type": "embed"}

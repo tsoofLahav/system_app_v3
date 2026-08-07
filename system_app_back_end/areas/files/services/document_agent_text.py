@@ -7,9 +7,19 @@ from datetime import datetime
 from typing import Any
 
 from models import InformationPiece, ObjectEmbed, Task, db
-from areas.files.services.document_v3 import new_id, parse_document, serialize_document
+from areas.files.services.document_v3 import (
+    SPACER_N_MAX,
+    SPACER_N_MIN,
+    new_id,
+    parse_document,
+    serialize_document,
+)
 from areas.objects.services.task_list_order import tasks_for_list
 
+_SPACER_RE = re.compile(
+    r'\[SPACER(?:\s+n="(\d+)")?\s*\]',
+    re.IGNORECASE,
+)
 _TASK_LIST_RE = re.compile(
     r"\[TASK_LIST id=\"(\d+)\"]\s*(.*?)\s*\[/TASK_LIST]",
     re.DOTALL | re.IGNORECASE,
@@ -50,6 +60,7 @@ _BULLET_ITEM_RE = re.compile(r"^(\s*)[-*]\s+(.*)$")
 _ORDERED_ITEM_RE = re.compile(r"^(\s*)\d+[\.\)]\s+(.*)$")
 
 _SPECIAL_MARKERS = (
+    "[SPACER",
     "[TASK_LIST",
     "[INFO",
     "[IMAGE",
@@ -134,6 +145,10 @@ def _list_body(block: dict[str, Any]) -> str:
 
 def _block_plain_text(block: dict[str, Any]) -> str:
     block_type = block.get("type")
+    if block_type == "spacer":
+        n = int(block.get("n") or 1)
+        n = max(SPACER_N_MIN, min(n, SPACER_N_MAX))
+        return f'[SPACER n="{n}"]'
     if block_type == "paragraph":
         return str(block.get("text") or "")
     if block_type == "heading":
@@ -190,7 +205,15 @@ def document_to_agent_text(
     objects_by_id = objects_by_id or {}
     lines: list[str] = []
 
-    inline_types = {"paragraph", "heading", "list", "bullet_list", "ordered_list", "table"}
+    inline_types = {
+        "paragraph",
+        "heading",
+        "list",
+        "bullet_list",
+        "ordered_list",
+        "table",
+        "spacer",
+    }
     for block in doc["blocks"]:
         block_type = block.get("type")
         if block_type in inline_types:
@@ -321,6 +344,7 @@ def parse_agent_text(text: str) -> dict[str, Any]:
 
         matched = False
         for pattern, handler in (
+            (_SPACER_RE, _parse_spacer),
             (_TASK_LIST_RE, _parse_task_list),
             (_INFO_RE, _parse_info),
             (_IMAGE_RE, _parse_image_marker),
@@ -535,6 +559,20 @@ def _parse_list_items(body: str, *, ordered: bool) -> list[dict[str, Any]]:
     if not items:
         items.append({"id": new_id("li"), "text": "", "indent": 0, "spans": []})
     return items
+
+
+def _parse_spacer(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
+    raw_n = match.group(1)
+    n = int(raw_n) if raw_n else 1
+    n = max(SPACER_N_MIN, min(n, SPACER_N_MAX))
+    return (
+        {
+            "id": new_id("b"),
+            "type": "spacer",
+            "n": n,
+        },
+        {},
+    )
 
 
 def _parse_bullet_list(match: re.Match) -> tuple[dict | None, dict[int, dict]]:

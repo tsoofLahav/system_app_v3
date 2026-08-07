@@ -37,12 +37,14 @@ This is why there is no flag on the file. Prominence is a property of the topic'
     { "id": "b2", "type": "heading", "level": 2, "text": "Goals", "spans": [] },
     { "id": "b3", "type": "bullet_list", "items": [{ "id": "li1", "text": "…", "indent": 0 }] },
     { "id": "b4", "type": "table", "rows": [[{ "text": "A" }, { "text": "B" }]] },
-    { "id": "b5", "type": "embed", "object_id": 42 }
+    { "id": "b5", "type": "embed", "object_id": 42 },
+    { "id": "b6", "type": "spacer", "n": 2 }
   ]
 }
 ```
 
 - Order is **array order** — there are no character offsets between blocks.
+- **`spacer`** — visual gap (`n` = blank-line weight, 1–12). Agent text: `[SPACER n="2"]`. Not raw blank lines.
 - `spans` carry inline formatting (bold, italic, underline, size, color) as ranges on `text`.
 - Legacy `list` + `list_style` normalizes to `bullet_list` / `ordered_list` on read.
 - Reads accept v1/v2 shapes and migrate; **writes always normalize to v3**.
@@ -76,12 +78,13 @@ Empty-final Enter exit (task / info / graph continuing as a paragraph below the 
 | **Full version** — block tree | `files.document_json` | The editor, persistence, source of truth |
 | **Text version** — agent text | Computed on demand | AI reading/writing, search, diffs |
 
-The text version flattens the tree into deterministic plain text with fenced regions (`[TABLE]`, `[BULLET_LIST]`, `[TASK_LIST id="…"]`, `[INFO]`, `[IMAGE]`, `[GRAPH]`). Embedded object content is expanded inline so the agent sees real content, not ids alone.
+The text version flattens the tree into deterministic plain text with fenced regions (`[TABLE]`, `[BULLET_LIST]`, `[SPACER]`, `[TASK_LIST id="…"]`, `[INFO]`, `[IMAGE]`, `[GRAPH]`). Embedded object content is expanded inline so the agent sees real content, not ids alone.
 
-Frozen embed shapes (see production agent prompt):
+Frozen shapes (see production agent prompt):
 
 | Fence | Shape |
 |-------|--------|
+| `SPACER` | `n` = blank-line weight between sections |
 | `TASK_LIST` | ACTIVE/DONE checkbox lines |
 | `INFO` | First line title, remaining body |
 | `IMAGE` | Single-line `caption` + optional `url` |

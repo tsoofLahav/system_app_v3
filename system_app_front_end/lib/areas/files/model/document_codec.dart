@@ -71,6 +71,12 @@ class DocumentCodec {
           id: id,
           objectId: json['object_id'] as int? ?? 0,
         );
+      case 'spacer':
+        final n = json['n'] as int? ?? 1;
+        return SpacerNode(
+          id: id,
+          n: n.clamp(SpacerNode.minN, SpacerNode.maxN),
+        );
       default:
         return ParagraphNode(
           id: id,

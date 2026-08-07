@@ -79,6 +79,34 @@ def test_document_to_agent_text_lists_and_table():
     assert "[/TABLE]" in text
 
 
+def test_spacer_round_trip_preserves_n():
+    original = serialize_document(
+        {
+            "version": 3,
+            "blocks": [
+                {"id": "b1", "type": "paragraph", "text": "Breakfast", "spans": []},
+                {"id": "b2", "type": "spacer", "n": 2},
+                {"id": "b3", "type": "paragraph", "text": "Lunch", "spans": []},
+            ],
+        }
+    )
+    text = document_to_agent_text(original)
+    assert '[SPACER n="2"]' in text
+    assert text.index("Breakfast") < text.index("[SPACER") < text.index("Lunch")
+    doc, _, errors = apply_agent_text(original, text, known_object_ids=set())
+    assert not errors
+    types = [b["type"] for b in doc["blocks"]]
+    assert types == ["paragraph", "spacer", "paragraph"]
+    assert doc["blocks"][1]["n"] == 2
+
+
+def test_parse_spacer_default_n():
+    parsed = parse_agent_text("Above\n\n[SPACER]\n\nBelow")
+    types = [b["type"] for b in parsed["blocks"]]
+    assert types == ["paragraph", "spacer", "paragraph"]
+    assert parsed["blocks"][1]["n"] == 1
+
+
 def test_round_trip_paragraph_heading_list_table_task_list():
     objects = {
         42: {
