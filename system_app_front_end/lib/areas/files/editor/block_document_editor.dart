@@ -1294,9 +1294,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
                   key: ValueKey(_doc.blocks[index].id),
                   child: Padding(
                     padding: EdgeInsets.only(
-                      bottom: _doc.blocks[index] is SpacerNode
-                          ? 0
-                          : (_doc.blocks[index] is ParagraphNode ? 2 : 8),
+                      bottom: _doc.blocks[index] is ParagraphNode ? 2 : 8,
                     ),
                     child: _buildBlock(_doc.blocks[index], index),
                   ),
@@ -1309,11 +1307,6 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   }
 
   Widget _buildBlock(DocumentNode block, int index) {
-    if (block is SpacerNode) {
-      return SizedBox(
-        height: AppTypography.documentSpacerLineHeight * block.clampedN,
-      );
-    }
     if (block is EmbedNode) {
       return _buildEmbed(block, index);
     }

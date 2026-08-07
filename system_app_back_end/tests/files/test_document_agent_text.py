@@ -79,29 +79,29 @@ def test_document_to_agent_text_lists_and_table():
     assert "[/TABLE]" in text
 
 
-def test_spacer_round_trip_preserves_n():
+def test_empty_paragraphs_round_trip_as_spacer_markers():
+    """Mapper-only: empty paragraphs ↔ [SPACER]; no document spacer type."""
     original = serialize_document(
         {
             "version": 3,
             "blocks": [
                 {"id": "b1", "type": "paragraph", "text": "Breakfast", "spans": []},
-                {"id": "b2", "type": "spacer", "n": 2},
-                {"id": "b3", "type": "paragraph", "text": "Lunch", "spans": []},
+                {"id": "b2", "type": "paragraph", "text": "", "spans": []},
+                {"id": "b3", "type": "paragraph", "text": "", "spans": []},
+                {"id": "b4", "type": "paragraph", "text": "Lunch", "spans": []},
             ],
         }
     )
     text = document_to_agent_text(original)
     assert '[SPACER n="2"]' in text
-    assert text.index("Breakfast") < text.index("[SPACER") < text.index("Lunch")
     doc, _, errors = apply_agent_text(original, text, known_object_ids=set())
     assert not errors
-    types = [b["type"] for b in doc["blocks"]]
-    assert types == ["paragraph", "spacer", "paragraph"]
-    assert doc["blocks"][1]["n"] == 2
+    assert all(b["type"] != "spacer" for b in doc["blocks"])
+    empties = [b for b in doc["blocks"] if b["type"] == "paragraph" and b["text"] == ""]
+    assert len(empties) == 2
 
 
-def test_blank_lines_inside_paragraph_become_spacers():
-    """Legacy coalesced blank lines must surface as SPACER for the agent."""
+def test_blank_lines_inside_paragraph_become_spacer_markers():
     original = serialize_document(
         {
             "version": 3,
@@ -119,40 +119,56 @@ def test_blank_lines_inside_paragraph_become_spacers():
     assert '[SPACER n="1"]' in text
     doc, _, errors = apply_agent_text(original, text, known_object_ids=set())
     assert not errors
-    assert [b["type"] for b in doc["blocks"]] == ["paragraph", "spacer", "paragraph"]
-    assert doc["blocks"][0]["text"] == "Breakfast"
-    assert doc["blocks"][2]["text"] == "Lunch"
+    assert all(b["type"] != "spacer" for b in doc["blocks"])
+    texts = [b["text"] for b in doc["blocks"] if b["type"] == "paragraph"]
+    assert "Breakfast" in texts and "Lunch" in texts
+    assert any(t == "" for t in texts)
 
 
-def test_empty_paragraph_becomes_spacer():
+def test_empty_file_agent_text_is_empty():
     original = serialize_document(
+        {
+            "version": 3,
+            "blocks": [{"id": "b1", "type": "paragraph", "text": "", "spans": []}],
+        }
+    )
+    assert document_to_agent_text(original) == ""
+
+
+def test_parse_spacer_becomes_empty_paragraphs():
+    parsed = parse_agent_text("Above\n\n[SPACER]\n\nBelow")
+    assert parsed["blocks"][0]["text"] == "Above"
+    assert parsed["blocks"][-1]["text"] == "Below"
+    assert parsed["blocks"][1]["type"] == "paragraph"
+    assert parsed["blocks"][1]["text"] == ""
+
+
+def test_text_to_blocks_empty_runs_become_empty_paragraphs():
+    parsed = parse_agent_text("A\n\n\n\nB")
+    assert [b["type"] for b in parsed["blocks"]] == [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+    ]
+    assert parsed["blocks"][1]["text"] == ""
+
+
+def test_legacy_spacer_type_normalizes_to_empty_paragraphs():
+    from areas.files.services.document_v3 import _normalize_v3
+
+    norm = _normalize_v3(
         {
             "version": 3,
             "blocks": [
                 {"id": "b1", "type": "paragraph", "text": "A", "spans": []},
-                {"id": "b2", "type": "paragraph", "text": "", "spans": []},
+                {"id": "b2", "type": "spacer", "n": 2},
                 {"id": "b3", "type": "paragraph", "text": "B", "spans": []},
             ],
         }
     )
-    text = document_to_agent_text(original)
-    assert "[SPACER" in text
-    doc, _, errors = apply_agent_text(original, text, known_object_ids=set())
-    assert not errors
-    assert [b["type"] for b in doc["blocks"]] == ["paragraph", "spacer", "paragraph"]
-
-
-def test_parse_spacer_default_n():
-    parsed = parse_agent_text("Above\n\n[SPACER]\n\nBelow")
-    types = [b["type"] for b in parsed["blocks"]]
-    assert types == ["paragraph", "spacer", "paragraph"]
-    assert parsed["blocks"][1]["n"] == 1
-
-
-def test_text_to_blocks_empty_runs_become_spacers():
-    parsed = parse_agent_text("A\n\n\n\nB")
-    assert [b["type"] for b in parsed["blocks"]] == ["paragraph", "spacer", "paragraph"]
-    assert parsed["blocks"][1]["n"] == 1
+    assert all(b["type"] != "spacer" for b in norm["blocks"])
+    empties = [b for b in norm["blocks"] if b["type"] == "paragraph" and b["text"] == ""]
+    assert len(empties) == 2
 
 
 def test_round_trip_paragraph_heading_list_table_task_list():

@@ -27,7 +27,6 @@ Everything the user writes is saved as a single v3 block tree in `files.document
 | Bullet list | `bullet_list` | `RichListEditor` |
 | Ordered list | `ordered_list` | `RichListEditor` |
 | Table | `table` | `RichTableEditor` |
-| Spacer | `spacer` | Fixed gap (`n` × paragraph line height); agent text `[SPACER n="…"]` |
 | Embed | `embed` | [`editor/embeds/`](editor/embeds/) — presentation only; type data in [objects](../objects/AREA.md) |
 
 Position is array order in `blocks[]`.
@@ -50,7 +49,7 @@ Position is array order in `blocks[]`.
 
 The empty-line-exits rule is what makes lists and tables feel like part of the text: the user presses Enter twice and simply keeps writing, exactly as they would in a word processor.
 
-Adjacent non-empty paragraphs are coalesced on load so a document that was split into many blocks reads as one body. Empty paragraphs and blank-line runs (`\n\n` inside text) become `spacer` blocks so section gaps survive agent edits.
+Adjacent paragraphs are coalesced on load so a document that was split into many blocks reads as one body.
 
 A newly inserted list or table gets the caret in its first bullet or its top-left cell, so inserting one is the same gesture as starting a new paragraph — insert and type.
 

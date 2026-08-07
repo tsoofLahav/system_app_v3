@@ -82,12 +82,6 @@ abstract final class AppTypography {
   static TextStyle get documentParagraphStyle =>
       noteBodyStyle.copyWith(height: 1.35);
 
-  /// One blank-line unit for `[SPACER n="…"]` blocks in the document.
-  static double get documentSpacerLineHeight {
-    final style = documentParagraphStyle;
-    return (style.fontSize ?? 13) * (style.height ?? 1.35);
-  }
-
   /// A heading inside a document. Level 1 is the largest; each level down
   /// loses 2px, and level 5 lands back on the paragraph size.
   static TextStyle documentHeadingStyle(int level) {

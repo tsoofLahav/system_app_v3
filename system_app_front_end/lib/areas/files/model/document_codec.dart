@@ -71,12 +71,6 @@ class DocumentCodec {
           id: id,
           objectId: json['object_id'] as int? ?? 0,
         );
-      case 'spacer':
-        final n = json['n'] as int? ?? 1;
-        return SpacerNode(
-          id: id,
-          n: n.clamp(SpacerNode.minN, SpacerNode.maxN),
-        );
       default:
         return ParagraphNode(
           id: id,
@@ -263,17 +257,7 @@ class DocumentCodec {
     return doc.copyWith(blocks: blocks);
   }
 
-  /// Merge adjacent body paragraphs; turn empty / blank-line runs into [SpacerNode].
   static RichDocument coalesceAdjacentParagraphs(RichDocument doc) {
-    final expanded = <DocumentNode>[];
-    for (final block in doc.blocks) {
-      if (block is ParagraphNode) {
-        expanded.addAll(_expandParagraphBlankLines(block));
-      } else {
-        expanded.add(block);
-      }
-    }
-
     final blocks = <DocumentNode>[];
     ParagraphNode? run;
 
@@ -284,32 +268,8 @@ class DocumentCodec {
       }
     }
 
-    void addSpacer(SpacerNode spacer) {
-      flushRun();
-      if (blocks.isNotEmpty && blocks.last is SpacerNode) {
-        final prev = blocks.last as SpacerNode;
-        blocks[blocks.length - 1] = SpacerNode(
-          id: prev.id,
-          n: (prev.clampedN + spacer.clampedN).clamp(
-            SpacerNode.minN,
-            SpacerNode.maxN,
-          ),
-        );
-      } else {
-        blocks.add(spacer);
-      }
-    }
-
-    for (final block in expanded) {
-      if (block is SpacerNode) {
-        addSpacer(block);
-        continue;
-      }
+    for (final block in doc.blocks) {
       if (block is ParagraphNode) {
-        if (block.text.isEmpty) {
-          addSpacer(SpacerNode(id: block.id, n: 1));
-          continue;
-        }
         if (run == null) {
           run = block;
         } else {
@@ -327,64 +287,16 @@ class DocumentCodec {
             ],
           );
         }
-        continue;
+      } else {
+        flushRun();
+        blocks.add(block);
       }
-      flushRun();
-      blocks.add(block);
     }
     flushRun();
     if (blocks.isEmpty) {
       blocks.add(ParagraphNode(id: newId('b'), text: ''));
     }
     return doc.copyWith(blocks: blocks);
-  }
-
-  /// Blank-line runs inside a paragraph become spacer blocks.
-  static List<DocumentNode> _expandParagraphBlankLines(ParagraphNode block) {
-    final parts = block.text.split('\n\n');
-    if (parts.length == 1) {
-      if (block.text.isEmpty) {
-        return [SpacerNode(id: block.id, n: 1)];
-      }
-      return [block];
-    }
-
-    final out = <DocumentNode>[];
-    var pendingSpacer = 0;
-    var usedId = false;
-
-    void flushSpacer() {
-      if (pendingSpacer <= 0) return;
-      out.add(
-        SpacerNode(
-          id: usedId ? newId('b') : block.id,
-          n: pendingSpacer.clamp(SpacerNode.minN, SpacerNode.maxN),
-        ),
-      );
-      usedId = true;
-      pendingSpacer = 0;
-    }
-
-    for (final part in parts) {
-      if (part.trim().isEmpty) {
-        pendingSpacer++;
-        continue;
-      }
-      flushSpacer();
-      out.add(
-        ParagraphNode(
-          id: usedId ? newId('b') : block.id,
-          text: part,
-          spans: usedId ? const [] : block.spans,
-        ),
-      );
-      usedId = true;
-    }
-    flushSpacer();
-    if (out.isEmpty) {
-      return [SpacerNode(id: block.id, n: 1)];
-    }
-    return out;
   }
 
   static int? embedBlockIndex(RichDocument doc, int objectId) {

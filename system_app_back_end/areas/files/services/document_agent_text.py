@@ -7,14 +7,12 @@ from datetime import datetime
 from typing import Any
 
 from models import InformationPiece, ObjectEmbed, Task, db
-from areas.files.services.document_v3 import (
-    SPACER_N_MAX,
-    SPACER_N_MIN,
-    new_id,
-    parse_document,
-    serialize_document,
-)
+from areas.files.services.document_v3 import new_id, parse_document, serialize_document
 from areas.objects.services.task_list_order import tasks_for_list
+
+# Agent-text only — stored in document_json as blank lines / empty paragraphs.
+SPACER_N_MIN = 1
+SPACER_N_MAX = 12
 
 _SPACER_RE = re.compile(
     r'\[SPACER(?:\s+n="(\d+)")?\s*\]',
@@ -179,10 +177,12 @@ def _append_paragraph_agent_parts(lines: list[str], text: str) -> None:
         _append_spacer(lines, pending)
 
 
+def _empty_paragraph() -> dict[str, Any]:
+    return {"id": new_id("b"), "type": "paragraph", "text": "", "spans": []}
+
+
 def _block_plain_text(block: dict[str, Any]) -> str:
     block_type = block.get("type")
-    if block_type == "spacer":
-        return _spacer_marker(int(block.get("n") or 1))
     if block_type == "paragraph":
         return str(block.get("text") or "")
     if block_type == "heading":
@@ -244,9 +244,6 @@ def document_to_agent_text(
         if block_type == "paragraph":
             _append_paragraph_agent_parts(lines, str(block.get("text") or ""))
             continue
-        if block_type == "spacer":
-            _append_spacer(lines, int(block.get("n") or 1))
-            continue
         if block_type in {
             "heading",
             "list",
@@ -280,6 +277,9 @@ def document_to_agent_text(
         elif obj_type == "graph":
             lines.append(_graph_section(int(object_id), obj))
 
+    # Empty file (only empty paragraphs) must not become a lone [SPACER].
+    if lines and all(_SPACER_RE.fullmatch(line.strip()) for line in lines):
+        return ""
     return "\n\n".join(line for line in lines if line is not None)
 
 
@@ -541,30 +541,22 @@ def _find_next_special(text: str, start: int) -> int | None:
 
 
 def _text_to_blocks(text: str) -> list[dict[str, Any]]:
-    """Plain text → paragraphs/headings; empty ``\\n\\n`` runs → spacer blocks."""
+    """Plain text → paragraphs/headings; empty ``\\n\\n`` runs → empty paragraphs."""
     blocks: list[dict[str, Any]] = []
-    pending_spacer = 0
+    pending_empty = 0
 
-    def flush_spacer() -> None:
-        nonlocal pending_spacer
-        if pending_spacer <= 0:
-            return
-        n = max(SPACER_N_MIN, min(pending_spacer, SPACER_N_MAX))
-        if blocks and blocks[-1].get("type") == "spacer":
-            blocks[-1]["n"] = max(
-                SPACER_N_MIN,
-                min(int(blocks[-1].get("n") or 1) + n, SPACER_N_MAX),
-            )
-        else:
-            blocks.append({"id": new_id("b"), "type": "spacer", "n": n})
-        pending_spacer = 0
+    def flush_empty() -> None:
+        nonlocal pending_empty
+        for _ in range(pending_empty):
+            blocks.append(_empty_paragraph())
+        pending_empty = 0
 
     for part in text.split("\n\n"):
         stripped = part.strip()
         if not stripped:
-            pending_spacer += 1
+            pending_empty += 1
             continue
-        flush_spacer()
+        flush_empty()
         if stripped.startswith("#"):
             level = 0
             while level < len(stripped) and stripped[level] == "#":
@@ -587,7 +579,7 @@ def _text_to_blocks(text: str) -> list[dict[str, Any]]:
                     "spans": [],
                 }
             )
-    flush_spacer()
+    flush_empty()
     return blocks
 
 
@@ -618,18 +610,12 @@ def _parse_list_items(body: str, *, ordered: bool) -> list[dict[str, Any]]:
     return items
 
 
-def _parse_spacer(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
+def _parse_spacer(match: re.Match) -> tuple[list[dict[str, Any]], dict[int, dict]]:
+    """Agent ``[SPACER]`` → empty paragraph blocks (no special document type)."""
     raw_n = match.group(1)
     n = int(raw_n) if raw_n else 1
     n = max(SPACER_N_MIN, min(n, SPACER_N_MAX))
-    return (
-        {
-            "id": new_id("b"),
-            "type": "spacer",
-            "n": n,
-        },
-        {},
-    )
+    return [_empty_paragraph() for _ in range(n)], {}
 
 
 def _parse_bullet_list(match: re.Match) -> tuple[dict | None, dict[int, dict]]:

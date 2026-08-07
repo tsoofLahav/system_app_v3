@@ -12,18 +12,8 @@ DOCUMENT_VERSION_V2 = 2
 DOCUMENT_VERSION_V1 = 1
 EMBED_CHAR = "\uFFFC"
 
-INLINE_BLOCK_TYPES = {
-    "paragraph",
-    "heading",
-    "list",
-    "bullet_list",
-    "ordered_list",
-    "table",
-    "spacer",
-}
+INLINE_BLOCK_TYPES = {"paragraph", "heading", "list", "bullet_list", "ordered_list", "table"}
 OBJECT_TYPES = {"task_list", "info", "image", "graph"}
-SPACER_N_MIN = 1
-SPACER_N_MAX = 12
 
 _TASK_MARKER = re.compile(r"^\{\{task:(\d+)\}\}$")
 _INFO_MARKER = re.compile(r"^\{\{info:(\d+)\}\}$")
@@ -75,6 +65,19 @@ def _normalize_v3(data: dict[str, Any]) -> dict[str, Any]:
     blocks: list[dict[str, Any]] = []
     for item in blocks_raw:
         if not isinstance(item, dict):
+            continue
+        # Legacy agent spacer blocks → empty paragraphs (gaps live in paragraph text).
+        if item.get("type") == "spacer":
+            n = max(1, min(int(item.get("n") or 1), 12))
+            for _ in range(n):
+                blocks.append(
+                    {
+                        "id": new_id("b"),
+                        "type": "paragraph",
+                        "text": "",
+                        "spans": [],
+                    }
+                )
             continue
         block = _normalize_block(item)
         if block:
@@ -128,13 +131,6 @@ def _normalize_block(item: dict[str, Any]) -> dict[str, Any] | None:
         if not rows:
             rows = [[_empty_cell(), _empty_cell()]]
         return {"id": block_id, "type": "table", "rows": rows}
-    if block_type == "spacer":
-        n = int(item.get("n") or 1)
-        return {
-            "id": block_id,
-            "type": "spacer",
-            "n": max(SPACER_N_MIN, min(n, SPACER_N_MAX)),
-        }
     if block_type == "embed":
         object_id = item.get("object_id")
         block: dict[str, Any] = {"id": block_id, "type": "embed"}

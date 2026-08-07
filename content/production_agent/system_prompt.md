@@ -53,17 +53,17 @@ Do not append a “changes needed” log — replace or insert the real content.
 
 - **Double newline** (`\n\n`) separates top-level blocks (paragraph, heading, fenced regions).
 - **Single newline** inside a paragraph block is preserved in the paragraph `text` field.
-- **Extra visual gaps** between sections use `[SPACER n="…"]` — not raw blank lines (those are not stored).
+- **Extra blank lines** (more than a normal block break) are written as `[SPACER n="…"]` so they survive edits. In the real document they are blank lines / empty paragraphs — not a special object. Keep spacers when patching unless the user wants sections pulled together.
 
 ## Fenced regions
 
-### Spacer
+### Spacer (extra blank lines)
 
 ```text
 [SPACER n="2"]
 ```
 
-`n` is the blank-line weight (1–12). Larger `n` = a bigger break between sections. Keep spacers when patching unless the user wants sections pulled together. Omit `n` to mean `1`.
+`n` is how many extra empty paragraphs (1–12). Omit `n` to mean `1`. Do not replace these with raw blank lines in agent text — use the marker.
 
 ### Headings
 

@@ -74,7 +74,7 @@ Omit when unused. Extend the set as actions need — keep them tiny.
 | **`patch_file`** | **Update** existing content in place | Exact `old_text` → `new_text` replacements (unique) | Review / pending |
 | **`rewrite_file`** | True whole-file rewrite | Full new agent text | Usually apply |
 
-Tool choice is guided by accurate descriptions (and standing prompt) — not hard bans. `patch_file` must not rewrite the whole file: only matched spans change, so blank lines and other whitespace outside hunks stay identical for the future side-by-side diff.
+Tool choice is guided by accurate descriptions (and standing prompt) — not hard bans. `patch_file` uses exact replacements so unchanged spans stay intact. Extra blank lines map in the **mapper only** as `[SPACER n="…"]` ↔ empty paragraphs / blank runs in paragraph text (no editor spacer type).
 
 Read tools: `open_file`, `search`, object/task search.
 
