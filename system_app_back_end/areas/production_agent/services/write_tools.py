@@ -60,13 +60,18 @@ WRITE_TOOL_NAMES = frozenset(TOOL_WRITE_DEFAULTS)
 
 
 def resolve_write_mode(tool_name: str, run_apply_mode: str) -> WriteMode:
-    """Run config is a ceiling; tools keep anti-drift defaults under direct_apply."""
+    """Run apply_mode wins. Tool defaults apply only when the run mode is unset/unknown.
+
+    Manual consult currently uses direct_apply so the rough review dialog is not
+    in the way until the real diff UI (step 6) ships.
+    """
     run_mode = (run_apply_mode or "review").strip()
     if run_mode == "notify_only":
         return "notify_only"
     if run_mode == "review":
         return "review"
-    # direct_apply (and unknown): honor tool default
+    if run_mode == "direct_apply":
+        return "direct_apply"
     return TOOL_WRITE_DEFAULTS.get(tool_name, "review")
 
 

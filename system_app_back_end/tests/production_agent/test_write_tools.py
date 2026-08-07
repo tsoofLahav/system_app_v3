@@ -16,8 +16,8 @@ def test_resolve_write_mode_review_ceiling():
     assert resolve_write_mode("patch_file", "review") == "review"
 
 
-def test_resolve_write_mode_tool_defaults_under_direct():
-    assert resolve_write_mode("patch_file", "direct_apply") == "review"
+def test_resolve_write_mode_direct_applies_all_tools():
+    assert resolve_write_mode("patch_file", "direct_apply") == "direct_apply"
     assert resolve_write_mode("move_text", "direct_apply") == "direct_apply"
     assert resolve_write_mode("rewrite_file", "direct_apply") == "direct_apply"
 

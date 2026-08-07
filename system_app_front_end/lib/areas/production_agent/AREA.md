@@ -30,18 +30,19 @@ The backend loads content only via tools; the first turn never includes file bod
 
 ## Diff review dialog
 
-Manual runs use `apply_mode: 'review'`, so the backend proposes instead of writing.
+**Temporary:** manual consult uses `apply_mode: 'direct_apply'` and shows a snackbar summary — the rough review dialog is skipped until the lookalike diff UI (plan step 6). Automations still choose their own apply mode.
+
+When review mode is used again:
 
 ```
 run → result.proposed_changes[0].review.diff_hunks
         ↓
-   TextDiffDialog  (added lines green, removed red)
+   TextDiffDialog
         ↓
  accept → applyAgentReview()  → PATCH document_json
- cancel → dismissAgentReview() → nothing written
 ```
 
-Key points:
+Key points (review mode):
 
 - The diff is over **agent text**, not JSON — the user reads sentences, not braces.
 - Nothing is written until the user accepts. The backend rolled its session back already.

@@ -317,7 +317,7 @@ def run_agent(
     prompt: str,
     workspace_id: int,
     scope: dict | None,
-    apply_mode: str = "review",
+    apply_mode: str = "direct_apply",
     context: dict | None = None,
     hints: dict | None = None,
 ) -> dict:

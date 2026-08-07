@@ -59,7 +59,7 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 
 `open_file` payload: [`services/open_file_tool.py`](services/open_file_tool.py). Writes: [`services/write_tools.py`](services/write_tools.py).
 
-**Apply vs review:** the run’s `apply_mode` is a ceiling (`review` → everything reviewed). Under `direct_apply`, tools keep defaults (`patch_file` → review, `move_text` / `rewrite_file` → apply). The model does not choose the dialog.
+**Apply vs review:** the run’s `apply_mode` wins (`review` / `direct_apply` / `notify_only`). Manual consult defaults to **`direct_apply`** until the real diff UI ships. Automations keep their own mode. The model does not choose the dialog.
 
 The agent never sees or writes raw JSON. It reads and writes **agent text**; the [files area](../files/AREA.md) converts in both directions.
 

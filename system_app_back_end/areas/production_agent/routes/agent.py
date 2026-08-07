@@ -17,7 +17,7 @@ def agent_run():
         prompt=prompt,
         workspace_id=int(workspace_id),
         scope=data.get("scope") or {},
-        apply_mode=data.get("apply_mode", "review"),
+        apply_mode=data.get("apply_mode", "direct_apply"),
         context=data.get("context") or {},
         hints=data.get("hints") or {},
     )

@@ -1511,7 +1511,7 @@ class AppState extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> runAgentPrompt(
     String prompt, {
-    String applyMode = 'review',
+    String applyMode = 'direct_apply',
   }) async {
     if (workspaceId == null) return null;
     aiRunning = true;

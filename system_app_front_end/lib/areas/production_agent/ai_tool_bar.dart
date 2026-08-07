@@ -91,23 +91,24 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
   if (prompt == null || prompt.isEmpty || !context.mounted) return;
 
   try {
-    final result = await state.runAgentPrompt(prompt, applyMode: 'review');
+    // Temporary: skip review dialog until the real lookalike diff UI exists.
+    final result = await state.runAgentPrompt(
+      prompt,
+      applyMode: 'direct_apply',
+    );
     if (!context.mounted || result == null) return;
-    final changes = result['proposed_changes'] as List?;
-    if (changes != null && changes.isNotEmpty) {
-      final first = changes.first as Map;
-      final review = first['review'] as Map?;
-      final diff = review?['diff_hunks']?.toString() ?? '';
-      final apply = await TextDiffDialog.show(
-        context,
-        title: s['reviewChanges'] ?? 'Review changes',
-        diffHunks: diff,
-      );
-      if (apply == true) {
-        await state.applyAgentReview();
-      } else {
-        state.dismissAgentReview();
-      }
+    final summary = result['summary']?.toString().trim() ?? '';
+    final applied = result['applied'] == true;
+    final message = summary.isNotEmpty
+        ? summary
+        : (applied
+            ? (s['aiAgentApplied'] ?? 'Changes applied.')
+            : (s['aiAgentNoChanges'] ?? 'No file changes.'));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+    if (applied && state.selectedTopic != null) {
+      await state.selectTopic(state.selectedTopic!);
     }
   } catch (e) {
     if (!context.mounted) return;

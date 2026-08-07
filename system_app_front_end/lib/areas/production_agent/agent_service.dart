@@ -10,7 +10,7 @@ class AgentService {
     required int workspaceId,
     Map<String, dynamic>? scope,
     Map<String, dynamic>? hints,
-    String applyMode = 'review',
+    String applyMode = 'direct_apply',
   }) async {
     final data =
         await _api.post('/agent/run', {
