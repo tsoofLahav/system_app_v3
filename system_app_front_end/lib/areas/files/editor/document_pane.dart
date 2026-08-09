@@ -153,21 +153,13 @@ class _DocumentPaneState extends State<DocumentPane> {
               ],
             ),
             const SizedBox(height: AppSpacing.xs),
-            // The pane is one slot of the topic's layout, so its height is
-            // fixed and the document scrolls inside it rather than pushing the
-            // pane taller. minViewportHeight lets clicks in the empty area
-            // under short / empty files place the caret.
+            // Pane height is fixed by the topic layout. Super Editor owns
+            // scrolling inside this slot (do not wrap in SingleChildScrollView —
+            // SE emits a sliver when it finds an ancestor scrollable).
             Flexible(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return SingleChildScrollView(
-                    child: DocumentEditor(
-                      file: file,
-                      state: widget.state,
-                      minViewportHeight: constraints.maxHeight,
-                    ),
-                  );
-                },
+              child: DocumentEditor(
+                file: file,
+                state: widget.state,
               ),
             ),
           ],

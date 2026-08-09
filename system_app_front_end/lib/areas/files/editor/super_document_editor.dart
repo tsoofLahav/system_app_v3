@@ -66,6 +66,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _embedsSnapshot =
         widget.state.embedsByFileId[widget.file.id] ?? widget.embeds;
     _focusNode = FocusNode();
+    _focusNode.addListener(_onFocusChanged);
     _composer = MutableDocumentComposer();
     _doc = markerTextToMutableDocument(_currentFile.documentJson);
     _editor = createDefaultDocumentEditor(
@@ -99,9 +100,14 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     DocumentEditorRegistry.unregister(widget.file.id);
     widget.state.removeListener(_onAppStateChanged);
     _doc.removeListener(_onDocumentChange);
+    _focusNode.removeListener(_onFocusChanged);
     _focusNode.dispose();
     _composer.dispose();
     super.dispose();
+  }
+
+  void _onFocusChanged() {
+    if (_focusNode.hasFocus) _claimFile();
   }
 
   void _onDocumentChange(DocumentChangeLog changeLog) {
@@ -503,21 +509,23 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   @override
   Widget build(BuildContext context) {
-    // Rebuild builders when move-mode / embeds change.
+    // Super Editor must own its scroll viewport (shrinkWrap: false). Nesting
+    // it under SingleChildScrollView makes SE emit a SliverHybridStack into a
+    // box parent and asserts at runtime.
     final editor = SuperEditor(
       editor: _editor,
       focusNode: _focusNode,
       documentLayoutKey: _docLayoutKey,
       stylesheet: _stylesheet,
       componentBuilders: _componentBuilders,
-      shrinkWrap: true,
+      shrinkWrap: false,
       selectionPolicies: const SuperEditorSelectionPolicies(
         clearSelectionWhenEditorLosesFocus: false,
         clearSelectionWhenImeConnectionCloses: false,
       ),
     );
 
-    Widget body = Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (_moveModeNodeId != null)
@@ -552,21 +560,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
               ],
             ),
           ),
-        GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: _claimFile,
-          child: editor,
-        ),
+        Expanded(child: editor),
       ],
     );
-
-    final minH = widget.minViewportHeight;
-    if (minH != null) {
-      return ConstrainedBox(
-        constraints: BoxConstraints(minHeight: minH),
-        child: body,
-      );
-    }
-    return body;
   }
 }

@@ -33,7 +33,7 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 
 ### One scroll owner
 
-The file pane’s `SingleChildScrollView` is the only scroll surface. Super Editor runs with `shrinkWrap: true` so it does not nest a second scroller.
+Super Editor owns scrolling inside the file pane (`shrinkWrap: false`). Do **not** wrap it in `SingleChildScrollView` — SE treats an ancestor scrollable as a sliver viewport and will assert under a box parent.
 
 ## Node types
 
