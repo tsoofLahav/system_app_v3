@@ -71,7 +71,7 @@ class ObjectEmbedComponentBuilder implements ComponentBuilder {
   ) {
     if (componentViewModel is! ObjectEmbedComponentViewModel) return null;
     return ObjectEmbedComponent(
-      key: componentContext.componentKey,
+      componentKey: componentContext.componentKey,
       viewModel: componentViewModel,
       state: state,
       lookup: lookup,
@@ -137,6 +137,7 @@ class ObjectEmbedComponentViewModel extends SingleColumnLayoutComponentViewModel
 class ObjectEmbedComponent extends StatelessWidget {
   const ObjectEmbedComponent({
     super.key,
+    required this.componentKey,
     required this.viewModel,
     required this.state,
     required this.lookup,
@@ -149,6 +150,8 @@ class ObjectEmbedComponent extends StatelessWidget {
     required this.onMoveToIndex,
   });
 
+  /// Must land on [BoxComponent] — SE looks up [DocumentComponent] via this key.
+  final GlobalKey componentKey;
   final ObjectEmbedComponentViewModel viewModel;
   final AppState state;
   final ObjectEmbedLookup lookup;
@@ -168,6 +171,7 @@ class ObjectEmbedComponent extends StatelessWidget {
         : _buildEmbed(embed);
 
     return BoxComponent(
+      key: componentKey,
       child: _SeEmbedMoveHost(
         nodeId: viewModel.nodeId,
         moveMode: moveMode,
