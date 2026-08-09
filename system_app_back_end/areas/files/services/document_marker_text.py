@@ -24,11 +24,11 @@ _SPACER_RE = re.compile(
     re.IGNORECASE,
 )
 _POINTER_RE = re.compile(
-    r'^\[(INFO|TASK_LIST|IMAGE|GRAPH|EMBED)\s+id="(\d+)"\s*\]\s*$',
+    r'^\[(INFO|TASK_LIST|IMAGE|GRAPH|TABLE|EMBED)\s+id="(\d+)"\s*\]\s*$',
     re.IGNORECASE | re.MULTILINE,
 )
 _POINTER_LINE_RE = re.compile(
-    r'\[(INFO|TASK_LIST|IMAGE|GRAPH|EMBED)\s+id="(\d+)"\s*\]',
+    r'\[(INFO|TASK_LIST|IMAGE|GRAPH|TABLE|EMBED)\s+id="(\d+)"\s*\]',
     re.IGNORECASE,
 )
 
@@ -37,6 +37,7 @@ _TYPE_TO_TAG = {
     "task_list": "TASK_LIST",
     "image": "IMAGE",
     "graph": "GRAPH",
+    "table": "TABLE",
 }
 
 
@@ -349,6 +350,8 @@ def v3_from_editor_text_lossy(body: str | None) -> dict[str, Any]:
             return f'[IMAGE id="{oid}"]'
         if tag == "GRAPH":
             return f'[GRAPH id="{oid}"]\n\n[/GRAPH]'
+        if tag == "TABLE":
+            return f'[TABLE id="{oid}"]\n\n[/TABLE]'
         return f'[INFO id="{oid}"]\n\n[/INFO]'
 
     expanded = _POINTER_LINE_RE.sub(_expand_pointer, text)

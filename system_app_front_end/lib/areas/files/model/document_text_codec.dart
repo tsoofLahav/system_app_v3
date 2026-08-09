@@ -37,11 +37,11 @@ class DocumentTextCodec {
   static const header = '%%system_app_document v4';
 
   static final pointerRe = RegExp(
-    r'^\[(INFO|TASK_LIST|IMAGE|GRAPH|EMBED)\s+id="(\d+)"\s*\]\s*$',
+    r'^\[(INFO|TASK_LIST|IMAGE|GRAPH|TABLE|EMBED)\s+id="(\d+)"\s*\]\s*$',
     caseSensitive: false,
   );
   static final _pointerAnyRe = RegExp(
-    r'\[(INFO|TASK_LIST|IMAGE|GRAPH|EMBED)\s+id="(\d+)"\s*\]',
+    r'\[(INFO|TASK_LIST|IMAGE|GRAPH|TABLE|EMBED)\s+id="(\d+)"\s*\]',
     caseSensitive: false,
   );
   static final spacerRe = RegExp(
@@ -102,6 +102,7 @@ class DocumentTextCodec {
         'TASK_LIST' => 'task_list',
         'IMAGE' => 'image',
         'GRAPH' => 'graph',
+        'TABLE' => 'table',
         _ => null,
       };
 
@@ -129,6 +130,7 @@ class DocumentTextCodec {
       'task_list' => 'TASK_LIST',
       'image' => 'IMAGE',
       'graph' => 'GRAPH',
+      'table' => 'TABLE',
       _ => 'EMBED',
     };
     return '[$tag id="$objectId"]';

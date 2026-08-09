@@ -4,16 +4,17 @@ How the file editor keeps **one continuous piece of text** when lists, tables, a
 
 **Storage dialect** (marker text SoT, pointer embeds): [`DOCUMENT_TEXT.md`](DOCUMENT_TEXT.md).
 
+**Editing surface:** Super Editor ([`super_document_editor.dart`](super_document_editor.dart)). Bridge save prunes empty neighbors around embeds.
+
 Sibling policy docs: caret/RTL → [`../rich_text/rtl/RTL.md`](../rich_text/rtl/RTL.md). Area overview → [`../AREA.md`](../AREA.md).
 
 ## Boundary
 
 | Layer | Owns |
 |-------|------|
-| [`DocumentBuffer`](../model/document_buffer.dart) | Marker-text SoT; Move Mode = pointer cut/paste; reindex drops blank neighbors next to embeds |
-| [`DocumentSession`](document_session.dart) + coalesce | Structural exits/prune/delete (folded into the buffer on commit) |
-| [`DocumentTextFlow`](document_text_flow.dart) | Segment order + part `baseOffset`; ↑/↓ lands on the **edge line** of the neighboring part |
-| Embed widgets + [`AppState`](../../../../core/app_state.dart) | Object **payload** (info body, tasks, …). Marker text stores pointer lines only |
+| Marker text + SE bridge | Persisted placement; save path drops blank neighbors next to embeds |
+| Super Editor `MutableDocument` | In-session structure, typing, list items, undo |
+| Embed widgets + [`AppState`](../../../../core/app_state.dart) | Object **payload** (info body, tasks, table rows, …). Marker text stores pointer lines only |
 
 ## Parts are lines
 
@@ -30,33 +31,18 @@ A bullet, a table row, and an **embed** (or each of its editable parts — info 
 
 ### 1. No empty neighbors
 
-After move, delete, or split, never leave an empty or whitespace/`\n`-only paragraph beside an embed (or stranded between text halves).
-
-- Coalesce drops blank paragraph stubs (including those next to non-paragraphs).
-- Split at a line boundary trims the line-break out of both halves so the origin does not keep a blank line.
-- Backspace on an empty paragraph stub **removes the stub** even when the neighbor is an embed, list, or table.
+After move, delete, or split, never leave an empty or whitespace/`\n`-only paragraph beside an embed (or stranded between text halves). The bridge serializer drops spacer/empty parts adjacent to pointers.
 
 Blank lines the user wants live as `\n` **inside** a paragraph — not as empty sibling blocks.
 
 ### 2. Edge landing
 
-Approach from below → **end / last line** of what is above. Approach from above → **start / first line** of what is below.
-
-Structural commits set `DocumentSessionResult.focusSegmentId` + `focusOffset` when the landing is not “first part at 0”. Hosts must not reset the caret to the start of an atomic embed when the flow already placed an end offset.
+Approach from below → **end / last line** of what is above. Approach from above → **start / first line** of what is below. Super Editor owns caret movement across text nodes; embeds keep their own internal fields.
 
 ### 3. Object remount
 
-The file owns placement; the object owns content. After drag or rebuild, object UI must keep or re-seed payload from the in-memory embed cache — never dispose a live info editor into a blank cache entry.
+The file owns placement; the object owns content. Embed node ids are stable (`embed:<objectId>`). After move or reload, object UI must keep or re-seed payload from the in-memory embed cache — never dispose a live info editor into a blank cache entry.
 
-- Move Mode reorders the **pointer token** in marker text (cut/paste), not a live widget drag that remounts object editors.
-- Move Mode keeps object editors **outside** `Draggable.child` / `childWhenDragging` when chrome is used.
-- Info embeds use a `GlobalKey` and push controllers into `embedsByFileId` before structural rebuild.
-- `updateInfoObject` patches the cache **before** the network round-trip.
+## Move Mode
 
-## Checklist (regressions)
-
-- Drag object mid-paragraph → no empty line at origin.
-- Empty line above/below object → Backspace removes it.
-- Delete object → caret at end of paragraph above.
-- Caret below object, ↑ → end of object’s last line/part.
-- Drag info with typed content → content still there after drop.
+Double-click an embed to enter Move Mode (glass frame). Use the move toolbar (up / down / Done) to reorder; save writes pointer order back to marker text.

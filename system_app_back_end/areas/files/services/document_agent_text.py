@@ -57,7 +57,7 @@ _ORDERED_LIST_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 _TABLE_RE = re.compile(
-    r"\[TABLE]\s*(.*?)\s*\[/TABLE]",
+    r'\[TABLE(?:\s+id="(\d+)")?\]\s*(.*?)\s*\[/TABLE]',
     re.DOTALL | re.IGNORECASE,
 )
 _TASK_LINE_RE = re.compile(r"^-\s*\[( |x|X)\]\s*(.*)$")
@@ -72,7 +72,7 @@ _SPECIAL_MARKERS = (
     "[GRAPH",
     "[BULLET_LIST",
     "[ORDERED_LIST",
-    "[TABLE]",
+    "[TABLE",
 )
 
 
@@ -178,7 +178,7 @@ def load_objects_by_id(file_id: int) -> dict[int, dict[str, Any]]:
 
 
 _POINTER_LINE_RE = re.compile(
-    r'\[(INFO|TASK_LIST|IMAGE|GRAPH|EMBED)\s+id="(\d+)"\s*\]',
+    r'\[(INFO|TASK_LIST|IMAGE|GRAPH|TABLE|EMBED)\s+id="(\d+)"\s*\]',
     re.IGNORECASE,
 )
 
@@ -201,6 +201,7 @@ def editor_text_to_agent_text(
             "TASK_LIST": "task_list",
             "IMAGE": "image",
             "GRAPH": "graph",
+            "TABLE": "table",
             "EMBED": "",
         }.get(tag, "")
         if obj_type == "task_list":
@@ -211,6 +212,8 @@ def editor_text_to_agent_text(
             return _image_section(object_id, obj)
         if obj_type == "graph":
             return _graph_section(object_id, obj)
+        if obj_type == "table":
+            return _table_section(object_id, obj)
         # Unknown / missing object — leave a bare pointer so apply can reject.
         return marker_text.pointer_line(object_id, obj_type or None)
 
@@ -306,6 +309,30 @@ def _task_list_section(object_id: int, obj: dict[str, Any]) -> str:
         lines.append(f"- [x] {task.get('title', '')}")
     lines.append("[/TASK_LIST]")
     return "\n".join(lines)
+
+
+def _table_section(object_id: int, obj: dict[str, Any]) -> str:
+    """Expanded table object: tab-separated rows inside an id'd fence."""
+    payload = obj.get("payload") or {}
+    rows = payload.get("rows") or []
+    row_lines: list[str] = []
+    for row in rows:
+        if not isinstance(row, list):
+            continue
+        cells = [
+            _escape_cell(
+                str(cell.get("text") if isinstance(cell, dict) else cell or "")
+            )
+            for cell in row
+        ]
+        row_lines.append("\t".join(cells))
+    if not row_lines:
+        row_lines = ["\t"]
+    return (
+        f'[TABLE id="{object_id}"]\n'
+        + "\n".join(row_lines)
+        + "\n[/TABLE]"
+    )
 
 
 def parse_agent_text(text: str) -> dict[str, Any]:
@@ -461,7 +488,7 @@ def apply_object_updates(
             _sync_task_list(embed, update.get("tasks") or [])
         elif update_type == "info":
             _sync_info(embed, update)
-        elif update_type in {"image", "graph"}:
+        elif update_type in {"image", "graph", "table"}:
             payload = update.get("payload") or {}
             embed.payload = {**(embed.payload or {}), **payload}
         else:
@@ -640,7 +667,8 @@ def _parse_ordered_list(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
 
 
 def _parse_table(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
-    body = match.group(1).strip()
+    object_id_raw = match.group(1)
+    body = (match.group(2) or "").strip()
     rows: list[list[dict[str, Any]]] = []
     for line in body.splitlines():
         if not line.strip():
@@ -654,6 +682,18 @@ def _parse_table(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
     for row in rows:
         padded = row + [{"text": "", "spans": []}] * (max_cols - len(row))
         normalized.append(padded[:max_cols])
+    if object_id_raw:
+        object_id = int(object_id_raw)
+        return (
+            {"id": new_id("b"), "type": "embed", "object_id": object_id},
+            {
+                object_id: {
+                    "type": "table",
+                    "payload": {"rows": normalized},
+                }
+            },
+        )
+    # Legacy structure fence (no id) — kept for migrate-on-read.
     return (
         {"id": new_id("b"), "type": "table", "rows": normalized},
         {},

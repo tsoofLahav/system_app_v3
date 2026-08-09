@@ -1,10 +1,12 @@
 # Document text (source of truth)
 
-A file’s body is **marker text**, not a v3 JSON block tree. The editor’s in-memory SoT is [`DocumentBuffer`](../model/document_buffer.dart) (`text` + range-indexed `parts`). DB column `files.document_json`, typing (`replaceRange` / `replacePartSlice`), and cut/paste/move all operate on that string. `RichDocument` / codec parse is a **view** for widgets and legacy structural helpers — not the session SoT.
+A file’s body is **marker text**, not a v3 JSON block tree. Disk / API SoT is the string in `files.document_json` (`%%system_app_document v4` + body).
+
+**Runtime editing surface** is Super Editor (`MutableDocument`). Load/save goes through [`marker_super_editor_bridge.dart`](../model/marker_super_editor_bridge.dart). [`DocumentBuffer`](../model/document_buffer.dart) remains available for marker-range helpers and tests; it is not the file-editor SoT anymore.
 
 Spans / inline formatting are **not** encoded yet (next step). Migration from v3 drops spans.
 
-Backend twin: [`system_app_back_end/areas/files/AREA.md`](../../../../system_app_back_end/areas/files/AREA.md). Fluent caret rules: [`FLUENT_TEXT.md`](FLUENT_TEXT.md).
+Backend twin: [`system_app_back_end/areas/files/AREA.md`](../../../../system_app_back_end/areas/files/AREA.md). Fluent rules for embeds: [`FLUENT_TEXT.md`](FLUENT_TEXT.md).
 
 ## Persistence header
 
@@ -19,39 +21,40 @@ Bodies without this header that parse as v3 JSON are migrated on read and rewrit
 
 | Layer | Object markers | Who uses it |
 |-------|----------------|-------------|
-| **Editor text (SoT)** | Pointer only: `[INFO id="42"]` | DB, editor, move/cut/paste |
+| **Editor text (SoT)** | Pointer only: `[INFO id="42"]` | DB, Super Editor bridge, move/cut/paste |
 | **Agent text** | Expanded fences with object payloads | Production agent tools |
 
-Structure markers are shared.
+Structure markers for lists are shared. Tables are **objects** (pointer in the file).
 
 ## Structure grammar
 
 - Blocks separated by `\n\n`. Soft line break inside a paragraph = `\n`.
 - Extra blank gaps: `[SPACER]` or `[SPACER n="N"]` (N 1–12).
 - Headings: `#` … `######` lines.
-- Lists: `[BULLET_LIST]…[/BULLET_LIST]`, `[ORDERED_LIST]…[/ORDERED_LIST]`.
-- Tables: `[TABLE]…[/TABLE]` (tab-separated cells).
+- Lists: `[BULLET_LIST]…[/BULLET_LIST]`, `[ORDERED_LIST]…[/ORDERED_LIST]` (mapped to Super Editor `ListItemNode`s).
+- Legacy structure tables: `[TABLE]…[/TABLE]` — migrated on open to a `table` object + pointer.
 
 ### Object pointers (SoT)
 
-One line each — **no** title/body/tasks inside the file:
+One line each — **no** payload inside the file:
 
 ```text
 [INFO id="42"]
 [TASK_LIST id="7"]
 [IMAGE id="5"]
 [GRAPH id="8"]
+[TABLE id="11"]
 ```
 
 Legacy fallback: `[EMBED id="N"]` (type resolved from the objects table).
 
-Object **content** lives in object tables. Deleting a pointer cascades to the object row (same as today).
+Object **content** lives in object tables / `objects.payload`. Deleting a pointer cascades to the object row.
 
 ### Move
 
-Cut the pointer line and paste it elsewhere in the string. Never split a paragraph into two stored units around an embed.
+Cut the pointer line and paste it elsewhere (or reorder the Super Editor embed node, then save). Never leave empty neighbor stubs around embeds (bridge save prunes them).
 
 ## Agent projection
 
-- **Read:** expand each pointer using `objects_by_id` into today’s expanded fences (`[INFO id="42"]` … `[/INFO]`, etc.).
+- **Read:** expand each pointer using `objects_by_id` into expanded fences (`[INFO id="42"]` … `[/INFO]`, `[TABLE id="11"]` … `[/TABLE]`, etc.).
 - **Write:** collapse expanded fences back to pointers + `object_updates`; reject unknown ids and silent drops of existing embeds.

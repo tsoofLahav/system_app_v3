@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from areas.production_agent.services.write_tools import apply_document_text
 from areas.files.services.document_agent_text import (
+    agent_text_to_editor_text,
     apply_agent_text,
     apply_agent_text_to_file,
     document_to_agent_text,
@@ -312,6 +313,40 @@ def test_info_title_body_round_trip():
     doc, updates, errors = apply_agent_text(original, text, known_object_ids={17})
     assert not errors
     assert updates[17]["title"] == "Lens notes"
+
+
+def test_table_object_pointer_round_trip():
+    from areas.files.services import document_marker_text as marker_text
+
+    objects = {
+        11: {
+            "type": "table",
+            "payload": {
+                "rows": [
+                    [{"text": "H1"}, {"text": "H2"}],
+                    [{"text": "V1"}, {"text": "V2"}],
+                ]
+            },
+        }
+    }
+    editor = marker_text.wrap_editor_text('[TABLE id="11"]')
+    text = document_to_agent_text(editor, objects_by_id=objects)
+    assert '[TABLE id="11"]' in text
+    assert "H1\tH2" in text
+    assert "V1\tV2" in text
+    assert "[/TABLE]" in text
+    parsed = parse_agent_text(text)
+    assert parsed["blocks"][0]["type"] == "embed"
+    assert parsed["blocks"][0]["object_id"] == 11
+    payload = parsed["object_updates"][11]["payload"]
+    assert payload["rows"][0][0]["text"] == "H1"
+    assert payload["rows"][1][1]["text"] == "V2"
+    collapsed, updates, errors = agent_text_to_editor_text(
+        text, known_object_ids={11}, current_body=editor
+    )
+    assert not errors
+    assert '[TABLE id="11"]' in (collapsed or "")
+    assert updates[11]["type"] == "table"
 
 
 def test_graph_table_round_trip():

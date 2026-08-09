@@ -53,5 +53,18 @@ void main() {
       expect(out, startsWith(DocumentTextCodec.header));
       expect(out, contains('[TASK_LIST id="3"]'));
     });
+
+    test('table pointer round-trips', () {
+      final doc = DocumentTextCodec.parse(
+        '${DocumentTextCodec.header}\n[TABLE id="11"]\n\nAfter',
+      );
+      expect(doc.blocks.first, isA<EmbedNode>());
+      expect((doc.blocks.first as EmbedNode).objectType, 'table');
+      final out = DocumentTextCodec.serialize(
+        doc,
+        objectTypes: {11: 'table'},
+      );
+      expect(out, contains('[TABLE id="11"]'));
+    });
   });
 }

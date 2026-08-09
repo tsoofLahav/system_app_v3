@@ -14,6 +14,7 @@ This area owns **data, services, and type logic**. How an object is *presented i
 | `info` | Knowledge piece; **links / object graph** | Title + body embed ([`../files/editor/embeds/object_embed_widgets.dart`](../files/editor/embeds/object_embed_widgets.dart)) |
 | `image` | Asset + caption payload | Image embed (same file) |
 | `graph` | Chart data (labels/values) | Table-like embed ([`../files/editor/embeds/graph_embed.dart`](../files/editor/embeds/graph_embed.dart)) |
+| `table` | Grid rows/cells in `payload` | [`../files/editor/embeds/table_embed.dart`](../files/editor/embeds/table_embed.dart) (`RichTableEditor`) |
 
 ```
 files (presentation) ──thin overlay──► objects (data + type logic)

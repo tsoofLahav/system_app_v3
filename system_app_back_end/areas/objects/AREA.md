@@ -16,6 +16,7 @@ Objects live in the `objects` table and appear inside a file through an `embed` 
 | `info` | `information_pieces` | Linkable into a graph |
 | `image` | `objects.payload` | Uploaded asset reference + caption |
 | `graph` | `objects.payload` | Chart data as labels/values (two-row table) |
+| `table` | `objects.payload` | Grid rows/cells (`payload.rows`) — pointer `[TABLE id="N"]` in the file |
 
 Every object has a stable id, file id, type, optional typed FKs / payload, and timestamps. The document owns position; the object owns data.
 
@@ -23,7 +24,7 @@ Every object has a stable id, file id, type, optional typed FKs / payload, and t
 
 | Rule | Meaning |
 |------|---------|
-| Embed is a pointer | Marker line e.g. `[INFO id="N"]` / `[TASK_LIST id="N"]` — no payload in the file |
+| Embed is a pointer | Marker line e.g. `[INFO id="N"]` / `[TASK_LIST id="N"]` / `[TABLE id="N"]` — no payload in the file |
 | Top-level only | Never nested inside list or table fences in editor text |
 | Create inserts the block | `POST /files/:id/objects` creates the row **and** inserts the embed at `block_index` |
 | Delete cascades | `delete_object_embed_cascade` removes the object and strips the embed from `document_json` |

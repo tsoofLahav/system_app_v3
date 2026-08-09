@@ -45,12 +45,12 @@ world
 
 - Blocks separated by `\n\n`; soft break inside a paragraph = `\n`.
 - Gaps: `[SPACER]` / `[SPACER n="N"]`.
-- Objects are **pointer lines only** (`[INFO id="N"]`, `[TASK_LIST id="N"]`, `[IMAGE id="N"]`, `[GRAPH id="N"]`). Content lives in object tables.
+- Objects are **pointer lines only** (`[INFO id="N"]`, `[TASK_LIST id="N"]`, `[IMAGE id="N"]`, `[GRAPH id="N"]`, `[TABLE id="N"]`). Content lives in object tables / `objects.payload`.
 - Move object = cut/paste the pointer line ([`document_marker_text.py`](services/document_marker_text.py)).
 
 ### Lists and tables
 
-Fenced in the same string (`[BULLET_LIST]…`, `[TABLE]…`). Not separate DB rows.
+Lists stay fenced in the file string (`[BULLET_LIST]…`, `[ORDERED_LIST]…`). **Tables are objects** — pointer `[TABLE id="N"]`, rows in `objects.payload`. Legacy structure fences `[TABLE]…[/TABLE]` without an id are migrated to a table object on open (frontend) / still accepted by the agent parser for read.
 
 ### How objects fit in
 

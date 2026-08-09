@@ -29,7 +29,7 @@ from areas.objects.services.object_graph import (
 
 objects_bp = Blueprint("objects", __name__)
 
-_OBJECT_TYPES = {"task_list", "info", "image", "graph"}
+_OBJECT_TYPES = {"task_list", "info", "image", "graph", "table"}
 
 
 def _workspace_for_object(embed: ObjectEmbed) -> int | None:
@@ -182,7 +182,7 @@ def update_object(object_id):
         embed.sort_key = data["sort_key"]
     if "anchor" in data:
         embed.anchor = data["anchor"]
-    if "payload" in data and embed.type in {"image", "graph"}:
+    if "payload" in data and embed.type in {"image", "graph", "table"}:
         embed.payload = data["payload"] or {}
     db.session.commit()
     return jsonify(_resolve_embed(embed))

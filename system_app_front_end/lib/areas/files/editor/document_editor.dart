@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/app_state.dart';
 import '../../objects/data/object_embed.dart';
 import '../data/app_file.dart';
-import './block_document_editor.dart';
+import './super_document_editor.dart';
 
 class DocumentEditor extends StatelessWidget {
   const DocumentEditor({
@@ -26,8 +26,8 @@ class DocumentEditor extends StatelessWidget {
     // Do NOT wrap this in ListenableBuilder(listenable: state). Rebuilding the
     // document editor mid-keystroke desyncs Flutter's HardwareKeyboard and
     // throws "KeyDownEvent … physical key is already pressed" in a loop.
-    // BlockDocumentEditor listens for embed changes itself, carefully.
-    return BlockDocumentEditor(
+    // SuperDocumentEditor listens for embed changes itself, carefully.
+    return SuperDocumentEditor(
       key: ValueKey('doc-${file.id}'),
       file: file,
       state: state,

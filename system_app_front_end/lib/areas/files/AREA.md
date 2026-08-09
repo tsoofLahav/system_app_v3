@@ -6,43 +6,45 @@ Backend twin: [`system_app_back_end/areas/files/AREA.md`](../../../../system_app
 
 A file must feel like **one continuous piece of text**, the way a Word document does. Paragraphs, lists, and tables are part of the same flow, not separate widgets the user has to click into.
 
-Everything the user writes is saved as **marker text (v4)** in `files.document_json` (header `%%system_app_document v4`). Spec: [`editor/DOCUMENT_TEXT.md`](editor/DOCUMENT_TEXT.md). Runtime SoT is [`DocumentBuffer`](model/document_buffer.dart); the block tree is a **view** for widgets. Object payloads stay in the objects area (file holds pointer lines only).
+Everything the user writes is saved as **marker text (v4)** in `files.document_json` (header `%%system_app_document v4`). Spec: [`editor/DOCUMENT_TEXT.md`](editor/DOCUMENT_TEXT.md).
+
+**Runtime editing surface** = Super Editor ([`editor/super_document_editor.dart`](editor/super_document_editor.dart)). Marker ↔ `MutableDocument` via [`model/marker_super_editor_bridge.dart`](model/marker_super_editor_bridge.dart). Object payloads stay in the objects area (file holds pointer lines only).
 
 ## Structure
 
 | Folder | Role |
 |--------|------|
-| [`model/document_buffer.dart`](model/document_buffer.dart) | **Editor SoT** — marker body + part range index |
-| [`model/`](model/) | View nodes + [`document_text_codec.dart`](model/document_text_codec.dart) (parse/serialize) |
-| [`editor/`](editor/) | The editor surface, block widgets, embed host |
+| [`editor/super_document_editor.dart`](editor/super_document_editor.dart) | File editor host (`SuperEditor` + save/insert/Move Mode) |
+| [`model/marker_super_editor_bridge.dart`](model/marker_super_editor_bridge.dart) | Marker text ↔ Super Editor document |
+| [`model/object_embed_node.dart`](model/object_embed_node.dart) | Custom SE node for object pointers |
+| [`model/document_text_codec.dart`](model/document_text_codec.dart) | Marker parse/serialize helpers |
+| [`model/document_buffer.dart`](model/document_buffer.dart) | Marker-range helpers (tests / legacy ops) |
 | [`editor/DOCUMENT_TEXT.md`](editor/DOCUMENT_TEXT.md) | Marker-text dialect (SoT vs agent expand) |
-| [`editor/document_session.dart`](editor/document_session.dart) | Structural helpers on the RichDocument view (folded into buffer on commit) |
-| [`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md) | Fluent-text principles for embeds (empty neighbors, edge landing, object remount) |
-| [`editor/embeds/`](editor/embeds/) | In-file presentation of objects (task list, info, image, graph) |
-| [`rich_text/`](rich_text/) | Span formatting, controllers, context menus |
-| [`rich_text/rtl/`](rich_text/rtl/RTL.md) | **RTL solution** — Hebrew/BiDi direction, visual arrows, empty-padding caret |
+| [`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md) | Fluent-text principles for embeds |
+| [`editor/embeds/`](editor/embeds/) | In-file presentation of objects (task list, info, image, graph, table) |
+| [`editor/object_embed_component.dart`](editor/object_embed_component.dart) | SE `ComponentBuilder` wrapping embed UIs |
+| [`rich_text/`](rich_text/) | Span formatting used inside embeds (tables, info, …) |
+| [`rich_text/rtl/`](rich_text/rtl/RTL.md) | **RTL solution** — Hebrew/BiDi direction helpers |
 | [`data/`](data/) | File and topic models + API services |
 
-### Document vs controllers (one sync rule)
+### Document vs Super Editor (one sync rule)
 
-**Runtime + persisted SoT** = `DocumentBuffer.text` (save = `%%system_app_document v4\n` + buffer). Typing / list / table write-through → `replacePartSlice`. Move Mode → `movePointer` / `splitPartAndInsertPointer`. `_doc = buffer.toRichDocument()` is the widget view (ids = part keys). `DocumentSession` may still compute structural results; the editor folds them with `loadFromRichDocument`. Object **payloads** stay in the objects area — file text only has pointer lines.
+**Persisted SoT** = marker text (`%%system_app_document v4\n` + body). **Session SoT** = Super Editor `MutableDocument` (undo via SE history). Save = bridge serialize → debounced `PATCH document_json`. Embed node ids are stable (`embed:<objectId>`). Object **payloads** stay in the objects area.
 
 ### One scroll owner
 
-The file pane’s `SingleChildScrollView` is the only scroll surface. `FormattedTextField` uses `NeverScrollableScrollPhysics` and scrolls the **pane** into view on focus (`Scrollable.ensureVisible`). Fields must not scroll independently.
+The file pane’s `SingleChildScrollView` is the only scroll surface. Super Editor runs with `shrinkWrap: true` so it does not nest a second scroller.
 
 ## Node types
 
-| Node | JSON `type` | Widget |
-|------|-------------|--------|
-| Paragraph | `paragraph` | `FormattedTextField` — multiline, `\n` is a line break |
-| Heading | `heading` | `FormattedTextField` in title style |
-| Bullet list | `bullet_list` | `RichListEditor` |
-| Ordered list | `ordered_list` | `RichListEditor` |
-| Table | `table` | `RichTableEditor` |
-| Embed | `embed` | [`editor/embeds/`](editor/embeds/) — presentation only; type data in [objects](../objects/AREA.md) |
+| Marker / object | Super Editor | Widget |
+|-----------------|--------------|--------|
+| Paragraph / heading | `ParagraphNode` (+ heading metadata) | SE text components |
+| Bullet / ordered list fence | N× `ListItemNode` | SE list components |
+| Object pointer | `ObjectEmbedNode` | [`editor/embeds/`](editor/embeds/) |
+| Table object (`[TABLE id]`) | `ObjectEmbedNode` type `table` | `RichTableEditor` via [`embeds/table_embed.dart`](editor/embeds/table_embed.dart) |
 
-Position is top-level parts in the marker buffer; the widget view exposes that as `blocks[]` order.
+Legacy `[TABLE]…[/TABLE]` fences are migrated to table objects on open.
 
 ## Keeping the text fluent
 
@@ -127,7 +129,7 @@ Segment ids come from buffer parts (view = `blocks[]`), never from widget build 
 | Table cell | `blockId#c<row>:<col>` |
 | Embed (whole object) | `blockId#embed` |
 
-`BlockDocumentEditor` pushes the order on every build; the fields attach themselves through `DocumentTextFlowScope`.
+Embed-internal fields may still register with `DocumentTextFlow` when nested; the file body itself is owned by Super Editor.
 
 ### What it gives the user
 
@@ -248,32 +250,26 @@ Type logic beyond presentation (views, links, cascades) → [objects](../objects
 
 | Layer | What it is | Who uses it |
 |-------|------------|-------------|
-| **Editor text (SoT)** | v4 marker body + header; pointer-only embeds | DB, editor `DocumentBuffer`, move/cut/paste |
+| **Editor text (SoT)** | v4 marker body + header; pointer-only embeds | DB, Super Editor bridge, move/cut/paste |
 | **Agent text** | Same structure with objects expanded to fences | Production agent tools, diffs |
 
 The app edits and persists **editor text**. Agent text is produced on demand and shown in AI diff review only. Spec: [`editor/DOCUMENT_TEXT.md`](editor/DOCUMENT_TEXT.md).
 
 ## Saving
 
-Edits mutate [`DocumentBuffer`](model/document_buffer.dart); save is `PATCH document_json` with `_buffer.stored` (`%%system_app_document v4\n` + body). Saves are debounced and silent — typing never triggers a full rebuild, or the cursor would jump.
+Edits mutate the Super Editor document; save serializes via the marker bridge and `PATCH document_json` (`%%system_app_document v4\n` + body). Saves are debounced and silent — typing never triggers a full editor remount from `AppState`.
 
-Undo/redo stores buffer text snapshots via `document_edit_history.dart`.
+In-session undo/redo uses Super Editor’s history stack.
 
 ## Rules
 
-- Enter never splits a paragraph into two blocks.
 - Never store agent-expanded text in `document_json`; SoT is marker/pointer editor text.
 - Never rebuild the whole editor on a keystroke; save silently and keep focus.
 - An empty list item, table row, or trailing object unit (empty final task / info line / graph column) plus Enter exits that structure **without destroying it**.
 - An empty object (empty info, last empty task, last empty graph column) plus Backspace **removes the object** and coalesces surrounding text — no leftover blank paragraph.
-- All formatting goes through spans, never through separate styled blocks.
-- Any new editable text must register a segment with the flow, or the caret will not reach it.
-- Segment order comes from buffer parts / the view tree, never from widget build order.
-- There is one marking. Every action resolves its target through `DocumentMark`, never from a single field's selection.
-- With nothing marked, an action applies to the caret's line — never to nothing, and never to the whole part.
+- Embed node ids are stable (`embed:<objectId>`); do not remount embeds under regenerated `p0`/`p1` keys.
 - A bullet, a row, and an embed each count as one line of text; settle caret and marking questions by asking what a plain line would do ([`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md)).
-- Never leave empty/`\n`-only paragraph neighbors after move/delete/split; delete object lands caret at the end of the text above.
-- A part is removed only when it was marked end to end; a partial marking never destroys structure.
+- Never leave empty/`\n`-only paragraph neighbors after move/delete/split (bridge save prunes them).
 - Never rebuild the whole editor from `AppState.notifyListeners` while a key may still be down. Silent saves and post-frame embed refreshes only — otherwise Flutter's keyboard state desyncs (`KeyDownEvent … already pressed`).
 - RTL / Hebrew caret and direction policy: only via [`rich_text/rtl/`](rich_text/rtl/RTL.md).
 - A list has one style. Points vs numbers is switched on the existing list, never offered as two kinds of list to insert.
