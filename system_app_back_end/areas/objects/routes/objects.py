@@ -15,7 +15,6 @@ from shared.bootstrap import default_workspace_id
 from areas.objects.services.delete_cascade import delete_object_embed_cascade
 from areas.files.services.document_v3 import (
     insert_embed_block,
-    parse_document,
     sync_object_anchors,
 )
 from areas.files.services.document_promote import promote_legacy_embeds
@@ -159,14 +158,9 @@ def create_object(file_id):
         file.document_json or "",
         embed.id,
         block_index=block_index,
+        object_type=type_,
     )
-    doc = parse_document(file.document_json)
-    hit = next(
-        (b for b in doc["blocks"] if b.get("object_id") == embed.id),
-        None,
-    )
-    if hit:
-        embed.anchor = {"kind": "embed", "block_id": hit["id"]}
+    embed.anchor = {"kind": "embed", "object_id": embed.id}
     embed.sort_key = data.get("sort_key", embed.id)
     sync_object_anchors(file.document_json or "", [embed])
     promote_legacy_embeds(file)

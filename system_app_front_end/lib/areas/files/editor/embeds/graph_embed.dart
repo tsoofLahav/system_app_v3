@@ -31,6 +31,7 @@ class GraphEmbed extends StatefulWidget {
     this.onFocus,
     this.onExitBelow,
     this.onDeleteObject,
+    this.documentBaseOffset = 0,
   });
 
   final ObjectEmbed embed;
@@ -44,6 +45,9 @@ class GraphEmbed extends StatefulWidget {
 
   /// Last empty column + Backspace — remove the graph from the file.
   final VoidCallback? onDeleteObject;
+
+  /// Start of this pointer slice in the marker-text buffer.
+  final int documentBaseOffset;
 
   @override
   State<GraphEmbed> createState() => _GraphEmbedState();
@@ -556,6 +560,8 @@ class _GraphEmbedState extends State<GraphEmbed> {
                                       r,
                                       c,
                                     ),
+                                    documentBaseOffset:
+                                        widget.documentBaseOffset,
                                     style: AppTypography.documentParagraphStyle,
                                     hintText: r == 0 && c == 0
                                         ? widget.strings['graphAddVariable']

@@ -28,7 +28,9 @@ def empty_document() -> dict[str, Any]:
 
 
 def empty_document_json() -> str:
-    return serialize_document(empty_document())
+    from areas.files.services.document_marker_text import empty_editor_text
+
+    return empty_editor_text()
 
 
 def parse_document(body: str | None) -> dict[str, Any]:
@@ -602,17 +604,17 @@ def insert_embed_block(
     *,
     block_index: int | None = None,
     block_id: str | None = None,
+    object_type: str | None = None,
 ) -> str:
-    doc = parse_document(body)
-    blocks = doc["blocks"]
-    index = len(blocks) if block_index is None else max(0, min(int(block_index), len(blocks)))
-    block = {
-        "id": block_id or new_id("b"),
-        "type": "embed",
-        "object_id": int(object_id),
-    }
-    blocks.insert(index, block)
-    return serialize_document(doc)
+    """Insert an embed pointer into editor text (migrates legacy v3 JSON)."""
+    from areas.files.services.document_marker_text import insert_embed_pointer
+
+    return insert_embed_pointer(
+        body,
+        object_id,
+        object_type=object_type,
+        block_index=block_index,
+    )
 
 
 def move_embed_block(body: str, block_id: str, new_index: int) -> str:
@@ -634,16 +636,41 @@ def remove_embed_block(body: str, block_id: str) -> str:
 
 
 def remove_object_embeds(body: str, object_id: int) -> str:
+    from areas.files.services.document_marker_text import (
+        ensure_editor_text,
+        is_editor_text,
+        remove_embed_pointers,
+    )
+
+    if is_editor_text(body) or not (body or "").lstrip().startswith("{"):
+        return remove_embed_pointers(ensure_editor_text(body), object_id)
     doc = parse_document(body)
     doc["blocks"] = [
         b
         for b in doc["blocks"]
         if not (b.get("type") == "embed" and int(b.get("object_id") or -1) == int(object_id))
     ]
-    return serialize_document(doc)
+    # Prefer rewriting as editor text going forward.
+    from areas.files.services.document_marker_text import migrate_v3_json_to_editor_text
+
+    return migrate_v3_json_to_editor_text(serialize_document(doc))
 
 
 def sync_object_anchors(body: str, objects: list) -> None:
+    from areas.files.services.document_marker_text import (
+        embed_ids_in_text,
+        ensure_editor_text,
+        editor_text_body,
+        is_editor_text,
+    )
+
+    if is_editor_text(body) or not (body or "").lstrip().startswith("{"):
+        text = editor_text_body(ensure_editor_text(body))
+        ids = embed_ids_in_text(text)
+        for obj in objects:
+            if obj.id in ids:
+                obj.anchor = {"kind": "embed", "object_id": obj.id}
+        return
     doc = parse_document(body)
     by_object: dict[int, dict] = {}
     for block in doc["blocks"]:
@@ -659,6 +686,20 @@ def sync_object_anchors(body: str, objects: list) -> None:
 
 
 def validate_document(body: str | None, known_object_ids: set[int] | None = None) -> None:
+    from areas.files.services.document_marker_text import (
+        is_editor_text,
+        validate_editor_text,
+    )
+
+    if is_editor_text(body) or (
+        body and not str(body).lstrip().startswith("{") and "%%system_app_document" in str(body)
+    ):
+        validate_editor_text(body, known_object_ids)
+        return
+    if body and not str(body).lstrip().startswith("{") and known_object_ids is not None:
+        # Bare marker text
+        validate_editor_text(body, known_object_ids)
+        return
     doc = parse_document(body)
     if known_object_ids is None:
         return

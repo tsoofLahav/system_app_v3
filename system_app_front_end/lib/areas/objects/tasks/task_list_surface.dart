@@ -43,6 +43,7 @@ class TaskListSurface extends StatefulWidget {
     this.compactMode = false,
     this.listTitleSegmentId,
     this.taskSegmentId,
+    this.documentBaseOffset = 0,
     this.extraMenuEntries,
     this.onExtraMenuAction,
     this.onForeignDrop,
@@ -62,6 +63,9 @@ class TaskListSurface extends StatefulWidget {
   final bool compactMode;
   final String? listTitleSegmentId;
   final String Function(int index)? taskSegmentId;
+
+  /// Start of the host pointer/part in the marker-text buffer (in-file only).
+  final int documentBaseOffset;
   final List<AppContextMenuEntry> Function(Task task)? extraMenuEntries;
   final Future<void> Function(String action, Task task)? onExtraMenuAction;
   final TaskListForeignDrop? onForeignDrop;
@@ -894,6 +898,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         controller: _controllers[index],
         focusNode: _focusNodes[index],
         segmentId: widget.taskSegmentId?.call(index),
+        documentBaseOffset: widget.documentBaseOffset,
         style: titleStyle,
         hintText: widget.state.strings['newTaskHint'],
         maxLines: null,
@@ -927,6 +932,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
             controller: _titleController,
             focusNode: _titleFocus,
             segmentId: widget.listTitleSegmentId,
+            documentBaseOffset: widget.documentBaseOffset,
             style: AppTypography.noteTitleStyle,
             hintText: s['taskListTitleHint'],
             maxLines: 1,

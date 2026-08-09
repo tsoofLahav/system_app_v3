@@ -31,6 +31,7 @@ class InfoEmbed extends StatefulWidget {
     this.onFocus,
     this.onExitBelow,
     this.onDeleteObject,
+    this.documentBaseOffset = 0,
   });
 
   final ObjectEmbed embed;
@@ -42,6 +43,9 @@ class InfoEmbed extends StatefulWidget {
 
   /// Backspace on a fully empty info object — remove it from the file.
   final VoidCallback? onDeleteObject;
+
+  /// Start of this pointer slice in the marker-text buffer.
+  final int documentBaseOffset;
 
   @override
   InfoEmbedState createState() => InfoEmbedState();
@@ -292,6 +296,7 @@ class InfoEmbedState extends State<InfoEmbed> {
               controller: _titleController,
               focusNode: _titleFocus,
               segmentId: infoTitleSegmentId(widget.blockId),
+              documentBaseOffset: widget.documentBaseOffset,
               style: AppTypography.noteTitleStyle,
               hintText: s['detailsTitleHint'],
               maxLines: 1,
@@ -306,6 +311,7 @@ class InfoEmbedState extends State<InfoEmbed> {
               controller: _bodyController,
               focusNode: _bodyFocus,
               segmentId: infoBodySegmentId(widget.blockId),
+              documentBaseOffset: widget.documentBaseOffset,
               style: AppTypography.noteBodyStyle,
               maxLines: null,
               minLines: 1,

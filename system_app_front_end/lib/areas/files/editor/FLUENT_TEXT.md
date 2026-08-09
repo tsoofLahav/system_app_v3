@@ -2,6 +2,8 @@
 
 How the file editor keeps **one continuous piece of text** when lists, tables, and embedded objects sit inside it.
 
+**Storage dialect** (marker text SoT, pointer embeds): [`DOCUMENT_TEXT.md`](DOCUMENT_TEXT.md).
+
 Sibling policy docs: caret/RTL → [`../rich_text/rtl/RTL.md`](../rich_text/rtl/RTL.md). Area overview → [`../AREA.md`](../AREA.md).
 
 ## Boundary
@@ -45,7 +47,8 @@ Structural commits set `DocumentSessionResult.focusSegmentId` + `focusOffset` wh
 
 The file owns placement; the object owns content. After drag or rebuild, object UI must keep or re-seed payload from the in-memory embed cache — never dispose a live info editor into a blank cache entry.
 
-- Move Mode keeps object editors **outside** `Draggable.child` / `childWhenDragging` (those slots swap and dispose State). Drag chrome is an overlay hit target only.
+- Move Mode reorders the **pointer token** in marker text (cut/paste), not a live widget drag that remounts object editors.
+- Move Mode keeps object editors **outside** `Draggable.child` / `childWhenDragging` when chrome is used.
 - Info embeds use a `GlobalKey` and push controllers into `embedsByFileId` before structural rebuild.
 - `updateInfoObject` patches the cache **before** the network round-trip.
 

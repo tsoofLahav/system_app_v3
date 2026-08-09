@@ -77,7 +77,17 @@ class File(db.Model):
             "created_at": _iso(self.created_at),
         }
         if include_document:
-            data["document_json"] = self.document_json or ""
+            # Serve editor text (v4). Legacy v3 JSON is migrated in the response
+            # (spans dropped); next save persists the text form.
+            from areas.files.services.document_marker_text import (
+                ensure_editor_text,
+                is_editor_text,
+            )
+
+            raw = self.document_json or ""
+            data["document_json"] = (
+                raw if is_editor_text(raw) else ensure_editor_text(raw)
+            )
         return data
 
 

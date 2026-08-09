@@ -40,28 +40,43 @@ def test_paragraph_round_trip():
 
 
 def test_insert_embed_block():
+    from areas.files.services.document_marker_text import (
+        DOCUMENT_TEXT_HEADER,
+        embed_ids_in_text,
+        strip_header,
+    )
+
     body = empty_document_json()
-    updated = insert_embed_block(body, 42, block_index=0)
-    doc = parse_document(updated)
-    assert doc["blocks"][0]["type"] == "embed"
-    assert doc["blocks"][0]["object_id"] == 42
+    updated = insert_embed_block(body, 42, block_index=0, object_type="info")
+    assert updated.startswith(DOCUMENT_TEXT_HEADER)
+    assert embed_ids_in_text(strip_header(updated)) == {42}
+    assert '[INFO id="42"]' in strip_header(updated)
 
 
 def test_remove_object_embeds():
-    body = serialize_document(
-        {
-            "version": 3,
-            "blocks": [
-                {"id": "b1", "type": "paragraph", "text": "x", "spans": []},
-                {"id": "b2", "type": "embed", "object_id": 5},
-                {"id": "b3", "type": "paragraph", "text": "y", "spans": []},
-            ],
-        }
+    from areas.files.services.document_marker_text import (
+        embed_ids_in_text,
+        migrate_v3_json_to_editor_text,
+        strip_header,
+    )
+
+    body = migrate_v3_json_to_editor_text(
+        serialize_document(
+            {
+                "version": 3,
+                "blocks": [
+                    {"id": "b1", "type": "paragraph", "text": "x", "spans": []},
+                    {"id": "b2", "type": "embed", "object_id": 5},
+                    {"id": "b3", "type": "paragraph", "text": "y", "spans": []},
+                ],
+            }
+        ),
+        objects_by_id={5: {"type": "info"}},
     )
     updated = remove_object_embeds(body, 5)
-    doc = parse_document(updated)
-    assert len(doc["blocks"]) == 2
-    assert all(b.get("type") != "embed" for b in doc["blocks"])
+    assert embed_ids_in_text(strip_header(updated)) == set()
+    assert "x" in strip_header(updated)
+    assert "y" in strip_header(updated)
 
 
 def test_migrate_plain_text():
@@ -169,7 +184,8 @@ def test_migrate_v2_inline():
     assert doc["blocks"][1]["object_id"] == 9
 
 
-def test_new_file_default_is_v3():
-    data = json.loads(empty_document_json())
-    assert data["version"] == 3
-    assert "blocks" in data
+def test_new_file_default_is_v4_editor_text():
+    from areas.files.services.document_marker_text import DOCUMENT_TEXT_HEADER
+
+    body = empty_document_json()
+    assert body.startswith(DOCUMENT_TEXT_HEADER)

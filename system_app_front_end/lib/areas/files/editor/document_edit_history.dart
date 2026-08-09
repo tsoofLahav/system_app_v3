@@ -1,29 +1,27 @@
-import '../model/document_model.dart';
-
-/// Undo/redo stack for document snapshots.
+/// Undo/redo stack for marker-text buffer snapshots.
 class DocumentEditHistory {
-  final _undo = <RichDocument>[];
-  final _redo = <RichDocument>[];
+  final _undo = <String>[];
+  final _redo = <String>[];
   static const _maxEntries = 50;
 
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
 
-  void record(RichDocument doc) {
-    _undo.add(doc);
+  void record(String text) {
+    _undo.add(text);
     if (_undo.length > _maxEntries) {
       _undo.removeAt(0);
     }
     _redo.clear();
   }
 
-  RichDocument? undo(RichDocument current) {
+  String? undo(String current) {
     if (_undo.isEmpty) return null;
     _redo.add(current);
     return _undo.removeLast();
   }
 
-  RichDocument? redo(RichDocument current) {
+  String? redo(String current) {
     if (_redo.isEmpty) return null;
     _undo.add(current);
     return _redo.removeLast();

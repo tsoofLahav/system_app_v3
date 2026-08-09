@@ -285,25 +285,41 @@ class TableNode extends DocumentNode {
 }
 
 class EmbedNode extends DocumentNode {
-  const EmbedNode({required super.id, required this.objectId});
+  const EmbedNode({
+    required super.id,
+    required this.objectId,
+    this.objectType,
+  });
 
   final int objectId;
+
+  /// Optional type for v4 pointer tags (`info`, `task_list`, …).
+  final String? objectType;
 
   @override
   String get type => 'embed';
 
-  EmbedNode copyWith({int? objectId}) {
-    return EmbedNode(id: id, objectId: objectId ?? this.objectId);
+  EmbedNode copyWith({int? objectId, String? objectType}) {
+    return EmbedNode(
+      id: id,
+      objectId: objectId ?? this.objectId,
+      objectType: objectType ?? this.objectType,
+    );
   }
 
   @override
-  EmbedNode copyWithId(String newId) => EmbedNode(id: newId, objectId: objectId);
+  EmbedNode copyWithId(String newId) => EmbedNode(
+        id: newId,
+        objectId: objectId,
+        objectType: objectType,
+      );
 
   @override
   Map<String, dynamic> toJson() => {
     'id': id,
     'type': type,
     'object_id': objectId,
+    if (objectType != null) 'object_type': objectType,
   };
 }
 

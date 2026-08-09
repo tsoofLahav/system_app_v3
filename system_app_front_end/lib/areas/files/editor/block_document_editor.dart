@@ -18,7 +18,9 @@ import './embeds/inline_task_list.dart';
 import './embeds/object_embed_widgets.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
+import '../model/document_buffer.dart';
 import '../model/document_codec.dart';
+import '../model/document_text_codec.dart';
 import './document_edit_history.dart';
 import './document_editor_controller.dart';
 import './document_session.dart';
@@ -59,6 +61,8 @@ class BlockDocumentEditor extends StatefulWidget {
 class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   static const _session = DocumentSession();
 
+  /// Marker-text source of truth (v4 body). [_doc] is a derived view for widgets.
+  late DocumentBuffer _buffer;
   late RichDocument _doc;
   var _dirty = false;
   var _focusedBlockIndex = 0;
@@ -96,16 +100,20 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
       widget.state.selectedDetail?.files.where((f) => f.id == widget.file.id).firstOrNull ??
       widget.file;
 
+  void _syncDocFromBuffer() {
+    _doc = _stampEmbedTypes(_buffer.toRichDocument());
+  }
+
   @override
   void initState() {
     super.initState();
-    _doc = DocumentCodec.coalesceAdjacentParagraphs(
-      DocumentCodec.parse(_currentFile.documentJson),
-    );
-    if (_doc.blocks.isEmpty) {
-      _doc = _doc.copyWith(blocks: [ParagraphNode(id: DocumentCodec.newId('b'), text: '')]);
-    }
     _embedsSnapshot = widget.state.embedsByFileId[widget.file.id] ?? widget.embeds;
+    _buffer = DocumentBuffer.fromStored(_currentFile.documentJson);
+    _syncDocFromBuffer();
+    if (_doc.blocks.isEmpty) {
+      _buffer = DocumentBuffer.empty();
+      _syncDocFromBuffer();
+    }
     _flow.onPruneStructures = _pruneStructures;
     _flow.addListener(_rememberCaretBlock);
     widget.state.addListener(_onAppStateChanged);
@@ -222,17 +230,19 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.file.id != widget.file.id) {
       _flushPendingChanges();
-      _doc = DocumentCodec.coalesceAdjacentParagraphs(
-        DocumentCodec.parse(_currentFile.documentJson),
-      );
+      _embedsSnapshot =
+          widget.state.embedsByFileId[widget.file.id] ?? widget.embeds;
+      _buffer = DocumentBuffer.fromStored(_currentFile.documentJson);
+      _syncDocFromBuffer();
       _dirty = false;
       _rebuildEditingState();
     } else if (!_dirty && oldWidget.file.documentJson != widget.file.documentJson) {
       final incoming = _currentFile.documentJson;
       if (incoming != _lastSavedJson) {
-        _doc = DocumentCodec.coalesceAdjacentParagraphs(
-          DocumentCodec.parse(_currentFile.documentJson),
-        );
+        _embedsSnapshot =
+            widget.state.embedsByFileId[widget.file.id] ?? widget.embeds;
+        _buffer = DocumentBuffer.fromStored(_currentFile.documentJson);
+        _syncDocFromBuffer();
         _rebuildEditingState();
       }
     }
@@ -315,11 +325,33 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     super.dispose();
   }
 
+  Map<int, String> get _objectTypesById => {
+        for (final e in _embedsSnapshot ??
+            widget.state.embedsByFileId[widget.file.id] ??
+            widget.embeds)
+          e.id: e.type,
+      };
+
+  String _serializeDoc() => _buffer.stored;
+
+  RichDocument _stampEmbedTypes(RichDocument doc) {
+    final types = _objectTypesById;
+    return doc.copyWith(
+      blocks: [
+        for (final block in doc.blocks)
+          if (block is EmbedNode)
+            block.copyWith(objectType: types[block.objectId] ?? block.objectType)
+          else
+            block,
+      ],
+    );
+  }
+
   Future<void> _flushPendingChanges() async {
     _saveTimer?.cancel();
     if (!_dirty) return;
     _dirty = false;
-    final json = DocumentCodec.serialize(_doc);
+    final json = _serializeDoc();
     _lastSavedJson = json;
     await widget.state.updateFile(_currentFile, {
       'document_json': json,
@@ -342,7 +374,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         now.difference(_lastHistoryRecord!) < const Duration(milliseconds: 400)) {
       return;
     }
-    _history.record(_doc);
+    _history.record(_buffer.text);
     _lastHistoryRecord = now;
   }
 
@@ -353,27 +385,30 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     bool recordHistory = true,
   }) {
     if (recordHistory) _recordHistory();
-    _doc = doc;
+    _buffer.loadFromRichDocument(doc, objectTypes: _objectTypesById);
+    _syncDocFromBuffer();
     _pruneOrphans();
     if (save) _scheduleSave();
     if (rebuild && mounted) setState(() {});
   }
 
   void _undo() {
-    final previous = _history.undo(_doc);
+    final previous = _history.undo(_buffer.text);
     if (previous == null) return;
     _applyingHistory = true;
-    _doc = DocumentCodec.coalesceAdjacentParagraphs(previous);
+    _buffer = DocumentBuffer(previous);
+    _syncDocFromBuffer();
     _rebuildEditingState();
     _applyingHistory = false;
     _scheduleSave();
   }
 
   void _redo() {
-    final next = _history.redo(_doc);
+    final next = _history.redo(_buffer.text);
     if (next == null) return;
     _applyingHistory = true;
-    _doc = DocumentCodec.coalesceAdjacentParagraphs(next);
+    _buffer = DocumentBuffer(next);
+    _syncDocFromBuffer();
     _rebuildEditingState();
     _applyingHistory = false;
     _scheduleSave();
@@ -581,49 +616,24 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     return c?.text.length ?? 0;
   }
 
-  /// Push paragraph/heading controller text into `_doc` before structural ops.
+  /// Push paragraph/heading controller text into the marker buffer before ops.
   void _flushParagraphControllersIntoDoc() {
-    var next = _doc;
     var changed = false;
     for (final block in _doc.blocks) {
-      if (block is! ParagraphNode && block is! HeadingNode) continue;
       final c = _controllers[block.id];
       if (c == null) continue;
-      final spans = [
-        for (final s in c.spans)
-          TextSpanMark.fromJson(Map<String, dynamic>.from(s)),
-      ];
-      if (block is ParagraphNode) {
-        if (c.text == block.text && _spanListsEqual(spans, block.spans)) {
-          continue;
-        }
-        next = DocumentCodec.replaceBlock(
-          next,
-          block.id,
-          block.copyWith(text: c.text, spans: spans),
-        );
-        changed = true;
-      } else if (block is HeadingNode) {
-        if (c.text == block.text && _spanListsEqual(spans, block.spans)) {
-          continue;
-        }
-        next = DocumentCodec.replaceBlock(
-          next,
-          block.id,
-          block.copyWith(text: c.text, spans: spans),
-        );
-        changed = true;
-      }
+      final DocumentNode? node = switch (block) {
+        ParagraphNode(:final text) when c.text != text =>
+          block.copyWith(text: c.text),
+        HeadingNode(:final text) when c.text != text =>
+          block.copyWith(text: c.text),
+        _ => null,
+      };
+      if (node == null) continue;
+      _buffer.replacePartSlice(block.id, _sliceForNode(node));
+      changed = true;
     }
-    if (changed) _doc = next;
-  }
-
-  static bool _spanListsEqual(List<TextSpanMark> a, List<TextSpanMark> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i].toJson().toString() != b[i].toJson().toString()) return false;
-    }
-    return true;
+    if (changed) _syncDocFromBuffer();
   }
 
   /// Single commit path after [DocumentSession] structural edits.
@@ -636,12 +646,11 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     if (!result.changed) return;
     if (recordHistory) _recordHistory(force: true);
     _flushLiveInfoEmbedCaches();
-    _doc = result.doc;
-    // Prefer AppState cache (patched by info editors) over a stale snapshot.
+    // Session still returns a RichDocument view — fold into marker buffer (SoT).
+    _buffer.loadFromRichDocument(result.doc, objectTypes: _objectTypesById);
+    _syncDocFromBuffer();
     _embedsSnapshot =
         widget.state.embedsByFileId[widget.file.id] ?? _embedsSnapshot;
-    // Skip orphan dispose when resetting — rebuild clears all controllers, and
-    // disposing the focused field mid-Backspace desyncs HardwareKeyboard.
     if (!resetControllers) _pruneOrphans();
     _scheduleSave();
     if (clearMoveMode) {
@@ -696,11 +705,10 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
       blockIndex: blockIndex,
     );
 
-    // Server wrote the embed into document_json; adopt that tree.
+    // Server wrote the pointer into document_json; adopt buffer text.
     final updated = await widget.state.reloadFile(widget.file.id);
-    _doc = DocumentCodec.coalesceAdjacentParagraphs(
-      DocumentCodec.parse(updated.documentJson),
-    );
+    _buffer = DocumentBuffer.fromStored(updated.documentJson);
+    _syncDocFromBuffer();
     _lastSavedJson = updated.documentJson;
     _dirty = false;
     if (mounted) setState(() {});
@@ -733,21 +741,36 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     });
   }
 
+  /// Serialize one view node to its marker-text slice.
+  String _sliceForNode(DocumentNode node) {
+    return DocumentTextCodec.stripHeader(
+      DocumentTextCodec.serialize(
+        RichDocument(version: RichDocument.documentVersion, blocks: [node]),
+        objectTypes: _objectTypesById,
+      ),
+    );
+  }
+
+  /// Write-through: replace the part slice in the buffer (SoT).
+  void _writeNodeToBuffer(DocumentNode node, {bool recordHistory = true}) {
+    if (recordHistory) _recordHistory();
+    final slice = _sliceForNode(node);
+    if (_buffer.partByKey(node.id) != null) {
+      _buffer.replacePartSlice(node.id, slice);
+    } else {
+      _buffer.loadFromRichDocument(
+        DocumentCodec.replaceBlock(_doc, node.id, node),
+        objectTypes: _objectTypesById,
+      );
+    }
+    _syncDocFromBuffer();
+    _scheduleSave();
+  }
+
   void _updateParagraph(ParagraphNode block, SpanTextEditingController controller) {
     _claimThisFile(_doc.blocks.indexWhere((b) => b.id == block.id));
-    _mutateDoc(
-      DocumentCodec.replaceBlock(
-        _doc,
-        block.id,
-        block.copyWith(
-          text: controller.text,
-          spans: [
-            for (final s in controller.spans)
-              TextSpanMark.fromJson(Map<String, dynamic>.from(s)),
-          ],
-        ),
-      ),
-      rebuild: false,
+    _writeNodeToBuffer(
+      block.copyWith(text: controller.text),
     );
   }
 
@@ -788,8 +811,8 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     final coalesced = DocumentCodec.coalesceAdjacentParagraphs(
       _doc.copyWith(blocks: blocks),
     );
-    // Do not dispose the focused field or setState while Backspace is down.
-    _doc = coalesced;
+    _buffer.loadFromRichDocument(coalesced, objectTypes: _objectTypesById);
+    _syncDocFromBuffer();
     _scheduleSave();
 
     final landingId = focusBlockId != null &&
@@ -1041,7 +1064,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
       }
 
       // Cascade-delete backing rows so agent text and views stay clean.
-      // Do not reload document_json from the server — local session is source
+      // Do not reload document_json from the server — local buffer is source
       // of truth after flush (reload used to overwrite with a stale body).
       for (final objectId in removedObjectIds) {
         await widget.state.deleteObjectEmbed(objectId);
@@ -1567,6 +1590,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
 
     return EmbedBlockHost(
       blockId: block.id,
+      documentBaseOffset: _partBaseOffset(block.id),
       registerAsUnit: embed == null ||
           (embed.type != 'task_list' &&
               embed.type != 'graph' &&
@@ -1796,12 +1820,14 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     Future<void> refresh() => _reloadEmbedsQuiet();
     void exitBelow() => _exitEmbedBelow(blockId);
     void deleteObject() => unawaited(_deleteEmbedBlock(blockId));
+    final base = _partBaseOffset(blockId);
 
     return switch (embed.type) {
       'task_list' => InlineTaskListWidget(
           embed: embed,
           blockId: blockId,
           state: widget.state,
+          documentBaseOffset: base,
           onRefresh: refresh,
           onFocus: () {
             final i = _doc.blocks.indexWhere((b) => b.id == blockId);
@@ -1819,6 +1845,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
           embed: embed,
           blockId: blockId,
           state: widget.state,
+          documentBaseOffset: base,
           onRefresh: () => unawaited(refresh()),
           onFocus: () {
             final i = _doc.blocks.indexWhere((b) => b.id == blockId);
@@ -1839,6 +1866,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
           embed: embed,
           blockId: blockId,
           strings: _strings,
+          documentBaseOffset: base,
           onPayloadChanged: (payload) {
             _patchEmbedPayloadLocally(embed.id, payload);
             unawaited(
@@ -1869,9 +1897,25 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
   void _moveEmbedToGap(String blockId, int gapIndex) {
     _flushParagraphControllersIntoDoc();
     _flushLiveInfoEmbedCaches();
-    _commitSessionResult(
-      _session.moveEmbedToGap(_doc, blockId, gapIndex),
-      clearMoveMode: true,
+    final objectId = _objectIdForEmbedBlock(blockId);
+    if (objectId == null) return;
+    _recordHistory(force: true);
+    if (!_buffer.movePointer(objectId, gapIndex)) {
+      setState(() {
+        _moveModeEmbedId = null;
+        _dropPreview = null;
+      });
+      return;
+    }
+    _syncDocFromBuffer();
+    _moveModeEmbedId = null;
+    _dropPreview = null;
+    _scheduleSave();
+    _rebuildEditingStateWhenSafe(
+      after: () {
+        if (!mounted) return;
+        _focusFirstPartOf('embed:$objectId');
+      },
     );
   }
 
@@ -1885,26 +1929,56 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
     _flushLiveInfoEmbedCaches();
     if (targetIndex < 0 || targetIndex >= _doc.blocks.length) return;
     final block = _doc.blocks[targetIndex];
-    final blockId = block.id;
-    final controller = _controllers[blockId];
-    final liveSpans = controller == null
-        ? null
-        : [
-            for (final s in controller.spans)
-              TextSpanMark.fromJson(Map<String, dynamic>.from(s)),
-          ];
-    _commitSessionResult(
-      _session.moveEmbedSplittingText(
-        doc: _doc,
-        embedBlockId: embedBlockId,
-        targetIndex: targetIndex,
-        cut: cut,
-        liveText: controller?.text,
-        liveSpans: liveSpans,
-      ),
-      clearMoveMode: true,
+    final objectId = _objectIdForEmbedBlock(embedBlockId);
+    if (objectId == null) return;
+    EmbedNode? embed;
+    for (final b in _doc.blocks) {
+      if (b is EmbedNode && b.objectId == objectId) {
+        embed = b;
+        break;
+      }
+    }
+    final controller = _controllers[block.id];
+    if (controller != null &&
+        (block is ParagraphNode || block is HeadingNode)) {
+      _buffer.replacePartSlice(block.id, controller.text);
+      _syncDocFromBuffer();
+    }
+    _recordHistory(force: true);
+    final ok = _buffer.splitPartAndInsertPointer(
+      partKey: block.id,
+      cut: cut,
+      objectId: objectId,
+      objectType: embed?.objectType ?? _objectTypesById[objectId],
+    );
+    if (!ok) {
+      _moveEmbedToGap(embedBlockId, targetIndex);
+      return;
+    }
+    _syncDocFromBuffer();
+    _moveModeEmbedId = null;
+    _dropPreview = null;
+    _scheduleSave();
+    _rebuildEditingStateWhenSafe(
+      after: () {
+        if (!mounted) return;
+        _focusFirstPartOf('embed:$objectId');
+      },
     );
   }
+
+  int? _objectIdForEmbedBlock(String blockId) {
+    for (final b in _doc.blocks) {
+      if (b is EmbedNode && b.id == blockId) return b.objectId;
+    }
+    if (blockId.startsWith('embed:')) {
+      return int.tryParse(blockId.substring(6));
+    }
+    return null;
+  }
+
+  int _partBaseOffset(String partKey) =>
+      _buffer.partByKey(partKey)?.start ?? 0;
 
   Widget _buildEditableBlock(DocumentNode block, int index) {
     if (block is ParagraphNode) {
@@ -1915,6 +1989,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         controller: controller,
         focusNode: _focusFor(block.id),
         segmentId: segmentId,
+        documentBaseOffset: _partBaseOffset(block.id),
         style: _paragraphStyle,
         maxLines: null,
         minLines: 1,
@@ -1942,6 +2017,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         controller: controller,
         focusNode: _focusFor(block.id),
         segmentId: segmentId,
+        documentBaseOffset: _partBaseOffset(block.id),
         style: AppTypography.documentHeadingStyle(block.level),
         maxLines: null,
         descriptionRanges: _descriptionRangesFor(segmentId),
@@ -1954,20 +2030,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
             unawaited(_onDescriptionDoubleTap(range)),
         onChanged: (_) {
           _claimThisFile(index);
-          _mutateDoc(
-            DocumentCodec.replaceBlock(
-              _doc,
-              block.id,
-              block.copyWith(
-                text: controller.text,
-                spans: [
-                  for (final s in controller.spans)
-                    TextSpanMark.fromJson(Map<String, dynamic>.from(s)),
-                ],
-              ),
-            ),
-            rebuild: false,
-          );
+          _writeNodeToBuffer(block.copyWith(text: controller.text));
         },
         onSecondaryTapDown: _showTextMenu,
       );
@@ -1977,13 +2040,11 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         key: ValueKey('l-${block.id}'),
         node: block,
         strings: _strings,
+        documentBaseOffset: _partBaseOffset(block.id),
         onFocus: () => _claimThisFile(index),
         onChanged: (updated) {
           _claimThisFile(index);
-          _mutateDoc(
-            DocumentCodec.replaceBlock(_doc, block.id, updated),
-            rebuild: false,
-          );
+          _writeNodeToBuffer(updated);
         },
         onExitList: (emptyItemIndex) => _exitListBelow(block.id, emptyItemIndex),
         onDeleteList: () => _removeStructureBlock(block.id),
@@ -1995,13 +2056,11 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
         key: ValueKey('t-${block.id}'),
         node: block,
         strings: _strings,
+        documentBaseOffset: _partBaseOffset(block.id),
         onFocus: () => _claimThisFile(index),
         onChanged: (updated) {
           _claimThisFile(index);
-          _mutateDoc(
-            DocumentCodec.replaceBlock(_doc, block.id, updated),
-            rebuild: false,
-          );
+          _writeNodeToBuffer(updated);
         },
         onExitTable: (emptyRowIndex) => _exitTableBelow(block.id, emptyRowIndex),
         onDeleteTable: () => _removeStructureBlock(block.id),

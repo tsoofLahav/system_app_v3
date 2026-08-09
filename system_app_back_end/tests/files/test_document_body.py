@@ -28,10 +28,16 @@ def test_paragraph_round_trip():
 
 
 def test_insert_object_embed():
+    from areas.files.services.document_marker_text import (
+        DOCUMENT_TEXT_HEADER,
+        embed_ids_in_text,
+        strip_header,
+    )
+
     body = empty_document_json()
-    updated = insert_embed_block(body, 42, block_index=0)
-    doc = parse_document(updated)
-    assert doc["blocks"][0]["object_id"] == 42
+    updated = insert_embed_block(body, 42, block_index=0, object_type="info")
+    assert updated.startswith(DOCUMENT_TEXT_HEADER)
+    assert embed_ids_in_text(strip_header(updated)) == {42}
 
 
 def test_migrate_v1_nodes():
@@ -43,8 +49,7 @@ def test_migrate_v1_nodes():
     assert doc["blocks"][0]["text"] == "Title"
 
 
-def test_new_file_default_is_v3():
-    import json
+def test_new_file_default_is_v4_editor_text():
+    from areas.files.services.document_marker_text import DOCUMENT_TEXT_HEADER
 
-    data = json.loads(empty_document_json())
-    assert data["version"] == 3
+    assert empty_document_json().startswith(DOCUMENT_TEXT_HEADER)

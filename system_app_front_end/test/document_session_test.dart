@@ -96,7 +96,13 @@ void main() {
       final result = session.moveEmbedToGap(doc, 'e', 1);
 
       expect(result.changed, isTrue);
-      expect(result.doc.blocks.map((b) => b.id).toList(), ['a', 'e', 'b']);
+      // Marker-text normalize regenerates block ids; assert order by content.
+      expect(result.doc.blocks, hasLength(3));
+      expect(result.doc.blocks[0], isA<ParagraphNode>());
+      expect((result.doc.blocks[0] as ParagraphNode).text, 'one');
+      expect(result.doc.blocks[1], isA<EmbedNode>());
+      expect((result.doc.blocks[1] as EmbedNode).objectId, 3);
+      expect((result.doc.blocks[2] as ParagraphNode).text, 'two');
     });
 
     test('no-ops when already in gap', () {

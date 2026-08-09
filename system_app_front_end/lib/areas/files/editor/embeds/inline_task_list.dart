@@ -21,6 +21,7 @@ class InlineTaskListWidget extends StatefulWidget {
     this.onFocus,
     this.onExitBelow,
     this.onDeleteObject,
+    this.documentBaseOffset = 0,
   });
 
   final ObjectEmbed embed;
@@ -33,6 +34,9 @@ class InlineTaskListWidget extends StatefulWidget {
 
   /// Last empty task + Backspace — remove the object from the file.
   final VoidCallback? onDeleteObject;
+
+  /// Start of this pointer slice in the marker-text buffer.
+  final int documentBaseOffset;
 
   @override
   State<InlineTaskListWidget> createState() => _InlineTaskListWidgetState();
@@ -69,6 +73,7 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
       compactMode: moveMode,
       listTitleSegmentId: taskListTitleSegmentId(widget.blockId),
       taskSegmentId: (index) => taskItemSegmentId(widget.blockId, index),
+      documentBaseOffset: widget.documentBaseOffset,
       climbToListTitleOnLastBackspace: true,
     );
   }

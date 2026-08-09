@@ -1,12 +1,13 @@
-/// Pure structural edits on a v3 [RichDocument].
+/// Pure structural helpers on a [RichDocument] **view** of marker text.
 ///
-/// The editor flushes live controllers into [doc] (or passes live text in),
-/// calls a method here, then commits the result by resetting controllers from
-/// [DocumentSessionResult.doc]. No widgets, no controllers, no API calls.
+/// Editor SoT is [`DocumentBuffer`](../model/document_buffer.dart). The editor
+/// folds session results via `loadFromRichDocument` (or uses buffer move/split
+/// directly for embeds). No widgets, no controllers, no API calls.
 library;
 
 import '../model/document_codec.dart';
 import '../model/document_model.dart';
+import '../model/document_text_codec.dart';
 import './document_structure_prune.dart';
 import './document_text_flow.dart';
 
@@ -362,17 +363,32 @@ class DocumentSession {
     String blockId,
     int gapIndex,
   ) {
-    final next = DocumentCodec.moveEmbedToGap(doc, blockId, gapIndex);
-    if (identical(next, doc)) return DocumentSessionResult.unchanged(doc);
-    final coalesced = DocumentCodec.coalesceAdjacentParagraphs(next);
+    EmbedNode? embed;
+    for (final b in doc.blocks) {
+      if (b is EmbedNode && b.id == blockId) {
+        embed = b;
+        break;
+      }
+    }
+    if (embed == null) return DocumentSessionResult.unchanged(doc);
+
+    // Marker-text SoT: cut/paste the pointer among top-level parts.
+    final before = DocumentCodec.moveEmbedToGap(doc, blockId, gapIndex);
+    if (identical(before, doc)) return DocumentSessionResult.unchanged(doc);
+    final text = DocumentTextCodec.serialize(before);
+    final normalized = DocumentTextCodec.parse(text);
+    final landing = _embedBlockIdForObject(normalized, embed.objectId) ?? blockId;
     return DocumentSessionResult(
-      doc: coalesced,
+      doc: DocumentCodec.coalesceAdjacentParagraphs(normalized),
       changed: true,
-      landingBlockId: blockId,
+      landingBlockId: landing,
     );
   }
 
   /// Split paragraph/heading at [cut] and place [embedBlockId] between halves.
+  ///
+  /// Uses string cut/paste of the pointer token so surrounding text stays one
+  /// unit in the marker-text source of truth (no empty neighbor stubs).
   DocumentSessionResult moveEmbedSplittingText({
     required RichDocument doc,
     required String embedBlockId,
@@ -384,6 +400,15 @@ class DocumentSession {
     if (targetIndex < 0 || targetIndex >= doc.blocks.length) {
       return DocumentSessionResult.unchanged(doc);
     }
+    EmbedNode? embed;
+    for (final b in doc.blocks) {
+      if (b is EmbedNode && b.id == embedBlockId) {
+        embed = b;
+        break;
+      }
+    }
+    if (embed == null) return DocumentSessionResult.unchanged(doc);
+
     final block = doc.blocks[targetIndex];
     if (block is! ParagraphNode && block is! HeadingNode) {
       return moveEmbedToGap(doc, embedBlockId, targetIndex);
@@ -391,64 +416,65 @@ class DocumentSession {
 
     final text = liveText ??
         (block is ParagraphNode ? block.text : (block as HeadingNode).text);
-    final spans = liveSpans ??
-        (block is ParagraphNode ? block.spans : (block as HeadingNode).spans);
     final clamped = cut.clamp(0, text.length);
     if (clamped <= 0) return moveEmbedToGap(doc, embedBlockId, targetIndex);
     if (clamped >= text.length) {
       return moveEmbedToGap(doc, embedBlockId, targetIndex + 1);
     }
 
-    // Trim hard line-breaks at the cut so neither half keeps a blank stub line.
-    var beforeEnd = clamped;
-    var afterStart = clamped;
-    while (beforeEnd > 0 && text[beforeEnd - 1] == '\n') {
-      beforeEnd--;
-    }
-    while (afterStart < text.length && text[afterStart] == '\n') {
-      afterStart++;
-    }
-
-    final beforeText = text.substring(0, beforeEnd);
-    final afterText = text.substring(afterStart);
-    if (beforeText.isEmpty) {
-      return moveEmbedToGap(doc, embedBlockId, targetIndex);
-    }
-    if (afterText.isEmpty) {
-      return moveEmbedToGap(doc, embedBlockId, targetIndex + 1);
-    }
-
-    final beforeSpans = spansBefore(spans, beforeEnd);
-    final afterSpans = spansAfter(spans, afterStart);
-    final afterId = DocumentCodec.newId('b');
-
-    final DocumentNode beforeNode;
-    final DocumentNode afterNode;
-    if (block is HeadingNode) {
-      beforeNode = block.copyWith(text: beforeText, spans: beforeSpans);
-      afterNode = HeadingNode(
-        id: afterId,
-        level: block.level,
-        text: afterText,
-        spans: afterSpans,
-      );
-    } else {
-      beforeNode = (block as ParagraphNode).copyWith(
-        text: beforeText,
-        spans: beforeSpans,
-      );
-      afterNode = ParagraphNode(id: afterId, text: afterText, spans: afterSpans);
+    // Apply live text onto a copy, then serialize and split that part in text.
+    var working = doc;
+    if (liveText != null) {
+      if (block is ParagraphNode) {
+        working = DocumentCodec.replaceBlock(
+          working,
+          block.id,
+          block.copyWith(text: liveText, spans: liveSpans ?? block.spans),
+        );
+      } else if (block is HeadingNode) {
+        working = DocumentCodec.replaceBlock(
+          working,
+          block.id,
+          block.copyWith(text: liveText, spans: liveSpans ?? block.spans),
+        );
+      }
     }
 
-    var next = DocumentCodec.replaceBlock(doc, block.id, beforeNode);
-    next = DocumentCodec.insertBlock(next, targetIndex + 1, afterNode);
-    next = DocumentCodec.moveEmbedToGap(next, embedBlockId, targetIndex + 1);
-    final coalesced = DocumentCodec.coalesceAdjacentParagraphs(next);
-    return DocumentSessionResult(
-      doc: coalesced,
-      changed: true,
-      landingBlockId: embedBlockId,
+    // Block index of the target after removing the embed (for part alignment).
+    final embedIndex = working.blocks.indexWhere((b) => b.id == embedBlockId);
+    var partIndex = targetIndex;
+    if (embedIndex >= 0 && embedIndex < targetIndex) {
+      partIndex -= 1;
+    }
+    working = DocumentCodec.removeBlock(working, embedBlockId);
+
+    final wrapped = DocumentTextCodec.serialize(working);
+    final pointer = DocumentTextCodec.pointerLine(
+      embed.objectId,
+      embed.objectType,
     );
+    final nextText = DocumentTextCodec.splitPartAndInsertPointer(
+      wrapped,
+      partIndex: partIndex.clamp(0, 999999),
+      cut: clamped,
+      pointer: pointer,
+      removeObjectId: embed.objectId,
+    );
+    final normalized = DocumentTextCodec.parse(nextText);
+    final landing =
+        _embedBlockIdForObject(normalized, embed.objectId) ?? embedBlockId;
+    return DocumentSessionResult(
+      doc: DocumentCodec.coalesceAdjacentParagraphs(normalized),
+      changed: true,
+      landingBlockId: landing,
+    );
+  }
+
+  static String? _embedBlockIdForObject(RichDocument doc, int objectId) {
+    for (final block in doc.blocks) {
+      if (block is EmbedNode && block.objectId == objectId) return block.id;
+    }
+    return null;
   }
 
   DocumentSessionResult applyPrune({

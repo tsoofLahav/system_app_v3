@@ -6,15 +6,17 @@ Backend twin: [`system_app_back_end/areas/files/AREA.md`](../../../../system_app
 
 A file must feel like **one continuous piece of text**, the way a Word document does. Paragraphs, lists, and tables are part of the same flow, not separate widgets the user has to click into.
 
-Everything the user writes is saved as a single v3 block tree in `files.document_json`. There is no plain-text mirror in the app.
+Everything the user writes is saved as **marker text (v4)** in `files.document_json` (header `%%system_app_document v4`). Spec: [`editor/DOCUMENT_TEXT.md`](editor/DOCUMENT_TEXT.md). Runtime SoT is [`DocumentBuffer`](model/document_buffer.dart); the block tree is a **view** for widgets. Object payloads stay in the objects area (file holds pointer lines only).
 
 ## Structure
 
 | Folder | Role |
 |--------|------|
-| [`model/`](model/) | Node types and JSON codec |
+| [`model/document_buffer.dart`](model/document_buffer.dart) | **Editor SoT** — marker body + part range index |
+| [`model/`](model/) | View nodes + [`document_text_codec.dart`](model/document_text_codec.dart) (parse/serialize) |
 | [`editor/`](editor/) | The editor surface, block widgets, embed host |
-| [`editor/document_session.dart`](editor/document_session.dart) | **Structural ops** (pure): split/insert gap, exit/delete structure, move embed, prune+coalesce |
+| [`editor/DOCUMENT_TEXT.md`](editor/DOCUMENT_TEXT.md) | Marker-text dialect (SoT vs agent expand) |
+| [`editor/document_session.dart`](editor/document_session.dart) | Structural helpers on the RichDocument view (folded into buffer on commit) |
 | [`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md) | Fluent-text principles for embeds (empty neighbors, edge landing, object remount) |
 | [`editor/embeds/`](editor/embeds/) | In-file presentation of objects (task list, info, image, graph) |
 | [`rich_text/`](rich_text/) | Span formatting, controllers, context menus |
@@ -23,9 +25,7 @@ Everything the user writes is saved as a single v3 block tree in `files.document
 
 ### Document vs controllers (one sync rule)
 
-`document_json` / `_doc` is the source of truth for the file tree. Typing updates `_doc` from the focused field (`rebuild: false`). **Any structural edit** goes through `DocumentSession`, then the editor’s single `_commitSessionResult` which **resets text controllers** from the new `_doc` (so coalesce/move/delete cannot leave a stale field showing half the text). Flush live paragraph controllers into `_doc` before session ops that read text (insert split, move split).
-
-Object **payloads** (info body, tasks, graph numbers) stay in the objects area — not in `document_json`. The file only stores embed placement (`object_id`).
+**Runtime + persisted SoT** = `DocumentBuffer.text` (save = `%%system_app_document v4\n` + buffer). Typing / list / table write-through → `replacePartSlice`. Move Mode → `movePointer` / `splitPartAndInsertPointer`. `_doc = buffer.toRichDocument()` is the widget view (ids = part keys). `DocumentSession` may still compute structural results; the editor folds them with `loadFromRichDocument`. Object **payloads** stay in the objects area — file text only has pointer lines.
 
 ### One scroll owner
 
@@ -214,7 +214,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 |------|---------|
 | Between blocks only | Never inside a list item or table cell |
 | Create at the caret | Inserts go to the **last-claimed** file. Mid-paragraph / mid-heading **splits** at the caret (`before \| new \| after`); caret at the start inserts before that block; at the end, after it. List / table / embed carets insert after the containing block. |
-| Document tree is source of truth | Position is `blocks[]` order; the object row holds data, not placement |
+| Marker buffer is source of truth | Position is top-level parts in buffer text (view = `blocks[]`); the object row holds data, not placement |
 | Right-click on embed text | Same text menu as paragraphs (`DocumentMark`). Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Graphs extend the table cell menu (add column + chart options). Task lists add **Add to view…** and **Reorder tasks** |
 | Move Mode | Double-click → glass frame; drag onto **any text block**. A teal line follows the pointer and snaps to **visual line boundaries** (including soft-wrapped lines). Drop splits that paragraph/heading at the line (`before \| embed \| after`) or moves before/after the block; empty space under the file = after the last block. Tap outside (not while dragging) ends the mode. After move/delete, adjacent paragraphs **coalesce** (blank/`\n`-only stubs dropped, including next to embeds) so the object does not leave a blank gap. Editing child stays mounted while dragging so object content is not lost. |
 | Empty object + Backspace | Same fluent rule as an empty list bullet / table row: last empty unit + Backspace **removes the object** (cascade-delete). Empty **Enter** still exits below without destroying. |

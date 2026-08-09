@@ -136,6 +136,8 @@ class _SegmentBinding {
 class DocumentTextFlow extends ChangeNotifier {
   final _order = <String>[];
   final _bindings = <String, _SegmentBinding>{};
+  /// Absolute start offset of each segment in the marker-text buffer.
+  final _baseOffset = <String, int>{};
   // Vertical neighbours differ from reading order inside a table: pressing down
   // in a cell should reach the cell below it, not the next cell in the row.
   final _above = <String, String>{};
@@ -189,14 +191,26 @@ class DocumentTextFlow extends ChangeNotifier {
     TextEditingController controller,
     FocusNode node, {
     VoidCallback? onChanged,
+    int baseOffset = 0,
   }) {
     _bindings[id] = _SegmentBinding(controller, node, onChanged);
+    _baseOffset[id] = baseOffset;
   }
 
   void unregister(String id, TextEditingController controller) {
     final existing = _bindings[id];
     if (existing == null || existing.controller != controller) return;
     _bindings.remove(id);
+    _baseOffset.remove(id);
+  }
+
+  /// Start of [id] in the document buffer, if registered.
+  int baseOffsetOf(String id) => _baseOffset[id] ?? 0;
+
+  /// Global caret offset = part base + local offset.
+  int? globalOffsetOf(DocumentTextPosition position) {
+    if (!_order.contains(position.segmentId)) return null;
+    return baseOffsetOf(position.segmentId) + position.offset;
   }
 
   TextEditingController? controllerFor(String id) => _bindings[id]?.controller;

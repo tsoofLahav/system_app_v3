@@ -12,12 +12,12 @@ Everything the user sees in a file is stored in **one column**: `files.document_
 
 | Column | Meaning |
 |--------|---------|
-| `document_json` | The whole document as a v3 block tree (JSON text) |
+| `document_json` | **Editor text (v4)** — marker string with header `%%system_app_document v4` (column name kept for now) |
 | `name`, `topic_id`, `order_index` | Placement inside a topic |
 | `meta` (JSONB) | Automation anchors and misc flags |
 | `archived_at` | Soft archive |
 
-**There is no plain-text column.** Plain text is always derived, never stored.
+Legacy **v3 JSON** in this column is migrated to editor text on read (`File.to_dict`) and rewritten on the next save. **Spans are dropped** on migrate (span encoding is a follow-up). Spec: frontend [`DOCUMENT_TEXT.md`](../../../system_app_front_end/lib/areas/files/editor/DOCUMENT_TEXT.md).
 
 ## Which files a topic shows
 
@@ -27,78 +27,67 @@ A file past the last slot is **not on screen**. It is not archived and not marke
 
 This is why there is no flag on the file. Prominence is a property of the topic's arrangement, so the only thing the backend stores is the order and the layout. `files.is_essence` existed for this and was dropped in [`migrations/004_topic_file_layout.sql`](../../migrations/004_topic_file_layout.sql); ordering already carried the same information, since arranging always wrote the shown files first.
 
-## Block tree (v3)
+## Editor text (v4 — source of truth)
 
-```json
-{
-  "version": 3,
-  "blocks": [
-    { "id": "b1", "type": "paragraph", "text": "…", "spans": [] },
-    { "id": "b2", "type": "heading", "level": 2, "text": "Goals", "spans": [] },
-    { "id": "b3", "type": "bullet_list", "items": [{ "id": "li1", "text": "…", "indent": 0 }] },
-    { "id": "b4", "type": "table", "rows": [[{ "text": "A" }, { "text": "B" }]] },
-    { "id": "b5", "type": "embed", "object_id": 42 }
-  ]
-}
+Stored body starts with `%%system_app_document v4`, then marker text:
+
+```text
+%%system_app_document v4
+Hello
+world
+
+[INFO id="42"]
+
+[BULLET_LIST]
+- point 1
+[/BULLET_LIST]
 ```
 
-- Order is **array order** — there are no character offsets between blocks.
-- `spans` carry inline formatting (bold, italic, underline, size, color) as ranges on `text`.
-- Legacy `list` + `list_style` normalizes to `bullet_list` / `ordered_list` on read.
-- Reads accept v1/v2 shapes and migrate; **writes always normalize to v3**.
-- Extra blank lines usually live as `\n\n` **inside** a paragraph’s `text` (the editor coalesces adjacent paragraphs with `\n`, so a visible blank line is `\n\n` in that string). The agent-text mapper turns each such gap into `[SPACER n="…"]` and back into empty paragraphs (no editor `spacer` type). Legacy `type: "spacer"` blocks normalize to empty paragraphs.
+- Blocks separated by `\n\n`; soft break inside a paragraph = `\n`.
+- Gaps: `[SPACER]` / `[SPACER n="N"]`.
+- Objects are **pointer lines only** (`[INFO id="N"]`, `[TASK_LIST id="N"]`, `[IMAGE id="N"]`, `[GRAPH id="N"]`). Content lives in object tables.
+- Move object = cut/paste the pointer line ([`document_marker_text.py`](services/document_marker_text.py)).
 
 ### Lists and tables
 
-Lists and tables are **nodes inside the document**, not separate database rows. They are part of the text flow: pressing Enter on an empty list item or empty table row ends that structure and continues as a paragraph, so the user never feels they left the document.
-
-Table cells hold `{ text, spans }`. Rows are padded to a uniform column count on read.
+Fenced in the same string (`[BULLET_LIST]…`, `[TABLE]…`). Not separate DB rows.
 
 ### How objects fit in
 
-An **embed** block is a pointer: `{ "type": "embed", "object_id": 42 }`. The content lives in the `objects` table ([objects area](../objects/AREA.md)).
-
-The document owns **where** an object sits; the objects area owns **what** it contains (data, views, links). In-file presentation (caret, menus, embed widgets) is frontend **files**.
-
 | Rule | Meaning |
 |------|---------|
-| Top-level only | Embeds are siblings of paragraphs, lists, and tables — never nested inside a list or table |
-| Array order is position | No character offsets between blocks |
-| Delete cascades | Removing an embed must go through the objects cascade so the object row (and tasks, info, …) are cleaned up |
+| Pointer only in SoT | Never store info body / tasks inside the file text |
+| Top-level only | Pointers are top-level parts — never inside a list/table fence |
+| Delete cascades | Removing a pointer goes through objects cascade |
 
-Creating via `POST /files/:id/objects` inserts the embed block at `block_index` in the same transaction.
+Creating via `POST /files/:id/objects` inserts a typed pointer at `block_index`.
 
-Empty-final Enter exit (task / info / graph continuing as a paragraph below the object) is a **frontend document edit** — it does not change object rows, only inserts a paragraph after the embed in `document_json`.
-
-## Two representations of the same file
+## Two projections of the same file
 
 | Representation | Where | Used for |
 |----------------|-------|----------|
-| **Full version** — block tree | `files.document_json` | The editor, persistence, source of truth |
-| **Text version** — agent text | Computed on demand | AI reading/writing, search, diffs |
+| **Editor text** | `files.document_json` (v4 header) | Persistence, editor, cut/paste/move |
+| **Agent text** | Derived on demand | AI reading/writing, search, diffs |
 
-The text version flattens the tree into deterministic plain text with fenced regions (`[TABLE]`, `[BULLET_LIST]`, `[SPACER]`, `[TASK_LIST id="…"]`, `[INFO]`, `[IMAGE]`, `[GRAPH]`). Embedded object content is expanded inline so the agent sees real content, not ids alone.
+Agent text **expands** pointers with live object payloads (same fences as before). Apply **collapses** back to pointers + `object_updates` ([`document_agent_text.py`](services/document_agent_text.py)). Rejects unknown ids and silent drops of existing embeds.
 
-Frozen shapes (see production agent prompt):
-
-| Fence | Shape |
+| Fence (agent) | Shape |
 |-------|--------|
-| `SPACER` | Extra blank lines ↔ empty paragraphs / blank runs in paragraph text |
-| `TASK_LIST` | ACTIVE/DONE checkbox lines |
-| `INFO` | First line title, remaining body |
-| `IMAGE` | Single-line `caption` + optional `url` |
-| `GRAPH` | Optional `chartType`; labels / values / optional colors as tab rows |
+| `SPACER` | Extra blank gaps |
+| `TASK_LIST` | ACTIVE/DONE checkbox lines (expanded) |
+| `INFO` | First line title, remaining body (expanded) |
+| `IMAGE` | `caption` + optional `url` (expanded) |
+| `GRAPH` | chartType + tab rows (expanded) |
 
-It is **never persisted**. Converting back (`apply_agent_text`) rebuilds a block tree and rejects any result that would silently drop an existing embed.
-
-Format spec: [`content/production_agent/system_prompt.md`](../../../content/production_agent/system_prompt.md)
+Format examples: [`content/production_agent/reference.md`](../../../content/production_agent/reference.md)
 
 ## Modules
 
 | Module | Role |
 |--------|------|
-| [`services/document_v3.py`](services/document_v3.py) | Parse, normalize, serialize, migrate the block tree |
-| [`services/document_agent_text.py`](services/document_agent_text.py) | Block tree ↔ agent text |
+| [`services/document_marker_text.py`](services/document_marker_text.py) | Editor text (v4): migrate, pointers, insert/move/remove |
+| [`services/document_v3.py`](services/document_v3.py) | Legacy v3 JSON helpers; embed ops delegate to marker text |
+| [`services/document_agent_text.py`](services/document_agent_text.py) | Editor text ↔ expanded agent text |
 | [`services/document_body.py`](services/document_body.py) | Back-compat re-exports |
 | [`services/document_promote.py`](services/document_promote.py) | Promote legacy inline embeds to object rows |
 | [`services/file_versions.py`](services/file_versions.py) | Snapshot before agent/automation writes |
@@ -116,9 +105,9 @@ Leaving the document out of that response is a data-loss bug, not a display one:
 
 ## Rules
 
-- Never write a document body that is not valid v3 — always go through `serialize_document`.
-- Never store derived plain text.
-- Never drop an embed block during a programmatic edit; fail loudly instead.
+- Persist editor text (v4 header). Migrate legacy v3 JSON on read; do not write new v3 JSON.
+- Never store expanded object bodies in the file — pointers only.
+- Never drop an embed pointer during a programmatic edit; fail loudly instead.
 - Save a file version before any agent or automation write.
 - Any endpoint the editor loads a file from must include `document_json`.
 
@@ -134,6 +123,6 @@ Agent text round-trip is not yet lossless. Open issues, worst first:
 | Unmatched fence markers in plain text advance one char without emitting it | Text like `Hello [TABLE] world` loses characters |
 | `_sync_task_list` archives every task and inserts new rows | Task ids churn on each apply; `view_task_memberships` point at archived tasks |
 | Malformed list/task lines are skipped with `continue` | Items vanish with no error |
-| Spans are dropped on parse (by design) | Any agent edit clears inline formatting across the whole file |
+| Spans not in v4 editor text yet | Migrate/agent paths drop inline formatting until span encoding ships |
 
 Tests cover happy paths only — no coverage for ordered-list round-trip, nested lists, newlines in cells, legacy or duplicate embeds, or `direct_apply` rollback.

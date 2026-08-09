@@ -19,6 +19,7 @@ class RichTableEditor extends StatefulWidget {
     this.onFocus,
     this.onExitTable,
     this.onDeleteTable,
+    this.documentBaseOffset = 0,
   });
 
   final TableNode node;
@@ -29,6 +30,9 @@ class RichTableEditor extends StatefulWidget {
 
   /// Backspace on the last empty row — remove the table from the file.
   final VoidCallback? onDeleteTable;
+
+  /// Start of this table's fence in the marker-text buffer.
+  final int documentBaseOffset;
 
   @override
   State<RichTableEditor> createState() => _RichTableEditorState();
@@ -336,6 +340,7 @@ class _RichTableEditorState extends State<RichTableEditor> {
                                 controller: _controllers[r][c],
                                 focusNode: _focusAt(r, c),
                                 segmentId: tableCellSegmentId(widget.node.id, r, c),
+                                documentBaseOffset: widget.documentBaseOffset,
                                 style: AppTypography.documentParagraphStyle,
                                 hintText: r == 0 && c == 0 ? 'Cell' : null,
                                 maxLines: null,

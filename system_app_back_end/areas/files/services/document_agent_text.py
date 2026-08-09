@@ -1,4 +1,8 @@
-"""Deterministic agent text serialization for v3 documents."""
+"""Agent text projection over editor-text (v4) documents.
+
+Editor text (SoT) stores pointer-only object markers. Agent text expands those
+pointers with live object payloads. See document_marker_text.py / DOCUMENT_TEXT.md.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from models import InformationPiece, ObjectEmbed, Task, db
+from areas.files.services import document_marker_text as marker_text
 from areas.files.services.document_v3 import new_id, parse_document, serialize_document
 from areas.objects.services.task_list_order import tasks_for_list
 
@@ -243,57 +248,58 @@ def load_objects_by_id(file_id: int) -> dict[int, dict[str, Any]]:
     return by_id
 
 
+_POINTER_LINE_RE = re.compile(
+    r'\[(INFO|TASK_LIST|IMAGE|GRAPH|EMBED)\s+id="(\d+)"\s*\]',
+    re.IGNORECASE,
+)
+
+
+def editor_text_to_agent_text(
+    editor_body: str | None,
+    *,
+    objects_by_id: dict[int, dict[str, Any]] | None = None,
+) -> str:
+    """Expand pointer markers in editor text into agent fences."""
+    objects_by_id = objects_by_id or {}
+    text = marker_text.editor_text_body(editor_body)
+
+    def replace_pointer(match: re.Match) -> str:
+        tag = match.group(1).upper()
+        object_id = int(match.group(2))
+        obj = objects_by_id.get(object_id, {})
+        obj_type = obj.get("type") or {
+            "INFO": "info",
+            "TASK_LIST": "task_list",
+            "IMAGE": "image",
+            "GRAPH": "graph",
+            "EMBED": "",
+        }.get(tag, "")
+        if obj_type == "task_list":
+            return _task_list_section(object_id, obj)
+        if obj_type == "info":
+            return _info_section(object_id, obj)
+        if obj_type == "image":
+            return _image_section(object_id, obj)
+        if obj_type == "graph":
+            return _graph_section(object_id, obj)
+        # Unknown / missing object — leave a bare pointer so apply can reject.
+        return marker_text.pointer_line(object_id, obj_type or None)
+
+    expanded = _POINTER_LINE_RE.sub(replace_pointer, text)
+    if expanded and all(_SPACER_RE.fullmatch(line.strip()) for line in expanded.split("\n\n")):
+        return ""
+    return expanded
+
+
 def document_to_agent_text(
     body: str | None,
     *,
     objects_by_id: dict[int, dict[str, Any]] | None = None,
 ) -> str:
-    doc = parse_document(body)
+    """Project stored body (v4 editor text or legacy v3 JSON) to agent text."""
     objects_by_id = objects_by_id or {}
-    lines: list[str] = []
-
-    for block in doc["blocks"]:
-        block_type = block.get("type")
-        if block_type == "paragraph":
-            _append_paragraph_agent_parts(lines, str(block.get("text") or ""))
-            continue
-        if block_type in {
-            "heading",
-            "list",
-            "bullet_list",
-            "ordered_list",
-            "table",
-        }:
-            text = _block_plain_text(block)
-            if text:
-                lines.append(text)
-            continue
-        if block_type != "embed":
-            continue
-        object_id = block.get("object_id")
-        if object_id is None:
-            legacy = block.get("_legacy") or {}
-            if legacy.get("type") == "image":
-                lines.append(f'[IMAGE url="{legacy.get("url", "")}"]')
-            elif legacy.get("type") == "graph":
-                lines.append("[GRAPH]")
-            continue
-
-        obj = objects_by_id.get(int(object_id), {})
-        obj_type = obj.get("type")
-        if obj_type == "task_list":
-            lines.append(_task_list_section(int(object_id), obj))
-        elif obj_type == "info":
-            lines.append(_info_section(int(object_id), obj))
-        elif obj_type == "image":
-            lines.append(_image_section(int(object_id), obj))
-        elif obj_type == "graph":
-            lines.append(_graph_section(int(object_id), obj))
-
-    # Empty file (only empty paragraphs) must not become a lone [SPACER].
-    if lines and all(_SPACER_RE.fullmatch(line.strip()) for line in lines):
-        return ""
-    return "\n\n".join(line for line in lines if line is not None)
+    editor = marker_text.ensure_editor_text(body, objects_by_id=objects_by_id)
+    return editor_text_to_agent_text(editor, objects_by_id=objects_by_id)
 
 
 def _attr_escape(value: str) -> str:
@@ -422,14 +428,13 @@ def parse_agent_text(text: str) -> dict[str, Any]:
     return {"blocks": blocks, "object_updates": object_updates}
 
 
-def apply_agent_text(
-    body: str | None,
+def agent_text_to_editor_text(
     agent_text: str,
     *,
     known_object_ids: set[int],
-) -> tuple[dict[str, Any], dict[int, dict[str, Any]], list[str]]:
-    """Parse agent text into a document tree. Return (doc, object_updates, errors)."""
-    current = parse_document(body)
+    current_body: str | None = None,
+) -> tuple[str | None, dict[int, dict[str, Any]], list[str]]:
+    """Collapse agent text to pointer-only editor text + object_updates."""
     parsed = parse_agent_text(agent_text)
     errors: list[str] = []
 
@@ -443,22 +448,72 @@ def apply_agent_text(
             errors.append(f"unknown object id: {object_id}")
 
     if errors:
-        return current, {}, errors
+        return None, {}, errors
 
-    current_embeds = {
-        int(b["object_id"]): b
-        for b in current["blocks"]
-        if b.get("type") == "embed" and b.get("object_id") is not None
-    }
-    for object_id in current_embeds:
+    current_ids = marker_text.embed_ids_in_text(
+        marker_text.editor_text_body(current_body)
+    )
+    # Also accept legacy v3 current bodies.
+    if not current_ids and current_body and not marker_text.is_editor_text(current_body):
+        current_doc = parse_document(current_body)
+        current_ids = {
+            int(b["object_id"])
+            for b in current_doc["blocks"]
+            if b.get("type") == "embed" and b.get("object_id") is not None
+        }
+
+    for object_id in current_ids:
         if object_id not in referenced_ids:
             errors.append(f"missing object id {object_id} in agent text — preserved")
 
     if errors:
-        return current, {}, errors
+        return None, {}, errors
 
-    doc = {"version": 3, "blocks": parsed["blocks"]}
-    return doc, parsed["object_updates"], []
+    # Rebuild editor text from parsed blocks — embeds as pointers only.
+    lines: list[str] = []
+    for block in parsed["blocks"]:
+        block_type = block.get("type")
+        if block_type == "paragraph":
+            _append_paragraph_agent_parts(lines, str(block.get("text") or ""))
+            continue
+        if block_type in {
+            "heading",
+            "list",
+            "bullet_list",
+            "ordered_list",
+            "table",
+        }:
+            text = _block_plain_text(block)
+            if text:
+                lines.append(text)
+            continue
+        if block_type == "embed" and block.get("object_id") is not None:
+            oid = int(block["object_id"])
+            update = parsed["object_updates"].get(oid) or {}
+            lines.append(marker_text.pointer_line(oid, update.get("type")))
+    if lines and all(_SPACER_RE.fullmatch(line.strip()) for line in lines):
+        return marker_text.empty_editor_text(), parsed["object_updates"], []
+    body = "\n\n".join(line for line in lines if line is not None)
+    return marker_text.wrap_editor_text(body), parsed["object_updates"], []
+
+
+def apply_agent_text(
+    body: str | None,
+    agent_text: str,
+    *,
+    known_object_ids: set[int],
+) -> tuple[dict[str, Any], dict[int, dict[str, Any]], list[str]]:
+    """Legacy API: return a v3-shaped doc for older callers; prefer apply_agent_text_to_file."""
+    editor, object_updates, errors = agent_text_to_editor_text(
+        agent_text,
+        known_object_ids=known_object_ids,
+        current_body=body,
+    )
+    if errors or editor is None:
+        current = parse_document(body)
+        return current, {}, errors
+    doc = marker_text.v3_from_editor_text_lossy(editor)
+    return doc, object_updates, []
 
 
 def apply_object_updates(
@@ -533,15 +588,15 @@ def apply_agent_text_to_file(
     *,
     known_object_ids: set[int],
 ) -> tuple[str | None, dict[int, dict[str, Any]], list[str]]:
-    """Return (serialized document_json or None on error, object_updates, errors)."""
-    doc, object_updates, errors = apply_agent_text(
-        current_document_json,
+    """Return (wrapped editor text or None on error, object_updates, errors)."""
+    editor, object_updates, errors = agent_text_to_editor_text(
         agent_text,
         known_object_ids=known_object_ids,
+        current_body=current_document_json,
     )
-    if errors:
+    if errors or editor is None:
         return None, {}, errors
-    return serialize_document(doc), object_updates, []
+    return editor, object_updates, []
 
 
 def _find_next_special(text: str, start: int) -> int | None:

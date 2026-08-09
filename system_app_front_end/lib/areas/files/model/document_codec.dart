@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import './document_model.dart';
+import './document_text_codec.dart';
 
 class DocumentCodec {
   static const embedChar = '\uFFFC';
@@ -15,25 +16,43 @@ class DocumentCodec {
   static RichDocument parse(String? raw) {
     final body = raw?.trim() ?? '';
     if (body.isEmpty) return empty();
-    try {
-      final data = jsonDecode(body);
-      if (data is! Map<String, dynamic>) return _migratePlain(body);
-      final version = data['version'] as int? ?? 1;
-      if (version >= 3 && data['blocks'] is List) {
-        return _fromV3(data);
-      }
-      if (version >= 2 && data.containsKey('text')) {
-        return _migrateV2ToV3(data);
-      }
-      if (data['nodes'] is List) {
-        return _migrateV1Nodes(data['nodes'] as List);
-      }
-    } catch (_) {}
-    return _migratePlain(body);
+    if (DocumentTextCodec.isEditorText(body)) {
+      return DocumentTextCodec.parse(body);
+    }
+    final trimmed = body.trimLeft();
+    if (trimmed.startsWith('{')) {
+      try {
+        final data = jsonDecode(body);
+        if (data is Map<String, dynamic>) {
+          final version = data['version'] as int? ?? 1;
+          if (version >= 3 && data['blocks'] is List) {
+            return _fromV3(data);
+          }
+          if (version >= 2 && data.containsKey('text')) {
+            return _migrateV2ToV3(data);
+          }
+          if (data['nodes'] is List) {
+            return _migrateV1Nodes(data['nodes'] as List);
+          }
+        }
+      } catch (_) {}
+    }
+    // Bare marker text (or non-JSON body).
+    return DocumentTextCodec.parse(body);
   }
 
-  static String serialize(RichDocument doc) =>
-      jsonEncode({'version': RichDocument.documentVersion, 'blocks': doc.blocks.map((b) => b.toJson()).toList()});
+  /// Persist as v4 editor text (pointer embeds). [objectTypes] labels pointers.
+  static String serialize(
+    RichDocument doc, {
+    Map<int, String>? objectTypes,
+  }) {
+    final types = {
+      ...?objectTypes,
+      for (final b in doc.blocks)
+        if (b is EmbedNode && b.objectType != null) b.objectId: b.objectType!,
+    };
+    return DocumentTextCodec.serialize(doc, objectTypes: types);
+  }
 
   static DocumentNode nodeFromJson(Map<String, dynamic> json) {
     final type = json['type'] as String? ?? 'paragraph';
@@ -70,6 +89,7 @@ class DocumentCodec {
         return EmbedNode(
           id: id,
           objectId: json['object_id'] as int? ?? 0,
+          objectType: json['object_type'] as String?,
         );
       default:
         return ParagraphNode(

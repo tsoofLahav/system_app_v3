@@ -49,6 +49,7 @@ class FormattedTextField extends StatefulWidget {
     this.textAlignVertical,
     this.blockId,
     this.segmentId,
+    this.documentBaseOffset = 0,
     this.emojiSearchHint = 'Search emoji',
     this.emojiPickerTitle = 'Insert emoji…',
     this.descriptionRanges = const [],
@@ -80,6 +81,9 @@ class FormattedTextField extends StatefulWidget {
   /// this field into neighbouring paragraphs, bullets and cells.
   final String? segmentId;
 
+  /// Absolute start of this field's slice in the marker-text buffer.
+  final int documentBaseOffset;
+
   final String emojiSearchHint;
   final String emojiPickerTitle;
 
@@ -98,6 +102,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   FocusOnKeyEventCallback? _editableKeyHandler;
   DocumentTextFlow? _flow;
   String? _registeredSegmentId;
+  int? _registeredBaseOffset;
   bool _applyingFlowSelection = false;
   TextDirection? _detectedDirection;
   Offset? _pendingTapGlobal;
@@ -144,7 +149,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
 
   void _attachToFlow(DocumentTextFlow? flow) {
     final segmentId = widget.segmentId;
-    final changed = flow != _flow || segmentId != _registeredSegmentId;
+    final base = widget.documentBaseOffset;
+    final changed = flow != _flow ||
+        segmentId != _registeredSegmentId ||
+        base != _registeredBaseOffset;
     if (!changed) return;
 
     final previousId = _registeredSegmentId;
@@ -153,12 +161,14 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     }
     _flow = flow;
     _registeredSegmentId = segmentId;
+    _registeredBaseOffset = base;
     if (flow != null && segmentId != null) {
       flow.register(
         segmentId,
         widget.controller,
         _focusNode,
         onChanged: _notifyChanged,
+        baseOffset: base,
       );
     }
   }
@@ -197,6 +207,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       final previousId = _registeredSegmentId;
       if (previousId != null) _flow?.unregister(previousId, oldWidget.controller);
       _registeredSegmentId = null;
+      _registeredBaseOffset = null;
     }
     if (oldWidget.focusNode != widget.focusNode) {
       oldWidget.focusNode?.removeListener(_onFocusChanged);

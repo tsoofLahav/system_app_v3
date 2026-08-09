@@ -20,6 +20,7 @@ class RichListEditor extends StatefulWidget {
     this.onDeleteList,
     this.onFocus,
     this.onStyleChanged,
+    this.documentBaseOffset = 0,
   });
 
   final ListNode node;
@@ -34,6 +35,9 @@ class RichListEditor extends StatefulWidget {
 
   /// Switches the whole list between `'bullet'` and `'numbered'`.
   final ValueChanged<String>? onStyleChanged;
+
+  /// Start of this list's fence in the marker-text buffer.
+  final int documentBaseOffset;
 
   @override
   State<RichListEditor> createState() => _RichListEditorState();
@@ -243,6 +247,7 @@ class _RichListEditorState extends State<RichListEditor> {
                     controller: _controllers[i],
                     focusNode: _focusNodes[i],
                     segmentId: listItemSegmentId(widget.node.id, i),
+                    documentBaseOffset: widget.documentBaseOffset,
                     style: AppTypography.documentParagraphStyle,
                     maxLines: null,
                     minLines: 1,

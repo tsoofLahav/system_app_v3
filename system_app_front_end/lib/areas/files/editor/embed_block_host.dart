@@ -25,6 +25,7 @@ class EmbedBlockHost extends StatefulWidget {
     this.onMoveModeChanged,
     this.onInteract,
     this.registerAsUnit = true,
+    this.documentBaseOffset = 0,
   });
 
   final String blockId;
@@ -36,6 +37,9 @@ class EmbedBlockHost extends StatefulWidget {
 
   /// When false, child widgets own the flow segments (tasks / graph cells).
   final bool registerAsUnit;
+
+  /// Start of this pointer slice in the marker-text buffer.
+  final int documentBaseOffset;
 
   @override
   State<EmbedBlockHost> createState() => _EmbedBlockHostState();
@@ -73,7 +77,8 @@ class _EmbedBlockHostState extends State<EmbedBlockHost> {
   void didUpdateWidget(EmbedBlockHost oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.blockId != widget.blockId ||
-        oldWidget.registerAsUnit != widget.registerAsUnit) {
+        oldWidget.registerAsUnit != widget.registerAsUnit ||
+        oldWidget.documentBaseOffset != widget.documentBaseOffset) {
       _detachFromFlow();
       _attachToFlow(DocumentTextFlowScope.maybeOf(context));
     }
@@ -98,7 +103,12 @@ class _EmbedBlockHostState extends State<EmbedBlockHost> {
     _flow = flow;
     _registeredSegmentId = _segmentId;
     if (flow != null) {
-      flow.register(_segmentId, _controller, _focusNode);
+      flow.register(
+        _segmentId,
+        _controller,
+        _focusNode,
+        baseOffset: widget.documentBaseOffset,
+      );
       flow.addListener(_onFlowChanged);
     }
   }

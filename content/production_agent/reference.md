@@ -4,7 +4,9 @@ Call the `reference` tool with `section` when you need examples. Do not memorize
 
 ## agent_text
 
-You read/write **agent text** (never raw JSON). Double newline separates blocks. Single newline inside a paragraph is a line break. Extra blank lines use `[SPACER n="…"]` (n 1–12; omit n for 1).
+You read/write **agent text** (never raw JSON, never the stored pointer-only form). The app stores pointer markers for embeds; `open_file` **expands** them so you see real task/info/graph content. When you write, keep every embed `id="…"` — the app collapses bodies back into object rows.
+
+Double newline separates blocks. Single newline inside a paragraph is a line break. Extra blank lines use `[SPACER n="…"]` (n 1–12; omit n for 1).
 
 ### Spacer
 
