@@ -509,58 +509,58 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   @override
   Widget build(BuildContext context) {
-    // Super Editor must own its scroll viewport (shrinkWrap: false). Nesting
-    // it under SingleChildScrollView makes SE emit a SliverHybridStack into a
-    // box parent and asserts at runtime.
-    final editor = SuperEditor(
-      editor: _editor,
-      focusNode: _focusNode,
-      documentLayoutKey: _docLayoutKey,
-      stylesheet: _stylesheet,
-      componentBuilders: _componentBuilders,
-      shrinkWrap: false,
-      selectionPolicies: const SuperEditorSelectionPolicies(
-        clearSelectionWhenEditorLosesFocus: false,
-        clearSelectionWhenImeConnectionCloses: false,
-      ),
-    );
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    // Super Editor always builds a SliverHybridStack. When it finds *any*
+    // ancestor Scrollable (the topic canvas is a SingleChildScrollView), it
+    // emits that sliver raw — so it must sit in *our* CustomScrollView as a
+    // sliver, never under Column/Expanded/GestureDetector.
+    return CustomScrollView(
+      slivers: [
         if (_moveModeNodeId != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              children: [
-                Text('Move', style: AppTypography.metaStyle),
-                const SizedBox(width: 8),
-                IconButton(
-                  tooltip: 'Move up',
-                  icon: const Icon(Icons.arrow_upward, size: 18),
-                  onPressed: () {
-                    final i = _doc.getNodeIndexById(_moveModeNodeId!);
-                    if (i > 0) _moveEmbedToIndex(_moveModeNodeId!, i - 1);
-                  },
-                ),
-                IconButton(
-                  tooltip: 'Move down',
-                  icon: const Icon(Icons.arrow_downward, size: 18),
-                  onPressed: () {
-                    final i = _doc.getNodeIndexById(_moveModeNodeId!);
-                    if (i >= 0 && i + 1 < _doc.nodeCount) {
-                      _moveEmbedToIndex(_moveModeNodeId!, i + 2);
-                    }
-                  },
-                ),
-                TextButton(
-                  onPressed: () => setState(() => _moveModeNodeId = null),
-                  child: const Text('Done'),
-                ),
-              ],
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Text('Move', style: AppTypography.metaStyle),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Move up',
+                    icon: const Icon(Icons.arrow_upward, size: 18),
+                    onPressed: () {
+                      final i = _doc.getNodeIndexById(_moveModeNodeId!);
+                      if (i > 0) _moveEmbedToIndex(_moveModeNodeId!, i - 1);
+                    },
+                  ),
+                  IconButton(
+                    tooltip: 'Move down',
+                    icon: const Icon(Icons.arrow_downward, size: 18),
+                    onPressed: () {
+                      final i = _doc.getNodeIndexById(_moveModeNodeId!);
+                      if (i >= 0 && i + 1 < _doc.nodeCount) {
+                        _moveEmbedToIndex(_moveModeNodeId!, i + 2);
+                      }
+                    },
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _moveModeNodeId = null),
+                    child: const Text('Done'),
+                  ),
+                ],
+              ),
             ),
           ),
-        Expanded(child: editor),
+        SuperEditor(
+          editor: _editor,
+          focusNode: _focusNode,
+          documentLayoutKey: _docLayoutKey,
+          stylesheet: _stylesheet,
+          componentBuilders: _componentBuilders,
+          shrinkWrap: true,
+          selectionPolicies: const SuperEditorSelectionPolicies(
+            clearSelectionWhenEditorLosesFocus: false,
+            clearSelectionWhenImeConnectionCloses: false,
+          ),
+        ),
       ],
     );
   }

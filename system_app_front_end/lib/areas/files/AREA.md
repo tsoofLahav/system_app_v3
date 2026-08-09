@@ -33,7 +33,7 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 
 ### One scroll owner
 
-Super Editor owns scrolling inside the file pane (`shrinkWrap: false`). Do **not** wrap it in `SingleChildScrollView` — SE treats an ancestor scrollable as a sliver viewport and will assert under a box parent.
+Each file pane scrolls its document in a local `CustomScrollView` with `SuperEditor` as a **sliver** (`shrinkWrap: true`). The topic canvas also scrolls; SE always emits a sliver when any ancestor `Scrollable` exists, so it must never sit under `Column` / `Expanded` / box parents.
 
 ## Node types
 
