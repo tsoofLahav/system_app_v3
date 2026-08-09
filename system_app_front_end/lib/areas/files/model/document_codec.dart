@@ -233,62 +233,6 @@ class DocumentCodec {
     return RichDocument(version: RichDocument.documentVersion, blocks: blocks);
   }
 
-  static RichDocument insertEmbedBlock(
-    RichDocument doc,
-    int objectId, {
-    int? blockIndex,
-    String? blockId,
-  }) {
-    final blocks = [...doc.blocks];
-    final index = blockIndex == null ? blocks.length : blockIndex.clamp(0, blocks.length);
-    blocks.insert(
-      index,
-      EmbedNode(id: blockId ?? newId('b'), objectId: objectId),
-    );
-    return doc.copyWith(blocks: blocks);
-  }
-
-  /// Moves an embed into the gap *before* [gapIndex] in the current list
-  /// (`0` = before the first block, `blocks.length` = after the last).
-  ///
-  /// No-ops when the embed is already adjacent to that gap.
-  static RichDocument moveEmbedToGap(
-    RichDocument doc,
-    String blockId,
-    int gapIndex,
-  ) {
-    final blocks = [...doc.blocks];
-    final current = blocks.indexWhere((b) => b.id == blockId);
-    if (current < 0) return doc;
-    final gap = gapIndex.clamp(0, blocks.length);
-    // Already sitting in this gap (immediately before or after the embed).
-    if (gap == current || gap == current + 1) return doc;
-    final block = blocks.removeAt(current);
-    var insertAt = gap;
-    if (current < gap) insertAt -= 1;
-    blocks.insert(insertAt.clamp(0, blocks.length), block);
-    return doc.copyWith(blocks: blocks);
-  }
-
-  /// Moves an embed so it occupies [newIndex] in the resulting document.
-  static RichDocument moveEmbedBlock(
-    RichDocument doc,
-    String blockId,
-    int newIndex,
-  ) {
-    final blocks = [...doc.blocks];
-    final current = blocks.indexWhere((b) => b.id == blockId);
-    if (current < 0) return doc;
-    final block = blocks.removeAt(current);
-    final index = newIndex.clamp(0, blocks.length);
-    if (index == current) {
-      blocks.insert(current, block);
-      return doc;
-    }
-    blocks.insert(index, block);
-    return doc.copyWith(blocks: blocks);
-  }
-
   static RichDocument removeBlock(RichDocument doc, String blockId) {
     return doc.copyWith(blocks: doc.blocks.where((b) => b.id != blockId).toList());
   }

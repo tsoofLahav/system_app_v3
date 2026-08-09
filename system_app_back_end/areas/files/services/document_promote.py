@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from models import File, ObjectEmbed, db
+from areas.files.services.document_marker_text import migrate_v3_json_to_editor_text
 from areas.files.services.document_v3 import (
     apply_object_to_legacy_block,
     parse_document,
@@ -31,9 +32,10 @@ def promote_legacy_embeds(file: File) -> bool:
         db.session.add(embed)
         db.session.flush()
         doc = apply_object_to_legacy_block(doc, block["id"], embed.id)
-        embed.anchor = {"kind": "embed", "block_id": block["id"]}
+        embed.anchor = {"kind": "embed", "object_id": embed.id}
         changed = True
 
     if changed:
-        file.document_json = serialize_document(doc)
+        # Always persist v4 marker text, never raw v3 JSON.
+        file.document_json = migrate_v3_json_to_editor_text(serialize_document(doc))
     return changed

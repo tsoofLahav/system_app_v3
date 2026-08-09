@@ -1,17 +1,19 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:system_app_front_end/areas/files/model/document_buffer.dart';
 import 'package:system_app_front_end/areas/files/model/document_codec.dart';
 import 'package:system_app_front_end/areas/files/model/document_model.dart';
+import 'package:system_app_front_end/areas/files/model/document_text_codec.dart';
 
 void main() {
-  test('empty document is v3', () {
+  test('empty document parses to empty view', () {
     final doc = DocumentCodec.parse('');
     expect(doc.version, RichDocument.documentVersion);
     expect(doc.blocks, isEmpty);
   });
 
-  test('paragraph round trip', () {
+  test('paragraph round trip via v4 marker text', () {
     final body = DocumentCodec.serialize(
       RichDocument(
         version: 3,
@@ -22,37 +24,36 @@ void main() {
         ],
       ),
     );
+    expect(body, startsWith(DocumentTextCodec.header));
     final doc = DocumentCodec.parse(body);
     expect(doc.blocks.first, isA<ParagraphNode>());
     expect((doc.blocks.first as ParagraphNode).text, 'Hello');
   });
 
-  test('embed block round trip', () {
+  test('embed pointer round trip', () {
     final body = DocumentCodec.serialize(
       RichDocument(
         version: 3,
         blocks: [
           ParagraphNode(id: 'b1', text: 'Before'),
-          EmbedNode(id: 'b2', objectId: 42),
+          EmbedNode(id: 'b2', objectId: 42, objectType: 'info'),
           ParagraphNode(id: 'b3', text: 'After'),
         ],
       ),
+      objectTypes: {42: 'info'},
     );
-    final parsed = jsonDecode(body) as Map<String, dynamic>;
-    expect(parsed['version'], 3);
-    expect(parsed['blocks'], hasLength(3));
+    expect(body, contains('[INFO id="42"]'));
     final doc = DocumentCodec.parse(body);
+    expect(doc.blocks, hasLength(3));
     expect(doc.blocks[1], isA<EmbedNode>());
     expect((doc.blocks[1] as EmbedNode).objectId, 42);
   });
 
-  test('insert embed block', () {
-    final doc = DocumentCodec.insertEmbedBlock(
-      DocumentCodec.empty(),
-      7,
-      blockIndex: 0,
-    );
-    expect(doc.blocks.single, isA<EmbedNode>());
+  test('insert embed pointer via buffer', () {
+    final buf = DocumentBuffer.empty();
+    buf.insertPointer(objectId: 7, objectType: 'info', gapIndex: 0);
+    final doc = buf.toRichDocument();
+    expect(doc.blocks.whereType<EmbedNode>().single.objectId, 7);
   });
 
   test('list block types round trip', () {
@@ -87,7 +88,7 @@ void main() {
     expect((orderedDoc.blocks.first as ListNode).type, 'ordered_list');
   });
 
-  test('span color round trip', () {
+  test('spans are dropped on v4 serialize (until span encoding)', () {
     final body = DocumentCodec.serialize(
       RichDocument(
         version: 3,
@@ -102,7 +103,8 @@ void main() {
     );
     final doc = DocumentCodec.parse(body);
     final block = doc.blocks.first as ParagraphNode;
-    expect(block.spans.single.color, '#E53935');
+    expect(block.text, 'Red');
+    expect(block.spans, isEmpty);
   });
 
   test('coalesce adjacent paragraphs', () {

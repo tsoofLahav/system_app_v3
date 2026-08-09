@@ -1,6 +1,8 @@
-# Development guide (v3 in progress)
+# Development guide (product rewrite in progress)
 
 **This is the working memory for the coding agent.** When the user says “remember this”, add it here.
+
+(“v3” here means the product rewrite on `main`, not the legacy document JSON format. File bodies are **v4 marker text**.)
 
 Not for the production agent — that agent reads its instructions from the database (`agent_configs.system_prompt`), not this file.
 
@@ -88,6 +90,7 @@ _(Dated bullets — added when the user asks to remember something.)_
 - **2026-08-09** — Fluent text with embeds: [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md) — no empty neighbors after move/delete, edge landing (delete/↑ at end of part above), object remount keeps info content across Move Mode drag.
 - **2026-08-09** — **Marker-text SoT (v4):** files store `%%system_app_document v4` pointer-marker text ([`DOCUMENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/DOCUMENT_TEXT.md)); agent text expands/collapses objects. Legacy v3 JSON migrates on read (spans dropped until span encoding). Checkpoint before this work: `f5034af`.
 - **2026-08-09** — **Linear editor buffer:** runtime SoT is [`DocumentBuffer`](system_app_front_end/lib/areas/files/model/document_buffer.dart) (not `RichDocument`). Paragraph/list/table write-through + Move Mode = pointer string surgery; caret flow stores part `baseOffset`.
+- **2026-08-09** — **Post-v4 cleanup:** deleted dead undo stack / old block widgets / session+codec move APIs / `document_body.py`; promote writes v4; docs aligned to buffer+marker SoT. Rebuild defers caret until after controllers remount (`clearBindings` + post-frame `placeCaret`).
 
 ---
 

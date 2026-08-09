@@ -85,11 +85,10 @@ Format examples: [`content/production_agent/reference.md`](../../../content/prod
 
 | Module | Role |
 |--------|------|
-| [`services/document_marker_text.py`](services/document_marker_text.py) | Editor text (v4): migrate, pointers, insert/move/remove |
-| [`services/document_v3.py`](services/document_v3.py) | Legacy v3 JSON helpers; embed ops delegate to marker text |
+| [`services/document_marker_text.py`](services/document_marker_text.py) | Editor text (v4): migrate, pointers, insert/move/remove; shared emit helpers |
+| [`services/document_v3.py`](services/document_v3.py) | Legacy v3 JSON parse/migrate; insert pointer delegates to marker text |
 | [`services/document_agent_text.py`](services/document_agent_text.py) | Editor text ↔ expanded agent text |
-| [`services/document_body.py`](services/document_body.py) | Back-compat re-exports |
-| [`services/document_promote.py`](services/document_promote.py) | Promote legacy inline embeds to object rows |
+| [`services/document_promote.py`](services/document_promote.py) | Promote legacy inline embeds → object rows; writes v4 editor text |
 | [`services/file_versions.py`](services/file_versions.py) | Snapshot before agent/automation writes |
 | [`routes/files.py`](routes/files.py) | File CRUD |
 | [`routes/file_versions.py`](routes/file_versions.py) | History and `POST /files/:id/diff` |

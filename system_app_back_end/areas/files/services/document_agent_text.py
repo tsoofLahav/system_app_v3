@@ -15,14 +15,16 @@ from areas.files.services import document_marker_text as marker_text
 from areas.files.services.document_v3 import new_id, parse_document, serialize_document
 from areas.objects.services.task_list_order import tasks_for_list
 
-# Agent-text only — stored in document_json as blank lines / empty paragraphs.
-SPACER_N_MIN = 1
-SPACER_N_MAX = 12
+# Shared marker emit helpers (single home: document_marker_text).
+SPACER_N_MIN = marker_text.SPACER_N_MIN
+SPACER_N_MAX = marker_text.SPACER_N_MAX
+_SPACER_RE = marker_text._SPACER_RE
+_escape_cell = marker_text._escape_cell
+_list_block_type = marker_text._list_block_type
+_list_body = marker_text._list_body
+_spacer_marker = marker_text._spacer_marker
+_append_spacer = marker_text._append_spacer
 
-_SPACER_RE = re.compile(
-    r'\[SPACER(?:\s+n="(\d+)")?\s*\]',
-    re.IGNORECASE,
-)
 _TASK_LIST_RE = re.compile(
     r"\[TASK_LIST id=\"(\d+)\"]\s*(.*?)\s*\[/TASK_LIST]",
     re.DOTALL | re.IGNORECASE,
@@ -74,10 +76,6 @@ _SPECIAL_MARKERS = (
 )
 
 
-def _escape_cell(text: str) -> str:
-    return text.replace("\\", "\\\\").replace("\t", "\\t")
-
-
 def _unescape_cell(text: str) -> str:
     out: list[str] = []
     i = 0
@@ -121,78 +119,9 @@ def _split_table_row(line: str) -> list[str]:
     return [_unescape_cell(c) for c in cells]
 
 
-def _list_block_type(block: dict[str, Any]) -> str:
-    block_type = block.get("type")
-    if block_type in {"bullet_list", "ordered_list"}:
-        return block_type
-    if block_type == "list":
-        style = block.get("list_style") or "bullet"
-        return "ordered_list" if style in {"numbered", "ordered"} else "bullet_list"
-    return "bullet_list"
-
-
-def _list_body(block: dict[str, Any]) -> str:
-    list_type = _list_block_type(block)
-    lines: list[str] = []
-    for i, item in enumerate(block.get("items") or []):
-        if not isinstance(item, dict):
-            continue
-        indent = "  " * int(item.get("indent") or 0)
-        text = str(item.get("text") or "")
-        if list_type == "ordered_list":
-            lines.append(f"{indent}{i + 1}. {text}")
-        else:
-            lines.append(f"{indent}- {text}")
-    return "\n".join(lines)
-
-
-def _spacer_marker(n: int) -> str:
-    n = max(SPACER_N_MIN, min(int(n), SPACER_N_MAX))
-    return f'[SPACER n="{n}"]'
-
-
-def _append_spacer(lines: list[str], n: int = 1) -> None:
-    """Append a spacer, merging into a trailing spacer marker when present."""
-    n = max(SPACER_N_MIN, min(int(n), SPACER_N_MAX))
-    if lines:
-        match = _SPACER_RE.fullmatch(lines[-1].strip())
-        if match:
-            prev = int(match.group(1) or 1)
-            lines[-1] = _spacer_marker(prev + n)
-            return
-    lines.append(_spacer_marker(n))
-
-
 def _append_paragraph_agent_parts(lines: list[str], text: str) -> None:
-    """Emit paragraph text; ``\\n\\n`` gaps become ``[SPACER]`` markers.
-
-    In ``document_json``, section gaps are usually blank lines *inside* one
-    paragraph's ``text`` (often after the editor coalesces blocks). A single
-    ``\\n\\n`` between two chunks must become ``[SPACER n="1"]`` — otherwise the
-    agent text looks like a normal block break and round-trip coalesces it to
-    a soft ``\\n`` and the gap disappears.
-    """
-    if text == "":
-        _append_spacer(lines, 1)
-        return
-    parts = text.split("\n\n")
-    pending_empty = 0
-    seen_text = False
-    for part in parts:
-        if not part.strip():
-            pending_empty += 1
-            continue
-        if seen_text:
-            # One blank line per ``\n\n`` boundary, plus two per extra empty part.
-            _append_spacer(lines, 2 * pending_empty + 1)
-            pending_empty = 0
-        elif pending_empty:
-            _append_spacer(lines, pending_empty)
-            pending_empty = 0
-        lines.append(part)
-        seen_text = True
-    if pending_empty:
-        _append_spacer(lines, pending_empty)
+    """Emit paragraph text; ``\\n\\n`` gaps become ``[SPACER]`` markers."""
+    marker_text._append_paragraph_parts(lines, text)
 
 
 def _empty_paragraph() -> dict[str, Any]:

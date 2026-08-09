@@ -204,6 +204,12 @@ class DocumentTextFlow extends ChangeNotifier {
     _baseOffset.remove(id);
   }
 
+  /// Drop all field bindings (call when controllers are disposed for rebuild).
+  void clearBindings() {
+    _bindings.clear();
+    _baseOffset.clear();
+  }
+
   /// Start of [id] in the document buffer, if registered.
   int baseOffsetOf(String id) => _baseOffset[id] ?? 0;
 
@@ -633,6 +639,8 @@ class DocumentTextFlow extends ChangeNotifier {
 
     final binding = _bindings[position.segmentId];
     if (binding == null) return;
+    // Rebuild can leave a stale binding whose controller was already disposed.
+    if (binding.focusNode.context == null) return;
     final length = binding.controller.text.length;
     final offset = position.offset.clamp(0, length);
 

@@ -23,7 +23,7 @@ Read the relevant `AREA.md` before changing that area, and update it in the same
 
 - **Workspace** — top container (single default from bootstrap)
 - **Topic** — holds files; tagged with user-defined tags
-- **File** — one continuous document stored as a v3 block tree in `files.document_json`
+- **File** — one continuous document stored as v4 marker text (`%%system_app_document v4`) in `files.document_json`
 - **Object** — embedded task list, info piece, image, or graph
 - **View** — user-created task list; membership only, never a copy
 - **Automation** — a saved agent run on a schedule

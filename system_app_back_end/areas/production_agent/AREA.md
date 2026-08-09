@@ -69,7 +69,7 @@ The agent never sees or writes raw JSON. It reads and writes **agent text**; the
 Each write tool ends in the same apply path:
 
 1. Build new agent text (`move_text` insert / `patch_file` replacements / `rewrite_file` full text)
-2. Parse agent text → block tree + object payload updates
+2. Parse agent text → v4 editor text + object payload updates
 3. Reject if any embed `object_id` is unknown or was dropped
 4. Reject archived files
 5. Save a file version (direct apply only)

@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 from models import File, Topic, db
 from shared.helpers import active_query, apply_updates, get_or_404
 from areas.objects.services.delete_cascade import delete_file_cascade
-from areas.files.services.document_v3 import empty_document_json, serialize_document, validate_document
+from areas.files.services.document_v3 import empty_document_json, validate_document
 from areas.files.services.document_promote import promote_legacy_embeds
 from areas.files.services.file_versions import save_file_version
 

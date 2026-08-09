@@ -69,28 +69,6 @@ class DocumentBuffer {
 
   String get stored => DocumentTextCodec.wrap(_text);
 
-  static final _pointerRe = RegExp(
-    r'^\[(INFO|TASK_LIST|IMAGE|GRAPH|EMBED)\s+id="(\d+)"\s*\]\s*$',
-    caseSensitive: false,
-  );
-  static final _spacerRe = RegExp(
-    r'^\[SPACER(?:\s+n="(\d+)")?\s*\]\s*$',
-    caseSensitive: false,
-  );
-  static final _bulletFenceRe = RegExp(
-    r'^\[BULLET_LIST\]\s*([\s\S]*?)\s*\[/BULLET_LIST\]\s*$',
-    caseSensitive: false,
-  );
-  static final _orderedFenceRe = RegExp(
-    r'^\[ORDERED_LIST\]\s*([\s\S]*?)\s*\[/ORDERED_LIST\]\s*$',
-    caseSensitive: false,
-  );
-  static final _tableFenceRe = RegExp(
-    r'^\[TABLE\]\s*([\s\S]*?)\s*\[/TABLE\]\s*$',
-    caseSensitive: false,
-  );
-  static final _headingRe = RegExp(r'^(#{1,6})\s+(.*)$');
-
   void reindex() {
     final raw = _text;
     if (raw.isEmpty) {
@@ -118,98 +96,27 @@ class DocumentBuffer {
     for (final slice in slices) {
       final trimmed = slice.content.trim();
       if (trimmed.isEmpty) continue;
-
-      final pointer = _pointerRe.firstMatch(trimmed);
-      if (pointer != null) {
-        final oid = int.parse(pointer.group(2)!);
-        final type = _tagToType(pointer.group(1)!);
-        parts.add(
-          DocPart(
-            key: 'embed:$oid',
-            kind: DocPartKind.embed,
-            start: slice.start,
-            end: slice.end,
-            objectId: oid,
-            objectType: type,
-          ),
-        );
-        index++;
-        continue;
-      }
-
-      if (_spacerRe.hasMatch(trimmed)) {
-        parts.add(
-          DocPart(
-            key: 'p$index',
-            kind: DocPartKind.spacer,
-            start: slice.start,
-            end: slice.end,
-          ),
-        );
-        index++;
-        continue;
-      }
-
-      if (_bulletFenceRe.hasMatch(trimmed)) {
-        parts.add(
-          DocPart(
-            key: 'p$index',
-            kind: DocPartKind.bulletList,
-            start: slice.start,
-            end: slice.end,
-          ),
-        );
-        index++;
-        continue;
-      }
-
-      if (_orderedFenceRe.hasMatch(trimmed)) {
-        parts.add(
-          DocPart(
-            key: 'p$index',
-            kind: DocPartKind.orderedList,
-            start: slice.start,
-            end: slice.end,
-          ),
-        );
-        index++;
-        continue;
-      }
-
-      if (_tableFenceRe.hasMatch(trimmed)) {
-        parts.add(
-          DocPart(
-            key: 'p$index',
-            kind: DocPartKind.table,
-            start: slice.start,
-            end: slice.end,
-          ),
-        );
-        index++;
-        continue;
-      }
-
-      final heading = _headingRe.firstMatch(trimmed.split('\n').first);
-      if (heading != null && !trimmed.contains('\n')) {
-        parts.add(
-          DocPart(
-            key: 'p$index',
-            kind: DocPartKind.heading,
-            start: slice.start,
-            end: slice.end,
-            headingLevel: heading.group(1)!.length,
-          ),
-        );
-        index++;
-        continue;
-      }
-
+      final info = DocumentTextCodec.classifyTopLevel(trimmed);
+      final kind = switch (info.kind) {
+        MarkerPartKind.paragraph => DocPartKind.paragraph,
+        MarkerPartKind.heading => DocPartKind.heading,
+        MarkerPartKind.bulletList => DocPartKind.bulletList,
+        MarkerPartKind.orderedList => DocPartKind.orderedList,
+        MarkerPartKind.table => DocPartKind.table,
+        MarkerPartKind.embed => DocPartKind.embed,
+        MarkerPartKind.spacer => DocPartKind.spacer,
+      };
       parts.add(
         DocPart(
-          key: 'p$index',
-          kind: DocPartKind.paragraph,
+          key: info.kind == MarkerPartKind.embed
+              ? 'embed:${info.objectId}'
+              : 'p$index',
+          kind: kind,
           start: slice.start,
           end: slice.end,
+          objectId: info.objectId,
+          objectType: info.objectType,
+          headingLevel: info.headingLevel,
         ),
       );
       index++;
@@ -328,7 +235,7 @@ class DocumentBuffer {
   void removePointer(int objectId) {
     final chunks = _topLevelChunks();
     chunks.removeWhere((c) {
-      final m = _pointerRe.firstMatch(c.trim());
+      final m = DocumentTextCodec.pointerRe.firstMatch(c.trim());
       return m != null && int.parse(m.group(2)!) == objectId;
     });
     _text = chunks.join('\n\n');
@@ -339,7 +246,7 @@ class DocumentBuffer {
   bool movePointer(int objectId, int gapIndex) {
     final chunks = _topLevelChunks();
     final current = chunks.indexWhere((c) {
-      final m = _pointerRe.firstMatch(c.trim());
+      final m = DocumentTextCodec.pointerRe.firstMatch(c.trim());
       return m != null && int.parse(m.group(2)!) == objectId;
     });
     if (current < 0) return false;
@@ -397,7 +304,7 @@ class DocumentBuffer {
     // Build new chunk list: remove old pointer, split target, insert pointer.
     final chunks = _topLevelChunks()
         .where((c) {
-          final m = _pointerRe.firstMatch(c.trim());
+          final m = DocumentTextCodec.pointerRe.firstMatch(c.trim());
           return !(m != null && int.parse(m.group(2)!) == objectId);
         })
         .toList();
@@ -445,7 +352,7 @@ class DocumentBuffer {
         case DocPartKind.spacer:
           blocks.add(ParagraphNode(id: part.key, text: slice));
         case DocPartKind.heading:
-          final m = RegExp(r'^(#{1,6})\s+(.*)$').firstMatch(slice.trim());
+          final m = DocumentTextCodec.headingRe.firstMatch(slice.trim());
           blocks.add(
             HeadingNode(
               id: part.key,
@@ -497,12 +404,4 @@ class DocumentBuffer {
   }
 
   DocumentBuffer copy() => DocumentBuffer(_text);
-
-  static String? _tagToType(String tag) => switch (tag.toUpperCase()) {
-        'INFO' => 'info',
-        'TASK_LIST' => 'task_list',
-        'IMAGE' => 'image',
-        'GRAPH' => 'graph',
-        _ => null,
-      };
 }

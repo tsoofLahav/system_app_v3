@@ -250,6 +250,7 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
 
   void _rebuildEditingState() {
     BlockTextFocusRegistry.abandonStashedFocus();
+    _flow.clearBindings();
     _disposeControllers();
     _disposeAllFocusNodes();
     if (mounted) setState(() {});
@@ -273,7 +274,13 @@ class _BlockDocumentEditorState extends State<BlockDocumentEditor> {
       return;
     }
     _rebuildEditingState();
-    after?.call();
+    // Controllers are disposed above; flow bindings still point at them until
+    // the next build remounts fields. Place caret only after that frame.
+    if (after == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      after();
+    });
   }
 
   void _disposeControllers() {
@@ -2081,7 +2088,7 @@ class _EmbedDropPreview {
   });
 
   final int blockIndex;
-  /// Gap index for [DocumentCodec.moveEmbedToGap] when not splitting.
+  /// Gap index for [DocumentBuffer.movePointer] when not splitting.
   final int gapIndex;
   final double localY;
   final double globalY;

@@ -6,7 +6,6 @@ agent text expands them via document_agent_text.
 
 from __future__ import annotations
 
-import json
 import re
 from typing import Any
 
@@ -321,19 +320,6 @@ def validate_editor_text(
     for oid in embed_ids_in_text(strip_header(text)):
         if oid not in known_object_ids:
             raise ValueError(f"unknown object id in document: {oid}")
-
-
-def looks_like_v3_json(body: str | None) -> bool:
-    raw = (body or "").lstrip()
-    if not raw.startswith("{"):
-        return False
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return False
-    return isinstance(data, dict) and (
-        "blocks" in data or "nodes" in data or "version" in data
-    )
 
 
 # Re-export for callers that still build v3 briefly during migration tests.

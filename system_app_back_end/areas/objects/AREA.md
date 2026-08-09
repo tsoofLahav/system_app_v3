@@ -23,8 +23,8 @@ Every object has a stable id, file id, type, optional typed FKs / payload, and t
 
 | Rule | Meaning |
 |------|---------|
-| Embed is a pointer | `{ "type": "embed", "object_id": N }` — no nested content in the block tree |
-| Top-level only | Never nested inside list or table JSON |
+| Embed is a pointer | Marker line e.g. `[INFO id="N"]` / `[TASK_LIST id="N"]` — no payload in the file |
+| Top-level only | Never nested inside list or table fences in editor text |
 | Create inserts the block | `POST /files/:id/objects` creates the row **and** inserts the embed at `block_index` |
 | Delete cascades | `delete_object_embed_cascade` removes the object and strips the embed from `document_json` |
 

@@ -23,8 +23,8 @@ Spec: [`content/production_agent/system_prompt.md`](content/production_agent/sys
 | F5 | **P1** | `_sync_task_list` archives every existing task and inserts new rows. Task ids churn on each apply and `view_task_memberships` end up pointing at archived tasks. Contradicts "a task exists once". |
 | F6 | **P2** | Malformed list/task lines are skipped with `continue`. `* [ ]` or `- []` vanish and the apply reports success. |
 | F7 | **P2** | Spans are dropped on parse, so any agent edit clears inline formatting across the whole file, not just edited blocks. Intentional today, but it is real data loss — needs a merge strategy. |
-| F8 | **P2** | Duplicate `[TASK_LIST id="42"]` references are not rejected; two embed blocks are created and the last object update wins. |
-| F9 | **P2** | A paragraph block whose `text` contains `\n\n` splits into two blocks on round-trip. Storage allows it, the agent format does not. |
+| F8 | **P2** | Duplicate `[TASK_LIST id="42"]` pointer lines are not rejected; both stay in editor text and the last object update wins. |
+| F9 | **P2** | A paragraph part whose text contains `\n\n` splits into two top-level parts on reindex/round-trip. Soft breaks should stay `\n` inside one part. |
 | F10 | **P2** | Search calls `document_to_agent_text` without `objects_by_id`, so task-list and info content is invisible to search. |
 | F11 | **P3** | Unescaped `"` in an IMAGE caption or GRAPH title produces an unparseable marker (then hits F4). |
 | F12 | **P3** | `[/INFO]` or `[/TASK_LIST]` appearing inside a body truncates the match early (non-greedy `.*?`). |
@@ -33,7 +33,7 @@ Spec: [`content/production_agent/system_prompt.md`](content/production_agent/sys
 | F15 | **P3** | Empty lists/tables/paragraphs are skipped on serialize and lost on round-trip, with no error. |
 | F16 | **P3** | `_sync_task_list` / `_sync_info` return silently when `task_list_id` / `information_id` is null, after the document was already replaced. |
 | F17 | **P3** | `_dispatch_tool` has no try/except; `int(args["file_id"])` on a missing key becomes a generic 500. |
-| F18 | **P3** | Block ids are regenerated on every apply. Fine only while nothing keys off them. |
+| F18 | **P3** | Part/view ids are regenerated when folding agent apply through parse (not persisted in v4 text). Fine only while nothing keys off them. |
 
 **Test gaps:** no coverage for ordered-list round-trip, nested lists, newlines in cells, span survival, legacy embeds, duplicate embeds, malformed task lines, quotes in captions, `direct_apply` rollback, or task-id preservation.
 
@@ -83,7 +83,7 @@ Code: [`areas/objects/`](system_app_back_end/areas/objects/) · Frontend data/vi
 | O3 | **P2** | Nested caret inside object fields is not yet linked to `DocumentTextFlow` as segments — Exit-below bridges work; full in-flow segments remain. |
 | O4 | **P2** | Convert selected text → Info / list → Task list helpers exist in `AppState` but have no UI entry. |
 | O5 | **P3** | Image resize handles are not built; width lives in payload only. |
-| O6 | **P3** | Agent text for graphs still omits the two-row labels/values table (marker is id/title only). |
+| ~~O6~~ | — | ~~Agent graph markers omit labels/values.~~ **Done** — `_graph_section` expands the full table. |
 
 ---
 
@@ -118,8 +118,8 @@ The spec says every visual constant lives in `areas/ui/`. These are the places t
 
 | # | Sev | Issue |
 |---|-----|-------|
-| C1 | **P3** | ~30 Dart files under `lib/` are unreachable from `main.dart` — leftovers from v1 (`part.dart`, `brought_file_snapshot.dart`, old `list_block_widget.dart` / `table_block_widget.dart`, `automation_rule.dart`, and more). Confirmed equally dead before the reorganization. `phone_topic_view.dart` and `pane_reorder_logic.dart` were removed with the layout work. |
-| C2 | **P3** | `areas/files/services/document_body.py` is a back-compat re-export with no importers. |
+| C1 | **P3** | ~30 Dart files under `lib/` are unreachable from `main.dart` — leftovers from v1 (`part.dart`, `brought_file_snapshot.dart`, `automation_rule.dart`, and more). Old `list_block_widget` / `table_block_widget` / `document_undo_stack` / `document_body.py` removed in the post-v4 cleanup. |
+| ~~C2~~ | — | ~~`document_body.py` dead re-export.~~ **Done** — deleted. |
 | C3 | **P3** | 35 analyzer warnings, all `dead_null_aware_expression` / `dead_code` from `??` applied to non-nullable `AppStrings` getters. |
 
 ---

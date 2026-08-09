@@ -10,9 +10,10 @@ Sibling policy docs: caret/RTL → [`../rich_text/rtl/RTL.md`](../rich_text/rtl/
 
 | Layer | Owns |
 |-------|------|
-| [`DocumentSession`](document_session.dart) + [`DocumentCodec.coalesceAdjacentParagraphs`](../model/document_codec.dart) | Structural edits: move/delete/split embeds, then drop empty neighbors |
-| [`DocumentTextFlow`](document_text_flow.dart) | Segment order; ↑/↓ lands on the **edge line** of the neighboring part |
-| Embed widgets + [`AppState`](../../../../core/app_state.dart) | Object **payload** (info body, tasks, …). File tree only stores placement (`object_id`) |
+| [`DocumentBuffer`](../model/document_buffer.dart) | Marker-text SoT; Move Mode = pointer cut/paste; reindex drops blank neighbors next to embeds |
+| [`DocumentSession`](document_session.dart) + coalesce | Structural exits/prune/delete (folded into the buffer on commit) |
+| [`DocumentTextFlow`](document_text_flow.dart) | Segment order + part `baseOffset`; ↑/↓ lands on the **edge line** of the neighboring part |
+| Embed widgets + [`AppState`](../../../../core/app_state.dart) | Object **payload** (info body, tasks, …). Marker text stores pointer lines only |
 
 ## Parts are lines
 

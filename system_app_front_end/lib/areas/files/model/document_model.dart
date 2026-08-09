@@ -326,6 +326,7 @@ class EmbedNode extends DocumentNode {
 class RichDocument {
   const RichDocument({required this.version, required this.blocks});
 
+  /// View-model constant only — persisted bodies use v4 marker text, not this.
   static const int documentVersion = 3;
 
   final int version;

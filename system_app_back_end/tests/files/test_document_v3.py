@@ -1,13 +1,12 @@
-"""Tests for JSON document codec (v3 block tree)."""
+"""Tests for legacy v3 JSON parse/migrate helpers."""
 
 import json
 
+from areas.files.services.document_marker_text import is_editor_text
 from areas.files.services.document_v3 import (
     empty_document_json,
     insert_embed_block,
-    insert_region,
     migrate_v1_nodes_to_v3,
-    move_embed_block,
     parse_document,
     remove_object_embeds,
     serialize_document,
@@ -97,31 +96,11 @@ def test_migrate_v1_nodes():
     assert doc["blocks"][1]["object_id"] == 9
 
 
-def test_insert_list_block():
+def test_insert_embed_block_writes_editor_text():
     body = empty_document_json()
-    updated = insert_region(
-        body,
-        {"id": "r1", "kind": "list", "list_style": "bullet"},
-        offset=0,
-    )
-    doc = parse_document(updated)
-    assert doc["blocks"][0]["type"] == "bullet_list"
-
-
-def test_move_embed_block():
-    body = serialize_document(
-        {
-            "version": 3,
-            "blocks": [
-                {"id": "b1", "type": "paragraph", "text": "a", "spans": []},
-                {"id": "b2", "type": "embed", "object_id": 1},
-                {"id": "b3", "type": "paragraph", "text": "b", "spans": []},
-            ],
-        }
-    )
-    updated = move_embed_block(body, "b2", 2)
-    doc = parse_document(updated)
-    assert doc["blocks"][2]["id"] == "b2"
+    updated = insert_embed_block(body, 9, block_index=0, object_type="info")
+    assert is_editor_text(updated)
+    assert '[INFO id="9"]' in updated
 
 
 def test_list_block_normalization():

@@ -78,5 +78,27 @@ void main() {
       expect(buf.localToGlobal(key, 1), 1);
       expect(buf.globalToLocal(key, 1), 1);
     });
+
+    test('movePointer between paragraphs then keeps neighbors', () {
+      final buf = DocumentBuffer('one\n\ntwo\n\n[INFO id="3"]');
+      expect(buf.movePointer(3, 1), isTrue);
+      expect(buf.parts, hasLength(3));
+      expect(buf.parts[0].slice(buf.text), 'one');
+      expect(buf.parts[1].objectId, 3);
+      expect(buf.parts[2].slice(buf.text), 'two');
+    });
+
+    test('movePointer no-ops when already in gap', () {
+      final buf = DocumentBuffer('[INFO id="3"]\n\nx');
+      expect(buf.movePointer(3, 0), isFalse);
+      expect(buf.movePointer(3, 1), isFalse);
+    });
+
+    test('insertPointer at gap', () {
+      final buf = DocumentBuffer('hello');
+      buf.insertPointer(objectId: 7, objectType: 'info', gapIndex: 0);
+      expect(buf.parts.first.objectId, 7);
+      expect(buf.parts.last.slice(buf.text), 'hello');
+    });
   });
 }

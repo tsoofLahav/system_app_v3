@@ -1,4 +1,8 @@
-"""JSON document codec — v3 ordered block tree with embed references."""
+"""Legacy v3 JSON parse/migrate helpers.
+
+Persistence is v4 marker text ([document_marker_text]). This module still
+parses old JSON bodies, normalizes them, and feeds migration.
+"""
 
 from __future__ import annotations
 
@@ -617,24 +621,6 @@ def insert_embed_block(
     )
 
 
-def move_embed_block(body: str, block_id: str, new_index: int) -> str:
-    doc = parse_document(body)
-    blocks = doc["blocks"]
-    current = next((i for i, b in enumerate(blocks) if b.get("id") == block_id), None)
-    if current is None:
-        return serialize_document(doc)
-    block = blocks.pop(current)
-    index = max(0, min(int(new_index), len(blocks)))
-    blocks.insert(index, block)
-    return serialize_document(doc)
-
-
-def remove_embed_block(body: str, block_id: str) -> str:
-    doc = parse_document(body)
-    doc["blocks"] = [b for b in doc["blocks"] if b.get("id") != block_id]
-    return serialize_document(doc)
-
-
 def remove_object_embeds(body: str, object_id: int) -> str:
     from areas.files.services.document_marker_text import (
         ensure_editor_text,
@@ -711,13 +697,6 @@ def validate_document(body: str | None, known_object_ids: set[int] | None = None
             raise ValueError(f"unknown object_id in document: {object_id}")
 
 
-def find_embed_block_index(doc: dict[str, Any], object_id: int) -> int | None:
-    for i, block in enumerate(doc["blocks"]):
-        if block.get("type") == "embed" and int(block.get("object_id") or -1) == int(object_id):
-            return i
-    return None
-
-
 def pending_legacy_embeds(doc: dict[str, Any]) -> list[dict[str, Any]]:
     pending: list[dict[str, Any]] = []
     for block in doc["blocks"]:
@@ -742,66 +721,3 @@ def apply_object_to_legacy_block(
     return _normalize_v3({"version": DOCUMENT_VERSION_V3, "blocks": blocks})
 
 
-# Legacy aliases
-def insert_embed(body: str, embed: dict[str, Any], *, offset: int | None = None) -> str:
-    object_id = embed.get("object_id")
-    if object_id is None:
-        raise ValueError("embed requires object_id in v3")
-    return insert_embed_block(body, int(object_id), block_index=offset)
-
-
-def move_embed(body: str, embed_id: str, new_offset: int) -> str:
-    return move_embed_block(body, embed_id, new_offset)
-
-
-def remove_object_nodes(body: str, object_id: int) -> str:
-    return remove_object_embeds(body, object_id)
-
-
-def object_node_for(object_id: int, object_type: str, *, node_id: str | None = None) -> dict:
-    return {"id": node_id or new_id("b"), "type": "embed", "object_id": object_id}
-
-
-def insert_region(body: str, region: dict[str, Any], *, offset: int | None = None) -> str:
-    doc = parse_document(body)
-    blocks = doc["blocks"]
-    index = len(blocks) if offset is None else max(0, min(int(offset), len(blocks)))
-    kind = region.get("kind")
-    if kind == "list":
-        list_style = region.get("list_style") or "bullet"
-        if list_style == "ordered":
-            list_style = "numbered"
-        block_type = "ordered_list" if list_style == "numbered" else "bullet_list"
-        block = {
-            "id": str(region.get("id") or new_id("b")),
-            "type": block_type,
-            "items": [{"id": new_id("li"), "text": "", "indent": 0, "spans": []}],
-        }
-    elif kind == "table":
-        block = {
-            "id": str(region.get("id") or new_id("b")),
-            "type": "table",
-            "rows": region.get("rows") or [[_empty_cell(), _empty_cell()]],
-        }
-    else:
-        raise ValueError("invalid region kind")
-    blocks.insert(index, block)
-    return serialize_document(doc)
-
-
-def insert_node(body: str, node: dict[str, Any], *, index: int | None = None) -> str:
-    doc = parse_document(body)
-    migrated = migrate_v1_nodes_to_v3([node])
-    new_blocks = migrated["blocks"]
-    if not new_blocks:
-        return serialize_document(doc)
-    idx = len(doc["blocks"]) if index is None else max(0, min(int(index), len(doc["blocks"])))
-    for offset, block in enumerate(new_blocks):
-        doc["blocks"].insert(idx + offset, block)
-    return serialize_document(doc)
-
-
-def document_plain_text(body: str | None) -> str:
-    from areas.files.services.document_agent_text import document_to_agent_text
-
-    return document_to_agent_text(body)

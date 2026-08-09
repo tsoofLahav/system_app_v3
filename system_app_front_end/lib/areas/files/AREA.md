@@ -42,7 +42,7 @@ The file pane’s `SingleChildScrollView` is the only scroll surface. `Formatted
 | Table | `table` | `RichTableEditor` |
 | Embed | `embed` | [`editor/embeds/`](editor/embeds/) — presentation only; type data in [objects](../objects/AREA.md) |
 
-Position is array order in `blocks[]`.
+Position is top-level parts in the marker buffer; the widget view exposes that as `blocks[]` order.
 
 ## Keeping the text fluent
 
@@ -118,7 +118,7 @@ Each paragraph, each bullet, and each table cell is a separate `TextField` — b
 | `DocumentTextPosition` | Caret as `(segmentId, offset)` rather than an offset in one field |
 | `DocumentTextSelection` | Anchor and focus, each free to sit in a different segment |
 
-Segment ids come from the document tree, so order is always derived from `blocks[]`, never from widget build order:
+Segment ids come from buffer parts (view = `blocks[]`), never from widget build order:
 
 | Part | Id |
 |------|-----|
@@ -244,31 +244,31 @@ Enter on an empty trailing unit (final task / info body line / graph column) exi
 
 Type logic beyond presentation (views, links, cascades) → [objects](../objects/AREA.md).
 
-## Text version vs full version
+## Editor text vs agent text
 
-| Version | What it is | Who uses it |
-|---------|------------|-------------|
-| **Full** | Block tree with spans and embed ids | The editor, saved to `document_json` |
-| **Text** | Flattened plain text with fenced regions | The AI agent, search, diffs |
+| Layer | What it is | Who uses it |
+|-------|------------|-------------|
+| **Editor text (SoT)** | v4 marker body + header; pointer-only embeds | DB, editor `DocumentBuffer`, move/cut/paste |
+| **Agent text** | Same structure with objects expanded to fences | Production agent tools, diffs |
 
-The app only ever handles the full version. The text version is produced by the backend on demand and shown to the user only inside AI diff review.
+The app edits and persists **editor text**. Agent text is produced on demand and shown in AI diff review only. Spec: [`editor/DOCUMENT_TEXT.md`](editor/DOCUMENT_TEXT.md).
 
 ## Saving
 
-Edits mutate the in-memory tree, then serialize through `DocumentCodec.serialize` and `PATCH document_json`. Saves are debounced and silent — typing never triggers a full rebuild, or the cursor would jump.
+Edits mutate [`DocumentBuffer`](model/document_buffer.dart); save is `PATCH document_json` with `_buffer.stored` (`%%system_app_document v4\n` + body). Saves are debounced and silent — typing never triggers a full rebuild, or the cursor would jump.
 
-Undo/redo is tracked by `document_edit_history.dart` at document level.
+Undo/redo stores buffer text snapshots via `document_edit_history.dart`.
 
 ## Rules
 
 - Enter never splits a paragraph into two blocks.
-- Never store or display derived plain text in the app.
+- Never store agent-expanded text in `document_json`; SoT is marker/pointer editor text.
 - Never rebuild the whole editor on a keystroke; save silently and keep focus.
 - An empty list item, table row, or trailing object unit (empty final task / info line / graph column) plus Enter exits that structure **without destroying it**.
 - An empty object (empty info, last empty task, last empty graph column) plus Backspace **removes the object** and coalesces surrounding text — no leftover blank paragraph.
 - All formatting goes through spans, never through separate styled blocks.
 - Any new editable text must register a segment with the flow, or the caret will not reach it.
-- Segment order comes from the document tree, never from widget build order.
+- Segment order comes from buffer parts / the view tree, never from widget build order.
 - There is one marking. Every action resolves its target through `DocumentMark`, never from a single field's selection.
 - With nothing marked, an action applies to the caret's line — never to nothing, and never to the whole part.
 - A bullet, a row, and an embed each count as one line of text; settle caret and marking questions by asking what a plain line would do ([`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md)).

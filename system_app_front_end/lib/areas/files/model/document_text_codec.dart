@@ -4,10 +4,39 @@ library;
 import './document_model.dart';
 import './document_codec.dart';
 
+/// Classification of one top-level `\n\n`-separated slice (shared by parse + buffer).
+enum MarkerPartKind {
+  paragraph,
+  heading,
+  bulletList,
+  orderedList,
+  table,
+  embed,
+  spacer,
+}
+
+class MarkerPartInfo {
+  const MarkerPartInfo(
+    this.kind, {
+    this.objectId,
+    this.objectType,
+    this.headingLevel,
+    this.listBody,
+    this.tableBody,
+  });
+
+  final MarkerPartKind kind;
+  final int? objectId;
+  final String? objectType;
+  final int? headingLevel;
+  final String? listBody;
+  final String? tableBody;
+}
+
 class DocumentTextCodec {
   static const header = '%%system_app_document v4';
 
-  static final _pointerRe = RegExp(
+  static final pointerRe = RegExp(
     r'^\[(INFO|TASK_LIST|IMAGE|GRAPH|EMBED)\s+id="(\d+)"\s*\]\s*$',
     caseSensitive: false,
   );
@@ -15,23 +44,66 @@ class DocumentTextCodec {
     r'\[(INFO|TASK_LIST|IMAGE|GRAPH|EMBED)\s+id="(\d+)"\s*\]',
     caseSensitive: false,
   );
-  static final _spacerRe = RegExp(
+  static final spacerRe = RegExp(
     r'^\[SPACER(?:\s+n="(\d+)")?\s*\]\s*$',
     caseSensitive: false,
   );
   static final _bulletFenceRe = RegExp(
-    r'\[BULLET_LIST\]\s*([\s\S]*?)\s*\[/BULLET_LIST\]',
+    r'^\[BULLET_LIST\]\s*([\s\S]*?)\s*\[/BULLET_LIST\]\s*$',
     caseSensitive: false,
   );
   static final _orderedFenceRe = RegExp(
-    r'\[ORDERED_LIST\]\s*([\s\S]*?)\s*\[/ORDERED_LIST\]',
+    r'^\[ORDERED_LIST\]\s*([\s\S]*?)\s*\[/ORDERED_LIST\]\s*$',
     caseSensitive: false,
   );
   static final _tableFenceRe = RegExp(
-    r'\[TABLE\]\s*([\s\S]*?)\s*\[/TABLE\]',
+    r'^\[TABLE\]\s*([\s\S]*?)\s*\[/TABLE\]\s*$',
     caseSensitive: false,
   );
-  static final _headingRe = RegExp(r'^(#{1,6})\s+(.*)$');
+  static final headingRe = RegExp(r'^(#{1,6})\s+(.*)$');
+
+  /// Classify a trimmed top-level part for indexing / parse.
+  static MarkerPartInfo classifyTopLevel(String trimmed) {
+    final pointer = pointerRe.firstMatch(trimmed);
+    if (pointer != null) {
+      return MarkerPartInfo(
+        MarkerPartKind.embed,
+        objectId: int.parse(pointer.group(2)!),
+        objectType: objectTypeForTag(pointer.group(1)!),
+      );
+    }
+    if (spacerRe.hasMatch(trimmed)) {
+      return const MarkerPartInfo(MarkerPartKind.spacer);
+    }
+    final bullet = _bulletFenceRe.firstMatch(trimmed);
+    if (bullet != null) {
+      return MarkerPartInfo(MarkerPartKind.bulletList, listBody: bullet.group(1));
+    }
+    final ordered = _orderedFenceRe.firstMatch(trimmed);
+    if (ordered != null) {
+      return MarkerPartInfo(MarkerPartKind.orderedList, listBody: ordered.group(1));
+    }
+    final table = _tableFenceRe.firstMatch(trimmed);
+    if (table != null) {
+      return MarkerPartInfo(MarkerPartKind.table, tableBody: table.group(1));
+    }
+    final heading = headingRe.firstMatch(trimmed.split('\n').first);
+    if (heading != null && !trimmed.contains('\n')) {
+      return MarkerPartInfo(
+        MarkerPartKind.heading,
+        headingLevel: heading.group(1)!.length,
+      );
+    }
+    return const MarkerPartInfo(MarkerPartKind.paragraph);
+  }
+
+  static String? objectTypeForTag(String tag) => switch (tag.toUpperCase()) {
+        'INFO' => 'info',
+        'TASK_LIST' => 'task_list',
+        'IMAGE' => 'image',
+        'GRAPH' => 'graph',
+        _ => null,
+      };
 
   static bool isEditorText(String? raw) {
     final body = raw?.trimLeft() ?? '';
@@ -98,7 +170,7 @@ class DocumentTextCodec {
       }
     }
     if (lines.isEmpty) return empty();
-    if (lines.every((l) => _spacerRe.hasMatch(l.trim()))) return empty();
+    if (lines.every((l) => spacerRe.hasMatch(l.trim()))) return empty();
     return wrap(lines.join('\n\n'));
   }
 
@@ -116,50 +188,36 @@ class DocumentTextCodec {
     for (final part in parts) {
       final trimmed = part.trim();
       if (trimmed.isEmpty) continue;
-      final pointer = _pointerRe.firstMatch(trimmed);
-      if (pointer != null) {
-        blocks.add(
-          EmbedNode(
-            id: DocumentCodec.newId('b'),
-            objectId: int.parse(pointer.group(2)!),
-            objectType: _tagToType(pointer.group(1)!),
-          ),
-        );
-        continue;
+      final info = classifyTopLevel(trimmed);
+      switch (info.kind) {
+        case MarkerPartKind.embed:
+          blocks.add(
+            EmbedNode(
+              id: DocumentCodec.newId('b'),
+              objectId: info.objectId ?? 0,
+              objectType: info.objectType,
+            ),
+          );
+        case MarkerPartKind.spacer:
+          blocks.add(ParagraphNode(id: DocumentCodec.newId('b'), text: ''));
+        case MarkerPartKind.bulletList:
+          blocks.add(_parseList(info.listBody ?? '', ordered: false));
+        case MarkerPartKind.orderedList:
+          blocks.add(_parseList(info.listBody ?? '', ordered: true));
+        case MarkerPartKind.table:
+          blocks.add(_parseTable(info.tableBody ?? ''));
+        case MarkerPartKind.heading:
+          final heading = headingRe.firstMatch(trimmed);
+          blocks.add(
+            HeadingNode(
+              id: DocumentCodec.newId('b'),
+              level: info.headingLevel ?? heading?.group(1)?.length ?? 1,
+              text: heading?.group(2) ?? '',
+            ),
+          );
+        case MarkerPartKind.paragraph:
+          blocks.add(ParagraphNode(id: DocumentCodec.newId('b'), text: part));
       }
-      if (_spacerRe.hasMatch(trimmed)) {
-        blocks.add(ParagraphNode(id: DocumentCodec.newId('b'), text: ''));
-        continue;
-      }
-      final bullet = _bulletFenceRe.firstMatch(trimmed);
-      if (bullet != null) {
-        blocks.add(_parseList(bullet.group(1)!, ordered: false));
-        continue;
-      }
-      final ordered = _orderedFenceRe.firstMatch(trimmed);
-      if (ordered != null) {
-        blocks.add(_parseList(ordered.group(1)!, ordered: true));
-        continue;
-      }
-      final table = _tableFenceRe.firstMatch(trimmed);
-      if (table != null) {
-        blocks.add(_parseTable(table.group(1)!));
-        continue;
-      }
-      final heading = _headingRe.firstMatch(trimmed.split('\n').first);
-      if (heading != null && !trimmed.contains('\n')) {
-        blocks.add(
-          HeadingNode(
-            id: DocumentCodec.newId('b'),
-            level: heading.group(1)!.length,
-            text: heading.group(2) ?? '',
-          ),
-        );
-        continue;
-      }
-      blocks.add(
-        ParagraphNode(id: DocumentCodec.newId('b'), text: part),
-      );
     }
     if (blocks.isEmpty) {
       blocks.add(ParagraphNode(id: DocumentCodec.newId('b'), text: ''));
@@ -167,7 +225,7 @@ class DocumentTextCodec {
     return RichDocument(version: RichDocument.documentVersion, blocks: blocks);
   }
 
-  /// Cut/paste an embed pointer among top-level `\n\n` parts.
+  /// String-level pointer move (tests / migrate). Editor uses [DocumentBuffer].
   static String movePointerInText(
     String wrapped, {
     required int objectId,
@@ -178,10 +236,12 @@ class DocumentTextCodec {
         ? <String>[]
         : body.split(RegExp(r'\n\n+')).where((p) => p.isNotEmpty).toList();
     final current = parts.indexWhere((p) {
-      final m = _pointerRe.firstMatch(p.trim());
+      final m = pointerRe.firstMatch(p.trim());
       return m != null && int.parse(m.group(2)!) == objectId;
     });
     if (current < 0) return wrap(body);
+    // Already sitting in this gap.
+    if (gapIndex == current || gapIndex == current + 1) return wrap(body);
     final pointer = parts.removeAt(current).trim();
     var gap = gapIndex;
     if (current < gap) gap -= 1;
@@ -190,7 +250,7 @@ class DocumentTextCodec {
     return wrap(parts.join('\n\n'));
   }
 
-  /// Split a top-level text part at [cut] and insert [pointer] between halves.
+  /// String-level split insert (tests / migrate). Editor uses [DocumentBuffer].
   static String splitPartAndInsertPointer(
     String wrapped, {
     required int partIndex,
@@ -202,9 +262,8 @@ class DocumentTextCodec {
     final parts = body.isEmpty
         ? <String>[]
         : body.split(RegExp(r'\n\n+')).where((p) => p.isNotEmpty).toList();
-    // Drop existing pointer for this object.
     parts.removeWhere((p) {
-      final m = _pointerRe.firstMatch(p.trim());
+      final m = pointerRe.firstMatch(p.trim());
       return m != null && int.parse(m.group(2)!) == removeObjectId;
     });
     if (partIndex < 0 || partIndex >= parts.length) {
@@ -241,14 +300,6 @@ class DocumentTextCodec {
   static Set<int> embedIds(String wrapped) => {
         for (final m in _pointerAnyRe.allMatches(stripHeader(wrapped)))
           int.parse(m.group(2)!),
-      };
-
-  static String? _tagToType(String tag) => switch (tag.toUpperCase()) {
-        'INFO' => 'info',
-        'TASK_LIST' => 'task_list',
-        'IMAGE' => 'image',
-        'GRAPH' => 'graph',
-        _ => null,
       };
 
   static void _appendParagraph(List<String> lines, String text) {
