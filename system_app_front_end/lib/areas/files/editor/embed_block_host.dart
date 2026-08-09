@@ -10,8 +10,8 @@ import './embed_move_mode_scope.dart';
 
 /// Hosts an embedded object in the document.
 ///
-/// When [registerAsUnit] is true (info / image), the whole object is one
-/// atomic segment. Task lists and graphs register their own parts instead and
+/// When [registerAsUnit] is true (e.g. image), the whole object is one atomic
+/// segment. Info, task lists, and graphs register their own parts instead and
 /// pass false — they still get Move Mode chrome, not a permanent frame.
 ///
 /// Double-click enters Move Mode: editing is blocked, the whole object is
@@ -47,7 +47,12 @@ class _EmbedBlockHostState extends State<EmbedBlockHost> {
   DocumentTextFlow? _flow;
   String? _registeredSegmentId;
   var _moveMode = false;
+  /// Double-click armed on pointer-down; applied on pointer-up so the Move Mode
+  /// tree is never swapped under an in-flight hit-test.
+  var _pendingMoveMode = false;
+  var _dragging = false;
   DateTime? _lastPointerDown;
+  Size? _moveModeSize;
 
   String get _segmentId => embedSegmentId(widget.blockId);
 
@@ -110,21 +115,35 @@ class _EmbedBlockHostState extends State<EmbedBlockHost> {
   }
 
   void _onFlowChanged() {
-    if (mounted) setState(() {});
+    // Rebuilds mid-gesture while swapping into Move Mode leave RenderBoxes
+    // without size in the hit-test path.
+    if (!mounted || _moveMode || _pendingMoveMode) return;
+    setState(() {});
   }
 
   void _onFocusChanged() {
     if (!mounted) return;
     if (_focusNode.hasFocus) {
       widget.onInteract?.call();
-      _controller.selection = TextSelection(
-        baseOffset: 0,
-        extentOffset: _controller.text.length,
-      );
-      _flow?.collapseTo(DocumentTextPosition(_segmentId, 0));
-      _flow?.extendTo(
-        DocumentTextPosition(_segmentId, _controller.text.length),
-      );
+      // Honor edge landing from DocumentTextFlow (↑ into object → end).
+      // Only full-select when the flow has not already placed a caret here.
+      final flowSel = _flow?.selection;
+      final flowAlreadyHere = flowSel != null &&
+          flowSel.isWithinOneSegment &&
+          flowSel.focus.segmentId == _segmentId;
+      if (!flowAlreadyHere) {
+        _controller.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _controller.text.length,
+        );
+        _flow?.collapseTo(DocumentTextPosition(_segmentId, 0));
+        _flow?.extendTo(
+          DocumentTextPosition(_segmentId, _controller.text.length),
+        );
+      } else {
+        final offset = flowSel.focus.offset.clamp(0, _controller.text.length);
+        _controller.selection = TextSelection.collapsed(offset: offset);
+      }
     } else {
       final flow = _flow;
       final sel = flow?.selection;
@@ -135,16 +154,33 @@ class _EmbedBlockHostState extends State<EmbedBlockHost> {
         flow.clearSelection();
       }
     }
-    setState(() {});
+    if (!_moveMode && !_pendingMoveMode) setState(() {});
+  }
+
+  Size? _measureHostSize() {
+    final box = context.findRenderObject();
+    if (box is RenderBox && box.hasSize) return box.size;
+    return null;
   }
 
   void _setMoveMode(bool value) {
     if (_moveMode == value) return;
-    setState(() => _moveMode = value);
-    widget.onMoveModeChanged?.call(value);
     if (value) {
+      _moveModeSize = _measureHostSize() ?? _moveModeSize;
       FocusManager.instance.primaryFocus?.unfocus();
+      // Pointer-up already ended the double-click gesture; wait one frame so
+      // the framed shell is laid out before the next mouse hit-test.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _moveMode) return;
+        setState(() => _moveMode = true);
+        widget.onMoveModeChanged?.call(true);
+      });
+      return;
     }
+    _pendingMoveMode = false;
+    _moveModeSize = null;
+    setState(() => _moveMode = false);
+    widget.onMoveModeChanged?.call(false);
   }
 
   void _onPointerDown(PointerDownEvent event) {
@@ -157,8 +193,20 @@ class _EmbedBlockHostState extends State<EmbedBlockHost> {
     if (last != null &&
         now.difference(last) < const Duration(milliseconds: 350)) {
       _lastPointerDown = null;
-      _setMoveMode(true);
+      // Arm only — swap the tree on pointer-up (see [_onPointerUp]).
+      _pendingMoveMode = true;
+      _moveModeSize = _measureHostSize();
     }
+  }
+
+  void _onPointerUp(PointerUpEvent event) {
+    if (!_pendingMoveMode || _moveMode) return;
+    _pendingMoveMode = false;
+    _setMoveMode(true);
+  }
+
+  void _onPointerCancel(PointerCancelEvent event) {
+    _pendingMoveMode = false;
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
@@ -194,6 +242,34 @@ class _EmbedBlockHostState extends State<EmbedBlockHost> {
     return KeyEventResult.handled;
   }
 
+  /// Move Mode shell: min size for hit-testing, natural height for content.
+  ///
+  /// Never impose a *max* height from the pre-measure — the glass padding sits
+  /// outside the child, so a tight [SizedBox] was squeezing InfoEmbed/etc.
+  /// into ~20px and overflowing.
+  Widget _moveModeShell({required Widget child, double opacity = 1}) {
+    final size = _moveModeSize;
+    Widget framed = Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minWidth: size?.width ?? 48,
+          minHeight: size?.height ?? 48,
+        ),
+        child: DragModeFrame.chip(
+          child: MouseRegion(
+            cursor: SystemMouseCursors.grab,
+            child: child,
+          ),
+        ),
+      ),
+    );
+    if (opacity < 1) {
+      framed = Opacity(opacity: opacity, child: framed);
+    }
+    return framed;
+  }
+
   @override
   Widget build(BuildContext context) {
     final flow = widget.registerAsUnit ? _flow : null;
@@ -201,45 +277,64 @@ class _EmbedBlockHostState extends State<EmbedBlockHost> {
         flow.spansSegments &&
         flow.selectionWithin(_segmentId) != null;
 
-    final scopedChild = EmbedMoveModeScope(
-      active: _moveMode,
+    // Object editors must stay in ONE slot for the whole Move Mode session.
+    // Putting them in Draggable.child / childWhenDragging disposes State on
+    // drag start (Flutter swaps those slots) and wipes info content.
+    final editingChild = EmbedMoveModeScope(
+      active: false,
       child: widget.child,
-    );
-
-    final content = IgnorePointer(
-      ignoring: _moveMode,
-      child: scopedChild,
     );
 
     Widget body;
     if (_moveMode) {
-      // Same rounded-square glass as task Reorder — children compact themselves
-      // via [EmbedMoveModeScope] so the frame hugs instead of a full-width bar.
-      final framed = Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: DragModeFrame.chip(
-          child: MouseRegion(
-            cursor: SystemMouseCursors.grab,
-            child: content,
-          ),
-        ),
-      );
-      body = TapRegion(
-        onTapOutside: (_) => _setMoveMode(false),
-        child: Draggable<String>(
-          data: widget.blockId,
-          onDragEnd: (_) => _setMoveMode(false),
-          feedback: Material(
-            color: Colors.transparent,
-            child: DragModeFrame.chip(
-              child: Opacity(
-                opacity: 0.95,
-                child: EmbedMoveModeScope(active: true, child: widget.child),
+      final ghostWidth = (_moveModeSize?.width ?? 168).clamp(96.0, 280.0);
+      final dragChrome = Draggable<String>(
+        data: widget.blockId,
+        maxSimultaneousDrags: 1,
+        onDragStarted: () {
+          if (!mounted) return;
+          setState(() => _dragging = true);
+        },
+        onDragEnd: (_) {
+          if (!mounted) return;
+          _dragging = false;
+          _setMoveMode(false);
+        },
+        onDraggableCanceled: (_, _) {
+          if (!mounted) return;
+          _dragging = false;
+          _setMoveMode(false);
+        },
+        feedback: Material(
+          color: Colors.transparent,
+          child: DragModeFrame.chip(
+            child: SizedBox(
+              width: ghostWidth,
+              height: 40,
+              child: Icon(
+                Icons.drag_handle_rounded,
+                color: AppColors.text.withValues(alpha: 0.45),
               ),
             ),
           ),
-          childWhenDragging: Opacity(opacity: 0.28, child: framed),
-          child: framed,
+        ),
+        // Hit target only — never host the live object editors here.
+        childWhenDragging: const SizedBox.expand(),
+        child: const SizedBox.expand(),
+      );
+      body = TapRegion(
+        onTapOutside: (_) {
+          if (_dragging) return;
+          _setMoveMode(false);
+        },
+        child: _moveModeShell(
+          opacity: _dragging ? 0.28 : 1,
+          child: Stack(
+            children: [
+              IgnorePointer(child: editingChild),
+              Positioned.fill(child: dragChrome),
+            ],
+          ),
         ),
       );
     } else {
@@ -251,13 +346,15 @@ class _EmbedBlockHostState extends State<EmbedBlockHost> {
               ? AppColors.primary.withValues(alpha: 0.08)
               : null,
         ),
-        child: content,
+        child: editingChild,
       );
     }
 
     final gestured = Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: _onPointerDown,
+      onPointerUp: _onPointerUp,
+      onPointerCancel: _onPointerCancel,
       child: body,
     );
 

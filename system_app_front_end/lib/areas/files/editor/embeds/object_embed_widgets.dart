@@ -30,6 +30,7 @@ class InfoEmbed extends StatefulWidget {
     required this.onRefresh,
     this.onFocus,
     this.onExitBelow,
+    this.onDeleteObject,
   });
 
   final ObjectEmbed embed;
@@ -39,11 +40,14 @@ class InfoEmbed extends StatefulWidget {
   final VoidCallback? onFocus;
   final VoidCallback? onExitBelow;
 
+  /// Backspace on a fully empty info object — remove it from the file.
+  final VoidCallback? onDeleteObject;
+
   @override
-  State<InfoEmbed> createState() => _InfoEmbedState();
+  InfoEmbedState createState() => InfoEmbedState();
 }
 
-class _InfoEmbedState extends State<InfoEmbed> {
+class InfoEmbedState extends State<InfoEmbed> {
   late SpanTextEditingController _titleController;
   late SpanTextEditingController _bodyController;
   late final FocusNode _titleFocus;
@@ -69,14 +73,27 @@ class _InfoEmbedState extends State<InfoEmbed> {
     );
   }
 
+  /// Push live controllers into AppState cache before a structural remount.
+  Future<void> flushToCache() async {
+    pushControllersToCache();
+    await _save(flush: true);
+  }
+
   @override
   void didUpdateWidget(InfoEmbed oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.embed.id != widget.embed.id) {
-      final info = widget.embed.information ?? const {};
-      _titleController.text = info['title'] as String? ?? '';
-      _bodyController.text = info['body'] as String? ?? '';
-    }
+    // Controllers are the live source of truth. Only re-seed when the object
+    // identity changes — never overwrite typed text with a stale empty cache
+    // after Move Mode (GlobalKey keeps this State across rebuilds).
+    if (oldWidget.embed.id == widget.embed.id) return;
+    final info = widget.embed.information ?? const {};
+    _titleController.text = info['title'] as String? ?? '';
+    _bodyController.text = info['body'] as String? ?? '';
+    final meta = info['metadata'];
+    final spans = meta is Map ? meta['spans'] : null;
+    _bodyController.spans = spans is List
+        ? [for (final s in spans) if (s is Map) Map<String, dynamic>.from(s)]
+        : const [];
   }
 
   @override
@@ -114,6 +131,16 @@ class _InfoEmbedState extends State<InfoEmbed> {
     if (flush) return;
   }
 
+  /// Sync cache only — use before structural rebuild; API can catch up async.
+  void pushControllersToCache() {
+    widget.state.patchInfoObjectCache(
+      widget.embed,
+      title: _titleController.text,
+      body: _bodyController.text,
+      spans: _bodyController.spans,
+    );
+  }
+
   void _focusBody({int offset = 0}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -142,9 +169,27 @@ class _InfoEmbedState extends State<InfoEmbed> {
     _focusBody();
   }
 
+  bool get _isEmptyObject =>
+      _titleController.text.trim().isEmpty &&
+      _bodyController.text.trim().isEmpty;
+
+  /// Backspace at the start of an empty title deletes the object when the body
+  /// is empty too — same fluent rule as an empty list bullet.
+  Future<void> _onTitleBackspaceAtStart() async {
+    widget.onFocus?.call();
+    if (_isEmptyObject) {
+      widget.onDeleteObject?.call();
+    }
+  }
+
   /// Backspace at the start of the body climbs into the title — previous line.
+  /// When the whole info object is empty, deletes it instead.
   Future<void> _onBodyBackspaceAtStart() async {
     widget.onFocus?.call();
+    if (_isEmptyObject) {
+      widget.onDeleteObject?.call();
+      return;
+    }
     _focusTitle();
   }
 
@@ -253,6 +298,7 @@ class _InfoEmbedState extends State<InfoEmbed> {
               minLines: 1,
               onChanged: (_) => _scheduleSave(),
               onEnter: _onTitleEnter,
+              onBackspaceAtStart: _onTitleBackspaceAtStart,
               onSecondaryTapDown: _showTextMenu,
             ),
             const SizedBox(height: 4),

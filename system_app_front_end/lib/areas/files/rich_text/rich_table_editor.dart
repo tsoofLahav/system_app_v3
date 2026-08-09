@@ -18,6 +18,7 @@ class RichTableEditor extends StatefulWidget {
     required this.onChanged,
     this.onFocus,
     this.onExitTable,
+    this.onDeleteTable,
   });
 
   final TableNode node;
@@ -25,6 +26,9 @@ class RichTableEditor extends StatefulWidget {
   final ValueChanged<TableNode> onChanged;
   final VoidCallback? onFocus;
   final ValueChanged<int>? onExitTable;
+
+  /// Backspace on the last empty row — remove the table from the file.
+  final VoidCallback? onDeleteTable;
 
   @override
   State<RichTableEditor> createState() => _RichTableEditorState();
@@ -210,6 +214,30 @@ class _RichTableEditorState extends State<RichTableEditor> {
     return _controllers[row].every((c) => c.text.trim().isEmpty);
   }
 
+  /// Backspace on an empty row removes it; the last empty row deletes the table
+  /// (fluent text). Enter on empty still uses [onExitTable].
+  void _removeRowAt(int row) {
+    widget.onFocus?.call();
+    if (row < 0 || row >= _controllers.length) return;
+    if (!_rowIsEmpty(row)) return;
+    if (_controllers.length <= 1) {
+      (widget.onDeleteTable ?? () => widget.onExitTable?.call(row))();
+      return;
+    }
+    setState(() {
+      for (final c in _controllers.removeAt(row)) {
+        c.dispose();
+      }
+      for (final f in _focusNodes) {
+        f.dispose();
+      }
+      _focusNodes.clear();
+    });
+    _emit();
+    final focusRow = (row > 0 ? row - 1 : 0).clamp(0, _controllers.length - 1);
+    _focusCell(focusRow, 0);
+  }
+
   /// Enter and Tab only. Arrow keys belong to the document text flow, which
   /// moves by column inside the table and out of it at the edge rows.
   KeyEventResult _onKey(FocusNode node, KeyEvent event, int row, int col) {
@@ -302,7 +330,7 @@ class _RichTableEditorState extends State<RichTableEditor> {
                               horizontal: 8,
                               vertical: 6,
                             ),
-                            child: Focus(
+                              child: Focus(
                               onKeyEvent: (node, event) => _onKey(node, event, r, c),
                               child: FormattedTextField(
                                 controller: _controllers[r][c],
@@ -313,6 +341,12 @@ class _RichTableEditorState extends State<RichTableEditor> {
                                 maxLines: null,
                                 minLines: 1,
                                 onChanged: (_) => _emit(),
+                                onBackspaceAtStart: () async {
+                                  if (_controllers[r][c].text.isEmpty &&
+                                      _rowIsEmpty(r)) {
+                                    _removeRowAt(r);
+                                  }
+                                },
                                 onSecondaryTapDown: (d) => _showMenu(d, r, c),
                               ),
                             ),

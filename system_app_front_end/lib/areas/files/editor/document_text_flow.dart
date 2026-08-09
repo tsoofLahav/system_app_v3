@@ -407,16 +407,29 @@ class DocumentTextFlow extends ChangeNotifier {
     collapseTo(DocumentTextPosition(position.segmentId, at + text.length));
   }
 
+  /// True when [globalPosition] lies inside a registered segment's box.
+  bool segmentContainsGlobal(Offset globalPosition) {
+    for (final id in _order) {
+      final context = _bindings[id]?.focusNode.context;
+      final box = context?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize || !box.attached) continue;
+      final rect = box.localToGlobal(Offset.zero) & box.size;
+      if (rect.contains(globalPosition)) return true;
+    }
+    return false;
+  }
+
   /// The caret position under a screen point, used for dragging a selection
-  /// across parts.
+  /// across parts and for taps in empty space **outside** every field.
   ///
-  /// A point in the gaps between parts resolves to the vertically nearest one,
-  /// so dragging past the end of the document keeps extending instead of
-  /// stalling.
+  /// Inside a field box: Flutter hit-test only. In-field empty-padding / RTL
+  /// policy lives in [`rich_text/rtl/`](../rich_text/rtl/RTL.md). Under-file
+  /// empty space is structure: logical end of the last part above.
   DocumentTextPosition? positionAtGlobal(Offset globalPosition) {
-    String? bestId;
-    RenderBox? bestBox;
-    var bestDistance = double.infinity;
+    String? hitId;
+    RenderBox? hitBox;
+    final tops = <String, double>{};
+    final bottoms = <String, double>{};
 
     for (final id in _order) {
       final context = _bindings[id]?.focusNode.context;
@@ -424,31 +437,76 @@ class DocumentTextFlow extends ChangeNotifier {
       if (box is! RenderBox || !box.hasSize || !box.attached) continue;
 
       final rect = box.localToGlobal(Offset.zero) & box.size;
-      final distance = globalPosition.dy < rect.top
-          ? rect.top - globalPosition.dy
-          : globalPosition.dy > rect.bottom
-              ? globalPosition.dy - rect.bottom
-              : 0.0;
-      // Prefer a direct hit; otherwise keep the closest by vertical distance.
-      if (distance == 0 && rect.contains(globalPosition)) {
-        bestId = id;
-        bestBox = box;
+      tops[id] = rect.top;
+      bottoms[id] = rect.bottom;
+      if (rect.contains(globalPosition)) {
+        hitId = id;
+        hitBox = box;
         break;
-      }
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestId = id;
-        bestBox = box;
       }
     }
 
-    if (bestId == null || bestBox == null) return null;
-    final editable = _findRenderEditable(bestBox);
-    if (editable == null) return DocumentTextPosition(bestId, 0);
-    return DocumentTextPosition(
-      bestId,
-      editable.getPositionForPoint(globalPosition).offset,
+    if (hitId != null && hitBox != null) {
+      final editable = _findRenderEditable(hitBox);
+      final length = lengthOf(hitId) ?? 0;
+      if (editable == null) {
+        return DocumentTextPosition(hitId, length);
+      }
+      return DocumentTextPosition(
+        hitId,
+        editable.getPositionForPoint(globalPosition).offset,
+      );
+    }
+
+    return resolvePointerMiss(
+      order: _order,
+      tops: tops,
+      bottoms: bottoms,
+      dy: globalPosition.dy,
+      lengthOf: (id) => lengthOf(id) ?? 0,
     );
+  }
+
+  /// Pure miss resolution for empty space below / above / between segments.
+  ///
+  /// Exposed for tests; [positionAtGlobal] uses this when the point is not
+  /// inside or beside any segment box.
+  @visibleForTesting
+  static DocumentTextPosition? resolvePointerMiss({
+    required List<String> order,
+    required Map<String, double> tops,
+    required Map<String, double> bottoms,
+    required double dy,
+    required int Function(String id) lengthOf,
+  }) {
+    String? lastAboveId;
+    var lastAboveBottom = double.negativeInfinity;
+    String? firstBelowId;
+    var firstBelowTop = double.infinity;
+
+    for (final id in order) {
+      final top = tops[id];
+      final bottom = bottoms[id];
+      if (top == null || bottom == null) continue;
+      if (bottom <= dy && bottom >= lastAboveBottom) {
+        lastAboveBottom = bottom;
+        lastAboveId = id;
+      }
+      if (top >= dy && top < firstBelowTop) {
+        firstBelowTop = top;
+        firstBelowId = id;
+      }
+    }
+
+    if (lastAboveId != null) {
+      return DocumentTextPosition(lastAboveId, lengthOf(lastAboveId));
+    }
+    if (firstBelowId != null) {
+      return DocumentTextPosition(firstBelowId, 0);
+    }
+    if (order.isEmpty) return null;
+    final last = order.last;
+    return DocumentTextPosition(last, lengthOf(last));
   }
 
   // --------------------------------------------------------------- navigation
@@ -549,6 +607,9 @@ class DocumentTextFlow extends ChangeNotifier {
   }
 
   /// Puts the caret in [position]'s segment, focusing it if it is attached.
+  ///
+  /// End-of-text placements use [TextAffinity.upstream] so soft-wrap / BiDi
+  /// boundaries prefer the end of the line over the start of the next run.
   void placeCaret(DocumentTextPosition position, {bool extendSelection = false}) {
     if (extendSelection) {
       extendTo(position);
@@ -564,7 +625,11 @@ class DocumentTextFlow extends ChangeNotifier {
     if (!binding.focusNode.hasFocus && binding.focusNode.canRequestFocus) {
       binding.focusNode.requestFocus();
     }
-    binding.controller.selection = TextSelection.collapsed(offset: offset);
+    binding.controller.selection = TextSelection.collapsed(
+      offset: offset,
+      affinity:
+          offset >= length ? TextAffinity.upstream : TextAffinity.downstream,
+    );
   }
 
   @override

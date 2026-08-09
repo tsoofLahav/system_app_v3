@@ -228,12 +228,43 @@ class DocumentCodec {
     return doc.copyWith(blocks: blocks);
   }
 
-  static RichDocument moveEmbedBlock(RichDocument doc, String blockId, int newIndex) {
+  /// Moves an embed into the gap *before* [gapIndex] in the current list
+  /// (`0` = before the first block, `blocks.length` = after the last).
+  ///
+  /// No-ops when the embed is already adjacent to that gap.
+  static RichDocument moveEmbedToGap(
+    RichDocument doc,
+    String blockId,
+    int gapIndex,
+  ) {
+    final blocks = [...doc.blocks];
+    final current = blocks.indexWhere((b) => b.id == blockId);
+    if (current < 0) return doc;
+    final gap = gapIndex.clamp(0, blocks.length);
+    // Already sitting in this gap (immediately before or after the embed).
+    if (gap == current || gap == current + 1) return doc;
+    final block = blocks.removeAt(current);
+    var insertAt = gap;
+    if (current < gap) insertAt -= 1;
+    blocks.insert(insertAt.clamp(0, blocks.length), block);
+    return doc.copyWith(blocks: blocks);
+  }
+
+  /// Moves an embed so it occupies [newIndex] in the resulting document.
+  static RichDocument moveEmbedBlock(
+    RichDocument doc,
+    String blockId,
+    int newIndex,
+  ) {
     final blocks = [...doc.blocks];
     final current = blocks.indexWhere((b) => b.id == blockId);
     if (current < 0) return doc;
     final block = blocks.removeAt(current);
     final index = newIndex.clamp(0, blocks.length);
+    if (index == current) {
+      blocks.insert(current, block);
+      return doc;
+    }
     blocks.insert(index, block);
     return doc.copyWith(blocks: blocks);
   }
@@ -257,20 +288,35 @@ class DocumentCodec {
     return doc.copyWith(blocks: blocks);
   }
 
+  /// True for empty or whitespace/`\n`-only paragraph text (visual blank stub).
+  static bool isBlankParagraphText(String text) => text.trim().isEmpty;
+
+  /// Merges adjacent paragraphs into one continuous block.
+  ///
+  /// Blank paragraph neighbors (empty or `\n`/whitespace-only) are dropped —
+  /// including stubs next to embeds — so move/delete does not leave a gap.
   static RichDocument coalesceAdjacentParagraphs(RichDocument doc) {
     final blocks = <DocumentNode>[];
     ParagraphNode? run;
 
-    void flushRun() {
-      if (run != null) {
-        blocks.add(run!);
+    void flushRun({required bool allowBlank}) {
+      if (run == null) return;
+      if (isBlankParagraphText(run!.text) && !allowBlank) {
         run = null;
+        return;
       }
+      blocks.add(run!);
+      run = null;
     }
 
     for (final block in doc.blocks) {
       if (block is ParagraphNode) {
         if (run == null) {
+          run = block;
+        } else if (isBlankParagraphText(block.text)) {
+          // Discard blank follower — no blank-line gap after a deleted embed.
+          continue;
+        } else if (isBlankParagraphText(run!.text)) {
           run = block;
         } else {
           final joinAt = run!.text.length + 1;
@@ -288,11 +334,13 @@ class DocumentCodec {
           );
         }
       } else {
-        flushRun();
+        // Do not keep a blank paragraph pressed against a non-paragraph.
+        flushRun(allowBlank: false);
         blocks.add(block);
       }
     }
-    flushRun();
+    // Trailing blank after an embed/list/table is dropped; a sole empty doc stays.
+    flushRun(allowBlank: blocks.isEmpty);
     if (blocks.isEmpty) {
       blocks.add(ParagraphNode(id: newId('b'), text: ''));
     }

@@ -43,7 +43,7 @@ files (presentation) ──thin overlay──► objects (data + type logic)
 
 **Drag + Reorder Mode.** Payload in [`tasks/task_drag_data.dart`](tasks/task_drag_data.dart). Glass chips, no handles. Same surface for files and view frames. Cross-frame drops in a view update membership section/topic then refresh.
 
-**Empty titles.** Created with `title: ""` and hint (`newTaskHint`) — never the literal “New task”. Enter on empty exits / unfocuses; Backspace on empty removes the row (files climb to list title when it is the last row).
+**Empty titles.** Created with `title: ""` and hint (`newTaskHint`) — never the literal “New task”. Enter on empty exits / unfocuses; Backspace on empty removes the row. In a file, the last empty task + empty title + Backspace deletes the whole task-list object (`onDeleteObject`); views keep a seed row.
 
 **Views.** A user-made list a task can appear in without being copied. **A task belongs to at most one view** — choosing a view replaces any previous one (`setTaskView`). Create from the sidebar **+**; rename via right-click → Edit on a view. Assign from a task’s right-click **Choose view…** (files and views) or the shortcut. UI: [`views/assign_task_view_dialog.dart`](views/assign_task_view_dialog.dart).
 

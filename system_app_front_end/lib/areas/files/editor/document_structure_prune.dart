@@ -94,8 +94,7 @@ PruneResult pruneFullyMarkedStructures({
       result.removeAt(i);
       firstRemovedIndex = i;
       changed = true;
-    } else if (block is EmbedNode &&
-        fullyEmptied.contains(embedSegmentId(block.id))) {
+    } else if (block is EmbedNode && _embedFullyEmptied(block.id, fullyEmptied)) {
       result.removeAt(i);
       firstRemovedIndex = i;
       changed = true;
@@ -120,4 +119,11 @@ PruneResult pruneFullyMarkedStructures({
     changed: true,
     firstRemovedIndex: firstRemovedIndex,
   );
+}
+
+/// Atomic `#embed` units, or info title+body both marked end to end.
+bool _embedFullyEmptied(String blockId, Set<String> fullyEmptied) {
+  if (fullyEmptied.contains(embedSegmentId(blockId))) return true;
+  return fullyEmptied.contains(infoTitleSegmentId(blockId)) &&
+      fullyEmptied.contains(infoBodySegmentId(blockId));
 }

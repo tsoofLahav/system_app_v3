@@ -133,6 +133,33 @@ void main() {
     });
   });
 
+  test('info title and body both marked removes the embed', () {
+    final result = pruneFullyMarkedStructures(
+      blocks: [
+        ParagraphNode(id: 'b0', text: 'before'),
+        EmbedNode(id: 'info1', objectId: 9),
+      ],
+      fullyEmptied: {
+        infoTitleSegmentId('info1'),
+        infoBodySegmentId('info1'),
+      },
+      spansParts: true,
+    );
+
+    expect(result.blocks.map((b) => b.id), ['b0']);
+  });
+
+  test('atomic embed segment marked removes the embed', () {
+    final result = pruneFullyMarkedStructures(
+      blocks: [EmbedNode(id: 'img1', objectId: 3)],
+      fullyEmptied: {embedSegmentId('img1')},
+      spansParts: false,
+    );
+
+    expect(result.blocks, hasLength(1));
+    expect(result.blocks.single, isA<ParagraphNode>());
+  });
+
   test('a file emptied completely keeps one paragraph to type in', () {
     final result = pruneFullyMarkedStructures(
       blocks: [_list('b1', 2), _table('b2', 1, 2)],

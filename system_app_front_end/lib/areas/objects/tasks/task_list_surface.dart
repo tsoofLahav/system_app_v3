@@ -39,6 +39,7 @@ class TaskListSurface extends StatefulWidget {
     required this.bridge,
     this.onFocus,
     this.onExitBelow,
+    this.onDeleteObject,
     this.compactMode = false,
     this.listTitleSegmentId,
     this.taskSegmentId,
@@ -54,6 +55,10 @@ class TaskListSurface extends StatefulWidget {
   final TaskListBridge bridge;
   final VoidCallback? onFocus;
   final ValueChanged<int?>? onExitBelow;
+
+  /// Last empty task + Backspace when the list should leave the file (in-file
+  /// host). Views leave this null and keep the empty seed row.
+  final VoidCallback? onDeleteObject;
   final bool compactMode;
   final String? listTitleSegmentId;
   final String Function(int index)? taskSegmentId;
@@ -389,14 +394,30 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     widget.onFocus?.call();
     if (_controllers[index].text.trim().isEmpty) {
       if (_controllers.length <= 1) {
-        if (widget.climbToListTitleOnLastBackspace && _bridge.showListTitle) {
+        if (widget.climbToListTitleOnLastBackspace &&
+            _bridge.showListTitle &&
+            _titleController.text.trim().isNotEmpty) {
           _titleFocus.requestFocus();
           final len = _titleController.text.length;
           _titleController.selection =
               TextSelection.collapsed(offset: len);
           return;
         }
-        widget.onExitBelow?.call(_taskIds[index]);
+        // Last empty task + empty/absent title: delete the object from the
+        // file (fluent text). Enter on empty still uses [onExitBelow].
+        if (widget.onDeleteObject != null) {
+          final id = _taskIds[index];
+          if (id != null) {
+            final task = _taskById(id);
+            if (task != null) {
+              await _bridge.delete(task);
+            }
+          }
+          if (!mounted) return;
+          widget.onDeleteObject!();
+          return;
+        }
+        await _removeAt(index);
         return;
       }
       await _removeAt(index);
@@ -912,6 +933,14 @@ class TaskListSurfaceState extends State<TaskListSurface> {
             minLines: 1,
             onChanged: (_) => _scheduleTitleSave(),
             onEnter: _onTitleEnter,
+            onBackspaceAtStart: () async {
+              if (_titleController.text.trim().isNotEmpty) return;
+              if (_controllers.length == 1 &&
+                  _controllers.first.text.trim().isEmpty &&
+                  widget.onDeleteObject != null) {
+                widget.onDeleteObject!();
+              }
+            },
             onSecondaryTapDown: (d) => unawaited(
               DocumentContextMenu.showTextMenu(
                 context: context,

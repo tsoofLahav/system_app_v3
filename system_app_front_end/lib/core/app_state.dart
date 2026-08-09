@@ -1038,16 +1038,55 @@ class AppState extends ChangeNotifier {
     bool notify = false,
   }) async {
     if (embed.informationId == null) return;
+    // Patch cache *before* the network round-trip so a remount during drag/drop
+    // never re-seeds from stale empty title/body.
+    patchInfoObjectCache(
+      embed,
+      title: title,
+      body: body,
+      spans: spans,
+    );
     await _api.patch('/information/${embed.informationId}', {
       'title': title,
       'body': body,
       'metadata': {'spans': spans ?? []},
     });
-    // Keep the typed text on screen without reloading embeds (which would
-    // notifyListeners and rebuild the document mid-keystroke).
     if (notify) {
       await loadEmbedsForFile(embed.fileId);
     }
+  }
+
+  /// Synchronous in-memory update used by info editors before structural rebuild.
+  void patchInfoObjectCache(
+    ObjectEmbed embed, {
+    required String title,
+    required String body,
+    List<Map<String, dynamic>>? spans,
+  }) {
+    final list = embedsByFileId[embed.fileId];
+    if (list == null) return;
+    final i = list.indexWhere((e) => e.id == embed.id);
+    if (i < 0) return;
+    final current = list[i];
+    final prevInfo = current.information ?? const <String, dynamic>{};
+    final prevMeta = prevInfo['metadata'];
+    final meta = prevMeta is Map
+        ? Map<String, dynamic>.from(prevMeta)
+        : <String, dynamic>{};
+    meta['spans'] = spans ?? [];
+    embedsByFileId[embed.fileId] = [
+      for (var j = 0; j < list.length; j++)
+        j == i
+            ? current.copyWith(
+                information: {
+                  ...prevInfo,
+                  'title': title,
+                  'body': body,
+                  'metadata': meta,
+                },
+              )
+            : list[j],
+    ];
   }
 
   Future<void> addInfoLink(

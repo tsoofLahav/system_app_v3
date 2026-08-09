@@ -10,7 +10,7 @@ import '../editor/document_text_flow.dart';
 import './block_text_focus.dart';
 import './format_range.dart';
 import './frozen_selection_painter.dart';
-import './rtl_caret_motion.dart';
+import './rtl/rtl.dart';
 import './span_text_editing_controller.dart';
 import './text_emoji_picker.dart';
 
@@ -99,6 +99,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   DocumentTextFlow? _flow;
   String? _registeredSegmentId;
   bool _applyingFlowSelection = false;
+  TextDirection? _detectedDirection;
+  Offset? _pendingTapGlobal;
   // Built once: the overrides are stateless, so they can outlive a rebuild.
   final _rtlMotionActions = rtlCaretMotionActions();
 
@@ -114,7 +116,24 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     _focusNode.addListener(_onFocusChanged);
     widget.controller.addListener(_normalizeSelectionIfNeeded);
     widget.controller.addListener(_syncFlowFromLocalSelection);
+    widget.controller.addListener(_syncParagraphDirection);
+    _detectedDirection = detectParagraphTextDirection(widget.controller.text);
     WidgetsBinding.instance.addPostFrameCallback((_) => _ensureKeyHandlerChained());
+  }
+
+  /// RTL solution: keep [TextField.textDirection] on the first strong character
+  /// (see `rtl/RTL.md`).
+  void _syncParagraphDirection() {
+    final next = detectParagraphTextDirection(widget.controller.text);
+    if (next == _detectedDirection) return;
+    setState(() => _detectedDirection = next);
+  }
+
+  TextDirection _resolvedTextDirection(BuildContext context) {
+    return resolveFieldTextDirection(
+      widget.controller.text,
+      Directionality.of(context),
+    );
   }
 
   @override
@@ -170,8 +189,11 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.removeListener(_normalizeSelectionIfNeeded);
       oldWidget.controller.removeListener(_syncFlowFromLocalSelection);
+      oldWidget.controller.removeListener(_syncParagraphDirection);
       widget.controller.addListener(_normalizeSelectionIfNeeded);
       widget.controller.addListener(_syncFlowFromLocalSelection);
+      widget.controller.addListener(_syncParagraphDirection);
+      _detectedDirection = detectParagraphTextDirection(widget.controller.text);
       final previousId = _registeredSegmentId;
       if (previousId != null) _flow?.unregister(previousId, oldWidget.controller);
       _registeredSegmentId = null;
@@ -203,6 +225,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     if (registeredId != null) _flow?.unregister(registeredId, widget.controller);
     widget.controller.removeListener(_normalizeSelectionIfNeeded);
     widget.controller.removeListener(_syncFlowFromLocalSelection);
+    widget.controller.removeListener(_syncParagraphDirection);
     _focusNode.removeListener(_onFocusChanged);
     BlockTextFocusRegistry.unregister(widget.controller);
     if (_ownsFocus) _focusNode.dispose();
@@ -238,6 +261,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         blockId: widget.blockId,
         flow: _flow,
       );
+      // File pane owns scrolling — keep the caret in view without letting each
+      // EditableText scroll as its own surface.
+      _ensureVisibleInFilePane();
     } else {
       if ((BlockTextFocusRegistry.isInMenuSession ||
               BlockTextFocusRegistry.isInEmojiPickerSession) &&
@@ -246,6 +272,19 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       }
       BlockTextFocusRegistry.unregister(widget.controller);
     }
+  }
+
+  void _ensureVisibleInFilePane() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_focusNode.hasFocus) return;
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.15,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   void _notifyChanged() {
@@ -287,6 +326,12 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       final text = flow.selectedText();
       if (text.isNotEmpty) await setClipboardText(text);
       flow.deleteSelection();
+      return;
+    }
+    if (_selectionCoversEntireField()) {
+      final copied = widget.controller.text;
+      if (copied.isNotEmpty) await setClipboardText(copied);
+      _clearEntireFieldAndPruneStructure();
       return;
     }
     final controller = widget.controller;
@@ -375,6 +420,14 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       return KeyEventResult.handled;
     }
 
+    if ((event.logicalKey == LogicalKeyboardKey.backspace ||
+            event.logicalKey == LogicalKeyboardKey.delete) &&
+        _selectionCoversEntireField()) {
+      if (_clearEntireFieldAndPruneStructure()) {
+        return KeyEventResult.handled;
+      }
+    }
+
     if (event.logicalKey == LogicalKeyboardKey.backspace &&
         _shouldInvokeBackspaceAtStart() &&
         widget.onBackspaceAtStart != null) {
@@ -383,6 +436,120 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     }
 
     return KeyEventResult.ignored;
+  }
+
+  /// True when the field's selection covers every character (Cmd+A style).
+  bool _selectionCoversEntireField() {
+    final text = widget.controller.text;
+    if (text.isEmpty) return false;
+    final selection = widget.controller.selection;
+    if (!selection.isValid || selection.isCollapsed) return false;
+    final start = selection.start < selection.end ? selection.start : selection.end;
+    final end = selection.start < selection.end ? selection.end : selection.start;
+    return start == 0 && end == text.length;
+  }
+
+  /// Clears this field and, for list/table/embed parts, removes the structure
+  /// the way deleting a marked line would — so objects feel like part of the
+  /// text, not a separate widget. Plain paragraphs are only cleared.
+  bool _clearEntireFieldAndPruneStructure() {
+    final text = widget.controller.text;
+    if (text.isEmpty) return false;
+
+    widget.controller.value = widget.controller.value.copyWith(
+      text: '',
+      selection: const TextSelection.collapsed(offset: 0),
+      composing: TextRange.empty,
+    );
+    if (widget.controller is SpanTextEditingController) {
+      (widget.controller as SpanTextEditingController).ensureSpansMatchText();
+    }
+    _notifyChanged();
+
+    final segmentId = _registeredSegmentId;
+    final flow = _flow;
+    // Structure parts have `#` in the id; plain paragraphs do not.
+    if (segmentId == null || flow == null || !segmentId.contains('#')) {
+      return true;
+    }
+
+    final toPrune = <String>{segmentId};
+    _expandPruneToWholeStructureIfEmpty(flow, segmentId, toPrune);
+    flow.pruneStructures(toPrune, spansParts: toPrune.length > 1);
+    return true;
+  }
+
+  /// When clearing one part leaves a list/table/info with no content left,
+  /// mark every part so prune removes the whole structure.
+  void _expandPruneToWholeStructureIfEmpty(
+    DocumentTextFlow flow,
+    String segmentId,
+    Set<String> toPrune,
+  ) {
+    const titleSuffix = '#infoTitle';
+    const bodySuffix = '#infoBody';
+    if (segmentId.endsWith(titleSuffix)) {
+      final bodyId =
+          '${segmentId.substring(0, segmentId.length - titleSuffix.length)}$bodySuffix';
+      final body = flow.controllerFor(bodyId);
+      if (body != null && body.text.isEmpty) toPrune.add(bodyId);
+      return;
+    }
+    if (segmentId.endsWith(bodySuffix)) {
+      final titleId =
+          '${segmentId.substring(0, segmentId.length - bodySuffix.length)}$titleSuffix';
+      final title = flow.controllerFor(titleId);
+      if (title != null && title.text.isEmpty) toPrune.add(titleId);
+      return;
+    }
+
+    final hash = segmentId.indexOf('#');
+    if (hash < 0) return;
+    final blockId = segmentId.substring(0, hash);
+    final suffix = segmentId.substring(hash);
+
+    // List bullets: `#iN` — if every bullet is empty, drop them all.
+    if (RegExp(r'^#i\d+$').hasMatch(suffix)) {
+      final ids = [
+        for (final id in flow.order)
+          if (id.startsWith('$blockId#i')) id,
+      ];
+      if (_allSegmentsEmpty(flow, ids, toPrune)) toPrune.addAll(ids);
+      return;
+    }
+
+    // Table cells: `#cR:C` — if every cell is empty, drop the table.
+    if (RegExp(r'^#c\d+:\d+$').hasMatch(suffix)) {
+      final ids = [
+        for (final id in flow.order)
+          if (id.startsWith('$blockId#c')) id,
+      ];
+      if (_allSegmentsEmpty(flow, ids, toPrune)) toPrune.addAll(ids);
+      return;
+    }
+
+    // Task rows: `#tN` — if every task is empty, drop them all (host removes
+    // the object when no tasks remain).
+    if (RegExp(r'^#t\d+$').hasMatch(suffix)) {
+      final ids = [
+        for (final id in flow.order)
+          if (id.startsWith('$blockId#t')) id,
+      ];
+      if (_allSegmentsEmpty(flow, ids, toPrune)) toPrune.addAll(ids);
+    }
+  }
+
+  bool _allSegmentsEmpty(
+    DocumentTextFlow flow,
+    List<String> ids,
+    Set<String> alreadyCleared,
+  ) {
+    if (ids.isEmpty) return false;
+    for (final id in ids) {
+      if (alreadyCleared.contains(id)) continue;
+      if ((flow.controllerFor(id)?.text ?? '').trim().isNotEmpty) return false;
+    }
+    return true;
   }
 
   /// This field's share of the mark an open menu will act on, so the user sees
@@ -438,32 +605,54 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
 
   /// Shift+click extends the document selection into this part; a plain click
   /// drops a selection that was covering several parts.
+  ///
+  /// RTL solution (`rtl/RTL.md`): empty-padding taps → logical line end in this
+  /// same `onTap` turn; glyph taps keep Flutter's hit-test.
   void _handleTap() {
     final flow = _flow;
     final segmentId = _registeredSegmentId;
-    if (flow == null || segmentId == null) return;
+    final tapGlobal = _pendingTapGlobal;
+    _pendingTapGlobal = null;
 
-    // The text field sets its selection from the tap during this frame.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final selection = widget.controller.selection;
-      if (!selection.isValid) return;
-      final offset = selection.extentOffset;
+    var offset = widget.controller.selection.isValid
+        ? widget.controller.selection.extentOffset
+        : widget.controller.text.length;
 
-      if (HardwareKeyboard.instance.isShiftPressed && flow.selection != null) {
-        _applyFlowSelection(
-          flow,
-          DocumentTextPosition(segmentId, offset),
-          extend: true,
+    if (tapGlobal != null) {
+      final host = context.findRenderObject();
+      final editable = host == null ? null : _findRenderEditable(host);
+      if (editable != null) {
+        final corrected = emptySpaceCaretOffset(
+          editable: editable,
+          globalPosition: tapGlobal,
+          textLength: widget.controller.text.length,
         );
-      } else if (flow.spansSegments) {
-        _applyFlowSelection(
-          flow,
-          DocumentTextPosition(segmentId, offset),
-          extend: false,
-        );
+        if (corrected != null) {
+          offset = corrected;
+          widget.controller.selection = collapsedAtLogicalEnd(corrected);
+          if (flow != null && segmentId != null) {
+            flow.collapseTo(DocumentTextPosition(segmentId, corrected));
+          }
+        }
       }
-    });
+    }
+
+    if (flow == null || segmentId == null) return;
+    if (!widget.controller.selection.isValid) return;
+
+    if (HardwareKeyboard.instance.isShiftPressed && flow.selection != null) {
+      _applyFlowSelection(
+        flow,
+        DocumentTextPosition(segmentId, offset),
+        extend: true,
+      );
+    } else if (flow.spansSegments) {
+      _applyFlowSelection(
+        flow,
+        DocumentTextPosition(segmentId, offset),
+        extend: false,
+      );
+    }
   }
 
   /// Deletes or replaces a selection that covers several parts, before the text
@@ -534,7 +723,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     // — `rtlCaretMotionActions` flips that for Hebrew. This handler only decides
     // which edge of the part is the exit, which is mirrored in RTL: the left
     // arrow runs off the logical end of the text rather than its start.
-    final rtl = Directionality.of(context) == TextDirection.rtl;
+    final rtl = _resolvedTextDirection(context) == TextDirection.rtl;
     final pressedLeft = key == LogicalKeyboardKey.arrowLeft;
     final movingBackward = isHorizontal
         ? (rtl ? !pressedLeft : pressedLeft)
@@ -703,6 +892,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (event) {
+        if (event.buttons == kPrimaryButton) {
+          _pendingTapGlobal = event.position;
+        }
         if (event.kind == PointerDeviceKind.mouse &&
             event.buttons == kSecondaryMouseButton) {
           // Freeze what the action will hit before the menu can move focus or
@@ -754,6 +946,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
               final hideNativeSelection =
                   inMenu || (_flow?.spansSegments ?? false);
 
+              // RTL solution — see rtl/RTL.md
+              final textDirection = _resolvedTextDirection(context);
               final field = TextSelectionTheme(
                 data: TextSelectionThemeData(
                   selectionColor:
@@ -764,9 +958,14 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                   controller: widget.controller,
                   focusNode: _focusNode,
                   style: style,
+                  textDirection: textDirection,
+                  textAlign: TextAlign.start,
                   textAlignVertical: widget.textAlignVertical,
                   maxLines: widget.maxLines,
                   minLines: widget.minLines,
+                  // One scroll owner: the file pane's SingleChildScrollView.
+                  scrollPhysics: const NeverScrollableScrollPhysics(),
+                  scrollPadding: EdgeInsets.zero,
                   decoration: InputDecoration(
                     isDense: true,
                     border: InputBorder.none,
@@ -793,7 +992,11 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
               );
 
               var body = _withFlowVerticalIntents(
-                _withVisualCaretMotion(_withCrossSegmentHighlight(field)),
+                wrapVisualCaretMotion(
+                  textDirection: textDirection,
+                  actions: _rtlMotionActions,
+                  child: _withCrossSegmentHighlight(field),
+                ),
               );
 
               if (widget.descriptionRanges.isNotEmpty) {
@@ -866,14 +1069,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       },
       child: child,
     );
-  }
-
-  /// In Hebrew the text field's own left/right motion runs against the arrow
-  /// keys, so its motion intents are flipped. In English it is already right and
-  /// nothing is wrapped.
-  Widget _withVisualCaretMotion(Widget child) {
-    if (Directionality.of(context) != TextDirection.rtl) return child;
-    return Actions(actions: _rtlMotionActions, child: child);
   }
 
   /// Paints this field's share of a selection that runs across several parts.

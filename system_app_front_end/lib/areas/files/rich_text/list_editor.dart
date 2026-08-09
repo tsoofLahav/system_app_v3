@@ -17,6 +17,7 @@ class RichListEditor extends StatefulWidget {
     required this.strings,
     required this.onChanged,
     required this.onExitList,
+    this.onDeleteList,
     this.onFocus,
     this.onStyleChanged,
   });
@@ -26,6 +27,9 @@ class RichListEditor extends StatefulWidget {
   final ValueChanged<ListNode> onChanged;
   /// Called when the user exits the list (empty item + Enter). Passes the empty item index.
   final ValueChanged<int> onExitList;
+
+  /// Backspace on the last empty bullet — remove the list from the file.
+  final VoidCallback? onDeleteList;
   final VoidCallback? onFocus;
 
   /// Switches the whole list between `'bullet'` and `'numbered'`.
@@ -159,7 +163,9 @@ class _RichListEditorState extends State<RichListEditor> {
 
   void _removeItemAt(int index) {
     if (_controllers.length <= 1) {
-      widget.onExitList(index);
+      // Empty last bullet + Backspace deletes the list (fluent text). Enter on
+      // an empty bullet still uses [onExitList] to continue writing below.
+      (widget.onDeleteList ?? () => widget.onExitList(index))();
       return;
     }
     final removedFocus = _focusNodes[index];

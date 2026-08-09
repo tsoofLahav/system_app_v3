@@ -30,6 +30,7 @@ class GraphEmbed extends StatefulWidget {
     required this.strings,
     this.onFocus,
     this.onExitBelow,
+    this.onDeleteObject,
   });
 
   final ObjectEmbed embed;
@@ -40,6 +41,9 @@ class GraphEmbed extends StatefulWidget {
 
   /// Empty column index — parent drops it and continues as a paragraph below.
   final ValueChanged<int>? onExitBelow;
+
+  /// Last empty column + Backspace — remove the graph from the file.
+  final VoidCallback? onDeleteObject;
 
   @override
   State<GraphEmbed> createState() => _GraphEmbedState();
@@ -341,7 +345,13 @@ class _GraphEmbedState extends State<GraphEmbed> {
   void _removeColumnAt(int col, {required int focusRow}) {
     if (_columnCount <= 1) {
       _unfocusAll();
-      widget.onExitBelow?.call(col);
+      // Backspace on the last empty column deletes the object; Enter still
+      // uses [onExitBelow] via [_exitFromColumn].
+      if (widget.onDeleteObject != null) {
+        widget.onDeleteObject!();
+      } else {
+        widget.onExitBelow?.call(col);
+      }
       return;
     }
     setState(() {

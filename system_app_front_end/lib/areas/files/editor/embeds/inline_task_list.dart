@@ -20,6 +20,7 @@ class InlineTaskListWidget extends StatefulWidget {
     required this.onRefresh,
     this.onFocus,
     this.onExitBelow,
+    this.onDeleteObject,
   });
 
   final ObjectEmbed embed;
@@ -29,6 +30,9 @@ class InlineTaskListWidget extends StatefulWidget {
   final VoidCallback? onFocus;
   /// Called with the empty task's id (null for an unsaved seed row).
   final ValueChanged<int?>? onExitBelow;
+
+  /// Last empty task + Backspace — remove the object from the file.
+  final VoidCallback? onDeleteObject;
 
   @override
   State<InlineTaskListWidget> createState() => _InlineTaskListWidgetState();
@@ -61,6 +65,7 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
       bridge: _bridge,
       onFocus: widget.onFocus,
       onExitBelow: widget.onExitBelow,
+      onDeleteObject: widget.onDeleteObject,
       compactMode: moveMode,
       listTitleSegmentId: taskListTitleSegmentId(widget.blockId),
       taskSegmentId: (index) => taskItemSegmentId(widget.blockId, index),

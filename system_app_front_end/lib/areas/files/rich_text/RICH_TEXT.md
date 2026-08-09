@@ -71,7 +71,7 @@ Toggle semantics: bold/italic/underline flip independently per character in the 
 
 Before merging any rich-text PR:
 
-1. Run `flutter test test/span_shift_test.dart test/document_mark_test.dart test/continuous_text_test.dart`
+1. Run `flutter test test/span_shift_test.dart test/document_mark_test.dart test/continuous_text_test.dart test/rtl_paragraph_text_direction_test.dart test/rtl_empty_space_caret_test.dart`
 2. Manual: bold a word → click after it → type (new text stays regular)
 3. Manual: mixed bold + regular lines → size up (bold stays bold, regular stays regular)
 4. Manual: select text → right-click → **one** highlight during menu, matching the selection (not selection + whole line)
@@ -91,8 +91,8 @@ Before merging any rich-text PR:
 | `text_formatting.dart` | Pure span math + `TextSpan` rendering |
 | `span_text_editing_controller.dart` | `TextEditingController` + spans + `handleTextChange` |
 | `block_text_focus.dart` | Active field + frozen menu range + menu actions |
-| `formatted_text_field.dart` | `TextField` wrapper, focus registration, `_FrozenSelectionOverlay` |
-| `rtl_caret_motion.dart` | Flips the field's horizontal motion intents so arrows move visually in Hebrew |
+| `formatted_text_field.dart` | `TextField` wrapper, focus registration, `_FrozenSelectionOverlay`; wires the [RTL solution](rtl/RTL.md) |
+| [`rtl/`](rtl/RTL.md) | **RTL solution** — base direction, visual arrows, empty-padding caret (see `RTL.md`) |
 | `document_context_menu.dart` | Text, list, and table-cell menu entries |
 | `frozen_selection_painter.dart` | Paints precomputed selection rects during menu |
 | `rich_text_block_sync.dart` | Idle-only sync from block → controller |

@@ -14,9 +14,22 @@ Everything the user writes is saved as a single v3 block tree in `files.document
 |--------|------|
 | [`model/`](model/) | Node types and JSON codec |
 | [`editor/`](editor/) | The editor surface, block widgets, embed host |
+| [`editor/document_session.dart`](editor/document_session.dart) | **Structural ops** (pure): split/insert gap, exit/delete structure, move embed, prune+coalesce |
+| [`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md) | Fluent-text principles for embeds (empty neighbors, edge landing, object remount) |
 | [`editor/embeds/`](editor/embeds/) | In-file presentation of objects (task list, info, image, graph) |
 | [`rich_text/`](rich_text/) | Span formatting, controllers, context menus |
+| [`rich_text/rtl/`](rich_text/rtl/RTL.md) | **RTL solution** — Hebrew/BiDi direction, visual arrows, empty-padding caret |
 | [`data/`](data/) | File and topic models + API services |
+
+### Document vs controllers (one sync rule)
+
+`document_json` / `_doc` is the source of truth for the file tree. Typing updates `_doc` from the focused field (`rebuild: false`). **Any structural edit** goes through `DocumentSession`, then the editor’s single `_commitSessionResult` which **resets text controllers** from the new `_doc` (so coalesce/move/delete cannot leave a stale field showing half the text). Flush live paragraph controllers into `_doc` before session ops that read text (insert split, move split).
+
+Object **payloads** (info body, tasks, graph numbers) stay in the objects area — not in `document_json`. The file only stores embed placement (`object_id`).
+
+### One scroll owner
+
+The file pane’s `SingleChildScrollView` is the only scroll surface. `FormattedTextField` uses `NeverScrollableScrollPhysics` and scrolls the **pane** into view on focus (`Scrollable.ensureVisible`). Fields must not scroll independently.
 
 ## Node types
 
@@ -33,16 +46,19 @@ Position is array order in `blocks[]`.
 
 ## Keeping the text fluent
 
+Embeds-in-flow principles (empty neighbors, edge landing, object remount): **[`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md)**.
+
 | Context | Key | Behavior |
 |---------|-----|----------|
 | Paragraph | Enter | New line **in the same paragraph** — never splits the block |
-| Paragraph | Backspace at start of empty block | Merge into the previous paragraph |
+| Paragraph | Backspace at start of empty block | Remove the stub / merge into the previous paragraph (works next to embeds too) |
 | List | Enter on a filled item | New list item, cursor moves to it |
 | List | Enter on an empty item | Drop that item, keep the list, continue as a paragraph below |
 | List | Backspace on an empty item | Remove the item, or exit the list if it was the last |
 | List | Right-click | Switch the list between points and numbers |
 | Table | Enter | Move to the cell below; add a row when on the last row |
 | Table | Enter on an empty row | Drop that row, keep the table, continue as a paragraph below |
+| Table | Backspace on an empty row | Remove the row; if it was the last row, remove the table |
 | Table | Shift+Enter | Line break inside the cell |
 | Table | Tab | Next cell |
 | Table | Right-click | Add column |
@@ -55,45 +71,42 @@ A newly inserted list or table gets the caret in its first bullet or its top-lef
 
 The insert bar offers **one** list button, not two. Points vs numbers is a property of a list that already exists, switched from its right-click menu, so the user chooses "a list" and then how it looks.
 
-### A row and a bullet are each one line of text
+### A row, a bullet, and an embed are each one line of text
 
-This is the rule the rest of the cursor behavior follows from. **A bullet in a list and a row in a table count as one line of the document**, no different from a line of a paragraph. Anywhere a decision has to be made about the caret or a marking, resolve it by asking what would happen if the part were a plain line:
+This is the rule the rest of the cursor behavior follows from. **A bullet, a table row, and an embed (or each of its editable parts) count as one line of the document**, no different from a line of a paragraph. Anywhere a decision has to be made about the caret or a marking, resolve it by asking what would happen if the part were a plain line — details in [`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md):
 
 | Situation | Because a part is a line |
 |-----------|--------------------------|
-| Arrow up out of a bullet | Lands on the **last** line of whatever is above, not its first |
-| Arrow down out of a bullet | Lands on the **first** line of whatever is below |
+| Arrow up out of a bullet / into an object | Lands on the **last** line of whatever is above, not its first |
+| Arrow down out of a bullet / out of an object | Lands on the **first** line of whatever is below |
+| Delete an object | Caret at the **end** of the text that was above it |
 | Vertical movement | Keeps the caret's horizontal position, measured in pixels off the caret rect, so it holds through wrapping and mixed scripts |
-| Marking a whole bullet or row and deleting | The bullet or row goes, the way deleting a marked line removes the line |
+| Marking a whole bullet, row, or object and deleting | That part goes, the way deleting a marked line removes the line |
 | Marking every bullet or every row | The list or table goes with them |
 
-Anything that would make a part behave unlike a line — a caret that stalls at a boundary, a delete that leaves an empty bullet behind — is a bug in this area, not a detail of the widget.
+Anything that would make a part behave unlike a line — a caret that stalls at a boundary, a delete that leaves an empty bullet or blank gap behind — is a bug in this area, not a detail of the widget.
 
 ### Deleting a part, not just its text
 
-A marking that covers a part **end to end** removes the part; a marking that covers only some of its text just deletes the text. [`editor/document_structure_prune.dart`](editor/document_structure_prune.dart) is the single place that decides this, and it is a pure function over `blocks[]` so the rules are testable without the widget tree.
+A marking that covers a part **end to end** removes the part; a marking that covers only some of its text just deletes the text. The same applies when the user selects **all** of a structure part and presses Backspace/Delete/Cut — lists, tables, and objects should disappear like lines of text, not leave empty shells. [`editor/document_structure_prune.dart`](editor/document_structure_prune.dart) is the single place that decides this (pure over `blocks[]`).
 
-| Marked | Result |
-|--------|--------|
-| A whole bullet | The bullet is removed |
-| Every bullet in a list | The list block is removed |
+| Marked / cleared | Result |
+|------------------|--------|
+| A whole bullet (mark or select-all + delete) | The bullet is removed |
+| Every bullet / last bullet deleted | The list block is removed |
 | Every cell of a row | The row is removed |
-| Every row of a table | The table block is removed |
+| Every cell of a table | The table block is removed |
+| Whole atomic embed, or info title+body both cleared | The object is removed (and its backing row) |
+| All tasks in a task list | The task-list object is removed |
 | A whole paragraph, as part of a larger marking | The paragraph is removed |
 | A whole paragraph, marked on its own | Text cleared, the paragraph stays |
 | Part of a bullet, row, or cell | Text only, nothing is removed |
 
-The last two keep single-part editing predictable: clearing a line in a word processor leaves the line. A file always keeps at least one paragraph, so there is somewhere to type after deleting everything.
+Empty **Enter** still exits below a list/table/object without destroying it (continue writing). Empty **Backspace** on the last unit removes the structure — empty list, empty table / row, or empty **object** (info / last task / last graph column) — then coalesces surrounding paragraphs (and resets text controllers so merged text is not lost). A file always keeps at least one paragraph.
 
-### Arrow keys in Hebrew
+### RTL / Hebrew
 
-An arrow moves the caret **the way it points on screen**, in both languages. A Flutter text field moves the caret through the *string*, so in Hebrew the left arrow walks backwards on screen.
-
-The fix reconfigures the editor rather than intercepting keys. A text field dispatches an *intent* for every caret movement; [`rich_text/rtl_caret_motion.dart`](rich_text/rtl_caret_motion.dart) overrides the horizontal ones and flips `forward`, then hands them back to the field's own action through `callingAction`. Flutter still performs the move.
-
-**Do not reimplement caret movement in a key handler.** It was tried and it was worse in exactly the ways that are invisible in English: held-down arrows arrive as `KeyRepeatEvent` and silently fall back to the wrong direction, and driving each step through the document flow rebuilds every part of the file per keypress, which makes a held arrow crawl. Delegating keeps key repeat, shift-extension, grapheme clusters and per-platform bindings for free.
-
-`FormattedTextField` wraps the field in these overrides **only** when the ambient `Directionality` is RTL; in LTR nothing is wrapped. The flow's own key handler still decides which *edge* of a part is the exit, and that edge is mirrored in RTL — the left arrow leaves from the logical end of the text.
+Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed Hebrew+English) lives in one place: **[`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)**. Do not add competing caret math outside that folder.
 
 ## One cursor across the whole file
 
@@ -125,6 +138,7 @@ Segment ids come from the document tree, so order is always derived from `blocks
 | Up/Down inside a table | Moves **by column**, and leaves the table from the edge rows |
 | Shift+arrows | Selection grows past part boundaries |
 | Shift+click, drag | Marks across paragraphs, bullets, and cells at once |
+| Click in empty space below / between parts | Structure: caret at the **logical end** of the last part above. Empty files fill the viewport so that area is tappable. (In-field empty padding → [RTL solution](rich_text/rtl/RTL.md).) |
 | Cmd+A | Selects the entire file, every part |
 | Copy / cut | Joins the marked parts with newlines |
 | Backspace / typing | Replaces the whole marked range |
@@ -199,10 +213,11 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Rule | Meaning |
 |------|---------|
 | Between blocks only | Never inside a list item or table cell |
-| Create at the caret | Inserts go to the **last-claimed** file, after the block that last held the caret |
+| Create at the caret | Inserts go to the **last-claimed** file. Mid-paragraph / mid-heading **splits** at the caret (`before \| new \| after`); caret at the start inserts before that block; at the end, after it. List / table / embed carets insert after the containing block. |
 | Document tree is source of truth | Position is `blocks[]` order; the object row holds data, not placement |
 | Right-click on embed text | Same text menu as paragraphs (`DocumentMark`). Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Graphs extend the table cell menu (add column + chart options). Task lists add **Add to view…** and **Reorder tasks** |
-| Move Mode | Double-click the object → glass frame around the whole embed; drag from anywhere; **drop or tap outside** ends the mode. No handles, no instructional text |
+| Move Mode | Double-click → glass frame; drag onto **any text block**. A teal line follows the pointer and snaps to **visual line boundaries** (including soft-wrapped lines). Drop splits that paragraph/heading at the line (`before \| embed \| after`) or moves before/after the block; empty space under the file = after the last block. Tap outside (not while dragging) ends the mode. After move/delete, adjacent paragraphs **coalesce** (blank/`\n`-only stubs dropped, including next to embeds) so the object does not leave a blank gap. Editing child stays mounted while dragging so object content is not lost. |
+| Empty object + Backspace | Same fluent rule as an empty list bullet / table row: last empty unit + Backspace **removes the object** (cascade-delete). Empty **Enter** still exits below without destroying. |
 | Task Reorder Mode | Owned by `TaskListSurface` (objects): right-click → Reorder tasks → glass per task; **tap outside the list** ends it |
 
 ### Segment id
@@ -250,21 +265,22 @@ Undo/redo is tracked by `document_edit_history.dart` at document level.
 - Never store or display derived plain text in the app.
 - Never rebuild the whole editor on a keystroke; save silently and keep focus.
 - An empty list item, table row, or trailing object unit (empty final task / info line / graph column) plus Enter exits that structure **without destroying it**.
+- An empty object (empty info, last empty task, last empty graph column) plus Backspace **removes the object** and coalesces surrounding text — no leftover blank paragraph.
 - All formatting goes through spans, never through separate styled blocks.
 - Any new editable text must register a segment with the flow, or the caret will not reach it.
 - Segment order comes from the document tree, never from widget build order.
 - There is one marking. Every action resolves its target through `DocumentMark`, never from a single field's selection.
 - With nothing marked, an action applies to the caret's line — never to nothing, and never to the whole part.
-- A bullet and a row each count as one line of text; settle caret and marking questions by asking what a plain line would do.
+- A bullet, a row, and an embed each count as one line of text; settle caret and marking questions by asking what a plain line would do ([`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md)).
+- Never leave empty/`\n`-only paragraph neighbors after move/delete/split; delete object lands caret at the end of the text above.
 - A part is removed only when it was marked end to end; a partial marking never destroys structure.
 - Never rebuild the whole editor from `AppState.notifyListeners` while a key may still be down. Silent saves and post-frame embed refreshes only — otherwise Flutter's keyboard state desyncs (`KeyDownEvent … already pressed`).
-- An arrow key moves the caret the direction it points on screen, in Hebrew as in English.
+- RTL / Hebrew caret and direction policy: only via [`rich_text/rtl/`](rich_text/rtl/RTL.md).
 - A list has one style. Points vs numbers is switched on the existing list, never offered as two kinds of list to insert.
 
 ## Not done yet
 
 - Deleting across parts does not merge the first and last part into one.
-- Cmd+arrow and Home/End still follow the platform's logical direction in Hebrew. They share one intent with Home/End, so flipping it would break those; plain and Alt+arrow are handled.
+- Cmd+arrow and Home/End in Hebrew — see known gap in [`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md).
 - Undo/redo is still per document mutation, not one stack shared with cross-part edits.
-- Insert still places the embed after the focused block, not by splitting a paragraph at the caret offset.
 - Image resize handles deferred. Convert selection → Info is an objects-area product flow (uses object APIs) with a small files entry point.

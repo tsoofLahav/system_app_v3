@@ -265,4 +265,55 @@ void main() {
       expect(flow.selection, isNull);
     });
   });
+
+  group('pointer miss in empty space', () {
+    test('click below text lands at the end of the last line above', () {
+      final at = DocumentTextFlow.resolvePointerMiss(
+        order: ['a', 'b'],
+        tops: {'a': 0, 'b': 40},
+        bottoms: {'a': 30, 'b': 70},
+        dy: 120,
+        lengthOf: (id) => id == 'a' ? 5 : 8,
+      );
+
+      expect(at, const DocumentTextPosition('b', 8));
+    });
+
+    test('click in the gap between parts lands at the end of the part above', () {
+      final at = DocumentTextFlow.resolvePointerMiss(
+        order: ['a', 'b'],
+        tops: {'a': 0, 'b': 50},
+        bottoms: {'a': 30, 'b': 80},
+        dy: 40,
+        lengthOf: (id) => id == 'a' ? 5 : 8,
+      );
+
+      expect(at, const DocumentTextPosition('a', 5));
+    });
+
+    test('click above the file lands at the start of the first line', () {
+      final at = DocumentTextFlow.resolvePointerMiss(
+        order: ['a', 'b'],
+        tops: {'a': 20, 'b': 60},
+        bottoms: {'a': 50, 'b': 90},
+        dy: 5,
+        lengthOf: (_) => 4,
+      );
+
+      expect(at, const DocumentTextPosition('a', 0));
+    });
+
+    test('empty file still resolves to the only segment end', () {
+      final at = DocumentTextFlow.resolvePointerMiss(
+        order: ['only'],
+        tops: {'only': 0},
+        bottoms: {'only': 24},
+        dy: 200,
+        lengthOf: (_) => 0,
+      );
+
+      expect(at, const DocumentTextPosition('only', 0));
+    });
+  });
+
 }

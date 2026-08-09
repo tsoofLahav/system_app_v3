@@ -1,0 +1,106 @@
+# RTL solution
+
+How the file editor stays fluent in Hebrew (and other RTL), including mixed Hebrew + English/numbers.
+
+This folder is the **only** place that owns RTL/BiDi policy for editable text. Wire it through [`../formatted_text_field.dart`](../formatted_text_field.dart). Do not add competing caret math in `DocumentTextFlow` or embed widgets.
+
+## Boundary
+
+| Layer | Owns |
+|-------|------|
+| [`DocumentTextFlow`](../../editor/document_text_flow.dart) | Segment order, moving **between** parts, click in empty space **under the file** → logical end of last part |
+| This folder + Flutter `TextField` | Base direction, visual arrows, caret/selection/IME **inside** a part |
+
+Custom code decides “leave paragraph A for task B”. Flutter decides “where on these glyphs is the caret?” — except empty padding (below), which Flutter gets wrong in BiDi.
+
+## The three pieces
+
+```
+rtl/
+  RTL.md                      ← this file
+  rtl.dart                    ← public barrel + small helpers
+  paragraph_text_direction.dart
+  rtl_caret_motion.dart
+  empty_space_caret.dart
+```
+
+### 1. Base direction — `paragraph_text_direction.dart`
+
+Each field gets an explicit `TextField.textDirection`:
+
+1. First **strong** directional character in the text (Unicode P2/P3 style) → RTL or LTR  
+2. Else ambient UI `Directionality` (empty / digits-only paragraphs)
+
+Example: `אני משתמש ב-Flutter 3.29 היום` → RTL base, so Flutter lays out the Latin/number runs inside an RTL paragraph.
+
+**Do not** reverse the string. Direction only.
+
+Helper: `resolveFieldTextDirection(text, ambient)` in `rtl.dart`.
+
+### 2. Visual arrow keys — `rtl_caret_motion.dart`
+
+Flutter moves the caret through the **string**. In RTL that makes ← walk the wrong way on screen.
+
+**Fix:** wrap the field in `Actions` that flip horizontal motion intents (`forward: !forward`) and hand them back to the field’s own action. Flutter still performs the move (key repeat, graphemes, shift-extend stay intact).
+
+**Do not** reimplement arrows in a `onKeyEvent` handler.
+
+Applied only when the field’s resolved direction is RTL (`wrapVisualCaretMotion`).
+
+**Not flipped:** Cmd+arrow / Home / End (they share intents; flipping would break Home/End). Documented as a known gap in the files [`AREA.md`](../../AREA.md).
+
+Cross-part exits (arrow off the edge of a bullet into the next segment) stay in `FormattedTextField` / `DocumentTextFlow`; the exit **edge** is mirrored when the field is RTL (left arrow leaves from the logical end).
+
+### 3. Empty-padding taps — `empty_space_caret.dart`
+
+Full-width fields leave empty space beside glyphs (especially RTL). Flutter’s `getPositionForPoint` often lands on a BiDi boundary (start of line, or after an English/number run).
+
+| Tap target | Who places the caret |
+|------------|----------------------|
+| On painted glyphs | Flutter (`getPositionForPoint`) |
+| Empty padding beside / below glyphs | Logical line end via `getLineAtOffset` (probe glyph **center** only to learn which line) |
+| Empty space under the whole file (outside every field) | `DocumentTextFlow` → logical end of last part |
+
+Correction runs in `FormattedTextField.onTap` **in the same event turn** (before paint). Never post-frame — that flashes wrong → right.
+
+Use `collapsedAtLogicalEnd(offset)` so affinity stays upstream at ends.
+
+## Wiring checklist (`FormattedTextField`)
+
+- [ ] `textDirection: resolveFieldTextDirection(text, ambient)`
+- [ ] `textAlign: TextAlign.start` (follows direction)
+- [ ] `wrapVisualCaretMotion(...)` when RTL
+- [ ] Primary pointer down stores global position; `onTap` may call `emptySpaceCaretOffset`
+- [ ] Cross-part arrow edge uses the **resolved** field direction, not only ambient locale
+
+## What we deliberately do not do
+
+- Migrate to Flutter Quill / Super Editor for RTL alone  
+- Reverse Hebrew strings or map “visual columns” ourselves for normal typing  
+- Fight the `TextField` from the parent editor on taps **inside** a field box (causes caret jump)  
+- Post-frame caret “snaps”
+
+## Regression tests
+
+```bash
+flutter test \
+  test/rtl_paragraph_text_direction_test.dart \
+  test/rtl_empty_space_caret_test.dart \
+  test/document_text_flow_test.dart
+```
+
+Manual (Hebrew UI):
+
+1. Type `אני משתמש ב-Flutter 3.29 היום` — layout stays coherent; caret at end after typing  
+2. ← → move the caret the way the keys point on screen  
+3. Click empty space beside the line → caret at logical end (resume writing)  
+4. Click below the paragraph / empty file → caret at end of last line  
+5. Click on a Hebrew letter mid-word → caret stays where Flutter put it on the glyph  
+
+## Related
+
+| Topic | Where |
+|-------|--------|
+| Continuous document / segments | [`../../AREA.md`](../../AREA.md) |
+| Spans / mark / menus | [`../RICH_TEXT.md`](../RICH_TEXT.md) |
+| Graph/table reading direction | Embed widgets use ambient `Directionality` for column mirroring — separate from this text-caret solution |
