@@ -7,11 +7,13 @@ import '../../../core/app_state.dart';
 import '../../objects/data/object_embed.dart';
 import '../../objects/data/task.dart';
 import '../../objects/tasks/task_zones.dart';
+import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
 import '../data/app_file.dart';
 import '../model/document_text_codec.dart';
 import '../model/marker_super_editor_bridge.dart';
 import '../model/object_embed_node.dart';
+import '../rich_text/document_context_menu.dart';
 import './document_editor_controller.dart';
 import './embeds/table_embed.dart';
 import './object_embed_component.dart';
@@ -39,6 +41,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   late MutableDocument _doc;
   late MutableDocumentComposer _composer;
   late Editor _editor;
+  late CommonEditorOperations _docOps;
   late FocusNode _focusNode;
   final _docLayoutKey = GlobalKey();
 
@@ -48,6 +51,9 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   var _applyingRemote = false;
   String? _moveModeNodeId;
   List<ObjectEmbed>? _embedsSnapshot;
+
+  /// Tight constant gap between blocks (Enter creates a new paragraph).
+  static const _blockGap = AppSpacing.blockGap;
 
   AppFile get _currentFile =>
       widget.state.selectedDetail?.files
@@ -73,6 +79,13 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       document: _doc,
       composer: _composer,
       isHistoryEnabled: true,
+    );
+    _docOps = CommonEditorOperations(
+      editor: _editor,
+      document: _doc,
+      composer: _composer,
+      documentLayoutResolver: () =>
+          _docLayoutKey.currentState as DocumentLayout,
     );
     _doc.addListener(_onDocumentChange);
     _lastSavedJson = _currentFile.documentJson;
@@ -343,6 +356,13 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       isHistoryEnabled: true,
     );
     _doc = next;
+    _docOps = CommonEditorOperations(
+      editor: _editor,
+      document: _doc,
+      composer: _composer,
+      documentLayoutResolver: () =>
+          _docLayoutKey.currentState as DocumentLayout,
+    );
     _doc.addListener(_onDocumentChange);
     _lastSavedJson = json;
     _dirty = false;
@@ -454,37 +474,214 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   void _claimFile() => DocumentEditorRegistry.claim(widget.file.id);
 
+  /// Full stylesheet (not layered on defaults) — defaults use maxWidth 640 and
+  /// 24px paragraph gaps, which look wrong in a file pane.
   Stylesheet get _stylesheet {
-    final base = defaultStylesheet;
     final para = AppTypography.documentParagraphStyle;
-    return base.copyWith(
-      addRulesAfter: [
+    return Stylesheet(
+      documentPadding: EdgeInsets.zero,
+      inlineTextStyler: defaultInlineTextStyler,
+      rules: [
         StyleRule(
           BlockSelector.all,
           (doc, node) => {
+            Styles.maxWidth: double.infinity,
+            Styles.padding: const CascadingPadding.symmetric(horizontal: 0),
             Styles.textStyle: para,
+          },
+        ),
+        StyleRule(
+          const BlockSelector('paragraph'),
+          (doc, node) => {
+            Styles.padding: const CascadingPadding.only(top: _blockGap),
+          },
+        ),
+        StyleRule(
+          const BlockSelector('paragraph').first(),
+          (doc, node) => {
+            Styles.padding: const CascadingPadding.only(top: 0),
+          },
+        ),
+        StyleRule(
+          const BlockSelector('listItem'),
+          (doc, node) => {
+            Styles.padding: const CascadingPadding.only(top: _blockGap),
+            Styles.textStyle: AppTypography.listItemStyle,
+          },
+        ),
+        StyleRule(
+          const BlockSelector('objectEmbed'),
+          (doc, node) => {
+            Styles.padding: const CascadingPadding.only(top: AppSpacing.sm),
           },
         ),
         StyleRule(
           const BlockSelector('header1'),
           (doc, node) => {
+            Styles.padding: const CascadingPadding.only(top: AppSpacing.md),
             Styles.textStyle: AppTypography.documentHeadingStyle(1),
           },
         ),
         StyleRule(
           const BlockSelector('header2'),
           (doc, node) => {
+            Styles.padding: const CascadingPadding.only(top: AppSpacing.sm),
             Styles.textStyle: AppTypography.documentHeadingStyle(2),
           },
         ),
         StyleRule(
           const BlockSelector('header3'),
           (doc, node) => {
+            Styles.padding: const CascadingPadding.only(top: AppSpacing.sm),
             Styles.textStyle: AppTypography.documentHeadingStyle(3),
+          },
+        ),
+        StyleRule(
+          BlockSelector.all.last(),
+          (doc, node) => {
+            Styles.padding: const CascadingPadding.only(bottom: AppSpacing.lg),
           },
         ),
       ],
     );
+  }
+
+  SelectionStyles get _selectionStyles => SelectionStyles(
+        selectionColor: AppColors.primary.withValues(alpha: 0.38),
+      );
+
+  Future<void> _onSecondaryTap(TapDownDetails details) async {
+    _claimFile();
+    _focusNode.requestFocus();
+    if (!mounted) return;
+
+    final sel = _composer.selection;
+    final node = sel == null ? null : _doc.getNodeById(sel.extent.nodeId);
+    final strings = widget.state.strings;
+
+    if (node is ListItemNode) {
+      await DocumentContextMenu.showListMenu(
+        context: context,
+        globalPosition: details.globalPosition,
+        strings: strings,
+        isOrdered: node.type == ListItemType.ordered,
+        onAction: (action) async {
+          if (action == 'list:style:bullet' ||
+              action == 'list:style:numbered') {
+            final wantOrdered = action == 'list:style:numbered';
+            // Switch every consecutive list item in this fence.
+            _setListFenceType(node.id, wantOrdered
+                ? ListItemType.ordered
+                : ListItemType.unordered);
+            return;
+          }
+          await _handleTextMenuAction(action);
+        },
+      );
+      return;
+    }
+
+    await DocumentContextMenu.showTextMenu(
+      context: context,
+      globalPosition: details.globalPosition,
+      strings: strings,
+      onAction: _handleTextMenuAction,
+    );
+  }
+
+  Future<void> _handleTextMenuAction(String action) async {
+    switch (action) {
+      case 'text:bold':
+        _docOps.toggleAttributionsOnSelection({boldAttribution});
+      case 'text:italic':
+        _docOps.toggleAttributionsOnSelection({italicsAttribution});
+      case 'text:underline':
+        _docOps.toggleAttributionsOnSelection({underlineAttribution});
+      case 'text:size_up':
+        _applyFontSizeDelta(1.5);
+      case 'text:size_down':
+        _applyFontSizeDelta(-1.5);
+      case 'text:color:clear':
+        _clearColorAttribution();
+      case 'text:cut':
+        if (_composer.selection != null &&
+            !_composer.selection!.isCollapsed) {
+          _docOps.cut();
+        }
+      case 'text:copy':
+        if (_composer.selection != null &&
+            !_composer.selection!.isCollapsed) {
+          _docOps.copy();
+        }
+      case 'text:paste':
+        if (_composer.selection != null) _docOps.paste();
+      default:
+        if (action.startsWith('text:color:') &&
+            action != 'text:color:pick' &&
+            action != 'text:color:clear') {
+          final hex = action.substring('text:color:'.length);
+          _applyColorAttribution(AppColors.colorFromHex(hex));
+        }
+    }
+  }
+
+  void _applyFontSizeDelta(double delta) {
+    final sel = _composer.selection;
+    if (sel == null || sel.isCollapsed) return;
+    final base =
+        AppTypography.documentParagraphStyle.fontSize ?? 12.5;
+    final next = (base + delta).clamp(10.0, 28.0);
+    _editor.execute([
+      AddTextAttributionsRequest(
+        documentRange: sel,
+        attributions: {FontSizeAttribution(next)},
+      ),
+    ]);
+  }
+
+  void _applyColorAttribution(Color color) {
+    final sel = _composer.selection;
+    if (sel == null || sel.isCollapsed) return;
+    _editor.execute([
+      AddTextAttributionsRequest(
+        documentRange: sel,
+        attributions: {ColorAttribution(color)},
+      ),
+    ]);
+  }
+
+  void _clearColorAttribution() {
+    final sel = _composer.selection;
+    if (sel == null || sel.isCollapsed) return;
+    _editor.execute([
+      AddTextAttributionsRequest(
+        documentRange: sel,
+        attributions: {ColorAttribution(AppColors.text)},
+      ),
+    ]);
+  }
+
+  void _setListFenceType(String anyItemId, ListItemType type) {
+    final start = _doc.getNodeIndexById(anyItemId);
+    if (start < 0) return;
+    // Expand to the contiguous list fence containing [anyItemId].
+    var lo = start;
+    while (lo > 0 && _doc.getNodeAt(lo - 1) is ListItemNode) {
+      lo--;
+    }
+    var hi = start;
+    while (hi + 1 < _doc.nodeCount &&
+        _doc.getNodeAt(hi + 1) is ListItemNode) {
+      hi++;
+    }
+    final requests = <EditRequest>[];
+    for (var i = lo; i <= hi; i++) {
+      final n = _doc.getNodeAt(i);
+      if (n is ListItemNode) {
+        requests.add(ChangeListItemTypeRequest(nodeId: n.id, newType: type));
+      }
+    }
+    if (requests.isNotEmpty) _editor.execute(requests);
   }
 
   List<ComponentBuilder> get _componentBuilders => [
@@ -512,56 +709,61 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     // Super Editor always builds a SliverHybridStack. When it finds *any*
     // ancestor Scrollable (the topic canvas is a SingleChildScrollView), it
     // emits that sliver raw — so it must sit in *our* CustomScrollView as a
-    // sliver, never under Column/Expanded/GestureDetector.
-    return CustomScrollView(
-      slivers: [
-        if (_moveModeNodeId != null)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Text('Move', style: AppTypography.metaStyle),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    tooltip: 'Move up',
-                    icon: const Icon(Icons.arrow_upward, size: 18),
-                    onPressed: () {
-                      final i = _doc.getNodeIndexById(_moveModeNodeId!);
-                      if (i > 0) _moveEmbedToIndex(_moveModeNodeId!, i - 1);
-                    },
-                  ),
-                  IconButton(
-                    tooltip: 'Move down',
-                    icon: const Icon(Icons.arrow_downward, size: 18),
-                    onPressed: () {
-                      final i = _doc.getNodeIndexById(_moveModeNodeId!);
-                      if (i >= 0 && i + 1 < _doc.nodeCount) {
-                        _moveEmbedToIndex(_moveModeNodeId!, i + 2);
-                      }
-                    },
-                  ),
-                  TextButton(
-                    onPressed: () => setState(() => _moveModeNodeId = null),
-                    child: const Text('Done'),
-                  ),
-                ],
+    // sliver, never under Column/Expanded.
+    return GestureDetector(
+      onSecondaryTapDown: _onSecondaryTap,
+      behavior: HitTestBehavior.translucent,
+      child: CustomScrollView(
+        slivers: [
+          if (_moveModeNodeId != null)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Text('Move', style: AppTypography.metaStyle),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Move up',
+                      icon: const Icon(Icons.arrow_upward, size: 18),
+                      onPressed: () {
+                        final i = _doc.getNodeIndexById(_moveModeNodeId!);
+                        if (i > 0) _moveEmbedToIndex(_moveModeNodeId!, i - 1);
+                      },
+                    ),
+                    IconButton(
+                      tooltip: 'Move down',
+                      icon: const Icon(Icons.arrow_downward, size: 18),
+                      onPressed: () {
+                        final i = _doc.getNodeIndexById(_moveModeNodeId!);
+                        if (i >= 0 && i + 1 < _doc.nodeCount) {
+                          _moveEmbedToIndex(_moveModeNodeId!, i + 2);
+                        }
+                      },
+                    ),
+                    TextButton(
+                      onPressed: () => setState(() => _moveModeNodeId = null),
+                      child: const Text('Done'),
+                    ),
+                  ],
+                ),
               ),
             ),
+          SuperEditor(
+            editor: _editor,
+            focusNode: _focusNode,
+            documentLayoutKey: _docLayoutKey,
+            stylesheet: _stylesheet,
+            selectionStyle: _selectionStyles,
+            componentBuilders: _componentBuilders,
+            shrinkWrap: true,
+            selectionPolicies: const SuperEditorSelectionPolicies(
+              clearSelectionWhenEditorLosesFocus: false,
+              clearSelectionWhenImeConnectionCloses: false,
+            ),
           ),
-        SuperEditor(
-          editor: _editor,
-          focusNode: _focusNode,
-          documentLayoutKey: _docLayoutKey,
-          stylesheet: _stylesheet,
-          componentBuilders: _componentBuilders,
-          shrinkWrap: true,
-          selectionPolicies: const SuperEditorSelectionPolicies(
-            clearSelectionWhenEditorLosesFocus: false,
-            clearSelectionWhenImeConnectionCloses: false,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

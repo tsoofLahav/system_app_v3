@@ -35,6 +35,16 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 
 Each file pane scrolls its document in a local `CustomScrollView` with `SuperEditor` as a **sliver** (`shrinkWrap: true`). The topic canvas also scrolls; SE always emits a sliver when any ancestor `Scrollable` exists, so it must never sit under `Column` / `Expanded` / box parents.
 
+### Visual rules (Super Editor stylesheet)
+
+| Rule | Value |
+|------|--------|
+| Content width | Full pane (`maxWidth: infinity`) — never the SE default 640px column |
+| Horizontal inset | 0 inside the editor (note card already pads) |
+| Gap between blocks | `AppSpacing.blockGap` (3) — Enter = new paragraph with that top gap |
+| Selection | Teal wash (`AppColors.primary` @ ~38% opacity) |
+| Right-click | `DocumentContextMenu` (bold/italic/cut/copy/paste; list style switch on list items) |
+
 ## Node types
 
 | Marker / object | Super Editor | Widget |
