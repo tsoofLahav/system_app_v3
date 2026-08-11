@@ -78,6 +78,11 @@ class _AppShortcutsScopeState extends State<AppShortcutsScope> {
     ShortcutActionIds.addFile,
     ShortcutActionIds.assignTaskView,
     ShortcutActionIds.aiConsult,
+    ShortcutActionIds.insertInfo,
+    ShortcutActionIds.insertTaskList,
+    ShortcutActionIds.insertTable,
+    ShortcutActionIds.insertGraph,
+    ShortcutActionIds.insertImage,
   };
 
   @override

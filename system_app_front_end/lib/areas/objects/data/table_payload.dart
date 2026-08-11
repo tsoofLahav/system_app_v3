@@ -18,13 +18,23 @@ class TableObjectPayload {
       };
 
   /// Default chart table (former graph insert).
-  static Map<String, dynamic> emptyChart({int columns = 2}) {
+  ///
+  /// When [hebrewLabels] is true (UI RTL / Hebrew mode), series labels use
+  /// א, ב, … instead of A, B, ….
+  static Map<String, dynamic> emptyChart({
+    int columns = 2,
+    bool hebrewLabels = false,
+  }) {
     final hexes = AppColorPalettes.defaultChart.hexes;
     return {
       'rows': [
         [
           for (var c = 0; c < columns; c++)
-            {'text': String.fromCharCode(0x41 + c)}, // A, B, …
+            {
+              'text': hebrewLabels
+                  ? String.fromCharCode(0x05D0 + c) // א, ב, …
+                  : String.fromCharCode(0x41 + c), // A, B, …
+            },
         ],
         [
           for (var c = 0; c < columns; c++) {'text': '${c + 1}'},

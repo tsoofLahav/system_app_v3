@@ -759,10 +759,10 @@ class AppState extends ChangeNotifier {
     return embeds;
   }
 
-  Future<AppFile> reloadFile(int fileId) async {
+  Future<AppFile> reloadFile(int fileId, {bool notify = true}) async {
     final updated = await _files.getFile(fileId);
     _patchFileInDetail(updated);
-    notifyListeners();
+    if (notify) notifyListeners();
     return updated;
   }
 
@@ -784,14 +784,8 @@ class AppState extends ChangeNotifier {
     Map<String, dynamic> payload, {
     bool notify = false,
   }) async {
-    try {
-      await _api.patch('/objects/$objectId', {'payload': payload});
-    } on ApiException catch (e) {
-      // Late write after delete (empty graph exit, prune, etc.).
-      if (e.statusCode == 404) return;
-      rethrow;
-    }
-    // Patch the local cache so typing does not rebuild the whole file mid-key.
+    // Patch cache first so a remount never re-seeds from a stale payload while
+    // the network round-trip is in flight (same pattern as [updateInfoObject]).
     for (final entry in embedsByFileId.entries) {
       final list = entry.value;
       final index = list.indexWhere((e) => e.id == objectId);
@@ -802,6 +796,13 @@ class AppState extends ChangeNotifier {
           if (i == index) current.copyWith(payload: payload) else list[i],
       ];
       break;
+    }
+    try {
+      await _api.patch('/objects/$objectId', {'payload': payload});
+    } on ApiException catch (e) {
+      // Late write after delete (empty graph exit, prune, etc.).
+      if (e.statusCode == 404) return;
+      rethrow;
     }
     if (notify) notifyListeners();
   }
@@ -828,7 +829,10 @@ class AppState extends ChangeNotifier {
     );
     final updated = await _files.getFile(file.id);
     _patchFileInDetail(updated);
-    await loadEmbedsForFile(file.id);
+    // Silent — the file editor reloads the document and focuses the new
+    // object itself. Notifying here rebuilds Super Editor mid-handoff and
+    // breaks the IME (one letter then stuck).
+    await loadEmbedsForFile(file.id, notify: false);
     return embed;
   }
 

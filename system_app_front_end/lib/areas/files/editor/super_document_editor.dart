@@ -1,23 +1,31 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:super_editor/super_editor.dart';
 
 import '../../../core/app_state.dart';
 import '../../objects/data/object_embed.dart';
 import '../../objects/data/table_payload.dart';
 import '../../objects/data/task.dart';
+import '../../objects/links/add_connection_dialog.dart';
+import '../../objects/tags/assign_object_tags_dialog.dart';
 import '../../objects/tasks/task_zones.dart';
+import '../../objects/views/assign_task_view_dialog.dart';
+import '../../ui/app_color_palettes.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
 import '../data/app_file.dart';
 import '../model/document_text_codec.dart';
 import '../model/marker_super_editor_bridge.dart';
 import '../model/object_embed_node.dart';
+import '../rich_text/block_text_actions.dart';
 import '../rich_text/document_context_menu.dart';
 import '../rich_text/rtl/rtl.dart';
 import './document_caret_session.dart';
 import './document_editor_controller.dart';
+import './document_secondary_tap.dart';
+import './editor_key_handoff.dart';
 import './embed_caret_bridge.dart';
 import './embed_move_bubble.dart';
 import './object_embed_component.dart';
@@ -62,6 +70,12 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   late final EmbedCaretPlugin _embedCaretPlugin;
   late final SuperEditorVisualCaretPlugin _visualCaretPlugin;
   late final DocumentCaretSession _caretSession;
+
+  /// Bumped when [_reloadFromStored] swaps [Editor]. Forces a full SuperEditor
+  /// remount so DocumentImeInputClient is disposed — SE's didUpdateWidget
+  /// recreates the client without disposing the old one, which then serializes
+  /// the dead document against the shared composer selection (Escape crash).
+  var _superEditorEpoch = 0;
 
   /// Tight constant gap between blocks (Enter creates a new paragraph).
   static const _blockGap = AppSpacing.blockGap;
@@ -173,9 +187,44 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   void _onAppStateChanged() {
     final embeds = widget.state.embedsByFileId[widget.file.id];
     if (embeds != null && !identical(embeds, _embedsSnapshot) && mounted) {
-      setState(() => _embedsSnapshot = embeds);
+      final prev = _embedsSnapshot;
+      // Always track the latest list identity. Payload-only patches (table/info
+      // typing) replace the list without needing a Super Editor rebuild — those
+      // remounts mid-KeyDown desync HardwareKeyboard ("already pressed").
+      final structural = _embedsStructurallyChanged(prev, embeds);
+      _embedsSnapshot = embeds;
+      if (structural) {
+        _scheduleEmbedStructureRebuild();
+      }
     }
     _tryFocusPendingObject();
+  }
+
+  /// Ids/types/order changed — not mere payload/title text patches.
+  static bool _embedsStructurallyChanged(
+    List<ObjectEmbed>? prev,
+    List<ObjectEmbed> next,
+  ) {
+    if (prev == null) return true;
+    if (prev.length != next.length) return true;
+    for (var i = 0; i < prev.length; i++) {
+      if (prev[i].id != next[i].id || prev[i].type != next[i].type) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void _scheduleEmbedStructureRebuild() {
+    if (!mounted) return;
+    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+      runAfterKeystroke(() {
+        if (!mounted) return;
+        setState(() {});
+      });
+      return;
+    }
+    setState(() {});
   }
 
   Future<void> _loadEmbedsQuietly() async {
@@ -339,7 +388,9 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     if (type == 'graph') {
       // Graph is a table with chart quality (pointer still [GRAPH id]).
       apiType = 'table';
-      payload = TableObjectPayload.emptyChart();
+      payload = TableObjectPayload.emptyChart(
+        hebrewLabels: widget.state.isRtl,
+      );
     } else if (type == 'image') {
       payload = {'url': '', 'caption': ''};
     } else if (type == 'table') {
@@ -359,16 +410,40 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       blockIndex: blockIndex,
     );
 
-    final updated = await widget.state.reloadFile(widget.file.id);
+    // Silent reload — a shell-wide notify mid-handoff remounts fields and
+    // desyncs the IME after the first character.
+    final updated =
+        await widget.state.reloadFile(widget.file.id, notify: false);
     final nodeId = ObjectEmbedNode.idFor(embed.id);
+    _embedsSnapshot = widget.state.embedsByFileId[widget.file.id];
     _reloadFromStored(updated.documentJson);
-    // Land SE caret on the new object block (Enter opens it).
+    // After remount, put the caret *inside* the object (Tab-equivalent).
+    // Images have no inner field — fall back to the block caret (after it).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        _caretSession.placeOnObjectLine(nodeId);
+        _enterNewObject(nodeId);
       });
+    });
+  }
+
+  void _enterNewObject(String nodeId) {
+    bool tryEnter(EmbedCaretGateway gateway) {
+      if (gateway.lineCount <= 0) return false;
+      _caretSession.adoptEmbed(nodeId);
+      gateway.enterFromAbove();
+      return true;
+    }
+
+    final gateway = _embedCaretRegistry[nodeId];
+    if (gateway != null && tryEnter(gateway)) return;
+    // Task-list surface may register one frame later than the embed host.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final late = _embedCaretRegistry[nodeId];
+      if (late != null && tryEnter(late)) return;
+      _caretSession.placeOnObjectLine(nodeId);
     });
   }
 
@@ -402,6 +477,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _lastSavedJson = json;
     _dirty = false;
     _applyingRemote = false;
+    // Remount SuperEditor so the prior DocumentImeInputClient is disposed.
+    _superEditorEpoch++;
     if (mounted) setState(() {});
   }
 
@@ -669,29 +746,63 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         selectionColor: _selectionFill,
       );
 
+  /// Node under a global pointer — safe when Super Editor is a sliver.
+  DocumentNode? _nodeAtGlobalOffset(Offset global) {
+    final layout = _docLayoutKey.currentState as DocumentLayout?;
+    if (layout == null) return null;
+    try {
+      final local = layout.getDocumentOffsetFromAncestorOffset(global);
+      final pos = layout.getDocumentPositionNearestToOffset(local) ??
+          layout.getDocumentPositionAtOffset(local);
+      if (pos == null) return null;
+      return _doc.getNodeById(pos.nodeId);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _onSecondaryTap(TapDownDetails details) async {
     _claimFile();
+    // Embed fields show their own menus and mark the gate first.
+    if (DocumentSecondaryTap.embedHandled) return;
+    if (!mounted) return;
+
+    // Super Editor is hosted as a sliver — never cast documentLayoutKey's
+    // render object to RenderBox. Use DocumentLayout's coordinate helper.
+    DocumentNode? node = _nodeAtGlobalOffset(details.globalPosition);
+    node ??= () {
+      final sel = _composer.selection;
+      if (sel == null) return null;
+      return _doc.getNodeById(sel.extent.nodeId);
+    }();
+
+    final strings = widget.state.strings;
+
+    if (node is ObjectEmbedNode) {
+      // Don't steal focus into SE — object menus act on the embed.
+      await _showObjectEmbedMenu(node, details.globalPosition);
+      return;
+    }
+
     _focusNode.requestFocus();
     if (!mounted) return;
 
-    final sel = _composer.selection;
-    final node = sel == null ? null : _doc.getNodeById(sel.extent.nodeId);
-    final strings = widget.state.strings;
-
     if (node is ListItemNode) {
+      final listNode = node;
       await DocumentContextMenu.showListMenu(
         context: context,
         globalPosition: details.globalPosition,
         strings: strings,
-        isOrdered: node.type == ListItemType.ordered,
+        isOrdered: listNode.type == ListItemType.ordered,
         onAction: (action) async {
           if (action == 'list:style:bullet' ||
               action == 'list:style:numbered') {
             final wantOrdered = action == 'list:style:numbered';
             // Switch every consecutive list item in this fence.
-            _setListFenceType(node.id, wantOrdered
-                ? ListItemType.ordered
-                : ListItemType.unordered);
+            _setListFenceType(
+              listNode.id,
+              wantOrdered ? ListItemType.ordered : ListItemType.unordered,
+            );
             return;
           }
           await _handleTextMenuAction(action);
@@ -706,6 +817,183 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       strings: strings,
       onAction: _handleTextMenuAction,
     );
+  }
+
+  Future<void> _showObjectEmbedMenu(
+    ObjectEmbedNode node,
+    Offset globalPosition,
+  ) async {
+    final embed = _lookup(node.objectId);
+    if (embed == null || !mounted) return;
+    final strings = widget.state.strings;
+    final type = embed.type == 'graph' ? 'table' : embed.type;
+
+    switch (type) {
+      case 'info':
+        await DocumentContextMenu.showInfoMenu(
+          context: context,
+          globalPosition: globalPosition,
+          strings: strings,
+          onAction: (action) async {
+            if (action == 'info:add_tag') {
+              await showAssignObjectTagsDialog(
+                context: context,
+                state: widget.state,
+                embed: embed,
+              );
+              await _loadEmbedsQuietly();
+              return;
+            }
+            if (action == 'info:add_connection') {
+              final pick = await showAddConnectionDialog(
+                context: context,
+                state: widget.state,
+                source: embed,
+              );
+              if (pick == null) return;
+              await widget.state.addRelatedObjectLink(
+                embed,
+                targetObjectId: pick.objectId,
+              );
+              await _loadEmbedsQuietly();
+              return;
+            }
+            await runBlockTextAction(action);
+          },
+        );
+      case 'task_list':
+        final taskId = _firstTaskId(embed);
+        await DocumentContextMenu.showTaskListMenu(
+          context: context,
+          globalPosition: globalPosition,
+          strings: strings,
+          includeAssignView: taskId != null,
+          onAction: (action) async {
+            if (action == 'tasks:assign_view' && taskId != null) {
+              await showAssignTaskViewDialog(
+                context: context,
+                state: widget.state,
+                taskId: taskId,
+              );
+              return;
+            }
+            if (action == 'tasks:reorder_mode') {
+              final gateway = _embedCaretRegistry[node.id];
+              gateway?.enterFromAbove();
+              gateway?.beginTaskReorderMode();
+              return;
+            }
+            await runBlockTextAction(action);
+          },
+        );
+      case 'table':
+        final chartOn = TableObjectPayload.chartEnabled(embed.payload);
+        if (chartOn) {
+          await DocumentContextMenu.showChartMenu(
+            context: context,
+            globalPosition: globalPosition,
+            strings: strings,
+            onAction: (action) async {
+              await _applyChartMenuToEmbed(embed, action);
+            },
+          );
+        } else {
+          await DocumentContextMenu.showTableCellMenu(
+            context: context,
+            globalPosition: globalPosition,
+            strings: strings,
+            onAction: (action) async {
+              if (action == 'table:add_column') {
+                await _addColumnToTableEmbed(embed);
+                return;
+              }
+              await runBlockTextAction(action);
+            },
+          );
+        }
+      case 'image':
+        // No object-specific actions yet — keep caret on the block.
+        return;
+      default:
+        return;
+    }
+  }
+
+  int? _firstTaskId(ObjectEmbed embed) {
+    final tasks = TaskZones.fromTasks(embed.tasks ?? const <Task>[]).all;
+    return tasks.isEmpty ? null : tasks.first.id;
+  }
+
+  /// Block-caret “Add column” — append a cell on every row and persist payload.
+  Future<void> _addColumnToTableEmbed(ObjectEmbed embed) async {
+    final payload = TableObjectPayload.normalize(embed.payload);
+    final rows = TableObjectPayload.rowsOf(payload);
+    final chartOn = TableObjectPayload.chartEnabled(payload);
+    final limit = chartOn ? AppColorPalettes.seriesLimit : 64;
+    final colCount = rows.isEmpty ? 0 : rows.first.length;
+    if (colCount >= limit) return;
+
+    final nextRows = rows.isEmpty
+        ? [
+            [
+              {'text': ''},
+              {'text': ''},
+            ],
+          ]
+        : [
+            for (final row in rows) [...row, {'text': ''}],
+          ];
+    final next = Map<String, dynamic>.from(payload)..['rows'] = nextRows;
+    if (chartOn) {
+      final chart = Map<String, dynamic>.from(
+        TableObjectPayload.chartOf(payload) ?? {'enabled': true},
+      );
+      final cols = nextRows.first.length;
+      final colors = List<String>.from(
+        (chart['colors'] as List?)?.map((e) => '$e') ?? const [],
+      );
+      final hexes = AppColorPalettes.defaultChart.hexes;
+      while (colors.length < cols) {
+        colors.add(hexes[colors.length % hexes.length]);
+      }
+      chart['colors'] = colors;
+      chart['enabled'] = true;
+      next['chart'] = chart;
+    }
+    await widget.state.updateObjectPayload(
+      embed.id,
+      TableObjectPayload.normalize(next),
+    );
+    await _loadEmbedsQuietly();
+  }
+
+  Future<void> _applyChartMenuToEmbed(
+    ObjectEmbed embed,
+    String action,
+  ) async {
+    final payload = Map<String, dynamic>.from(
+      TableObjectPayload.normalize(embed.payload),
+    );
+    final chart = Map<String, dynamic>.from(
+      TableObjectPayload.chartOf(payload) ?? {'enabled': true},
+    );
+    chart['enabled'] = true;
+    if (action.startsWith('chart:type:')) {
+      chart['chartType'] = action.substring('chart:type:'.length);
+    } else if (action.startsWith('chart:palette:')) {
+      final paletteId = action.substring('chart:palette:'.length);
+      final rows = TableObjectPayload.rowsOf(payload);
+      final cols = rows.isEmpty ? 0 : rows.first.length;
+      final palette = AppColorPalettes.byId(paletteId);
+      if (palette != null) {
+        chart['colors'] = palette.colorsForCount(cols);
+      }
+    } else {
+      return;
+    }
+    payload['chart'] = chart;
+    await widget.state.updateObjectPayload(embed.id, payload);
+    await _loadEmbedsQuietly();
   }
 
   Future<void> _handleTextMenuAction(String action) async {
@@ -839,6 +1127,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         child: CustomScrollView(
           slivers: [
             SuperEditor(
+              key: ValueKey<int>(_superEditorEpoch),
               editor: _editor,
               focusNode: _focusNode,
               documentLayoutKey: _docLayoutKey,

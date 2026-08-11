@@ -1020,11 +1020,18 @@ class TaskListSurfaceState extends State<TaskListSurface> {
               }
             },
             onSecondaryTapDown: (d) => unawaited(
-              DocumentContextMenu.showTextMenu(
+              DocumentContextMenu.showTaskListMenu(
                 context: context,
                 globalPosition: d.globalPosition,
                 strings: widget.state.strings,
-                onAction: runBlockTextAction,
+                includeAssignView: false,
+                onAction: (action) async {
+                  if (action == 'tasks:reorder_mode') {
+                    _setReorderMode(true);
+                    return;
+                  }
+                  await runBlockTextAction(action);
+                },
               ),
             ),
             onArrowExitAbove: () =>

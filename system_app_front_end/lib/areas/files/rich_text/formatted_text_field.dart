@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../../../shared/utils/platform_text.dart';
+import '../editor/document_secondary_tap.dart';
 import '../editor/document_text_flow.dart';
 import './block_text_focus.dart';
 import './format_range.dart';
@@ -57,6 +58,8 @@ class FormattedTextField extends StatefulWidget {
     this.onDescriptionDoubleTap,
     this.onArrowExitAbove,
     this.onArrowExitBelow,
+    this.onArrowExitLeft,
+    this.onArrowExitRight,
   });
 
   final TextEditingController controller;
@@ -92,6 +95,14 @@ class FormattedTextField extends StatefulWidget {
 
   /// When there is no [DocumentTextFlow], ↓ on the last visual line calls this.
   final VoidCallback? onArrowExitBelow;
+
+  /// When there is no [DocumentTextFlow], ← at the visual left edge of the
+  /// text (offset 0 in LTR, end in RTL) calls this — e.g. table cell to the left.
+  final VoidCallback? onArrowExitLeft;
+
+  /// When there is no [DocumentTextFlow], → at the visual right edge of the
+  /// text calls this — e.g. table cell to the right.
+  final VoidCallback? onArrowExitRight;
 
   final String emojiSearchHint;
   final String emojiPickerTitle;
@@ -928,6 +939,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
           // collapse the selection.
           _capturePendingMark();
           if (widget.onSecondaryTapDown != null) {
+            // Tell Super Editor's translucent secondary-tap handler to stand
+            // down — otherwise the document text menu opens on top.
+            DocumentSecondaryTap.markEmbedHandled();
             widget.onSecondaryTapDown!(
               TapDownDetails(globalPosition: event.position),
             );
@@ -1071,17 +1085,43 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     widget.onDescriptionHover?.call(_descriptionAt(local));
   }
 
-  /// ↑/↓ at the first/last visual line when this field is not in a flow
-  /// (embed under Super Editor). Returns false when the host has no handler.
+  /// ↑/↓/←/→ at a visual edge when this field is not in a flow (embed under
+  /// Super Editor). Returns false when the host has no handler for that edge.
   bool _handleStandaloneEdgeExit(KeyEvent event) {
     final key = event.logicalKey;
-    if (key != LogicalKeyboardKey.arrowUp &&
-        key != LogicalKeyboardKey.arrowDown) {
-      return false;
-    }
+    final isUp = key == LogicalKeyboardKey.arrowUp;
+    final isDown = key == LogicalKeyboardKey.arrowDown;
+    final isLeft = key == LogicalKeyboardKey.arrowLeft;
+    final isRight = key == LogicalKeyboardKey.arrowRight;
+    if (!isUp && !isDown && !isLeft && !isRight) return false;
     if (HardwareKeyboard.instance.isShiftPressed) return false;
 
     final selection = widget.controller.selection;
+
+    if (isLeft || isRight) {
+      if (widget.onArrowExitLeft == null && widget.onArrowExitRight == null) {
+        return false;
+      }
+      if (!selection.isValid || !selection.isCollapsed) return false;
+      final caret = selection.extentOffset;
+      final textLen = widget.controller.text.length;
+      final rtl = _resolvedTextDirection(context) == TextDirection.rtl;
+      // Physical grid nav: left/right keys match on-screen edges.
+      final atVisualLeft = rtl ? caret >= textLen : caret <= 0;
+      final atVisualRight = rtl ? caret <= 0 : caret >= textLen;
+      if (isLeft && atVisualLeft) {
+        if (widget.onArrowExitLeft == null) return false;
+        widget.onArrowExitLeft!();
+        return true;
+      }
+      if (isRight && atVisualRight) {
+        if (widget.onArrowExitRight == null) return false;
+        widget.onArrowExitRight!();
+        return true;
+      }
+      return false;
+    }
+
     // Single-line fields (info title) are one document line — always at both
     // edges. Don't require a valid selection; macOS may deliver moveUp: before
     // the caret is restored after a focus handoff.
@@ -1089,7 +1129,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     if (!singleLine) {
       if (!selection.isValid || !selection.isCollapsed) return false;
       final caret = selection.extentOffset;
-      if (key == LogicalKeyboardKey.arrowUp) {
+      if (isUp) {
         if (!_caretOnFirstLine(caret)) return false;
         if (widget.onArrowExitAbove == null) return false;
         widget.onArrowExitAbove!();
@@ -1101,7 +1141,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       return true;
     }
 
-    if (key == LogicalKeyboardKey.arrowUp) {
+    if (isUp) {
       if (widget.onArrowExitAbove == null) return false;
       widget.onArrowExitAbove!();
       return true;
@@ -1111,14 +1151,19 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     return true;
   }
 
-  /// macOS sends vertical arrows as selection intents / IME selectors, not only
-  /// key events. At a field edge we move through the document flow; otherwise
-  /// the default EditableText action runs — except on single-line fields, where
-  /// VerticalCaretMovementRun asserts (`isValid` false / one line).
+  /// macOS often delivers arrows as selection intents / IME selectors, not only
+  /// key events. At a field edge we move to the host (table cell / flow);
+  /// otherwise EditableText runs — except single-line vertical, which asserts.
+  ///
+  /// Parent of [wrapVisualCaretMotion]: in RTL the flip action calls *this*
+  /// with a flipped [ExtendSelectionByCharacterIntent], so [forward] here means
+  /// toward higher string offset (visual left in RTL, visual right in LTR).
   Widget _withFlowVerticalIntents(Widget child) {
     if (widget.segmentId == null &&
         widget.onArrowExitAbove == null &&
-        widget.onArrowExitBelow == null) {
+        widget.onArrowExitBelow == null &&
+        widget.onArrowExitLeft == null &&
+        widget.onArrowExitRight == null) {
       return child;
     }
     final singleLine = widget.maxLines == 1;
@@ -1142,9 +1187,48 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
               ? null
               : () => widget.controller.selection.isValid,
         ),
+        ExtendSelectionByCharacterIntent: _StandaloneHorizontalEdgeAction(
+          tryEdge: _tryHorizontalEdgeExitForIntent,
+        ),
       },
       child: child,
     );
+  }
+
+  /// Intent-path edge exit. [towardHigherOffset] is after any RTL flip.
+  bool _tryHorizontalEdgeExitForIntent(
+    ExtendSelectionByCharacterIntent intent,
+  ) {
+    if (!intent.collapseSelection) return false;
+    if (widget.onArrowExitLeft == null && widget.onArrowExitRight == null) {
+      return false;
+    }
+    final selection = widget.controller.selection;
+    if (!selection.isValid || !selection.isCollapsed) return false;
+    final caret = selection.extentOffset;
+    final textLen = widget.controller.text.length;
+    final rtl = _resolvedTextDirection(context) == TextDirection.rtl;
+    if (intent.forward) {
+      if (caret < textLen) return false;
+      // Higher-offset edge: visual right (LTR) / visual left (RTL).
+      if (rtl) {
+        if (widget.onArrowExitLeft == null) return false;
+        widget.onArrowExitLeft!();
+        return true;
+      }
+      if (widget.onArrowExitRight == null) return false;
+      widget.onArrowExitRight!();
+      return true;
+    }
+    if (caret > 0) return false;
+    if (rtl) {
+      if (widget.onArrowExitRight == null) return false;
+      widget.onArrowExitRight!();
+      return true;
+    }
+    if (widget.onArrowExitLeft == null) return false;
+    widget.onArrowExitLeft!();
+    return true;
   }
 
   /// Paints this field's share of a selection that runs across several parts.
@@ -1422,4 +1506,24 @@ class _FlowVerticalEdgeAction
   @override
   bool consumesKey(ExtendSelectionVerticallyToAdjacentLineIntent intent) =>
       true;
+}
+
+/// ←/→ at a text edge (table/graph cells) — macOS character-selection intents.
+class _StandaloneHorizontalEdgeAction
+    extends Action<ExtendSelectionByCharacterIntent> {
+  _StandaloneHorizontalEdgeAction({required this.tryEdge});
+
+  final bool Function(ExtendSelectionByCharacterIntent intent) tryEdge;
+
+  @override
+  Object? invoke(ExtendSelectionByCharacterIntent intent) {
+    if (tryEdge(intent)) return null;
+    return callingAction?.invoke(intent);
+  }
+
+  @override
+  bool isEnabled(ExtendSelectionByCharacterIntent intent) => true;
+
+  @override
+  bool consumesKey(ExtendSelectionByCharacterIntent intent) => true;
 }

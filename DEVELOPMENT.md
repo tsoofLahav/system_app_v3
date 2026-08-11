@@ -59,6 +59,41 @@ Area maps: [backend](system_app_back_end/areas/README.md) · [frontend](system_a
 
 ---
 
+## Editor keyboard safety (read before editing the file editor)
+
+Flutter desyncs when a `TextField` / `FocusNode` is disposed or the editor tree remounts **while a physical key is still down**. Symptom: looping console errors
+
+`KeyDownEvent is dispatched, but the state shows that the physical key is already pressed`
+
+This class of bug comes back often after embed/save/focus changes. **Before changing** `SuperDocumentEditor`, embeds, `AppState` notify paths, or any in-document `TextField`:
+
+### MUST NOT
+
+1. Wrap `DocumentEditor` / `SuperDocumentEditor` in `ListenableBuilder(listenable: appState)` (or any parent that rebuilds the whole file on every `notifyListeners`).
+2. Call `notifyListeners()` / `loadEmbedsForFile(notify: true)` / `_reloadEmbedsForOpenFiles` **from a keystroke path** (cell/title/body `onChanged`, every character).
+3. `setState` the Super Editor (or replace `Editor` / remount embeds) while `HardwareKeyboard.instance.physicalKeysPressed` is non-empty — unless the change is purely visual and keeps the same `FocusNode`s.
+4. Dispose or recreate cell/task/info `FocusNode`s / controllers in `didUpdateWidget` while those fields have focus or keys are down.
+5. Overwrite live controller text from a stale embed cache while the user is typing in that embed.
+
+### MUST
+
+1. **Silent saves:** document + object payload/title patches use `notify: false` (or patch cache in place with no notify).
+2. **Debounce** embed field PATCHes (info / table / tasks already do ~400ms) — never hit the network on every character without a timer.
+3. **Patch cache before await** on embed writes so a remount cannot re-seed empty content mid-flight.
+4. On `AppState` embed-list changes, rebuild Super Editor only for **structural** changes (id / type / order). Payload-only list replacements must not `setState` the editor. If a structural rebuild is required and keys are down, use `runAfterKeystroke` ([`editor_key_handoff.dart`](system_app_front_end/lib/areas/files/editor/editor_key_handoff.dart)).
+5. **Tab / Escape** focus handoff → `runNextFrame`. **Destructive** deletes (empty Backspace removing a row/object) → `runAfterKeystroke`.
+6. Keep stable embed identities (`embed:<objectId>`, `GlobalKey` where State must survive parent rebuilds).
+
+### After you change editor code — smoke-check
+
+- Type quickly in: paragraph, info body, task title, table cell, chart-table cell.
+- Tab into an object, type, Escape out, type in the paragraph below.
+- If the assertion appears: **full restart** the app (hot reload can leave keys stuck); then fix the remount/notify path — do not ignore it.
+
+Detail and fluent-text rules: files [`AREA.md`](system_app_front_end/lib/areas/files/AREA.md) · [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md).
+
+---
+
 ## Remembered notes
 
 _(Dated bullets — added when the user asks to remember something.)_
@@ -82,7 +117,7 @@ _(Dated bullets — added when the user asks to remember something.)_
 - **2026-07-27** — **Files wear their topic's colour**, at a strength fixed per file id (`AppColors.fileTintStrength`) so a pane keeps its shade through reordering, restarts, and other devices. Never derive the shade from position or content. The full cross-app style spec is the UI [`AREA.md`](system_app_front_end/lib/areas/ui/AREA.md) — colours, type, spacing, glass, controls, dialogs — and no `Color(0x…)` or font size belongs outside `areas/ui/`.
 - **2026-07-31** — **Files vs objects split:** in-file embed widgets live under [`files/editor/embeds/`](system_app_front_end/lib/areas/files/editor/embeds/) (presentation, flow, menus, Move Mode). Objects owns data + special qualities — **tasks/views**, **info links**, payloads (e.g. `tasks.status`). Thin overlay: embeds call object services/controls; they do not own those fields. See both [`AREA.md`](system_app_front_end/lib/areas/files/AREA.md) files.
 - **2026-07-27** — **Objects in a file** are top-level embed blocks. The document owns position; the object owns data. Double-click enters Move Mode. Enter on an empty final task / info line / graph column exits below without destroying the object.
-- **2026-07-27** — **Never rebuild the document editor (or the Shortcuts tree) from `AppState.notifyListeners` mid-keystroke.** That desyncs Flutter's `HardwareKeyboard` and loops `KeyDownEvent … physical key is already pressed` (same class of bug as 2026-07-15). Silent document/object saves (`notify: false`), debounce embed field saves, and only schedule embed rebuilds post-frame. Hot reload can leave keys stuck — use a **full restart** to clear it.
+- **2026-07-27** — **Never rebuild the document editor mid-keystroke** (`HardwareKeyboard` / `KeyDownEvent … already pressed`). Full checklist: [Editor keyboard safety](#editor-keyboard-safety-read-before-editing-the-file-editor) above. (Reconfirmed **2026-08-11** after table payload patches remounted Super Editor while typing.)
 - **2026-08-10** — **Atomic object blocks:** SE caret treats embeds as one block. **Tab**/click opens; **Escape** returns to the block; **Enter** inserts a line below. Tab/Escape use `runNextFrame`; destructive deletes still use `runAfterKeystroke`. Info is one text field (first line = title). No arrow auto-enter/exit. Rules: [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md).
 - **2026-08-03** — Object graph / tags / diagram need migration **`006_object_graph.sql`** applied manually on the Render Postgres DB before (or right after) deploying the backend that uses `tags.icon`, `links.kind`, and `links.anchor`.
 - **2026-08-11** — **Tables + charts:** one object type `table` (`payload.rows` + optional `payload.chart`). `[GRAPH id]` is sugar for chart-on tables. Apply migration **`007_table_object.sql`** (adds `table` to type CHECK, migrates legacy `graph` rows). Shared UI: [`table_embed.dart`](system_app_front_end/lib/areas/files/editor/embeds/table_embed.dart) + [`RichTableEditor`](system_app_front_end/lib/areas/files/rich_text/rich_table_editor.dart).

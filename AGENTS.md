@@ -32,7 +32,7 @@ Read the relevant `AREA.md` before changing that area, and update it in the same
 
 | Agent | Instructions |
 |-------|--------------|
-| **Coding agent** (Cursor) | [`DEVELOPMENT.md`](DEVELOPMENT.md) + `AREA.md` files |
+| **Coding agent** (Cursor) | [`DEVELOPMENT.md`](DEVELOPMENT.md) + `AREA.md` files. Before editing the file editor / embeds / `AppState` notify paths, read **Editor keyboard safety** in `DEVELOPMENT.md` (avoids `KeyDownEvent … already pressed`). |
 | **Production agent** (in-app AI) | `agent_configs.system_prompt` in the DB, sourced from [`content/production_agent/system_prompt.md`](content/production_agent/system_prompt.md) |
 
 ## Read-only

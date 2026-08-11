@@ -6,7 +6,7 @@ enum ShortcutCategory {
   navigation,
   ai,
   text,
-  blocks,
+  objects,
 }
 
 enum ShortcutContextRequirement {
@@ -15,8 +15,8 @@ enum ShortcutContextRequirement {
   mainTopic,
   aiContext,
   textFocus,
-  insertBlock,
-  insertBlockMenu,
+  /// Insert an object into the active file (via [DocumentEditorRegistry]).
+  insertObject,
   toggleLayoutMode,
 }
 
@@ -27,7 +27,7 @@ class ShortcutAction {
     required this.labelKey,
     required this.defaultBinding,
     this.context = ShortcutContextRequirement.none,
-    this.blockType,
+    this.insertType,
     this.aiTool,
     this.textAction,
   });
@@ -37,7 +37,9 @@ class ShortcutAction {
   final String labelKey;
   final ShortcutBinding defaultBinding;
   final ShortcutContextRequirement context;
-  final String? blockType;
+
+  /// Value for [DocumentEditorController.insertAtBlock] (object or structure).
+  final String? insertType;
   final String? aiTool;
   final String? textAction;
 }
@@ -71,15 +73,11 @@ abstract final class ShortcutActionIds {
   static const textSizeUp = 'text_size_up';
   static const textSizeDown = 'text_size_down';
 
-  static const insertText = 'insert_text';
-  static const insertHeader = 'insert_header';
-  static const insertSummary = 'insert_summary';
-  static const insertList = 'insert_list';
+  static const insertInfo = 'insert_info';
   static const insertImage = 'insert_image';
   static const insertTable = 'insert_table';
   static const insertGraph = 'insert_graph';
   static const insertTaskList = 'insert_task_list';
-  static const insertBlockMenu = 'insert_block_menu';
   static const toggleLayoutMode = 'toggle_layout_mode';
   static const toggleLanguage = 'toggle_language';
 }
@@ -287,76 +285,47 @@ final List<ShortcutAction> kShortcutCatalog = [
     context: ShortcutContextRequirement.textFocus,
     textAction: 'text:size_down',
   ),
+  // Letter matches the English object name. Task + Table both want T —
+  // Table uses ⌥ instead of ⇧ so the key stays T.
   ShortcutAction(
-    id: ShortcutActionIds.insertText,
-    category: ShortcutCategory.blocks,
-    labelKey: 'addText',
-    defaultBinding: _m(LogicalKeyboardKey.keyT, shift: true),
-    context: ShortcutContextRequirement.insertBlock,
-    blockType: 'text',
-  ),
-  ShortcutAction(
-    id: ShortcutActionIds.insertHeader,
-    category: ShortcutCategory.blocks,
-    labelKey: 'addHeader',
-    defaultBinding: _m(LogicalKeyboardKey.keyH, shift: true),
-    context: ShortcutContextRequirement.insertBlock,
-    blockType: 'header',
-  ),
-  ShortcutAction(
-    id: ShortcutActionIds.insertSummary,
-    category: ShortcutCategory.blocks,
-    labelKey: 'addSummary',
-    defaultBinding: _m(LogicalKeyboardKey.keyS, shift: true),
-    context: ShortcutContextRequirement.insertBlock,
-    blockType: 'summary',
-  ),
-  ShortcutAction(
-    id: ShortcutActionIds.insertList,
-    category: ShortcutCategory.blocks,
-    labelKey: 'addList',
-    defaultBinding: _m(LogicalKeyboardKey.keyL, shift: true),
-    context: ShortcutContextRequirement.insertBlock,
-    blockType: 'list',
-  ),
-  ShortcutAction(
-    id: ShortcutActionIds.insertImage,
-    category: ShortcutCategory.blocks,
-    labelKey: 'addImage',
-    defaultBinding: _m(LogicalKeyboardKey.keyI, shift: true),
-    context: ShortcutContextRequirement.insertBlock,
-    blockType: 'image',
-  ),
-  ShortcutAction(
-    id: ShortcutActionIds.insertTable,
-    category: ShortcutCategory.blocks,
-    labelKey: 'addTable',
-    defaultBinding: _m(LogicalKeyboardKey.keyU, shift: true),
-    context: ShortcutContextRequirement.insertBlock,
-    blockType: 'table',
-  ),
-  ShortcutAction(
-    id: ShortcutActionIds.insertGraph,
-    category: ShortcutCategory.blocks,
-    labelKey: 'addGraph',
-    defaultBinding: _m(LogicalKeyboardKey.keyG, shift: true),
-    context: ShortcutContextRequirement.insertBlock,
-    blockType: 'graph',
+    id: ShortcutActionIds.insertInfo,
+    category: ShortcutCategory.objects,
+    labelKey: 'addDetails',
+    defaultBinding: _m(LogicalKeyboardKey.keyD, shift: true),
+    context: ShortcutContextRequirement.insertObject,
+    insertType: 'info',
   ),
   ShortcutAction(
     id: ShortcutActionIds.insertTaskList,
-    category: ShortcutCategory.blocks,
+    category: ShortcutCategory.objects,
     labelKey: 'addTaskList',
-    defaultBinding: _m(LogicalKeyboardKey.keyY, shift: true),
-    context: ShortcutContextRequirement.insertBlock,
-    blockType: 'task_list',
+    defaultBinding: _m(LogicalKeyboardKey.keyT, shift: true),
+    context: ShortcutContextRequirement.insertObject,
+    insertType: 'task_list',
   ),
   ShortcutAction(
-    id: ShortcutActionIds.insertBlockMenu,
-    category: ShortcutCategory.blocks,
-    labelKey: 'shortcutInsertBlockMenu',
-    defaultBinding: _m(LogicalKeyboardKey.keyO, shift: true),
-    context: ShortcutContextRequirement.insertBlockMenu,
+    id: ShortcutActionIds.insertTable,
+    category: ShortcutCategory.objects,
+    labelKey: 'addTable',
+    defaultBinding: _m(LogicalKeyboardKey.keyT, alt: true),
+    context: ShortcutContextRequirement.insertObject,
+    insertType: 'table',
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.insertGraph,
+    category: ShortcutCategory.objects,
+    labelKey: 'addGraph',
+    defaultBinding: _m(LogicalKeyboardKey.keyG, shift: true),
+    context: ShortcutContextRequirement.insertObject,
+    insertType: 'graph',
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.insertImage,
+    category: ShortcutCategory.objects,
+    labelKey: 'addImage',
+    defaultBinding: _m(LogicalKeyboardKey.keyI, shift: true),
+    context: ShortcutContextRequirement.insertObject,
+    insertType: 'image',
   ),
   ShortcutAction(
     id: ShortcutActionIds.toggleLayoutMode,
@@ -389,6 +358,6 @@ String shortcutCategoryLabelKey(ShortcutCategory category) {
     ShortcutCategory.navigation => 'shortcutCategoryNavigation',
     ShortcutCategory.ai => 'shortcutCategoryAi',
     ShortcutCategory.text => 'shortcutCategoryText',
-    ShortcutCategory.blocks => 'shortcutCategoryBlocks',
+    ShortcutCategory.objects => 'shortcutCategoryObjects',
   };
 }

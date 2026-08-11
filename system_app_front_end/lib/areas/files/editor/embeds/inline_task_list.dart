@@ -62,6 +62,11 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget>
   }
 
   @override
+  void beginTaskReorderMode() {
+    _surfaceKey.currentState?.setReorderMode(true);
+  }
+
+  @override
   void initState() {
     super.initState();
     _bridge = FileTaskListBridge(

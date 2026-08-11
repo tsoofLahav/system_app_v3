@@ -15,10 +15,12 @@ def empty_table_payload(*, columns: int = 2) -> dict[str, Any]:
     }
 
 
-def empty_chart_table_payload() -> dict[str, Any]:
+def empty_chart_table_payload(*, hebrew_labels: bool = False) -> dict[str, Any]:
+    """Default chart table. FE insert passes labels; hebrew_labels → א/ב."""
+    labels = ("א", "ב") if hebrew_labels else ("A", "B")
     return {
         "rows": [
-            [_cell("A"), _cell("B")],
+            [_cell(labels[0]), _cell(labels[1])],
             [_cell("1"), _cell("2")],
         ],
         "chart": {

@@ -143,6 +143,10 @@ Shortcuts are user-rebindable. [`shortcuts/`](shortcuts/) owns the catalog of av
 | [`shortcuts/shortcut_dispatcher.dart`](shortcuts/shortcut_dispatcher.dart) | Keystroke → action |
 | [`shortcuts/main_file_cycle.dart`](shortcuts/main_file_cycle.dart) | Rotate which of the shown files leads |
 
+**Insert object** (not “blocks”): catalog category `objects` inserts into the **active** file via `DocumentEditorRegistry` — info, task list, table, graph (chart table), image. After insert, the caret enters the new object (first inner field); images with no field keep the block caret. Paragraph / bullet list stay on the insert bar only (document structure, not objects).
+
+Default keys match the English name’s letter (`D`etails, `T`ask, `T`able, `G`raph, `I`mage). When two objects share a letter, keep that letter and vary the modifiers (task = ⌘⇧T, table = ⌘⌥T).
+
 ## Rules
 
 - Section changes swap the main pane only. Never rebuild or hide the sidebar and bottom bar on desktop.

@@ -7,6 +7,7 @@ import '../../ui/app_typography.dart';
 import '../editor/document_text_flow.dart';
 import '../editor/editor_key_handoff.dart';
 import '../model/document_model.dart';
+import '../../ux/widgets/app_context_menu.dart';
 import './block_text_actions.dart';
 import './document_context_menu.dart';
 import './formatted_text_field.dart';
@@ -34,6 +35,8 @@ class RichTableEditor extends StatefulWidget {
     this.mode = TableEditorMode.grid,
     this.maxColumns,
     this.cellHint,
+    this.extraMenuEntries = const [],
+    this.onExtraMenuAction,
   });
 
   final TableNode node;
@@ -56,6 +59,10 @@ class RichTableEditor extends StatefulWidget {
   /// Hint for the first cell (e.g. graph variable hint).
   final String? cellHint;
 
+  /// Extra rows on the cell menu (e.g. chart type / palette).
+  final List<AppContextMenuEntry> extraMenuEntries;
+  final Future<void> Function(String action)? onExtraMenuAction;
+
   @override
   State<RichTableEditor> createState() => RichTableEditorState();
 }
@@ -66,6 +73,9 @@ class RichTableEditorState extends State<RichTableEditor> {
 
   static const _defaultColumns = 2;
   static const _minCellHeight = 36.0;
+
+  /// True while a cell owns focus (used by [TableEmbed] to keep local SoT).
+  bool get hasInnerFocus => _focusNodes.any((f) => f.hasFocus);
 
   @override
   void initState() {
@@ -99,6 +109,12 @@ class RichTableEditorState extends State<RichTableEditor> {
     // Rows removed or replaced upstream (exit, undo, external update) must
     // reach the controllers, or the next edit re-emits the stale grid.
     if (_localStateMatchesNode()) return;
+    // Never dispose TextFields mid-KeyDown — that desyncs HardwareKeyboard
+    // ("KeyDownEvent … physical key is already pressed").
+    if (hasInnerFocus ||
+        HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+      return;
+    }
     final focusedIndex = _focusNodes.indexWhere((f) => f.hasFocus);
     _disposeAll();
     _syncControllers();
@@ -239,31 +255,53 @@ class RichTableEditorState extends State<RichTableEditor> {
     _focusAt(row, col).requestFocus();
   }
 
-  void _arrowFromLine(int lineIndex, {required bool goingDown}) {
+  /// Physical grid: ↓/↑ stay in the same column; ←/→ stay in the same row.
+  /// Chart tables use the same mapping (Enter still grows columns).
+  void _arrowVertical(int row, int col, {required bool goingDown}) {
     if (goingDown) {
-      if (lineIndex < lineCount - 1) {
-        focusLine(lineIndex + 1, fromAbove: true);
+      if (row + 1 < _controllers.length) {
+        _focusCell(row + 1, col, atStart: true);
         return;
       }
-      widget.onExitTable?.call(lineIndex ~/ _columnCount);
+      widget.onExitTable?.call(row);
       return;
     }
-    if (lineIndex > 0) {
-      focusLine(lineIndex - 1, fromAbove: false);
+    if (row > 0) {
+      _focusCell(row - 1, col, atStart: false);
       return;
     }
-    // First cell ↑ — same as exit table upward via onExitTable(-1) convention
-    // Table edge arrows stay inside; Escape leaves via EmbedEditScope.
+    // Top edge ↑ — leave the embed upward.
     widget.onExitTable?.call(-1);
   }
 
-  void _focusCell(int row, int col, {bool fromAbove = true}) {
+  void _arrowHorizontal(int row, int col, {required bool goingRight}) {
+    if (goingRight) {
+      if (col + 1 < _columnCount) {
+        _focusCell(row, col + 1, atStart: true);
+      }
+      return;
+    }
+    if (col > 0) {
+      _focusCell(row, col - 1, atStart: false);
+    }
+  }
+
+  void _focusCell(int row, int col, {bool atStart = true}) {
     final controller = _controllers[row][col];
     final len = controller.text.length;
     controller.selection = TextSelection.collapsed(
-      offset: fromAbove ? 0 : len,
+      offset: atStart ? 0 : len,
     );
     _focusAt(row, col).requestFocus();
+  }
+
+  /// Flat focus indices are `row * columnCount + col` — rebuild after grid shape
+  /// changes or two cells share a [FocusNode] (double caret).
+  void _rebuildFocusNodes() {
+    for (final f in _focusNodes) {
+      f.dispose();
+    }
+    _focusNodes.clear();
   }
 
   void _addRowAfter(int row) {
@@ -275,9 +313,13 @@ class RichTableEditorState extends State<RichTableEditor> {
             SpanTextEditingController(text: ''),
         ],
       );
+      _rebuildFocusNodes();
     });
     _emit();
-    _focusCell(row + 1, 0);
+    runNextFrame(() {
+      if (!mounted) return;
+      _focusCell(row + 1, 0);
+    });
   }
 
   void _addColumnAfter(int col, {required int focusRow}) {
@@ -285,9 +327,24 @@ class RichTableEditorState extends State<RichTableEditor> {
       for (final row in _controllers) {
         row.insert(col + 1, SpanTextEditingController(text: ''));
       }
+      _rebuildFocusNodes();
     });
     _emit();
-    _focusCell(focusRow, col + 1);
+    // Next frame — let disposed focus nodes settle so only one caret shows.
+    runNextFrame(() {
+      if (!mounted) return;
+      _focusCell(focusRow, (col + 1).clamp(0, _columnCount - 1));
+    });
+  }
+
+  /// Block-caret “Add column” (no focused cell) — append on the right.
+  void addColumnAtEnd() {
+    if (_columnCount >= _maxColumns) return;
+    final focusRow = _focusNodes.indexWhere((f) => f.hasFocus);
+    final row = focusRow >= 0
+        ? (focusRow ~/ _columnCount).clamp(0, _controllers.length - 1)
+        : 0;
+    _addColumnAfter(_columnCount - 1, focusRow: row);
   }
 
   bool _rowIsEmpty(int row) {
@@ -356,7 +413,7 @@ class RichTableEditorState extends State<RichTableEditor> {
     _addColumnAfter(col, focusRow: focusRow);
   }
 
-  /// Enter / Tab move cells; ↑/↓ use [FormattedTextField] edge exits (line chain).
+  /// Enter / Tab move cells; arrows use [FormattedTextField] edge exits (2D grid).
   KeyEventResult _onKey(FocusNode node, KeyEvent event, int row, int col) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
@@ -425,10 +482,21 @@ class RichTableEditorState extends State<RichTableEditor> {
       context: context,
       globalPosition: details.globalPosition,
       strings: widget.strings,
+      extraEntries: widget.extraMenuEntries,
       onAction: (action) async {
         if (action == 'table:add_column') {
           _addColumnOrCap(col, focusRow: row);
           return;
+        }
+        final extra = widget.onExtraMenuAction;
+        if (extra != null &&
+            (action.startsWith('chart:') ||
+                widget.extraMenuEntries.isNotEmpty)) {
+          // Let the host claim chart:* (and any other extras) first.
+          if (action.startsWith('chart:')) {
+            await extra(action);
+            return;
+          }
         }
         await runBlockTextAction(action);
       },
@@ -480,7 +548,10 @@ class RichTableEditorState extends State<RichTableEditor> {
                               vertical: 6,
                             ),
                               child: Focus(
-                              onKeyEvent: (node, event) => _onKey(node, event, r, c),
+                              // Ancestor-only node (Enter/Tab). Cell focus stays
+                              // on FormattedTextField's node — do not share it.
+                              onKeyEvent: (node, event) =>
+                                  _onKey(node, event, r, c),
                               child: FormattedTextField(
                                 controller: _controllers[r][c],
                                 focusNode: _focusAt(r, c),
@@ -507,14 +578,14 @@ class RichTableEditorState extends State<RichTableEditor> {
                                   }
                                 },
                                 onSecondaryTapDown: (d) => _showMenu(d, r, c),
-                                onArrowExitAbove: () => _arrowFromLine(
-                                      r * _columnCount + c,
-                                      goingDown: false,
-                                    ),
-                                onArrowExitBelow: () => _arrowFromLine(
-                                      r * _columnCount + c,
-                                      goingDown: true,
-                                    ),
+                                onArrowExitAbove: () =>
+                                    _arrowVertical(r, c, goingDown: false),
+                                onArrowExitBelow: () =>
+                                    _arrowVertical(r, c, goingDown: true),
+                                onArrowExitLeft: () =>
+                                    _arrowHorizontal(r, c, goingRight: false),
+                                onArrowExitRight: () =>
+                                    _arrowHorizontal(r, c, goingRight: true),
                               ),
                             ),
                           ),

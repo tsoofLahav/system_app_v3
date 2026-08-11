@@ -14,7 +14,7 @@ enum DocumentCaretOwner {
 /// Enter/exit for atomic object blocks.
 ///
 /// Default: SE caret sits on the embed as one block. Tab opens the object;
-/// Escape returns the SE caret to that same block. Enter inserts a line under
+/// Escape places the SE caret **after** the object. Enter inserts a line under
 /// the object (normal SE behavior).
 class DocumentCaretSession {
   DocumentCaretSession({
@@ -23,12 +23,12 @@ class DocumentCaretSession {
     required MutableDocumentComposer composer,
     required FocusNode editorFocus,
   })  : _editor = editor,
-        _document = document,
         _composer = composer,
-        _editorFocus = editorFocus;
+        _editorFocus = editorFocus {
+    assert(identical(document, editor.document));
+  }
 
   Editor _editor;
-  Document _document;
   MutableDocumentComposer _composer;
   final FocusNode _editorFocus;
 
@@ -37,21 +37,31 @@ class DocumentCaretSession {
   /// Embed node id while an inner field owns the caret (for Escape → block).
   String? activeEmbedNodeId;
 
+  /// Always the editor's live document so insert/select and IME serialize agree.
+  MutableDocument get _liveDoc => _editor.document;
+
   void bind({
     required Editor editor,
     required Document document,
     required MutableDocumentComposer composer,
   }) {
+    assert(identical(document, editor.document));
     _editor = editor;
-    _document = document;
     _composer = composer;
   }
 
-  /// Inner field focused — drop SE selection so two carets/IMEs do not fight.
+  /// Inner field focused — drop SE selection/focus so two carets/IMEs do not fight.
   void adoptEmbed(String embedNodeId) {
     owner = DocumentCaretOwner.embed;
     activeEmbedNodeId = embedNodeId;
     _clearSelection();
+    // Release Super Editor's focus node; otherwise the first keystroke often
+    // lands in a half-attached IME (one Latin glyph) and then typing dies.
+    if (_editorFocus.hasFocus) {
+      _editorFocus.unfocus(
+        disposition: UnfocusDisposition.previouslyFocusedChild,
+      );
+    }
   }
 
   void embedBlurred() {
@@ -68,45 +78,112 @@ class DocumentCaretSession {
     _clearSelection();
   }
 
-  /// Place SE caret on the embed block (atomic object line).
+  /// Place SE caret in a **text** paragraph after the object.
+  ///
+  /// Never leave the IME selection on a missing node — Super Editor's
+  /// DocumentImeSerializer null-checks node lookup when the keyboard opens.
   void placeOnObjectLine(String embedNodeId) {
-    final node = _document.getNodeById(embedNodeId);
-    if (node is! ObjectEmbedNode) return;
+    if (_liveDoc.getNodeById(embedNodeId) is! ObjectEmbedNode) return;
+
     owner = DocumentCaretOwner.document;
     activeEmbedNodeId = null;
+    final afterId = _ensureParagraphAfter(embedNodeId);
+    if (!_selectTextNode(afterId)) return;
+    _requestEditorFocusWhenSelectionIsLive(afterId);
+  }
+
+  /// Leave an embed field: SE caret after that object (keep writing below).
+  void exitToObjectLine([String? embedNodeId]) {
+    final id = embedNodeId ?? activeEmbedNodeId;
+    if (id == null) return;
+    owner = DocumentCaretOwner.transferring;
+
+    // Drop the embed field first so Flutter's TextField IME closes before SE
+    // opens SuperIme against the document selection.
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary != null && primary != _editorFocus) {
+      primary.unfocus();
+    }
+
+    // Next frame — Escape handoff; avoid runAfterKeystroke's keys-clear wait.
+    runNextFrame(() {
+      if (_liveDoc.getNodeById(id) == null) {
+        owner = DocumentCaretOwner.document;
+        activeEmbedNodeId = null;
+        return;
+      }
+      owner = DocumentCaretOwner.document;
+      activeEmbedNodeId = null;
+
+      final afterId = _ensureParagraphAfter(id);
+      if (!_selectTextNode(afterId)) return;
+      _requestEditorFocusWhenSelectionIsLive(afterId);
+    });
+  }
+
+  /// Next text node after [embedNodeId], or a new empty paragraph there.
+  String _ensureParagraphAfter(String embedNodeId) {
+    final doc = _liveDoc;
+    final index = doc.getNodeIndexById(embedNodeId);
+    if (index >= 0 && index + 1 < doc.nodeCount) {
+      final after = doc.getNodeAt(index + 1);
+      if (after is TextNode) return after.id;
+    }
+    final newId = Editor.createNodeId();
     _editor.execute([
+      InsertNodeAfterNodeRequest(
+        existingNodeId: embedNodeId,
+        newNode: ParagraphNode(id: newId, text: AttributedText()),
+      ),
+    ]);
+    return newId;
+  }
+
+  bool _selectTextNode(String nodeId) {
+    if (_liveDoc.getNodeById(nodeId) is! TextNode) {
+      _clearSelection();
+      return false;
+    }
+    _editor.execute([
+      const ClearComposingRegionRequest(),
       ChangeSelectionRequest(
         DocumentSelection.collapsed(
           position: DocumentPosition(
-            nodeId: embedNodeId,
-            nodePosition: const UpstreamDownstreamNodePosition.upstream(),
+            nodeId: nodeId,
+            nodePosition: const TextNodePosition(offset: 0),
           ),
         ),
         SelectionChangeType.placeCaret,
         SelectionReason.userInteraction,
       ),
     ]);
-    _editorFocus.requestFocus();
+    return true;
   }
 
-  /// Leave an embed field: SE caret back on that object's block.
-  void exitToObjectLine([String? embedNodeId]) {
-    final id = embedNodeId ?? activeEmbedNodeId;
-    if (id == null) return;
-    owner = DocumentCaretOwner.transferring;
-    // Next frame — Escape handoff; avoid runAfterKeystroke's keys-clear wait.
+  /// Open SE IME only after the selection node exists in the live document.
+  ///
+  /// One extra frame lets a SuperEditor remount (after silent reload) finish
+  /// wiring a fresh DocumentImeInputClient before SuperIme.openConnection.
+  void _requestEditorFocusWhenSelectionIsLive(String nodeId) {
     runNextFrame(() {
-      final primary = FocusManager.instance.primaryFocus;
-      if (primary != null && primary != _editorFocus) {
-        primary.unfocus();
+      if (_liveDoc.getNodeById(nodeId) is! TextNode) {
+        _clearSelection();
+        return;
       }
-      placeOnObjectLine(id);
+      if (_composer.selection?.extent.nodeId != nodeId) {
+        if (!_selectTextNode(nodeId)) return;
+      }
+      _editorFocus.requestFocus();
     });
   }
 
   void _clearSelection() {
-    if (_composer.selection == null) return;
+    if (_composer.selection == null &&
+        _composer.composingRegion.value == null) {
+      return;
+    }
     _editor.execute([
+      const ClearComposingRegionRequest(),
       const ChangeSelectionRequest(
         null,
         SelectionChangeType.clearSelection,

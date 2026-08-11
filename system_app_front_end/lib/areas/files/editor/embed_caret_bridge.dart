@@ -17,6 +17,9 @@ abstract class EmbedCaretGateway {
   void focusLine(int index, {required bool fromAbove});
   void enterFromAbove();
   void enterFromBelow();
+
+  /// Task lists only — enter Reorder Mode. No-op elsewhere.
+  void beginTaskReorderMode() {}
 }
 
 mixin EmbedLineGatewayMixin implements EmbedCaretGateway {
@@ -31,6 +34,9 @@ mixin EmbedLineGatewayMixin implements EmbedCaretGateway {
     if (lineCount <= 0) return;
     focusLine(lineCount - 1, fromAbove: false);
   }
+
+  @override
+  void beginTaskReorderMode() {}
 }
 
 /// ↑/↓ within an embed only. At the first/last line, do nothing (Escape leaves).
@@ -61,9 +67,16 @@ void focusFieldLine(
   controller.selection = TextSelection.collapsed(
     offset: fromAbove ? 0 : len,
   );
-  if (!focus.hasFocus) {
-    focus.requestFocus();
-  }
+  focus.requestFocus();
+  // Super Editor may still be releasing the IME this frame (especially right
+  // after insert + document reload). Re-claim focus once the tree settles so
+  // Hebrew/Latin typing continues without a manual click.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!focus.canRequestFocus) return;
+    if (!focus.hasFocus) {
+      focus.requestFocus();
+    }
+  });
 }
 
 class EmbedCaretRegistry extends ChangeNotifier {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/app_strings.dart';
+import '../../ui/app_color_palettes.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/color_dialog.dart';
 import '../../ux/widgets/app_context_menu.dart';
@@ -131,11 +132,33 @@ class DocumentContextMenu {
     );
   }
 
+  /// Chart-quality table: bar / line / pie + colour palettes.
+  static List<AppContextMenuEntry> buildChartEntries(AppStrings strings) => [
+        AppContextMenuItem(value: 'chart:type:bar', label: strings['graphBar']),
+        AppContextMenuItem(
+          value: 'chart:type:line',
+          label: strings['graphLine'],
+        ),
+        AppContextMenuItem(value: 'chart:type:pie', label: strings['graphPie']),
+        const AppContextMenuDivider(),
+        AppContextMenuSubmenu(
+          label: strings['graphChangeColors'],
+          children: [
+            for (final palette in AppColorPalettes.chart)
+              AppContextMenuItem(
+                value: 'chart:palette:${palette.id}',
+                label: strings[palette.nameKey],
+              ),
+          ],
+        ),
+      ];
+
   static Future<void> showTableCellMenu({
     required BuildContext context,
     required Offset globalPosition,
     required AppStrings strings,
     required DocumentMenuHandler onAction,
+    List<AppContextMenuEntry> extraEntries = const [],
   }) {
     return _showMenu(
       context: context,
@@ -149,7 +172,27 @@ class DocumentContextMenu {
           value: 'table:add_column',
           label: strings['addColumn'] ?? 'Add column',
         ),
+        if (extraEntries.isNotEmpty) ...[
+          const AppContextMenuDivider(),
+          ...extraEntries,
+        ],
       ],
+    );
+  }
+
+  /// Chart surface (or block caret on a chart table): design only.
+  static Future<void> showChartMenu({
+    required BuildContext context,
+    required Offset globalPosition,
+    required AppStrings strings,
+    required DocumentMenuHandler onAction,
+  }) {
+    return _showMenu(
+      context: context,
+      globalPosition: globalPosition,
+      strings: strings,
+      onAction: onAction,
+      entries: buildChartEntries(strings),
     );
   }
 

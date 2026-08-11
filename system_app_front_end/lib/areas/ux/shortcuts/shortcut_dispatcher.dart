@@ -13,6 +13,17 @@ Future<void> dispatchShortcutAction(
   AppState state,
   String actionId,
 ) async {
+  final action = shortcutActionById(actionId);
+
+  if (action?.context == ShortcutContextRequirement.insertObject) {
+    final insertType = action!.insertType;
+    if (insertType == null) return;
+    final controller = DocumentEditorRegistry.active;
+    if (controller == null) return;
+    await controller.insertAtBlock(insertType);
+    return;
+  }
+
   switch (actionId) {
     case ShortcutActionIds.addTopic:
       await createTopicFromDialog(context, state);

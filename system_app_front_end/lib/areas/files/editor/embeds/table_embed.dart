@@ -1,13 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/l10n/app_strings.dart';
 import '../../../objects/data/object_embed.dart';
 import '../../../objects/data/table_payload.dart';
 import '../../../ui/app_color_palettes.dart';
 import '../../../ux/topic/topic_appearance.dart';
-import '../../../ux/widgets/app_context_menu.dart';
 import '../../model/document_model.dart';
+import '../../rich_text/document_context_menu.dart';
 import '../../rich_text/rich_table_editor.dart';
+import '../document_secondary_tap.dart';
 import '../embed_caret_bridge.dart';
 import './table_chart.dart';
 
@@ -40,6 +44,7 @@ class TableEmbedState extends State<TableEmbed>
   final _editorKey = GlobalKey<RichTableEditorState>();
   EmbedCaretRegistry? _registry;
   late Map<String, dynamic> _payload;
+  Timer? _saveTimer;
 
   @override
   String get nodeId => widget.blockId;
@@ -54,6 +59,10 @@ class TableEmbedState extends State<TableEmbed>
 
   bool get _chartOn => TableObjectPayload.chartEnabled(_payload);
 
+  bool get _editorBusy =>
+      (_editorKey.currentState?.hasInnerFocus ?? false) ||
+      HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
@@ -63,8 +72,13 @@ class TableEmbedState extends State<TableEmbed>
   @override
   void didUpdateWidget(TableEmbed oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.embed.id != widget.embed.id ||
-        oldWidget.embed.payload != widget.embed.payload) {
+    if (oldWidget.embed.id != widget.embed.id) {
+      _payload = TableObjectPayload.normalize(widget.embed.payload);
+      return;
+    }
+    // Controllers are live SoT while typing — never clobber with a cache patch.
+    if (_editorBusy) return;
+    if (oldWidget.embed.payload != widget.embed.payload) {
       _payload = TableObjectPayload.normalize(widget.embed.payload);
     }
   }
@@ -82,6 +96,9 @@ class TableEmbedState extends State<TableEmbed>
 
   @override
   void dispose() {
+    _saveTimer?.cancel();
+    // Best-effort flush of the last debounced cell edits.
+    widget.onPayloadChanged(_payload);
     _registry?.unregister(nodeId);
     _registry = null;
     super.dispose();
@@ -99,6 +116,20 @@ class TableEmbedState extends State<TableEmbed>
           ],
       ],
     );
+  }
+
+  void _scheduleSave() {
+    widget.onFocus?.call();
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      widget.onPayloadChanged(_payload);
+    });
+  }
+
+  void _persistNow() {
+    _saveTimer?.cancel();
+    widget.onPayloadChanged(_payload);
   }
 
   void _onRowsChanged(TableNode node) {
@@ -129,7 +160,14 @@ class TableEmbedState extends State<TableEmbed>
       next['chart'] = chart;
     }
     _payload = TableObjectPayload.normalize(next);
-    widget.onPayloadChanged(_payload);
+    // Keep [RichTableEditor.node] in sync (add column / Enter) — not only charts.
+    if (mounted) setState(() {});
+    _scheduleSave();
+  }
+
+  /// Right-click “Add column” when the SE caret is on the block (no cell focus).
+  void addColumnAtEnd() {
+    _editorKey.currentState?.addColumnAtEnd();
   }
 
   void _setChartType(String type) {
@@ -144,7 +182,7 @@ class TableEmbedState extends State<TableEmbed>
         'chart': chart,
       });
     });
-    widget.onPayloadChanged(_payload);
+    _persistNow();
   }
 
   void _applyPalette(String paletteId) {
@@ -163,46 +201,27 @@ class TableEmbedState extends State<TableEmbed>
         'chart': chart,
       });
     });
-    widget.onPayloadChanged(_payload);
+    _persistNow();
+  }
+
+  Future<void> _onChartMenuAction(String action) async {
+    if (action.startsWith('chart:type:')) {
+      _setChartType(action.substring('chart:type:'.length));
+      return;
+    }
+    if (action.startsWith('chart:palette:')) {
+      _applyPalette(action.substring('chart:palette:'.length));
+    }
   }
 
   Future<void> _showChartMenu(TapDownDetails details) async {
-    final value = await AppContextMenu.show(
+    DocumentSecondaryTap.markEmbedHandled();
+    await DocumentContextMenu.showChartMenu(
       context: context,
       globalPosition: details.globalPosition,
-      isRtl: widget.strings.isRtl,
-      entries: [
-        AppContextMenuItem(
-          value: 'type:bar',
-          label: widget.strings['graphBar'],
-        ),
-        AppContextMenuItem(
-          value: 'type:line',
-          label: widget.strings['graphLine'],
-        ),
-        AppContextMenuItem(
-          value: 'type:pie',
-          label: widget.strings['graphPie'],
-        ),
-        const AppContextMenuDivider(),
-        AppContextMenuSubmenu(
-          label: widget.strings['graphChangeColors'],
-          children: [
-            for (final palette in AppColorPalettes.chart)
-              AppContextMenuItem(
-                value: 'palette:${palette.id}',
-                label: widget.strings[palette.nameKey],
-              ),
-          ],
-        ),
-      ],
+      strings: widget.strings,
+      onAction: _onChartMenuAction,
     );
-    if (!mounted || value == null) return;
-    if (value.startsWith('type:')) {
-      _setChartType(value.substring(5));
-    } else if (value.startsWith('palette:')) {
-      _applyPalette(value.substring(8));
-    }
   }
 
   void _onExitTable(int _) {
@@ -260,6 +279,10 @@ class TableEmbedState extends State<TableEmbed>
           onFocus: widget.onFocus,
           onExitTable: _onExitTable,
           onDeleteTable: widget.onDeleteObject,
+          extraMenuEntries: chartOn
+              ? DocumentContextMenu.buildChartEntries(widget.strings)
+              : const [],
+          onExtraMenuAction: chartOn ? _onChartMenuAction : null,
         ),
       ],
     );

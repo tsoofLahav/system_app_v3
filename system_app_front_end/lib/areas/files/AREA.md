@@ -84,7 +84,11 @@ Embeds-in-flow principles (empty neighbors, edge landing, object remount): **[`e
 | Table | Backspace on an empty row | Remove the row; if it was the last row, remove the table |
 | Table | Shift+Enter | Line break inside the cell |
 | Table | Tab | Next cell |
+| Table | ←/→ at text edge | Adjacent cell in the same row (physical grid; macOS intents + key events) |
+| Table | ↑/↓ at first/last line | Cell above/below in the same column; leave embed at top/bottom |
 | Table | Right-click | Add column |
+| Table + chart | Enter | Next column (series); add a column on the last |
+| Table + chart | Arrows | Same physical 2D grid as a normal table (not series-reading order) |
 
 The empty-line-exits rule is what makes lists and tables feel like part of the text: the user presses Enter twice and simply keeps writing, exactly as they would in a word processor.
 
@@ -225,7 +229,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Embed | Widget | Flow role |
 |-------|--------|-----------|
 | Task list | [`embeds/inline_task_list.dart`](editor/embeds/inline_task_list.dart) | Thin host: document segments + Move Mode; rows via objects [`TaskListSurface`](../objects/tasks/task_list_surface.dart) |
-| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); tag chips; Add tag / Add connection via info context menu (no links list) |
+| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); tag chips; right-click → text + **Add tag** / **Add connection** (field or block caret) |
 | Image | same | Atomic unit; caption field |
 | Table (+ chart) | [`embeds/table_embed.dart`](editor/embeds/table_embed.dart) | `RichTableEditor`; chart quality paints above the same grid |
 | Host | [`embed_block_host.dart`](editor/embed_block_host.dart) | Move Mode; optional atomic `#embed` segment |
@@ -241,7 +245,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Right-click on embed text | Same text menu as paragraphs (`DocumentMark`). Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Graphs extend the table cell menu (add column + chart options). Task lists add **Add to view…** and **Reorder tasks** |
 | Move Mode | Double-click → glass frame on the object + floating glass bubble ([`embed_move_bubble.dart`](editor/embed_move_bubble.dart), no scrim; drag to reposition). Up/down in the bubble nudge the object and **stay in Move Mode**; Done or tap outside the bubble ends it. After move/delete, adjacent paragraphs **coalesce** (blank/`\n`-only stubs dropped, including next to embeds). |
 | Empty object + Backspace | Same fluent rule as an empty list bullet / table row: last empty unit + Backspace **removes the object** (cascade-delete). |
-| Object block + Tab | Opens the object (first inner field). **Escape** returns to the block. **Enter** inserts a paragraph below. Arrows do not auto-enter/leave objects. |
+| Object block + Tab | Opens the object (first inner field). **Escape** lands **after** the object so typing continues below. **Enter** inserts a paragraph below. Arrows do not auto-enter/leave objects. |
 | Task Reorder Mode | Owned by `TaskListSurface` (objects): right-click → Reorder tasks → glass per task; **tap outside the list** ends it |
 
 ### Segment id
@@ -255,16 +259,16 @@ Deleting a fully marked embed removes the block **and** cascades through the obj
 
 ### Object enter / exit
 
-Objects are atomic SE blocks. ↑/↓ move onto the block; **Tab** (or click) opens it; **Escape** returns to the block; **Enter** inserts a line below. Inner ↑/↓ stay inside (see [`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md)).
+Objects are atomic SE blocks. ↑/↓ move onto the block; **Tab** (or click) opens it; **Escape** places the caret after the object; **Enter** inserts a line below. Inner ↑/↓ stay inside (see [`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md)). Insert bar and **Insert object** shortcuts create an object then put the caret in its first field without a shell-wide notify (so Hebrew/Latin IME keeps working).
 
 ### In-file behaviour by type (presentation only)
 
 | Type | In the document |
 |------|-----------------|
-| Task list | Active then Done; Enter adds in the same zone; Escape leaves to SE block; Reorder Mode via right-click; empty title + hint |
+| Task list | Active then Done; Enter adds in the same zone; Escape leaves to SE block; right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title + hint |
 | Info | One field; first line = title (diagrams/API `title`); Enter adds lines; Escape leaves to SE block; right-click → text + Add tag / Add connection |
-| Table | Grid; Enter adds rows; menu adds columns; Escape leaves to SE block |
-| Table + chart | Same embed; chart on top; fixed 2 rows; Enter adds columns (max **8**); right-click chart → type + palette ([`AppColorPalettes`](../ui/app_color_palettes.dart)); pointer `[GRAPH id]` |
+| Table | Grid; Enter adds rows; ←/→/↑/↓ move on the physical grid; menu adds columns; Escape leaves to SE block |
+| Table + chart | Same embed; chart on top; fixed 2 rows; Enter adds columns (max **8**); arrows match the physical grid (same as table); insert template labels **A/B** or **א/ב** from UI language; right-click chart **or** cell → type + palette ([`AppColorPalettes`](../ui/app_color_palettes.dart)); pointer `[GRAPH id]` |
 | Image | Display + caption; resize handles deferred |
 
 Type logic beyond presentation (views, links, cascades) → [objects](../objects/AREA.md).
@@ -284,16 +288,34 @@ Edits mutate the Super Editor document; save serializes via the marker bridge an
 
 In-session undo/redo uses Super Editor’s history stack.
 
+## Keyboard / focus safety (recurring bug class)
+
+Symptom: `KeyDownEvent … physical key is already pressed` (often loops on one letter). Cause: remounting Super Editor or disposing embed `FocusNode`s / `TextField`s while a key is still down.
+
+**Coding-agent checklist (canonical):** [`DEVELOPMENT.md` § Editor keyboard safety](../../../../../DEVELOPMENT.md#editor-keyboard-safety-read-before-editing-the-file-editor).
+
+In this area specifically:
+
+| Do | Don't |
+|----|--------|
+| `updateFile` / `updateObjectPayload` / task+info title saves with `notify: false` | `ListenableBuilder` on `AppState` around `DocumentEditor` |
+| Debounce embed PATCHes; patch cache **before** `await` | PATCH + `notifyListeners` / full embed reload on every `onChanged` |
+| Super Editor `setState` only when embed **id/type/order** changes; defer with `runAfterKeystroke` if keys are down | Treat every new embeds-list identity as a reason to remount |
+| Keep controllers as SoT while focused; skip `didUpdateWidget` resync if focused or keys down | Dispose cell/task/info focus nodes mid-KeyDown |
+| Tab/Escape → `runNextFrame`; empty-structure Backspace → `runAfterKeystroke` | Sync `unfocus` / delete structure on the KeyDown frame |
+| Remount `SuperEditor` (`ValueKey` epoch) when replacing `Editor` after silent reload | Swap `Editor` in place and keep a stale `DocumentImeInputClient` (Escape IME crash) |
+
+Smoke after edits: type fast in paragraph + info + task + table/chart cell; Tab into object, type, Escape, keep typing.
+
 ## Rules
 
 - Never store agent-expanded text in `document_json`; SoT is marker/pointer editor text.
-- Never rebuild the whole editor on a keystroke; save silently and keep focus.
+- Never rebuild the whole editor on a keystroke; save silently and keep focus. Follow [Keyboard / focus safety](#keyboard--focus-safety-recurring-bug-class).
 - An empty list item, table row, or trailing object unit (empty final task / info line / graph column) plus Enter exits that structure **without destroying it**.
 - An empty object (empty info, last empty task, last empty graph column) plus Backspace **removes the object** and coalesces surrounding text — no leftover blank paragraph.
 - Embed node ids are stable (`embed:<objectId>`); do not remount embeds under regenerated `p0`/`p1` keys.
 - A bullet, a row, and an embed each count as one line of text; settle caret and marking questions by asking what a plain line would do ([`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md)).
 - Never leave empty/`\n`-only paragraph neighbors after move/delete/split (bridge save prunes them).
-- Never rebuild the whole editor from `AppState.notifyListeners` while a key may still be down. Silent saves and post-frame embed refreshes only — otherwise Flutter's keyboard state desyncs (`KeyDownEvent … already pressed`).
 - RTL / Hebrew caret and direction policy: only via [`rich_text/rtl/`](rich_text/rtl/RTL.md).
 - A list has one style. Points vs numbers is switched on the existing list, never offered as two kinds of list to insert.
 
