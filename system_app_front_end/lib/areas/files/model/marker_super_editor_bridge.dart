@@ -77,6 +77,10 @@ MutableDocument markerTextToMutableDocument(String? raw) {
   if (nodes.isEmpty) {
     nodes.add(ParagraphNode(id: Editor.createNodeId(), text: AttributedText()));
   }
+  // File ending on an embed needs a writable paragraph below (Enter-to-exit).
+  if (nodes.last is ObjectEmbedNode) {
+    nodes.add(ParagraphNode(id: Editor.createNodeId(), text: AttributedText()));
+  }
   return MutableDocument(nodes: nodes);
 }
 
@@ -158,12 +162,14 @@ String mutableDocumentToMarkerText(Document document) {
     i++;
   }
 
-  // Drop trailing spacers / empties; ensure at least empty wrap.
-  while (lines.isNotEmpty &&
-      DocumentTextCodec.spacerRe.hasMatch(lines.last.trim())) {
+  // Drop trailing spacers / empties — except one after a final embed so
+  // Enter-to-exit / continue-typing below the last object survives save.
+  while (lines.length >= 2 &&
+      DocumentTextCodec.spacerRe.hasMatch(lines.last.trim()) &&
+      !DocumentTextCodec.pointerRe.hasMatch(lines[lines.length - 2].trim())) {
     lines.removeLast();
   }
-  // Prune empty neighbors around embeds (fluent rule).
+  // Prune empty neighbors around embeds (fluent rule), keep trailing write line.
   final pruned = _pruneEmptyNeighbors(lines);
   if (pruned.isEmpty) return DocumentTextCodec.empty();
   return DocumentTextCodec.wrap(pruned.join('\n\n'));
@@ -318,7 +324,14 @@ List<String> _pruneEmptyNeighbors(List<String> lines) {
         DocumentTextCodec.pointerRe.hasMatch(out.last.trim());
     final nextEmbed = i + 1 < lines.length &&
         DocumentTextCodec.pointerRe.hasMatch(lines[i + 1].trim());
-    // Drop empty/spacer neighbors of embeds.
+    // Keep a single trailing empty/spacer after the last embed (writing surface).
+    final trailingAfterEmbed =
+        prevEmbed && !nextEmbed && i == lines.length - 1;
+    if (trailingAfterEmbed) {
+      out.add(isSpacer ? line : '[SPACER n="1"]');
+      continue;
+    }
+    // Drop empty/spacer neighbors sandwiched against embeds.
     if (prevEmbed || nextEmbed) continue;
     if (isSpacer) out.add(line);
   }

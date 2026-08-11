@@ -121,9 +121,10 @@ PruneResult pruneFullyMarkedStructures({
   );
 }
 
-/// Atomic `#embed` units, or info title+body both marked end to end.
+/// Atomic `#embed` units, unified info text, or legacy title+body both cleared.
 bool _embedFullyEmptied(String blockId, Set<String> fullyEmptied) {
   if (fullyEmptied.contains(embedSegmentId(blockId))) return true;
+  if (fullyEmptied.contains(infoTextSegmentId(blockId))) return true;
   return fullyEmptied.contains(infoTitleSegmentId(blockId)) &&
       fullyEmptied.contains(infoBodySegmentId(blockId));
 }

@@ -34,10 +34,13 @@ String embedSegmentId(String blockId) => '$blockId#embed';
 
 bool isEmbedSegmentId(String segmentId) => segmentId.endsWith('#embed');
 
-/// Info object title — one line above the body, like a heading line.
+/// Info object — one editable text field (first line = title for API/diagrams).
+String infoTextSegmentId(String blockId) => '$blockId#infoText';
+
+/// Legacy: separate title field (pre first-line-title model).
 String infoTitleSegmentId(String blockId) => '$blockId#infoTitle';
 
-/// Info object body — continuous text under the title.
+/// Legacy: separate body field (pre first-line-title model).
 String infoBodySegmentId(String blockId) => '$blockId#infoBody';
 
 /// Task list object header — one line above the task rows.

@@ -2,13 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/l10n/app_strings.dart';
+import '../../ui/app_color_palettes.dart';
 import '../../ui/app_typography.dart';
 import '../editor/document_text_flow.dart';
+import '../editor/editor_key_handoff.dart';
 import '../model/document_model.dart';
 import './block_text_actions.dart';
 import './document_context_menu.dart';
 import './formatted_text_field.dart';
 import './span_text_editing_controller.dart';
+
+/// Grid editing modes for [RichTableEditor].
+enum TableEditorMode {
+  /// Arbitrary rows × columns; Enter grows rows.
+  grid,
+
+  /// Fixed 2 rows (labels/values); Enter grows columns (series), capped.
+  chartSeries,
+}
 
 class RichTableEditor extends StatefulWidget {
   const RichTableEditor({
@@ -20,6 +31,9 @@ class RichTableEditor extends StatefulWidget {
     this.onExitTable,
     this.onDeleteTable,
     this.documentBaseOffset = 0,
+    this.mode = TableEditorMode.grid,
+    this.maxColumns,
+    this.cellHint,
   });
 
   final TableNode node;
@@ -28,17 +42,25 @@ class RichTableEditor extends StatefulWidget {
   final VoidCallback? onFocus;
   final ValueChanged<int>? onExitTable;
 
-  /// Backspace on the last empty row — remove the table from the file.
+  /// Backspace on the last empty row/column — remove the table from the file.
   final VoidCallback? onDeleteTable;
 
   /// Start of this table's fence in the marker-text buffer.
   final int documentBaseOffset;
 
+  final TableEditorMode mode;
+
+  /// Cap for [TableEditorMode.chartSeries] (defaults to series palette limit).
+  final int? maxColumns;
+
+  /// Hint for the first cell (e.g. graph variable hint).
+  final String? cellHint;
+
   @override
-  State<RichTableEditor> createState() => _RichTableEditorState();
+  State<RichTableEditor> createState() => RichTableEditorState();
 }
 
-class _RichTableEditorState extends State<RichTableEditor> {
+class RichTableEditorState extends State<RichTableEditor> {
   late List<List<SpanTextEditingController>> _controllers;
   final _focusNodes = <FocusNode>[];
 
@@ -90,10 +112,17 @@ class _RichTableEditorState extends State<RichTableEditor> {
     }
   }
 
+  bool get _isChart => widget.mode == TableEditorMode.chartSeries;
+
+  int get _maxColumns =>
+      widget.maxColumns ??
+      (_isChart ? AppColorPalettes.seriesLimit : 64);
+
   List<List<DocumentTableCell>> get _normalizedRows {
     if (widget.node.rows.isEmpty) {
+      final rowCount = _isChart ? 2 : 1;
       return [
-        for (var r = 0; r < 1; r++)
+        for (var r = 0; r < rowCount; r++)
           [
             for (var c = 0; c < _defaultColumns; c++)
               const DocumentTableCell(text: ''),
@@ -103,9 +132,20 @@ class _RichTableEditorState extends State<RichTableEditor> {
     final maxCols = widget.node.rows
         .map((row) => row.length)
         .fold(_defaultColumns, (a, b) => a > b ? a : b);
-    final targetCols = maxCols < _defaultColumns ? _defaultColumns : maxCols;
+    var targetCols = maxCols < _defaultColumns ? _defaultColumns : maxCols;
+    if (_isChart && targetCols > _maxColumns) targetCols = _maxColumns;
+    final source = _isChart
+        ? [
+            widget.node.rows.isNotEmpty
+                ? widget.node.rows[0]
+                : <DocumentTableCell>[],
+            widget.node.rows.length > 1
+                ? widget.node.rows[1]
+                : <DocumentTableCell>[],
+          ]
+        : widget.node.rows;
     return [
-      for (final row in widget.node.rows)
+      for (final row in source)
         [
           for (var c = 0; c < targetCols; c++)
             c < row.length ? row[c] : const DocumentTableCell(text: ''),
@@ -183,11 +223,47 @@ class _RichTableEditorState extends State<RichTableEditor> {
     return _focusNodes[index];
   }
 
-  void _focusCell(int row, int col) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _focusAt(row, col).requestFocus();
-    });
+  int get lineCount => _controllers.length * _columnCount;
+
+  void focusLine(int index, {required bool fromAbove}) {
+    if (lineCount <= 0) return;
+    final cols = _columnCount;
+    final i = index.clamp(0, lineCount - 1);
+    final row = i ~/ cols;
+    final col = i % cols;
+    final controller = _controllers[row][col];
+    final len = controller.text.length;
+    controller.selection = TextSelection.collapsed(
+      offset: fromAbove ? 0 : len,
+    );
+    _focusAt(row, col).requestFocus();
+  }
+
+  void _arrowFromLine(int lineIndex, {required bool goingDown}) {
+    if (goingDown) {
+      if (lineIndex < lineCount - 1) {
+        focusLine(lineIndex + 1, fromAbove: true);
+        return;
+      }
+      widget.onExitTable?.call(lineIndex ~/ _columnCount);
+      return;
+    }
+    if (lineIndex > 0) {
+      focusLine(lineIndex - 1, fromAbove: false);
+      return;
+    }
+    // First cell ↑ — same as exit table upward via onExitTable(-1) convention
+    // Table edge arrows stay inside; Escape leaves via EmbedEditScope.
+    widget.onExitTable?.call(-1);
+  }
+
+  void _focusCell(int row, int col, {bool fromAbove = true}) {
+    final controller = _controllers[row][col];
+    final len = controller.text.length;
+    controller.selection = TextSelection.collapsed(
+      offset: fromAbove ? 0 : len,
+    );
+    _focusAt(row, col).requestFocus();
   }
 
   void _addRowAfter(int row) {
@@ -218,6 +294,13 @@ class _RichTableEditorState extends State<RichTableEditor> {
     return _controllers[row].every((c) => c.text.trim().isEmpty);
   }
 
+  bool _columnIsEmpty(int col) {
+    if (_controllers.isEmpty || col < 0 || col >= _columnCount) return true;
+    return _controllers.every(
+      (row) => col >= row.length || row[col].text.trim().isEmpty,
+    );
+  }
+
   /// Backspace on an empty row removes it; the last empty row deletes the table
   /// (fluent text). Enter on empty still uses [onExitTable].
   void _removeRowAt(int row) {
@@ -242,14 +325,56 @@ class _RichTableEditorState extends State<RichTableEditor> {
     _focusCell(focusRow, 0);
   }
 
-  /// Enter and Tab only. Arrow keys belong to the document text flow, which
-  /// moves by column inside the table and out of it at the edge rows.
+  void _removeColumnAt(int col, {required int focusRow}) {
+    widget.onFocus?.call();
+    if (_columnCount <= 1) {
+      runAfterKeystroke(() {
+        if (!mounted) return;
+        (widget.onDeleteTable ?? () => widget.onExitTable?.call(col))();
+      });
+      return;
+    }
+    setState(() {
+      for (final row in _controllers) {
+        row.removeAt(col).dispose();
+      }
+      for (final f in _focusNodes) {
+        f.dispose();
+      }
+      _focusNodes.clear();
+    });
+    _emit();
+    final nextCol = col.clamp(0, _columnCount - 1);
+    runAfterKeystroke(() {
+      if (!mounted) return;
+      _focusCell(focusRow.clamp(0, _controllers.length - 1), nextCol);
+    });
+  }
+
+  void _addColumnOrCap(int col, {required int focusRow}) {
+    if (_columnCount >= _maxColumns) return;
+    _addColumnAfter(col, focusRow: focusRow);
+  }
+
+  /// Enter / Tab move cells; ↑/↓ use [FormattedTextField] edge exits (line chain).
   KeyEventResult _onKey(FocusNode node, KeyEvent event, int row, int col) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     if (event.logicalKey == LogicalKeyboardKey.enter &&
         !HardwareKeyboard.instance.isShiftPressed) {
       widget.onFocus?.call();
+      if (_isChart) {
+        if (_columnIsEmpty(col)) {
+          widget.onExitTable?.call(col);
+          return KeyEventResult.handled;
+        }
+        if (col + 1 < _columnCount) {
+          _focusCell(row, col + 1);
+        } else {
+          _addColumnOrCap(col, focusRow: row);
+        }
+        return KeyEventResult.handled;
+      }
       if (_rowIsEmpty(row)) {
         widget.onExitTable?.call(row);
         return KeyEventResult.handled;
@@ -263,6 +388,16 @@ class _RichTableEditorState extends State<RichTableEditor> {
     }
 
     if (event.logicalKey == LogicalKeyboardKey.tab) {
+      if (_isChart) {
+        if (row == 0) {
+          _focusCell(1, col);
+        } else if (col + 1 < _columnCount) {
+          _focusCell(0, col + 1);
+        } else {
+          _focusCell(0, 0);
+        }
+        return KeyEventResult.handled;
+      }
       final nextCol = col + 1;
       if (nextCol < _controllers[row].length) {
         _focusCell(row, nextCol);
@@ -270,6 +405,16 @@ class _RichTableEditorState extends State<RichTableEditor> {
         _focusCell(row + 1, 0);
       }
       return KeyEventResult.handled;
+    }
+
+    if (_isChart && event.logicalKey == LogicalKeyboardKey.backspace) {
+      final controller = _controllers[row][col];
+      final sel = controller.selection;
+      final atStart = !sel.isValid || (sel.isCollapsed && sel.baseOffset <= 0);
+      if (atStart && controller.text.isEmpty && _columnIsEmpty(col)) {
+        _removeColumnAt(col, focusRow: row);
+        return KeyEventResult.handled;
+      }
     }
 
     return KeyEventResult.ignored;
@@ -282,7 +427,7 @@ class _RichTableEditorState extends State<RichTableEditor> {
       strings: widget.strings,
       onAction: (action) async {
         if (action == 'table:add_column') {
-          _addColumnAfter(col, focusRow: row);
+          _addColumnOrCap(col, focusRow: row);
           return;
         }
         await runBlockTextAction(action);
@@ -342,17 +487,34 @@ class _RichTableEditorState extends State<RichTableEditor> {
                                 segmentId: tableCellSegmentId(widget.node.id, r, c),
                                 documentBaseOffset: widget.documentBaseOffset,
                                 style: AppTypography.documentParagraphStyle,
-                                hintText: r == 0 && c == 0 ? 'Cell' : null,
+                                hintText: r == 0 && c == 0
+                                    ? (widget.cellHint ?? 'Cell')
+                                    : null,
                                 maxLines: null,
                                 minLines: 1,
                                 onChanged: (_) => _emit(),
                                 onBackspaceAtStart: () async {
+                                  if (_isChart) {
+                                    if (_controllers[r][c].text.isEmpty &&
+                                        _columnIsEmpty(c)) {
+                                      _removeColumnAt(c, focusRow: r);
+                                    }
+                                    return;
+                                  }
                                   if (_controllers[r][c].text.isEmpty &&
                                       _rowIsEmpty(r)) {
                                     _removeRowAt(r);
                                   }
                                 },
                                 onSecondaryTapDown: (d) => _showMenu(d, r, c),
+                                onArrowExitAbove: () => _arrowFromLine(
+                                      r * _columnCount + c,
+                                      goingDown: false,
+                                    ),
+                                onArrowExitBelow: () => _arrowFromLine(
+                                      r * _columnCount + c,
+                                      goingDown: true,
+                                    ),
                               ),
                             ),
                           ),

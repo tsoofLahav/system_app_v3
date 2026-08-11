@@ -10,17 +10,134 @@ import '../../../objects/links/add_connection_dialog.dart';
 import '../../../objects/tags/assign_object_tags_dialog.dart';
 import '../../../ux/topic/topic_appearance.dart';
 import '../document_text_flow.dart';
+import '../editor_key_handoff.dart';
+import '../embed_caret_bridge.dart';
 import '../../rich_text/block_text_actions.dart';
 import '../../rich_text/document_context_menu.dart';
 import '../../rich_text/formatted_text_field.dart';
 import '../../rich_text/span_text_editing_controller.dart';
+import '../../rich_text/text_formatting.dart';
 import '../../../ui/app_colors.dart';
 import '../../../ui/app_typography.dart';
 
-/// Info object — gentle frame, title + body as two document-flow lines.
-///
-/// Arrows / Enter / Backspace move between title and body the way they move
-/// between lines of a paragraph; empty final body line + Enter exits below.
+/// Compose API `title` + `body` into one editable string (first line = title).
+String composeInfoText(String title, String body) {
+  if (title.isEmpty && body.isEmpty) return '';
+  if (body.isEmpty) return title;
+  return '$title\n$body';
+}
+
+(String title, String body) splitInfoText(String text) {
+  final nl = text.indexOf('\n');
+  if (nl < 0) return (text, '');
+  return (text.substring(0, nl), text.substring(nl + 1));
+}
+
+/// Body-relative spans → offsets in the combined title\\nbody string.
+List<Map<String, dynamic>> infoSpansToCombined(
+  List<Map<String, dynamic>> bodySpans,
+  String combined,
+) {
+  final nl = combined.indexOf('\n');
+  if (nl < 0) return const [];
+  final offset = nl + 1;
+  return [
+    for (final s in bodySpans)
+      {
+        ...s,
+        'start': (s['start'] as int) + offset,
+        'end': (s['end'] as int) + offset,
+      },
+  ];
+}
+
+/// Combined-string spans → body-relative spans for the API.
+List<Map<String, dynamic>> infoSpansToBody(
+  List<Map<String, dynamic>> combinedSpans,
+  String combined,
+) {
+  final nl = combined.indexOf('\n');
+  if (nl < 0) return const [];
+  final offset = nl + 1;
+  final bodyLen = combined.length - offset;
+  final out = <Map<String, dynamic>>[];
+  for (final s in combinedSpans) {
+    var start = s['start'] as int;
+    var end = s['end'] as int;
+    if (end <= offset) continue;
+    if (start < offset) start = offset;
+    start -= offset;
+    end -= offset;
+    if (start >= bodyLen) continue;
+    if (end > bodyLen) end = bodyLen;
+    if (start >= end) continue;
+    out.add({...s, 'start': start, 'end': end});
+  }
+  return out;
+}
+
+/// Renders the first line as title weight/size; rest as body + user spans.
+class _InfoTextController extends SpanTextEditingController {
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final titleStyle = AppTypography.noteTitleStyle;
+    final bodyStyle = AppTypography.noteBodyStyle;
+    final t = text;
+    final nl = t.indexOf('\n');
+    if (nl < 0) {
+      return TextSpanBuilder.build(
+        text: t,
+        baseStyle: titleStyle,
+        spans: spans,
+      );
+    }
+
+    final titlePart = t.substring(0, nl);
+    final bodyPart = t.substring(nl + 1);
+    final titleSpans = <Map<String, dynamic>>[];
+    final bodySpans = <Map<String, dynamic>>[];
+    for (final s in spans) {
+      final start = s['start'] as int;
+      final end = s['end'] as int;
+      if (end > 0 && start < nl) {
+        titleSpans.add({
+          ...s,
+          'start': start.clamp(0, nl),
+          'end': end.clamp(0, nl),
+        });
+      }
+      if (end > nl + 1) {
+        final bs = (start - (nl + 1)).clamp(0, bodyPart.length);
+        final be = (end - (nl + 1)).clamp(0, bodyPart.length);
+        if (bs < be) {
+          bodySpans.add({...s, 'start': bs, 'end': be});
+        }
+      }
+    }
+
+    return TextSpan(
+      children: [
+        TextSpanBuilder.build(
+          text: titlePart,
+          baseStyle: titleStyle,
+          spans: titleSpans,
+        ),
+        TextSpan(text: '\n', style: bodyStyle),
+        TextSpanBuilder.build(
+          text: bodyPart,
+          baseStyle: bodyStyle,
+          spans: bodySpans,
+        ),
+      ],
+    );
+  }
+}
+
+/// Info object — one text field; first line is the title (diagrams / API).
 class InfoEmbed extends StatefulWidget {
   const InfoEmbed({
     super.key,
@@ -51,30 +168,71 @@ class InfoEmbed extends StatefulWidget {
   InfoEmbedState createState() => InfoEmbedState();
 }
 
-class InfoEmbedState extends State<InfoEmbed> {
-  late SpanTextEditingController _titleController;
-  late SpanTextEditingController _bodyController;
-  late final FocusNode _titleFocus;
-  late final FocusNode _bodyFocus;
+class InfoEmbedState extends State<InfoEmbed>
+    with EmbedLineGatewayMixin
+    implements EmbedCaretGateway {
+  late _InfoTextController _controller;
+  late final FocusNode _focus;
   Timer? _saveTimer;
+  EmbedCaretRegistry? _registry;
+
+  @override
+  String get nodeId => widget.blockId;
+
+  @override
+  int get lineCount => 1;
+
+  @override
+  void focusLine(int index, {required bool fromAbove}) {
+    focusFieldLine(_focus, _controller, fromAbove: fromAbove);
+  }
+
+  void _seedFromEmbed() {
+    final info = widget.embed.information ?? const {};
+    final title = info['title'] as String? ?? '';
+    final body = info['body'] as String? ?? '';
+    final combined = composeInfoText(title, body);
+    final meta = info['metadata'];
+    final rawSpans = meta is Map ? meta['spans'] : null;
+    final bodySpans = rawSpans is List
+        ? [
+            for (final s in rawSpans)
+              if (s is Map) Map<String, dynamic>.from(s),
+          ]
+        : <Map<String, dynamic>>[];
+    _controller.setRichState(
+      text: combined,
+      spans: infoSpansToCombined(bodySpans, combined),
+    );
+  }
+
+  (String, String, List<Map<String, dynamic>>) _splitForApi() {
+    final combined = _controller.text;
+    final parts = splitInfoText(combined);
+    return (
+      parts.$1,
+      parts.$2,
+      infoSpansToBody(_controller.spans, combined),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
-    _titleFocus = FocusNode();
-    _bodyFocus = FocusNode();
-    final info = widget.embed.information ?? const {};
-    _titleController = SpanTextEditingController(
-      text: info['title'] as String? ?? '',
-    );
-    final meta = info['metadata'];
-    final spans = meta is Map ? meta['spans'] : null;
-    _bodyController = SpanTextEditingController(
-      text: info['body'] as String? ?? '',
-      spans: spans is List
-          ? [for (final s in spans) if (s is Map) Map<String, dynamic>.from(s)]
-          : const [],
-    );
+    _focus = FocusNode();
+    _controller = _InfoTextController();
+    _seedFromEmbed();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = EmbedCaretScope.maybeOf(context)?.registry;
+    if (!identical(next, _registry)) {
+      _registry?.unregister(nodeId);
+      _registry = next;
+      _registry?.register(this);
+    }
   }
 
   /// Push live controllers into AppState cache before a structural remount.
@@ -90,25 +248,18 @@ class InfoEmbedState extends State<InfoEmbed> {
     // identity changes — never overwrite typed text with a stale empty cache
     // after Move Mode (GlobalKey keeps this State across rebuilds).
     if (oldWidget.embed.id == widget.embed.id) return;
-    final info = widget.embed.information ?? const {};
-    _titleController.text = info['title'] as String? ?? '';
-    _bodyController.text = info['body'] as String? ?? '';
-    final meta = info['metadata'];
-    final spans = meta is Map ? meta['spans'] : null;
-    _bodyController.spans = spans is List
-        ? [for (final s in spans) if (s is Map) Map<String, dynamic>.from(s)]
-        : const [];
+    _seedFromEmbed();
   }
 
   @override
   void dispose() {
+    _registry?.unregister(nodeId);
+    _registry = null;
     _saveTimer?.cancel();
     // Best-effort flush — ignore if the object was already deleted.
     unawaited(_save(flush: true).catchError((_) {}));
-    _titleFocus.dispose();
-    _bodyFocus.dispose();
-    _titleController.dispose();
-    _bodyController.dispose();
+    _focus.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
@@ -122,12 +273,13 @@ class InfoEmbedState extends State<InfoEmbed> {
 
   Future<void> _save({bool flush = false}) async {
     _saveTimer?.cancel();
+    final (title, body, spans) = _splitForApi();
     try {
       await widget.state.updateInfoObject(
         widget.embed,
-        title: _titleController.text,
-        body: _bodyController.text,
-        spans: _bodyController.spans,
+        title: title,
+        body: body,
+        spans: spans,
       );
     } catch (_) {
       // Object may have been removed while a debounce was pending.
@@ -137,102 +289,34 @@ class InfoEmbedState extends State<InfoEmbed> {
 
   /// Sync cache only — use before structural rebuild; API can catch up async.
   void pushControllersToCache() {
+    final (title, body, spans) = _splitForApi();
     widget.state.patchInfoObjectCache(
       widget.embed,
-      title: _titleController.text,
-      body: _bodyController.text,
-      spans: _bodyController.spans,
+      title: title,
+      body: body,
+      spans: spans,
     );
   }
 
-  void _focusBody({int offset = 0}) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _bodyFocus.requestFocus();
-      final len = _bodyController.text.length;
-      _bodyController.selection =
-          TextSelection.collapsed(offset: offset.clamp(0, len));
-    });
-  }
+  bool get _isEmptyObject => _controller.text.trim().isEmpty;
 
-  void _focusTitle({int? offset}) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _titleFocus.requestFocus();
-      final len = _titleController.text.length;
-      _titleController.selection = TextSelection.collapsed(
-        offset: (offset ?? len).clamp(0, len),
-      );
-    });
-  }
-
-  /// Enter in the title drops into the body — next line.
-  void _onTitleEnter() {
-    widget.onFocus?.call();
-    unawaited(_save());
-    _focusBody();
-  }
-
-  bool get _isEmptyObject =>
-      _titleController.text.trim().isEmpty &&
-      _bodyController.text.trim().isEmpty;
-
-  /// Backspace at the start of an empty title deletes the object when the body
-  /// is empty too — same fluent rule as an empty list bullet.
-  Future<void> _onTitleBackspaceAtStart() async {
+  Future<void> _onBackspaceAtStart() async {
     widget.onFocus?.call();
     if (_isEmptyObject) {
-      widget.onDeleteObject?.call();
+      runAfterKeystroke(() => widget.onDeleteObject?.call());
     }
   }
 
-  /// Backspace at the start of the body climbs into the title — previous line.
-  /// When the whole info object is empty, deletes it instead.
-  Future<void> _onBodyBackspaceAtStart() async {
+  /// Enter inserts a newline (first line stays the title). Leave with Escape.
+  void _onEnter() {
     widget.onFocus?.call();
-    if (_isEmptyObject) {
-      widget.onDeleteObject?.call();
-      return;
-    }
-    _focusTitle();
-  }
-
-  /// Enter adds a line; Enter on an empty final line exits to text below.
-  void _onBodyEnter() {
-    widget.onFocus?.call();
-    final text = _bodyController.text;
-    final sel = _bodyController.selection;
+    final text = _controller.text;
+    final sel = _controller.selection;
     final offset =
         sel.isValid ? sel.baseOffset.clamp(0, text.length) : text.length;
 
-    final lastBreak = text.lastIndexOf('\n');
-    final lastLineStart = lastBreak + 1;
-    final lastLine = text.substring(lastLineStart);
-    final onLastLine = offset >= lastLineStart;
-
-    if (onLastLine && lastLine.trim().isEmpty && text.contains('\n')) {
-      final trimmed =
-          text.substring(0, lastLineStart).replaceFirst(RegExp(r'\n$'), '');
-      _bodyController.value = TextEditingValue(
-        text: trimmed,
-        selection: TextSelection.collapsed(offset: trimmed.length),
-      );
-      unawaited(_save());
-      _titleFocus.unfocus();
-      _bodyFocus.unfocus();
-      widget.onExitBelow?.call();
-      return;
-    }
-
-    if (text.trim().isEmpty) {
-      _titleFocus.unfocus();
-      _bodyFocus.unfocus();
-      widget.onExitBelow?.call();
-      return;
-    }
-
     final next = text.replaceRange(offset, offset, '\n');
-    _bodyController.value = TextEditingValue(
+    _controller.value = TextEditingValue(
       text: next,
       selection: TextSelection.collapsed(offset: offset + 1),
     );
@@ -293,32 +377,30 @@ class InfoEmbedState extends State<InfoEmbed> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             FormattedTextField(
-              controller: _titleController,
-              focusNode: _titleFocus,
-              segmentId: infoTitleSegmentId(widget.blockId),
-              documentBaseOffset: widget.documentBaseOffset,
-              style: AppTypography.noteTitleStyle,
-              hintText: s['detailsTitleHint'],
-              maxLines: 1,
-              minLines: 1,
-              onChanged: (_) => _scheduleSave(),
-              onEnter: _onTitleEnter,
-              onBackspaceAtStart: _onTitleBackspaceAtStart,
-              onSecondaryTapDown: _showTextMenu,
-            ),
-            const SizedBox(height: 4),
-            FormattedTextField(
-              controller: _bodyController,
-              focusNode: _bodyFocus,
-              segmentId: infoBodySegmentId(widget.blockId),
+              controller: _controller,
+              focusNode: _focus,
+              segmentId: infoTextSegmentId(widget.blockId),
               documentBaseOffset: widget.documentBaseOffset,
               style: AppTypography.noteBodyStyle,
+              hintText: s['detailsTitleHint'],
               maxLines: null,
               minLines: 1,
               onChanged: (_) => _scheduleSave(),
-              onEnter: _onBodyEnter,
-              onBackspaceAtStart: _onBodyBackspaceAtStart,
+              onEnter: _onEnter,
+              onBackspaceAtStart: _onBackspaceAtStart,
               onSecondaryTapDown: _showTextMenu,
+              onArrowExitAbove: () => navigateEmbedLine(
+                lineIndex: 0,
+                lineCount: lineCount,
+                focusLine: focusLine,
+                goingDown: false,
+              ),
+              onArrowExitBelow: () => navigateEmbedLine(
+                lineIndex: 0,
+                lineCount: lineCount,
+                focusLine: focusLine,
+                goingDown: true,
+              ),
             ),
             if (tags.isNotEmpty) ...[
               const SizedBox(height: 8),

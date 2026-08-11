@@ -4,11 +4,13 @@
 ///
 /// Pieces:
 /// - [detectParagraphTextDirection] / [resolveFieldTextDirection] — base direction
-/// - [rtlCaretMotionActions] / [wrapVisualCaretMotion] — visual arrow keys
+/// - [rtlCaretMotionActions] / [wrapVisualCaretMotion] — visual arrow keys (embeds)
 /// - [emptySpaceCaretOffset] — taps in empty padding beside/below glyphs
+/// - [ambientAwareTextBuilders] / [SuperEditorVisualCaretPlugin] — Super Editor
 ///
-/// Wire these only through [FormattedTextField]. Do not reinvent caret math
-/// elsewhere in the document flow.
+/// Wire caret/direction helpers through [FormattedTextField] (embeds) and
+/// Super Editor builders/plugins — see [RTL.md]. Do not reinvent caret math in
+/// `DocumentTextFlow`.
 library;
 
 import 'package:flutter/widgets.dart';
@@ -19,6 +21,8 @@ import './rtl_caret_motion.dart';
 export './empty_space_caret.dart';
 export './paragraph_text_direction.dart';
 export './rtl_caret_motion.dart';
+export './super_editor_text_direction.dart';
+export './super_editor_visual_caret.dart';
 
 /// Paragraph [textDirection]: first strong character, else [ambient] UI locale.
 TextDirection resolveFieldTextDirection(String text, TextDirection ambient) {

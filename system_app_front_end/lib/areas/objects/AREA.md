@@ -11,10 +11,11 @@ This area owns **data, services, and type logic**. How an object is *presented i
 | Type | Special quality (this area) | In-file presentation (files) |
 |------|-----------------------------|------------------------------|
 | `task_list` | Tasks as rows; order; done/active; **views** | List-like embed ([`../files/editor/embeds/inline_task_list.dart`](../files/editor/embeds/inline_task_list.dart)) |
-| `info` | Knowledge piece; **links / object graph** | Title + body embed ([`../files/editor/embeds/object_embed_widgets.dart`](../files/editor/embeds/object_embed_widgets.dart)) |
+| `info` | Knowledge piece; **links / object graph** | One-text embed; first line = title ([`../files/editor/embeds/object_embed_widgets.dart`](../files/editor/embeds/object_embed_widgets.dart)) |
 | `image` | Asset + caption payload | Image embed (same file) |
-| `graph` | Chart data (labels/values) | Table-like embed ([`../files/editor/embeds/graph_embed.dart`](../files/editor/embeds/graph_embed.dart)) |
-| `table` | Grid rows/cells in `payload` | [`../files/editor/embeds/table_embed.dart`](../files/editor/embeds/table_embed.dart) (`RichTableEditor`) |
+| `table` | Grid (`payload.rows`); optional **chart** quality | [`../files/editor/embeds/table_embed.dart`](../files/editor/embeds/table_embed.dart) (`RichTableEditor` + chart chrome) |
+
+Payload helpers: [`data/table_payload.dart`](data/table_payload.dart). Insert “graph” creates a table with `chart.enabled`.
 
 ```
 files (presentation) ──thin overlay──► objects (data + type logic)
@@ -59,7 +60,7 @@ task ──┬── shown inline in its file (home list)
 
 ## Info and the object graph
 
-An info object holds knowledge (`title`, `body`, …). Graph edges are keyed by **`objects.id`**.
+An info object holds knowledge (`title`, `body`, …). In the file, title and body edit as **one text field** (first line → `title`, rest → `body`); diagrams and the API still see separate fields. Graph edges are keyed by **`objects.id`**.
 
 | Kind | Meaning |
 |------|---------|
@@ -74,16 +75,16 @@ An info object holds knowledge (`title`, `body`, …). Graph edges are keyed by 
 - Description: document **Connect info…**, hover bubble, double-tap opens the info
 - **Objects map**: info nodes + related edges; tag filter above bottom bar; topic/tag color modes; click expands editable card with ×
 
-In-file editing of title/body is presentation (files).
+In-file editing of the unified info text is presentation (files).
 
-## Image and graph (data)
+## Image and table (data)
 
 | Type | Data |
 |------|------|
 | `image` | Payload: url/path/width/caption |
-| `graph` | Payload: `labels`, `values`, `chartType`, **`colors[]`** (one hex per variable; legacy `color` = first) |
+| `table` | Payload: `rows` + optional `chart` (`enabled`, `chartType`, `colors[]`) — see [`data/table_payload.dart`](data/table_payload.dart) |
 
-Agent text and API shapes: backend objects `AREA.md` + production agent prompt.
+Agent text and API shapes: backend objects `AREA.md` + production agent prompt. “Object graph” (links map) is separate from chart tables.
 
 ## Structure
 
@@ -114,6 +115,6 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 
 **Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder; object tags; related + description links; objects map with tag filter, color modes, in-map expand/edit.
 
-**Shipped (presentation, in files):** list-like task embed; info title/body + tag chips (add tag/link via context menu); graph table-like embed; Move Mode; right-click text menu including Connect info; description underlines + hover/double-tap.
+**Shipped (presentation, in files):** list-like task embed; info title/body + tag chips (add tag/link via context menu); table embed (+ chart quality); Move Mode; right-click text menu including Connect info; description underlines + hover/double-tap.
 
 **Next (this area):** non-info map nodes; persisted map layout; convert-selection → create Info.

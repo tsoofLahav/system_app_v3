@@ -97,6 +97,8 @@ class DocumentTextCodec {
     return const MarkerPartInfo(MarkerPartKind.paragraph);
   }
 
+  /// Marker tag → node label. `GRAPH` stays `graph` so save re-emits `[GRAPH]`
+  /// for chart tables; the API object type is always `table`.
   static String? objectTypeForTag(String tag) => switch (tag.toUpperCase()) {
         'INFO' => 'info',
         'TASK_LIST' => 'task_list',

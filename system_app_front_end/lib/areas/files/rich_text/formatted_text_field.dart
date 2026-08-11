@@ -55,6 +55,8 @@ class FormattedTextField extends StatefulWidget {
     this.descriptionRanges = const [],
     this.onDescriptionHover,
     this.onDescriptionDoubleTap,
+    this.onArrowExitAbove,
+    this.onArrowExitBelow,
   });
 
   final TextEditingController controller;
@@ -83,6 +85,13 @@ class FormattedTextField extends StatefulWidget {
 
   /// Absolute start of this field's slice in the marker-text buffer.
   final int documentBaseOffset;
+
+  /// When there is no [DocumentTextFlow] (Super Editor body), ↑ on the first
+  /// visual line calls this so the host can leave the embed.
+  final VoidCallback? onArrowExitAbove;
+
+  /// When there is no [DocumentTextFlow], ↓ on the last visual line calls this.
+  final VoidCallback? onArrowExitBelow;
 
   final String emojiSearchHint;
   final String emojiPickerTitle;
@@ -497,6 +506,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     String segmentId,
     Set<String> toPrune,
   ) {
+    // Unified info text is one segment — clearing it empties the object.
+    if (segmentId.endsWith('#infoText')) return;
+
     const titleSuffix = '#infoTitle';
     const bodySuffix = '#infoBody';
     if (segmentId.endsWith(titleSuffix)) {
@@ -708,7 +720,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   bool _handleFlowArrowKey(KeyEvent event) {
     final flow = _flow;
     final segmentId = _registeredSegmentId;
-    if (flow == null || segmentId == null) return false;
 
     final key = event.logicalKey;
     final isHorizontal = key == LogicalKeyboardKey.arrowLeft ||
@@ -722,6 +733,11 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         HardwareKeyboard.instance.isMetaPressed ||
         HardwareKeyboard.instance.isControlPressed) {
       return false;
+    }
+
+    // Super Editor embeds: no DocumentTextFlow — exit at first/last line.
+    if (flow == null || segmentId == null) {
+      return _handleStandaloneEdgeExit(event);
     }
 
     final selection = widget.controller.selection;
@@ -1055,12 +1071,57 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     widget.onDescriptionHover?.call(_descriptionAt(local));
   }
 
-  /// macOS sends vertical arrows as selection intents, not only key events.
-  /// At a field edge we move through the document flow; otherwise the default
-  /// EditableText action runs. Claiming the edge case avoids
-  /// VerticalCaretMovementRun asserting on single-line fields.
+  /// ↑/↓ at the first/last visual line when this field is not in a flow
+  /// (embed under Super Editor). Returns false when the host has no handler.
+  bool _handleStandaloneEdgeExit(KeyEvent event) {
+    final key = event.logicalKey;
+    if (key != LogicalKeyboardKey.arrowUp &&
+        key != LogicalKeyboardKey.arrowDown) {
+      return false;
+    }
+    if (HardwareKeyboard.instance.isShiftPressed) return false;
+
+    final selection = widget.controller.selection;
+    // Single-line fields (info title) are one document line — always at both
+    // edges. Don't require a valid selection; macOS may deliver moveUp: before
+    // the caret is restored after a focus handoff.
+    final singleLine = widget.maxLines == 1;
+    if (!singleLine) {
+      if (!selection.isValid || !selection.isCollapsed) return false;
+      final caret = selection.extentOffset;
+      if (key == LogicalKeyboardKey.arrowUp) {
+        if (!_caretOnFirstLine(caret)) return false;
+        if (widget.onArrowExitAbove == null) return false;
+        widget.onArrowExitAbove!();
+        return true;
+      }
+      if (!_caretOnLastLine(caret)) return false;
+      if (widget.onArrowExitBelow == null) return false;
+      widget.onArrowExitBelow!();
+      return true;
+    }
+
+    if (key == LogicalKeyboardKey.arrowUp) {
+      if (widget.onArrowExitAbove == null) return false;
+      widget.onArrowExitAbove!();
+      return true;
+    }
+    if (widget.onArrowExitBelow == null) return false;
+    widget.onArrowExitBelow!();
+    return true;
+  }
+
+  /// macOS sends vertical arrows as selection intents / IME selectors, not only
+  /// key events. At a field edge we move through the document flow; otherwise
+  /// the default EditableText action runs — except on single-line fields, where
+  /// VerticalCaretMovementRun asserts (`isValid` false / one line).
   Widget _withFlowVerticalIntents(Widget child) {
-    if (widget.segmentId == null) return child;
+    if (widget.segmentId == null &&
+        widget.onArrowExitAbove == null &&
+        widget.onArrowExitBelow == null) {
+      return child;
+    }
+    final singleLine = widget.maxLines == 1;
     return Actions(
       actions: <Type, Action<Intent>>{
         ExtendSelectionVerticallyToAdjacentLineIntent: _FlowVerticalEdgeAction(
@@ -1076,6 +1137,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
             );
             return _handleFlowArrowKey(synthetic);
           },
+          // Never fall through to EditableText on a single-line field.
+          mayDeferToEditable: singleLine
+              ? null
+              : () => widget.controller.selection.isValid,
         ),
       },
       child: child,
@@ -1325,25 +1390,36 @@ class _StripNewlinesFormatter extends TextInputFormatter {
   }
 }
 
-/// At a field edge, move through [DocumentTextFlow]; otherwise defer to the
-/// EditableText vertical action (needed for multi-line bodies).
+/// At a field edge, move through [DocumentTextFlow] / embed exits; otherwise
+/// defer to EditableText (multi-line bodies only).
 class _FlowVerticalEdgeAction
     extends Action<ExtendSelectionVerticallyToAdjacentLineIntent> {
-  _FlowVerticalEdgeAction(this._tryFlowEdge);
+  _FlowVerticalEdgeAction(
+    this._tryFlowEdge, {
+    bool Function()? mayDeferToEditable,
+  }) : _mayDeferToEditable = mayDeferToEditable;
 
   final bool Function(bool forward) _tryFlowEdge;
+
+  /// When null or returns false, never invoke EditableText's vertical action
+  /// (avoids VerticalCaretMovementRun asserts on single-line / invalid sel).
+  final bool Function()? _mayDeferToEditable;
 
   @override
   Object? invoke(ExtendSelectionVerticallyToAdjacentLineIntent intent) {
     if (_tryFlowEdge(intent.forward)) return null;
+    final mayDefer = _mayDeferToEditable;
+    if (mayDefer == null || !mayDefer()) return null;
     return callingAction?.invoke(intent);
   }
 
   @override
-  bool isEnabled(ExtendSelectionVerticallyToAdjacentLineIntent intent) =>
-      callingAction?.isEnabled(intent) ?? true;
+  bool isEnabled(ExtendSelectionVerticallyToAdjacentLineIntent intent) {
+    // Keep enabled so macOS IME selectors hit us instead of a broken default.
+    return true;
+  }
 
   @override
   bool consumesKey(ExtendSelectionVerticallyToAdjacentLineIntent intent) =>
-      callingAction?.consumesKey(intent) ?? false;
+      true;
 }

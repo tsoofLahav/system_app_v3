@@ -46,6 +46,8 @@ One line each — **no** payload inside the file:
 [TABLE id="11"]
 ```
 
+`[GRAPH id]` and `[TABLE id]` both point at `objects.type = table`. Use `[GRAPH]` when `payload.chart.enabled` (chart quality); otherwise `[TABLE]`.
+
 Legacy fallback: `[EMBED id="N"]` (type resolved from the objects table).
 
 Object **content** lives in object tables / `objects.payload`. Deleting a pointer cascades to the object row.

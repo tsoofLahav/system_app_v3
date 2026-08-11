@@ -1,0 +1,256 @@
+/// Atomic object blocks: SE owns the caret on the embed; Tab opens it;
+/// Escape returns to the SE block caret. Enter inserts a line under the object.
+library;
+
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import 'package:super_editor/super_editor.dart';
+
+import '../model/object_embed_node.dart';
+import './document_caret_session.dart';
+import './editor_key_handoff.dart';
+
+/// Ordered editable lines inside one object (title, body, tasks, cells, …).
+abstract class EmbedCaretGateway {
+  String get nodeId;
+  int get lineCount;
+  void focusLine(int index, {required bool fromAbove});
+  void enterFromAbove();
+  void enterFromBelow();
+}
+
+mixin EmbedLineGatewayMixin implements EmbedCaretGateway {
+  @override
+  void enterFromAbove() {
+    if (lineCount <= 0) return;
+    focusLine(0, fromAbove: true);
+  }
+
+  @override
+  void enterFromBelow() {
+    if (lineCount <= 0) return;
+    focusLine(lineCount - 1, fromAbove: false);
+  }
+}
+
+/// ↑/↓ within an embed only. At the first/last line, do nothing (Escape leaves).
+void navigateEmbedLine({
+  required int lineIndex,
+  required int lineCount,
+  required void Function(int index, {required bool fromAbove}) focusLine,
+  required bool goingDown,
+}) {
+  if (lineCount <= 0) return;
+  if (goingDown) {
+    if (lineIndex < lineCount - 1) {
+      focusLine(lineIndex + 1, fromAbove: true);
+    }
+    return;
+  }
+  if (lineIndex > 0) {
+    focusLine(lineIndex - 1, fromAbove: false);
+  }
+}
+
+void focusFieldLine(
+  FocusNode focus,
+  TextEditingController controller, {
+  required bool fromAbove,
+}) {
+  final len = controller.text.length;
+  controller.selection = TextSelection.collapsed(
+    offset: fromAbove ? 0 : len,
+  );
+  if (!focus.hasFocus) {
+    focus.requestFocus();
+  }
+}
+
+class EmbedCaretRegistry extends ChangeNotifier {
+  final _gateways = <String, EmbedCaretGateway>{};
+
+  void register(EmbedCaretGateway gateway) {
+    _gateways[gateway.nodeId] = gateway;
+  }
+
+  void unregister(String nodeId) {
+    _gateways.remove(nodeId);
+  }
+
+  EmbedCaretGateway? operator [](String nodeId) => _gateways[nodeId];
+}
+
+/// Registry + Escape → SE block caret.
+class EmbedCaretScope extends InheritedWidget {
+  const EmbedCaretScope({
+    super.key,
+    required this.registry,
+    required this.onExitObject,
+    required super.child,
+  });
+
+  final EmbedCaretRegistry registry;
+  final void Function(String nodeId) onExitObject;
+
+  static EmbedCaretScope? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<EmbedCaretScope>();
+  }
+
+  @override
+  bool updateShouldNotify(EmbedCaretScope oldWidget) {
+    return registry != oldWidget.registry ||
+        onExitObject != oldWidget.onExitObject;
+  }
+}
+
+/// Tab opens an object; Enter on an object inserts a paragraph below it.
+class EmbedCaretPlugin extends SuperEditorPlugin {
+  EmbedCaretPlugin({
+    required this.registry,
+    required this.caretSession,
+  });
+
+  final EmbedCaretRegistry registry;
+  final DocumentCaretSession caretSession;
+
+  @override
+  List<SuperEditorKeyboardAction> get keyboardActions => [_onTab, _onEnter];
+
+  Map<String, SuperEditorSelectorHandler> get selectorHandlers {
+    return {
+      ...defaultEditorSelectorHandlers,
+      MacOsSelectors.insertTab: (ctx) {
+        if (!tryEnterObject(ctx)) {
+          indentListItem(ctx);
+        }
+      },
+      MacOsSelectors.insertNewLine: (ctx) {
+        if (!tryInsertLineBelowObject(ctx)) {
+          insertNewLine(ctx);
+        }
+      },
+    };
+  }
+
+  ObjectEmbedNode? _embedAtCaret(SuperEditorContext editContext) {
+    final selection = editContext.composer.selection;
+    if (selection == null || !selection.isCollapsed) return null;
+    final node = editContext.document.getNodeById(selection.extent.nodeId);
+    return node is ObjectEmbedNode ? node : null;
+  }
+
+  /// Tab while SE caret is on an enterable embed → first inner line.
+  bool tryEnterObject(SuperEditorContext editContext) {
+    final node = _embedAtCaret(editContext);
+    if (node == null) return false;
+    final gateway = registry[node.id];
+    if (gateway == null) return false;
+
+    caretSession.adoptEmbed(node.id);
+    // Next frame only — Tab is a distinct key from inner typing; waiting for
+    // keys-clear (runAfterKeystroke) felt like a half-second stall.
+    runNextFrame(() {
+      caretSession.adoptEmbed(node.id);
+      gateway.enterFromAbove();
+    });
+    return true;
+  }
+
+  /// Enter on an object block → empty paragraph underneath (keep writing).
+  bool tryInsertLineBelowObject(SuperEditorContext editContext) {
+    final node = _embedAtCaret(editContext);
+    if (node == null) return false;
+
+    final id = Editor.createNodeId();
+    editContext.editor.execute([
+      InsertNodeAfterNodeRequest(
+        existingNodeId: node.id,
+        newNode: ParagraphNode(id: id, text: AttributedText()),
+      ),
+      ChangeSelectionRequest(
+        DocumentSelection.collapsed(
+          position: DocumentPosition(
+            nodeId: id,
+            nodePosition: const TextNodePosition(offset: 0),
+          ),
+        ),
+        SelectionChangeType.insertContent,
+        SelectionReason.userInteraction,
+      ),
+    ]);
+    return true;
+  }
+
+  ExecutionInstruction _onTab({
+    required SuperEditorContext editContext,
+    required KeyEvent keyEvent,
+  }) {
+    if (keyEvent is! KeyDownEvent && keyEvent is! KeyRepeatEvent) {
+      return ExecutionInstruction.continueExecution;
+    }
+    if (keyEvent.logicalKey != LogicalKeyboardKey.tab) {
+      return ExecutionInstruction.continueExecution;
+    }
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      return ExecutionInstruction.continueExecution;
+    }
+    return tryEnterObject(editContext)
+        ? ExecutionInstruction.haltExecution
+        : ExecutionInstruction.continueExecution;
+  }
+
+  ExecutionInstruction _onEnter({
+    required SuperEditorContext editContext,
+    required KeyEvent keyEvent,
+  }) {
+    if (keyEvent is! KeyDownEvent && keyEvent is! KeyRepeatEvent) {
+      return ExecutionInstruction.continueExecution;
+    }
+    if (keyEvent.logicalKey != LogicalKeyboardKey.enter &&
+        keyEvent.logicalKey != LogicalKeyboardKey.numpadEnter) {
+      return ExecutionInstruction.continueExecution;
+    }
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      return ExecutionInstruction.continueExecution;
+    }
+    return tryInsertLineBelowObject(editContext)
+        ? ExecutionInstruction.haltExecution
+        : ExecutionInstruction.continueExecution;
+  }
+}
+
+/// Wraps embed content: Escape returns to the SE caret on this object.
+class EmbedEditScope extends StatelessWidget {
+  const EmbedEditScope({
+    super.key,
+    required this.nodeId,
+    required this.child,
+  });
+
+  final String nodeId;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.escape): _ExitObjectIntent(),
+      },
+      child: Actions(
+        actions: {
+          _ExitObjectIntent: CallbackAction<_ExitObjectIntent>(
+            onInvoke: (_) {
+              EmbedCaretScope.maybeOf(context)?.onExitObject(nodeId);
+              return null;
+            },
+          ),
+        },
+        child: child,
+      ),
+    );
+  }
+}
+
+class _ExitObjectIntent extends Intent {
+  const _ExitObjectIntent();
+}

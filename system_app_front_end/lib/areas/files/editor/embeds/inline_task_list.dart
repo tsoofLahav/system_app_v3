@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/app_state.dart';
-import '../document_text_flow.dart';
-import '../embed_move_mode_scope.dart';
 import '../../../objects/data/object_embed.dart';
 import '../../../objects/tasks/file_task_list_bridge.dart';
 import '../../../objects/tasks/task_list_surface.dart';
+import '../document_text_flow.dart';
+import '../embed_caret_bridge.dart';
+import '../embed_move_mode_scope.dart';
 
 /// In-file task list: thin host over [TaskListSurface] + [FileTaskListBridge].
 ///
-/// Owns document segment ids, Move Mode compact layout, and exit-below into
-/// the surrounding file. Row interaction lives in objects/tasks.
+/// Owns document segment ids, Move Mode compact layout, and exit into the
+/// surrounding file. Row ↑/↓ is an ordered line chain on the surface.
 class InlineTaskListWidget extends StatefulWidget {
   const InlineTaskListWidget({
     super.key,
@@ -42,8 +43,23 @@ class InlineTaskListWidget extends StatefulWidget {
   State<InlineTaskListWidget> createState() => _InlineTaskListWidgetState();
 }
 
-class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
+class _InlineTaskListWidgetState extends State<InlineTaskListWidget>
+    with EmbedLineGatewayMixin
+    implements EmbedCaretGateway {
   late FileTaskListBridge _bridge;
+  final _surfaceKey = GlobalKey<TaskListSurfaceState>();
+  EmbedCaretRegistry? _registry;
+
+  @override
+  String get nodeId => widget.blockId;
+
+  @override
+  int get lineCount => _surfaceKey.currentState?.lineCount ?? 0;
+
+  @override
+  void focusLine(int index, {required bool fromAbove}) {
+    _surfaceKey.currentState?.focusLine(index, fromAbove: fromAbove);
+  }
 
   @override
   void initState() {
@@ -56,25 +72,46 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = EmbedCaretScope.maybeOf(context)?.registry;
+    if (!identical(next, _registry)) {
+      _registry?.unregister(nodeId);
+      _registry = next;
+      _registry?.register(this);
+    }
+  }
+
+  @override
   void didUpdateWidget(InlineTaskListWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     _bridge.embed = widget.embed;
   }
 
   @override
+  void dispose() {
+    _registry?.unregister(nodeId);
+    _registry = null;
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final moveMode = EmbedMoveModeScope.of(context);
     return TaskListSurface(
+      key: _surfaceKey,
       state: widget.state,
       bridge: _bridge,
       onFocus: widget.onFocus,
-      onExitBelow: widget.onExitBelow,
       onDeleteObject: widget.onDeleteObject,
       compactMode: moveMode,
       listTitleSegmentId: taskListTitleSegmentId(widget.blockId),
       taskSegmentId: (index) => taskItemSegmentId(widget.blockId, index),
       documentBaseOffset: widget.documentBaseOffset,
       climbToListTitleOnLastBackspace: true,
+      // Arrows stay inside the list; Escape (EmbedEditScope) leaves to SE.
+      onArrowExitAbove: () {},
+      onArrowExitBelow: () {},
     );
   }
 }

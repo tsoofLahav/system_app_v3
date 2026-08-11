@@ -20,8 +20,10 @@ rtl/
   RTL.md                      ← this file
   rtl.dart                    ← public barrel + small helpers
   paragraph_text_direction.dart
-  rtl_caret_motion.dart
+  rtl_caret_motion.dart       ← FormattedTextField visual ←/→
   empty_space_caret.dart
+  super_editor_text_direction.dart  ← SE empty → ambient direction
+  super_editor_visual_caret.dart    ← SE visual ←/→ + selectors
 ```
 
 ### 1. Base direction — `paragraph_text_direction.dart`
@@ -73,12 +75,25 @@ Use `collapsedAtLogicalEnd(offset)` so affinity stays upstream at ends.
 - [ ] Primary pointer down stores global position; `onTap` may call `emptySpaceCaretOffset`
 - [ ] Cross-part arrow edge uses the **resolved** field direction, not only ambient locale
 
+## Super Editor (file body)
+
+The file body is Super Editor, not `FormattedTextField`. Same direction rules apply:
+
+| Rule | How |
+|------|-----|
+| Base direction | [`ambientAwareTextBuilders`](super_editor_text_direction.dart) — first strong char, else ambient UI (empty Hebrew paragraphs start RTL so the caret sits on the right). Do **not** use stock `getParagraphDirection` alone (it hard-codes empty → LTR). |
+| Align | Stylesheet sets `TextAlign.start` (not absolute left/right) |
+| Visual ←/→ | [`SuperEditorVisualCaretPlugin`](super_editor_visual_caret.dart) + `withVisualHorizontalSelectors` — same flip idea as `rtl_caret_motion.dart` (character/word; not Cmd+line / Home / End) |
+| Selection wash | SE’s beneath-layer highlight is unreliable for RTL/Hebrew → [`selection_background_phase.dart`](../../editor/selection_background_phase.dart) also paints `BackgroundColorAttribution` on the selected span |
+
+Embed fields (table cells, info, …) still use `FormattedTextField` + the three pieces above.
+
 ## What we deliberately do not do
 
-- Migrate to Flutter Quill / Super Editor for RTL alone  
 - Reverse Hebrew strings or map “visual columns” ourselves for normal typing  
 - Fight the `TextField` from the parent editor on taps **inside** a field box (causes caret jump)  
-- Post-frame caret “snaps”
+- Post-frame caret “snaps”  
+- Rely on SE’s translucent beneath-layer selection alone for Hebrew
 
 ## Regression tests
 
@@ -86,16 +101,18 @@ Use `collapsedAtLogicalEnd(offset)` so affinity stays upstream at ends.
 flutter test \
   test/rtl_paragraph_text_direction_test.dart \
   test/rtl_empty_space_caret_test.dart \
+  test/rtl_super_editor_direction_test.dart \
   test/document_text_flow_test.dart
 ```
 
 Manual (Hebrew UI):
 
-1. Type `אני משתמש ב-Flutter 3.29 היום` — layout stays coherent; caret at end after typing  
-2. ← → move the caret the way the keys point on screen  
-3. Click empty space beside the line → caret at logical end (resume writing)  
-4. Click below the paragraph / empty file → caret at end of last line  
-5. Click on a Hebrew letter mid-word → caret stays where Flutter put it on the glyph  
+1. Empty file paragraph — caret already on the **right** (no left→right jump on first Hebrew key)  
+2. Type `אני משתמש ב-Flutter 3.29 היום` — layout stays coherent; caret at end after typing  
+3. ← → move the caret the way the keys point on screen (file body **and** object fields)  
+4. Click empty space beside the line → caret at logical end (resume writing)  
+5. Click below the paragraph / empty file → caret at end of last line  
+6. Click on a Hebrew letter mid-word → caret stays where Flutter put it on the glyph  
 
 ## Related
 

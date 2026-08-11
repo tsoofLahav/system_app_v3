@@ -39,16 +39,16 @@ Next section.
 [/ORDERED_LIST]
 ```
 
-### Table
+### Table object
 
 ```text
-[TABLE]
+[TABLE id="11"]
 Header A	Header B
 Value 1	Value 2
 [/TABLE]
 ```
 
-Tab between cells. Escape literal tab/backslash as `\t` and `\\`.
+Tab between cells. Escape literal tab/backslash as `\t` and `\\`. Preserve `id="…"`.
 
 ### Task list embed
 
@@ -79,7 +79,9 @@ First line = title; rest = body. `open_file` may also return `object_extras` wit
 [IMAGE id="5" caption="Screenshot" url="/uploads/shot.png"]
 ```
 
-### Graph embed
+### Chart table (graph sugar)
+
+A graph is a **table object with chart quality** — same object type, pointer tagged `[GRAPH]`:
 
 ```text
 [GRAPH id="8" chartType="bar"]

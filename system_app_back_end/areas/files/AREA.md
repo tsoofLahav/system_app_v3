@@ -50,7 +50,7 @@ world
 
 ### Lists and tables
 
-Lists stay fenced in the file string (`[BULLET_LIST]…`, `[ORDERED_LIST]…`). **Tables are objects** — pointer `[TABLE id="N"]`, rows in `objects.payload`. Legacy structure fences `[TABLE]…[/TABLE]` without an id are migrated to a table object on open (frontend) / still accepted by the agent parser for read.
+Lists stay fenced in the file string (`[BULLET_LIST]…`, `[ORDERED_LIST]…`). **Tables are objects** (`type=table`, `payload.rows`). Pointer `[TABLE id]` for plain grids; `[GRAPH id]` when `payload.chart.enabled` (same object type). Legacy structure fences `[TABLE]…[/TABLE]` without an id migrate to a table object on open.
 
 ### How objects fit in
 
@@ -77,7 +77,8 @@ Agent text **expands** pointers with live object payloads (same fences as before
 | `TASK_LIST` | ACTIVE/DONE checkbox lines (expanded) |
 | `INFO` | First line title, remaining body (expanded) |
 | `IMAGE` | `caption` + optional `url` (expanded) |
-| `GRAPH` | chartType + tab rows (expanded) |
+| `GRAPH` | Chart table sugar: chartType + 2 TSV rows (+ colors); object type is `table` |
+| `TABLE` | Full grid TSV rows (expanded); object type `table` |
 
 Format examples: [`content/production_agent/reference.md`](../../../content/production_agent/reference.md)
 

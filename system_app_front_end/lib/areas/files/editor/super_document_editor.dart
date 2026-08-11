@@ -5,6 +5,7 @@ import 'package:super_editor/super_editor.dart';
 
 import '../../../core/app_state.dart';
 import '../../objects/data/object_embed.dart';
+import '../../objects/data/table_payload.dart';
 import '../../objects/data/task.dart';
 import '../../objects/tasks/task_zones.dart';
 import '../../ui/app_colors.dart';
@@ -14,9 +15,13 @@ import '../model/document_text_codec.dart';
 import '../model/marker_super_editor_bridge.dart';
 import '../model/object_embed_node.dart';
 import '../rich_text/document_context_menu.dart';
+import '../rich_text/rtl/rtl.dart';
+import './document_caret_session.dart';
 import './document_editor_controller.dart';
-import './embeds/table_embed.dart';
+import './embed_caret_bridge.dart';
+import './embed_move_bubble.dart';
 import './object_embed_component.dart';
+import './selection_background_phase.dart';
 
 /// File editor surface backed by Super Editor + v4 marker-text persistence.
 class SuperDocumentEditor extends StatefulWidget {
@@ -50,10 +55,24 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   String? _lastSavedJson;
   var _applyingRemote = false;
   String? _moveModeNodeId;
+  OverlayEntry? _moveBubbleEntry;
   List<ObjectEmbed>? _embedsSnapshot;
+  late final VisibleSelectionPlugin _visibleSelectionPlugin;
+  late final EmbedCaretRegistry _embedCaretRegistry;
+  late final EmbedCaretPlugin _embedCaretPlugin;
+  late final SuperEditorVisualCaretPlugin _visualCaretPlugin;
+  late final DocumentCaretSession _caretSession;
 
   /// Tight constant gap between blocks (Enter creates a new paragraph).
   static const _blockGap = AppSpacing.blockGap;
+
+  /// Opaque wash — translucent paints are easy to miss on dense Hebrew glyphs,
+  /// and SE's beneath-layer highlight is unreliable for RTL (see
+  /// [VisibleSelectionPlugin]).
+  static final _selectionFill = Color.alphaBlend(
+    AppColors.primary.withValues(alpha: 0.34),
+    AppColors.noteTop,
+  );
 
   AppFile get _currentFile =>
       widget.state.selectedDetail?.files
@@ -80,6 +99,21 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       composer: _composer,
       isHistoryEnabled: true,
     );
+    _visibleSelectionPlugin = VisibleSelectionPlugin(color: _selectionFill);
+    _embedCaretRegistry = EmbedCaretRegistry();
+    _caretSession = DocumentCaretSession(
+      editor: _editor,
+      document: _doc,
+      composer: _composer,
+      editorFocus: _focusNode,
+    );
+    _embedCaretPlugin = EmbedCaretPlugin(
+      registry: _embedCaretRegistry,
+      caretSession: _caretSession,
+    );
+    _visualCaretPlugin = SuperEditorVisualCaretPlugin(
+      ambient: TextDirection.ltr,
+    );
     _docOps = CommonEditorOperations(
       editor: _editor,
       document: _doc,
@@ -88,6 +122,9 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           _docLayoutKey.currentState as DocumentLayout,
     );
     _doc.addListener(_onDocumentChange);
+    _composer.selectionNotifier.addListener(
+      _caretSession.suppressDocumentSelectionWhileEmbedOwns,
+    );
     _lastSavedJson = _currentFile.documentJson;
     widget.state.addListener(_onAppStateChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -108,11 +145,15 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   @override
   void dispose() {
+    _removeMoveBubble();
     _saveTimer?.cancel();
     unawaited(_flushPendingChanges());
     DocumentEditorRegistry.unregister(widget.file.id);
     widget.state.removeListener(_onAppStateChanged);
     _doc.removeListener(_onDocumentChange);
+    _composer.selectionNotifier.removeListener(
+      _caretSession.suppressDocumentSelectionWhileEmbedOwns,
+    );
     _focusNode.removeListener(_onFocusChanged);
     _focusNode.dispose();
     _composer.dispose();
@@ -153,19 +194,11 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     widget.state.takePendingFocusObjectId();
     final nodeId = ObjectEmbedNode.idFor(pending);
     if (_doc.getNodeById(nodeId) == null) return;
-    _editor.execute([
-      ChangeSelectionRequest(
-        DocumentSelection.collapsed(
-          position: DocumentPosition(
-            nodeId: nodeId,
-            nodePosition: const UpstreamDownstreamNodePosition.upstream(),
-          ),
-        ),
-        SelectionChangeType.placeCaret,
-        SelectionReason.userInteraction,
-      ),
-    ]);
-    _focusNode.requestFocus();
+    // Enter the object field — never leave an IME caret on the embed block.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _embedCaretRegistry[nodeId]?.enterFromAbove();
+    });
   }
 
   void _scheduleSave() {
@@ -183,7 +216,11 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       _dirty = false;
       return;
     }
-    await widget.state.updateFile(_currentFile, {'document_json': json});
+    await widget.state.updateFile(
+      _currentFile,
+      {'document_json': json},
+      notify: false,
+    );
     _lastSavedJson = json;
     _dirty = false;
   }
@@ -297,15 +334,12 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   Future<void> _insertObject(String type, int blockIndex) async {
+    var apiType = type;
     Map<String, dynamic>? payload;
     if (type == 'graph') {
-      payload = {
-        'labels': ['A', 'B'],
-        'values': ['1', '2'],
-        'chartType': 'bar',
-        'colors': ['#37899E', '#58C4D8'],
-        'color': '#37899E',
-      };
+      // Graph is a table with chart quality (pointer still [GRAPH id]).
+      apiType = 'table';
+      payload = TableObjectPayload.emptyChart();
     } else if (type == 'image') {
       payload = {'url': '', 'caption': ''};
     } else if (type == 'table') {
@@ -318,36 +352,32 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
     final embed = await widget.state.createObjectInDocument(
       _currentFile,
-      type: type,
-      title: type == 'info' ? '' : null,
-      body: type == 'info' ? '' : null,
+      type: apiType,
+      title: apiType == 'info' ? '' : null,
+      body: apiType == 'info' ? '' : null,
       payload: payload,
       blockIndex: blockIndex,
     );
 
     final updated = await widget.state.reloadFile(widget.file.id);
-    _reloadFromStored(updated.documentJson);
     final nodeId = ObjectEmbedNode.idFor(embed.id);
-    if (_doc.getNodeById(nodeId) != null) {
-      _editor.execute([
-        ChangeSelectionRequest(
-          DocumentSelection.collapsed(
-            position: DocumentPosition(
-              nodeId: nodeId,
-              nodePosition: const UpstreamDownstreamNodePosition.upstream(),
-            ),
-          ),
-          SelectionChangeType.placeCaret,
-          SelectionReason.userInteraction,
-        ),
-      ]);
-    }
-    _focusNode.requestFocus();
+    _reloadFromStored(updated.documentJson);
+    // Land SE caret on the new object block (Enter opens it).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _caretSession.placeOnObjectLine(nodeId);
+      });
+    });
   }
 
   void _reloadFromStored(String? json) {
     _applyingRemote = true;
     _doc.removeListener(_onDocumentChange);
+    // Drop any selection before swapping documents — shared composer notifies
+    // the still-mounted (old) SuperEditor/IME during the swap otherwise.
+    _composer.clearSelection();
     final next = markerTextToMutableDocument(json);
     // Replace nodes in place via editor reset pattern: rebuild editor.
     _editor = createDefaultDocumentEditor(
@@ -356,6 +386,11 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       isHistoryEnabled: true,
     );
     _doc = next;
+    _caretSession.bind(
+      editor: _editor,
+      document: _doc,
+      composer: _composer,
+    );
     _docOps = CommonEditorOperations(
       editor: _editor,
       document: _doc,
@@ -454,25 +489,107 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   void _onMoveModeChanged(String? nodeId) {
     setState(() => _moveModeNodeId = nodeId);
+    // Overlay after this frame so the editor has layout for the anchor.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _syncMoveBubble();
+    });
   }
 
   void _moveEmbedToIndex(String nodeId, int targetIndex) {
     final current = _doc.getNodeIndexById(nodeId);
     if (current < 0) return;
-    var dest = targetIndex.clamp(0, _doc.nodeCount);
-    if (dest == current || dest == current + 1) {
-      setState(() => _moveModeNodeId = null);
-      return;
-    }
+    final dest = targetIndex.clamp(0, _doc.nodeCount);
+    if (dest == current || dest == current + 1) return;
     _editor.execute([
-      MoveNodeRequest(nodeId: nodeId, newIndex: dest > current ? dest - 1 : dest),
+      MoveNodeRequest(
+        nodeId: nodeId,
+        newIndex: dest > current ? dest - 1 : dest,
+      ),
     ]);
-    setState(() => _moveModeNodeId = null);
+    // Stay in Move Mode so the user can keep nudging with the bubble.
+    _moveBubbleEntry?.markNeedsBuild();
+    setState(() {});
     _dirty = true;
     _scheduleSave();
   }
 
+  void _endMoveMode() {
+    if (_moveModeNodeId == null) return;
+    setState(() => _moveModeNodeId = null);
+    _removeMoveBubble();
+  }
+
+  void _nudgeMoveEmbed({required bool up}) {
+    final id = _moveModeNodeId;
+    if (id == null) return;
+    final i = _doc.getNodeIndexById(id);
+    if (i < 0) return;
+    if (up) {
+      if (i > 0) _moveEmbedToIndex(id, i - 1);
+    } else if (i + 1 < _doc.nodeCount) {
+      _moveEmbedToIndex(id, i + 2);
+    }
+  }
+
+  void _removeMoveBubble() {
+    _moveBubbleEntry?.remove();
+    _moveBubbleEntry = null;
+  }
+
+  void _syncMoveBubble() {
+    final moveId = _moveModeNodeId;
+    if (moveId == null) {
+      _removeMoveBubble();
+      return;
+    }
+    final moveIndex = _doc.getNodeIndexById(moveId);
+    if (moveIndex < 0) {
+      _removeMoveBubble();
+      return;
+    }
+    if (_moveBubbleEntry != null) {
+      _moveBubbleEntry!.markNeedsBuild();
+      return;
+    }
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
+    final anchor = embedMoveBubbleAnchor(context);
+    _moveBubbleEntry = OverlayEntry(
+      builder: (overlayContext) {
+        final id = _moveModeNodeId;
+        if (id == null) return const SizedBox.shrink();
+        final index = _doc.getNodeIndexById(id);
+        if (index < 0) return const SizedBox.shrink();
+        return EmbedMoveBubble(
+          // Key keeps drag position / outside-arm across markNeedsBuild.
+          key: const ValueKey('embed-move-bubble'),
+          anchorGlobal: anchor,
+          canMoveUp: index > 0,
+          canMoveDown: index + 1 < _doc.nodeCount,
+          onMoveUp: () => _nudgeMoveEmbed(up: true),
+          onMoveDown: () => _nudgeMoveEmbed(up: false),
+          onDone: _endMoveMode,
+        );
+      },
+    );
+    overlay.insert(_moveBubbleEntry!);
+  }
+
   void _claimFile() => DocumentEditorRegistry.claim(widget.file.id);
+
+  void _onEmbedInnerFocusChanged(String? nodeId) {
+    if (nodeId != null) {
+      _claimFile();
+      _caretSession.adoptEmbed(nodeId);
+    } else {
+      _caretSession.embedBlurred();
+    }
+  }
+
+  void _exitEmbedObject(String nodeId) {
+    _caretSession.exitToObjectLine(nodeId);
+  }
 
   /// Full stylesheet (not layered on defaults) — defaults use maxWidth 640 and
   /// 24px paragraph gaps, which look wrong in a file pane.
@@ -487,6 +604,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           (doc, node) => {
             Styles.maxWidth: double.infinity,
             Styles.padding: const CascadingPadding.symmetric(horizontal: 0),
+            // Follow paragraph direction (RTL.md) — not absolute left/right.
+            Styles.textAlign: TextAlign.start,
             Styles.textStyle: para,
           },
         ),
@@ -547,7 +666,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   SelectionStyles get _selectionStyles => SelectionStyles(
-        selectionColor: AppColors.primary.withValues(alpha: 0.38),
+        selectionColor: _selectionFill,
       );
 
   Future<void> _onSecondaryTap(TapDownDetails details) async {
@@ -684,7 +803,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     if (requests.isNotEmpty) _editor.execute(requests);
   }
 
-  List<ComponentBuilder> get _componentBuilders => [
+  List<ComponentBuilder> _componentBuilders(TextDirection ambient) => [
         ObjectEmbedComponentBuilder(
           state: widget.state,
           lookup: _lookup,
@@ -692,14 +811,13 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           onPayloadChanged: _onPayloadChanged,
           onDelete: _deleteObject,
           onClaimFile: _claimFile,
+          onInnerFocusChanged: _onEmbedInnerFocusChanged,
           moveModeNodeId: _moveModeNodeId,
           onMoveModeChanged: _onMoveModeChanged,
           onMoveToIndex: _moveEmbedToIndex,
         ),
         const LegacyTableFenceComponentBuilder(),
-        const BlockquoteComponentBuilder(),
-        const ParagraphComponentBuilder(),
-        const ListItemComponentBuilder(),
+        ...ambientAwareTextBuilders(ambient),
         const HorizontalRuleComponentBuilder(),
         // Intentionally omit TaskComponentBuilder + ImageComponentBuilder.
       ];
@@ -710,59 +828,48 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     // ancestor Scrollable (the topic canvas is a SingleChildScrollView), it
     // emits that sliver raw — so it must sit in *our* CustomScrollView as a
     // sliver, never under Column/Expanded.
-    return GestureDetector(
-      onSecondaryTapDown: _onSecondaryTap,
-      behavior: HitTestBehavior.translucent,
-      child: CustomScrollView(
-        slivers: [
-          if (_moveModeNodeId != null)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    Text('Move', style: AppTypography.metaStyle),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      tooltip: 'Move up',
-                      icon: const Icon(Icons.arrow_upward, size: 18),
-                      onPressed: () {
-                        final i = _doc.getNodeIndexById(_moveModeNodeId!);
-                        if (i > 0) _moveEmbedToIndex(_moveModeNodeId!, i - 1);
-                      },
-                    ),
-                    IconButton(
-                      tooltip: 'Move down',
-                      icon: const Icon(Icons.arrow_downward, size: 18),
-                      onPressed: () {
-                        final i = _doc.getNodeIndexById(_moveModeNodeId!);
-                        if (i >= 0 && i + 1 < _doc.nodeCount) {
-                          _moveEmbedToIndex(_moveModeNodeId!, i + 2);
-                        }
-                      },
-                    ),
-                    TextButton(
-                      onPressed: () => setState(() => _moveModeNodeId = null),
-                      child: const Text('Done'),
-                    ),
-                  ],
-                ),
+    final ambient = Directionality.of(context);
+    _visualCaretPlugin.ambient = ambient;
+    return EmbedCaretScope(
+      registry: _embedCaretRegistry,
+      onExitObject: _exitEmbedObject,
+      child: GestureDetector(
+        onSecondaryTapDown: _onSecondaryTap,
+        behavior: HitTestBehavior.translucent,
+        child: CustomScrollView(
+          slivers: [
+            SuperEditor(
+              editor: _editor,
+              focusNode: _focusNode,
+              documentLayoutKey: _docLayoutKey,
+              stylesheet: _stylesheet,
+              selectionStyle: _selectionStyles,
+              componentBuilders: _componentBuilders(ambient),
+              plugins: {
+                _visibleSelectionPlugin,
+                _visualCaretPlugin,
+                _embedCaretPlugin,
+              },
+              // Tab/Enter embeds + visual ←/→ when the paragraph is RTL.
+              selectorHandlers: withVisualHorizontalSelectors(
+                base: _embedCaretPlugin.selectorHandlers,
+                ambient: ambient,
+              ),
+              shrinkWrap: true,
+              imePolicies: const SuperEditorImePolicies(
+                openImeOnNonPrimaryFocusGain: false,
+                closeKeyboardOnLosePrimaryFocus: true,
+                openKeyboardOnGainPrimaryFocus: true,
+                openKeyboardOnSelectionChange: true,
+                closeKeyboardOnSelectionLost: true,
+              ),
+              selectionPolicies: const SuperEditorSelectionPolicies(
+                clearSelectionWhenEditorLosesFocus: false,
+                clearSelectionWhenImeConnectionCloses: false,
               ),
             ),
-          SuperEditor(
-            editor: _editor,
-            focusNode: _focusNode,
-            documentLayoutKey: _docLayoutKey,
-            stylesheet: _stylesheet,
-            selectionStyle: _selectionStyles,
-            componentBuilders: _componentBuilders,
-            shrinkWrap: true,
-            selectionPolicies: const SuperEditorSelectionPolicies(
-              clearSelectionWhenEditorLosesFocus: false,
-              clearSelectionWhenImeConnectionCloses: false,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

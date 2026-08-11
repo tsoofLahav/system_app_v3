@@ -29,7 +29,9 @@ from areas.objects.services.object_graph import (
 
 objects_bp = Blueprint("objects", __name__)
 
-_OBJECT_TYPES = {"task_list", "info", "image", "graph", "table"}
+_OBJECT_TYPES = {"task_list", "info", "image", "table"}
+# Legacy client alias — create normalizes to table + chart quality.
+_LEGACY_CREATE_ALIASES = {"graph": "table"}
 
 
 def _workspace_for_object(embed: ObjectEmbed) -> int | None:
@@ -59,6 +61,11 @@ def _resolve_embed(obj: ObjectEmbed) -> dict:
 
 
 def _create_embed_entity(type_: str, data: dict) -> ObjectEmbed:
+    from areas.objects.services.table_payload import (
+        empty_chart_table_payload,
+        normalize_table_payload,
+    )
+
     if type_ == "task_list":
         task_list = TaskList(title=data.get("title") or "")
         db.session.add(task_list)
@@ -82,6 +89,12 @@ def _create_embed_entity(type_: str, data: dict) -> ObjectEmbed:
             information_id=entity.id,
         )
     payload = data.get("payload") or {}
+    if type_ == "table":
+        # Chart sugar: empty payload + former graph create → chart defaults.
+        if data.get("_chart") or data.get("chart"):
+            payload = normalize_table_payload(payload or empty_chart_table_payload())
+        else:
+            payload = normalize_table_payload(payload)
     return ObjectEmbed(
         file_id=data["file_id"],
         type=type_,
@@ -141,10 +154,15 @@ def create_object(file_id):
     file = get_or_404(File, file_id)
     data = request.get_json(silent=True) or {}
     type_ = data.get("type")
+    legacy_graph = type_ == "graph"
+    type_ = _LEGACY_CREATE_ALIASES.get(type_, type_)
     if type_ not in _OBJECT_TYPES:
         return jsonify({"error": f"type must be one of {sorted(_OBJECT_TYPES)}"}), 400
 
-    embed = _create_embed_entity(type_, {**data, "file_id": file.id})
+    create_data = {**data, "file_id": file.id, "type": type_}
+    if legacy_graph:
+        create_data["_chart"] = True
+    embed = _create_embed_entity(type_, create_data)
     db.session.add(embed)
     db.session.flush()
 
@@ -154,11 +172,17 @@ def create_object(file_id):
     if block_index is None and data.get("offset") is not None:
         block_index = data.get("offset")
 
+    from areas.objects.services.table_payload import chart_enabled
+
+    pointer_type = type_
+    if type_ == "table" and (legacy_graph or chart_enabled(embed.payload)):
+        pointer_type = "graph"
+
     file.document_json = insert_embed_block(
         file.document_json or "",
         embed.id,
         block_index=block_index,
-        object_type=type_,
+        object_type=pointer_type,
     )
     embed.anchor = {"kind": "embed", "object_id": embed.id}
     embed.sort_key = data.get("sort_key", embed.id)
@@ -182,8 +206,14 @@ def update_object(object_id):
         embed.sort_key = data["sort_key"]
     if "anchor" in data:
         embed.anchor = data["anchor"]
-    if "payload" in data and embed.type in {"image", "graph", "table"}:
-        embed.payload = data["payload"] or {}
+    if "payload" in data and embed.type in {"image", "table"}:
+        payload = data["payload"] or {}
+        if embed.type == "table":
+            from areas.objects.services.table_payload import normalize_table_payload
+
+            embed.payload = normalize_table_payload(payload)
+        else:
+            embed.payload = payload
     db.session.commit()
     return jsonify(_resolve_embed(embed))
 

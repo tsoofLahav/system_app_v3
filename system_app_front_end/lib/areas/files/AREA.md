@@ -15,6 +15,7 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | Folder | Role |
 |--------|------|
 | [`editor/super_document_editor.dart`](editor/super_document_editor.dart) | File editor host (`SuperEditor` + save/insert/Move Mode) |
+| [`editor/embed_move_bubble.dart`](editor/embed_move_bubble.dart) | Floating glass Move Mode controls (outside the file) |
 | [`model/marker_super_editor_bridge.dart`](model/marker_super_editor_bridge.dart) | Marker text ↔ Super Editor document |
 | [`model/object_embed_node.dart`](model/object_embed_node.dart) | Custom SE node for object pointers |
 | [`model/document_text_codec.dart`](model/document_text_codec.dart) | Marker parse/serialize helpers |
@@ -42,7 +43,8 @@ Each file pane scrolls its document in a local `CustomScrollView` with `SuperEdi
 | Content width | Full pane (`maxWidth: infinity`) — never the SE default 640px column |
 | Horizontal inset | 0 inside the editor (note card already pads) |
 | Gap between blocks | `AppSpacing.blockGap` (3) — Enter = new paragraph with that top gap |
-| Selection | Teal wash (`AppColors.primary` @ ~38% opacity) |
+| Selection | Opaque teal wash on note surface + span `backgroundColor` via [`selection_background_phase.dart`](editor/selection_background_phase.dart) (SE's beneath-layer highlight alone misses RTL/Hebrew) |
+| Text align | `TextAlign.start` (follows paragraph direction — see [`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)) |
 | Right-click | `DocumentContextMenu` (bold/italic/cut/copy/paste; list style switch on list items) |
 
 ## Node types
@@ -51,10 +53,19 @@ Each file pane scrolls its document in a local `CustomScrollView` with `SuperEdi
 |-----------------|--------------|--------|
 | Paragraph / heading | `ParagraphNode` (+ heading metadata) | SE text components |
 | Bullet / ordered list fence | N× `ListItemNode` | SE list components |
-| Object pointer | `ObjectEmbedNode` | [`editor/embeds/`](editor/embeds/) |
+| Object pointer | `ObjectEmbedNode` ([`BlockNode`](model/object_embed_node.dart)) | [`editor/embeds/`](editor/embeds/) via [`object_embed_component.dart`](editor/object_embed_component.dart) |
 | Table object (`[TABLE id]`) | `ObjectEmbedNode` type `table` | `RichTableEditor` via [`embeds/table_embed.dart`](editor/embeds/table_embed.dart) |
 
 Legacy `[TABLE]…[/TABLE]` fences are migrated to table objects on open.
+
+### Embeds vs document caret (SE rules)
+
+**Line-chain model** — see [`FLUENT_TEXT.md`](editor/FLUENT_TEXT.md) § Embed line navigation:
+
+- Every editable unit inside an embed is a line (info text, tasks, table/graph cells).
+- ↑/↓ never leaves a collapsed caret on the embed block; images are skipped.
+- [`DocumentCaretSession`](editor/document_caret_session.dart) owns document↔embed; gateways expose `lineCount` / `focusLine`.
+- Shift-select can include the **whole** embed with surrounding text (atomic for document mark).
 
 ## Keeping the text fluent
 
@@ -108,7 +119,7 @@ A marking that covers a part **end to end** removes the part; a marking that cov
 | Every bullet / last bullet deleted | The list block is removed |
 | Every cell of a row | The row is removed |
 | Every cell of a table | The table block is removed |
-| Whole atomic embed, or info title+body both cleared | The object is removed (and its backing row) |
+| Whole atomic embed, or info text cleared | The object is removed (and its backing row) |
 | All tasks in a task list | The task-list object is removed |
 | A whole paragraph, as part of a larger marking | The paragraph is removed |
 | A whole paragraph, marked on its own | Text cleared, the paragraph stays |
@@ -118,7 +129,7 @@ Empty **Enter** still exits below a list/table/object without destroying it (con
 
 ### RTL / Hebrew
 
-Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed Hebrew+English) lives in one place: **[`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)**. Do not add competing caret math outside that folder.
+Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed Hebrew+English) lives in one place: **[`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)** — embeds via `FormattedTextField`, file body via ambient-aware SE builders + visual ←/→ plugin. Do not add competing caret math outside that folder.
 
 ## One cursor across the whole file
 
@@ -214,9 +225,9 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Embed | Widget | Flow role |
 |-------|--------|-----------|
 | Task list | [`embeds/inline_task_list.dart`](editor/embeds/inline_task_list.dart) | Thin host: document segments + Move Mode; rows via objects [`TaskListSurface`](../objects/tasks/task_list_surface.dart) |
-| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | Title + body segments; tag chips; Add tag / Add connection via info context menu (no links list) |
+| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); tag chips; Add tag / Add connection via info context menu (no links list) |
 | Image | same | Atomic unit; caption field |
-| Graph | [`embeds/graph_embed.dart`](editor/embeds/graph_embed.dart) | One segment per column (like a table) |
+| Table (+ chart) | [`embeds/table_embed.dart`](editor/embeds/table_embed.dart) | `RichTableEditor`; chart quality paints above the same grid |
 | Host | [`embed_block_host.dart`](editor/embed_block_host.dart) | Move Mode; optional atomic `#embed` segment |
 | Drag chrome | [`drag_mode_frame.dart`](editor/drag_mode_frame.dart) | Shared gentle glass frame for Move / Reorder modes |
 
@@ -228,8 +239,9 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Create at the caret | Inserts go to the **last-claimed** file. Mid-paragraph / mid-heading **splits** at the caret (`before \| new \| after`); caret at the start inserts before that block; at the end, after it. List / table / embed carets insert after the containing block. |
 | Marker buffer is source of truth | Position is top-level parts in buffer text (view = `blocks[]`); the object row holds data, not placement |
 | Right-click on embed text | Same text menu as paragraphs (`DocumentMark`). Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Graphs extend the table cell menu (add column + chart options). Task lists add **Add to view…** and **Reorder tasks** |
-| Move Mode | Double-click → glass frame; drag onto **any text block**. A teal line follows the pointer and snaps to **visual line boundaries** (including soft-wrapped lines). Drop splits that paragraph/heading at the line (`before \| embed \| after`) or moves before/after the block; empty space under the file = after the last block. Tap outside (not while dragging) ends the mode. After move/delete, adjacent paragraphs **coalesce** (blank/`\n`-only stubs dropped, including next to embeds) so the object does not leave a blank gap. Editing child stays mounted while dragging so object content is not lost. |
-| Empty object + Backspace | Same fluent rule as an empty list bullet / table row: last empty unit + Backspace **removes the object** (cascade-delete). Empty **Enter** still exits below without destroying. |
+| Move Mode | Double-click → glass frame on the object + floating glass bubble ([`embed_move_bubble.dart`](editor/embed_move_bubble.dart), no scrim; drag to reposition). Up/down in the bubble nudge the object and **stay in Move Mode**; Done or tap outside the bubble ends it. After move/delete, adjacent paragraphs **coalesce** (blank/`\n`-only stubs dropped, including next to embeds). |
+| Empty object + Backspace | Same fluent rule as an empty list bullet / table row: last empty unit + Backspace **removes the object** (cascade-delete). |
+| Object block + Tab | Opens the object (first inner field). **Escape** returns to the block. **Enter** inserts a paragraph below. Arrows do not auto-enter/leave objects. |
 | Task Reorder Mode | Owned by `TaskListSurface` (objects): right-click → Reorder tasks → glass per task; **tap outside the list** ends it |
 
 ### Segment id
@@ -241,17 +253,18 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 
 Deleting a fully marked embed removes the block **and** cascades through the object service.
 
-### Exit below (continuity)
+### Object enter / exit
 
-Enter on an empty trailing unit (final task / info body line / graph column) exits below without destroying remaining content — same idea as lists and tables.
+Objects are atomic SE blocks. ↑/↓ move onto the block; **Tab** (or click) opens it; **Escape** returns to the block; **Enter** inserts a line below. Inner ↑/↓ stay inside (see [`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md)).
 
 ### In-file behaviour by type (presentation only)
 
 | Type | In the document |
 |------|-----------------|
-| Task list | Active then Done; Enter adds in the same zone; empty + Enter exits below; Reorder Mode via right-click; empty title + hint |
-| Info | Title ↔ body like adjacent lines; empty final body line + Enter exits below; right-click → text + Add tag / Add connection |
-| Graph | Chart on top; two-row grid; max **8** variables; Enter adds columns (blocked at 8); empty column exits below; chart paints in the same reading direction as the table (RTL in Hebrew); right-click → type + palette submenu ([`AppColorPalettes`](../ui/app_color_palettes.dart), 8 colours each) |
+| Task list | Active then Done; Enter adds in the same zone; Escape leaves to SE block; Reorder Mode via right-click; empty title + hint |
+| Info | One field; first line = title (diagrams/API `title`); Enter adds lines; Escape leaves to SE block; right-click → text + Add tag / Add connection |
+| Table | Grid; Enter adds rows; menu adds columns; Escape leaves to SE block |
+| Table + chart | Same embed; chart on top; fixed 2 rows; Enter adds columns (max **8**); right-click chart → type + palette ([`AppColorPalettes`](../ui/app_color_palettes.dart)); pointer `[GRAPH id]` |
 | Image | Display + caption; resize handles deferred |
 
 Type logic beyond presentation (views, links, cascades) → [objects](../objects/AREA.md).

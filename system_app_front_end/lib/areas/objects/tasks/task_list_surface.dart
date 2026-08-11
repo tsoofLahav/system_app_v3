@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/app_state.dart';
 import '../../files/editor/drag_mode_frame.dart';
+import '../../files/editor/editor_key_handoff.dart';
 import '../../files/rich_text/block_text_actions.dart';
 import '../../files/rich_text/document_context_menu.dart';
 import '../../files/rich_text/formatted_text_field.dart';
@@ -50,6 +51,8 @@ class TaskListSurface extends StatefulWidget {
     this.onReorderModeChanged,
     this.climbToListTitleOnLastBackspace = true,
     this.includeAssignView = true,
+    this.onArrowExitAbove,
+    this.onArrowExitBelow,
   });
 
   final AppState state;
@@ -73,6 +76,12 @@ class TaskListSurface extends StatefulWidget {
   final bool climbToListTitleOnLastBackspace;
   /// When false, the host supplies its own Choose view entry (view frames).
   final bool includeAssignView;
+
+  /// ↑ on the first line of the list — leave the embed upward.
+  final VoidCallback? onArrowExitAbove;
+
+  /// ↓ on the last line of the list — leave the embed downward.
+  final VoidCallback? onArrowExitBelow;
 
   @override
   State<TaskListSurface> createState() => TaskListSurfaceState();
@@ -104,6 +113,57 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   bool get reorderMode => _reorderMode;
 
   void setReorderMode(bool value) => _setReorderMode(value);
+
+  bool get _hasTitleLine =>
+      _bridge.showListTitle && !widget.compactMode && !_reorderMode;
+
+  /// Title (optional) + each task row — document-order lines for ↑/↓.
+  int get lineCount => (_hasTitleLine ? 1 : 0) + _controllers.length;
+
+  /// Document caret entering this list from above.
+  void focusFirstLine() => focusLine(0, fromAbove: true);
+
+  /// Document caret entering this list from below.
+  void focusLastLine() {
+    if (lineCount <= 0) return;
+    focusLine(lineCount - 1, fromAbove: false);
+  }
+
+  void focusLine(int index, {required bool fromAbove}) {
+    if (lineCount <= 0) return;
+    final i = index.clamp(0, lineCount - 1);
+    if (_hasTitleLine && i == 0) {
+      final len = _titleController.text.length;
+      _titleController.selection = TextSelection.collapsed(
+        offset: fromAbove ? 0 : len,
+      );
+      _titleFocus.requestFocus();
+      return;
+    }
+    final taskIndex = _hasTitleLine ? i - 1 : i;
+    if (taskIndex < 0 || taskIndex >= _focusNodes.length) return;
+    final len = _controllers[taskIndex].text.length;
+    _controllers[taskIndex].selection = TextSelection.collapsed(
+      offset: fromAbove ? 0 : len,
+    );
+    _focusNodes[taskIndex].requestFocus();
+  }
+
+  void _arrowFromLine(int lineIndex, {required bool goingDown}) {
+    if (goingDown) {
+      if (lineIndex < lineCount - 1) {
+        focusLine(lineIndex + 1, fromAbove: true);
+        return;
+      }
+      widget.onArrowExitBelow?.call();
+      return;
+    }
+    if (lineIndex > 0) {
+      focusLine(lineIndex - 1, fromAbove: false);
+      return;
+    }
+    widget.onArrowExitAbove?.call();
+  }
 
   @override
   void initState() {
@@ -385,9 +445,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final text = _controllers[index].text;
     if (text.trim().isEmpty) {
       final emptyId = _taskIds[index];
-      for (final f in _focusNodes) {
-        if (f.hasFocus) f.unfocus();
-      }
+      // No sync unfocus mid-Enter — document handoff waits for KeyUp.
       widget.onExitBelow?.call(emptyId);
       return;
     }
@@ -418,7 +476,10 @@ class TaskListSurfaceState extends State<TaskListSurface> {
             }
           }
           if (!mounted) return;
-          widget.onDeleteObject!();
+          runAfterKeystroke(() {
+            if (!mounted) return;
+            widget.onDeleteObject!();
+          });
           return;
         }
         await _removeAt(index);
@@ -911,6 +972,14 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         onEnter: () => unawaited(_handleEnter(index)),
         onBackspaceAtStart: () => _handleBackspace(index),
         onSecondaryTapDown: (d) => _showTaskMenu(d, index),
+        onArrowExitAbove: () => _arrowFromLine(
+              _hasTitleLine ? index + 1 : index,
+              goingDown: false,
+            ),
+        onArrowExitBelow: () => _arrowFromLine(
+              _hasTitleLine ? index + 1 : index,
+              goingDown: true,
+            ),
       ),
     );
   }
@@ -935,8 +1004,11 @@ class TaskListSurfaceState extends State<TaskListSurface> {
             documentBaseOffset: widget.documentBaseOffset,
             style: AppTypography.noteTitleStyle,
             hintText: s['taskListTitleHint'],
-            maxLines: 1,
+            // Multi-line field (one visual line) — avoids single-line vertical
+            // caret intents that mark the whole title; newlines still stripped.
+            maxLines: null,
             minLines: 1,
+            stripNewlines: true,
             onChanged: (_) => _scheduleTitleSave(),
             onEnter: _onTitleEnter,
             onBackspaceAtStart: () async {
@@ -955,6 +1027,10 @@ class TaskListSurfaceState extends State<TaskListSurface> {
                 onAction: runBlockTextAction,
               ),
             ),
+            onArrowExitAbove: () =>
+                _arrowFromLine(0, goingDown: false),
+            onArrowExitBelow: () =>
+                _arrowFromLine(0, goingDown: true),
           ),
         if (_bridge.showListTitle && !compact && !_reorderMode)
           const SizedBox(height: 4),

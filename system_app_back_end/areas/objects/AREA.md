@@ -13,10 +13,11 @@ Objects live in the `objects` table and appear inside a file through an `embed` 
 | Type | Backing storage | Special quality |
 |------|-----------------|-----------------|
 | `task_list` | `task_lists` + `tasks` | Ordering, done/active, views |
-| `info` | `information_pieces` | Linkable into a graph |
+| `info` | `information_pieces` | Linkable into the object graph (links map) |
 | `image` | `objects.payload` | Uploaded asset reference + caption |
-| `graph` | `objects.payload` | Chart data as labels/values (two-row table) |
-| `table` | `objects.payload` | Grid rows/cells (`payload.rows`) — pointer `[TABLE id="N"]` in the file |
+| `table` | `objects.payload` | Grid (`payload.rows`); optional **chart** quality (`payload.chart`) — pointer `[TABLE id]` or `[GRAPH id]` when chart is on |
+
+Migration `007_table_object.sql` moves legacy `type=graph` rows into `table` + `chart`.
 
 Every object has a stable id, file id, type, optional typed FKs / payload, and timestamps. The document owns position; the object owns data.
 
@@ -56,7 +57,7 @@ Views are membership and filtering only. **Never add per-view status columns** �
 
 ## Information and the object graph
 
-An `info` object holds a piece of knowledge (`title`, `body`, `metadata`).
+An `info` object holds a piece of knowledge (`title`, `body`, `metadata`). The file UI edits them as one text field (first line → `title`); storage and agent text stay title + body.
 
 The `links` table is the workspace **object graph**, keyed by **`objects.id`** for object endpoints (migration `006` also adds `links.kind`, `links.anchor`, `tags.icon`).
 
@@ -79,14 +80,16 @@ The `links` table is the workspace **object graph**, keyed by **`objects.id`** f
 
 Object GET / file object list payloads include `tags[]` and `connections[]` (undirected related + description rows with a `peer` summary). Deleting an object or file removes links where it is source **or** target.
 
-## Image and graph payloads
+## Image and table payloads
 
 | Type | Typical payload |
 |------|-----------------|
 | `image` | `{ "url", "path", "width", "caption" }` |
-| `graph` | `{ "labels": [...], "values": [...], "chartType"?, "colors": ["#…", …], "color"? }` — one column and one colour per variable (`color` is legacy alias for the first) |
+| `table` | `{ "rows": [[{ "text" }], …], "chart"?: { "enabled", "chartType", "colors" } }` |
 
-Agent text (frozen): task lists = ACTIVE/DONE checkboxes; info = title line + body; image = caption + optional url; graph = labels/values (+ optional colors) table with optional chartType. Spec: production agent system prompt.
+Chart tables use the same `table` type; agent text still expands them as `[GRAPH id chartType=…]` with two TSV rows (+ optional colors). Normalize helpers: [`services/table_payload.py`](services/table_payload.py). Spec: production agent system prompt.
+
+**Naming:** “object graph” = info **links map** (`GET /objects/graph`). “Chart table” / `[GRAPH]` pointer = visualization quality on a table object.
 
 ## Deletion
 
@@ -99,7 +102,8 @@ Deleting anything that contains objects must cascade, or the database keeps orph
 | Module | Role |
 |--------|------|
 | [`routes/objects.py`](routes/objects.py) | Create/update/delete embeds; links; graph; object tags; insert embed blocks |
-| [`services/object_graph.py`](services/object_graph.py) | Graph build, connection dicts, link/tag helpers |
+| [`services/object_graph.py`](services/object_graph.py) | Links-map build, connection dicts, link/tag helpers |
+| [`services/table_payload.py`](services/table_payload.py) | Normalize table/chart payloads (incl. legacy graph shape) |
 | [`routes/tasks.py`](routes/tasks.py) | Task CRUD, status, due date |
 | [`routes/task_lists.py`](routes/task_lists.py) | Task list contents and reorder |
 | [`routes/information.py`](routes/information.py) | Info pieces |

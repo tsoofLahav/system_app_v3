@@ -2,11 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/l10n/app_strings.dart';
 import '../../../objects/data/object_embed.dart';
+import '../../../objects/data/table_payload.dart';
+import '../../../ui/app_color_palettes.dart';
+import '../../../ux/topic/topic_appearance.dart';
+import '../../../ux/widgets/app_context_menu.dart';
 import '../../model/document_model.dart';
 import '../../rich_text/rich_table_editor.dart';
+import '../embed_caret_bridge.dart';
+import './table_chart.dart';
 
-/// Table object embed — hosts [RichTableEditor] against object payload rows.
-class TableEmbed extends StatelessWidget {
+/// Table object embed — [RichTableEditor] (+ optional chart chrome).
+class TableEmbed extends StatefulWidget {
   const TableEmbed({
     super.key,
     required this.embed,
@@ -24,70 +30,238 @@ class TableEmbed extends StatelessWidget {
   final VoidCallback? onFocus;
   final VoidCallback? onDeleteObject;
 
-  TableNode _nodeFromPayload() {
-    final raw = embed.payload?['rows'];
-    final rows = <List<DocumentTableCell>>[];
-    if (raw is List) {
-      for (final row in raw) {
-        if (row is! List) continue;
-        rows.add([
-          for (final cell in row)
-            DocumentTableCell(
-              text: cell is Map
-                  ? '${cell['text'] ?? ''}'
-                  : '$cell',
-            ),
-        ]);
-      }
-    }
-    if (rows.isEmpty) {
-      rows.add([
-        const DocumentTableCell(text: ''),
-        const DocumentTableCell(text: ''),
-      ]);
-    }
-    return TableNode(id: blockId, rows: rows);
+  @override
+  State<TableEmbed> createState() => TableEmbedState();
+}
+
+class TableEmbedState extends State<TableEmbed>
+    with EmbedLineGatewayMixin
+    implements EmbedCaretGateway {
+  final _editorKey = GlobalKey<RichTableEditorState>();
+  EmbedCaretRegistry? _registry;
+  late Map<String, dynamic> _payload;
+
+  @override
+  String get nodeId => widget.blockId;
+
+  @override
+  int get lineCount => _editorKey.currentState?.lineCount ?? 0;
+
+  @override
+  void focusLine(int index, {required bool fromAbove}) {
+    _editorKey.currentState?.focusLine(index, fromAbove: fromAbove);
   }
 
-  Map<String, dynamic> _payloadFromNode(TableNode node) {
-    return {
-      'rows': [
-        for (final row in node.rows)
+  bool get _chartOn => TableObjectPayload.chartEnabled(_payload);
+
+  @override
+  void initState() {
+    super.initState();
+    _payload = TableObjectPayload.normalize(widget.embed.payload);
+  }
+
+  @override
+  void didUpdateWidget(TableEmbed oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.embed.id != widget.embed.id ||
+        oldWidget.embed.payload != widget.embed.payload) {
+      _payload = TableObjectPayload.normalize(widget.embed.payload);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = EmbedCaretScope.maybeOf(context)?.registry;
+    if (!identical(next, _registry)) {
+      _registry?.unregister(nodeId);
+      _registry = next;
+      _registry?.register(this);
+    }
+  }
+
+  @override
+  void dispose() {
+    _registry?.unregister(nodeId);
+    _registry = null;
+    super.dispose();
+  }
+
+  TableNode _nodeFromPayload() {
+    final rows = TableObjectPayload.rowsOf(_payload);
+    return TableNode(
+      id: widget.blockId,
+      rows: [
+        for (final row in rows)
           [
-            for (final cell in row) {'text': cell.text},
+            for (final cell in row)
+              DocumentTableCell(text: '${cell['text'] ?? ''}'),
           ],
       ],
-    };
+    );
+  }
+
+  void _onRowsChanged(TableNode node) {
+    final rows = [
+      for (final row in node.rows)
+        [
+          for (final cell in row) {'text': cell.text},
+        ],
+    ];
+    final next = Map<String, dynamic>.from(_payload)..['rows'] = rows;
+    if (_chartOn) {
+      final chart = Map<String, dynamic>.from(
+        TableObjectPayload.chartOf(_payload) ?? {},
+      );
+      final cols = rows.isEmpty ? 0 : rows.first.length;
+      final colors = List<String>.from(
+        (chart['colors'] as List?)?.map((e) => '$e') ?? const [],
+      );
+      final hexes = AppColorPalettes.defaultChart.hexes;
+      while (colors.length < cols) {
+        colors.add(hexes[colors.length % hexes.length]);
+      }
+      if (colors.length > cols) {
+        colors.removeRange(cols, colors.length);
+      }
+      chart['colors'] = colors;
+      chart['enabled'] = true;
+      next['chart'] = chart;
+    }
+    _payload = TableObjectPayload.normalize(next);
+    widget.onPayloadChanged(_payload);
+  }
+
+  void _setChartType(String type) {
+    final chart = Map<String, dynamic>.from(
+      TableObjectPayload.chartOf(_payload) ?? {'enabled': true},
+    );
+    chart['chartType'] = type;
+    chart['enabled'] = true;
+    setState(() {
+      _payload = TableObjectPayload.normalize({
+        ..._payload,
+        'chart': chart,
+      });
+    });
+    widget.onPayloadChanged(_payload);
+  }
+
+  void _applyPalette(String paletteId) {
+    final palette = AppColorPalettes.byId(paletteId);
+    if (palette == null) return;
+    final rows = TableObjectPayload.rowsOf(_payload);
+    final cols = rows.isEmpty ? 0 : rows.first.length;
+    final chart = Map<String, dynamic>.from(
+      TableObjectPayload.chartOf(_payload) ?? {'enabled': true},
+    );
+    chart['colors'] = palette.colorsForCount(cols);
+    chart['enabled'] = true;
+    setState(() {
+      _payload = TableObjectPayload.normalize({
+        ..._payload,
+        'chart': chart,
+      });
+    });
+    widget.onPayloadChanged(_payload);
+  }
+
+  Future<void> _showChartMenu(TapDownDetails details) async {
+    final value = await AppContextMenu.show(
+      context: context,
+      globalPosition: details.globalPosition,
+      isRtl: widget.strings.isRtl,
+      entries: [
+        AppContextMenuItem(
+          value: 'type:bar',
+          label: widget.strings['graphBar'],
+        ),
+        AppContextMenuItem(
+          value: 'type:line',
+          label: widget.strings['graphLine'],
+        ),
+        AppContextMenuItem(
+          value: 'type:pie',
+          label: widget.strings['graphPie'],
+        ),
+        const AppContextMenuDivider(),
+        AppContextMenuSubmenu(
+          label: widget.strings['graphChangeColors'],
+          children: [
+            for (final palette in AppColorPalettes.chart)
+              AppContextMenuItem(
+                value: 'palette:${palette.id}',
+                label: widget.strings[palette.nameKey],
+              ),
+          ],
+        ),
+      ],
+    );
+    if (!mounted || value == null) return;
+    if (value.startsWith('type:')) {
+      _setChartType(value.substring(5));
+    } else if (value.startsWith('palette:')) {
+      _applyPalette(value.substring(8));
+    }
+  }
+
+  void _onExitTable(int _) {
+    // Escape leaves via EmbedEditScope; empty Enter exits via host Escape path.
   }
 
   @override
   Widget build(BuildContext context) {
-    return RichTableEditor(
-      node: _nodeFromPayload(),
-      strings: strings,
-      onChanged: (next) => onPayloadChanged(_payloadFromNode(next)),
-      onFocus: onFocus,
-      onDeleteTable: onDeleteObject,
+    final chart = TableObjectPayload.chartOf(_payload);
+    final chartOn = _chartOn;
+    final rows = TableObjectPayload.rowsOf(_payload);
+    final labels = rows.isNotEmpty
+        ? [for (final c in rows[0]) '${c['text'] ?? ''}']
+        : <String>[];
+    final valueTexts = rows.length > 1
+        ? [for (final c in rows[1]) '${c['text'] ?? ''}']
+        : <String>[];
+    final values = [
+      for (final t in valueTexts) double.tryParse(t.trim()) ?? 0,
+    ];
+    final colorHexes = List<String>.from(
+      (chart?['colors'] as List?)?.map((e) => '$e') ?? const [],
+    );
+    final colors = [
+      for (var i = 0; i < values.length; i++)
+        TopicAppearance.colorFromHex(
+          i < colorHexes.length && colorHexes[i].isNotEmpty
+              ? colorHexes[i]
+              : AppColorPalettes.defaultChart.hexes[
+                  i % AppColorPalettes.defaultChart.hexes.length],
+        ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (chartOn)
+          TableChartView(
+            type: '${chart?['chartType'] ?? 'bar'}',
+            values: values,
+            labels: labels,
+            colors: colors,
+            textDirection: Directionality.of(context),
+            onSecondaryTapDown: _showChartMenu,
+          ),
+        if (chartOn) const SizedBox(height: 6),
+        RichTableEditor(
+          key: _editorKey,
+          node: _nodeFromPayload(),
+          strings: widget.strings,
+          mode: chartOn ? TableEditorMode.chartSeries : TableEditorMode.grid,
+          maxColumns: chartOn ? AppColorPalettes.seriesLimit : null,
+          cellHint: chartOn ? widget.strings['graphAddVariable'] : null,
+          onChanged: _onRowsChanged,
+          onFocus: widget.onFocus,
+          onExitTable: _onExitTable,
+          onDeleteTable: widget.onDeleteObject,
+        ),
+      ],
     );
   }
-}
-
-/// Helpers for default table object payloads.
-class TableObjectPayload {
-  static Map<String, dynamic> empty({int columns = 2}) => {
-        'rows': [
-          [
-            for (var c = 0; c < columns; c++) {'text': ''},
-          ],
-        ],
-      };
-
-  static Map<String, dynamic> fromRowStrings(List<List<String>> rows) => {
-        'rows': [
-          for (final row in rows)
-            [
-              for (final cell in row) {'text': cell},
-            ],
-        ],
-      };
 }

@@ -6,15 +6,15 @@ import 'package:super_editor/super_editor.dart';
 
 import '../../../core/app_state.dart';
 import '../../objects/data/object_embed.dart';
+import '../../ui/app_colors.dart';
+import '../../ui/app_typography.dart';
 import '../model/marker_super_editor_bridge.dart';
 import '../model/object_embed_node.dart';
 import './drag_mode_frame.dart';
-import './embeds/graph_embed.dart';
+import './embed_caret_bridge.dart';
 import './embeds/inline_task_list.dart';
 import './embeds/object_embed_widgets.dart';
 import './embeds/table_embed.dart';
-import '../../ui/app_colors.dart';
-import '../../ui/app_typography.dart';
 
 typedef ObjectEmbedLookup = ObjectEmbed? Function(int objectId);
 typedef ObjectEmbedAction = void Function(int objectId);
@@ -34,6 +34,7 @@ class ObjectEmbedComponentBuilder implements ComponentBuilder {
     required this.onPayloadChanged,
     required this.onDelete,
     required this.onClaimFile,
+    required this.onInnerFocusChanged,
     required this.moveModeNodeId,
     required this.onMoveModeChanged,
     required this.onMoveToIndex,
@@ -45,6 +46,9 @@ class ObjectEmbedComponentBuilder implements ComponentBuilder {
   final ObjectPayloadChanged onPayloadChanged;
   final ObjectEmbedAction onDelete;
   final VoidCallback onClaimFile;
+
+  /// Embed node id when an inner field is focused; `null` when it leaves.
+  final ValueChanged<String?> onInnerFocusChanged;
   final String? moveModeNodeId;
   final EmbedMoveModeChanged onMoveModeChanged;
   final EmbedMoveRequested onMoveToIndex;
@@ -60,7 +64,8 @@ class ObjectEmbedComponentBuilder implements ComponentBuilder {
       createdAt: node.metadata[NodeMetadata.createdAt],
       objectId: node.objectId,
       objectType: node.objectType,
-      selectionColor: const Color(0x00000000),
+      // Washed by ObjectEmbedComponent when selected (atomic block caret).
+      selectionColor: AppColors.primary.withValues(alpha: 0.35),
     );
   }
 
@@ -79,6 +84,7 @@ class ObjectEmbedComponentBuilder implements ComponentBuilder {
       onPayloadChanged: onPayloadChanged,
       onDelete: onDelete,
       onClaimFile: onClaimFile,
+      onInnerFocusChanged: onInnerFocusChanged,
       moveMode: moveModeNodeId == componentViewModel.nodeId,
       onMoveModeChanged: (active) =>
           onMoveModeChanged(active ? componentViewModel.nodeId : null),
@@ -128,10 +134,18 @@ class ObjectEmbedComponentViewModel extends SingleColumnLayoutComponentViewModel
       super == other &&
           other is ObjectEmbedComponentViewModel &&
           objectId == other.objectId &&
-          objectType == other.objectType;
+          objectType == other.objectType &&
+          selection == other.selection &&
+          selectionColor == other.selectionColor;
 
   @override
-  int get hashCode => Object.hash(super.hashCode, objectId, objectType);
+  int get hashCode => Object.hash(
+        super.hashCode,
+        objectId,
+        objectType,
+        selection,
+        selectionColor,
+      );
 }
 
 class ObjectEmbedComponent extends StatelessWidget {
@@ -145,6 +159,7 @@ class ObjectEmbedComponent extends StatelessWidget {
     required this.onPayloadChanged,
     required this.onDelete,
     required this.onClaimFile,
+    required this.onInnerFocusChanged,
     required this.moveMode,
     required this.onMoveModeChanged,
     required this.onMoveToIndex,
@@ -159,6 +174,7 @@ class ObjectEmbedComponent extends StatelessWidget {
   final ObjectPayloadChanged onPayloadChanged;
   final ObjectEmbedAction onDelete;
   final VoidCallback onClaimFile;
+  final ValueChanged<String?> onInnerFocusChanged;
   final bool moveMode;
   final ValueChanged<bool> onMoveModeChanged;
   final EmbedMoveRequested onMoveToIndex;
@@ -170,14 +186,39 @@ class ObjectEmbedComponent extends StatelessWidget {
         ? _MissingEmbed(type: viewModel.objectType, id: viewModel.objectId)
         : _buildEmbed(embed);
 
+    final nodeSel = viewModel.selection?.nodeSelection;
+    final blockSel =
+        nodeSel is UpstreamDownstreamNodeSelection ? nodeSel : null;
+    // SE treats the object as one atomic block — show wash whenever selected
+    // (collapsed = "on this object"; expanded = shift-select through it).
+    final showBlockWash = blockSel != null;
+
     return BoxComponent(
       key: componentKey,
-      child: _SeEmbedMoveHost(
-        nodeId: viewModel.nodeId,
-        moveMode: moveMode,
-        onMoveModeChanged: onMoveModeChanged,
-        onInteract: onClaimFile,
-        child: child,
+      child: Stack(
+        children: [
+          _SeEmbedMoveHost(
+            nodeId: viewModel.nodeId,
+            moveMode: moveMode,
+            onMoveModeChanged: onMoveModeChanged,
+            onInteract: onClaimFile,
+            onInnerFocusChanged: onInnerFocusChanged,
+            child: EmbedEditScope(nodeId: viewModel.nodeId, child: child),
+          ),
+          if (showBlockWash)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: viewModel.selectionColor.withValues(
+                      alpha: blockSel.isCollapsed ? 0.28 : 0.45,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -191,7 +232,7 @@ class ObjectEmbedComponent extends StatelessWidget {
           blockId: blockId,
           state: state,
           onRefresh: () => onRefresh(),
-          onFocus: onClaimFile,
+          onFocus: () => onInnerFocusChanged(blockId),
           onDeleteObject: () => onDelete(embed.id),
         );
       case 'task_list':
@@ -200,16 +241,7 @@ class ObjectEmbedComponent extends StatelessWidget {
           blockId: blockId,
           state: state,
           onRefresh: onRefresh,
-          onFocus: onClaimFile,
-          onDeleteObject: () => onDelete(embed.id),
-        );
-      case 'graph':
-        return GraphEmbed(
-          embed: embed,
-          blockId: blockId,
-          strings: state.strings,
-          onPayloadChanged: (p) => onPayloadChanged(embed.id, p),
-          onFocus: onClaimFile,
+          onFocus: () => onInnerFocusChanged(blockId),
           onDeleteObject: () => onDelete(embed.id),
         );
       case 'image':
@@ -219,12 +251,13 @@ class ObjectEmbedComponent extends StatelessWidget {
           onPayloadChanged: (p) => onPayloadChanged(embed.id, p),
         );
       case 'table':
+      case 'graph': // legacy unmigrated cache — same host as table + chart
         return TableEmbed(
           embed: embed,
           blockId: blockId,
           strings: state.strings,
           onPayloadChanged: (p) => onPayloadChanged(embed.id, p),
-          onFocus: onClaimFile,
+          onFocus: () => onInnerFocusChanged(blockId),
           onDeleteObject: () => onDelete(embed.id),
         );
       default:
@@ -297,6 +330,17 @@ class LegacyTableFenceComponentViewModel
       selectionColor: selectionColor,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      super == other &&
+          other is LegacyTableFenceComponentViewModel &&
+          selection == other.selection &&
+          selectionColor == other.selectionColor;
+
+  @override
+  int get hashCode => Object.hash(super.hashCode, selection, selectionColor);
 }
 
 class _MissingEmbed extends StatelessWidget {
@@ -321,13 +365,17 @@ class _MissingEmbed extends StatelessWidget {
   }
 }
 
-/// Double-click Move Mode chrome for Super Editor embeds (no DocumentTextFlow).
+/// Double-click Move Mode chrome for Super Editor embeds.
+///
+/// Watches descendant focus so any inner [TextField] clears the document caret
+/// (avoids the double-caret: SE block caret + field caret).
 class _SeEmbedMoveHost extends StatefulWidget {
   const _SeEmbedMoveHost({
     required this.nodeId,
     required this.moveMode,
     required this.onMoveModeChanged,
     required this.onInteract,
+    required this.onInnerFocusChanged,
     required this.child,
   });
 
@@ -335,6 +383,7 @@ class _SeEmbedMoveHost extends StatefulWidget {
   final bool moveMode;
   final ValueChanged<bool> onMoveModeChanged;
   final VoidCallback onInteract;
+  final ValueChanged<String?> onInnerFocusChanged;
   final Widget child;
 
   @override
@@ -348,9 +397,18 @@ class _SeEmbedMoveHostState extends State<_SeEmbedMoveHost> {
     if (widget.moveMode) {
       body = DragModeFrame(child: body);
     }
+    body = Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (focused) {
+        widget.onInnerFocusChanged(focused ? widget.nodeId : null);
+      },
+      child: body,
+    );
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onTap: widget.onInteract,
+      // Don't select-on-tap here — that races TextField focus and recreates
+      // the double caret. Double-click is Move Mode only.
       onDoubleTap: () {
         widget.onInteract();
         widget.onMoveModeChanged(!widget.moveMode);

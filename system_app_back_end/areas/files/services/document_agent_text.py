@@ -210,10 +210,8 @@ def editor_text_to_agent_text(
             return _info_section(object_id, obj)
         if obj_type == "image":
             return _image_section(object_id, obj)
-        if obj_type == "graph":
-            return _graph_section(object_id, obj)
-        if obj_type == "table":
-            return _table_section(object_id, obj)
+        if obj_type in {"graph", "table"} or (obj.get("type") in {"graph", "table"}):
+            return _table_or_graph_section(object_id, obj)
         # Unknown / missing object — leave a bare pointer so apply can reject.
         return marker_text.pointer_line(object_id, obj_type or None)
 
@@ -263,18 +261,29 @@ def _image_section(object_id: int, obj: dict[str, Any]) -> str:
     return f'[IMAGE {" ".join(attrs)}]'
 
 
-def _graph_section(object_id: int, obj: dict[str, Any]) -> str:
-    """Frozen shape: optional chartType; two-row labels/values table; optional colors row."""
-    payload = obj.get("payload") or {}
-    labels = [str(x) for x in (payload.get("labels") or [])]
-    values = [str(x) for x in (payload.get("values") or [])]
-    colors_raw = payload.get("colors")
-    if not colors_raw and payload.get("color"):
-        colors_raw = [payload.get("color")]
-    colors = [str(x) for x in (colors_raw or [])] if colors_raw else []
-    chart_type = str(
-        payload.get("chartType") or payload.get("chart_type") or ""
-    ).strip()
+def _table_or_graph_section(object_id: int, obj: dict[str, Any]) -> str:
+    """Table object: GRAPH fence when chart quality is on, else TABLE fence."""
+    from areas.objects.services.table_payload import (
+        chart_enabled,
+        chart_meta,
+        normalize_table_payload,
+        rows_to_labels_values,
+    )
+
+    payload = normalize_table_payload(obj.get("payload") or {})
+    if chart_enabled(payload):
+        return _graph_section_normalized(object_id, payload)
+    return _table_section_normalized(object_id, payload)
+
+
+def _graph_section_normalized(object_id: int, payload: dict[str, Any]) -> str:
+    """Agent GRAPH fence: chartType + labels/values (+ optional colors)."""
+    from areas.objects.services.table_payload import chart_meta, rows_to_labels_values
+
+    labels, values = rows_to_labels_values(payload)
+    meta = chart_meta(payload)
+    chart_type = str(meta.get("chartType") or "").strip()
+    colors = list(meta.get("colors") or [])
 
     n = max(len(labels), len(values), len(colors), 1)
     labels = (labels + [""] * n)[:n]
@@ -297,23 +306,7 @@ def _graph_section(object_id: int, obj: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _task_list_section(object_id: int, obj: dict[str, Any]) -> str:
-    tasks = obj.get("tasks") or []
-    active = [t for t in tasks if t.get("status") != "done"]
-    done = [t for t in tasks if t.get("status") == "done"]
-    lines = [f'[TASK_LIST id="{object_id}"]', "ACTIVE:"]
-    for task in sorted(active, key=lambda t: (t.get("list_order_index", 0), t.get("id", 0))):
-        lines.append(f"- [ ] {task.get('title', '')}")
-    lines.append("DONE:")
-    for task in sorted(done, key=lambda t: (t.get("list_order_index", 0), t.get("id", 0))):
-        lines.append(f"- [x] {task.get('title', '')}")
-    lines.append("[/TASK_LIST]")
-    return "\n".join(lines)
-
-
-def _table_section(object_id: int, obj: dict[str, Any]) -> str:
-    """Expanded table object: tab-separated rows inside an id'd fence."""
-    payload = obj.get("payload") or {}
+def _table_section_normalized(object_id: int, payload: dict[str, Any]) -> str:
     rows = payload.get("rows") or []
     row_lines: list[str] = []
     for row in rows:
@@ -333,6 +326,20 @@ def _table_section(object_id: int, obj: dict[str, Any]) -> str:
         + "\n".join(row_lines)
         + "\n[/TABLE]"
     )
+
+
+def _task_list_section(object_id: int, obj: dict[str, Any]) -> str:
+    tasks = obj.get("tasks") or []
+    active = [t for t in tasks if t.get("status") != "done"]
+    done = [t for t in tasks if t.get("status") == "done"]
+    lines = [f'[TASK_LIST id="{object_id}"]', "ACTIVE:"]
+    for task in sorted(active, key=lambda t: (t.get("list_order_index", 0), t.get("id", 0))):
+        lines.append(f"- [ ] {task.get('title', '')}")
+    lines.append("DONE:")
+    for task in sorted(done, key=lambda t: (t.get("list_order_index", 0), t.get("id", 0))):
+        lines.append(f"- [x] {task.get('title', '')}")
+    lines.append("[/TASK_LIST]")
+    return "\n".join(lines)
 
 
 def parse_agent_text(text: str) -> dict[str, Any]:
@@ -490,7 +497,13 @@ def apply_object_updates(
             _sync_info(embed, update)
         elif update_type in {"image", "graph", "table"}:
             payload = update.get("payload") or {}
-            embed.payload = {**(embed.payload or {}), **payload}
+            if update_type == "image":
+                embed.payload = {**(embed.payload or {}), **payload}
+            else:
+                from areas.objects.services.table_payload import normalize_table_payload
+
+                embed.type = "table"
+                embed.payload = normalize_table_payload(payload)
         else:
             errors.append(f"unsupported object update type: {update_type}")
     return errors
@@ -667,6 +680,8 @@ def _parse_ordered_list(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
 
 
 def _parse_table(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
+    from areas.objects.services.table_payload import normalize_table_payload
+
     object_id_raw = match.group(1)
     body = (match.group(2) or "").strip()
     rows: list[list[dict[str, Any]]] = []
@@ -682,6 +697,7 @@ def _parse_table(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
     for row in rows:
         padded = row + [{"text": "", "spans": []}] * (max_cols - len(row))
         normalized.append(padded[:max_cols])
+    payload = normalize_table_payload({"rows": normalized})
     if object_id_raw:
         object_id = int(object_id_raw)
         return (
@@ -689,7 +705,7 @@ def _parse_table(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
             {
                 object_id: {
                     "type": "table",
-                    "payload": {"rows": normalized},
+                    "payload": payload,
                 }
             },
         )
@@ -769,27 +785,29 @@ def _parse_image_marker(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
 
 
 def _parse_graph_marker(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
+    from areas.objects.services.table_payload import normalize_table_payload
+
     object_id = int(match.group(1))
     chart_type = (match.group(2) or "").strip()
     legacy_title = (match.group(3) or "").strip()
     body = (match.group(4) or "").strip()
-    payload: dict[str, Any] = {}
+    legacy: dict[str, Any] = {}
     if chart_type:
-        payload["chartType"] = chart_type
+        legacy["chartType"] = chart_type
     elif legacy_title and not body:
-        # Legacy single-line marker used title= as a display label.
-        payload["title"] = legacy_title
+        legacy["title"] = legacy_title
 
     data_lines = [ln for ln in body.splitlines() if ln.strip()]
     if data_lines:
-        labels = _split_table_row(data_lines[0])
-        values = _split_table_row(data_lines[1]) if len(data_lines) > 1 else []
-        payload["labels"] = labels
-        payload["values"] = values
+        legacy["labels"] = _split_table_row(data_lines[0])
+        legacy["values"] = (
+            _split_table_row(data_lines[1]) if len(data_lines) > 1 else []
+        )
         if len(data_lines) > 2:
-            payload["colors"] = _split_table_row(data_lines[2])
+            legacy["colors"] = _split_table_row(data_lines[2])
 
+    payload = normalize_table_payload(legacy)
     return (
         {"id": new_id("b"), "type": "embed", "object_id": object_id},
-        {object_id: {"type": "graph", "payload": payload}},
+        {object_id: {"type": "table", "payload": payload}},
     )

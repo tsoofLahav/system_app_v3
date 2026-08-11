@@ -6,7 +6,7 @@ from models import EntityTag, File, InformationPiece, Link, ObjectEmbed, Tag, To
 
 
 LINK_KINDS = {"related", "description"}
-OBJECT_LINK_TYPES = {"task_list", "info", "image", "graph"}
+OBJECT_LINK_TYPES = {"task_list", "info", "image", "table"}
 
 
 def object_title(embed: ObjectEmbed) -> str:
@@ -23,8 +23,10 @@ def object_title(embed: ObjectEmbed) -> str:
     if embed.type == "image":
         payload = embed.payload or {}
         return (payload.get("caption") or "").strip() or "Image"
-    if embed.type == "graph":
-        return "Graph"
+    if embed.type == "table":
+        from areas.objects.services.table_payload import chart_enabled
+
+        return "Graph" if chart_enabled(embed.payload) else "Table"
     return embed.type
 
 

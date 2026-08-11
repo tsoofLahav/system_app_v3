@@ -350,14 +350,20 @@ def test_table_object_pointer_round_trip():
 
 
 def test_graph_table_round_trip():
+    """Chart quality on a table object expands/parses as a GRAPH fence."""
     objects = {
         8: {
-            "type": "graph",
+            "type": "table",
             "payload": {
-                "labels": ["A", "B"],
-                "values": ["1", "2"],
-                "chartType": "bar",
-                "colors": ["#111111", "#222222"],
+                "rows": [
+                    [{"text": "A"}, {"text": "B"}],
+                    [{"text": "1"}, {"text": "2"}],
+                ],
+                "chart": {
+                    "enabled": True,
+                    "chartType": "bar",
+                    "colors": ["#111111", "#222222"],
+                },
             },
         }
     }
@@ -371,11 +377,33 @@ def test_graph_table_round_trip():
     assert "#111111\t#222222" in text
     assert "[/GRAPH]" in text
     parsed = parse_agent_text(text)
+    assert parsed["object_updates"][8]["type"] == "table"
     payload = parsed["object_updates"][8]["payload"]
-    assert payload["chartType"] == "bar"
-    assert payload["labels"] == ["A", "B"]
-    assert payload["values"] == ["1", "2"]
-    assert payload["colors"] == ["#111111", "#222222"]
+    assert payload["chart"]["chartType"] == "bar"
+    assert payload["chart"]["enabled"] is True
+    assert payload["rows"][0][0]["text"] == "A"
+    assert payload["rows"][1][1]["text"] == "2"
+    assert payload["chart"]["colors"] == ["#111111", "#222222"]
+
+
+def test_legacy_graph_payload_still_expands():
+    objects = {
+        8: {
+            "type": "table",
+            "payload": {
+                "labels": ["A", "B"],
+                "values": ["1", "2"],
+                "chartType": "line",
+                "colors": ["#111111", "#222222"],
+            },
+        }
+    }
+    original = serialize_document(
+        {"version": 3, "blocks": [{"id": "b1", "type": "embed", "object_id": 8}]}
+    )
+    text = document_to_agent_text(original, objects_by_id=objects)
+    assert 'chartType="line"' in text
+    assert "A\tB" in text
 
 
 def test_image_caption_and_url():
