@@ -220,7 +220,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Embed | Widget | Flow role |
 |-------|--------|-----------|
 | Task list | [`embeds/inline_task_list.dart`](editor/embeds/inline_task_list.dart) | Thin host: document segments + Move Mode; rows via objects [`TaskListSurface`](../objects/tasks/task_list_surface.dart) |
-| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | Topic-tint chrome (`AppColors.infoBlockDecoration`); one text field (first line = title); tag chips; right-click → text + **Add tag** / **Add connection** (field or block caret) |
+| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); tag chips; right-click → text + **Add tag** / **Add connection** (field or block caret) |
 | Image | same | Atomic unit; caption field |
 | Table (+ chart) | [`embeds/table_embed.dart`](editor/embeds/table_embed.dart) | `RichTableEditor` + optional chart; behaviour in **[Tables & charts](#tables--charts)** |
 | Host | [`embed_block_host.dart`](editor/embed_block_host.dart) | Move Mode; optional atomic `#embed` segment |
@@ -257,7 +257,7 @@ Objects are atomic SE blocks. ↑/↓ move onto the block; **Tab** (or click) op
 | Type | In the document |
 |------|-----------------|
 | Task list | Active then Done; Enter adds in the same zone; **insert lands on the list header** (then tasks); Escape leaves to SE block; right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title + hint |
-| Info | Topic wash + thin topic outline; one field; first line = title (diagrams/API `title`); Enter adds lines; Escape leaves to SE block; right-click → text + Add tag / Add connection. **Regular** connection = collapsed caret / chrome (info↔info). **Through-text** = real selection → link marked span to an info (hover bubble + press opens that info). Collapsed RMB must not paint a fake line mark. |
+| Info | One field; first line = title (diagrams/API `title`); Enter adds lines; Escape leaves to SE block; right-click → text + Add tag / Add connection |
 | Table / chart | See **[Tables & charts](#tables--charts)** |
 | Image | Display + caption; resize handles deferred |
 

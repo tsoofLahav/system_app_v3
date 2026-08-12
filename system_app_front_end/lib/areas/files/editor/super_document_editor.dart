@@ -845,7 +845,6 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
               return;
             }
             if (action == 'info:add_connection') {
-              // Chrome / collapsed caret → regular info↔info (no text anchor).
               final pick = await showAddConnectionDialog(
                 context: context,
                 state: widget.state,

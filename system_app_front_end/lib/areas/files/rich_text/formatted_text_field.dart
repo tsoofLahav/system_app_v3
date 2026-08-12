@@ -55,7 +55,7 @@ class FormattedTextField extends StatefulWidget {
     this.emojiPickerTitle = 'Insert emoji…',
     this.descriptionRanges = const [],
     this.onDescriptionHover,
-    this.onDescriptionActivate,
+    this.onDescriptionDoubleTap,
     this.onArrowExitAbove,
     this.onArrowExitBelow,
     this.onArrowExitLeft,
@@ -114,13 +114,8 @@ class FormattedTextField extends StatefulWidget {
   final String emojiPickerTitle;
 
   final List<DescriptionTextRange> descriptionRanges;
-
-  /// Hover over a linked span. [globalPosition] is null on exit.
-  final void Function(DescriptionTextRange? range, Offset? globalPosition)?
-      onDescriptionHover;
-
-  /// Press on a linked span (open / jump to the target info).
-  final ValueChanged<DescriptionTextRange>? onDescriptionActivate;
+  final ValueChanged<DescriptionTextRange?>? onDescriptionHover;
+  final ValueChanged<DescriptionTextRange>? onDescriptionDoubleTap;
 
   @override
   State<FormattedTextField> createState() => _FormattedTextFieldState();
@@ -137,7 +132,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   bool _applyingFlowSelection = false;
   TextDirection? _detectedDirection;
   Offset? _pendingTapGlobal;
-  int _pointerDownButtons = 0;
   // Built once: the overrides are stateless, so they can outlive a rebuild.
   final _rtlMotionActions = rtlCaretMotionActions();
 
@@ -610,9 +604,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   /// fall back to [FormatRange], which can expand a caret to a whole line and
   /// show a second highlight next to the user's selection.
   TextSelection? _frozenMarkRange() {
-    // Object-level menus (collapsed caret) must not paint a line highlight.
-    if (!BlockTextFocusRegistry.frozenWasExplicitSelection) return null;
-
     final mark = BlockTextFocusRegistry.frozenMark;
     if (mark != null) {
       if (!mark.isValid) return null;
@@ -950,7 +941,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (event) {
-        _pointerDownButtons = event.buttons;
         if (event.buttons == kPrimaryButton) {
           _pendingTapGlobal = event.position;
         }
@@ -980,31 +970,17 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       child: MouseRegion(
         onHover: widget.descriptionRanges.isEmpty
             ? null
-            : (event) => _handleDescriptionHover(
-                  event.localPosition,
-                  event.position,
-                ),
+            : (event) => _handleDescriptionHover(event.localPosition),
         onExit: widget.descriptionRanges.isEmpty
             ? null
-            : (_) => widget.onDescriptionHover?.call(null, null),
-        child: Listener(
-          behavior: HitTestBehavior.translucent,
-          onPointerUp: widget.descriptionRanges.isEmpty
+            : (_) => widget.onDescriptionHover?.call(null),
+        child: GestureDetector(
+          onDoubleTapDown: widget.descriptionRanges.isEmpty
               ? null
-              : (event) {
-                  final wasSecondary =
-                      (_pointerDownButtons & kSecondaryMouseButton) != 0;
-                  _pointerDownButtons = 0;
-                  if (wasSecondary) return;
-                  if (event.kind != PointerDeviceKind.mouse &&
-                      event.kind != PointerDeviceKind.touch &&
-                      event.kind != PointerDeviceKind.trackpad &&
-                      event.kind != PointerDeviceKind.stylus) {
-                    return;
-                  }
-                  final hit = _descriptionAtGlobal(event.position);
+              : (details) {
+                  final hit = _descriptionAt(details.localPosition);
                   if (hit != null) {
-                    widget.onDescriptionActivate?.call(hit);
+                    widget.onDescriptionDoubleTap?.call(hit);
                   }
                 },
           child: AnimatedBuilder(
@@ -1101,21 +1077,23 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     );
   }
 
-  DescriptionTextRange? _descriptionAtGlobal(Offset global) {
+  DescriptionTextRange? _descriptionAt(Offset local) {
     final host = context.findRenderObject();
     if (host == null) return null;
     final editable = _findRenderEditable(host);
     if (editable == null) return null;
-    final offset = editable.getPositionForPoint(global).offset;
+    final position = editable.getPositionForPoint(
+      editable.localToGlobal(local),
+    );
+    final offset = position.offset;
     for (final range in widget.descriptionRanges) {
       if (offset >= range.start && offset < range.end) return range;
     }
     return null;
   }
 
-  void _handleDescriptionHover(Offset local, Offset global) {
-    final hit = _descriptionAtGlobal(global);
-    widget.onDescriptionHover?.call(hit, hit == null ? null : global);
+  void _handleDescriptionHover(Offset local) {
+    widget.onDescriptionHover?.call(_descriptionAt(local));
   }
 
   /// ↑/↓/←/→ at a visual edge when this field is not in a flow (embed under

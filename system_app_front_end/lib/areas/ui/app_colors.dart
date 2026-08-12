@@ -232,19 +232,6 @@ abstract final class AppColors {
     );
   }
 
-  /// In-file info embed: very light topic wash + thin topic outline.
-  static BoxDecoration infoBlockDecoration(Color topicAccent) {
-    final wash = Color.lerp(topicAccent, Colors.white, 0.92) ?? topicAccent;
-    return BoxDecoration(
-      color: wash.withValues(alpha: 0.55),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(
-        color: topicAccent.withValues(alpha: 0.42),
-        width: 0.85,
-      ),
-    );
-  }
-
   /// `#RRGGBB` (uppercase). Invalid / empty → [text].
   static Color colorFromHex(String? hex) {
     return tryParseHex(hex) ?? text;

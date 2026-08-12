@@ -172,13 +172,11 @@ class ObjectService {
     int objectId, {
     required int targetObjectId,
     String? label,
-    Map<String, dynamic>? anchor,
   }) async {
     return await _api.post('/objects/$objectId/links', {
           'kind': 'related',
           'target_object_id': targetObjectId,
           if (label != null) 'label': label,
-          if (anchor != null) 'anchor': anchor,
         })
         as Map<String, dynamic>;
   }

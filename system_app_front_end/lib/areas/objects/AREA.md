@@ -64,17 +64,16 @@ An info object holds knowledge (`title`, `body`, …). In the file, title and bo
 
 | Kind | Meaning |
 |------|---------|
-| `related` | **Regular:** info ↔ info (no `anchor`). **Through-text:** marked span on the source object → target **info**, with `anchor` `{ file_id, block_id, segment_id, start, end }` on that span. Stored directed; graph treats undirected when both ends are infos. |
-| `description` | Info → marked span in a file (`anchor` on the file text). Separate from through-text related links. |
+| `related` | Object ↔ object (stored directed; UI treats undirected) |
+| `description` | Info → marked span in a file (`anchor`: file/block/segment + offsets) |
 
 **Tags.** Freeform workspace tags (`tags.icon` + colour) assign to objects via `entity_type=object`. Topic type tags (`project` / `process` / …) stay for topic classification and are excluded from the object-tag UI.
 
 **UI here:**
 - Create tag via sidebar **+**; assign tags on info embeds (context menu)
-- Info frame shows tag chips only; Add connection via context menu (picker is infos only)
-- Through-text: selection + Add connection → related + `anchor`; hover bubble previews the **target info**; press opens it
-- Description (file body → info): document **Connect info…** still uses `kind=description`
-- **Objects map**: near-square info nodes (shrink-fit titles), related edges; bottom chrome = tags filter with color-mode config **beside** it; expand pushes neighbors aside and restores on close (soft settle, no bounce)
+- Info frame shows tag chips only; Add connection via context menu (no links list)
+- Description: document **Connect info…**, hover bubble, double-tap opens the info
+- **Objects map**: info nodes + related edges; tag filter above bottom bar; topic/tag color modes; click expands editable card with ×
 
 In-file editing of the unified info text is presentation (files).
 

@@ -66,14 +66,14 @@ The `links` table is the workspace **object graph**, keyed by **`objects.id`** f
 | `source_type`, `source_id` | One endpoint (`info` / `task_list` / … or `file` for description targets) |
 | `target_type`, `target_id` | The other endpoint |
 | `kind` | `related` (default) or `description` |
-| `anchor` | JSON span: `{ file_id, block_id, segment_id, start, end }` — required for `description`; optional on `related` for **through-text** (marked text on the source → target info) |
+| `anchor` | JSON for description spans: `{ file_id, block_id, segment_id, start, end }` |
 
-**Related** without `anchor`: info ↔ info only. **Related** with `anchor`: through-text (any source object’s marked span → info target); when both ends are infos the graph still draws the edge. **Description** edges attach an info to a marked span in a file (`target_type=file`).
+**Related** edges connect objects. **Description** edges attach an info object to a marked span in a file (`target_type=file`).
 
 | Endpoint | Role |
 |----------|------|
 | `GET /objects/graph?workspace_id=` | Info nodes (title, body, topic_id/color, tag_ids) + related info↔info edges for the objects map |
-| `GET/POST /objects/:id/links` | List / create connections (`target_object_id`, optional through-text `anchor`, or description `anchor`) |
+| `GET/POST /objects/:id/links` | List / create connections (`target_object_id` or description `anchor`) |
 | `GET /files/:id/description-links` | Description links targeting that file |
 | `PUT /objects/:id/tags` | Replace object tags |
 | `PATCH /tags/:id` | Update tag name/color/icon |

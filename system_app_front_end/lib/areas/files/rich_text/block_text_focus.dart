@@ -28,10 +28,6 @@ class BlockTextFocusRegistry {
   static int _menuSessionDepth = 0;
   static FormatRange? _frozenRange;
   static DocumentMark? _frozenMark;
-
-  /// True when the menu opened on a real non-collapsed selection (not line-at-caret).
-  static var _pendingExplicitSelection = false;
-  static var _frozenExplicitSelection = false;
   static DocumentMark? _pendingMark;
   static final ValueNotifier<int> menuSessionListenable = ValueNotifier(0);
 
@@ -52,9 +48,6 @@ class BlockTextFocusRegistry {
 
   /// The mark an open menu will act on, frozen when the menu opened.
   static DocumentMark? get frozenMark => _frozenMark;
-
-  /// True when the frozen mark came from a real non-collapsed selection.
-  static bool get frozenWasExplicitSelection => _frozenExplicitSelection;
 
   /// The single target for any action: the current selection, or the line at
   /// the caret when nothing is marked.
@@ -89,10 +82,6 @@ class BlockTextFocusRegistry {
   /// focus or collapse the selection.
   static void capturePendingMark() {
     if (_pendingMark != null && _pendingMark!.isValid) return;
-    final controller = activeController ?? _recentTarget?.controller;
-    final sel = controller?.selection;
-    _pendingExplicitSelection =
-        sel != null && sel.isValid && !sel.isCollapsed;
     _pendingMark = _resolveLiveMark();
   }
 
@@ -161,8 +150,6 @@ class BlockTextFocusRegistry {
 
   static void openMenuSession() {
     _menuSessionDepth++;
-    _frozenExplicitSelection = _pendingExplicitSelection;
-    _pendingExplicitSelection = false;
     _frozenMark = _pendingMark ?? _resolveLiveMark();
     _pendingMark = null;
     final controller = activeController;
@@ -170,11 +157,6 @@ class BlockTextFocusRegistry {
       _frozenRange = FormatRange.pending;
     } else {
       _frozenRange = FormatRange.consume(controller.text, controller.selection);
-    }
-    // Collapsed right-click: keep line-at-caret for format actions, but do not
-    // paint a fake text mark (needed for object-level info linking).
-    if (!_frozenExplicitSelection) {
-      _frozenRange = null;
     }
     menuSessionListenable.value++;
   }
@@ -190,7 +172,6 @@ class BlockTextFocusRegistry {
     _frozenRange = null;
     _frozenMark = null;
     _pendingMark = null;
-    _frozenExplicitSelection = false;
     menuSessionListenable.value++;
 
     // A mark that covered several parts stays marked after the menu closes, so
