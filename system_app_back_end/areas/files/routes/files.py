@@ -2,7 +2,10 @@ from flask import Blueprint, jsonify, request
 
 from models import File, Topic, db
 from shared.helpers import active_query, apply_updates, get_or_404
-from areas.objects.services.delete_cascade import delete_file_cascade
+from areas.objects.services.delete_cascade import (
+    delete_file_cascade,
+    purge_unreferenced_embeds_for_file,
+)
 from areas.files.services.document_v3 import empty_document_json, validate_document
 from areas.files.services.document_promote import promote_legacy_embeds
 from areas.files.services.file_versions import save_file_version
@@ -80,7 +83,10 @@ def update_file(file_id):
     file = get_or_404(File, file_id)
     data = request.get_json(silent=True) or {}
 
-    if "document_json" in data and data["document_json"] != file.document_json:
+    document_changed = (
+        "document_json" in data and data["document_json"] != file.document_json
+    )
+    if document_changed:
         save_file_version(file, source="user")
         try:
             validate_document(data["document_json"])
@@ -101,6 +107,10 @@ def update_file(file_id):
         datetime_fields={"archived_at"},
     )
     promote_legacy_embeds(file)
+    # Pointers removed from the file body must drop the object rows too
+    # (selection Backspace/Cut in the editor often only PATCHes the document).
+    if document_changed:
+        purge_unreferenced_embeds_for_file(file)
     db.session.commit()
     return jsonify(file.to_dict())
 

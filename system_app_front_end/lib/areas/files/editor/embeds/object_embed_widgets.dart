@@ -13,6 +13,7 @@ import '../document_text_flow.dart';
 import '../editor_key_handoff.dart';
 import '../embed_caret_bridge.dart';
 import '../../rich_text/block_text_actions.dart';
+import '../../rich_text/block_text_focus.dart';
 import '../../rich_text/document_context_menu.dart';
 import '../../rich_text/formatted_text_field.dart';
 import '../../rich_text/span_text_editing_controller.dart';
@@ -185,6 +186,21 @@ class InfoEmbedState extends State<InfoEmbed>
   @override
   void focusLine(int index, {required bool fromAbove}) {
     focusFieldLine(_focus, _controller, fromAbove: fromAbove);
+  }
+
+  @override
+  void prepareObjectMenuMark() {
+    BlockTextFocusRegistry.register(
+      controller: _controller,
+      changed: _scheduleSave,
+      focusNode: _focus,
+      fontSize: AppTypography.noteBodyStyle.fontSize ?? 12.5,
+    );
+    BlockTextFocusRegistry.capturePendingWholeFieldMark(
+      controller: _controller,
+      onChanged: _scheduleSave,
+      segmentId: infoTextSegmentId(widget.blockId),
+    );
   }
 
   void _seedFromEmbed() {

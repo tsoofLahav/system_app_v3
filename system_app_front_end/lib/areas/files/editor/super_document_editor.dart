@@ -62,6 +62,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   var _dirty = false;
   String? _lastSavedJson;
   var _applyingRemote = false;
+
+  /// Object ids currently present as embed nodes — used to cascade-delete
+  /// when Super Editor removes a pointer without going through [_deleteObject].
+  var _trackedObjectIds = <int>{};
   String? _moveModeNodeId;
   OverlayEntry? _moveBubbleEntry;
   List<ObjectEmbed>? _embedsSnapshot;
@@ -140,6 +144,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       _caretSession.suppressDocumentSelectionWhileEmbedOwns,
     );
     _lastSavedJson = _currentFile.documentJson;
+    _trackedObjectIds = _objectIdsInDocument();
     widget.state.addListener(_onAppStateChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -180,8 +185,35 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   void _onDocumentChange(DocumentChangeLog changeLog) {
     if (_applyingRemote) return;
+    final live = _objectIdsInDocument();
+    final removed = _trackedObjectIds.difference(live);
+    _trackedObjectIds = live;
     _dirty = true;
     _scheduleSave();
+    if (removed.isNotEmpty) {
+      unawaited(_cascadeDeleteRemovedObjects(removed));
+    }
+  }
+
+  Set<int> _objectIdsInDocument() {
+    final ids = <int>{};
+    for (var i = 0; i < _doc.nodeCount; i++) {
+      final node = _doc.getNodeAt(i);
+      if (node is ObjectEmbedNode) ids.add(node.objectId);
+    }
+    return ids;
+  }
+
+  /// SE selection Backspace/Delete/Cut drops the node only — still must
+  /// DELETE the object row (diagram + agent text stay clean).
+  Future<void> _cascadeDeleteRemovedObjects(Set<int> ids) async {
+    for (final id in ids) {
+      try {
+        await widget.state.deleteObjectEmbed(id);
+      } catch (_) {
+        // Best-effort; file PATCH also purges unreferenced embeds.
+      }
+    }
   }
 
   void _onAppStateChanged() {
@@ -476,6 +508,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _doc.addListener(_onDocumentChange);
     _lastSavedJson = json;
     _dirty = false;
+    _trackedObjectIds = _objectIdsInDocument();
     _applyingRemote = false;
     // Remount SuperEditor so the prior DocumentImeInputClient is disposed.
     _superEditorEpoch++;
@@ -548,11 +581,15 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   Future<void> _deleteObject(int objectId) async {
     await _flushPendingChanges();
+    // Drop from the tracked set first so [_onDocumentChange] does not
+    // double-DELETE after the node is removed.
+    _trackedObjectIds = {..._trackedObjectIds}..remove(objectId);
     await widget.state.deleteObjectEmbed(objectId);
     final nodeId = ObjectEmbedNode.idFor(objectId);
     if (_doc.getNodeById(nodeId) != null) {
       _editor.execute([DeleteNodeRequest(nodeId: nodeId)]);
     }
+    _trackedObjectIds = _objectIdsInDocument();
     _dirty = true;
     await _flushPendingChanges();
   }
@@ -779,7 +816,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     final strings = widget.state.strings;
 
     if (node is ObjectEmbedNode) {
-      // Don't steal focus into SE — object menus act on the embed.
+      // Chrome / block caret — whole-object menu (not a text line mark).
+      // Text fields mark [DocumentSecondaryTap] first and handle their own menu.
+      final gateway = _embedCaretRegistry[node.id];
+      gateway?.prepareObjectMenuMark();
       await _showObjectEmbedMenu(node, details.globalPosition);
       return;
     }

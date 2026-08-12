@@ -60,7 +60,7 @@ task ──┬── shown inline in its file (home list)
 
 ## Info and the object graph
 
-An info object holds knowledge (`title`, `body`, …). In the file, title and body edit as **one text field** (first line → `title`, rest → `body`); diagrams and the API still see separate fields. Graph edges are keyed by **`objects.id`**.
+An info object holds knowledge (`title`, `body`, …). In the file, title and body edit as **one text field** (first line → `title`, rest → `body`); diagrams and the API still see separate fields. Graph edges are keyed by **`objects.id`**. Removing an info from a file (any path) must delete the object row — the map is every info in the workspace, so orphans stay visible until cascade-deleted (see backend objects `AREA.md` deletion).
 
 | Kind | Meaning |
 |------|---------|

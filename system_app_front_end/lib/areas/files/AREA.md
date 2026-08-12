@@ -246,7 +246,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Atomic embed (image, or host when `registerAsUnit`) | `blockId#embed` via `embedSegmentId` |
 | Task / info / graph parts | Per-part ids from `document_text_flow.dart` helpers |
 
-Deleting a fully marked embed removes the block **and** cascades through the object service.
+Deleting an embed (empty Backspace, or selecting the block / cutting it out of the file) removes the pointer **and** cascade-deletes the object row. File `PATCH` also purges any `objects` rows for that file whose pointers are gone from `document_json`, so the objects map cannot keep showing orphans.
 
 ### Object enter / exit
 

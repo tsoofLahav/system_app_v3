@@ -25,7 +25,9 @@ Every action targets **the mark**, resolved by a single rule:
 
 The mark is captured on secondary pointer-down (`capturePendingMark`) and frozen for the menu session (`openMenuSession`), so focus loss or a collapsed selection cannot change the target mid-menu. `FormatRange` remains only as the fallback for a lone field outside any document flow.
 
-**Only the first valid pending capture is kept** until the menu consumes it — do not capture again from parents after focus loss (that replaced a word selection with the whole paragraph).
+**Embed objects:** right-click on text always registers that field first, then freezes selection → else the last non-collapsed snapshot → else the line at the caret. Right-click on object chrome (not text) freezes the **whole field** via `prepareObjectMenuMark`. Embed fields keep `DocumentSecondaryTap` until the menu closes so Super Editor cannot open a second menu that clobbers the freeze.
+
+**Only the first valid pending capture is kept** until the menu consumes it — do not capture again from parents after focus loss (that replaced a word selection with the whole paragraph). Nested `openMenuSession` must not re-resolve from a live collapsed selection.
 
 ### 3. Span shifts only on text changes
 

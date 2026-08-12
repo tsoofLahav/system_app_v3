@@ -15,6 +15,7 @@ from models import (
     ViewTaskMembership,
     db,
 )
+from areas.files.services.document_marker_text import embed_ids_in_text
 from areas.files.services.document_v3 import remove_object_embeds
 from areas.objects.services.object_graph import (
     delete_links_for_file,
@@ -83,6 +84,24 @@ def delete_object_embed_cascade(embed: ObjectEmbed, *, remove_from_document: boo
             db.session.delete(info)
 
     db.session.delete(embed)
+
+
+def purge_unreferenced_embeds_for_file(file: File) -> list[int]:
+    """Delete object rows for this file whose pointers are gone from the body.
+
+    Super Editor can drop an embed node and PATCH ``document_json`` without
+    calling ``DELETE /objects/:id``. The objects map would keep showing orphans
+    unless we cascade-delete them here.
+    """
+    live_ids = embed_ids_in_text(file.document_json or "")
+    embeds = ObjectEmbed.query.filter_by(file_id=file.id).all()
+    removed: list[int] = []
+    for embed in embeds:
+        if embed.id in live_ids:
+            continue
+        delete_object_embed_cascade(embed, remove_from_document=False)
+        removed.append(embed.id)
+    return removed
 
 
 def delete_file_cascade(file_id: int) -> None:

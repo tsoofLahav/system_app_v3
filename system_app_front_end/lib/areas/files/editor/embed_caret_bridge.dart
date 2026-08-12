@@ -32,6 +32,10 @@ abstract class EmbedCaretGateway {
 
   /// Tables only — enter column Reorder Mode. No-op elsewhere.
   void beginTableReorderColumns() {}
+
+  /// Chrome / block-level right-click: freeze the whole embed text as the mark
+  /// (not a single line). No-op when the embed has no text field.
+  void prepareObjectMenuMark() {}
 }
 
 mixin EmbedLineGatewayMixin implements EmbedCaretGateway {
@@ -61,6 +65,9 @@ mixin EmbedLineGatewayMixin implements EmbedCaretGateway {
 
   @override
   void beginTableReorderColumns() {}
+
+  @override
+  void prepareObjectMenuMark() {}
 }
 
 /// ↑/↓ within an embed only. At the first/last line, do nothing (Escape leaves).

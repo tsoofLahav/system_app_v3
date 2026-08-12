@@ -148,6 +148,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     widget.controller.addListener(_normalizeSelectionIfNeeded);
     widget.controller.addListener(_syncFlowFromLocalSelection);
     widget.controller.addListener(_syncParagraphDirection);
+    widget.controller.addListener(_noteSelectionForMenu);
     _detectedDirection = detectParagraphTextDirection(widget.controller.text);
     WidgetsBinding.instance.addPostFrameCallback((_) => _ensureKeyHandlerChained());
   }
@@ -158,6 +159,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     final next = detectParagraphTextDirection(widget.controller.text);
     if (next == _detectedDirection) return;
     setState(() => _detectedDirection = next);
+  }
+
+  void _noteSelectionForMenu() {
+    BlockTextFocusRegistry.noteLiveSelection(widget.controller);
   }
 
   TextDirection _resolvedTextDirection(BuildContext context) {
@@ -226,9 +231,11 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       oldWidget.controller.removeListener(_normalizeSelectionIfNeeded);
       oldWidget.controller.removeListener(_syncFlowFromLocalSelection);
       oldWidget.controller.removeListener(_syncParagraphDirection);
+      oldWidget.controller.removeListener(_noteSelectionForMenu);
       widget.controller.addListener(_normalizeSelectionIfNeeded);
       widget.controller.addListener(_syncFlowFromLocalSelection);
       widget.controller.addListener(_syncParagraphDirection);
+      widget.controller.addListener(_noteSelectionForMenu);
       _detectedDirection = detectParagraphTextDirection(widget.controller.text);
       final previousId = _registeredSegmentId;
       if (previousId != null) _flow?.unregister(previousId, oldWidget.controller);
@@ -263,6 +270,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     widget.controller.removeListener(_normalizeSelectionIfNeeded);
     widget.controller.removeListener(_syncFlowFromLocalSelection);
     widget.controller.removeListener(_syncParagraphDirection);
+    widget.controller.removeListener(_noteSelectionForMenu);
     _focusNode.removeListener(_onFocusChanged);
     BlockTextFocusRegistry.unregister(widget.controller);
     if (_ownsFocus) _focusNode.dispose();
@@ -625,6 +633,19 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   /// action targets the line the user pointed at rather than a stale mark
   /// somewhere else in the file.
   void _capturePendingMark() {
+    // Always register this field first — Super Editor embeds often have no
+    // DocumentTextFlow, and without register capturePendingMark resolves the
+    // wrong controller (or nothing) so the mark looks like "the whole object".
+    BlockTextFocusRegistry.register(
+      controller: widget.controller,
+      changed: _notifyChanged,
+      blockContent: widget.blockContent,
+      fontSize: widget.style.fontSize ?? 12.5,
+      focusNode: _focusNode,
+      blockId: widget.blockId,
+      flow: _flow,
+    );
+
     final flow = _flow;
     final segmentId = _registeredSegmentId;
     if (flow != null && segmentId != null) {
@@ -632,17 +653,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       final pointsInsideMark = marked != null;
       if (!pointsInsideMark && flow.spansSegments) {
         flow.clearSelection();
-      }
-      if (!flow.spansSegments && !_focusNode.hasFocus) {
-        BlockTextFocusRegistry.register(
-          controller: widget.controller,
-          changed: _notifyChanged,
-          blockContent: widget.blockContent,
-          fontSize: widget.style.fontSize ?? 12.5,
-          focusNode: _focusNode,
-          blockId: widget.blockId,
-          flow: flow,
-        );
       }
     }
     BlockTextFocusRegistry.capturePendingMark();
@@ -944,20 +954,22 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         if (event.buttons == kPrimaryButton) {
           _pendingTapGlobal = event.position;
         }
-        if (event.kind == PointerDeviceKind.mouse &&
-            event.buttons == kSecondaryMouseButton) {
+        final isSecondary = (event.buttons & kSecondaryMouseButton) != 0;
+        if (isSecondary) {
           // Freeze what the action will hit before the menu can move focus or
           // collapse the selection.
           _capturePendingMark();
           if (widget.onSecondaryTapDown != null) {
             // Tell Super Editor's translucent secondary-tap handler to stand
-            // down — otherwise the document text menu opens on top.
+            // down — otherwise the document text menu opens on top and
+            // clobbers the frozen mark.
             DocumentSecondaryTap.markEmbedHandled();
             widget.onSecondaryTapDown!(
               TapDownDetails(globalPosition: event.position),
             );
             return;
           }
+          DocumentSecondaryTap.clearEmbedHandled();
           if (_focusNode.hasFocus ||
               BlockTextFocusRegistry.activeController == widget.controller) {
             FormatRange.capturePending(

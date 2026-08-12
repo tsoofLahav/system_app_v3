@@ -5,6 +5,7 @@ import '../../ui/app_color_palettes.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/color_dialog.dart';
 import '../../ux/widgets/app_context_menu.dart';
+import '../editor/document_secondary_tap.dart';
 import './block_text_focus.dart';
 
 typedef DocumentMenuHandler = Future<void> Function(String action);
@@ -61,26 +62,30 @@ class DocumentContextMenu {
   }) async {
     AppContextMenu.dismissActive();
     BlockTextFocusRegistry.openMenuSession();
-    final value = await AppContextMenu.show(
-      context: context,
-      globalPosition: globalPosition,
-      entries: entries,
-      isRtl: strings.isRtl,
-    );
-    // Keep the mark frozen while the colour dialog is open.
-    if (value == 'text:color:pick' && context.mounted) {
-      final hex = await showAppColorDialog(
+    try {
+      final value = await AppContextMenu.show(
         context: context,
-        strings: strings,
-        selectedHex: AppColors.colorToHex(AppColors.text),
+        globalPosition: globalPosition,
+        entries: entries,
+        isRtl: strings.isRtl,
       );
-      if (hex != null && context.mounted) {
-        await onAction('text:color:$hex');
+      // Keep the mark frozen while the colour dialog is open.
+      if (value == 'text:color:pick' && context.mounted) {
+        final hex = await showAppColorDialog(
+          context: context,
+          strings: strings,
+          selectedHex: AppColors.colorToHex(AppColors.text),
+        );
+        if (hex != null && context.mounted) {
+          await onAction('text:color:$hex');
+        }
+      } else if (value != null) {
+        await onAction(value);
       }
-    } else if (value != null) {
-      await onAction(value);
+    } finally {
+      BlockTextFocusRegistry.closeMenuSession();
+      DocumentSecondaryTap.clearEmbedHandled();
     }
-    BlockTextFocusRegistry.closeMenuSession();
   }
 
   static Future<void> showTextMenu({

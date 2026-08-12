@@ -93,9 +93,11 @@ Chart tables use the same `table` type; agent text still expands them as `[GRAPH
 
 ## Deletion
 
-Deleting anything that contains objects must cascade, or the database keeps orphans that still appear in agent text.
+Deleting anything that contains objects must cascade, or the database keeps orphans that still appear in agent text **and on the objects map**.
 
 `services/delete_cascade.py` owns cascades for task, object embed, file, topic, view, tag, workspace, and automation. Route handlers must call it rather than deleting rows directly.
+
+**File body is authoritative for membership.** When `PATCH /files/:id` changes `document_json`, `purge_unreferenced_embeds_for_file` cascade-deletes every `objects` row for that file whose pointer is no longer in the marker text (covers Super Editor selection delete/cut that never called `DELETE /objects/:id`).
 
 ## Modules
 

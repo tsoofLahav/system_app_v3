@@ -767,8 +767,17 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteObjectEmbed(int objectId) async {
-    await _objects.deleteEmbed(objectId);
+    try {
+      await _objects.deleteEmbed(objectId);
+    } on ApiException catch (e) {
+      // Already gone (e.g. file PATCH purged the orphan first).
+      if (e.statusCode != 404) rethrow;
+    }
     await _reloadEmbedsForOpenFiles();
+    // Diagram lists every info row — refresh so deleted nodes disappear.
+    if (objectGraph != null) {
+      await loadObjectGraph();
+    }
     notifyListeners();
   }
 

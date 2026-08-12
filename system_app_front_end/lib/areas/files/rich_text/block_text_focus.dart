@@ -29,6 +29,12 @@ class BlockTextFocusRegistry {
   static FormatRange? _frozenRange;
   static DocumentMark? _frozenMark;
   static DocumentMark? _pendingMark;
+
+  /// Last non-collapsed selection on a controller — survives macOS EditableText
+  /// collapsing the selection on secondary-tap-up before the menu freezes.
+  static TextEditingController? _snapshotController;
+  static TextSelection? _snapshotSelection;
+
   static final ValueNotifier<int> menuSessionListenable = ValueNotifier(0);
 
   static int _emojiPickerSessionDepth = 0;
@@ -78,11 +84,78 @@ class BlockTextFocusRegistry {
     );
   }
 
+  /// Remember a real text selection so a later right-click can still freeze it
+  /// if the platform clears the selection before [capturePendingMark].
+  static void noteLiveSelection(TextEditingController controller) {
+    final sel = controller.selection;
+    if (!sel.isValid || sel.isCollapsed) return;
+    _snapshotController = controller;
+    _snapshotSelection = sel;
+  }
+
   /// Captured on secondary pointer-down, before opening the menu can disturb
   /// focus or collapse the selection.
   static void capturePendingMark() {
     if (_pendingMark != null && _pendingMark!.isValid) return;
+
+    final controller = activeController ?? _recentTarget?.controller;
+    if (controller != null) {
+      final sel = controller.selection;
+      if (sel.isValid && !sel.isCollapsed) {
+        _pendingMark = DocumentMark([
+          MarkedSpan(
+            controller: controller,
+            start: sel.start,
+            end: sel.end,
+            onChanged: onChanged ?? _recentTarget?.onChanged,
+          ),
+        ]);
+        return;
+      }
+      // Platform may have collapsed the selection already — use the snapshot
+      // when it still belongs to this field.
+      final snap = _snapshotSelection;
+      if (identical(controller, _snapshotController) &&
+          snap != null &&
+          snap.isValid &&
+          !snap.isCollapsed) {
+        final start = snap.start.clamp(0, controller.text.length);
+        final end = snap.end.clamp(0, controller.text.length);
+        if (end > start) {
+          _pendingMark = DocumentMark([
+            MarkedSpan(
+              controller: controller,
+              start: start,
+              end: end,
+              onChanged: onChanged ?? _recentTarget?.onChanged,
+            ),
+          ]);
+          return;
+        }
+      }
+    }
+
     _pendingMark = _resolveLiveMark();
+  }
+
+  /// Chrome / whole-object menu: freeze the entire field as the mark.
+  static void capturePendingWholeFieldMark({
+    required TextEditingController controller,
+    VoidCallback? onChanged,
+    String? segmentId,
+  }) {
+    final end = controller.text.length;
+    _pendingMark = end <= 0
+        ? const DocumentMark.empty()
+        : DocumentMark([
+            MarkedSpan(
+              controller: controller,
+              start: 0,
+              end: end,
+              segmentId: segmentId,
+              onChanged: onChanged,
+            ),
+          ]);
   }
 
   static void clearPendingMark() => _pendingMark = null;
@@ -145,24 +218,42 @@ class BlockTextFocusRegistry {
     _recentTarget = null;
     _frozenMark = null;
     _pendingMark = null;
+    _snapshotController = null;
+    _snapshotSelection = null;
     _bumpFocus();
   }
 
   static void openMenuSession() {
+    final opening = _menuSessionDepth == 0;
     _menuSessionDepth++;
-    _frozenMark = _pendingMark ?? _resolveLiveMark();
-    _pendingMark = null;
-    final controller = activeController;
-    if (controller == null) {
-      _frozenRange = FormatRange.pending;
-    } else {
-      _frozenRange = FormatRange.consume(controller.text, controller.selection);
+    // Only freeze once per top-level menu. Nested openMenuSession must not
+    // re-resolve from a collapsed live selection and clobber the mark.
+    if (opening) {
+      _frozenMark = _pendingMark ?? _resolveLiveMark();
+      _pendingMark = null;
+      final controller = activeController;
+      if (controller == null) {
+        _frozenRange = FormatRange.pending;
+      } else {
+        final mark = _frozenMark;
+        final span = mark != null && mark.isValid ? mark.first : null;
+        if (span != null && !span.isEmpty) {
+          _frozenRange = FormatRange(start: span.safeStart, end: span.safeEnd);
+        } else {
+          _frozenRange =
+              FormatRange.consume(controller.text, controller.selection);
+        }
+      }
     }
     menuSessionListenable.value++;
   }
 
   static void closeMenuSession() {
     if (_menuSessionDepth > 0) _menuSessionDepth--;
+    if (_menuSessionDepth > 0) {
+      menuSessionListenable.value++;
+      return;
+    }
     FormatRange.clearPending();
 
     final range = _frozenRange;
@@ -178,7 +269,7 @@ class BlockTextFocusRegistry {
     // the caret is not silently yanked into one of them.
     if (mark != null && mark.spansParts) return;
 
-    if (_menuSessionDepth != 0 || node == null || controller == null) return;
+    if (node == null || controller == null) return;
 
     final restoreController = controller;
     final restoreNode = node;
