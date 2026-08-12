@@ -79,16 +79,7 @@ Embeds-in-flow principles (empty neighbors, edge landing, object remount): **[`e
 | List | Enter on an empty item | Drop that item, keep the list, continue as a paragraph below |
 | List | Backspace on an empty item | Remove the item, or exit the list if it was the last |
 | List | Right-click | Switch the list between points and numbers |
-| Table | Enter | Move to the cell below; add a row when on the last row |
-| Table | Enter on an empty row | Drop that row, keep the table, continue as a paragraph below |
-| Table | Backspace on an empty row | Remove the row; if it was the last row, remove the table |
-| Table | Shift+Enter | Line break inside the cell |
-| Table | Tab | Next cell |
-| Table | ←/→ at text edge | Adjacent cell in the same row (physical grid; macOS intents + key events) |
-| Table | ↑/↓ at first/last line | Cell above/below in the same column; leave embed at top/bottom |
-| Table | Right-click | Add column |
-| Table + chart | Enter | Next column (series); add a column on the last |
-| Table + chart | Arrows | Same physical 2D grid as a normal table (not series-reading order) |
+| Table / chart | (keys) | See **[Tables & charts](#tables--charts)** below |
 
 The empty-line-exits rule is what makes lists and tables feel like part of the text: the user presses Enter twice and simply keeps writing, exactly as they would in a word processor.
 
@@ -229,9 +220,9 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Embed | Widget | Flow role |
 |-------|--------|-----------|
 | Task list | [`embeds/inline_task_list.dart`](editor/embeds/inline_task_list.dart) | Thin host: document segments + Move Mode; rows via objects [`TaskListSurface`](../objects/tasks/task_list_surface.dart) |
-| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); tag chips; right-click → text + **Add tag** / **Add connection** (field or block caret) |
+| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | Topic-tint chrome (`AppColors.infoBlockDecoration`); one text field (first line = title); tag chips; right-click → text + **Add tag** / **Add connection** (field or block caret) |
 | Image | same | Atomic unit; caption field |
-| Table (+ chart) | [`embeds/table_embed.dart`](editor/embeds/table_embed.dart) | `RichTableEditor`; chart quality paints above the same grid |
+| Table (+ chart) | [`embeds/table_embed.dart`](editor/embeds/table_embed.dart) | `RichTableEditor` + optional chart; behaviour in **[Tables & charts](#tables--charts)** |
 | Host | [`embed_block_host.dart`](editor/embed_block_host.dart) | Move Mode; optional atomic `#embed` segment |
 | Drag chrome | [`drag_mode_frame.dart`](editor/drag_mode_frame.dart) | Shared gentle glass frame for Move / Reorder modes |
 
@@ -242,7 +233,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Between blocks only | Never inside a list item or table cell |
 | Create at the caret | Inserts go to the **last-claimed** file. Mid-paragraph / mid-heading **splits** at the caret (`before \| new \| after`); caret at the start inserts before that block; at the end, after it. List / table / embed carets insert after the containing block. |
 | Marker buffer is source of truth | Position is top-level parts in buffer text (view = `blocks[]`); the object row holds data, not placement |
-| Right-click on embed text | Same text menu as paragraphs (`DocumentMark`). Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Graphs extend the table cell menu (add column + chart options). Task lists add **Add to view…** and **Reorder tasks** |
+| Right-click on embed text | Same text menu as paragraphs (`DocumentMark`). Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Tables/charts: see **[Tables & charts](#tables--charts)**. Task lists add **Add to view…** and **Reorder tasks** |
 | Move Mode | Double-click → glass frame on the object + floating glass bubble ([`embed_move_bubble.dart`](editor/embed_move_bubble.dart), no scrim; drag to reposition). Up/down in the bubble nudge the object and **stay in Move Mode**; Done or tap outside the bubble ends it. After move/delete, adjacent paragraphs **coalesce** (blank/`\n`-only stubs dropped, including next to embeds). |
 | Empty object + Backspace | Same fluent rule as an empty list bullet / table row: last empty unit + Backspace **removes the object** (cascade-delete). |
 | Object block + Tab | Opens the object (first inner field). **Escape** lands **after** the object so typing continues below. **Enter** inserts a paragraph below. Arrows do not auto-enter/leave objects. |
@@ -265,11 +256,28 @@ Objects are atomic SE blocks. ↑/↓ move onto the block; **Tab** (or click) op
 
 | Type | In the document |
 |------|-----------------|
-| Task list | Active then Done; Enter adds in the same zone; Escape leaves to SE block; right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title + hint |
-| Info | One field; first line = title (diagrams/API `title`); Enter adds lines; Escape leaves to SE block; right-click → text + Add tag / Add connection |
-| Table | Grid; Enter adds rows; ←/→/↑/↓ move on the physical grid; menu adds columns; Escape leaves to SE block |
-| Table + chart | Same embed; chart on top; fixed 2 rows; Enter adds columns (max **8**); arrows match the physical grid (same as table); insert template labels **A/B** or **א/ב** from UI language; right-click chart **or** cell → type + palette ([`AppColorPalettes`](../ui/app_color_palettes.dart)); pointer `[GRAPH id]` |
+| Task list | Active then Done; Enter adds in the same zone; **insert lands on the list header** (then tasks); Escape leaves to SE block; right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title + hint |
+| Info | Topic wash + thin topic outline; one field; first line = title (diagrams/API `title`); Enter adds lines; Escape leaves to SE block; right-click → text + Add tag / Add connection. **Regular** connection = collapsed caret / chrome (info↔info). **Through-text** = real selection → link marked span to an info (hover bubble + press opens that info). Collapsed RMB must not paint a fake line mark. |
+| Table / chart | See **[Tables & charts](#tables--charts)** |
 | Image | Display + caption; resize handles deferred |
+
+### Tables & charts
+
+One object type `table` (`payload.rows` + optional `payload.chart`). UI: [`table_embed.dart`](editor/embeds/table_embed.dart) + [`RichTableEditor`](rich_text/rich_table_editor.dart); reorder chrome in [`table_reorder_surface.dart`](rich_text/table_reorder_surface.dart). `[GRAPH id]` is sugar for chart-on. Insert labels **A/B** or **א/ב** from UI language.
+
+| | Plain table | Chart table |
+|--|-------------|-------------|
+| Shape | N×M grid | Fixed 2 rows (labels / values); max **8** columns |
+| Enter | Cell below; add row on last filled row | Next column; add column on last |
+| Empty Enter | Drop that row; keep table; continue below | (column exit path) |
+| Empty Backspace | Remove empty row; last row removes table | Remove empty column; last removes object |
+| Arrows | Physical 2D; host owns ←/→ at text edge → side cell; RTL flips column order (col 0 on the right) | Same grid rules |
+| Tab / Shift+Enter | Next cell / line break in cell | Same |
+| Add row / column | **Immediately after the right-clicked cell** (storage index + 1; in RTL that is visually left of the cell). Anchor is the click, not a drifting “end” | Add **column** only (same anchor rule) |
+| Reorder | Separate **Reorder rows…** / **Reorder columns…**; grab the glass row/column (no handles) | **Reorder columns…** only; series colors move with the column |
+| Exit reorder | Tap outside / Escape / Done | Same |
+| Escape (editing) | Leave to SE block caret | Same |
+| Right-click | Text + add/reorder; block caret same | Chart chrome **or** cell → type + palette ([`AppColorPalettes`](../ui/app_color_palettes.dart)); columns reorder |
 
 Type logic beyond presentation (views, links, cascades) → [objects](../objects/AREA.md).
 

@@ -266,13 +266,31 @@ def create_object_link(object_id):
         db.session.commit()
         return jsonify(link.to_dict()), 201
 
-    # related: target is another object
+    # related: target is another object. Optional anchor = through-text
+    # (marked span on the source → target info).
     target_object_id = data.get("target_object_id") or data.get("target_id")
     if target_object_id is None:
         return jsonify({"error": "target_object_id required"}), 400
     target = get_or_404(ObjectEmbed, int(target_object_id))
     if target.id == embed.id:
         return jsonify({"error": "cannot link an object to itself"}), 400
+
+    anchor = data.get("anchor")
+    if anchor is not None and not isinstance(anchor, dict):
+        return jsonify({"error": "anchor must be an object"}), 400
+    if isinstance(anchor, dict) and not anchor:
+        anchor = None
+
+    if anchor is not None:
+        # Through-text: always targets an info; span lives on the source.
+        if target.type != "info":
+            return jsonify({"error": "through-text links require an info target"}), 400
+        if not anchor.get("file_id"):
+            return jsonify({"error": "anchor.file_id required for through-text"}), 400
+    else:
+        # Regular: info ↔ info only.
+        if embed.type != "info" or target.type != "info":
+            return jsonify({"error": "related links require info ↔ info"}), 400
 
     link = Link(
         workspace_id=workspace_id,
@@ -281,6 +299,7 @@ def create_object_link(object_id):
         target_type=target.type,
         target_id=target.id,
         kind="related",
+        anchor=anchor,
         label=data.get("label"),
     )
     db.session.add(link)

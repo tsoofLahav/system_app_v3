@@ -61,6 +61,7 @@ class TableEmbedState extends State<TableEmbed>
 
   bool get _editorBusy =>
       (_editorKey.currentState?.hasInnerFocus ?? false) ||
+      (_editorKey.currentState?.reorderMode ?? false) ||
       HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty;
 
   @override
@@ -160,14 +161,61 @@ class TableEmbedState extends State<TableEmbed>
       next['chart'] = chart;
     }
     _payload = TableObjectPayload.normalize(next);
-    // Keep [RichTableEditor.node] in sync (add column / Enter) — not only charts.
-    if (mounted) setState(() {});
+    // Defer rebuild one frame so cell focus handoff (add column) finishes
+    // before chart chrome remounts the grid — avoids ghost/double carets.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
     _scheduleSave();
   }
 
-  /// Right-click “Add column” when the SE caret is on the block (no cell focus).
-  void addColumnAtEnd() {
-    _editorKey.currentState?.addColumnAtEnd();
+  /// Add column after the right-clicked / focused cell.
+  @override
+  void addColumnAfterCurrent() {
+    _editorKey.currentState?.addColumnAfterCurrent();
+  }
+
+  @override
+  void addRowAfterCurrent() {
+    _editorKey.currentState?.addRowAfterCurrent();
+  }
+
+  @override
+  void beginTableReorderRows() {
+    _editorKey.currentState?.beginReorderRows();
+  }
+
+  @override
+  void beginTableReorderColumns() {
+    _editorKey.currentState?.beginReorderColumns();
+  }
+
+  /// Keep chart series colors aligned when a column is dragged.
+  void _onReorderColumn(int from, int to) {
+    if (!_chartOn || from == to) return;
+    final chart = Map<String, dynamic>.from(
+      TableObjectPayload.chartOf(_payload) ?? {'enabled': true},
+    );
+    final rows = TableObjectPayload.rowsOf(_payload);
+    final cols = rows.isEmpty ? 0 : rows.first.length;
+    final colors = List<String>.from(
+      (chart['colors'] as List?)?.map((e) => '$e') ?? const [],
+    );
+    final hexes = AppColorPalettes.defaultChart.hexes;
+    while (colors.length < cols) {
+      colors.add(hexes[colors.length % hexes.length]);
+    }
+    if (from < 0 || to < 0 || from >= colors.length || to >= colors.length) {
+      return;
+    }
+    final moved = colors.removeAt(from);
+    colors.insert(to, moved);
+    chart['colors'] = colors;
+    chart['enabled'] = true;
+    _payload = TableObjectPayload.normalize({
+      ..._payload,
+      'chart': chart,
+    });
   }
 
   void _setChartType(String type) {
@@ -220,7 +268,13 @@ class TableEmbedState extends State<TableEmbed>
       context: context,
       globalPosition: details.globalPosition,
       strings: widget.strings,
-      onAction: _onChartMenuAction,
+      onAction: (action) async {
+        if (action == 'table:reorder_columns') {
+          beginTableReorderColumns();
+          return;
+        }
+        await _onChartMenuAction(action);
+      },
     );
   }
 
@@ -279,6 +333,7 @@ class TableEmbedState extends State<TableEmbed>
           onFocus: widget.onFocus,
           onExitTable: _onExitTable,
           onDeleteTable: widget.onDeleteObject,
+          onReorderColumn: chartOn ? _onReorderColumn : null,
           extraMenuEntries: chartOn
               ? DocumentContextMenu.buildChartEntries(widget.strings)
               : const [],

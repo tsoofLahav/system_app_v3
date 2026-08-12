@@ -159,6 +159,9 @@ class DocumentContextMenu {
     required AppStrings strings,
     required DocumentMenuHandler onAction,
     List<AppContextMenuEntry> extraEntries = const [],
+    bool includeAddRow = true,
+    bool includeReorderRows = true,
+    bool includeReorderColumns = true,
   }) {
     return _showMenu(
       context: context,
@@ -168,10 +171,25 @@ class DocumentContextMenu {
       entries: [
         ...buildTextEntries(strings, includeConnectInfo: true),
         const AppContextMenuDivider(),
+        if (includeAddRow)
+          AppContextMenuItem(
+            value: 'table:add_row',
+            label: strings['addRowAfter'],
+          ),
         AppContextMenuItem(
           value: 'table:add_column',
-          label: strings['addColumn'] ?? 'Add column',
+          label: strings['addColumnAfter'],
         ),
+        if (includeReorderRows)
+          AppContextMenuItem(
+            value: 'table:reorder_rows',
+            label: strings['reorderRows'],
+          ),
+        if (includeReorderColumns)
+          AppContextMenuItem(
+            value: 'table:reorder_columns',
+            label: strings['reorderColumns'],
+          ),
         if (extraEntries.isNotEmpty) ...[
           const AppContextMenuDivider(),
           ...extraEntries,
@@ -180,7 +198,7 @@ class DocumentContextMenu {
     );
   }
 
-  /// Chart surface (or block caret on a chart table): design only.
+  /// Chart surface (or block caret on a chart table): design + column reorder.
   static Future<void> showChartMenu({
     required BuildContext context,
     required Offset globalPosition,
@@ -192,7 +210,14 @@ class DocumentContextMenu {
       globalPosition: globalPosition,
       strings: strings,
       onAction: onAction,
-      entries: buildChartEntries(strings),
+      entries: [
+        AppContextMenuItem(
+          value: 'table:reorder_columns',
+          label: strings['reorderColumns'],
+        ),
+        const AppContextMenuDivider(),
+        ...buildChartEntries(strings),
+      ],
     );
   }
 

@@ -379,9 +379,13 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         _optimistic = _tasksFromLocalRows();
       });
       await _bridge.refresh();
-      _pendingFocusIndex = 0;
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _applyPendingFocus());
+      // Do not steal focus to the seed row — insert/enter lands on the list
+      // header when present ([_hasTitleLine]).
+      if (!_hasTitleLine) {
+        _pendingFocusIndex = 0;
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _applyPendingFocus());
+      }
     } finally {
       _ensuringSeed = false;
     }

@@ -29,6 +29,7 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane>
     with SingleTickerProviderStateMixin {
   final _positions = <int, Offset>{};
   final _velocities = <int, Offset>{};
+  final _preExpandPositions = <int, Offset>{};
   Ticker? _ticker;
   Size _size = Size.zero;
   var _settled = false;
@@ -36,10 +37,12 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane>
   int _lastNodeCount = -1;
   int? _expandedObjectId;
 
-  static const _cardHalfW = 52.0;
-  static const _cardHalfH = 18.0;
+  /// Near-square collapsed cards (must match [_InfoNodeCard] frame).
+  static const _cardHalfW = 46.0;
+  static const _cardHalfH = 42.0;
   static const _expandedHalfW = 140.0;
   static const _expandedHalfH = 90.0;
+  static const _expandPad = 18.0;
   static const _filterFloor = AppBottomBarMetrics.scrollInset + 8;
 
   AppState get state => widget.state;
@@ -122,11 +125,11 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane>
     }
     _ensurePositions(nodes, _size);
 
-    // Tighter packing so related edges stay visible between cards.
-    const repulsion = 2200.0;
-    const attraction = 0.018;
-    const damping = 0.86;
-    const centerPull = 0.004;
+    // More separation, softer settle (higher damping, gentler springs).
+    const repulsion = 4800.0;
+    const attraction = 0.010;
+    const damping = 0.93;
+    const centerPull = 0.003;
     final center = Offset(_size.width / 2, _size.height / 2);
     final forces = <int, Offset>{
       for (final n in nodes) n.objectId: Offset.zero,
@@ -199,20 +202,59 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane>
   }
 
   void _toggleExpand(ObjectGraphNode node) {
-    setState(() {
-      if (_expandedObjectId == node.objectId) {
-        _expandedObjectId = null;
-      } else {
-        _expandedObjectId = node.objectId;
-        _ticker?.stop();
-      }
-    });
-    if (_expandedObjectId == null) _startSim();
+    if (_expandedObjectId == node.objectId) {
+      _closeExpand();
+      return;
+    }
+    _preExpandPositions
+      ..clear()
+      ..addAll(_positions);
+    _expandedObjectId = node.objectId;
+    _ticker?.stop();
+    _pushNeighborsAway(node.objectId);
+    setState(() {});
   }
 
   void _closeExpand() {
+    for (final e in _preExpandPositions.entries) {
+      _positions[e.key] = e.value;
+      _velocities[e.key] = Offset.zero;
+    }
+    _preExpandPositions.clear();
     setState(() => _expandedObjectId = null);
     _startSim();
+  }
+
+  /// Displace neighbors outside the expanded card AABB (+ padding).
+  void _pushNeighborsAway(int expandedId) {
+    final center = _positions[expandedId];
+    if (center == null) return;
+    final eHalfW = _expandedHalfW + _expandPad;
+    final eHalfH = _expandedHalfH + _expandPad;
+    for (final id in _positions.keys.toList()) {
+      if (id == expandedId) continue;
+      var p = _positions[id]!;
+      final dx = p.dx - center.dx;
+      final dy = p.dy - center.dy;
+      final overlapX = eHalfW + _cardHalfW - dx.abs();
+      final overlapY = eHalfH + _cardHalfH - dy.abs();
+      if (overlapX <= 0 || overlapY <= 0) continue;
+      if (overlapX < overlapY) {
+        final sign = dx >= 0 ? 1.0 : -1.0;
+        p = Offset(p.dx + sign * overlapX, p.dy);
+      } else {
+        final sign = dy >= 0 ? 1.0 : -1.0;
+        p = Offset(p.dx, p.dy + sign * overlapY);
+      }
+      if (!_size.isEmpty) {
+        p = Offset(
+          p.dx.clamp(40.0, _size.width - 40),
+          p.dy.clamp(40.0, _size.height - 40),
+        );
+      }
+      _positions[id] = p;
+      _velocities[id] = Offset.zero;
+    }
   }
 
   @override
@@ -338,10 +380,14 @@ class _InfoNodeCard extends StatelessWidget {
   final VoidCallback onTap;
   final Color? accent;
 
+  static const _frameW = 92.0;
+  static const _frameH = 84.0;
+
   @override
   Widget build(BuildContext context) {
     final tint = accent ?? AppColors.glassTint;
     final border = accent ?? AppColors.noteBorder;
+    final label = title.isEmpty ? 'Info' : title;
     return GestureDetector(
       onTap: onTap,
       child: GlassSurface(
@@ -354,19 +400,27 @@ class _InfoNodeCard extends StatelessWidget {
           color: border.withValues(alpha: accent == null ? 0.55 : 0.75),
           width: AppColors.filePaneBorderWidth,
         ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 72, maxWidth: 110),
+        child: SizedBox(
+          width: _frameW,
+          height: _frameH,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-            child: Text(
-              title.isEmpty ? 'Info' : title,
-              style: AppTypography.listItemStyle.copyWith(
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: SizedBox(
+                  width: _frameW - 16,
+                  child: Text(
+                    label,
+                    style: AppTypography.listItemStyle.copyWith(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                    maxLines: 4,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
             ),
           ),
         ),
@@ -538,31 +592,28 @@ class _DiagramChrome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = state.strings;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Align(
-          alignment: Alignment.center,
-          child: GlassBarSegment(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: AppSegmentedToggle<DiagramColorMode>(
-              options: [
-                AppSegmentedOption(
-                  value: DiagramColorMode.byTopic,
-                  label: s['diagramColorByTopic'],
-                ),
-                AppSegmentedOption(
-                  value: DiagramColorMode.byTag,
-                  label: s['diagramColorByTag'],
-                ),
-              ],
-              selected: state.diagramColorMode,
-              onSelected: state.setDiagramColorMode,
-            ),
+        Expanded(child: _DiagramTagFilter(state: state)),
+        const SizedBox(width: 8),
+        GlassBarSegment(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: AppSegmentedToggle<DiagramColorMode>(
+            options: [
+              AppSegmentedOption(
+                value: DiagramColorMode.byTopic,
+                label: s['diagramColorByTopic'],
+              ),
+              AppSegmentedOption(
+                value: DiagramColorMode.byTag,
+                label: s['diagramColorByTag'],
+              ),
+            ],
+            selected: state.diagramColorMode,
+            onSelected: state.setDiagramColorMode,
           ),
         ),
-        const SizedBox(height: 8),
-        _DiagramTagFilter(state: state),
       ],
     );
   }

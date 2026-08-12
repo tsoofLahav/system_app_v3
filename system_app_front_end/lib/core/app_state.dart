@@ -420,12 +420,23 @@ class AppState extends ChangeNotifier {
   Future<void> addRelatedObjectLink(
     ObjectEmbed embed, {
     required int targetObjectId,
+    Map<String, dynamic>? anchor,
   }) async {
     await _objects.createRelatedLink(
       embed.id,
       targetObjectId: targetObjectId,
+      anchor: anchor,
     );
     await loadEmbedsForFile(embed.fileId);
+    // Peer info may live in another file — refresh if we know it.
+    for (final entry in embedsByFileId.entries) {
+      if (entry.key == embed.fileId) continue;
+      if (entry.value.any((o) => o.id == targetObjectId)) {
+        await loadEmbedsForFile(entry.key);
+        break;
+      }
+    }
+    await loadObjectGraph();
   }
 
   Future<void> removeObjectLink(ObjectEmbed embed, int linkId) async {

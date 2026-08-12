@@ -58,8 +58,10 @@ class _AddConnectionDialogState extends State<_AddConnectionDialog> {
     final options = <ConnectionPick>[];
 
     final graph = widget.state.objectGraph;
+    // Regular + through-text connections only target infos.
     if (graph != null) {
       for (final n in graph.nodes) {
+        if (n.type != 'info') continue;
         if (seen.contains(n.objectId)) continue;
         seen.add(n.objectId);
         options.add(
@@ -74,13 +76,10 @@ class _AddConnectionDialogState extends State<_AddConnectionDialog> {
 
     for (final embeds in widget.state.embedsByFileId.values) {
       for (final e in embeds) {
+        if (e.type != 'info') continue;
         if (seen.contains(e.id)) continue;
         seen.add(e.id);
-        final title = e.type == 'info'
-            ? (e.information?['title'] as String? ?? '').trim()
-            : e.taskListTitle.trim().isNotEmpty
-                ? e.taskListTitle
-                : e.type;
+        final title = (e.information?['title'] as String? ?? '').trim();
         options.add(
           ConnectionPick(
             objectId: e.id,
@@ -148,7 +147,10 @@ Future<ObjectGraphNode?> showPickInfoObjectDialog({
 }) async {
   await state.loadObjectGraph();
   if (!context.mounted) return null;
-  final nodes = state.objectGraph?.nodes ?? const <ObjectGraphNode>[];
+  final nodes = [
+    for (final n in state.objectGraph?.nodes ?? const <ObjectGraphNode>[])
+      if (n.type == 'info') n,
+  ];
   return showAppDialog<ObjectGraphNode>(
     context: context,
     builder: (_) => AppAdaptiveDialogShell(

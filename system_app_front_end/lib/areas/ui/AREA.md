@@ -85,6 +85,8 @@ A topic carries any `#RRGGBB` colour (picked in [`color_dialog.dart`](color_dial
 
 (v1 varied the tint by *file type* — `plan` heaviest, `text` lightest. The document model has no file types, so identity took over the same range.)
 
+**In-file info embeds** use `AppColors.infoBlockDecoration(topicAccent)`: a very light topic wash fill and a thin topic-accent outline (~0.85px, radius 8). Main-topic infos fall back to a neutral border tint so white-on-white does not disappear. Generic details chrome remains `detailsBlockDecoration()`.
+
 ## Text
 
 All of it comes from [`app_typography.dart`](app_typography.dart). One family, few weights, one colour.

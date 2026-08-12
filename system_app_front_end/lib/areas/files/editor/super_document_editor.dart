@@ -845,6 +845,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
               return;
             }
             if (action == 'info:add_connection') {
+              // Chrome / collapsed caret → regular info↔info (no text anchor).
               final pick = await showAddConnectionDialog(
                 context: context,
                 state: widget.state,
@@ -894,6 +895,12 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
             globalPosition: globalPosition,
             strings: strings,
             onAction: (action) async {
+              if (action == 'table:reorder_columns') {
+                final gateway = _embedCaretRegistry[node.id];
+                gateway?.enterFromAbove();
+                gateway?.beginTableReorderColumns();
+                return;
+              }
               await _applyChartMenuToEmbed(embed, action);
             },
           );
@@ -904,7 +911,35 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
             strings: strings,
             onAction: (action) async {
               if (action == 'table:add_column') {
-                await _addColumnToTableEmbed(embed);
+                // Prefer the live grid (after current/last cell); payload
+                // fallback only if the embed host is not registered yet.
+                final gateway = _embedCaretRegistry[node.id];
+                if (gateway != null) {
+                  gateway.addColumnAfterCurrent();
+                } else {
+                  await _addColumnToTableEmbedAfterLast(embed);
+                }
+                return;
+              }
+              if (action == 'table:add_row') {
+                final gateway = _embedCaretRegistry[node.id];
+                if (gateway != null) {
+                  gateway.addRowAfterCurrent();
+                } else {
+                  await _addRowToTableEmbedAfterLast(embed);
+                }
+                return;
+              }
+              if (action == 'table:reorder_rows') {
+                final gateway = _embedCaretRegistry[node.id];
+                gateway?.enterFromAbove();
+                gateway?.beginTableReorderRows();
+                return;
+              }
+              if (action == 'table:reorder_columns') {
+                final gateway = _embedCaretRegistry[node.id];
+                gateway?.enterFromAbove();
+                gateway?.beginTableReorderColumns();
                 return;
               }
               await runBlockTextAction(action);
@@ -924,8 +959,33 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     return tasks.isEmpty ? null : tasks.first.id;
   }
 
-  /// Block-caret “Add column” — append a cell on every row and persist payload.
-  Future<void> _addColumnToTableEmbed(ObjectEmbed embed) async {
+  /// Fallback when the table embed is not mounted — insert after the last row.
+  Future<void> _addRowToTableEmbedAfterLast(ObjectEmbed embed) async {
+    final payload = TableObjectPayload.normalize(embed.payload);
+    if (TableObjectPayload.chartEnabled(payload)) return;
+    final rows = TableObjectPayload.rowsOf(payload);
+    final colCount = rows.isEmpty
+        ? 2
+        : rows.map((r) => r.length).fold<int>(0, (a, b) => a > b ? a : b);
+    final width = colCount <= 0 ? 2 : colCount;
+    final nextRows = [
+      ...rows,
+      [
+        for (var i = 0; i < width; i++) {'text': ''},
+      ],
+    ];
+    await widget.state.updateObjectPayload(
+      embed.id,
+      TableObjectPayload.normalize({
+        ...payload,
+        'rows': nextRows,
+      }),
+    );
+    await _loadEmbedsQuietly();
+  }
+
+  /// Fallback when the table embed is not mounted — insert after the last column.
+  Future<void> _addColumnToTableEmbedAfterLast(ObjectEmbed embed) async {
     final payload = TableObjectPayload.normalize(embed.payload);
     final rows = TableObjectPayload.rowsOf(payload);
     final chartOn = TableObjectPayload.chartEnabled(payload);
@@ -1037,13 +1097,30 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     if (sel == null || sel.isCollapsed) return;
     final base =
         AppTypography.documentParagraphStyle.fontSize ?? 12.5;
-    final next = (base + delta).clamp(10.0, 28.0);
+    // Bump relative to the size already on the text — not always base±delta.
+    final current = _fontSizeAt(sel.extent) ?? base;
+    final next = (current + delta).clamp(10.0, 28.0);
     _editor.execute([
       AddTextAttributionsRequest(
         documentRange: sel,
         attributions: {FontSizeAttribution(next)},
       ),
     ]);
+  }
+
+  /// Current [FontSizeAttribution] at [position], if any.
+  double? _fontSizeAt(DocumentPosition position) {
+    final node = _doc.getNodeById(position.nodeId);
+    if (node is! TextNode) return null;
+    final pos = position.nodePosition;
+    if (pos is! TextNodePosition) return null;
+    final text = node.text;
+    if (text.isEmpty) return null;
+    final offset = pos.offset.clamp(0, text.length - 1);
+    for (final attr in text.getAllAttributionsAt(offset)) {
+      if (attr is FontSizeAttribution) return attr.fontSize;
+    }
+    return null;
   }
 
   void _applyColorAttribution(Color color) {

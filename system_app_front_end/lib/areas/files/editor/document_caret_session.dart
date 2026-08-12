@@ -78,6 +78,10 @@ class DocumentCaretSession {
     _clearSelection();
   }
 
+  /// True when [nodeId] is an atomic object block in the live document.
+  bool isObjectEmbed(String nodeId) =>
+      _liveDoc.getNodeById(nodeId) is ObjectEmbedNode;
+
   /// Place SE caret in a **text** paragraph after the object.
   ///
   /// Never leave the IME selection on a missing node — Super Editor's

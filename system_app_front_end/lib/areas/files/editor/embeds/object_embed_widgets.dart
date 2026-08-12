@@ -7,12 +7,14 @@ import '../../../../config/api_config.dart';
 import '../../../../core/app_state.dart';
 import '../../../objects/data/object_embed.dart';
 import '../../../objects/links/add_connection_dialog.dart';
+import '../../../objects/links/info_description_bubble.dart';
 import '../../../objects/tags/assign_object_tags_dialog.dart';
 import '../../../ux/topic/topic_appearance.dart';
 import '../document_text_flow.dart';
 import '../editor_key_handoff.dart';
 import '../embed_caret_bridge.dart';
 import '../../rich_text/block_text_actions.dart';
+import '../../rich_text/block_text_focus.dart';
 import '../../rich_text/document_context_menu.dart';
 import '../../rich_text/formatted_text_field.dart';
 import '../../rich_text/span_text_editing_controller.dart';
@@ -175,6 +177,7 @@ class InfoEmbedState extends State<InfoEmbed>
   late final FocusNode _focus;
   Timer? _saveTimer;
   EmbedCaretRegistry? _registry;
+  OverlayEntry? _linkBubble;
 
   @override
   String get nodeId => widget.blockId;
@@ -253,6 +256,7 @@ class InfoEmbedState extends State<InfoEmbed>
 
   @override
   void dispose() {
+    _hideLinkBubble();
     _registry?.unregister(nodeId);
     _registry = null;
     _saveTimer?.cancel();
@@ -261,6 +265,125 @@ class InfoEmbedState extends State<InfoEmbed>
     _focus.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _hideLinkBubble() {
+    _linkBubble?.remove();
+    _linkBubble = null;
+  }
+
+  Color _topicAccent() {
+    final file = widget.state.selectedDetail?.files
+        .where((f) => f.id == widget.embed.fileId)
+        .firstOrNull;
+    final topicId = file?.topicId ?? widget.state.selectedTopic?.id;
+    final topic = topicId == null
+        ? widget.state.selectedTopic
+        : widget.state.allTopics.where((t) => t.id == topicId).firstOrNull ??
+            widget.state.selectedTopic;
+    if (topic == null || topic.isMain) {
+      return AppColors.noteBorder;
+    }
+    return TopicAppearance.accentFor(topic);
+  }
+
+  List<DescriptionTextRange> _throughTextRanges() {
+    final segmentId = infoTextSegmentId(widget.blockId);
+    final out = <DescriptionTextRange>[];
+    for (final c in widget.embed.connections) {
+      if ((c['kind'] as String? ?? 'related') != 'related') continue;
+      final anchor = c['anchor'];
+      if (anchor is! Map) continue;
+      if ('${anchor['segment_id']}' != segmentId) continue;
+      final start = anchor['start'] as int? ?? 0;
+      final end = anchor['end'] as int? ?? 0;
+      if (end <= start) continue;
+      out.add(DescriptionTextRange(start: start, end: end, link: c));
+    }
+    return out;
+  }
+
+  int? _targetInfoId(Map<String, dynamic> link) {
+    final peer = link['peer'];
+    if (peer is Map && peer['id'] is int) return peer['id'] as int;
+    if (link['source_id'] == widget.embed.id) {
+      return link['target_id'] as int?;
+    }
+    return link['source_id'] as int?;
+  }
+
+  (String title, String body) _previewForTarget(int targetId) {
+    for (final embeds in widget.state.embedsByFileId.values) {
+      final hit = embeds.where((e) => e.id == targetId).firstOrNull;
+      if (hit != null) {
+        final info = hit.information ?? const {};
+        return (
+          (info['title'] as String? ?? '').trim(),
+          (info['body'] as String? ?? '').trim(),
+        );
+      }
+    }
+    final node = widget.state.objectGraph?.nodes
+        .where((n) => n.objectId == targetId)
+        .firstOrNull;
+    if (node != null) {
+      return (node.title.trim(), node.body.trim());
+    }
+    return ('Info', '');
+  }
+
+  void _onThroughTextHover(DescriptionTextRange? range, Offset? global) {
+    _hideLinkBubble();
+    if (range == null || global == null || !mounted) return;
+    final targetId = _targetInfoId(range.link);
+    if (targetId == null) return;
+    final (title, body) = _previewForTarget(targetId);
+    final overlay = Overlay.maybeOf(context);
+    if (overlay == null) return;
+    _linkBubble = OverlayEntry(
+      builder: (context) => Positioned(
+        left: global.dx + 12,
+        top: global.dy + 18,
+        child: IgnorePointer(
+          child: InfoDescriptionBubble(
+            title: title.isEmpty ? 'Info' : title,
+            body: body.length > 220 ? '${body.substring(0, 220)}…' : body,
+          ),
+        ),
+      ),
+    );
+    overlay.insert(_linkBubble!);
+  }
+
+  Future<void> _onThroughTextActivate(DescriptionTextRange range) async {
+    _hideLinkBubble();
+    final targetId = _targetInfoId(range.link);
+    if (targetId == null) return;
+    final peer = range.link['peer'];
+    final fileId = peer is Map ? peer['file_id'] as int? : null;
+    await widget.state.openObjectInFile(
+      objectId: targetId,
+      fileId: fileId,
+    );
+  }
+
+  Map<String, dynamic>? _anchorFromFrozenMark() {
+    if (!BlockTextFocusRegistry.frozenWasExplicitSelection) return null;
+    final mark = BlockTextFocusRegistry.frozenMark;
+    if (mark == null || !mark.isValid || mark.spansParts) return null;
+    final span = mark.first;
+    if (span == null || span.segmentId == null) return null;
+    final segmentId = span.segmentId!;
+    final blockId = segmentId.contains('#')
+        ? segmentId.substring(0, segmentId.indexOf('#'))
+        : segmentId;
+    return {
+      'file_id': widget.embed.fileId,
+      'block_id': blockId,
+      'segment_id': segmentId,
+      'start': span.safeStart,
+      'end': span.safeEnd,
+    };
   }
 
   void _scheduleSave() {
@@ -343,6 +466,8 @@ class InfoEmbedState extends State<InfoEmbed>
   }
 
   Future<void> _addConnection() async {
+    final throughText = BlockTextFocusRegistry.frozenWasExplicitSelection;
+    final anchor = throughText ? _anchorFromFrozenMark() : null;
     final pick = await showAddConnectionDialog(
       context: context,
       state: widget.state,
@@ -352,6 +477,7 @@ class InfoEmbedState extends State<InfoEmbed>
     await widget.state.addRelatedObjectLink(
       widget.embed,
       targetObjectId: pick.objectId,
+      anchor: anchor,
     );
     widget.onRefresh();
   }
@@ -369,8 +495,10 @@ class InfoEmbedState extends State<InfoEmbed>
   Widget build(BuildContext context) {
     final s = widget.state.strings;
     final tags = widget.embed.tags;
+    final accent = _topicAccent();
+    final throughText = _throughTextRanges();
     return DecoratedBox(
-      decoration: AppColors.detailsBlockDecoration(),
+      decoration: AppColors.infoBlockDecoration(accent),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
         child: Column(
@@ -389,6 +517,9 @@ class InfoEmbedState extends State<InfoEmbed>
               onEnter: _onEnter,
               onBackspaceAtStart: _onBackspaceAtStart,
               onSecondaryTapDown: _showTextMenu,
+              descriptionRanges: throughText,
+              onDescriptionHover: _onThroughTextHover,
+              onDescriptionActivate: _onThroughTextActivate,
               onArrowExitAbove: () => navigateEmbedLine(
                 lineIndex: 0,
                 lineCount: lineCount,

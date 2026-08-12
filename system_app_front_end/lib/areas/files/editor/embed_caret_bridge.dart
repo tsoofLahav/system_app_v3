@@ -20,6 +20,18 @@ abstract class EmbedCaretGateway {
 
   /// Task lists only — enter Reorder Mode. No-op elsewhere.
   void beginTaskReorderMode() {}
+
+  /// Tables only — insert a column after the current/last cell. No-op elsewhere.
+  void addColumnAfterCurrent() {}
+
+  /// Tables only — insert a row after the current/last cell. No-op elsewhere.
+  void addRowAfterCurrent() {}
+
+  /// Tables only — enter row Reorder Mode. No-op elsewhere.
+  void beginTableReorderRows() {}
+
+  /// Tables only — enter column Reorder Mode. No-op elsewhere.
+  void beginTableReorderColumns() {}
 }
 
 mixin EmbedLineGatewayMixin implements EmbedCaretGateway {
@@ -37,6 +49,18 @@ mixin EmbedLineGatewayMixin implements EmbedCaretGateway {
 
   @override
   void beginTaskReorderMode() {}
+
+  @override
+  void addColumnAfterCurrent() {}
+
+  @override
+  void addRowAfterCurrent() {}
+
+  @override
+  void beginTableReorderRows() {}
+
+  @override
+  void beginTableReorderColumns() {}
 }
 
 /// ↑/↓ within an embed only. At the first/last line, do nothing (Escape leaves).
@@ -121,13 +145,21 @@ class EmbedCaretPlugin extends SuperEditorPlugin {
   EmbedCaretPlugin({
     required this.registry,
     required this.caretSession,
-  });
+  }) : _tapDelegate = _EmbedAwareTapDelegate(caretSession);
 
   final EmbedCaretRegistry registry;
   final DocumentCaretSession caretSession;
+  final _EmbedAwareTapDelegate _tapDelegate;
 
   @override
   List<SuperEditorKeyboardAction> get keyboardActions => [_onTab, _onEnter];
+
+  /// Halts SE double-tap word-select while an embed owns the caret (and on
+  /// object blocks for Move Mode) — otherwise SE selects, we clear via
+  /// [DocumentCaretSession.suppressDocumentSelectionWhileEmbedOwns], then
+  /// Super Editor null-checks `selectionNotifier.value!` and crashes.
+  @override
+  List<ContentTapDelegate> get contentTapHandlers => [_tapDelegate];
 
   Map<String, SuperEditorSelectorHandler> get selectorHandlers {
     return {
@@ -266,4 +298,23 @@ class EmbedEditScope extends StatelessWidget {
 
 class _ExitObjectIntent extends Intent {
   const _ExitObjectIntent();
+}
+
+class _EmbedAwareTapDelegate extends ContentTapDelegate {
+  _EmbedAwareTapDelegate(this.caretSession);
+
+  final DocumentCaretSession caretSession;
+
+  @override
+  TapHandlingInstruction onDoubleTap(DocumentTapDetails details) {
+    if (caretSession.owner == DocumentCaretOwner.embed) {
+      return TapHandlingInstruction.halt;
+    }
+    final pos = details.documentLayout
+        .getDocumentPositionNearestToOffset(details.layoutOffset);
+    if (pos != null && caretSession.isObjectEmbed(pos.nodeId)) {
+      return TapHandlingInstruction.halt;
+    }
+    return TapHandlingInstruction.continueHandling;
+  }
 }

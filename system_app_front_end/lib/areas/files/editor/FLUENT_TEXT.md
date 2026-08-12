@@ -55,7 +55,7 @@ Mechanism ([`embed_caret_bridge.dart`](embed_caret_bridge.dart) + [`document_car
 |-------|---------------------------|
 | Info | one field — first line is title (API/diagrams); rest is body |
 | Task list | list title → each task |
-| Table / chart grid | cells on a **physical 2D grid** (`RichTableEditor`: ←/→ same row, ↑/↓ same column). Enter grows rows (grid) or columns (chart). Document enter/exit still uses row-major `focusLine` |
+| Table / chart grid | Physical 2D cells. Product rules (Enter, add-after, reorder): files [`AREA.md` § Tables & charts](../AREA.md#tables--charts). Caret: `hostKeyEvent` owns ←/→ (edge → side cell; RTL flips cols); ↑/↓ first/last line → cell above/below; one `FocusNode` per cell; surgical focus insert on add-column; chart parent rebuild deferred one frame. Document enter/exit still uses row-major `focusLine` |
 | Image | none — block only |
 
 ### Keystroke handoff
@@ -72,8 +72,8 @@ Each object type keeps its own menu (not the plain paragraph menu):
 |--------|------|
 | Info | Text + **Add tag** / **Add connection** |
 | Task list | Text + **Choose view…** / **Reorder tasks** |
-| Table | Text + **Add column** (+ Connect info when wired) |
-| Chart table | Chart type + palette (on chart chrome **and** cells); block caret → chart menu |
+| Table | Text + **Add row/column after** + **Reorder rows…** / **Reorder columns…** (+ Connect info when wired) |
+| Chart table | **Reorder columns…** + chart type + palette (on chart chrome **and** cells); block caret → chart menu |
 
 Embed fields mark [`DocumentSecondaryTap`](document_secondary_tap.dart) so Super Editor’s translucent secondary-tap handler does not open a second menu. Right-click on an object block (SE caret on the embed) resolves the node under the pointer and opens that object’s menu.
 
