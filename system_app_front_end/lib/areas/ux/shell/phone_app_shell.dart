@@ -17,6 +17,7 @@ import '../../files/editor/document_editor_controller.dart';
 import '../../files/editor/document_insert_bar.dart';
 import '../../production_agent/ai_tool_bar.dart';
 import './desktop_app_shell.dart';
+import './app_bottom_bar.dart';
 import './preferences_dialog.dart';
 
 class PhoneAppShell extends StatefulWidget {
@@ -73,6 +74,11 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
     return ListenableBuilder(
       listenable: state,
       builder: (context, _) {
+        final diagramMode = state.isDiagramMode;
+        final bottomInset = diagramMode
+            ? AppBottomBarMetrics.scrollInset
+            : MediaQuery.sizeOf(context).height * 0.1;
+
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: AppColors.canvasNeutralBottom,
@@ -137,9 +143,7 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
                   top: false,
                   bottom: false,
                   child: Padding(
-                    padding: EdgeInsets.only(
-                      bottom: MediaQuery.sizeOf(context).height * 0.1,
-                    ),
+                    padding: EdgeInsets.only(bottom: bottomInset),
                     child: !state.appReady
                         ? const MainPaneLoader()
                         : AnimatedSwitcher(
@@ -176,29 +180,34 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
                     backgroundColor: Colors.transparent,
                   ),
                 ),
-              ListenableBuilder(
-                listenable: DocumentEditorRegistry.notifier,
-                builder: (context, _) {
-                  if (DocumentEditorRegistry.active == null) {
-                    return const SizedBox.shrink();
-                  }
-                  return Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: MediaQuery.sizeOf(context).height * 0.1,
-                    child: DocumentInsertBar(state: state),
-                  );
-                },
-              ),
+              if (!diagramMode)
+                ListenableBuilder(
+                  listenable: DocumentEditorRegistry.notifier,
+                  builder: (context, _) {
+                    if (DocumentEditorRegistry.active == null) {
+                      return const SizedBox.shrink();
+                    }
+                    return Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: bottomInset,
+                      child: DocumentInsertBar(state: state),
+                    );
+                  },
+                ),
               Positioned(
                 left: 0,
                 right: 0,
                 bottom: 0,
-                height: MediaQuery.sizeOf(context).height,
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: _PhoneBottomToolsSheet(state: state),
-                ),
+                child: diagramMode
+                    ? AppBottomBar(state: state)
+                    : SizedBox(
+                        height: MediaQuery.sizeOf(context).height,
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: _PhoneBottomToolsSheet(state: state),
+                        ),
+                      ),
               ),
             ],
           ),

@@ -89,7 +89,7 @@ How a topic is laid out on screen, top to bottom — matching v1:
 |---------|-------|-----------|
 | Topic | Sidebar topic | [`topic/topic_view.dart`](topic/topic_view.dart) — files laid out |
 | Task view | Sidebar view | [`../objects/views/task_view_pane.dart`](../objects/views/task_view_pane.dart) — grid of list frames |
-| Objects map | Sidebar **Objects map** (below topics) | [`../objects/diagram/object_diagram_pane.dart`](../objects/diagram/object_diagram_pane.dart) — info nodes + related edges, tag filter, color modes |
+| Objects map | Sidebar **Objects map** (below topics) | [`../objects/diagram/object_diagram_pane.dart`](../objects/diagram/object_diagram_pane.dart) — `interactive_graph_view` canvas; drag move, double-click expand; tag filter, color modes |
 | Archive | Sidebar archive | [`archive/`](archive/) — archived topics and files, read-mostly |
 
 ### Task view page
@@ -145,7 +145,7 @@ Shortcuts are user-rebindable. [`shortcuts/`](shortcuts/) owns the catalog of av
 
 **Insert object** (not “blocks”): catalog category `objects` inserts into the **active** file via `DocumentEditorRegistry` — info, task list, table, graph (chart table), image. After insert, the caret enters the new object (first inner field); images with no field keep the block caret. Paragraph / bullet list stay on the insert bar only (document structure, not objects).
 
-Default keys match the English name’s letter (`D`etails, `T`ask, `T`able, `G`raph, `I`mage). When two objects share a letter, keep that letter and vary the modifiers (task = ⌘⇧T, table = ⌘⌥T).
+Default keys match the English name’s letter (`D`etails, `T`ask, `T`able, `G`raph, `I`mage). When two objects share a letter, keep that letter and vary the modifiers (task = ⌘⇧T, table = ⌘⌥T). **Move object** is ⌘⌥M (⌘⇧M is layout toggle).
 
 ## Rules
 

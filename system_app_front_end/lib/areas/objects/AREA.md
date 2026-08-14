@@ -73,7 +73,7 @@ An info object holds knowledge (`title`, `body`, …). In the file, title and bo
 - Create tag via sidebar **+**; assign tags on info embeds (context menu)
 - Info frame shows tag chips only; Add connection via context menu (no links list)
 - Description: document **Connect info…**, hover bubble, double-tap opens the info
-- **Objects map**: info nodes + related edges; tag filter above bottom bar; topic/tag color modes; click expands editable card with ×
+- **Objects map** ([`interactive_graph_view`](https://pub.dev/packages/interactive_graph_view)): info nodes + related edges; pan/zoom; drag to move (session-only layout); double-click expands editable card with ×; tag filter above bottom bar; topic/tag color modes
 
 In-file editing of the unified info text is presentation (files).
 
@@ -95,7 +95,7 @@ Agent text and API shapes: backend objects `AREA.md` + production agent prompt. 
 | [`views/`](views/) | Task view pane and display config |
 | [`tags/`](tags/) | Create / assign object tags |
 | [`links/`](links/) | Connection picker + description hover bubble |
-| [`diagram/`](diagram/) | Objects map pane |
+| [`diagram/`](diagram/) | Objects map pane (`interactive_graph_view`) |
 
 In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 
@@ -113,7 +113,7 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 
 **Shipped (data):** task CRUD/status/order; view membership pane; empty titles; object create/delete with embed insert.
 
-**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder; object tags; related + description links; objects map with tag filter, color modes, in-map expand/edit.
+**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder; object tags; related + description links; objects map (`interactive_graph_view`: drag move, double-click expand, session layout, tag filter, color modes).
 
 **Shipped (presentation, in files):** list-like task embed; info title/body + tag chips (add tag/link via context menu); table embed (+ chart quality); Move Mode; right-click text menu including Connect info; description underlines + hover/double-tap.
 
