@@ -122,7 +122,7 @@ This help. `section`: `agent_text` | `tools` | `all`.
 }
 ```
 
-Add a table row by replacing one data line with that line plus the new row (`document_lines` numbers):
+Add a table row — **keep** the existing row in `new_text` and append the new row (do not replace the old row with only the new one):
 
 ```json
 {
@@ -137,7 +137,7 @@ Add a table row by replacing one data line with that line plus the new row (`doc
 }
 ```
 
-Same pattern for `[INFO id="…"]` / `[TASK_LIST id="…"]`. Outside the edited lines, including `[SPACER]`, stays unchanged.
+Same insert pattern for `[INFO id="…"]` body lines, `[TASK_LIST id="…"]` tasks, and `[BULLET_LIST]` items: existing line stays in `new_text`, new line follows. Outside the edited lines, including `[SPACER]`, stays unchanged.
 
 ### `rewrite_file` — whole file only when asked
 
