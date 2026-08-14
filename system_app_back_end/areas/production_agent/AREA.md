@@ -53,9 +53,9 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 | Tool | Behavior |
 |------|----------|
 | `search` | Substring match on file name and **agent text** within scope (includes archived, flagged) |
-| `open_file` | Returns `document_plain` (agent text) + `object_extras` (info `title` / `Links` when useful). Archived readable. |
+| `open_file` | Returns `document_plain` (agent text), `document_lines` (1-based), + `object_extras` (info `title` / `Links` when useful). Archived readable. |
 | `reference` | On-demand examples from `content/production_agent/reference.md` (`agent_text` / `tools` / `all`) |
-| `patch_file` | **All partial edits** (change / delete / add lines, including inside embed fences) via exact unique `old_text` → `new_text`; typical outcome **review** |
+| `patch_file` | **All partial edits** by inclusive `start_line`/`end_line` + `new_text` (from `document_lines`); typical outcome **review** |
 | `rewrite_file` | Full new agent text for a true whole-file rewrite; typical outcome **apply** when run allows |
 | `search_tasks` | Substring match on task titles within scoped (live) files |
 
@@ -67,7 +67,7 @@ The agent never sees or writes raw JSON. It reads and writes **agent text**; the
 
 Each write tool ends in the same apply path:
 
-1. Build new agent text (`patch_file` replacements / `rewrite_file` full text)
+1. Build new agent text (`patch_file` line edits / `rewrite_file` full text)
 2. Parse agent text → v4 editor text + object payload updates (`apply_agent_text_to_file`)
 3. Reject if any embed `object_id` is unknown or was dropped; reject id-less `[TABLE]` on write
 4. Reject archived files

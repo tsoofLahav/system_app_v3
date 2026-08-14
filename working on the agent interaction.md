@@ -70,7 +70,7 @@ Omit when unused. Extend the set as actions need — keep them tiny.
 
 | Tool | When | Model sends | Typical outcome |
 |------|------|-------------|-----------------|
-| **`patch_file`** | **All** partial edits (change / delete / add, including inside fences) | Exact `old_text` → `new_text` replacements (unique) | Review / pending |
+| **`patch_file`** | **All** partial edits by line range from `document_lines` | `start_line` / `end_line` / `new_text` | Review / pending |
 | **`rewrite_file`** | True whole-file rewrite | Full new agent text | Usually apply |
 
 Tool choice is guided by accurate descriptions (and standing prompt) — not hard bans. `patch_file` uses exact replacements so unchanged spans stay intact. Extra blank lines map in the **mapper only** as `[SPACER n="…"]` ↔ empty paragraphs / blank runs in paragraph text (no editor spacer type).

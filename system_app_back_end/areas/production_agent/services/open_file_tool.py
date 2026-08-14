@@ -28,6 +28,10 @@ def build_open_file_payload(file: File) -> dict[str, Any]:
         "topic_id": file.topic_id,
         "archived": file.archived_at is not None,
         "document_plain": document_plain,
+        "document_lines": [
+            {"line": i, "text": row}
+            for i, row in enumerate(document_plain.splitlines(), start=1)
+        ],
         "object_extras": _object_extras(file.id, objects_by_id),
     }
 

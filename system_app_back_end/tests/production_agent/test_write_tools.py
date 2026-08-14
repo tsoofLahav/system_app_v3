@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from areas.files.services.document_v3 import serialize_document
 from areas.production_agent.services.write_tools import (
     apply_document_text,
+    apply_line_edits,
     apply_replacements,
     insert_agent_text,
     move_text,
@@ -125,19 +126,49 @@ def test_apply_replacements_preserves_blank_lines():
     assert new == "Breakfast\n\nLunch: soup\n\nDinner\n"
 
 
-def test_apply_replacements_adds_table_row():
-    current = '[TABLE id="3"]\nName\tQty\nEggs\t6\n[/TABLE]\n'
-    new, err = apply_replacements(
+def test_apply_line_edits_adds_table_row():
+    current = '[TABLE id="3"]\nName\\tQty\nEggs\\t6\n[/TABLE]\n'
+    new, err = apply_line_edits(
         current,
         [
             {
-                "old_text": '[TABLE id="3"]\nName\tQty\nEggs\t6\n[/TABLE]',
-                "new_text": '[TABLE id="3"]\nName\tQty\nEggs\t6\nMilk\t1\n[/TABLE]',
+                "start_line": 3,
+                "end_line": 3,
+                "new_text": "Eggs\\t6\nMilk\\t1",
             }
         ],
     )
     assert err is None
-    assert "Milk\t1" in (new or "")
+    assert "Milk\\t1" in (new or "")
+    assert new.splitlines() == [
+        '[TABLE id="3"]',
+        "Name\\tQty",
+        "Eggs\\t6",
+        "Milk\\t1",
+        "[/TABLE]",
+    ]
+
+
+def test_apply_line_edits_rejects_out_of_range():
+    new, err = apply_line_edits(
+        "A\nB\n",
+        [{"start_line": 1, "end_line": 9, "new_text": "X"}],
+    )
+    assert new is None
+    assert "past end of file" in (err or "")
+
+
+def test_apply_line_edits_bottom_up():
+    current = "A\nB\nC\n"
+    new, err = apply_line_edits(
+        current,
+        [
+            {"start_line": 1, "end_line": 1, "new_text": "A1"},
+            {"start_line": 3, "end_line": 3, "new_text": "C3\nC4"},
+        ],
+    )
+    assert err is None
+    assert new.splitlines() == ["A1", "B", "C3", "C4"]
 
 
 def test_apply_replacements_requires_unique_match():
@@ -160,7 +191,7 @@ def test_apply_replacements_not_found():
 @patch("areas.production_agent.services.write_tools.apply_document_text")
 @patch("areas.production_agent.services.write_tools._current_agent_text")
 @patch("areas.production_agent.services.write_tools.db.session")
-def test_patch_file_uses_replacements(
+def test_patch_file_uses_line_edits(
     mock_session, mock_current, mock_apply
 ):
     file_row = MagicMock()
@@ -173,12 +204,12 @@ def test_patch_file_uses_replacements(
 
     result = patch_file(
         5,
-        [{"old_text": "B", "new_text": "C"}],
+        [{"start_line": 3, "end_line": 3, "new_text": "C"}],
         scope={"file_ids": [5]},
         write_mode="direct_apply",
     )
     assert result.get("applied") is True
-    assert result.get("replacements") == 1
+    assert result.get("edits") == 1
     args, kwargs = mock_apply.call_args
     assert args[1] == "A\n\nC\n"
     assert kwargs["tool_name"] == "patch_file"

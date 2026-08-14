@@ -3,7 +3,7 @@
 Apply vs review is decided by the run's action config plus per-tool defaults —
 the model does not choose the dialog.
 
-- ``patch_file`` — partial edits via exact old→new replacements (change/delete/add)
+- ``patch_file`` — partial edits via inclusive 1-based line ranges
 - ``rewrite_file`` — replace the whole file's agent text
 """
 
@@ -167,6 +167,60 @@ def apply_replacements(
             )
         text = text.replace(old, new, 1)
     return text, None
+
+
+def apply_line_edits(
+    current: str,
+    edits: list[dict[str, Any]],
+) -> tuple[str | None, str | None]:
+    """Replace inclusive 1-based line ranges. Return (new_text, error).
+
+    Edits are applied from bottom to top so earlier line numbers stay valid.
+    ``new_text`` may be empty (delete) or multi-line (replace/insert).
+    Insert at end of file: ``start_line == end_line == line_count + 1``.
+    """
+    if not edits:
+        return None, "edits is empty"
+
+    lines = current.splitlines()
+    ends_with_newline = current.endswith("\n")
+    line_count = len(lines)
+
+    normalized: list[tuple[int, int, list[str]]] = []
+    for index, raw in enumerate(edits, start=1):
+        if not isinstance(raw, dict):
+            return None, f"edit {index}: must be an object"
+        try:
+            start = int(raw["start_line"])
+            end = int(raw["end_line"])
+        except (KeyError, TypeError, ValueError):
+            return None, f"edit {index}: start_line and end_line are required integers"
+        if start < 1 or end < 1:
+            return None, f"edit {index}: line numbers must be >= 1"
+        if end < start:
+            return None, (
+                f"edit {index}: end_line ({end}) must be >= start_line ({start})"
+            )
+        append_at_end = start == end == line_count + 1
+        if not append_at_end and (start > line_count or end > line_count):
+            return None, (
+                f"edit {index}: line range {start}-{end} past end of file "
+                f"({line_count} lines)"
+            )
+        new = "" if raw.get("new_text") is None else str(raw.get("new_text"))
+        normalized.append((start, end, new.splitlines()))
+
+    normalized.sort(key=lambda item: item[0], reverse=True)
+    for start, end, new_lines in normalized:
+        if start == end == len(lines) + 1:
+            lines.extend(new_lines)
+        else:
+            lines[start - 1 : end] = new_lines
+
+    new_text = "\n".join(lines)
+    if ends_with_newline and new_text and not new_text.endswith("\n"):
+        new_text += "\n"
+    return new_text, None
 
 
 def apply_document_text(
@@ -335,12 +389,12 @@ def move_text(
 
 def patch_file(
     file_id: int,
-    replacements: list[dict[str, Any]],
+    edits: list[dict[str, Any]],
     *,
     scope: dict,
     write_mode: WriteMode,
 ) -> dict[str, Any]:
-    """Update a file in place via exact unique string replacements."""
+    """Update a file in place via inclusive 1-based line-range edits."""
     file = db.session.get(File, file_id)
     if file is None:
         return {"error": "file not found"}
@@ -350,7 +404,7 @@ def patch_file(
         return {"error": "archived files are read-only"}
 
     current = _current_agent_text(file)
-    new_text, error = apply_replacements(current, replacements)
+    new_text, error = apply_line_edits(current, edits)
     if error:
         return {"error": error, "tool": "patch_file"}
     result = apply_document_text(
@@ -361,5 +415,5 @@ def patch_file(
         tool_name="patch_file",
     )
     if "error" not in result:
-        result["replacements"] = len(replacements)
+        result["edits"] = len(edits)
     return result

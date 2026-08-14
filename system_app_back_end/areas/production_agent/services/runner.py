@@ -187,32 +187,33 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "type": "function",
         "name": "patch_file",
         "description": (
-            "Partial edits in a file: change, delete, or add lines (including "
-            "inside [TABLE]/[INFO]/[TASK_LIST] fences). Send exact replacements: "
-            "old_text must match open_file uniquely; new_text is that span changed "
-            "or extended with new line(s). Text outside those spans is left "
-            "unchanged — including blank lines. Do not append a change-log. "
-            "Preserve every embed id=\"…\"."
+            "Partial edits by 1-based line range from open_file document_lines: "
+            "change, delete, or add lines (including inside [TABLE]/[INFO]/"
+            "[TASK_LIST] fences). Each edit replaces start_line..end_line "
+            "inclusive with new_text (may be multiple lines). To add a line, "
+            "replace one line with that line plus the new line(s). Table cells "
+            "use visible \\t between columns. Preserve every embed id=\"…\"."
         ),
         "strict": True,
         "parameters": {
             "type": "object",
             "properties": {
                 "file_id": {"type": "integer"},
-                "replacements": {
+                "edits": {
                     "type": "array",
                     "items": {
                         "type": "object",
                         "properties": {
-                            "old_text": {"type": "string"},
+                            "start_line": {"type": "integer"},
+                            "end_line": {"type": "integer"},
                             "new_text": {"type": "string"},
                         },
-                        "required": ["old_text", "new_text"],
+                        "required": ["start_line", "end_line", "new_text"],
                         "additionalProperties": False,
                     },
                 },
             },
-            "required": ["file_id", "replacements"],
+            "required": ["file_id", "edits"],
             "additionalProperties": False,
         },
     },
@@ -273,11 +274,11 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
             return {"error": "file_id required"}
         write_mode = resolve_write_mode(tool_name, apply_mode)
         if tool_name == "patch_file":
-            replacements = args.get("replacements")
-            if isinstance(replacements, list):
+            edits = args.get("edits")
+            if isinstance(edits, list):
                 return patch_file(
                     file_id,
-                    replacements,
+                    edits,
                     scope=scope,
                     write_mode=write_mode,
                 )
@@ -294,7 +295,7 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
                     tool_name="patch_file",
                 )
             return {
-                "error": "replacements array required (old_text → new_text)",
+                "error": "edits array required (start_line, end_line, new_text)",
                 "tool": "patch_file",
             }
         document_text = args.get("document_text")

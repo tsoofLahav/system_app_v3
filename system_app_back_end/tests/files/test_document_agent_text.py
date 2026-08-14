@@ -76,7 +76,7 @@ def test_document_to_agent_text_lists_and_table():
     assert "[ORDERED_LIST]" in text
     assert "1. First" in text
     assert "[TABLE]" in text
-    assert "A\tB" in text
+    assert "A\\tB" in text
     assert "[/TABLE]" in text
 
 
@@ -262,11 +262,41 @@ def test_table_tab_escaping_round_trip():
         }
     )
     text = document_to_agent_text(body, objects_by_id=objects)
-    assert "a\\tb" in text
+    # In-cell tab → \\t; cell separator → visible \t; no raw tab characters.
+    assert "a\\\\tb\\tplain" in text
+    assert "\t" not in text.split("\n")[1]
     _, updates, errors = apply_agent_text(body, text, known_object_ids={5})
     assert not errors
     cell = updates[5]["payload"]["rows"][0][0]["text"]
     assert cell == "a\tb"
+    assert updates[5]["payload"]["rows"][0][1]["text"] == "plain"
+
+
+def test_table_visible_tab_separator_round_trip():
+    objects = {
+        8: {
+            "type": "table",
+            "payload": {
+                "rows": [
+                    [{"text": "Name"}, {"text": "Qty"}],
+                    [{"text": "Eggs"}, {"text": "6"}],
+                ],
+            },
+        }
+    }
+    body = serialize_document(
+        {
+            "version": 3,
+            "blocks": [{"id": "b1", "type": "embed", "object_id": 8}],
+        }
+    )
+    text = document_to_agent_text(body, objects_by_id=objects)
+    assert 'Name\\tQty' in text
+    assert "\t" not in text
+    _, updates, errors = apply_agent_text(body, text, known_object_ids={8})
+    assert not errors
+    assert updates[8]["payload"]["rows"][0][0]["text"] == "Name"
+    assert updates[8]["payload"]["rows"][1][1]["text"] == "6"
 
 def test_apply_agent_text_preserves_unknown_objects():
     body = serialize_document(
@@ -335,8 +365,8 @@ def test_table_object_pointer_round_trip():
     editor = marker_text.wrap_editor_text('[TABLE id="11"]')
     text = document_to_agent_text(editor, objects_by_id=objects)
     assert '[TABLE id="11"]' in text
-    assert "H1\tH2" in text
-    assert "V1\tV2" in text
+    assert "H1\\tH2" in text
+    assert "V1\\tV2" in text
     assert "[/TABLE]" in text
     parsed = parse_agent_text(text)
     assert parsed["blocks"][0]["type"] == "embed"
@@ -375,9 +405,9 @@ def test_graph_table_round_trip():
     )
     text = document_to_agent_text(original, objects_by_id=objects)
     assert 'chartType="bar"' in text
-    assert "A\tB" in text
-    assert "1\t2" in text
-    assert "#111111\t#222222" in text
+    assert "A\\tB" in text
+    assert "1\\t2" in text
+    assert "#111111\\t#222222" in text
     assert "[/GRAPH]" in text
     parsed = parse_agent_text(text)
     assert parsed["object_updates"][8]["type"] == "table"
@@ -406,7 +436,7 @@ def test_legacy_graph_payload_still_expands():
     )
     text = document_to_agent_text(original, objects_by_id=objects)
     assert 'chartType="line"' in text
-    assert "A\tB" in text
+    assert "A\\tB" in text
 
 
 def test_image_caption_and_url():
@@ -579,9 +609,9 @@ def test_v4_table_pointer_round_trip():
     }
     agent = document_to_agent_text(body, objects_by_id=objects)
     assert '[TABLE id="9"]' in agent
-    assert "A\tB" in agent
+    assert "A\\tB" in agent
 
-    new_agent = agent.replace("A\tB", "Alpha\tB")
+    new_agent = agent.replace("A\\tB", "Alpha\\tB")
     new_body, updates, errors = apply_agent_text_to_file(
         1,
         body,

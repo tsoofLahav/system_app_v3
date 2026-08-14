@@ -77,17 +77,21 @@ _SPECIAL_MARKERS = (
 
 
 def _unescape_cell(text: str) -> str:
+    """Undo ``_escape_cell``: ``\\\\t`` → tab, ``\\\\`` → ``\\``, legacy ``\\t`` → tab."""
     out: list[str] = []
     i = 0
     while i < len(text):
         if text[i] == "\\" and i + 1 < len(text):
-            nxt = text[i + 1]
-            if nxt == "t":
+            if text[i + 1] == "\\" and i + 2 < len(text) and text[i + 2] == "t":
                 out.append("\t")
+                i += 3
+                continue
+            if text[i + 1] == "\\":
+                out.append("\\")
                 i += 2
                 continue
-            if nxt == "\\":
-                out.append("\\")
+            if text[i + 1] == "t":
+                out.append("\t")
                 i += 2
                 continue
         out.append(text[i])
@@ -96,27 +100,34 @@ def _unescape_cell(text: str) -> str:
 
 
 def _split_table_row(line: str) -> list[str]:
+    """Split a table/graph row on visible ``\\t`` (or raw tab for older text)."""
     cells: list[str] = []
     current: list[str] = []
     i = 0
     while i < len(line):
-        if line[i] == "\\" and i + 1 < len(line) and line[i + 1] == "t":
-            current.append("\t")
-            i += 2
-            continue
         if line[i] == "\\" and i + 1 < len(line) and line[i + 1] == "\\":
+            # Keep ``\\`` / ``\\t`` for unescape (do not treat as separator).
             current.append("\\")
+            current.append("\\")
+            i += 2
+            if i < len(line) and line[i] == "t":
+                current.append("t")
+                i += 1
+            continue
+        if line[i] == "\\" and i + 1 < len(line) and line[i + 1] == "t":
+            cells.append(_unescape_cell("".join(current)))
+            current = []
             i += 2
             continue
         if line[i] == "\t":
-            cells.append("".join(current))
+            cells.append(_unescape_cell("".join(current)))
             current = []
             i += 1
             continue
         current.append(line[i])
         i += 1
-    cells.append("".join(current))
-    return [_unescape_cell(c) for c in cells]
+    cells.append(_unescape_cell("".join(current)))
+    return cells
 
 
 def _append_paragraph_agent_parts(lines: list[str], text: str) -> None:
@@ -154,7 +165,7 @@ def _block_plain_text(block: dict[str, Any]) -> str:
                 )
                 for cell in row
             ]
-            row_lines.append("\t".join(cells))
+            row_lines.append("\\t".join(cells))
         if not row_lines:
             return ""
         return "[TABLE]\n" + "\n".join(row_lines) + "\n[/TABLE]"
@@ -296,12 +307,12 @@ def _graph_section_normalized(object_id: int, payload: dict[str, Any]) -> str:
 
     lines = [
         open_tag,
-        "\t".join(_escape_cell(c) for c in labels),
-        "\t".join(_escape_cell(c) for c in values),
+        "\\t".join(_escape_cell(c) for c in labels),
+        "\\t".join(_escape_cell(c) for c in values),
     ]
     if colors:
         colors = (colors + [""] * n)[:n]
-        lines.append("\t".join(_escape_cell(c) for c in colors))
+        lines.append("\\t".join(_escape_cell(c) for c in colors))
     lines.append("[/GRAPH]")
     return "\n".join(lines)
 
@@ -318,9 +329,9 @@ def _table_section_normalized(object_id: int, payload: dict[str, Any]) -> str:
             )
             for cell in row
         ]
-        row_lines.append("\t".join(cells))
+        row_lines.append("\\t".join(cells))
     if not row_lines:
-        row_lines = ["\t"]
+        row_lines = ["\\t"]
     return (
         f'[TABLE id="{object_id}"]\n'
         + "\n".join(row_lines)

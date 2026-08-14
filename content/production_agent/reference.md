@@ -6,7 +6,7 @@ Call the `reference` tool with `section` when you need examples. Do not memorize
 
 You read/write **agent text** (never raw JSON, never the stored pointer-only form). The app stores pointer markers for embeds; `open_file` **expands** them so you see real task/info/graph content. When you write, keep every embed `id="…"` — the app collapses bodies back into object rows.
 
-Double newline separates blocks. Single newline inside a paragraph is a line break. Extra blank lines use `[SPACER n="…"]` (n 1–12; omit n for 1).
+Real newlines separate lines (`open_file` also returns `document_lines` with 1-based numbers). Extra blank gaps use `[SPACER n="…"]` (n 1–12; omit n for 1). Table/graph cells are joined with the two characters `\t` (not a raw tab).
 
 ### Spacer
 
@@ -43,12 +43,12 @@ Next section.
 
 ```text
 [TABLE id="11"]
-Header A	Header B
-Value 1	Value 2
+Header A\tHeader B
+Value 1\tValue 2
 [/TABLE]
 ```
 
-Tab between cells. Escape literal tab/backslash as `\t` and `\\`. Preserve `id="…"`. Never invent object ids. A `[TABLE]` fence **without** `id="…"` is rejected on write.
+Cells are separated by the two characters `\t`. In-cell tab/backslash are escaped as `\\t` and `\\`. Preserve `id="…"`. Never invent object ids. A `[TABLE]` fence **without** `id="…"` is rejected on write.
 
 ### Task list embed
 
@@ -85,13 +85,13 @@ A graph is a **table object with chart quality** — same object type, pointer t
 
 ```text
 [GRAPH id="8" chartType="bar"]
-Week1	Week2	Week3
-10	20	15
-#4A90D9	#E07A5F	#3D405B
+Week1\tWeek2\tWeek3
+10\t20\t15
+#4A90D9\t#E07A5F\t#3D405B
 [/GRAPH]
 ```
 
-Row 1 = labels, row 2 = values, optional row 3 = colors. Preserve every `id="…"`. Never invent object ids.
+Row 1 = labels, row 2 = values, optional row 3 = colors. Same `\t` cell separator. Preserve every `id="…"`. Never invent object ids.
 
 ## tools
 
@@ -101,41 +101,43 @@ Find files by name or agent-text substring inside scope.
 
 ### `open_file`
 
-Load one file. Returns `document_plain` (agent text) and optional `object_extras`.
+Load one file. Returns `document_plain` (agent text), `document_lines` (`[{line, text}, …]` 1-based), and optional `object_extras`.
 
 ### `reference`
 
 This help. `section`: `agent_text` | `tools` | `all`.
 
-### `patch_file` — all partial edits (change / delete / add)
+### `patch_file` — all partial edits by line range
 
 ```json
 {
   "file_id": 12,
-  "replacements": [
+  "edits": [
     {
-      "old_text": "Lunch: salad",
+      "start_line": 4,
+      "end_line": 4,
       "new_text": "Lunch: soup"
     }
   ]
 }
 ```
 
-Add a line by replacing a unique span with a longer span (copy from `open_file`):
+Add a table row by replacing one data line with that line plus the new row (`document_lines` numbers):
 
 ```json
 {
   "file_id": 12,
-  "replacements": [
+  "edits": [
     {
-      "old_text": "[TABLE id=\"3\"]\nName\tQty\nEggs\t6\n[/TABLE]",
-      "new_text": "[TABLE id=\"3\"]\nName\tQty\nEggs\t6\nMilk\t1\n[/TABLE]"
+      "start_line": 3,
+      "end_line": 3,
+      "new_text": "Eggs\\t6\nMilk\\t1"
     }
   ]
 }
 ```
 
-Same pattern for `[INFO id="…"]` body lines. `old_text` must match `document_plain` uniquely. Outside the match, including `[SPACER]`, stays unchanged.
+Same pattern for `[INFO id="…"]` / `[TASK_LIST id="…"]`. Outside the edited lines, including `[SPACER]`, stays unchanged.
 
 ### `rewrite_file` — whole file only when asked
 

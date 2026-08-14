@@ -118,7 +118,7 @@ Agent text round-trip is not yet lossless. Open issues, worst first:
 | Gap | Effect |
 |-----|--------|
 | `run_agent` commits without checking tool errors after `applied` | A failed later tool can still leave earlier writes committed |
-| `_escape_cell` escapes `\` and `\t` but not `\n` | A newline in a table cell becomes an extra row on read |
+| `_escape_cell` escapes `\` and in-cell tab; rows join with visible `\t` | A newline in a table cell becomes an extra row on read |
 | Unmatched fence markers in plain text advance one char without emitting it | Text like `Hello [TABLE] world` loses characters |
 | `_sync_task_list` archives every task and inserts new rows | Task ids churn on each apply; `view_task_memberships` point at archived tasks |
 | Malformed list/task lines are skipped with `continue` | Items vanish with no error |

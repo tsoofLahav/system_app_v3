@@ -76,7 +76,11 @@ def embed_ids_in_text(text: str) -> set[int]:
 
 
 def _escape_cell(text: str) -> str:
-    return text.replace("\\", "\\\\").replace("\t", "\\t")
+    """Escape cell text for agent/table rows joined by visible ``\\t``.
+
+    In-cell tab becomes ``\\\\t`` so it does not collide with the ``\\t`` separator.
+    """
+    return text.replace("\\", "\\\\").replace("\t", "\\\\t")
 
 
 def _list_block_type(block: dict[str, Any]) -> str:
@@ -169,7 +173,7 @@ def _structure_block_text(block: dict[str, Any]) -> str:
                 )
                 for cell in row
             ]
-            row_lines.append("\t".join(cells))
+            row_lines.append("\\t".join(cells))
         if not row_lines:
             return ""
         return "[TABLE]\n" + "\n".join(row_lines) + "\n[/TABLE]"

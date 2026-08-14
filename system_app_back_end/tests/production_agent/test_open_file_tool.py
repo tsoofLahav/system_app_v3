@@ -71,6 +71,11 @@ def test_build_open_file_payload_shape():
     assert payload["archived"] is False
     assert "document_plain" in payload
     assert '[INFO id="17"]' in payload["document_plain"]
+    assert payload["document_lines"] == [
+        {"line": 1, "text": '[INFO id="17"]'},
+        {"line": 2, "text": "Practice daily"},
+        {"line": 3, "text": "[/INFO]"},
+    ]
     # No ORM dump of every object — only useful extras
     assert "objects" not in payload
     assert payload["object_extras"] == [
