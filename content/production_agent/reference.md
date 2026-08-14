@@ -48,7 +48,7 @@ Value 1	Value 2
 [/TABLE]
 ```
 
-Tab between cells. Escape literal tab/backslash as `\t` and `\\`. Preserve `id="…"`.
+Tab between cells. Escape literal tab/backslash as `\t` and `\\`. Preserve `id="…"`. Never invent object ids. A `[TABLE]` fence **without** `id="…"` is rejected on write.
 
 ### Task list embed
 

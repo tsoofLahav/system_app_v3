@@ -117,12 +117,11 @@ Agent text round-trip is not yet lossless. Open issues, worst first:
 
 | Gap | Effect |
 |-----|--------|
-| `direct_apply` writes `file.document_json` before `apply_object_updates` runs, and `run_agent` commits without checking tool errors | A failed object update can still persist the new document |
-| Legacy embeds (`object_id` null) serialize to markers the parser cannot read, and the agent path never calls `promote_legacy_embeds` | Those blocks are dropped on apply |
+| `run_agent` commits without checking tool errors after `applied` | A failed later tool can still leave earlier writes committed |
 | `_escape_cell` escapes `\` and `\t` but not `\n` | A newline in a table cell becomes an extra row on read |
 | Unmatched fence markers in plain text advance one char without emitting it | Text like `Hello [TABLE] world` loses characters |
 | `_sync_task_list` archives every task and inserts new rows | Task ids churn on each apply; `view_task_memberships` point at archived tasks |
 | Malformed list/task lines are skipped with `continue` | Items vanish with no error |
 | Spans not in v4 editor text yet | Migrate/agent paths drop inline formatting until span encoding ships |
 
-Tests cover happy paths only — no coverage for ordered-list round-trip, nested lists, newlines in cells, legacy or duplicate embeds, or `direct_apply` rollback.
+Agent write path: `commit_agent_file_apply` promotes legacy embeds, versions the file, writes v4 `document_json`, applies `object_updates`, then purges unreferenced embeds. Review proposals include `object_updates`; Accept uses `POST /files/:id/apply-agent-text` (not a bare document PATCH). Id-less `[TABLE]` fences are rejected on write.

@@ -410,6 +410,13 @@ def agent_text_to_editor_text(
         if object_id not in known_object_ids:
             errors.append(f"unknown object id: {object_id}")
 
+    for block in parsed["blocks"]:
+        if block.get("type") == "table":
+            errors.append(
+                'TABLE fence requires id="…" — copy ids from open_file; '
+                "inline [TABLE]…[/TABLE] without id is not allowed on write"
+            )
+
     if errors:
         return None, {}, errors
 
@@ -709,7 +716,7 @@ def _parse_table(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
                 }
             },
         )
-    # Legacy structure fence (no id) — kept for migrate-on-read.
+    # Id-less fence — rejected on write in agent_text_to_editor_text.
     return (
         {"id": new_id("b"), "type": "table", "rows": normalized},
         {},

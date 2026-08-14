@@ -40,6 +40,20 @@ class FileService {
     return AppFile.fromJson(data);
   }
 
+  Future<AppFile> applyAgentText(
+    int id, {
+    required String documentJson,
+    Map<String, dynamic>? objectUpdates,
+    String? tool,
+  }) async {
+    final data = await _api.post('/files/$id/apply-agent-text', {
+          'document_json': documentJson,
+          if (objectUpdates != null) 'object_updates': objectUpdates,
+          if (tool != null) 'tool': tool,
+        }) as Map<String, dynamic>;
+    return AppFile.fromJson(data);
+  }
+
   Future<void> deleteFile(int id) async {
     await _api.delete('/files/$id');
   }

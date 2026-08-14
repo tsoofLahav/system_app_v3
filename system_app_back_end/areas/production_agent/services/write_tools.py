@@ -20,7 +20,9 @@ from areas.files.services.document_agent_text import (
     document_to_agent_text,
     load_objects_by_id,
 )
+from areas.files.services.document_promote import promote_legacy_embeds
 from areas.files.services.file_versions import save_file_version
+from areas.objects.services.delete_cascade import purge_unreferenced_embeds_for_file
 from shared.run_config import DEFAULT_MANUAL_APPLY_MODE
 
 WriteMode = Literal["review", "direct_apply", "notify_only"]
@@ -96,6 +98,41 @@ def _current_agent_text(file: File) -> str:
     return document_to_agent_text(file.document_json or "", objects_by_id=objects_by_id)
 
 
+def _object_updates_json(updates: dict[int, dict[str, Any]]) -> dict[str, Any]:
+    return {str(k): v for k, v in updates.items()}
+
+
+def _object_updates_from_json(raw: dict[str, Any] | None) -> dict[int, dict[str, Any]]:
+    if not raw:
+        return {}
+    out: dict[int, dict[str, Any]] = {}
+    for key, value in raw.items():
+        if not isinstance(value, dict):
+            continue
+        out[int(key)] = value
+    return out
+
+
+def commit_agent_file_apply(
+    file: File,
+    *,
+    new_document_json: str,
+    object_updates: dict[int, dict[str, Any]],
+    source: str = "agent",
+) -> list[str]:
+    """Persist document + object rows atomically. Returns error strings."""
+    if file.archived_at is not None:
+        return ["archived files are read-only"]
+    promote_legacy_embeds(file)
+    save_file_version(file, source=source)
+    file.document_json = new_document_json
+    update_errors = apply_object_updates(file.id, object_updates)
+    if update_errors:
+        return update_errors
+    purge_unreferenced_embeds_for_file(file)
+    return []
+
+
 def apply_replacements(
     current: str,
     replacements: list[dict[str, Any]],
@@ -151,6 +188,7 @@ def apply_document_text(
     if file.archived_at is not None:
         return {"error": "archived files are read-only"}
 
+    promote_legacy_embeds(file)
     old_document = file.document_json or ""
     known_ids = _known_object_ids(file_id)
     new_document_json, object_updates, errors = apply_agent_text_to_file(
@@ -169,6 +207,7 @@ def apply_document_text(
         "new_document_json": new_document_json,
         "document_text": document_text,
         "write_mode": write_mode,
+        "object_updates": _object_updates_json(object_updates),
     }
 
     if write_mode == "notify_only":
@@ -182,11 +221,14 @@ def apply_document_text(
             ),
         }
 
-    save_file_version(file, source="agent")
-    file.document_json = new_document_json
-    update_errors = apply_object_updates(file_id, object_updates)
-    if update_errors:
-        return {"error": "; ".join(update_errors), "tool": tool_name}
+    apply_errors = commit_agent_file_apply(
+        file,
+        new_document_json=new_document_json or "",
+        object_updates=object_updates,
+        source="agent",
+    )
+    if apply_errors:
+        return {"error": "; ".join(apply_errors), "tool": tool_name}
     db.session.flush()
     return {**base, "applied": True}
 

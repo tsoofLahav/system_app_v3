@@ -52,6 +52,8 @@ def test_insert_agent_text_after_text():
     assert new.index("[/TABLE]") < new.index("## Note")
 
 
+@patch("areas.production_agent.services.write_tools.purge_unreferenced_embeds_for_file")
+@patch("areas.production_agent.services.write_tools.promote_legacy_embeds")
 @patch("areas.production_agent.services.write_tools.apply_object_updates", return_value=[])
 @patch("areas.production_agent.services.write_tools.save_file_version")
 @patch("areas.production_agent.services.write_tools.db.session")
@@ -61,6 +63,8 @@ def test_apply_document_text_direct(
     mock_session,
     mock_save_version,
     mock_apply_objects,
+    mock_promote,
+    mock_purge,
 ):
     file_row = MagicMock()
     file_row.id = 1
@@ -79,8 +83,10 @@ def test_apply_document_text_direct(
     )
     assert result.get("applied") is True
     assert result.get("tool") == "rewrite_file"
+    assert "object_updates" in result
     mock_apply_objects.assert_called_once()
-
+    mock_promote.assert_called()
+    mock_purge.assert_called_once()
 
 @patch("areas.production_agent.services.write_tools.apply_document_text")
 @patch("areas.production_agent.services.write_tools._current_agent_text")

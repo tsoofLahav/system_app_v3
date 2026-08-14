@@ -52,7 +52,7 @@ Key points (review path):
 
 - The diff is over **agent text**, not JSON — the user reads sentences, not braces.
 - Nothing is written until the user accepts. The backend rolled its session back already.
-- On accept, the frontend writes `new_document_json` from the proposal, then reloads the topic so embeds refresh.
+- On accept, the frontend calls `POST /files/:id/apply-agent-text` with `new_document_json` **and** `object_updates` from the proposal (not a bare `document_json` PATCH), then reloads the topic so embeds refresh.
 - Only the first proposed change is currently shown, even when a run touches several files.
 
 | File | Role |

@@ -1603,10 +1603,18 @@ class AppState extends ChangeNotifier {
     for (final change in changes) {
       if (change is! Map) continue;
       final fileId = change['file_id'] as int?;
-      final newBody = change['new_document_json'] as String? ?? change['new_body'] as String?;
-      if (fileId != null && newBody != null) {
-        await _files.updateFile(fileId, {'document_json': newBody});
-      }
+      final newBody =
+          change['new_document_json'] as String? ?? change['new_body'] as String?;
+      if (fileId == null || newBody == null) continue;
+      final objectUpdates = change['object_updates'];
+      await _files.applyAgentText(
+        fileId,
+        documentJson: newBody,
+        objectUpdates: objectUpdates is Map
+            ? Map<String, dynamic>.from(objectUpdates)
+            : null,
+        tool: change['tool'] as String?,
+      );
     }
     pendingAgentReview = null;
     if (selectedTopic != null) await selectTopic(selectedTopic!);

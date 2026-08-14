@@ -206,10 +206,14 @@ def test_legacy_spacer_type_normalizes_to_empty_paragraphs():
 
 def test_round_trip_paragraph_heading_list_table_task_list():
     objects = {
+        11: {
+            "type": "table",
+            "payload": {"rows": [[{"text": "x"}, {"text": "y"}]]},
+        },
         42: {
             "type": "task_list",
             "tasks": [{"title": "Todo", "status": "active", "list_order_index": 0}],
-        }
+        },
     }
     original = serialize_document(
         {
@@ -222,48 +226,47 @@ def test_round_trip_paragraph_heading_list_table_task_list():
                     "type": "bullet_list",
                     "items": [{"id": "li1", "text": "Item", "indent": 0, "spans": []}],
                 },
-                {
-                    "id": "b4",
-                    "type": "table",
-                    "rows": [[{"text": "x", "spans": []}, {"text": "y", "spans": []}]],
-                },
+                {"id": "b4", "type": "embed", "object_id": 11},
                 {"id": "b5", "type": "embed", "object_id": 42},
             ],
         }
     )
     agent_text = document_to_agent_text(original, objects_by_id=objects)
-    doc, object_updates, errors = apply_agent_text(original, agent_text, known_object_ids={42})
+    doc, object_updates, errors = apply_agent_text(
+        original, agent_text, known_object_ids={11, 42}
+    )
     assert not errors
     assert doc["version"] == 3
     types = [b["type"] for b in doc["blocks"]]
     assert "paragraph" in types
     assert "heading" in types
     assert "bullet_list" in types
-    assert "table" in types
-    assert "embed" in types
+    assert types.count("embed") == 2
     assert object_updates[42]["type"] == "task_list"
+    assert object_updates[11]["type"] == "table"
 
 
 def test_table_tab_escaping_round_trip():
+    objects = {
+        5: {
+            "type": "table",
+            "payload": {
+                "rows": [[{"text": "a\tb"}, {"text": "plain"}]],
+            },
+        }
+    }
     body = serialize_document(
         {
             "version": 3,
-            "blocks": [
-                {
-                    "id": "b1",
-                    "type": "table",
-                    "rows": [[{"text": "a\tb", "spans": []}, {"text": "plain", "spans": []}]],
-                }
-            ],
+            "blocks": [{"id": "b1", "type": "embed", "object_id": 5}],
         }
     )
-    text = document_to_agent_text(body)
+    text = document_to_agent_text(body, objects_by_id=objects)
     assert "a\\tb" in text
-    doc, _, errors = apply_agent_text(body, text, known_object_ids=set())
+    _, updates, errors = apply_agent_text(body, text, known_object_ids={5})
     assert not errors
-    cell = doc["blocks"][0]["rows"][0][0]["text"]
+    cell = updates[5]["payload"]["rows"][0][0]["text"]
     assert cell == "a\tb"
-
 
 def test_apply_agent_text_preserves_unknown_objects():
     body = serialize_document(
@@ -439,6 +442,8 @@ def test_parse_agent_text_bullet_list_and_table():
     assert table["rows"][1][1]["text"] == "V2"
 
 
+@patch("areas.production_agent.services.write_tools.purge_unreferenced_embeds_for_file")
+@patch("areas.production_agent.services.write_tools.promote_legacy_embeds")
 @patch("areas.production_agent.services.write_tools.apply_object_updates", return_value=[])
 @patch("areas.production_agent.services.write_tools.save_file_version")
 @patch("areas.production_agent.services.write_tools.db.session")
@@ -448,6 +453,8 @@ def test_apply_document_text_direct_apply(
     mock_session,
     mock_save_version,
     mock_apply_objects,
+    mock_promote,
+    mock_purge,
 ):
     file_row = MagicMock()
     file_row.id = 1
@@ -469,12 +476,15 @@ def test_apply_document_text_direct_apply(
     assert result.get("applied") is True
     assert "Title" in (file_row.document_json or "")
     mock_apply_objects.assert_called_once()
+    mock_promote.assert_called()
+    mock_purge.assert_called_once()
 
 
+@patch("areas.production_agent.services.write_tools.promote_legacy_embeds")
 @patch("areas.production_agent.services.write_tools.db.session")
 @patch("areas.production_agent.services.write_tools.ObjectEmbed")
 def test_apply_document_text_review_returns_agent_text_diff(
-    mock_embed_model, mock_session
+    mock_embed_model, mock_session, mock_promote
 ):
     file_row = MagicMock()
     file_row.id = 1
@@ -501,7 +511,8 @@ def test_apply_document_text_review_returns_agent_text_diff(
     assert "review" in result
     assert "old_document_text" in result["review"]
     assert "new_document_text" in result["review"]
-
+    assert "object_updates" in result
+    mock_promote.assert_called()
 
 def test_apply_agent_text_to_file_no_embeds():
     serialized, updates, errors = apply_agent_text_to_file(
@@ -514,3 +525,120 @@ def test_apply_agent_text_to_file_no_embeds():
     assert updates == {}
     assert serialized is not None
     assert "Hello" in serialized
+
+
+def _v4_body(*parts: str) -> str:
+    from areas.files.services import document_marker_text as marker_text
+
+    return marker_text.wrap_editor_text("\n\n".join(parts))
+
+
+def test_v4_pointer_round_trip_info_and_tasks():
+    from areas.files.services import document_marker_text as marker_text
+
+    body = _v4_body("Intro", '[INFO id="7"]', '[TASK_LIST id="42"]')
+    objects = {
+        7: {
+            "type": "info",
+            "information": {"title": "Tip", "body": "Details"},
+        },
+        42: {
+            "type": "task_list",
+            "tasks": [
+                {"title": "Call clinic", "status": "active", "list_order_index": 0},
+            ],
+        },
+    }
+    agent = document_to_agent_text(body, objects_by_id=objects)
+    assert '[INFO id="7"]' in agent
+    assert "Tip" in agent
+    assert '[TASK_LIST id="42"]' in agent
+    assert "- [ ] Call clinic" in agent
+
+    new_body, updates, errors = apply_agent_text_to_file(
+        1,
+        body,
+        agent.replace("Call clinic", "Call doctor"),
+        known_object_ids={7, 42},
+    )
+    assert not errors
+    assert new_body is not None
+    assert marker_text.is_editor_text(new_body)
+    assert '[INFO id="7"]' in new_body
+    assert '[TASK_LIST id="42"]' in new_body
+    assert updates[42]["tasks"][0]["title"] == "Call doctor"
+
+
+def test_v4_table_pointer_round_trip():
+    body = _v4_body('[TABLE id="9"]')
+    objects = {
+        9: {
+            "type": "table",
+            "payload": {"rows": [[{"text": "A"}, {"text": "B"}]]},
+        }
+    }
+    agent = document_to_agent_text(body, objects_by_id=objects)
+    assert '[TABLE id="9"]' in agent
+    assert "A\tB" in agent
+
+    new_agent = agent.replace("A\tB", "Alpha\tB")
+    new_body, updates, errors = apply_agent_text_to_file(
+        1,
+        body,
+        new_agent,
+        known_object_ids={9},
+    )
+    assert not errors
+    assert '[TABLE id="9"]' in (new_body or "")
+    assert updates[9]["payload"]["rows"][0][0]["text"] == "Alpha"
+
+
+def test_idless_table_rejected_on_apply():
+    agent = "[TABLE]\nA\tB\n[/TABLE]"
+    _, _, errors = apply_agent_text_to_file(
+        1,
+        _v4_body(),
+        agent,
+        known_object_ids=set(),
+    )
+    assert errors
+    assert any("id=" in e for e in errors)
+
+
+@patch("areas.production_agent.services.write_tools.purge_unreferenced_embeds_for_file")
+@patch("areas.production_agent.services.write_tools.promote_legacy_embeds")
+@patch(
+    "areas.production_agent.services.write_tools.apply_object_updates", return_value=[]
+)
+@patch("areas.production_agent.services.write_tools.db.session")
+@patch("areas.production_agent.services.write_tools.ObjectEmbed")
+def test_apply_document_text_review_includes_object_updates(
+    mock_embed_model,
+    mock_session,
+    mock_apply_objects,
+    mock_promote,
+    mock_purge,
+):
+    file_row = MagicMock()
+    file_row.id = 1
+    file_row.topic_id = 1
+    file_row.archived_at = None
+    file_row.document_json = _v4_body('[INFO id="3"]')
+    mock_session.get.return_value = file_row
+    mock_embed = MagicMock()
+    mock_embed.id = 3
+    mock_embed_model.query.filter_by.return_value.all.return_value = [mock_embed]
+
+    agent = '[INFO id="3"]\nNew title\nNew body\n[/INFO]'
+    result = apply_document_text(
+        1,
+        agent,
+        scope={"file_ids": [1]},
+        write_mode="review",
+        tool_name="patch_file",
+    )
+    assert result.get("applied") is False
+    assert "object_updates" in result
+    assert result["object_updates"]["3"]["title"] == "New title"
+    mock_apply_objects.assert_not_called()
+    mock_purge.assert_not_called()

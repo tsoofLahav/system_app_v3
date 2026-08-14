@@ -1,6 +1,6 @@
 # Working on the agent interaction
 
-**Status:** Settled plan — implement **after** objects-in-files.  
+**Status:** Plan v2 Step 1 (v4 apply harden) done on this branch — Accept uses `POST /files/:id/apply-agent-text` with `object_updates`; id-less `[TABLE]` rejected on write. Steps 2+ (pending DB, lookalike diff, undo) not started.  
 Not day-to-day coding memory (`DEVELOPMENT.md` / `AREA.md`).
 
 ---

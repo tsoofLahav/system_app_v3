@@ -69,18 +69,17 @@ The agent never sees or writes raw JSON. It reads and writes **agent text**; the
 Each write tool ends in the same apply path:
 
 1. Build new agent text (`move_text` insert / `patch_file` replacements / `rewrite_file` full text)
-2. Parse agent text → v4 editor text + object payload updates
-3. Reject if any embed `object_id` is unknown or was dropped
+2. Parse agent text → v4 editor text + object payload updates (`apply_agent_text_to_file`)
+3. Reject if any embed `object_id` is unknown or was dropped; reject id-less `[TABLE]` on write
 4. Reject archived files
-5. Save a file version (direct apply only)
-6. Write `document_json`, then apply object updates
+5. On `direct_apply` (and Accept via API): `commit_agent_file_apply` — promote legacy embeds → file version → `document_json` → `object_updates` → purge unreferenced embeds
 
 ## Apply modes
 
 | Mode | Effect |
 |------|--------|
-| `direct_apply` | Writes immediately, commits |
-| `review` | Computes a diff, returns it as a proposed change, rolls back |
+| `direct_apply` | Writes immediately via `commit_agent_file_apply`, commits |
+| `review` | Returns proposed change with `object_updates` + `review` diff; rolls back live file |
 | `notify_only` | Returns the new document without diff or write |
 
 ## Diff logic (review mode)
@@ -93,7 +92,7 @@ old document_json ─┐
 new document_json ─┘
 ```
 
-Returns `{ diff_hunks, old_document_text, new_document_text }`. The frontend renders `diff_hunks` in the review dialog and applies `new_document_json` only if the user accepts.
+Returns `{ diff_hunks, old_document_text, new_document_text }`. The review tool result also includes `object_updates`. The frontend Accept path calls `POST /files/:id/apply-agent-text` with `document_json` + `object_updates` (not a bare file PATCH).
 
 The same `compute_diff` backs `POST /files/:id/diff`.
 
@@ -102,11 +101,11 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 | Module | Role |
 |--------|------|
 | [`services/runner.py`](services/runner.py) | Conversation lifecycle, tool dispatch |
-| [`services/write_tools.py`](services/write_tools.py) | `patch_file` / `move_text` / `rewrite_file`, diff, mode resolution |
+| [`services/write_tools.py`](services/write_tools.py) | `patch_file` / `move_text` / `rewrite_file`, `commit_agent_file_apply`, diff, mode resolution |
 | [`services/open_file_tool.py`](services/open_file_tool.py) | `open_file` payload (agent text + extras) |
 | [`services/prompt.py`](services/prompt.py) | Load/seed/sync the system prompt from the DB |
 | [`services/openai_service.py`](services/openai_service.py) | Responses conversation helpers + legacy chat/image helpers |
-| [`routes/agent.py`](routes/agent.py) | `POST /agent/run` (`prompt`, `scope`, `hints`, `apply_mode`) |
+| [`routes/agent.py`](routes/agent.py) | `POST /agent/run`; `POST /files/:id/apply-agent-text` |
 
 ## Rules
 
