@@ -1,10 +1,9 @@
-"""Agent write tools: patch_file, move_text, rewrite_file.
+"""Agent write tools: patch_file, rewrite_file.
 
 Apply vs review is decided by the run's action config plus per-tool defaults —
 the model does not choose the dialog.
 
-- ``move_text`` — place new content at an anchor (insert only)
-- ``patch_file`` — update in place via exact old→new replacements
+- ``patch_file`` — partial edits via exact old→new replacements (change/delete/add)
 - ``rewrite_file`` — replace the whole file's agent text
 """
 
@@ -59,7 +58,6 @@ def compute_diff(
 # Typical outcomes from the plan when the run allows direct apply.
 TOOL_WRITE_DEFAULTS: dict[str, WriteMode] = {
     "patch_file": "review",
-    "move_text": "direct_apply",
     "rewrite_file": "direct_apply",
 }
 

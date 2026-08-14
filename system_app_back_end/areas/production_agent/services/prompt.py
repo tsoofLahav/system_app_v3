@@ -15,7 +15,6 @@ DEFAULT_TOOL_ALLOWLIST = [
     "open_file",
     "reference",
     "patch_file",
-    "move_text",
     "rewrite_file",
     "search_tasks",
 ]

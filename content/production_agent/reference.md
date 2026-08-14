@@ -107,7 +107,7 @@ Load one file. Returns `document_plain` (agent text) and optional `object_extras
 
 This help. `section`: `agent_text` | `tools` | `all`.
 
-### `patch_file` — update existing content
+### `patch_file` — all partial edits (change / delete / add)
 
 ```json
 {
@@ -121,21 +121,21 @@ This help. `section`: `agent_text` | `tools` | `all`.
 }
 ```
 
-`old_text` must match `document_plain` uniquely (copy from `open_file`). Outside the match, including `[SPACER]`, stays unchanged.
-
-### `move_text` — place new content
+Add a line by replacing a unique span with a longer span (copy from `open_file`):
 
 ```json
 {
   "file_id": 12,
-  "content": "- [ ] Buy oats",
-  "anchor_type": "after_text",
-  "line": 0,
-  "text": "ACTIVE:"
+  "replacements": [
+    {
+      "old_text": "[TABLE id=\"3\"]\nName\tQty\nEggs\t6\n[/TABLE]",
+      "new_text": "[TABLE id=\"3\"]\nName\tQty\nEggs\t6\nMilk\t1\n[/TABLE]"
+    }
+  ]
 }
 ```
 
-`anchor_type`: `end` | `start` | `after_line` | `before_line` | `after_text`. For line anchors set `line` (1-based); for `after_text` set `text`; otherwise pass `line=0` and `text=""`.
+Same pattern for `[INFO id="…"]` body lines. `old_text` must match `document_plain` uniquely. Outside the match, including `[SPACER]`, stays unchanged.
 
 ### `rewrite_file` — whole file only when asked
 

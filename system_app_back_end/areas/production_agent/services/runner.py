@@ -33,7 +33,6 @@ from areas.production_agent.services.write_tools import (
     WRITE_TOOL_NAMES,
     apply_document_text,
     compute_diff,
-    move_text,
     patch_file,
     resolve_write_mode,
 )
@@ -188,11 +187,12 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "type": "function",
         "name": "patch_file",
         "description": (
-            "Update existing content in a file (plans, menus, docs, graph values). "
-            "Send one or more exact replacements: old_text must match the current "
-            "agent text uniquely (copy from open_file). Text outside those spans "
-            "is left unchanged — including blank lines. Do not append a change-log; "
-            "replace the lines that should change. Preserve every embed id=\"…\"."
+            "Partial edits in a file: change, delete, or add lines (including "
+            "inside [TABLE]/[INFO]/[TASK_LIST] fences). Send exact replacements: "
+            "old_text must match open_file uniquely; new_text is that span changed "
+            "or extended with new line(s). Text outside those spans is left "
+            "unchanged — including blank lines. Do not append a change-log. "
+            "Preserve every embed id=\"…\"."
         ),
         "strict": True,
         "parameters": {
@@ -218,41 +218,11 @@ TOOL_DEFS: list[dict[str, Any]] = [
     },
     {
         "type": "function",
-        "name": "move_text",
-        "description": (
-            "Place new content the user wants stored somewhere: find the right "
-            "file and insert it (task line, note, paragraph, fenced block). "
-            "Insert only — not for updating existing lines (use patch_file). "
-            "anchor_type: end | start | after_line | before_line | after_text. "
-            "For after_line/before_line set line (1-based). "
-            "For after_text set text to a unique substring of the target line. "
-            "When unused, pass line=0 and text=\"\"."
-        ),
-        "strict": True,
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "file_id": {"type": "integer"},
-                "content": {"type": "string"},
-                "anchor_type": {
-                    "type": "string",
-                    "description": "end|start|after_line|before_line|after_text",
-                },
-                "line": {"type": "integer"},
-                "text": {"type": "string"},
-            },
-            "required": ["file_id", "content", "anchor_type", "line", "text"],
-            "additionalProperties": False,
-        },
-    },
-    {
-        "type": "function",
         "name": "rewrite_file",
         "description": (
             "Replace an entire file with new agent text when the user asked for a "
             "true whole-file rewrite. Preserve embed object_ids that must survive. "
-            "For updating parts of a file use patch_file; for placing new material "
-            "use move_text."
+            "For any partial edit (add/change/delete lines) use patch_file."
         ),
         "strict": True,
         "parameters": {
@@ -302,16 +272,6 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
         except (KeyError, TypeError, ValueError):
             return {"error": "file_id required"}
         write_mode = resolve_write_mode(tool_name, apply_mode)
-        if tool_name == "move_text":
-            return move_text(
-                file_id,
-                str(args.get("content") or ""),
-                scope=scope,
-                write_mode=write_mode,
-                anchor_type=str(args.get("anchor_type") or "end"),
-                line=int(args.get("line") or 0),
-                text=str(args.get("text") or ""),
-            )
         if tool_name == "patch_file":
             replacements = args.get("replacements")
             if isinstance(replacements, list):

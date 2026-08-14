@@ -27,7 +27,7 @@ That file is **for the model**: short system explainer + how to work + write-too
 |-------|----------|
 | **instructions** | `agent_configs.system_prompt` + operational suffix (attached on each Responses turn) |
 | **First user input** | `prompt` + hard `scope` + optional tiny `hints` — **no file bodies** |
-| **Tools** | Native Responses function tools (`search`, `open_file`, `reference`, `move_text`, `patch_file`, `rewrite_file`, `search_tasks`) |
+| **Tools** | Native Responses function tools (`search`, `open_file`, `reference`, `patch_file`, `rewrite_file`, `search_tasks`) |
 | **Follow-up input** | Tool results only (`function_call_output` items) |
 
 `scope` is a hard allow-list: `{ "topic_ids": [...] }` and/or `{ "file_ids": [...] }`. Empty scope is rejected.
@@ -55,8 +55,7 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 | `search` | Substring match on file name and **agent text** within scope (includes archived, flagged) |
 | `open_file` | Returns `document_plain` (agent text) + `object_extras` (info `title` / `Links` when useful). Archived readable. |
 | `reference` | On-demand examples from `content/production_agent/reference.md` (`agent_text` / `tools` / `all`) |
-| `move_text` | **Place** new content at an anchor (`end` / `start` / `after_line` / `before_line` / `after_text`) |
-| `patch_file` | **Update** via exact unique `old_text` → `new_text` replacements (rest of file untouched); typical outcome **review** |
+| `patch_file` | **All partial edits** (change / delete / add lines, including inside embed fences) via exact unique `old_text` → `new_text`; typical outcome **review** |
 | `rewrite_file` | Full new agent text for a true whole-file rewrite; typical outcome **apply** when run allows |
 | `search_tasks` | Substring match on task titles within scoped (live) files |
 
@@ -68,7 +67,7 @@ The agent never sees or writes raw JSON. It reads and writes **agent text**; the
 
 Each write tool ends in the same apply path:
 
-1. Build new agent text (`move_text` insert / `patch_file` replacements / `rewrite_file` full text)
+1. Build new agent text (`patch_file` replacements / `rewrite_file` full text)
 2. Parse agent text → v4 editor text + object payload updates (`apply_agent_text_to_file`)
 3. Reject if any embed `object_id` is unknown or was dropped; reject id-less `[TABLE]` on write
 4. Reject archived files
@@ -101,7 +100,7 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 | Module | Role |
 |--------|------|
 | [`services/runner.py`](services/runner.py) | Conversation lifecycle, tool dispatch |
-| [`services/write_tools.py`](services/write_tools.py) | `patch_file` / `move_text` / `rewrite_file`, `commit_agent_file_apply`, diff, mode resolution |
+| [`services/write_tools.py`](services/write_tools.py) | `patch_file` / `rewrite_file`, `commit_agent_file_apply`, diff, mode resolution |
 | [`services/open_file_tool.py`](services/open_file_tool.py) | `open_file` payload (agent text + extras) |
 | [`services/prompt.py`](services/prompt.py) | Load/seed/sync the system prompt from the DB |
 | [`services/openai_service.py`](services/openai_service.py) | Responses conversation helpers + legacy chat/image helpers |

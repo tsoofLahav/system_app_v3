@@ -1,4 +1,4 @@
-"""Tests for patch_file / move_text / rewrite_file helpers."""
+"""Tests for patch_file / rewrite_file helpers."""
 
 from unittest.mock import MagicMock, patch
 
@@ -14,13 +14,12 @@ from areas.production_agent.services.write_tools import (
 
 
 def test_resolve_write_mode_review_ceiling():
-    assert resolve_write_mode("move_text", "review") == "review"
+    assert resolve_write_mode("rewrite_file", "review") == "review"
     assert resolve_write_mode("patch_file", "review") == "review"
 
 
 def test_resolve_write_mode_direct_applies_all_tools():
     assert resolve_write_mode("patch_file", "direct_apply") == "direct_apply"
-    assert resolve_write_mode("move_text", "direct_apply") == "direct_apply"
     assert resolve_write_mode("rewrite_file", "direct_apply") == "direct_apply"
 
 
@@ -88,10 +87,11 @@ def test_apply_document_text_direct(
     mock_promote.assert_called()
     mock_purge.assert_called_once()
 
+
 @patch("areas.production_agent.services.write_tools.apply_document_text")
 @patch("areas.production_agent.services.write_tools._current_agent_text")
 @patch("areas.production_agent.services.write_tools.db.session")
-def test_move_text_uses_insert(
+def test_move_text_helper_still_inserts(
     mock_session, mock_current, mock_apply
 ):
     file_row = MagicMock()
@@ -123,6 +123,21 @@ def test_apply_replacements_preserves_blank_lines():
     )
     assert err is None
     assert new == "Breakfast\n\nLunch: soup\n\nDinner\n"
+
+
+def test_apply_replacements_adds_table_row():
+    current = '[TABLE id="3"]\nName\tQty\nEggs\t6\n[/TABLE]\n'
+    new, err = apply_replacements(
+        current,
+        [
+            {
+                "old_text": '[TABLE id="3"]\nName\tQty\nEggs\t6\n[/TABLE]',
+                "new_text": '[TABLE id="3"]\nName\tQty\nEggs\t6\nMilk\t1\n[/TABLE]',
+            }
+        ],
+    )
+    assert err is None
+    assert "Milk\t1" in (new or "")
 
 
 def test_apply_replacements_requires_unique_match():

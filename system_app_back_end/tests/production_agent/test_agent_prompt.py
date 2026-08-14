@@ -28,7 +28,7 @@ def test_reference_sections():
 
     tools = load_reference_section("tools")
     assert "patch_file" in tools
-    assert "move_text" in tools
+    assert "move_text" not in tools
     assert "[BULLET_LIST]" not in tools
 
     everything = load_reference_section("all")

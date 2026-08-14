@@ -28,16 +28,17 @@ Formats and tool-call shapes: call `reference` with `section` = `agent_text`, `t
 
 | Tool | Use when |
 |------|----------|
-| `patch_file` | Update existing content (`old_text` → `new_text`, exact unique match from `open_file`) |
-| `move_text` | Insert **new** material the user wants stored |
+| `patch_file` | **All** partial edits: change, delete, or **add** lines (including inside embed fences) |
 | `rewrite_file` | User asked to rewrite the whole file |
 
 Preserve every embed `id="…"`.
 
 ### `patch_file`
 
-1. Preserve structure: headings, lists, tables, fences, `[SPACER]`, embeds.
-2. Local updates only — not a rewrite.
-3. Plan all replacements, then call once (or in a clear order).
-4. `old_text` must match `open_file` uniquely.
-5. Keep `[SPACER n="…"]` unless the user asked to remove gaps.
+1. Use for every in-file edit that is not a whole-file rewrite — including adding a line to a table, info, list, or paragraph.
+2. To add: replace a unique span from `open_file` with that span plus the new line(s). Same for rows inside `[TABLE id="…"]` / body inside `[INFO id="…"]`.
+3. Preserve structure: headings, lists, tables, fences, `[SPACER]`, embeds.
+4. Local updates only — not a rewrite.
+5. Plan all replacements, then call once (or in a clear order).
+6. `old_text` must match `open_file` uniquely.
+7. Keep `[SPACER n="…"]` unless the user asked to remove gaps.

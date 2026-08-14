@@ -70,8 +70,7 @@ Omit when unused. Extend the set as actions need — keep them tiny.
 
 | Tool | When | Model sends | Typical outcome |
 |------|------|-------------|-----------------|
-| **`move_text`** | **Place** user content (find topic/file/spot; insert) | Content + destination anchor | Usually apply |
-| **`patch_file`** | **Update** existing content in place | Exact `old_text` → `new_text` replacements (unique) | Review / pending |
+| **`patch_file`** | **All** partial edits (change / delete / add, including inside fences) | Exact `old_text` → `new_text` replacements (unique) | Review / pending |
 | **`rewrite_file`** | True whole-file rewrite | Full new agent text | Usually apply |
 
 Tool choice is guided by accurate descriptions (and standing prompt) — not hard bans. `patch_file` uses exact replacements so unchanged spans stay intact. Extra blank lines map in the **mapper only** as `[SPACER n="…"]` ↔ empty paragraphs / blank runs in paragraph text (no editor spacer type).
@@ -121,7 +120,7 @@ Keep short: agent text + fences; object ids; tool choice; open/search when neede
 1. **Runner** — Responses API + per-flow `conversation_id` / workspace (scope, hints, workflow metadata). Tool loop = tool results only.
 2. **`open_file`** — agent text + minimal extras; archive files read-only for writes.
 3. **Fences** — freeze task / info / image / graph agent-text shapes; align prompt.
-4. **Write tools** — `patch_file`, `move_text`, `rewrite_file`; action-config apply vs review.
+4. **Write tools** — `patch_file`, `rewrite_file`; action-config apply vs review.
 5. **Pending changes** — DB records + accept/reject API (decoupled from OpenAI conversation).
 6. **Presentation + diff UI** — read-only lookalike; line + word; open from topic/file when pending exists.
 7. **Compact undo** — reverse hunk / sized snapshot for applied writes.
