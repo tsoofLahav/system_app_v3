@@ -128,6 +128,7 @@ def test_apply_replacements_preserves_blank_lines():
 
 def test_apply_line_edits_adds_table_row():
     current = '[TABLE id="3"]\nName\\tQty\nEggs\\t6\n[/TABLE]\n'
+    # add after last data row (line 3), not after [/TABLE]
     new, err = apply_line_edits(
         current,
         [{"op": "add", "line": 3, "end_line": 0, "text": "Milk\\t1"}],

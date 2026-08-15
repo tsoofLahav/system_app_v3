@@ -189,8 +189,8 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "description": (
             "Partial edits using open_file document_lines (1-based). Each edit "
             "has op: add | remove | replace. "
-            "add: insert text after line (line=0 = start of file); put new rows "
-            "inside fences by adding after the last content line before [/…]. "
+            "add: insert text AFTER line (line=0 = start of file). "
+            "Inside a fence/list: after the last content line — never after [/…]. "
             "remove: delete line (end_line=0, text=\"\"). "
             "replace: replace line..end_line inclusive with text. "
             "Table cells use \\t between columns. Preserve embed id=\"…\"."

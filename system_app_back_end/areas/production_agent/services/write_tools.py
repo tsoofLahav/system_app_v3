@@ -176,7 +176,7 @@ def apply_line_edits(
     """Apply add / remove / replace line ops. Return (new_text, error).
 
     Line numbers are 1-based from ``document_lines``.
-    - ``add``: insert ``text`` lines after ``line`` (``line=0`` = start of file)
+    - ``add``: insert ``text`` **after** ``line`` (``line=0`` = start of file)
     - ``remove``: delete ``line`` (``end_line`` unused; pass 0)
     - ``replace``: replace inclusive ``line``..``end_line`` with ``text``
 
@@ -216,7 +216,6 @@ def apply_line_edits(
                 )
             if not new_lines:
                 return None, f"edit {index}: add requires non-empty text"
-            # sort after the anchor so we touch higher lines first
             normalized.append((line, index, "add", line, line, new_lines))
         elif op == "remove":
             if line < 1 or line > line_count:
@@ -238,7 +237,6 @@ def apply_line_edits(
                     f"edit {index}: replace range {line}-{end} past end of file "
                     f"({line_count} lines)"
                 )
-            # empty text deletes the range (same as remove multi)
             normalized.append((line, index, "replace", line, end, new_lines))
 
     normalized.sort(key=lambda item: (item[0], item[1]), reverse=True)

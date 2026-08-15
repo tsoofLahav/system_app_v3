@@ -120,7 +120,7 @@ This help. `section`: `agent_text` | `tools` | `all`.
 }
 ```
 
-`add`: insert after `line` (0 = start of file). For a new table row, `line` = last data row (the line above `[/TABLE]`). Same idea for `[/INFO]`, `[/BULLET_LIST]`, and active tasks (after last `ACTIVE` item / before `DONE:`). Never add after the closer. `remove`: only `line`. `replace`: `line`..`end_line` with `text`.
+`add` inserts **after** `line` (`0` = start). For a new table row, `line` = last data row (the line **above** `[/TABLE]`), not the closer — same pattern as adding a task after the last `- [ ]` under `ACTIVE:`. Never `add` after `[/…]`. `remove`: only `line`. `replace`: `line`..`end_line` with `text`.
 
 
 ### `rewrite_file` — whole file only when asked
