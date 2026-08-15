@@ -122,22 +122,22 @@ This help. `section`: `agent_text` | `tools` | `all`.
 }
 ```
 
-Add a table row — **keep** the existing row in `new_text` and append the new row (do not replace the old row with only the new one):
+Add a table row — patch the **`[/TABLE]` line** so the new row sits above it (closer stays):
 
 ```json
 {
   "file_id": 12,
   "edits": [
     {
-      "start_line": 3,
-      "end_line": 3,
-      "new_text": "Eggs\\t6\nMilk\\t1"
+      "start_line": 4,
+      "end_line": 4,
+      "new_text": "Milk\\t1\n[/TABLE]"
     }
   ]
 }
 ```
 
-Same insert pattern for `[INFO id="…"]` body lines, `[TASK_LIST id="…"]` tasks, and `[BULLET_LIST]` items: existing line stays in `new_text`, new line follows. Outside the edited lines, including `[SPACER]`, stays unchanged.
+Same for `[/INFO]`, `[/BULLET_LIST]`, `[/TASK_LIST]` (prefer inserting above `DONE:` for new active tasks). Never add on the line after the closer. Outside the edited lines, including `[SPACER]`, stays unchanged.
 
 ### `rewrite_file` — whole file only when asked
 
