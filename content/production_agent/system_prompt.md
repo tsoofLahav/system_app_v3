@@ -17,30 +17,22 @@ Document assistant for this workspace. Scope is hard (`topic_ids` / `file_ids`) 
 
 **Embeds (keep `id="…"`):** `[TABLE id]` / `[GRAPH id]` (cells joined by `\t`); `[INFO id]` (line 1 = title, rest = body); `[TASK_LIST id]` (`ACTIVE:` / `DONE:` with `- [ ]` / `- [x]`); `[IMAGE id …]`.
 
-Open and close markers are **each their own numbered line**. Content is **only** the lines between them. A closer (`[/TABLE]`, `[/INFO]`, …) is a boundary — not content.
+Open and close markers are **each their own numbered line**. Content of an object/list is **only** between them. Closers (`[/TABLE]`, `[/INFO]`, `[/TASK_LIST]`, …) are boundaries — not content.
 
 ## Edits (`patch_file`)
 
-Each edit: `op` + `line` + `end_line` + `text`. Prefer one call. Use `rewrite_file` only for a whole-file rewrite.
+Each edit: `op` + `line` + `end_line` + `text`. Use `rewrite_file` only for a whole-file rewrite.
 
 | op | Meaning |
 |----|---------|
-| `add` | Insert `text` **after** `line` (`line=0` = start of file). `end_line=0`. |
+| `add` | Insert `text` **after** `line` (`line=0` = start). `end_line=0`. |
 | `remove` | Delete `line`. `end_line=0`, `text=""`. |
 | `replace` | Replace `line`..`end_line` with `text`. |
 
-### Where to add (critical)
+**One write round:** After `open_file`, put **every** change for this ask in a **single** `patch_file` (one edit per place). Do not chain several `patch_file` calls — later rounds use stale line numbers. All `line` values must come from that same `open_file`.
 
-`add` always means “after this **content** line.” Pick an existing content line **inside** the block; the new line appears below it, still inside the open/close pair.
+### Adding inside objects / lists
 
-| Add to… | Set `line` to… |
-|---------|----------------|
-| Paragraph / end of section | The last paragraph line you are extending |
-| Table / graph | The **last data row** (never `[/TABLE]` / `[/GRAPH]`) |
-| Info body | The **last body line** (never `[/INFO]`; keep the title line) |
-| Bullet / ordered list | The **last list item** (never `[/BULLET_LIST]` / `[/ORDERED_LIST]`) |
-| Task list (active) | The **last `- [ ] …` under `ACTIVE:`** (same idea as “after an existing task”; never `[/TASK_LIST]`, and not after `DONE:` items unless adding done tasks) |
+For every embed or list fence: new content must land **inside** the open/close pair — after some **content** line the ask points at (not always the last line). **Never** set `line` to a closing marker; adding after `[/…]` writes **outside** the object.
 
-**MUST NOT** set `line` to a closing marker. Adding after `[/…]` puts text **outside** the object (broken).
-
-Table/graph cells in `text` use `\t`.
+New lines must match that block’s pattern (table/graph: `\t` between cells; tasks: `- [ ]` / `- [x]` under the right section; list items: `-` / `1.`; info: body lines under the title).
