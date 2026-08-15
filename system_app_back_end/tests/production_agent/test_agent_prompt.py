@@ -15,6 +15,8 @@ def test_load_prompt_file_is_short_standing_instructions():
     assert "Agent text" in text
     assert "patch_file" in text
     assert "add" in text
+    assert "Matching spacing" in text
+    assert "[SPACER" in text
     assert "reference" in text
     # Examples stay in reference.md — no code fences in the standing prompt.
     assert "```" not in text

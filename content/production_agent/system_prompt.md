@@ -36,3 +36,7 @@ Each edit: `op` + `line` + `end_line` + `text`. Use `rewrite_file` only for a wh
 For every embed or list fence: new content must land **inside** the open/close pair — after some **content** line the ask points at (not always the last line). **Never** set `line` to a closing marker; adding after `[/…]` writes **outside** the object.
 
 New lines must match that block’s pattern (table/graph: `\t` between cells; tasks: `- [ ]` / `- [x]` under the right section; list items: `-` / `1.`; info: body lines under the title).
+
+### Matching spacing
+
+Blank gaps in the UI are `[SPACER n="…"]` lines in agent text — not invisible empty lines. When the ask is to follow an existing pattern (or neighbors are separated by spacers), **include the same spacer in `text`**. Example: if neighbors are `line` then `[SPACER n="1"]` then `line`, an `add` after the last item should use multi-line `text` with the spacer first, then the new content line. Do not add only the content line and drop the spacer.

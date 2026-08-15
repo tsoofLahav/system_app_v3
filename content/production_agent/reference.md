@@ -120,7 +120,7 @@ This help. `section`: `agent_text` | `tools` | `all`.
 }
 ```
 
-`add` inserts **after** `line` (`0` = start). Inside a fence, `line` must be a **content** line (where the ask wants the insert) — never a `[/…]` closer. New text must match that block’s pattern (e.g. table cells with `\t`). Put **all** edits for the ask in **one** `patch_file`, with every `line` from the same `open_file`. `remove`: only `line`. `replace`: `line`..`end_line` with `text`.
+`add` inserts **after** `line` (`0` = start). Inside a fence, `line` must be a **content** line (where the ask wants the insert) — never a `[/…]` closer. New text must match that block’s pattern (e.g. table cells with `\t`). When neighbors are separated by `[SPACER …]`, put that spacer in the `add` `text` too (multi-line: spacer then content). Put **all** edits for the ask in **one** `patch_file`, with every `line` from the same `open_file`. `remove`: only `line`. `replace`: `line`..`end_line` with `text`.
 
 
 ### `rewrite_file` — whole file only when asked
