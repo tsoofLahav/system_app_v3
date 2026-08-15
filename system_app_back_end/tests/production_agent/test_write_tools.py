@@ -130,16 +130,9 @@ def test_apply_line_edits_adds_table_row():
     current = '[TABLE id="3"]\nName\\tQty\nEggs\\t6\n[/TABLE]\n'
     new, err = apply_line_edits(
         current,
-        [
-            {
-                "start_line": 3,
-                "end_line": 3,
-                "new_text": "Eggs\\t6\nMilk\\t1",
-            }
-        ],
+        [{"op": "add", "line": 3, "end_line": 0, "text": "Milk\\t1"}],
     )
     assert err is None
-    assert "Milk\\t1" in (new or "")
     assert new.splitlines() == [
         '[TABLE id="3"]',
         "Name\\tQty",
@@ -149,10 +142,23 @@ def test_apply_line_edits_adds_table_row():
     ]
 
 
+def test_apply_line_edits_remove_and_replace():
+    current = "A\nB\nC\n"
+    new, err = apply_line_edits(
+        current,
+        [
+            {"op": "remove", "line": 2, "end_line": 0, "text": ""},
+            {"op": "replace", "line": 1, "end_line": 1, "text": "A1"},
+        ],
+    )
+    assert err is None
+    assert new.splitlines() == ["A1", "C"]
+
+
 def test_apply_line_edits_rejects_out_of_range():
     new, err = apply_line_edits(
         "A\nB\n",
-        [{"start_line": 1, "end_line": 9, "new_text": "X"}],
+        [{"op": "replace", "line": 1, "end_line": 9, "text": "X"}],
     )
     assert new is None
     assert "past end of file" in (err or "")
@@ -163,12 +169,12 @@ def test_apply_line_edits_bottom_up():
     new, err = apply_line_edits(
         current,
         [
-            {"start_line": 1, "end_line": 1, "new_text": "A1"},
-            {"start_line": 3, "end_line": 3, "new_text": "C3\nC4"},
+            {"op": "replace", "line": 1, "end_line": 1, "text": "A1"},
+            {"op": "add", "line": 3, "end_line": 0, "text": "C4"},
         ],
     )
     assert err is None
-    assert new.splitlines() == ["A1", "B", "C3", "C4"]
+    assert new.splitlines() == ["A1", "B", "C", "C4"]
 
 
 def test_apply_replacements_requires_unique_match():
@@ -204,7 +210,7 @@ def test_patch_file_uses_line_edits(
 
     result = patch_file(
         5,
-        [{"start_line": 3, "end_line": 3, "new_text": "C"}],
+        [{"op": "replace", "line": 3, "end_line": 3, "text": "C"}],
         scope={"file_ids": [5]},
         write_mode="direct_apply",
     )

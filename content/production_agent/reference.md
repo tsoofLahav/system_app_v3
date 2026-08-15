@@ -107,37 +107,21 @@ Load one file. Returns `document_plain` (agent text), `document_lines` (`[{line,
 
 This help. `section`: `agent_text` | `tools` | `all`.
 
-### `patch_file` — all partial edits by line range
+### `patch_file` — add / remove / replace by line
 
 ```json
 {
   "file_id": 12,
   "edits": [
-    {
-      "start_line": 4,
-      "end_line": 4,
-      "new_text": "Lunch: soup"
-    }
+    { "op": "replace", "line": 4, "end_line": 4, "text": "Lunch: soup" },
+    { "op": "add", "line": 3, "end_line": 0, "text": "Milk\\t1" },
+    { "op": "remove", "line": 9, "end_line": 0, "text": "" }
   ]
 }
 ```
 
-Add a table row — patch the **`[/TABLE]` line** so the new row sits above it (closer stays):
+`add`: insert after `line` (0 = start of file). For a new table row, `line` = last data row (the line above `[/TABLE]`). Same idea for `[/INFO]`, `[/BULLET_LIST]`, and active tasks (after last `ACTIVE` item / before `DONE:`). Never add after the closer. `remove`: only `line`. `replace`: `line`..`end_line` with `text`.
 
-```json
-{
-  "file_id": 12,
-  "edits": [
-    {
-      "start_line": 4,
-      "end_line": 4,
-      "new_text": "Milk\\t1\n[/TABLE]"
-    }
-  ]
-}
-```
-
-Same for `[/INFO]`, `[/BULLET_LIST]`, `[/TASK_LIST]` (prefer inserting above `DONE:` for new active tasks). Never add on the line after the closer. Outside the edited lines, including `[SPACER]`, stays unchanged.
 
 ### `rewrite_file` — whole file only when asked
 

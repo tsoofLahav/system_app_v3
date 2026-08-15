@@ -12,12 +12,12 @@ from areas.production_agent.services.prompt import (
 
 def test_load_prompt_file_is_short_standing_instructions():
     text = load_prompt_file()
-    assert "What this system is" in text
-    assert "How you work" in text
+    assert "Agent text" in text
     assert "patch_file" in text
+    assert "add" in text
     assert "reference" in text
-    # Bulky examples live in reference.md, not the standing prompt.
-    assert "[BULLET_LIST]" not in text
+    # Examples stay in reference.md — no code fences in the standing prompt.
+    assert "```" not in text
 
 
 def test_reference_sections():
@@ -28,7 +28,7 @@ def test_reference_sections():
 
     tools = load_reference_section("tools")
     assert "patch_file" in tools
-    assert "start_line" in tools
+    assert '"op": "add"' in tools or "add |" in tools or '"op"' in tools
     assert "move_text" not in tools
     assert "[BULLET_LIST]" not in tools
 

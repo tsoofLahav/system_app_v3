@@ -3,7 +3,7 @@
 Apply vs review is decided by the run's action config plus per-tool defaults —
 the model does not choose the dialog.
 
-- ``patch_file`` — partial edits via inclusive 1-based line ranges
+- ``patch_file`` — partial edits via add / remove / replace line ops
 - ``rewrite_file`` — replace the whole file's agent text
 """
 
@@ -173,11 +173,14 @@ def apply_line_edits(
     current: str,
     edits: list[dict[str, Any]],
 ) -> tuple[str | None, str | None]:
-    """Replace inclusive 1-based line ranges. Return (new_text, error).
+    """Apply add / remove / replace line ops. Return (new_text, error).
 
-    Edits are applied from bottom to top so earlier line numbers stay valid.
-    ``new_text`` may be empty (delete) or multi-line (replace/insert).
-    Insert at end of file: ``start_line == end_line == line_count + 1``.
+    Line numbers are 1-based from ``document_lines``.
+    - ``add``: insert ``text`` lines after ``line`` (``line=0`` = start of file)
+    - ``remove``: delete ``line`` (``end_line`` unused; pass 0)
+    - ``replace``: replace inclusive ``line``..``end_line`` with ``text``
+
+    Ops are applied from bottom to top so earlier line numbers stay valid.
     """
     if not edits:
         return None, "edits is empty"
@@ -186,34 +189,66 @@ def apply_line_edits(
     ends_with_newline = current.endswith("\n")
     line_count = len(lines)
 
-    normalized: list[tuple[int, int, list[str]]] = []
+    # (sort_line, orig_index, kind, start, end, new_lines)
+    normalized: list[tuple[int, int, str, int, int, list[str]]] = []
     for index, raw in enumerate(edits, start=1):
         if not isinstance(raw, dict):
             return None, f"edit {index}: must be an object"
+        op = str(raw.get("op") or "").strip().lower()
+        if op not in {"add", "remove", "replace"}:
+            return None, f"edit {index}: op must be add, remove, or replace"
         try:
-            start = int(raw["start_line"])
-            end = int(raw["end_line"])
+            line = int(raw["line"])
         except (KeyError, TypeError, ValueError):
-            return None, f"edit {index}: start_line and end_line are required integers"
-        if start < 1 or end < 1:
-            return None, f"edit {index}: line numbers must be >= 1"
-        if end < start:
-            return None, (
-                f"edit {index}: end_line ({end}) must be >= start_line ({start})"
-            )
-        append_at_end = start == end == line_count + 1
-        if not append_at_end and (start > line_count or end > line_count):
-            return None, (
-                f"edit {index}: line range {start}-{end} past end of file "
-                f"({line_count} lines)"
-            )
-        new = "" if raw.get("new_text") is None else str(raw.get("new_text"))
-        normalized.append((start, end, new.splitlines()))
+            return None, f"edit {index}: line is required"
+        try:
+            end_line = int(raw.get("end_line") or 0)
+        except (TypeError, ValueError):
+            return None, f"edit {index}: end_line must be an integer"
+        text = "" if raw.get("text") is None else str(raw.get("text"))
+        new_lines = text.splitlines()
 
-    normalized.sort(key=lambda item: item[0], reverse=True)
-    for start, end, new_lines in normalized:
-        if start == end == len(lines) + 1:
-            lines.extend(new_lines)
+        if op == "add":
+            if line < 0 or line > line_count:
+                return None, (
+                    f"edit {index}: add after line {line} past end of file "
+                    f"({line_count} lines); use 0 to insert at start"
+                )
+            if not new_lines:
+                return None, f"edit {index}: add requires non-empty text"
+            # sort after the anchor so we touch higher lines first
+            normalized.append((line, index, "add", line, line, new_lines))
+        elif op == "remove":
+            if line < 1 or line > line_count:
+                return None, (
+                    f"edit {index}: remove line {line} past end of file "
+                    f"({line_count} lines)"
+                )
+            normalized.append((line, index, "remove", line, line, []))
+        else:  # replace
+            end = end_line if end_line else line
+            if line < 1 or end < 1:
+                return None, f"edit {index}: replace line numbers must be >= 1"
+            if end < line:
+                return None, (
+                    f"edit {index}: end_line ({end}) must be >= line ({line})"
+                )
+            if line > line_count or end > line_count:
+                return None, (
+                    f"edit {index}: replace range {line}-{end} past end of file "
+                    f"({line_count} lines)"
+                )
+            # empty text deletes the range (same as remove multi)
+            normalized.append((line, index, "replace", line, end, new_lines))
+
+    normalized.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    for _sort, _idx, kind, start, end, new_lines in normalized:
+        if kind == "add":
+            # after line start → insert at 0-based index `start`
+            at = start
+            lines[at:at] = new_lines
+        elif kind == "remove":
+            del lines[start - 1]
         else:
             lines[start - 1 : end] = new_lines
 

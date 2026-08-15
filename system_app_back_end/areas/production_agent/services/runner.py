@@ -187,12 +187,13 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "type": "function",
         "name": "patch_file",
         "description": (
-            "Partial edits by 1-based line range from open_file document_lines: "
-            "change, delete, or add lines (including inside [TABLE]/[INFO]/"
-            "[TASK_LIST] fences). Each edit replaces start_line..end_line "
-            "inclusive with new_text (may be multiple lines). To add a line, "
-            "replace one line with that line plus the new line(s). Table cells "
-            "use visible \\t between columns. Preserve every embed id=\"…\"."
+            "Partial edits using open_file document_lines (1-based). Each edit "
+            "has op: add | remove | replace. "
+            "add: insert text after line (line=0 = start of file); put new rows "
+            "inside fences by adding after the last content line before [/…]. "
+            "remove: delete line (end_line=0, text=\"\"). "
+            "replace: replace line..end_line inclusive with text. "
+            "Table cells use \\t between columns. Preserve embed id=\"…\"."
         ),
         "strict": True,
         "parameters": {
@@ -204,11 +205,27 @@ TOOL_DEFS: list[dict[str, Any]] = [
                     "items": {
                         "type": "object",
                         "properties": {
-                            "start_line": {"type": "integer"},
-                            "end_line": {"type": "integer"},
-                            "new_text": {"type": "string"},
+                            "op": {
+                                "type": "string",
+                                "description": "add | remove | replace",
+                            },
+                            "line": {
+                                "type": "integer",
+                                "description": (
+                                    "add: after this line (0=start); "
+                                    "remove/replace: first line"
+                                ),
+                            },
+                            "end_line": {
+                                "type": "integer",
+                                "description": "replace: last line inclusive; else 0",
+                            },
+                            "text": {
+                                "type": "string",
+                                "description": "add/replace content; remove: \"\"",
+                            },
                         },
-                        "required": ["start_line", "end_line", "new_text"],
+                        "required": ["op", "line", "end_line", "text"],
                         "additionalProperties": False,
                     },
                 },
@@ -295,7 +312,7 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
                     tool_name="patch_file",
                 )
             return {
-                "error": "edits array required (start_line, end_line, new_text)",
+                "error": "edits array required (op, line, end_line, text)",
                 "tool": "patch_file",
             }
         document_text = args.get("document_text")

@@ -55,7 +55,7 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 | `search` | Substring match on file name and **agent text** within scope (includes archived, flagged) |
 | `open_file` | Returns `document_plain` (agent text), `document_lines` (1-based), + `object_extras` (info `title` / `Links` when useful). Archived readable. |
 | `reference` | On-demand examples from `content/production_agent/reference.md` (`agent_text` / `tools` / `all`) |
-| `patch_file` | **All partial edits** by inclusive `start_line`/`end_line` + `new_text` (from `document_lines`); typical outcome **review** |
+| `patch_file` | **Partial edits** with `op` add / remove / replace on `document_lines`; typical outcome **review** |
 | `rewrite_file` | Full new agent text for a true whole-file rewrite; typical outcome **apply** when run allows |
 | `search_tasks` | Substring match on task titles within scoped (live) files |
 
