@@ -13,22 +13,29 @@ from areas.production_agent.services.prompt import (
 
 def test_load_prompt_file_is_short_standing_instructions():
     text = load_prompt_file()
-    assert "## What this is" in text
+    assert "## App structure" in text
     assert "## Tools" in text
+    assert "## Agent text" in text
     assert "## Input" in text
-    assert "## Workflow" in text
     assert "list" in text
     assert "find_file" in text
     assert "find_object" in text
     assert "create_object" in text
     assert "patch_file" in text
-    assert "selected_text" in text
+    assert "one `patch_file` call" in text
     assert "[SPACER" in text
-    assert "when using `patch_file`" in text or "When using `patch_file`" in text
     assert "search_tasks" not in text
     assert "Scope is hard" not in text
     # Examples stay in reference.md — no code fences in the standing prompt.
     assert "```" not in text
+
+
+def test_prompt_treats_scope_and_hints_as_context_only():
+    """Where the user stands must never read as where the edit has to happen."""
+    text = load_prompt_file()
+    assert "not a target and not a boundary" in text
+    assert "selected_text" in text
+    assert "which text the user means, not where the result belongs" in text
 
 
 def test_default_tool_allowlist():

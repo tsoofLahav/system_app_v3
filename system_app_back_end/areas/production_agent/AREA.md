@@ -19,7 +19,9 @@ The agent's standing instructions are a real document it is allowed to read:
 
 Bootstrap seeds the DB row on first launch. The runner never reads the markdown file at request time — only the DB. Deploying the backend refreshes the prompt over the internal DB link (no laptop → external Postgres needed).
 
-That file is **for the model**: short standing instructions in four parts — what this is, tools, input, workflow. Keep it instructional and short; drop vague lines the model cannot act on. Bulky fence/tool **examples** live in [`content/production_agent/reference.md`](../../../content/production_agent/reference.md) and are loaded on demand via the `reference` tool (`agent_text` | `tools` | `all`). Maintainer notes stay in this `AREA.md`. Scenario-specific jobs belong in topic/automation prompts later — not in generic tool descriptions.
+That file is **for the model**: short standing instructions in four parts — app structure, tools, agent text, input. It describes **what exists and how the tools behave**, and leaves the implementation to the model; a capable model given an accurate map is more flexible than one walked through steps. Add a line only when it states a fact the model cannot discover (a schema rule, a system constraint), not to coach judgement or guard against one past mistake.
+
+**Scope and hints are context, never a target.** They say where the user is standing (open topic, `focused_file_id`, `selected_text`); the prompt says what to do and where. `selected_text` identifies the text the user means — it must never read as "edit these lines here", which once made the agent build a table in the open file instead of moving the sentence to the right topic. Bulky fence/tool **examples** live in [`content/production_agent/reference.md`](../../../content/production_agent/reference.md) and are loaded on demand via the `reference` tool (`agent_text` | `tools` | `all`). Maintainer notes stay in this `AREA.md`. Scenario-specific jobs belong in topic/automation prompts later — not in generic tool descriptions.
 
 ## What is passed to the agent
 
