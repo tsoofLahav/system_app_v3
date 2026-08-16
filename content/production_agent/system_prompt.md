@@ -34,6 +34,8 @@ The form you read and write, returned by `open_file`:
 - Structure (no id): headings `## …`; paragraphs; `[BULLET_LIST]` / `[ORDERED_LIST]` … closers; blank gaps = `[SPACER n="…"]`
 - Embeds (keep `id="…"`): `[TABLE id]` / `[GRAPH id]` (cells joined by `\t`); `[INFO id]` (line 1 = title, rest = body); `[TASK_LIST id]` (`ACTIVE:` / `DONE:` with `- [ ]` / `- [x]`); `[IMAGE id …]`
 - Open and close markers are each their own numbered line. Content lives only between them.
+- A block is whatever sits between one pair of markers. To add, change or drop an item, edit the lines inside the block that is already there — a second `[BULLET_LIST]` next to one is a new block, not a longer list.
+- Markers are structure, not text. An unmatched or attribute-carrying marker is rejected, and the write fails.
 
 Call `reference` for fence or tool-call examples rather than guessing a shape.
 

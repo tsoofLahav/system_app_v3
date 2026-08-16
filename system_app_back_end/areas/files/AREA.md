@@ -125,3 +125,9 @@ Agent text round-trip is not yet lossless. Open issues, worst first:
 | Spans not in v4 editor text yet | Migrate/agent paths drop inline formatting until span encoding ships |
 
 Agent write path: `commit_agent_file_apply` promotes legacy embeds, versions the file, writes v4 `document_json`, applies `object_updates`, then purges unreferenced embeds. Review proposals include `object_updates`; Accept uses `POST /files/:id/apply-agent-text` (not a bare document PATCH). Id-less `[TABLE]` fences are rejected on write.
+
+### Markers are rejected, not degraded
+
+`validate_agent_text_markers` runs before every write. A fence that is opened and never closed, a closer with no opener, or a list carrying an attribute all fail with a line-numbered error the agent can act on.
+
+This is not cosmetic. `parse_agent_text` needs an open **and** a close: without the pair it falls through, and the run becomes a paragraph that keeps the marker as characters (minus the `[`, which the scanner ate). That text then reaches the file, and the user reads `BULLET_LIST]` in their own document. Rejecting costs the agent one retry; degrading costs the user their content.

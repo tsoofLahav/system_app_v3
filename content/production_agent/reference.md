@@ -39,6 +39,12 @@ Next section.
 [/ORDERED_LIST]
 ```
 
+To grow a list, `add` the item line after the last item — inside the markers. Repeating `[BULLET_LIST]` starts a second list instead:
+
+```text
+patch_file: {"edits": [{"op": "add", "line": 20, "text": "- Item three", "end_line": 0}]}
+```
+
 ### Table object
 
 ```text

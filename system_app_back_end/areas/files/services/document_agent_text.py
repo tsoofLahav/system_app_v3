@@ -75,6 +75,75 @@ _SPECIAL_MARKERS = (
     "[TABLE",
 )
 
+# Markers that must open and close. An unmatched one is not a structure at all:
+# the parser below falls through and keeps the marker as literal text, so it
+# would land in the user's document as characters. Validation rejects that.
+_FENCED_MARKERS = (
+    "TASK_LIST",
+    "INFO",
+    "GRAPH",
+    "BULLET_LIST",
+    "ORDERED_LIST",
+    "TABLE",
+)
+_MARKER_LINE_RE = re.compile(
+    r"^\[(/?)\s*([A-Z][A-Z0-9_]*)\b([^\]]*)\]$",
+    re.IGNORECASE,
+)
+# Lists are pure structure — an id or any other attribute makes them unparsable.
+_ATTRIBUTE_FREE_MARKERS = ("BULLET_LIST", "ORDERED_LIST")
+
+
+def validate_agent_text_markers(text: str) -> list[str]:
+    """Errors for structure markers that would degrade into literal text.
+
+    Catches the common agent slips: opening a fence and never closing it,
+    closing one that was never opened, and putting attributes on a list.
+    Unknown marker names are left alone — they are not our language, so they
+    are legitimately just text.
+    """
+    errors: list[str] = []
+    stack: list[tuple[str, int]] = []
+
+    for number, raw in enumerate(text.split("\n"), start=1):
+        match = _MARKER_LINE_RE.match(raw.strip())
+        if not match:
+            continue
+        closing = bool(match.group(1))
+        name = match.group(2).upper()
+        attributes = match.group(3).strip()
+        if name not in _FENCED_MARKERS:
+            continue
+
+        # Inside a fence only its own closer counts; the rest is content.
+        if stack and not (closing and name == stack[-1][0]):
+            continue
+
+        if closing:
+            if not stack:
+                errors.append(
+                    f"line {number}: [/{name}] closes a marker that was never "
+                    "opened"
+                )
+                continue
+            stack.pop()
+            continue
+
+        if name in _ATTRIBUTE_FREE_MARKERS and attributes:
+            errors.append(
+                f"line {number}: [{name}] takes no attributes — write "
+                f"[{name}] on its own line"
+            )
+        # Opened either way, so its closer is not reported as a second fault.
+        stack.append((name, number))
+
+    for name, number in stack:
+        errors.append(
+            f"line {number}: [{name}] is never closed — add [/{name}] on its "
+            "own line, or edit the lines inside the existing one"
+        )
+    return errors
+
 
 def _unescape_cell(text: str) -> str:
     """Undo ``_escape_cell``: ``\\\\t`` → tab, ``\\\\`` → ``\\``, legacy ``\\t`` → tab."""
@@ -409,6 +478,10 @@ def agent_text_to_editor_text(
     current_body: str | None = None,
 ) -> tuple[str | None, dict[int, dict[str, Any]], list[str]]:
     """Collapse agent text to pointer-only editor text + object_updates."""
+    marker_errors = validate_agent_text_markers(agent_text)
+    if marker_errors:
+        return None, {}, marker_errors
+
     parsed = parse_agent_text(agent_text)
     errors: list[str] = []
 

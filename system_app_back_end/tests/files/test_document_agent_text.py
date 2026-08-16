@@ -321,6 +321,56 @@ def test_apply_agent_text_rejects_unknown_object_id():
     assert "unknown object id: 17" in errors[0]
 
 
+def test_unclosed_list_is_rejected_instead_of_becoming_text():
+    # Without the guard the parser falls through and the marker is stored as
+    # characters, so the file ends up showing `BULLET_LIST]` to the user.
+    editor, _, errors = agent_text_to_editor_text(
+        "Plan:\n[BULLET_LIST]\n- one\n- two",
+        known_object_ids=set(),
+    )
+    assert editor is None
+    assert errors == [
+        "line 2: [BULLET_LIST] is never closed — add [/BULLET_LIST] on its "
+        "own line, or edit the lines inside the existing one"
+    ]
+
+
+def test_second_list_opened_beside_a_closed_one_is_rejected():
+    _, _, errors = agent_text_to_editor_text(
+        "[BULLET_LIST]\n- one\n[/BULLET_LIST]\n[BULLET_LIST]\n- added",
+        known_object_ids=set(),
+    )
+    assert errors and "line 4" in errors[0]
+
+
+def test_list_marker_with_an_attribute_is_rejected_once():
+    _, _, errors = agent_text_to_editor_text(
+        '[BULLET_LIST id="3"]\n- one\n[/BULLET_LIST]',
+        known_object_ids=set(),
+    )
+    assert errors == [
+        "line 1: [BULLET_LIST] takes no attributes — write [BULLET_LIST] on "
+        "its own line"
+    ]
+
+
+def test_stray_closer_is_rejected():
+    _, _, errors = agent_text_to_editor_text(
+        "- one\n[/BULLET_LIST]",
+        known_object_ids=set(),
+    )
+    assert errors and "never opened" in errors[0]
+
+
+def test_marker_words_inside_a_fence_and_plain_brackets_still_pass():
+    _, _, errors = agent_text_to_editor_text(
+        '[INFO id="2"]\nTitle\n[BULLET_LIST] is how a list opens\n[/INFO]\n'
+        "A line mentioning [IMPORTANT] stays text",
+        known_object_ids={2},
+    )
+    assert errors == []
+
+
 def test_parse_agent_text_info_legacy_body_only():
     parsed = parse_agent_text('[INFO id="17"]\nHello info\n[/INFO]')
     assert parsed["object_updates"][17]["body"] == "Hello info"

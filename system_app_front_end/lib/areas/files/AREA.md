@@ -20,6 +20,8 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | [`model/object_embed_node.dart`](model/object_embed_node.dart) | Custom SE node for object pointers |
 | [`model/document_text_codec.dart`](model/document_text_codec.dart) | Marker parse/serialize helpers |
 | [`model/document_buffer.dart`](model/document_buffer.dart) | Marker-range helpers (tests / legacy ops) |
+| [`model/agent_text_blocks.dart`](model/agent_text_blocks.dart) | Agent text → display blocks, each keyed to its line |
+| [`editor/read_only_document_view.dart`](editor/read_only_document_view.dart) | Draws those blocks read-only (AI diff review) |
 | [`editor/DOCUMENT_TEXT.md`](editor/DOCUMENT_TEXT.md) | Marker-text dialect (SoT vs agent expand) |
 | [`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md) | Fluent-text principles for embeds |
 | [`editor/embeds/`](editor/embeds/) | In-file presentation of objects (task list, info, image, graph, table) |
@@ -289,6 +291,10 @@ Type logic beyond presentation (views, links, cascades) → [objects](../objects
 | **Agent text** | Same structure with objects expanded to fences | Production agent tools, diffs |
 
 The app edits and persists **editor text**. Agent text is produced on demand and shown in AI diff review only. Spec: [`editor/DOCUMENT_TEXT.md`](editor/DOCUMENT_TEXT.md).
+
+Agent text is parsed twice: [`document_agent_text.py`](../../../../system_app_back_end/areas/files/services/document_agent_text.py) writes, [`model/agent_text_blocks.dart`](model/agent_text_blocks.dart) only displays. The Python side leads — when the fence format changes, change it there first and follow here, or the review dialog shows markers again.
+
+The display side is deliberately forgiving where the write side is strict: item lines with no fence around them are drawn as a list, and a leftover marker is drawn as a quiet rule. Marker language must never reach the reader, even when the text is malformed.
 
 ## Saving
 
