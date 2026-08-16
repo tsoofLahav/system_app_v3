@@ -98,10 +98,41 @@ Row 1 = labels, row 2 = values, optional row 3 = colors. Same `\t` cell separato
 ### `list`
 
 ```json
-{ "kind": "files", "topic_id": 3 }
+{ "kind": "files", "topic_id": 0 }
 ```
 
 `kind`: `topics` | `files` | `objects`. `topic_id` `0` = whole workspace.
+
+`files` and `objects` come back **grouped by topic**, so you can see which topic each file belongs to:
+
+```json
+{
+  "kind": "files",
+  "grouped_by": "topic",
+  "topics": [
+    { "topic_id": 2, "topic": "nutrition", "archived": false,
+      "files": [{ "id": 7, "name": "daily log", "archived": false }] },
+    { "topic_id": 3, "topic": "fitness", "archived": false,
+      "files": [{ "id": 12, "name": "week plan", "archived": false }] }
+  ]
+}
+```
+
+`objects` nests one level deeper — topic → file → objects:
+
+```json
+{
+  "kind": "objects",
+  "grouped_by": "topic",
+  "topics": [
+    { "topic_id": 3, "topic": "fitness",
+      "files": [{ "file_id": 12, "file": "week plan",
+                  "objects": [{ "id": 42, "type": "task_list", "name": "Week" }] }] }
+  ]
+}
+```
+
+`topics` returns `{ id, name, archived, file_count }`. Match the subject of the ask to a topic name first; only then pick a file inside it.
 
 ### `find_file`
 
@@ -109,7 +140,7 @@ Row 1 = labels, row 2 = values, optional row 3 = colors. Same `\t` cell separato
 { "file_id": 0, "name": "plan", "topic_id": 3 }
 ```
 
-Or `{ "file_id": 12, "name": "", "topic_id": 0 }`.
+Or `{ "file_id": 12, "name": "", "topic_id": 0 }`. Each hit is `{ id, name, topic_id, topic, archived }` — confirm `topic` is the one you meant.
 
 ### `find_object`
 
@@ -117,9 +148,11 @@ Or `{ "file_id": 12, "name": "", "topic_id": 0 }`.
 { "object_id": 0, "name": "clinic", "type": "task_list", "topic_id": 0 }
 ```
 
+Each hit is `{ id, type, name, file_id, file, topic_id, topic }`.
+
 ### `open_file`
 
-Load one file. Returns `document_plain` (agent text), `document_lines` (`[{line, text}, …]` 1-based), and optional `object_extras`.
+Load one file. Returns `name` + `topic` (so you can confirm where you landed), `document_plain` (agent text), `document_lines` (`[{line, text}, …]` 1-based), and optional `object_extras`.
 
 ### `create_object`
 

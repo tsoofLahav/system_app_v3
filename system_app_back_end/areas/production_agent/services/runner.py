@@ -66,9 +66,12 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "type": "function",
         "name": "list",
         "description": (
-            "List topics, files, or objects in the workspace. "
-            "kind: topics | files | objects. "
-            "topic_id: 0 = all; else filter files/objects to that topic."
+            "Browse the workspace. kind: topics | files | objects. "
+            "files/objects come back grouped under their topic "
+            "(topics[].topic = topic name, topics[].files[]; objects also "
+            "carry their file name). Read the topic names and pick the topic "
+            "that matches the subject of the ask before choosing a file. "
+            "topic_id: 0 = all topics; else only that topic."
         ),
         "strict": True,
         "parameters": {
@@ -92,6 +95,7 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "name": "find_file",
         "description": (
             "Find a file by id, or by name substring (optional topic_id). "
+            "Each hit carries its topic name — check it before writing. "
             "file_id: 0 when searching by name. topic_id: 0 = any topic. "
             "name: \"\" when using file_id."
         ),
@@ -112,6 +116,7 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "name": "find_object",
         "description": (
             "Find an object by id, or by type and/or name (optional topic_id). "
+            "Each hit carries its file and topic name. "
             "Types: task_list | info | table | graph | image. "
             "object_id: 0 when filtering. Unused strings are \"\". topic_id: 0 = any."
         ),

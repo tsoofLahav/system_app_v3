@@ -23,6 +23,7 @@ Agent never touches `document_json`. It reads/writes **agent text**; backend con
 | Scope | Preferred topic/file context from UI (not a hard tool allow-list). Not file bodies. |
 | Hints | Tiny pointers on the first turn: focused file, selection, dates, etc. Not file bodies. |
 | Content | Loaded only via tools (`open_file` / list / find) |
+| Browsing | Always **by topic**: `list files` / `list objects` group under `{topic_id, topic}`, `find_*` hits and `open_file` name their topic. The agent picks the topic before the file. |
 | Archive files | Readable when needed; **never writable** |
 | Review vs apply | **Action config** (+ Consult toggle). Model does not choose the dialog. |
 | Pending reviews | Persisted in **`agent_pending_reviews`**; lookalike UI when user opens the file. Finish archives old copy then applies merge. |

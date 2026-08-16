@@ -68,6 +68,14 @@ def _workspace_files_query(
     return q.order_by(File.topic_id, File.order_index, File.id)
 
 
+def _topic_rows(workspace_id: int) -> list[Topic]:
+    return _workspace_topics(workspace_id, include_archived=True).all()
+
+
+def _topic_names(workspace_id: int) -> dict[int, str]:
+    return {t.id: (t.name or "") for t in _topic_rows(workspace_id)}
+
+
 def _object_display_name(embed: ObjectEmbed) -> str:
     if embed.type == "info" and embed.information_id:
         info = db.session.get(InformationPiece, embed.information_id)
@@ -97,79 +105,123 @@ def list_entities(
     kind: str,
     topic_id: int | None = None,
 ) -> dict[str, Any]:
+    """Browse the workspace. Files and objects come back grouped under their topic."""
     kind_norm = (kind or "").strip().lower()
     if kind_norm not in {"topics", "files", "objects"}:
         return {"error": "kind must be topics | files | objects"}
 
+    if topic_id is not None:
+        topic = db.session.get(Topic, int(topic_id))
+        if topic is None or int(topic.workspace_id) != int(workspace_id):
+            return {"error": "topic not found"}
+
     if kind_norm == "topics":
-        if topic_id is not None:
-            topic = db.session.get(Topic, int(topic_id))
-            if topic is None or int(topic.workspace_id) != int(workspace_id):
-                return {"error": "topic not found"}
-            return {
-                "kind": "topics",
-                "items": [
-                    {
-                        "id": topic.id,
-                        "name": topic.name,
-                        "archived": topic.archived_at is not None,
-                    }
-                ],
-            }
-        items = [
+        return _list_topics(workspace_id, topic_id=topic_id)
+    if kind_norm == "files":
+        return _list_files_by_topic(workspace_id, topic_id=topic_id)
+    return _list_objects_by_topic(workspace_id, topic_id=topic_id)
+
+
+def _list_topics(workspace_id: int, *, topic_id: int | None) -> dict[str, Any]:
+    file_rows = _workspace_files_query(
+        workspace_id, topic_id=topic_id, include_archived=True
+    ).all()
+    counts: dict[int, int] = {}
+    for f in file_rows:
+        if f.archived_at is None:
+            counts[f.topic_id] = counts.get(f.topic_id, 0) + 1
+    topics = _topic_rows(workspace_id)
+    if topic_id is not None:
+        topics = [t for t in topics if t.id == int(topic_id)]
+    return {
+        "kind": "topics",
+        "items": [
             {
                 "id": t.id,
                 "name": t.name,
                 "archived": t.archived_at is not None,
+                "file_count": counts.get(t.id, 0),
             }
-            for t in _workspace_topics(workspace_id).all()
-        ]
-        return {"kind": "topics", "items": items}
+            for t in topics
+            # An archived topic is noise unless it still holds files, or was asked for.
+            if topic_id is not None or t.archived_at is None or counts.get(t.id)
+        ],
+    }
 
-    if kind_norm == "files":
-        rows = _workspace_files_query(
-            workspace_id, topic_id=topic_id, include_archived=True
-        ).all()
-        return {
-            "kind": "files",
-            "items": [
-                {
-                    "id": f.id,
-                    "name": f.name,
-                    "topic_id": f.topic_id,
-                    "archived": f.archived_at is not None,
-                }
-                for f in rows
-            ],
-        }
 
-    # objects
-    file_q = _workspace_files_query(
+def _list_files_by_topic(workspace_id: int, *, topic_id: int | None) -> dict[str, Any]:
+    rows = _workspace_files_query(
+        workspace_id, topic_id=topic_id, include_archived=True
+    ).all()
+    files_by_topic: dict[int, list[dict[str, Any]]] = {}
+    for f in rows:
+        files_by_topic.setdefault(f.topic_id, []).append(
+            {
+                "id": f.id,
+                "name": f.name,
+                "archived": f.archived_at is not None,
+            }
+        )
+    groups = []
+    for t in _topic_rows(workspace_id):
+        if topic_id is not None and t.id != int(topic_id):
+            continue
+        files = files_by_topic.get(t.id, [])
+        # An archived topic is only worth showing when it still holds files.
+        if topic_id is None and t.archived_at is not None and not files:
+            continue
+        groups.append(
+            {
+                "topic_id": t.id,
+                "topic": t.name,
+                "archived": t.archived_at is not None,
+                "files": files,
+            }
+        )
+    return {"kind": "files", "grouped_by": "topic", "topics": groups}
+
+
+def _list_objects_by_topic(workspace_id: int, *, topic_id: int | None) -> dict[str, Any]:
+    file_rows = _workspace_files_query(
         workspace_id, topic_id=topic_id, include_archived=False
-    )
-    file_rows = file_q.all()
-    file_ids = [f.id for f in file_rows]
-    topic_by_file = {f.id: f.topic_id for f in file_rows}
-    if not file_ids:
-        return {"kind": "objects", "items": []}
+    ).all()
+    if not file_rows:
+        return {"kind": "objects", "grouped_by": "topic", "topics": []}
+
     embeds = (
-        ObjectEmbed.query.filter(ObjectEmbed.file_id.in_(file_ids))
+        ObjectEmbed.query.filter(ObjectEmbed.file_id.in_([f.id for f in file_rows]))
         .order_by(ObjectEmbed.file_id, ObjectEmbed.sort_key, ObjectEmbed.id)
         .all()
     )
-    return {
-        "kind": "objects",
-        "items": [
+    objects_by_file: dict[int, list[dict[str, Any]]] = {}
+    for e in embeds:
+        objects_by_file.setdefault(e.file_id, []).append(
             {
                 "id": e.id,
                 "type": _object_type_label(e),
                 "name": _object_display_name(e),
-                "file_id": e.file_id,
-                "topic_id": topic_by_file.get(e.file_id),
             }
-            for e in embeds
-        ],
-    }
+        )
+
+    files_by_topic: dict[int, list[dict[str, Any]]] = {}
+    for f in file_rows:
+        objects = objects_by_file.get(f.id)
+        if not objects:
+            continue
+        files_by_topic.setdefault(f.topic_id, []).append(
+            {"file_id": f.id, "file": f.name, "objects": objects}
+        )
+
+    groups = [
+        {
+            "topic_id": t.id,
+            "topic": t.name,
+            "files": files_by_topic[t.id],
+        }
+        for t in _topic_rows(workspace_id)
+        if files_by_topic.get(t.id)
+    ]
+    return {"kind": "objects", "grouped_by": "topic", "topics": groups}
 
 
 def find_file(
@@ -179,6 +231,8 @@ def find_file(
     name: str | None = None,
     topic_id: int | None = None,
 ) -> dict[str, Any]:
+    topic_names = _topic_names(workspace_id)
+
     if file_id is not None:
         file = db.session.get(File, int(file_id))
         if file is None or not file_in_workspace(file, workspace_id):
@@ -189,6 +243,7 @@ def find_file(
                     "id": file.id,
                     "name": file.name,
                     "topic_id": file.topic_id,
+                    "topic": topic_names.get(file.topic_id, ""),
                     "archived": file.archived_at is not None,
                 }
             ]
@@ -201,10 +256,6 @@ def find_file(
     rows = _workspace_files_query(
         workspace_id, topic_id=topic_id, include_archived=True
     ).all()
-    topic_names = {
-        t.id: (t.name or "")
-        for t in _workspace_topics(workspace_id, include_archived=True).all()
-    }
     hits = []
     for f in rows:
         fname = (f.name or "").lower()
@@ -215,6 +266,7 @@ def find_file(
                     "id": f.id,
                     "name": f.name,
                     "topic_id": f.topic_id,
+                    "topic": topic_names.get(f.topic_id, ""),
                     "archived": f.archived_at is not None,
                 }
             )
@@ -229,6 +281,8 @@ def find_object(
     type_: str | None = None,
     topic_id: int | None = None,
 ) -> dict[str, Any]:
+    topic_names = _topic_names(workspace_id)
+
     if object_id is not None:
         embed = db.session.get(ObjectEmbed, int(object_id))
         if embed is None:
@@ -243,7 +297,9 @@ def find_object(
                     "type": _object_type_label(embed),
                     "name": _object_display_name(embed),
                     "file_id": embed.file_id,
+                    "file": file.name,
                     "topic_id": file.topic_id,
+                    "topic": topic_names.get(file.topic_id, ""),
                 }
             ]
         }
@@ -268,7 +324,7 @@ def find_object(
         workspace_id, topic_id=topic_id, include_archived=False
     ).all()
     file_ids = [f.id for f in file_rows]
-    topic_by_file = {f.id: f.topic_id for f in file_rows}
+    file_by_id = {f.id: f for f in file_rows}
     if not file_ids:
         return {"items": []}
 
@@ -287,13 +343,17 @@ def find_object(
         display = _object_display_name(e)
         if name_q and name_q not in display.lower():
             continue
+        file = file_by_id.get(e.file_id)
+        file_topic_id = file.topic_id if file is not None else None
         hits.append(
             {
                 "id": e.id,
                 "type": label,
                 "name": display,
                 "file_id": e.file_id,
-                "topic_id": topic_by_file.get(e.file_id),
+                "file": file.name if file is not None else "",
+                "topic_id": file_topic_id,
+                "topic": topic_names.get(file_topic_id, ""),
             }
         )
     hits.sort(key=lambda r: (r.get("topic_id") or 0, r.get("file_id") or 0, r["id"]))

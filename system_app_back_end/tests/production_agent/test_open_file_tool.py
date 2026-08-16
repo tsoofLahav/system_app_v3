@@ -64,11 +64,17 @@ def test_build_open_file_payload_shape():
             "areas.production_agent.services.open_file_tool._info_links",
             return_value=[{"id": 22, "type": "info", "title": "Peer"}],
         ),
+        patch(
+            "areas.production_agent.services.open_file_tool._topic_name",
+            return_value="vision",
+        ),
     ):
         payload = build_open_file_payload(file)
 
     assert payload["id"] == 12
     assert payload["archived"] is False
+    # The agent must see which topic it opened, not just a topic_id.
+    assert payload["topic"] == "vision"
     assert "document_plain" in payload
     assert '[INFO id="17"]' in payload["document_plain"]
     assert payload["document_lines"] == [
@@ -104,6 +110,10 @@ def test_build_open_file_marks_archived():
         patch(
             "areas.production_agent.services.open_file_tool.document_to_agent_text",
             return_value="",
+        ),
+        patch(
+            "areas.production_agent.services.open_file_tool._topic_name",
+            return_value="vision",
         ),
     ):
         payload = build_open_file_payload(file)
