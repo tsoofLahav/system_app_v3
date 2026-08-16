@@ -48,11 +48,15 @@ After finish pending / direct apply, the topic reloads; open Super Editors pick 
 
 Pending also opens when the **file** mounts ([`document_pane.dart`](../files/editor/document_pane.dart) → [`pending_review_ui.dart`](pending_review_ui.dart) → [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart)). After a dialog closes, the same helper continues to any other on-screen file that still has pending.
 
-- **Full-file side-by-side** (Current | Suggested), unchanged lines shown, change regions tinted
-- Word-level marks inside changed lines; fences as compact read-only chrome
-- Per-region Accept | Reject; Finish disabled until all decided
-- Finish → `POST /files/:id/pending-review/finish` (archive copy + merge apply)
-- Discard → `DELETE /files/:id/pending-review`
+### The review dialog
+
+Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's tint: **Current** on the left, **Suggested** on the right, both showing the whole file.
+
+- Panes render real blocks — headings, lists, tables, tasks, graphs — never marker text. Agent text is parsed by [`agent_text_blocks.dart`](../files/model/agent_text_blocks.dart) and drawn by [`read_only_document_view.dart`](../files/editor/read_only_document_view.dart).
+- A hunk is mapped to the lines it touches ([`review_marks.dart`](review_marks.dart)). One table row, task or list item is one agent-text line, so a change inside an embed tints that row alone; a hunk over the whole fence tints the embed.
+- States: pending (faint op tint), active (stronger tint plus a left rule), accepted (teal with a check), rejected (grey, dimmed, with a cross). Word marks stay for changed text lines.
+- One bubble in the gutter between the panes carries `n / m` and Accept | Reject. Deciding advances it to the next undecided change and scrolls both panes there; clicking any change brings it back so a choice can be flipped. Enter accepts, Backspace rejects, Up/Down walk the changes.
+- Finish (disabled until all decided) → `POST /files/:id/pending-review/finish` (archive copy + merge apply); Discard → `DELETE /files/:id/pending-review`.
 
 | File | Role |
 |------|------|
@@ -60,7 +64,8 @@ Pending also opens when the **file** mounts ([`document_pane.dart`](../files/edi
 | [`agent_result_ui.dart`](agent_result_ui.dart) | Result → dialog or snackbar |
 | [`pending_review_ui.dart`](pending_review_ui.dart) | Shared open-pending helper (anti double-open) |
 | [`pending_review_service.dart`](pending_review_service.dart) | GET/DELETE/finish pending |
-| [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart) | PR-style side-by-side lookalike review |
+| [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart) | Two file panes on glass + the moving bubble |
+| [`review_marks.dart`](review_marks.dart) | Hunk lines → change state, tint and mark |
 | [`compact_undo_toast.dart`](compact_undo_toast.dart) | Direct-apply undo toast queue |
 | [`agent_run_defaults.dart`](agent_run_defaults.dart) | FE twin of automation apply-mode default |
 | [`text_diff_dialog.dart`](text_diff_dialog.dart) | Legacy monospace diff (unused for pending path) |

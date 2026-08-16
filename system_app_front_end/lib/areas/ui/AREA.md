@@ -235,4 +235,4 @@ Every surface must work in English (LTR) and Hebrew (RTL). Use [`bilingual_layou
 
 ## Where the style is still not honest
 
-Tracked as **U1–U5** in [`BACKLOG.md`](../../../../BACKLOG.md): the context menu and hover bubble keep some local blur values instead of an `AppGlassStyle` preset, the AI review/diff dialogs bypass `AppGlassDialog` and `AppTypography`, document heading sizes still derive from a formula (now named as `documentHeadingStyle`), some Material icons remain among the Lucide ones in older surfaces, and `AppSwitch` is themed but unused.
+Tracked as **U1–U5** in [`BACKLOG.md`](../../../../BACKLOG.md): the context menu and hover bubble keep some local blur values instead of an `AppGlassStyle` preset, the legacy AI diff dialog and its shell bypass `AppGlassDialog` and `AppTypography`, document heading sizes still derive from a formula (now named as `documentHeadingStyle`), some Material icons remain among the Lucide ones in older surfaces, and `AppSwitch` is themed but unused.

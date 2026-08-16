@@ -107,7 +107,7 @@ The spec says every visual constant lives in `areas/ui/`. These are the places t
 | # | Sev | Issue |
 |---|-----|-------|
 | U1 | **P3** | `app_context_menu.dart` and `details_hover_bubble.dart` keep their own visual language: local blur and tint values instead of an `AppGlassStyle` preset, and their own shadow stacks. |
-| U2 | **P3** | `change_review_dialog.dart` and `text_diff_dialog.dart` bypass `AppGlassDialog` and `AppTypography` — raw `TextStyle(fontSize: 18)`, `fontFamily: 'monospace'`, own max sizes. |
+| U2 | **P3** | `change_review_dialog.dart` and `text_diff_dialog.dart` bypass `AppGlassDialog` and `AppTypography` — raw `TextStyle(fontSize: 18)`, `fontFamily: 'monospace'`, own max sizes. (The pending-review dialog is done: it is on `AppGlassStyle.dialog`; only the legacy shell and diff remain.) |
 | U3 | **P3** | Document heading sizes are computed inline as `24 - level * 2` in `block_document_editor.dart` instead of being named styles in `AppTypography`. |
 | U4 | **P3** | Material `Icons.*` still appear among the Lucide set (`task_mark`, `task_row`, `task_view_pane`, `automation_dialog`, `ai_tool_bar`), so stroke weights do not match. |
 | U5 | **P3** | `AppSwitch` is defined and themed but no widget uses it; `BILINGUAL.md` describes it as standard. Either adopt it or drop it. |

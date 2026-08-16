@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
+import '../ux/topic/topic_appearance.dart';
 import './lookalike_review_dialog.dart';
 import './pending_review_service.dart';
 
@@ -20,9 +21,15 @@ Future<bool> openPendingReviewForFile(
     final PendingReview? pending = await state.pendingReviewForFile(fileId);
     if (!context.mounted || pending == null) return false;
     showed = true;
+    final detail = state.selectedDetail;
+    final file = detail?.files.where((f) => f.id == fileId).firstOrNull;
     await LookalikeReviewDialog.show(
       context,
       pending: pending,
+      strings: state.strings,
+      fileName: file?.name,
+      topicAccent:
+          detail == null ? null : TopicAppearance.accentFor(detail.topic),
       onFinish: (decisions) => state.finishPendingReview(fileId, decisions),
       onDiscard: () => state.discardPendingReview(fileId),
     );

@@ -110,6 +110,13 @@ class AppStrings {
   String compactUndoManyChanges(int count) =>
       this['compactUndoManyChanges'].replaceAll('{count}', '$count');
 
+  String reviewCounter(int index, int total) => '$index / $total';
+
+  String reviewDecidedCount(int decided, int total) =>
+      this['reviewDecidedCount']
+          .replaceAll('{decided}', '$decided')
+          .replaceAll('{total}', '$total');
+
   String archiveDeleteBody(int count) =>
       this['archiveDeleteBody'].replaceAll('{count}', '$count');
 
@@ -612,6 +619,15 @@ class AppStrings {
     'suggestedNewPoint': 'New point',
     'replaceWith': 'Replace with',
     'reviewContextNote': 'Unchanged lines are shown for context. Review suggested changes only.',
+    'reviewPaneCurrent': 'Current',
+    'reviewPaneSuggested': 'Suggested',
+    'reviewAccept': 'Accept',
+    'reviewReject': 'Reject',
+    'reviewFinish': 'Finish',
+    'reviewDiscard': 'Discard',
+    'reviewSaving': 'Saving…',
+    'reviewNoChanges': 'Nothing to review.',
+    'reviewDecidedCount': '{decided} of {total} decided',
     'previousProcess': 'Previous process',
     'nextProcess': 'Next process',
     'previousProject': 'Previous project',
@@ -1082,6 +1098,15 @@ class AppStrings {
     'suggestedNewPoint': 'נקודה חדשה',
     'replaceWith': 'החלף ב',
     'reviewContextNote': 'שורות שלא השתנו מוצגות להקשר. סקור רק את השינויים המוצעים.',
+    'reviewPaneCurrent': 'נוכחי',
+    'reviewPaneSuggested': 'מוצע',
+    'reviewAccept': 'אשר',
+    'reviewReject': 'דחה',
+    'reviewFinish': 'סיום',
+    'reviewDiscard': 'בטל',
+    'reviewSaving': 'שומר…',
+    'reviewNoChanges': 'אין מה לסקור.',
+    'reviewDecidedCount': 'הוכרעו {decided} מתוך {total}',
     'previousProcess': 'תהליך קודם',
     'nextProcess': 'תהליך הבא',
     'previousProject': 'פרויקט קודם',
