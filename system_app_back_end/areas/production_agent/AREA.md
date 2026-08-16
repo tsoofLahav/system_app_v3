@@ -34,7 +34,9 @@ That file is **for the model**: short standing instructions in four parts — ap
 
 Tools authorize by **workspace membership** (run `workspace_id`), not the FE allow-list. Client `scope` / `hints` are preferred context (`focused_file_id`, open topic). Archived files stay read-only on writes.
 
-`hints` are optional pointers on the first turn only (e.g. `focused_file_id`, `selected_text`, `for_date`). Never dump file content there.
+`hints` are optional pointers on the first turn only (`focused_file_id`, `selected_text`). Never dump file content there.
+
+**Clock:** the model has none, so it writes a date from memory unless the run states one. Every run carries `today` / `weekday` / `now` — the client sends the user's local day, and `_with_time_hints` in the runner fills server UTC when nothing arrived (automations have no client). Client values always win.
 
 ## Run loop (Responses API)
 

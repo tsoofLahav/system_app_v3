@@ -19,6 +19,7 @@ import '../areas/objects/data/task.dart';
 import '../areas/files/data/topic.dart';
 import '../areas/automations/automation_service.dart';
 import '../areas/production_agent/agent_service.dart';
+import '../areas/production_agent/agent_time_hints.dart';
 import '../areas/production_agent/pending_review_service.dart';
 import './services/api_service.dart';
 import './services/bootstrap_service.dart';
@@ -1610,6 +1611,7 @@ class AppState extends ChangeNotifier {
             'file_ids': selectedDetail!.files.map((f) => f.id).toList(),
         },
         hints: {
+          ...agentTimeHints(),
           'focused_file_id': ?focusedFileId,
           'selected_text': ?selectedText,
         },

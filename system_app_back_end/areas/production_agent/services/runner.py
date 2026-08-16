@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from models import File, db
@@ -401,6 +402,23 @@ def _clean_hints(hints: dict | None) -> dict[str, Any]:
     return cleaned
 
 
+def _with_time_hints(hints: dict[str, Any]) -> dict[str, Any]:
+    """The model has no clock, so a dated line is invented unless we say the date.
+
+    The client sends the user's local day; automations have no client, so fall
+    back to server UTC.
+    """
+    if hints.get("today"):
+        return hints
+    now = datetime.now(timezone.utc)
+    return {
+        **hints,
+        "today": now.strftime("%Y-%m-%d"),
+        "weekday": now.strftime("%A"),
+        "now": now.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+    }
+
+
 def _first_turn_input(*, prompt: str, scope: dict, hints: dict) -> str:
     """Prompt + scope (+ tiny hints). Never file bodies."""
     payload: dict[str, Any] = {
@@ -432,7 +450,7 @@ def run_agent(
     apply_mode = (apply_mode or DEFAULT_MANUAL_APPLY_MODE).strip()
     # `context` is legacy; merge into hints (hints win on key clash).
     merged_hints = {**(context or {}), **(hints or {})}
-    hints = _clean_hints(merged_hints)
+    hints = _with_time_hints(_clean_hints(merged_hints))
 
     instructions = system_prompt_for_workspace(workspace_id)
     model = _model_for_workspace(workspace_id)

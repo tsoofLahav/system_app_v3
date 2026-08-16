@@ -24,7 +24,10 @@ selected topic  → scope.topic_ids
 selected topic's files → scope.file_ids
 active editor file → hints.focused_file_id   (tiny pointer; not the file body)
 caret line / mark → hints.selected_text      (tiny; selection or caret line only)
+local clock → hints.today / weekday / now    ([`agent_time_hints.dart`](agent_time_hints.dart))
 ```
+
+The clock hints are not optional: without them the model dates a line from memory. Send the **local** day — the backend can only fall back to UTC, which is the wrong date late in the evening.
 
 Before the run, the active editor is flushed so `open_file` matches the open document.
 After finish pending / direct apply, the topic reloads; open Super Editors pick up a changed `document_json` and remount from stored text.

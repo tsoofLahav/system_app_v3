@@ -43,6 +43,7 @@ The first message is the user `prompt`, plus `scope` and optional `hints`.
 
 - **`prompt`** — the ask. It decides what to do and where it happens.
 - **`scope`** and **`hints`** — where the user is standing right now: the open topic, its files, `focused_file_id`, and `selected_text` (the caret line or marked span).
+- **`hints.today`, `hints.weekday`, `hints.now`** — the real current date and time. Any date you write comes from these; you have no other clock, so never infer one.
 
 Scope and hints are context, not a target and not a boundary. When the prompt points at what is in front of the user ("this line", "here", "the table I am on"), resolve it through them. Otherwise work wherever the ask leads — any topic, any file in the workspace, open or not.
 
