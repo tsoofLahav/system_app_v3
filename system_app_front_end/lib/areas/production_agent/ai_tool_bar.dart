@@ -6,8 +6,8 @@ import '../ux/shortcuts/shortcut_catalog.dart';
 import '../ui/adaptive_dialog.dart';
 import '../ui/app_colors.dart';
 import '../ui/app_icons.dart';
+import '../ui/app_segmented_toggle.dart';
 import '../ui/dialog_field_style.dart';
-import '../ui/glass_surface.dart';
 import './agent_result_ui.dart';
 
 const aiToolIconSize = 22.0;
@@ -42,24 +42,58 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
   }
 
   final controller = TextEditingController();
+  var applyMode = 'review';
   final prompt = await showAppDialog<String>(
     context: context,
-    builder: (ctx) => AppAdaptiveDialogShell(
-      title: Text(s['aiAgent']),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s['cancel'])),
-        FilledButton(
-          onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-          child: Text(s['run']),
-        ),
-      ],
-      child: AppDialogField(
-        label: s['aiAgentPromptHint'],
-        child: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: 4,
-          decoration: DialogFieldStyle.decoration(),
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setLocal) => AppAdaptiveDialogShell(
+        title: Text(s['aiAgent']),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s['cancel']),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: Text(s['run']),
+          ),
+        ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AppDialogField(
+              label: s['aiAgentPromptHint'],
+              child: TextField(
+                controller: controller,
+                autofocus: true,
+                maxLines: 4,
+                decoration: DialogFieldStyle.decoration(),
+              ),
+            ),
+            const SizedBox(height: DialogFieldStyle.fieldGap),
+            AppDialogField(
+              label: s['consultApplyMode'],
+              hint: s['consultApplyModeHint'],
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: AppSegmentedToggle<String>(
+                  options: [
+                    AppSegmentedOption(
+                      value: 'review',
+                      label: s['consultApplyModeReview'],
+                    ),
+                    AppSegmentedOption(
+                      value: 'direct_apply',
+                      label: s['consultApplyModeDirect'],
+                    ),
+                  ],
+                  selected: applyMode,
+                  onSelected: (mode) => setLocal(() => applyMode = mode),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     ),
@@ -67,8 +101,7 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
   if (prompt == null || prompt.isEmpty || !context.mounted) return;
 
   try {
-    // No apply_mode — backend `DEFAULT_MANUAL_APPLY_MODE` is the only default.
-    final result = await state.runAgentPrompt(prompt);
+    final result = await state.runAgentPrompt(prompt, applyMode: applyMode);
     if (!context.mounted || result == null) return;
     await presentAgentRunResult(context, state, result);
   } catch (e) {

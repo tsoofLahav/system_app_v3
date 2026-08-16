@@ -1,13 +1,13 @@
 # Working on the agent interaction
 
-**Status:** Plan v2 Step 1 (v4 apply harden) done on this branch — Accept uses `POST /files/:id/apply-agent-text` with `object_updates`; id-less `[TABLE]` rejected on write. Steps 2+ (pending DB, lookalike diff, undo) not started.  
+**Status:** Pending DB + lookalike per-hunk review + Consult apply toggle are implemented. Compact undo for `direct_apply` (step 7) not started.  
 Not day-to-day coding memory (`DEVELOPMENT.md` / `AREA.md`).
 
 ---
 
 ## Goal
 
-Production agent finds the right files and makes accurate edits. User either reviews a git-merge-style diff, or the action applies silently.
+Production agent finds the right files and makes accurate edits. User either reviews a lookalike per-hunk diff when opening the file, or the action applies silently.
 
 Agent never touches `document_json`. It reads/writes **agent text**; backend converts both ways.
 
@@ -20,25 +20,25 @@ Agent never touches `document_json`. It reads/writes **agent text**; backend con
 | API | **Responses API** + one OpenAI conversation per workflow |
 | Memory | DB = long-term; OpenAI conversation = short-term for that run only (no need to archive chats) |
 | File format for agent | **Agent text** with fences; never raw JSON |
-| Scope | Hard allow-list of topic/file ids (from UI). Not file bodies. |
+| Scope | Preferred topic/file context from UI (not a hard tool allow-list). Not file bodies. |
 | Hints | Tiny pointers on the first turn: focused file, selection, dates, etc. Not file bodies. |
-| Content | Loaded only via tools (`open_file` / search) |
+| Content | Loaded only via tools (`open_file` / list / find) |
 | Archive files | Readable when needed; **never writable** |
-| Review vs apply | **Action config** (+ tool defaults). Model does not choose the dialog. |
-| Pending reviews | Persisted in **our DB**; shown when user opens the topic/file. Accept/reject is separate from the agent run. |
+| Review vs apply | **Action config** (+ Consult toggle). Model does not choose the dialog. |
+| Pending reviews | Persisted in **`agent_pending_reviews`**; lookalike UI when user opens the file. Finish archives old copy then applies merge. |
 | Diff | Agent text ↔ agent text only; look like the real file (read-only presentation) |
 
 ---
 
 ## Run flow (one workflow)
 
-1. Frontend sends: **prompt** + **scope** + optional **hints**.
+1. Frontend sends: **prompt** + **scope** + optional **hints** (+ Consult `apply_mode`).
 2. Backend creates OpenAI conversation; stores `conversation_id` + scope on workspace; attaches standing instructions once (`agent_configs.system_prompt`).
 3. First message = prompt + scope (+ hints). No file bodies.
-4. Loop: model calls tools → backend runs them (enforce scope; reject writes to archived) → send **tool results only** back into the same conversation.
+4. Loop: model calls tools → backend runs them (workspace auth; reject writes to archived) → send **tool results only** back into the same conversation.
 5. Each write tool either **applies to DB** or **queues a pending change** (per action config).
-6. Run ends. Drop the OpenAI conversation. Pending reviews + any compact undo stay in DB.
-7. Later, user opens topic/file → sees pending reviews → accept/reject → apply via `apply_agent_text` (independent of the chat).
+6. Run ends. Drop the OpenAI conversation. Pending reviews stay in DB.
+7. Later, user opens file → lookalike hunk dialog → accept/reject each → Finish → archive copy + `apply_agent_text`.
 
 ### Hints (first turn only)
 
@@ -72,10 +72,11 @@ Omit when unused. Extend the set as actions need — keep them tiny.
 |------|------|-------------|-----------------|
 | **`patch_file`** | **Partial edits** add / remove / replace by line | `op`, `line`, `end_line`, `text` | Review / pending |
 | **`rewrite_file`** | True whole-file rewrite | Full new agent text | Usually apply |
+| **`create_object`** | New embed + pointer | type + fields | **direct_apply** this pass (not line-merge pending) |
 
 Tool choice is guided by accurate descriptions (and standing prompt) — not hard bans. `patch_file` uses exact replacements so unchanged spans stay intact. Extra blank lines map in the **mapper only** as `[SPACER n="…"]` ↔ empty paragraphs / blank runs in paragraph text (no editor spacer type).
 
-Read tools: `open_file`, `search`, object/task search.
+Browse: `list`, `find_file`, `find_object`, `open_file`, `reference`.
 
 ---
 
@@ -83,19 +84,19 @@ Read tools: `open_file`, `search`, object/task search.
 
 | Path | Behaviour |
 |------|-----------|
-| **Review** | Don’t write live file. Store pending change (file id, old/new agent text, run id). Diff UI later. |
-| **Apply** | Write now. Keep **compact undo** sized to the change (reverse hunk for tiny; fuller snapshot for rewrite). |
+| **Review** | Rollback live file. Upsert pending (file id, old/new agent text + document_json, run key). Lookalike UI on file open. Finish: deep-copy old into topic Archive, apply merged agent text to live file, delete pending. |
+| **Apply** | Write now. Compact undo still **not** implemented. |
 
-Multi-file runs: each write applies or queues on its own; accumulate pending records in DB (not only in the HTTP response).
+Multi-file runs: each file gets its own pending row; each opens on that file.
 
 ---
 
 ## Diff UI
 
-1. Line-level diff on agent text (incl. fences).
+1. Line-level hunks on agent text (incl. fences).
 2. Word-level marks inside changed lines.
-3. Side-by-side; read-only presentation that **looks** like the file (shared styles with editor; no live edit widgets).
-4. Accept/reject → merged agent text → `apply_agent_text`.
+3. Lookalike read-only blocks (shared note typography).
+4. Every hunk Accept | Reject → Finish → merge → archive + apply.
 
 ```
 agent text  →  presentation blocks  →  read-only UI
@@ -117,14 +118,14 @@ Keep short: agent text + fences; object ids; tool choice; open/search when neede
 
 ## Implementation steps (do in order)
 
-1. **Runner** — Responses API + per-flow `conversation_id` / workspace (scope, hints, workflow metadata). Tool loop = tool results only.
-2. **`open_file`** — agent text + minimal extras; archive files read-only for writes.
-3. **Fences** — freeze task / info / image / graph agent-text shapes; align prompt.
-4. **Write tools** — `patch_file`, `rewrite_file`; action-config apply vs review.
-5. **Pending changes** — DB records + accept/reject API (decoupled from OpenAI conversation).
-6. **Presentation + diff UI** — read-only lookalike; line + word; open from topic/file when pending exists.
+1. **Runner** — Responses API + per-flow `conversation_id` / workspace (scope, hints, workflow metadata). Tool loop = tool results only. ✅
+2. **`open_file`** — agent text + minimal extras; archive files read-only for writes. ✅
+3. **Fences** — freeze task / info / image / graph agent-text shapes; align prompt. ✅
+4. **Write tools** — `patch_file`, `rewrite_file`; action-config apply vs review. ✅
+5. **Pending changes** — DB records + finish/discard API (decoupled from OpenAI conversation). ✅
+6. **Presentation + diff UI** — lookalike; line + word; open from file when pending exists. ✅
 7. **Compact undo** — reverse hunk / sized snapshot for applied writes.
-8. **Prompt** — trim, sync to DB, smoke-test a few actions.
+8. **Prompt** — trim, sync to DB, smoke-test a few actions. (ongoing)
 
 ---
 

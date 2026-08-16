@@ -423,3 +423,36 @@ class AgentConfig(db.Model):
             "created_at": _iso(self.created_at),
             "updated_at": _iso(self.updated_at),
         }
+
+
+class AgentPendingReview(db.Model):
+    __tablename__ = "agent_pending_reviews"
+
+    id = db.Column(db.Integer, primary_key=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id"), nullable=False)
+    topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"), nullable=False)
+    file_id = db.Column(db.Integer, db.ForeignKey("files.id"), nullable=False, unique=True)
+    run_key = db.Column(db.Text, nullable=False, default="")
+    old_agent_text = db.Column(db.Text, nullable=False, default="")
+    new_agent_text = db.Column(db.Text, nullable=False, default="")
+    old_document_json = db.Column(db.Text, nullable=False, default="")
+    new_document_json = db.Column(db.Text, nullable=False, default="")
+    object_updates = db.Column(JSONB, nullable=False, default=dict)
+    tool = db.Column(db.Text, nullable=False, default="patch_file")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workspace_id": self.workspace_id,
+            "topic_id": self.topic_id,
+            "file_id": self.file_id,
+            "run_key": self.run_key or "",
+            "old_agent_text": self.old_agent_text or "",
+            "new_agent_text": self.new_agent_text or "",
+            "old_document_json": self.old_document_json or "",
+            "new_document_json": self.new_document_json or "",
+            "object_updates": self.object_updates if self.object_updates is not None else {},
+            "tool": self.tool or "patch_file",
+            "created_at": _iso(self.created_at),
+        }

@@ -32,6 +32,7 @@ from areas.production_agent.services.browse_tools import (
     list_entities,
 )
 from areas.production_agent.services.create_object_tool import create_object
+from areas.production_agent.services.pending_reviews import upsert_pending_from_proposals
 from areas.production_agent.services.write_tools import (
     WRITE_TOOL_NAMES,
     apply_document_text,
@@ -548,9 +549,30 @@ def run_agent(
     else:
         db.session.rollback()
 
+    pending_ids: list[int] = []
+    if apply_mode == "review" and proposed_changes:
+        try:
+            import uuid
+
+            run_key = conversation_id or str(uuid.uuid4())
+            pending_ids = upsert_pending_from_proposals(
+                workspace_id=int(workspace_id),
+                run_key=str(run_key),
+                proposed_changes=[
+                    c for c in proposed_changes if isinstance(c, dict)
+                ],
+            )
+            if pending_ids:
+                db.session.commit()
+        except Exception:
+            logger.exception("failed to persist pending reviews")
+            db.session.rollback()
+            pending_ids = []
+
     print(
         f"[agent-run] tools={[t.get('name') for t in tool_trace]} "
         f"proposed={len(proposed_changes)} applied={applied} "
+        f"pending={len(pending_ids)} "
         f"summary_len={len(final_summary)}",
         flush=True,
     )
@@ -564,4 +586,6 @@ def run_agent(
         "proposed_changes": proposed_changes,
         "applied": applied,
         "apply_mode": apply_mode,
+        "pending_review_ids": pending_ids,
+        "has_pending_review": bool(pending_ids),
     }

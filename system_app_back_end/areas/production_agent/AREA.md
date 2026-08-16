@@ -46,7 +46,7 @@ create OpenAI conversation
 delete conversation
 ```
 
-Short-term memory is the OpenAI conversation for that run only. It is dropped when the run ends. Pending reviews / undo stay in our DB (later steps).
+Short-term memory is the OpenAI conversation for that run only. It is dropped when the run ends. Pending reviews live in `agent_pending_reviews`.
 
 ## Tools
 
@@ -63,7 +63,7 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 
 Browse helpers: [`services/browse_tools.py`](services/browse_tools.py). Create: [`services/create_object_tool.py`](services/create_object_tool.py) + shared [`areas/objects/services/create_embed.py`](../objects/services/create_embed.py). `open_file` payload: [`services/open_file_tool.py`](services/open_file_tool.py). Writes: [`services/write_tools.py`](services/write_tools.py).
 
-**Apply vs review:** the run’s `apply_mode` wins (`review` / `direct_apply` / `notify_only`). Defaults live in **one place**: [`shared/run_config.py`](../../shared/run_config.py) (`DEFAULT_MANUAL_APPLY_MODE`, `DEFAULT_AUTOMATION_APPLY_MODE`). Routes/runner/models import those — do not hardcode fallback strings. Manual consult currently defaults to `direct_apply` until the real diff UI ships. Automations store their own mode. The model does not choose the dialog.
+**Apply vs review:** the run’s `apply_mode` wins (`review` / `direct_apply` / `notify_only`). Defaults live in **one place**: [`shared/run_config.py`](../../shared/run_config.py) (`DEFAULT_MANUAL_APPLY_MODE`, `DEFAULT_AUTOMATION_APPLY_MODE`). Routes/runner/models import those — do not hardcode fallback strings. Manual **Consult** sends `apply_mode` from the FE toggle (default review). Automations store their own mode. The model does not choose the dialog.
 
 The agent never sees or writes raw JSON. It reads and writes **agent text**; the [files area](../files/AREA.md) converts in both directions.
 
@@ -82,8 +82,22 @@ Each write tool ends in the same apply path (`patch_file` / `rewrite_file`):
 | Mode | Effect |
 |------|--------|
 | `direct_apply` | Writes immediately via `commit_agent_file_apply`, commits |
-| `review` | Returns proposed change with `object_updates` + `review` diff; rolls back live file |
+| `review` | Rolls back live writes; upserts `agent_pending_reviews`; response includes `has_pending_review` |
 | `notify_only` | Returns the new document without diff or write |
+
+## Pending reviews
+
+Table `agent_pending_reviews` (one open row per `file_id`; newest run replaces). After review rollback, runner upserts then commits.
+
+| Method | Path | Role |
+|--------|------|------|
+| GET | `/files/:id/pending-review` | `{ pending: null \| { …, hunks } }` |
+| POST | `/files/:id/pending-review/finish` | Per-hunk decisions → archive deep-copy of old file → apply merged agent text → delete pending |
+| DELETE | `/files/:id/pending-review` | Discard |
+
+Finish archives as `"{name} (before AI · {local date})"` with deep-copied embeds, then `apply_agent_text` on the live file. `create_object` proposals are not queued for line-merge pending (direct_apply only this pass).
+
+Service: [`services/pending_reviews.py`](services/pending_reviews.py).
 
 ## Diff logic (review mode)
 
@@ -91,11 +105,11 @@ Diffs are computed on **agent text**, not JSON — a JSON diff is unreadable and
 
 ```
 old document_json ─┐
-                   ├─ document_to_agent_text (embeds expanded) ─→ unified diff
+                   ├─ document_to_agent_text (embeds expanded) ─→ unified / hunks
 new document_json ─┘
 ```
 
-Returns `{ diff_hunks, old_document_text, new_document_text }`. The review tool result also includes `object_updates`. The frontend Accept path calls `POST /files/:id/apply-agent-text` with `document_json` + `object_updates` (not a bare file PATCH).
+Tool results still include `{ diff_hunks, old_document_text, new_document_text }` for debugging. The product path is pending DB + lookalike UI. `POST /files/:id/apply-agent-text` remains for direct apply / finish.
 
 The same `compute_diff` backs `POST /files/:id/diff`.
 
@@ -103,25 +117,27 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 
 | Module | Role |
 |--------|------|
-| [`services/runner.py`](services/runner.py) | Conversation lifecycle, tool dispatch |
+| [`services/runner.py`](services/runner.py) | Conversation lifecycle, tool dispatch, pending upsert after review rollback |
+| [`services/pending_reviews.py`](services/pending_reviews.py) | Hunks, merge, archive copy, finish/discard |
 | [`services/write_tools.py`](services/write_tools.py) | `patch_file` / `rewrite_file`, `commit_agent_file_apply`, diff, mode resolution |
 | [`services/open_file_tool.py`](services/open_file_tool.py) | `open_file` payload (agent text + extras) |
 | [`services/prompt.py`](services/prompt.py) | Load/seed/sync the system prompt from the DB |
 | [`services/openai_service.py`](services/openai_service.py) | Responses conversation helpers + legacy chat/image helpers |
-| [`routes/agent.py`](routes/agent.py) | `POST /agent/run`; `POST /files/:id/apply-agent-text` |
+| [`routes/agent.py`](routes/agent.py) | `POST /agent/run`; apply-agent-text; pending-review routes |
 
 ## Rules
 
-- Scope is a hard boundary — never widen it inside a tool.
+- Scope is preferred context — tools authorize by workspace membership.
 - Never put file bodies in the first turn; load only via tools.
 - Follow-up turns send tool results only.
-- Never persist agent text.
+- Never persist agent text as the live file format.
 - Never apply a partial update: if parsing produced errors, write nothing.
-- `review` and `notify_only` must roll back the session.
+- `review` and `notify_only` must roll back the tool session; review then persists pending in a new commit.
 - Drop the OpenAI conversation when the run ends.
 - Changing the agent's behavior means editing the markdown source and syncing — not hardcoding prompt text in `runner.py`.
 
-## Known gaps (later plan steps)
+## Known gaps (later)
 
-- Pending reviews are still returned in the HTTP response, not yet persisted independently in DB (step 5).
-- `agent_configs.tool_allowlist` is not yet honored.
+- Compact undo for `direct_apply`
+- Per-hunk review of `create_object`
+- `agent_configs.tool_allowlist` is not yet honored

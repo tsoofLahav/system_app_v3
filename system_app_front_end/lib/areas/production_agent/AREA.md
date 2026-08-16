@@ -11,7 +11,7 @@ Lives in the bottom bar ([`ai_tool_bar.dart`](ai_tool_bar.dart)) and has two con
 | Control | Behavior |
 |---------|----------|
 | **Bolt menu** | Saved AI actions — automations the user marked as manual. Picking one runs it immediately. |
-| **Consult button** | Opens a prompt dialog for a one-off request. |
+| **Consult button** | Opens a prompt dialog for a one-off request, with **Review changes (diff)** vs **Apply directly** (default review). |
 
 Both are disabled when there is no AI context (nothing selected) or a run is already in flight. `AppState.hasAiContext` and `aiRunning` gate them; `aiRunning` also drives the busy state so the user cannot double-fire.
 
@@ -27,57 +27,48 @@ caret line / mark → hints.selected_text      (tiny; selection or caret line on
 ```
 
 Before the run, the active editor is flushed so `open_file` matches the open document.
-After apply (or accept review), the topic reloads; open Super Editors pick up a changed `document_json` and remount from stored text (so the user does not need to leave the page).
+After finish pending / direct apply, the topic reloads; open Super Editors pick up a changed `document_json` and remount from stored text.
 
-Buttons stay disabled with nothing open so the run still has a workspace + useful context.
-The backend loads content only via tools; the first turn never includes file bodies.
+## Apply mode
 
-## Apply mode defaults
-
-Manual consult **omits** `apply_mode` on `POST /agent/run`. The backend owns the default in [`shared/run_config.py`](../../../../system_app_back_end/shared/run_config.py) — do not re-default it in `AppState` / `AgentService` / the toolbar.
-
-Automation create UI uses [`agent_run_defaults.dart`](agent_run_defaults.dart) (`defaultAutomationApplyMode`), which must match `DEFAULT_AUTOMATION_APPLY_MODE` on the backend.
+- **Consult** always sends `apply_mode`: `review` | `direct_apply` (dialog default = review).
+- If somehow omitted, backend [`DEFAULT_MANUAL_APPLY_MODE`](../../../../system_app_back_end/shared/run_config.py) applies.
+- Automations use their stored mode; create UI default is [`agent_run_defaults.dart`](agent_run_defaults.dart).
 
 ## Presenting a run result
 
 [`agent_result_ui.dart`](agent_result_ui.dart) branches on the **result**, not a copied mode string:
 
-- any `proposed_changes[].review` → rough `TextDiffDialog` (until lookalike UI, plan step 6)
+- `has_pending_review` or any `proposed_changes[].review` → snackbar “Open the file to review changes” (no blocking apply dialog)
 - else → snackbar summary; reload topic when `applied`
 
-```
-run → presentAgentRunResult(result)
-        ↓
- review? → TextDiffDialog → accept/cancel
- else    → snackbar (+ reload if applied)
-```
+Pending reviews open when the **file** mounts ([`document_pane.dart`](../files/editor/document_pane.dart) → [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart)):
 
-Key points (review path):
-
-- The diff is over **agent text**, not JSON — the user reads sentences, not braces.
-- Nothing is written until the user accepts. The backend rolled its session back already.
-- On accept, the frontend calls `POST /files/:id/apply-agent-text` with `new_document_json` **and** `object_updates` from the proposal (not a bare `document_json` PATCH), then reloads the topic so embeds refresh.
-- Only the first proposed change is currently shown, even when a run touches several files.
+- Per-hunk Accept | Reject; Finish disabled until all decided
+- Finish → `POST /files/:id/pending-review/finish` (archive copy + merge apply)
+- Discard → `DELETE /files/:id/pending-review`
 
 | File | Role |
 |------|------|
-| [`ai_tool_bar.dart`](ai_tool_bar.dart) | Actions menu, prompt dialog, run orchestration |
-| [`agent_result_ui.dart`](agent_result_ui.dart) | Result → dialog or snackbar |
+| [`ai_tool_bar.dart`](ai_tool_bar.dart) | Actions menu, prompt dialog + apply toggle, run orchestration |
+| [`agent_result_ui.dart`](agent_result_ui.dart) | Result → snackbar |
+| [`pending_review_service.dart`](pending_review_service.dart) | GET/DELETE/finish pending |
+| [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart) | Per-hunk lookalike review |
 | [`agent_run_defaults.dart`](agent_run_defaults.dart) | FE twin of automation apply-mode default |
-| [`text_diff_dialog.dart`](text_diff_dialog.dart) | Renders `diff_hunks` and returns accept/cancel |
-| [`change_review_dialog.dart`](change_review_dialog.dart) | Richer structured review surface |
+| [`text_diff_dialog.dart`](text_diff_dialog.dart) | Legacy monospace diff (fallback / unused for pending path) |
+| [`change_review_dialog.dart`](change_review_dialog.dart) | Glass shell for review dialogs |
 | [`agent_service.dart`](agent_service.dart) | `POST /agent/run` |
-| [`ai_proposal.dart`](ai_proposal.dart), [`change_set.dart`](change_set.dart) | Proposal models |
 
 ## Rules
 
-- Never write a file from an agent result without explicit user acceptance when the result includes a review proposal.
-- Never hardcode manual `apply_mode` defaults on the frontend.
-- Never show raw JSON to the user — always the agent-text diff.
-- Clear `pendingAgentReview` on both accept and cancel so a stale proposal cannot be applied later.
-- Refresh the open topic after applying, or the editor will keep showing the pre-agent document. Open editors also reload when `document_json` changes in AppState.
-- Pass `hints.selected_text` from the active mark (selection or caret line) so “delete this line” can resolve correctly.
+- Never apply a review proposal without Finish (or Discard) on the lookalike dialog.
+- Never hardcode a silent consult `apply_mode` — the dialog chooses and sends it.
+- Never show raw JSON to the user — agent-text hunks only.
+- Refresh the open topic after Finish so the editor and Archive list update.
+- Pass `hints.selected_text` from the active mark so “delete this line” can resolve correctly.
 
 ## Not done yet
 
-Multi-file proposals are returned by the backend but only the first is presented for review.
+- Compact undo for `direct_apply`
+- Per-hunk review of `create_object` (stays direct_apply)
+- Multi-file single combined dialog (each file opens its own pending)

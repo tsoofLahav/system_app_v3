@@ -7,6 +7,11 @@ from areas.production_agent.services.write_tools import (
     _object_updates_from_json,
     commit_agent_file_apply,
 )
+from areas.production_agent.services.pending_reviews import (
+    discard_pending,
+    finish_pending,
+    get_pending_for_file,
+)
 from shared.run_config import DEFAULT_MANUAL_APPLY_MODE
 
 agent_bp = Blueprint("agent", __name__)
@@ -53,3 +58,38 @@ def apply_agent_text_route(file_id):
         return jsonify({"error": "; ".join(errors)}), 400
     db.session.commit()
     return jsonify(file.to_dict())
+
+
+@agent_bp.route("/files/<int:file_id>/pending-review", methods=["GET"])
+def get_pending_review(file_id):
+    get_or_404(File, file_id)
+    pending = get_pending_for_file(file_id)
+    return jsonify({"pending": pending})
+
+
+@agent_bp.route("/files/<int:file_id>/pending-review", methods=["DELETE"])
+def delete_pending_review(file_id):
+    get_or_404(File, file_id)
+    if not discard_pending(file_id):
+        return jsonify({"error": "no pending review"}), 404
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@agent_bp.route("/files/<int:file_id>/pending-review/finish", methods=["POST"])
+def finish_pending_review(file_id):
+    get_or_404(File, file_id)
+    data = request.get_json(silent=True) or {}
+    decisions = data.get("decisions")
+    if not isinstance(decisions, list):
+        return jsonify({"error": "decisions array required"}), 400
+    result = finish_pending(
+        file_id,
+        decisions=decisions,
+        archive_name=data.get("archive_name"),
+    )
+    if result.get("error"):
+        db.session.rollback()
+        return jsonify(result), 400
+    db.session.commit()
+    return jsonify(result)

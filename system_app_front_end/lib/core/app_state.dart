@@ -19,6 +19,7 @@ import '../areas/objects/data/task.dart';
 import '../areas/files/data/topic.dart';
 import '../areas/automations/automation_service.dart';
 import '../areas/production_agent/agent_service.dart';
+import '../areas/production_agent/pending_review_service.dart';
 import './services/api_service.dart';
 import './services/bootstrap_service.dart';
 import './services/image_service.dart';
@@ -54,6 +55,7 @@ class AppState extends ChangeNotifier {
     _tasks = TaskService(_api);
     _tags = TagService(_api);
     _agent = AgentService(_api);
+    _pendingReviews = PendingReviewService(_api);
     _automations = AutomationService(_api);
     _images = ImageService(_api);
   }
@@ -67,6 +69,7 @@ class AppState extends ChangeNotifier {
   late final TaskService _tasks;
   late final TagService _tags;
   late final AgentService _agent;
+  late final PendingReviewService _pendingReviews;
   late final AutomationService _automations;
   late final ImageService _images;
 
@@ -1591,16 +1594,28 @@ class AppState extends ChangeNotifier {
         },
         applyMode: applyMode,
       );
-      final changes = result['proposed_changes'];
-      if (changes is List &&
-          changes.any((c) => c is Map && c['review'] != null)) {
-        pendingAgentReview = result;
-      }
       return result;
     } finally {
       aiRunning = false;
       notifyListeners();
     }
+  }
+
+  Future<PendingReview?> pendingReviewForFile(int fileId) {
+    return _pendingReviews.getForFile(fileId);
+  }
+
+  Future<void> finishPendingReview(
+    int fileId,
+    List<Map<String, String>> decisions,
+  ) async {
+    await _pendingReviews.finish(fileId, decisions: decisions);
+    if (selectedTopic != null) await selectTopic(selectedTopic!);
+    await loadArchive();
+  }
+
+  Future<void> discardPendingReview(int fileId) async {
+    await _pendingReviews.discard(fileId);
   }
 
   Future<void> applyAgentReview() async {
