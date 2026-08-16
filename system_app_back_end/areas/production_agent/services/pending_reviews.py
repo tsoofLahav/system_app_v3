@@ -31,13 +31,51 @@ _POINTER_ID_RE = re.compile(
     r'(\[(?:TABLE|GRAPH|INFO|TASK_LIST|IMAGE|EMBED)\b[^\]]*?\bid=")(\d+)(")'
 )
 
+# Opcode tuple: (tag, i1, i2, j1, j2) — same shape as SequenceMatcher.
+_Opcode = tuple[str, int, int, int, int]
+
+
+def _coalesce_opcodes(opcodes: list[_Opcode]) -> list[_Opcode]:
+    """Merge adjacent delete+insert (either order) into a single replace.
+
+    Prevents a conceptual line edit from applying as “keep old + insert new”
+    when difflib emits separate delete/insert instead of replace.
+    """
+    if not opcodes:
+        return []
+    out: list[_Opcode] = []
+    i = 0
+    while i < len(opcodes):
+        tag, i1, i2, j1, j2 = opcodes[i]
+        if i + 1 < len(opcodes):
+            ntag, ni1, ni2, nj1, nj2 = opcodes[i + 1]
+            if tag == "delete" and ntag == "insert" and i2 == ni1 and j2 == nj1:
+                out.append(("replace", i1, i2, j1, nj2))
+                i += 2
+                continue
+            if tag == "insert" and ntag == "delete" and i2 == ni1 and j2 == nj1:
+                out.append(("replace", i1, ni2, j1, j2))
+                i += 2
+                continue
+        out.append((tag, i1, i2, j1, j2))
+        i += 1
+    return out
+
+
+def normalized_opcodes(old_text: str, new_text: str) -> list[_Opcode]:
+    old_lines = (old_text or "").splitlines()
+    new_lines = (new_text or "").splitlines()
+    raw = list(
+        SequenceMatcher(a=old_lines, b=new_lines, autojunk=False).get_opcodes()
+    )
+    return _coalesce_opcodes(raw)
+
 
 def build_hunks(old_text: str, new_text: str) -> list[dict[str, Any]]:
     old_lines = (old_text or "").splitlines()
     new_lines = (new_text or "").splitlines()
-    matcher = SequenceMatcher(a=old_lines, b=new_lines, autojunk=False)
     hunks: list[dict[str, Any]] = []
-    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+    for tag, i1, i2, j1, j2 in normalized_opcodes(old_text, new_text):
         if tag == "equal":
             continue
         op = {"insert": "add", "delete": "remove", "replace": "change"}.get(tag, tag)
@@ -61,9 +99,14 @@ def merge_agent_text(
     new_text: str,
     decisions: list[dict[str, Any]],
 ) -> tuple[str | None, str | None]:
-    """Return (chosen_text, error). Every hunk must appear in decisions."""
+    """Return (chosen_text, error). Every hunk must appear in decisions.
+
+    Walks the same normalized opcodes as ``build_hunks`` so Accept on a change
+    replaces (never keeps old + inserts new).
+    """
     old_lines = (old_text or "").splitlines()
     new_lines = (new_text or "").splitlines()
+    opcodes = normalized_opcodes(old_text, new_text)
     hunks = build_hunks(old_text, new_text)
     by_id = {str(d.get("hunk_id")): d.get("choice") for d in decisions}
     if len(hunks) != len(by_id) or any(h["id"] not in by_id for h in hunks):
@@ -73,10 +116,9 @@ def merge_agent_text(
         if choice not in {"accept", "reject"}:
             return None, f"invalid choice for hunk {h['id']}"
 
-    matcher = SequenceMatcher(a=old_lines, b=new_lines, autojunk=False)
     out: list[str] = []
     hunk_iter = iter(hunks)
-    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+    for tag, i1, i2, j1, j2 in opcodes:
         if tag == "equal":
             out.extend(old_lines[i1:i2])
             continue
@@ -89,6 +131,7 @@ def merge_agent_text(
             if not accept:
                 out.extend(old_lines[i1:i2])
         elif tag == "replace":
+            # Accept → only new; reject → only old. Never concatenate.
             out.extend(new_lines[j1:j2] if accept else old_lines[i1:i2])
     text = "\n".join(out)
     if (old_text or "").endswith("\n") or (new_text or "").endswith("\n"):

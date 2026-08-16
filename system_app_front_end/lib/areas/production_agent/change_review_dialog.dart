@@ -10,11 +10,15 @@ class ChangeReviewDialogShell extends StatelessWidget {
     required this.title,
     required this.child,
     required this.actions,
+    this.maxWidth = 640,
+    this.maxHeight = 520,
   });
 
   final String title;
   final Widget child;
   final List<Widget> actions;
+  final double maxWidth;
+  final double maxHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +29,10 @@ class ChangeReviewDialogShell extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppGlassStyle.dialogRadius),
         tintOpacity: 0.92,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640, maxHeight: 520),
+          constraints: BoxConstraints(
+            maxWidth: maxWidth,
+            maxHeight: maxHeight,
+          ),
           child: Padding(
             padding: AppDialogMetrics.padding,
             child: Column(

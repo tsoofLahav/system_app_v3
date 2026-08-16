@@ -4,7 +4,7 @@ import 'dart:async';
 import '../../../core/app_state.dart';
 import '../data/app_file.dart';
 import '../data/topic.dart';
-import '../../production_agent/lookalike_review_dialog.dart';
+import '../../production_agent/pending_review_ui.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
@@ -37,8 +37,6 @@ class DocumentPane extends StatefulWidget {
 class _DocumentPaneState extends State<DocumentPane> {
   late TextEditingController _titleController;
   final _menuButtonKey = GlobalKey();
-  /// Avoid reopening the same pending dialog in a loop for one pane open.
-  int? _pendingPromptedForFileId;
 
   @override
   void initState() {
@@ -56,7 +54,6 @@ class _DocumentPaneState extends State<DocumentPane> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.file.id != widget.file.id) {
       _titleController.text = widget.state.fileDisplayName(widget.file.name);
-      _pendingPromptedForFileId = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(_maybeOpenPendingReview());
       });
@@ -65,25 +62,7 @@ class _DocumentPaneState extends State<DocumentPane> {
 
   Future<void> _maybeOpenPendingReview() async {
     if (!mounted) return;
-    final fileId = widget.file.id;
-    if (_pendingPromptedForFileId == fileId) return;
-    _pendingPromptedForFileId = fileId;
-    try {
-      final pending = await widget.state.pendingReviewForFile(fileId);
-      if (!mounted || pending == null || widget.file.id != fileId) return;
-      await LookalikeReviewDialog.show(
-        context,
-        pending: pending,
-        onFinish: (decisions) =>
-            widget.state.finishPendingReview(fileId, decisions),
-        onDiscard: () => widget.state.discardPendingReview(fileId),
-      );
-    } catch (_) {
-      // Leave the file usable if pending fetch fails.
-      if (_pendingPromptedForFileId == fileId) {
-        _pendingPromptedForFileId = null;
-      }
-    }
+    await openPendingReviewForFile(context, widget.state, widget.file.id);
   }
 
   @override

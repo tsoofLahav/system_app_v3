@@ -39,23 +39,26 @@ After finish pending / direct apply, the topic reloads; open Super Editors pick 
 
 [`agent_result_ui.dart`](agent_result_ui.dart) branches on the **result**, not a copied mode string:
 
-- `has_pending_review` or any `proposed_changes[].review` → snackbar “Open the file to review changes” (no blocking apply dialog)
+- `has_pending_review` / review proposals → if the edited file is **already on screen**, open the lookalike dialog immediately; otherwise snackbar “Open the file to review changes”
 - else → snackbar summary; reload topic when `applied`
 
-Pending reviews open when the **file** mounts ([`document_pane.dart`](../files/editor/document_pane.dart) → [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart)):
+Pending also opens when the **file** mounts ([`document_pane.dart`](../files/editor/document_pane.dart) → [`pending_review_ui.dart`](pending_review_ui.dart) → [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart)):
 
-- Per-hunk Accept | Reject; Finish disabled until all decided
+- **Full-file side-by-side** (Current | Suggested), unchanged lines shown, change regions tinted
+- Word-level marks inside changed lines; fences as compact read-only chrome
+- Per-region Accept | Reject; Finish disabled until all decided
 - Finish → `POST /files/:id/pending-review/finish` (archive copy + merge apply)
 - Discard → `DELETE /files/:id/pending-review`
 
 | File | Role |
 |------|------|
 | [`ai_tool_bar.dart`](ai_tool_bar.dart) | Actions menu, prompt dialog + apply toggle, run orchestration |
-| [`agent_result_ui.dart`](agent_result_ui.dart) | Result → snackbar |
+| [`agent_result_ui.dart`](agent_result_ui.dart) | Result → dialog or snackbar |
+| [`pending_review_ui.dart`](pending_review_ui.dart) | Shared open-pending helper (anti double-open) |
 | [`pending_review_service.dart`](pending_review_service.dart) | GET/DELETE/finish pending |
-| [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart) | Per-hunk lookalike review |
+| [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart) | PR-style side-by-side lookalike review |
 | [`agent_run_defaults.dart`](agent_run_defaults.dart) | FE twin of automation apply-mode default |
-| [`text_diff_dialog.dart`](text_diff_dialog.dart) | Legacy monospace diff (fallback / unused for pending path) |
+| [`text_diff_dialog.dart`](text_diff_dialog.dart) | Legacy monospace diff (unused for pending path) |
 | [`change_review_dialog.dart`](change_review_dialog.dart) | Glass shell for review dialogs |
 | [`agent_service.dart`](agent_service.dart) | `POST /agent/run` |
 

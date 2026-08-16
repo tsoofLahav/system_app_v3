@@ -6,14 +6,25 @@ class PendingReviewHunk {
     required this.op,
     required this.oldLines,
     required this.newLines,
+    required this.oldStart,
+    required this.oldEnd,
+    required this.newStart,
+    required this.newEnd,
   });
 
   factory PendingReviewHunk.fromJson(Map<String, dynamic> json) {
     return PendingReviewHunk(
       id: json['id']?.toString() ?? '',
       op: json['op']?.toString() ?? 'change',
-      oldLines: (json['old_lines'] as List?)?.map((e) => '$e').toList() ?? const [],
-      newLines: (json['new_lines'] as List?)?.map((e) => '$e').toList() ?? const [],
+      oldLines:
+          (json['old_lines'] as List?)?.map((e) => '$e').toList() ?? const [],
+      newLines:
+          (json['new_lines'] as List?)?.map((e) => '$e').toList() ?? const [],
+      // BE: old_start is 1-based; old_end is exclusive 0-based end index.
+      oldStart: (json['old_start'] as int?) ?? 1,
+      oldEnd: (json['old_end'] as int?) ?? 0,
+      newStart: (json['new_start'] as int?) ?? 1,
+      newEnd: (json['new_end'] as int?) ?? 0,
     );
   }
 
@@ -21,6 +32,20 @@ class PendingReviewHunk {
   final String op;
   final List<String> oldLines;
   final List<String> newLines;
+  final int oldStart;
+  final int oldEnd;
+  final int newStart;
+  final int newEnd;
+
+  /// 0-based inclusive start on the old side.
+  int get oldIndex0 => (oldStart - 1).clamp(0, 1 << 30);
+
+  /// 0-based exclusive end on the old side.
+  int get oldIndexEnd => oldEnd;
+
+  int get newIndex0 => (newStart - 1).clamp(0, 1 << 30);
+
+  int get newIndexEnd => newEnd;
 }
 
 class PendingReview {
@@ -42,7 +67,9 @@ class PendingReview {
       hunks: hunksRaw is List
           ? hunksRaw
               .whereType<Map>()
-              .map((e) => PendingReviewHunk.fromJson(Map<String, dynamic>.from(e)))
+              .map(
+                (e) => PendingReviewHunk.fromJson(Map<String, dynamic>.from(e)),
+              )
               .toList()
           : const [],
     );

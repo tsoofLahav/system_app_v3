@@ -97,6 +97,8 @@ Table `agent_pending_reviews` (one open row per `file_id`; newest run replaces).
 
 Finish archives as `"{name} (before AI · {local date})"` with deep-copied embeds, then `apply_agent_text` on the live file. `create_object` proposals are not queued for line-merge pending (direct_apply only this pass).
 
+Hunks come from agent-text `SequenceMatcher`, with **adjacent delete+insert coalesced into replace** so an edit never applies as “keep old + insert new”. Merge walks the same normalized opcodes: add inserts, remove deletes, change replaces.
+
 Service: [`services/pending_reviews.py`](services/pending_reviews.py).
 
 ## Diff logic (review mode)

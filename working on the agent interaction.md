@@ -1,6 +1,6 @@
 # Working on the agent interaction
 
-**Status:** Pending DB + lookalike per-hunk review + Consult apply toggle are implemented. Compact undo for `direct_apply` (step 7) not started.  
+**Status:** Pending DB + **PR-style side-by-side** lookalike review + Consult apply toggle are implemented. Compact undo for `direct_apply` (step 7) not started.  
 Not day-to-day coding memory (`DEVELOPMENT.md` / `AREA.md`).
 
 ---
@@ -93,13 +93,14 @@ Multi-file runs: each file gets its own pending row; each opens on that file.
 
 ## Diff UI
 
-1. Line-level hunks on agent text (incl. fences).
-2. Word-level marks inside changed lines.
-3. Lookalike read-only blocks (shared note typography).
-4. Every hunk Accept | Reject → Finish → merge → archive + apply.
+1. Full-file **side-by-side** (Current | Suggested); unchanged lines shown.
+2. Contiguous line hunks; Accept/Reject per region.
+3. Word-level marks inside changed lines; fences as compact chrome (read-only).
+4. Opens on file mount; if that file is already on screen when the run finishes → open immediately.
+5. Finish → merge (add / remove / **replace**, never keep-old+insert) → archive deep-copy → apply.
 
 ```
-agent text  →  presentation blocks  →  read-only UI
+agent text  →  PR-style dual pane  →  decisions → merge → archive + apply
 ```
 
 ---

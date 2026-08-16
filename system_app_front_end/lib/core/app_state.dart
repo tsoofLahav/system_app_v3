@@ -113,6 +113,27 @@ class AppState extends ChangeNotifier {
   bool archiveDeleteMode = false;
   final Set<int> archiveDeleteSelection = {};
   Map<String, dynamic>? pendingAgentReview;
+  /// File id whose lookalike pending dialog is currently open (anti double-open).
+  int? _pendingReviewDialogFileId;
+
+  bool tryBeginPendingReviewDialog(int fileId) {
+    if (_pendingReviewDialogFileId == fileId) return false;
+    if (_pendingReviewDialogFileId != null) return false;
+    _pendingReviewDialogFileId = fileId;
+    return true;
+  }
+
+  void endPendingReviewDialog(int fileId) {
+    if (_pendingReviewDialogFileId == fileId) {
+      _pendingReviewDialogFileId = null;
+    }
+  }
+
+  bool isFileOnScreen(int fileId) {
+    final files = selectedDetail?.files;
+    if (files == null) return false;
+    return files.any((f) => f.id == fileId);
+  }
 
   void toggleArchiveDeleteMode() {
     archiveDeleteMode = !archiveDeleteMode;
