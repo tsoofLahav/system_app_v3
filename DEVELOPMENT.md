@@ -15,6 +15,7 @@ A test cycle is slow (deploy, restart, click through the app), so a wrong guess 
 3. **One change at a time** — the smallest set of files that does the job. Avoid large unrelated change sets.
 4. **Push to `main` after backend changes** so Render redeploys and the Flutter app can be tested against the live API. Frontend-only changes need no deploy.
 5. **Update the area's `AREA.md` in the same commit** — both sides if the change spans front and back.
+6. **Say what changed and why, briefly** — discuss the solution, but a few sentences, not an essay. Lead with the outcome, keep the reasoning that affects a decision, and drop the rest.
 
 When the user says “remember this”, add it to [`NOTES.md`](NOTES.md) under the matching section, with a date.
 
