@@ -5,9 +5,9 @@ import './pending_review_ui.dart';
 
 /// Present an agent run from its result shape — not from a copied apply_mode.
 ///
-/// Pending review: open lookalike immediately when the edited file is already
-/// on screen; otherwise snackbar to open the file. Other results → summary
-/// snackbar (+ topic reload if applied).
+/// Pending review: open lookalike immediately when edited files are already
+/// on screen (queue, one dialog after another); otherwise snackbar to open a
+/// file. Other results → summary snackbar (+ topic reload if applied).
 Future<void> presentAgentRunResult(
   BuildContext context,
   AppState state,
@@ -25,8 +25,11 @@ Future<void> presentAgentRunResult(
     final fileIds = pendingFileIdsFromAgentResult(result);
     final visible = fileIds.where(state.isFileOnScreen).toList();
     if (visible.isNotEmpty) {
-      // One dialog at a time; first visible pending file.
-      await openPendingReviewForFile(context, state, visible.first);
+      await openPendingReviewsQueue(
+        context,
+        state,
+        preferOrder: visible,
+      );
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(

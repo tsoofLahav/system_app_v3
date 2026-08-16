@@ -39,10 +39,10 @@ After finish pending / direct apply, the topic reloads; open Super Editors pick 
 
 [`agent_result_ui.dart`](agent_result_ui.dart) branches on the **result**, not a copied mode string:
 
-- `has_pending_review` / review proposals → if the edited file is **already on screen**, open the lookalike dialog immediately; otherwise snackbar “Open the file to review changes”
+- `has_pending_review` / review proposals → if any edited file is **already on screen**, open lookalike dialogs in a queue (Finish/Discard on one → next pending on-screen file); otherwise snackbar “Open the file to review changes”
 - else → snackbar summary; reload topic when `applied`
 
-Pending also opens when the **file** mounts ([`document_pane.dart`](../files/editor/document_pane.dart) → [`pending_review_ui.dart`](pending_review_ui.dart) → [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart)):
+Pending also opens when the **file** mounts ([`document_pane.dart`](../files/editor/document_pane.dart) → [`pending_review_ui.dart`](pending_review_ui.dart) → [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart)). After a dialog closes, the same helper continues to any other on-screen file that still has pending.
 
 - **Full-file side-by-side** (Current | Suggested), unchanged lines shown, change regions tinted
 - Word-level marks inside changed lines; fences as compact read-only chrome
