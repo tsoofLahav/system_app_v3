@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
+import './compact_undo_toast.dart';
 import './pending_review_ui.dart';
 
 /// Present an agent run from its result shape — not from a copied apply_mode.
 ///
-/// Pending review: open lookalike immediately when edited files are already
-/// on screen (queue, one dialog after another); otherwise snackbar to open a
-/// file. Other results → summary snackbar (+ topic reload if applied).
+/// Pending review: open lookalike when edited files are on screen (queued).
+/// Direct apply: compact undo toast queue (even off that file’s page).
+/// Else: summary snackbar.
 Future<void> presentAgentRunResult(
   BuildContext context,
   AppState state,
@@ -38,8 +39,18 @@ Future<void> presentAgentRunResult(
     return;
   }
 
-  final summary = result['summary']?.toString().trim() ?? '';
   final applied = result['applied'] == true;
+  final undoCards = undoCardsFromAgentResult(result);
+  if (applied && undoCards.isNotEmpty) {
+    if (reloadTopicIfApplied && state.selectedTopic != null) {
+      await state.selectTopic(state.selectedTopic!);
+    }
+    if (!context.mounted) return;
+    await showCompactUndoQueue(context, state, undoCards);
+    return;
+  }
+
+  final summary = result['summary']?.toString().trim() ?? '';
   final message = summary.isNotEmpty
       ? summary
       : (applied ? s['aiAgentApplied'] : s['aiAgentNoChanges']);

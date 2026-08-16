@@ -206,7 +206,8 @@ TOOL_DEFS: list[dict[str, Any]] = [
             "has op: add | remove | replace. "
             "replace: change an existing line/range (rephrase, sharpen, enrich). "
             "add: insert new data or a new point after line (line=0 = start). "
-            "remove: delete line (end_line=0, text=\"\"). "
+            "remove: delete an unneeded, unwanted, or repeating line "
+            "(end_line=0, text=\"\"). "
             "Inside a fence/list: edit content lines; preserve markers and id=\"…\". "
             "Table cells use \\t between columns."
         ),

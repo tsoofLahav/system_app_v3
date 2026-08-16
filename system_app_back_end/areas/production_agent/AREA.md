@@ -81,7 +81,7 @@ Each write tool ends in the same apply path (`patch_file` / `rewrite_file`):
 
 | Mode | Effect |
 |------|--------|
-| `direct_apply` | Writes immediately via `commit_agent_file_apply`, commits |
+| `direct_apply` | Writes immediately via `commit_agent_file_apply`, commits; response includes per-file `undo` card (old snapshot + change previews) for the FE toast |
 | `review` | Rolls back live writes; upserts `agent_pending_reviews`; response includes `has_pending_review` |
 | `notify_only` | Returns the new document without diff or write |
 
@@ -140,6 +140,6 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 
 ## Known gaps (later)
 
-- Compact undo for `direct_apply`
+- Undo for `create_object` alone / long-lived DB undo
 - Per-hunk review of `create_object`
 - `agent_configs.tool_allowlist` is not yet honored

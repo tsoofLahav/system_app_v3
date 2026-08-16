@@ -40,6 +40,7 @@ After finish pending / direct apply, the topic reloads; open Super Editors pick 
 [`agent_result_ui.dart`](agent_result_ui.dart) branches on the **result**, not a copied mode string:
 
 - `has_pending_review` / review proposals → if any edited file is **already on screen**, open lookalike dialogs in a queue (Finish/Discard on one → next pending on-screen file); otherwise snackbar “Open the file to review changes”
+- `applied` with `undo` cards → compact undo toast queue ([`compact_undo_toast.dart`](compact_undo_toast.dart)): file + topic + change summary, **Undo** / **X** / ~8s auto-close; next file when one closes
 - else → snackbar summary; reload topic when `applied`
 
 Pending also opens when the **file** mounts ([`document_pane.dart`](../files/editor/document_pane.dart) → [`pending_review_ui.dart`](pending_review_ui.dart) → [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart)). After a dialog closes, the same helper continues to any other on-screen file that still has pending.
@@ -57,6 +58,7 @@ Pending also opens when the **file** mounts ([`document_pane.dart`](../files/edi
 | [`pending_review_ui.dart`](pending_review_ui.dart) | Shared open-pending helper (anti double-open) |
 | [`pending_review_service.dart`](pending_review_service.dart) | GET/DELETE/finish pending |
 | [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart) | PR-style side-by-side lookalike review |
+| [`compact_undo_toast.dart`](compact_undo_toast.dart) | Direct-apply undo toast queue |
 | [`agent_run_defaults.dart`](agent_run_defaults.dart) | FE twin of automation apply-mode default |
 | [`text_diff_dialog.dart`](text_diff_dialog.dart) | Legacy monospace diff (unused for pending path) |
 | [`change_review_dialog.dart`](change_review_dialog.dart) | Glass shell for review dialogs |
@@ -72,6 +74,6 @@ Pending also opens when the **file** mounts ([`document_pane.dart`](../files/edi
 
 ## Not done yet
 
-- Compact undo for `direct_apply`
+- Undo for `create_object` alone / long-lived DB undo
 - Per-hunk review of `create_object` (stays direct_apply)
-- Multi-file single combined dialog (each file opens its own pending)
+- Multi-file single combined lookalike dialog (each file still has its own dialog, queued)

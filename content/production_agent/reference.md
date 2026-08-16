@@ -146,7 +146,7 @@ This help. `section`: `agent_text` | `tools` | `all`.
 }
 ```
 
-`replace` changes an existing line or range (rephrase, sharpen, enrich). `add` inserts **new** data or a new point **after** `line` (`0` = start). `remove` deletes `line`. Inside a fence, edit **content** lines and keep markers intact. New text must match that block’s pattern (e.g. table cells with `\t`). When neighbors use `[SPACER …]`, keep spacing consistent with the file. Put **all** edits for the ask in **one** `patch_file`, with every `line` from the same `open_file`.
+`replace` changes an existing line or range (rephrase, sharpen, enrich). `add` inserts **new** data or a new point **after** `line` (`0` = start). `remove` deletes an unneeded, unwanted, or repeating line. Inside a fence, edit **content** lines and keep markers intact. New text must match that block’s pattern (e.g. table cells with `\t`). When neighbors use `[SPACER …]`, keep spacing consistent with the file. Put **all** edits for the ask in **one** `patch_file`, with every `line` from the same `open_file`.
 
 
 ### `rewrite_file` — whole file only when asked

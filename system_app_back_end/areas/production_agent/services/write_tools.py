@@ -12,7 +12,7 @@ from __future__ import annotations
 import difflib
 from typing import Any, Literal
 
-from models import File, ObjectEmbed, db
+from models import File, ObjectEmbed, Topic, db
 from areas.files.services.document_agent_text import (
     apply_agent_text_to_file,
     apply_object_updates,
@@ -26,6 +26,48 @@ from areas.production_agent.services.browse_tools import file_allowed
 from shared.run_config import DEFAULT_MANUAL_APPLY_MODE
 
 WriteMode = Literal["review", "direct_apply", "notify_only"]
+
+_UNDO_PREVIEW_MAX = 100
+
+
+def build_undo_card(
+    *,
+    file: File,
+    old_document_json: str,
+    new_agent_text: str,
+) -> dict[str, Any]:
+    """Compact undo payload for a just-applied direct write."""
+    # Lazy import avoids circular import with pending_reviews.
+    from areas.production_agent.services.pending_reviews import build_hunks
+
+    topic = db.session.get(Topic, file.topic_id) if file.topic_id else None
+    objects_by_id = load_objects_by_id(file.id)
+    old_plain = document_to_agent_text(
+        old_document_json or "",
+        objects_by_id=objects_by_id,
+    )
+    hunks = build_hunks(old_plain, new_agent_text or "")
+    changes: list[dict[str, str]] = []
+    for h in hunks:
+        op = str(h.get("op") or "change")
+        if op == "add":
+            lines = h.get("new_lines") or []
+        elif op == "remove":
+            lines = h.get("old_lines") or []
+        else:
+            lines = h.get("new_lines") or h.get("old_lines") or []
+        preview = str(lines[0]) if lines else ""
+        if len(preview) > _UNDO_PREVIEW_MAX:
+            preview = preview[: _UNDO_PREVIEW_MAX - 3] + "..."
+        changes.append({"op": op, "text": preview})
+    return {
+        "file_id": file.id,
+        "file_name": file.name or "",
+        "topic_id": file.topic_id,
+        "topic_name": (topic.name if topic else "") or "",
+        "old_document_json": old_document_json or "",
+        "changes": changes,
+    }
 
 
 def compute_diff(
@@ -302,6 +344,12 @@ def apply_document_text(
             ),
         }
 
+    # Build undo from pre-commit object state + agent text just applied.
+    undo = build_undo_card(
+        file=file,
+        old_document_json=old_document,
+        new_agent_text=document_text,
+    )
     apply_errors = commit_agent_file_apply(
         file,
         new_document_json=new_document_json or "",
@@ -311,7 +359,7 @@ def apply_document_text(
     if apply_errors:
         return {"error": "; ".join(apply_errors), "tool": tool_name}
     db.session.flush()
-    return {**base, "applied": True}
+    return {**base, "applied": True, "undo": undo}
 
 
 def insert_agent_text(

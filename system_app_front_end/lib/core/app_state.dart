@@ -1639,6 +1639,23 @@ class AppState extends ChangeNotifier {
     await _pendingReviews.discard(fileId);
   }
 
+  /// Restore a file after a direct_apply using the pre-apply document snapshot.
+  Future<void> undoDirectApply({
+    required int fileId,
+    required String oldDocumentJson,
+    int? topicId,
+  }) async {
+    await _files.applyAgentText(
+      fileId,
+      documentJson: oldDocumentJson,
+      tool: 'undo',
+    );
+    if (selectedTopic != null &&
+        (topicId == null || selectedTopic!.id == topicId)) {
+      await selectTopic(selectedTopic!);
+    }
+  }
+
   Future<void> applyAgentReview() async {
     final changes = pendingAgentReview?['proposed_changes'] as List?;
     if (changes == null || selectedDetail == null) return;

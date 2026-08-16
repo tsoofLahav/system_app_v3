@@ -1,6 +1,6 @@
 # Working on the agent interaction
 
-**Status:** Pending DB + **PR-style side-by-side** lookalike review + Consult apply toggle are implemented. Compact undo for `direct_apply` (step 7) not started.  
+**Status:** Pending DB + PR-style lookalike review + Consult toggle + **compact undo toast for direct_apply** are implemented. Prompt polish (step 8) ongoing.  
 Not day-to-day coding memory (`DEVELOPMENT.md` / `AREA.md`).
 
 ---
@@ -85,7 +85,7 @@ Browse: `list`, `find_file`, `find_object`, `open_file`, `reference`.
 | Path | Behaviour |
 |------|-----------|
 | **Review** | Rollback live file. Upsert pending (file id, old/new agent text + document_json, run key). Lookalike UI on file open. Finish: deep-copy old into topic Archive, apply merged agent text to live file, delete pending. |
-| **Apply** | Write now. Compact undo still **not** implemented. |
+| **Apply** | Write now. Compact undo toast: file + topic + change summary; Undo restores `old_document_json`; X / ~8s dismiss; multi-file queued. |
 
 Multi-file runs: each file gets its own pending row; each opens on that file.
 
@@ -125,7 +125,7 @@ Keep short: agent text + fences; object ids; tool choice; open/search when neede
 4. **Write tools** — `patch_file`, `rewrite_file`; action-config apply vs review. ✅
 5. **Pending changes** — DB records + finish/discard API (decoupled from OpenAI conversation). ✅
 6. **Presentation + diff UI** — lookalike; line + word; open from file when pending exists. ✅
-7. **Compact undo** — reverse hunk / sized snapshot for applied writes.
+7. **Compact undo** — reverse snapshot toast for applied writes. ✅
 8. **Prompt** — trim, sync to DB, smoke-test a few actions. (ongoing)
 
 ---

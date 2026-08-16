@@ -94,6 +94,22 @@ class AppStrings {
   String archiveFileMessage(String name) =>
       this['archiveFileBody'].replaceAll('{name}', name);
 
+  String compactUndoInFile(String file, String topic) => this['compactUndoInFile']
+      .replaceAll('{file}', file)
+      .replaceAll('{topic}', topic);
+
+  String compactUndoOneAdded(String text) =>
+      this['compactUndoOneAdded'].replaceAll('{text}', text);
+
+  String compactUndoOneEdited(String text) =>
+      this['compactUndoOneEdited'].replaceAll('{text}', text);
+
+  String compactUndoOneRemoved(String text) =>
+      this['compactUndoOneRemoved'].replaceAll('{text}', text);
+
+  String compactUndoManyChanges(int count) =>
+      this['compactUndoManyChanges'].replaceAll('{count}', '$count');
+
   String archiveDeleteBody(int count) =>
       this['archiveDeleteBody'].replaceAll('{count}', '$count');
 
@@ -266,6 +282,14 @@ class AppStrings {
     'consultApplyModeDirect': 'Apply directly',
     'consultApplyModeHint': 'For testing — review stores a pending diff on the file',
     'aiAgentApplied': 'Changes applied.',
+    'undo': 'Undo',
+    'compactUndoInFile': 'In file {file}, of {topic}',
+    'compactUndoOneAdded': '1 line was added: {text}',
+    'compactUndoOneEdited': '1 line was edited: {text}',
+    'compactUndoOneRemoved': '1 line was removed: {text}',
+    'compactUndoManyChanges': '{count} changes were made',
+    'compactUndoShow': 'Show details',
+    'compactUndoHide': 'Hide details',
     'undoAgentEdit': 'Undo last AI edit',
     'aiAgentNoChanges': 'No file changes.',
     'bringFile': 'Bring file',
@@ -729,6 +753,14 @@ class AppStrings {
     'consultApplyModeDirect': 'החלה ישירה',
     'consultApplyModeHint': 'לבדיקות — סקירה שומרת diff ממתין על הקובץ',
     'aiAgentApplied': 'השינויים הוחלו.',
+    'undo': 'בטל',
+    'compactUndoInFile': 'בקובץ {file}, בנושא {topic}',
+    'compactUndoOneAdded': 'נוספה שורה אחת: {text}',
+    'compactUndoOneEdited': 'נערכה שורה אחת: {text}',
+    'compactUndoOneRemoved': 'הוסרה שורה אחת: {text}',
+    'compactUndoManyChanges': 'בוצעו {count} שינויים',
+    'compactUndoShow': 'הצג פרטים',
+    'compactUndoHide': 'הסתר פרטים',
     'undoAgentEdit': 'בטל עריכת AI אחרונה',
     'aiAgentNoChanges': 'אין שינויים בקובץ.',
     'bringFile': 'הבא קובץ',
