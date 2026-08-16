@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 from areas.production_agent.services.prompt import (
+    DEFAULT_TOOL_ALLOWLIST,
     load_prompt_file,
     load_reference_section,
     operational_suffix,
@@ -12,14 +13,29 @@ from areas.production_agent.services.prompt import (
 
 def test_load_prompt_file_is_short_standing_instructions():
     text = load_prompt_file()
-    assert "Agent text" in text
+    assert "## What this is" in text
+    assert "## Tools" in text
+    assert "## Input" in text
+    assert "## Workflow" in text
+    assert "list" in text
+    assert "find_file" in text
+    assert "find_object" in text
+    assert "create_object" in text
     assert "patch_file" in text
-    assert "add" in text
-    assert "Matching spacing" in text
+    assert "selected_text" in text
     assert "[SPACER" in text
-    assert "reference" in text
+    assert "when using `patch_file`" in text or "When using `patch_file`" in text
+    assert "search_tasks" not in text
+    assert "Scope is hard" not in text
     # Examples stay in reference.md — no code fences in the standing prompt.
     assert "```" not in text
+
+
+def test_default_tool_allowlist():
+    assert "list" in DEFAULT_TOOL_ALLOWLIST
+    assert "create_object" in DEFAULT_TOOL_ALLOWLIST
+    assert "search" not in DEFAULT_TOOL_ALLOWLIST
+    assert "search_tasks" not in DEFAULT_TOOL_ALLOWLIST
 
 
 def test_reference_sections():
@@ -30,8 +46,9 @@ def test_reference_sections():
 
     tools = load_reference_section("tools")
     assert "patch_file" in tools
-    assert '"op": "add"' in tools or "add |" in tools or '"op"' in tools
-    assert "move_text" not in tools
+    assert "find_file" in tools
+    assert "create_object" in tools
+    assert "search_tasks" not in tools
     assert "[BULLET_LIST]" not in tools
 
     everything = load_reference_section("all")

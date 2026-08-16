@@ -19,18 +19,18 @@ The agent's standing instructions are a real document it is allowed to read:
 
 Bootstrap seeds the DB row on first launch. The runner never reads the markdown file at request time — only the DB. Deploying the backend refreshes the prompt over the internal DB link (no laptop → external Postgres needed).
 
-That file is **for the model**: short system explainer + how to work + write-tool rules. Keep it instructional and short. Bulky fence/tool **examples** live in [`content/production_agent/reference.md`](../../../content/production_agent/reference.md) and are loaded on demand via the `reference` tool (`agent_text` | `tools` | `all`). Maintainer notes stay in this `AREA.md`. Scenario-specific jobs belong in topic/automation prompts later — not in generic tool descriptions.
+That file is **for the model**: short standing instructions in four parts — what this is, tools, input, workflow. Keep it instructional and short; drop vague lines the model cannot act on. Bulky fence/tool **examples** live in [`content/production_agent/reference.md`](../../../content/production_agent/reference.md) and are loaded on demand via the `reference` tool (`agent_text` | `tools` | `all`). Maintainer notes stay in this `AREA.md`. Scenario-specific jobs belong in topic/automation prompts later — not in generic tool descriptions.
 
 ## What is passed to the agent
 
 | Piece | Contents |
 |-------|----------|
 | **instructions** | `agent_configs.system_prompt` + operational suffix (attached on each Responses turn) |
-| **First user input** | `prompt` + hard `scope` + optional tiny `hints` — **no file bodies** |
-| **Tools** | Native Responses function tools (`search`, `open_file`, `reference`, `patch_file`, `rewrite_file`, `search_tasks`) |
+| **First user input** | `prompt` + client `scope` (open topic/files as context) + optional tiny `hints` — **no file bodies** |
+| **Tools** | `list`, `find_file`, `find_object`, `open_file`, `create_object`, `reference`, `patch_file`, `rewrite_file` |
 | **Follow-up input** | Tool results only (`function_call_output` items) |
 
-`scope` is a hard allow-list: `{ "topic_ids": [...] }` and/or `{ "file_ids": [...] }`. Empty scope is rejected.
+Tools authorize by **workspace membership** (run `workspace_id`), not the FE allow-list. Client `scope` / `hints` are preferred context (`focused_file_id`, open topic). Archived files stay read-only on writes.
 
 `hints` are optional pointers on the first turn only (e.g. `focused_file_id`, `selected_text`, `for_date`). Never dump file content there.
 
@@ -40,7 +40,7 @@ That file is **for the model**: short system explainer + how to work + write-too
 create OpenAI conversation
   → responses.create(instructions, tools, prompt+scope+hints)
   → while function_call items:
-        run tools (enforce scope; reject archived writes)
+        run tools (workspace membership; reject archived writes)
         responses.create(tool results only)
   → plain-text summary
 delete conversation
@@ -52,26 +52,30 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 
 | Tool | Behavior |
 |------|----------|
-| `search` | Substring match on file name and **agent text** within scope (includes archived, flagged) |
-| `open_file` | Returns `document_plain` (agent text), `document_lines` (1-based), + `object_extras` (info `title` / `Links` when useful). Archived readable. |
+| `list` | List topics / files / objects in the workspace (optional `topic_id`) |
+| `find_file` | By `file_id`, or name (+ optional topic) |
+| `find_object` | By `object_id`, or type/name (+ optional topic) |
+| `open_file` | Returns `document_plain` (agent text), `document_lines` (1-based), + `object_extras`. Archived readable. |
+| `create_object` | Create embed + pointer (`task_list` \| `info` \| `table` \| `graph` \| `image`); returns `object_id` |
 | `reference` | On-demand examples from `content/production_agent/reference.md` (`agent_text` / `tools` / `all`) |
 | `patch_file` | **Partial edits** with `op` add / remove / replace on `document_lines`; typical outcome **review** |
 | `rewrite_file` | Full new agent text for a true whole-file rewrite; typical outcome **apply** when run allows |
-| `search_tasks` | Substring match on task titles within scoped (live) files |
 
-`open_file` payload: [`services/open_file_tool.py`](services/open_file_tool.py). Writes: [`services/write_tools.py`](services/write_tools.py).
+Browse helpers: [`services/browse_tools.py`](services/browse_tools.py). Create: [`services/create_object_tool.py`](services/create_object_tool.py) + shared [`areas/objects/services/create_embed.py`](../objects/services/create_embed.py). `open_file` payload: [`services/open_file_tool.py`](services/open_file_tool.py). Writes: [`services/write_tools.py`](services/write_tools.py).
 
 **Apply vs review:** the run’s `apply_mode` wins (`review` / `direct_apply` / `notify_only`). Defaults live in **one place**: [`shared/run_config.py`](../../shared/run_config.py) (`DEFAULT_MANUAL_APPLY_MODE`, `DEFAULT_AUTOMATION_APPLY_MODE`). Routes/runner/models import those — do not hardcode fallback strings. Manual consult currently defaults to `direct_apply` until the real diff UI ships. Automations store their own mode. The model does not choose the dialog.
 
 The agent never sees or writes raw JSON. It reads and writes **agent text**; the [files area](../files/AREA.md) converts in both directions.
 
-Each write tool ends in the same apply path:
+Each write tool ends in the same apply path (`patch_file` / `rewrite_file`):
 
 1. Build new agent text (`patch_file` line edits / `rewrite_file` full text)
 2. Parse agent text → v4 editor text + object payload updates (`apply_agent_text_to_file`)
 3. Reject if any embed `object_id` is unknown or was dropped; reject id-less `[TABLE]` on write
 4. Reject archived files
 5. On `direct_apply` (and Accept via API): `commit_agent_file_apply` — promote legacy embeds → file version → `document_json` → `object_updates` → purge unreferenced embeds
+
+`create_object` allocates a real embed id and inserts the pointer (shared with `POST /files/:id/objects`); fill content afterward with `patch_file`.
 
 ## Apply modes
 

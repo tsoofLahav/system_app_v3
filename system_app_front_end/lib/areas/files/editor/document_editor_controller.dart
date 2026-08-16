@@ -7,6 +7,7 @@ class DocumentEditorController {
     required this.focusBlock,
     required this.flushPendingChanges,
     this.focusedTaskId,
+    this.markedTextForAgent,
   });
 
   final int fileId;
@@ -16,6 +17,9 @@ class DocumentEditorController {
 
   /// Task under the caret in this file, if any (for view-assign shortcut).
   final int? Function()? focusedTaskId;
+
+  /// Selection, or caret line/paragraph when nothing is marked — for agent hints.
+  final String? Function()? markedTextForAgent;
 }
 
 /// Tracks every open file editor. Inserts go to the **last claimed** file —
@@ -61,5 +65,13 @@ class DocumentEditorRegistry {
 
   static Future<void> flushActive() async {
     await active?.flushPendingChanges();
+  }
+
+  /// Tiny pointer for `hints.selected_text` — never a full file body.
+  static String? activeMarkedTextForAgent({int maxChars = 400}) {
+    final raw = active?.markedTextForAgent?.call()?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    if (raw.length <= maxChars) return raw;
+    return raw.substring(0, maxChars);
   }
 }

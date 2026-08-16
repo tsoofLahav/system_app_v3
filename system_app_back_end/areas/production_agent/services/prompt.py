@@ -11,12 +11,14 @@ from models import AgentConfig, Workspace, db
 
 DEFAULT_CONFIG_NAME = "default"
 DEFAULT_TOOL_ALLOWLIST = [
-    "search",
+    "list",
+    "find_file",
+    "find_object",
     "open_file",
     "reference",
     "patch_file",
     "rewrite_file",
-    "search_tasks",
+    "create_object",
 ]
 _HERE = Path(__file__).resolve()
 # Monorepo root (…/system_app) when services live under system_app_back_end/areas/…

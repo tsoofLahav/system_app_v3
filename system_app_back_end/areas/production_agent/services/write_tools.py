@@ -22,6 +22,7 @@ from areas.files.services.document_agent_text import (
 from areas.files.services.document_promote import promote_legacy_embeds
 from areas.files.services.file_versions import save_file_version
 from areas.objects.services.delete_cascade import purge_unreferenced_embeds_for_file
+from areas.production_agent.services.browse_tools import file_allowed
 from shared.run_config import DEFAULT_MANUAL_APPLY_MODE
 
 WriteMode = Literal["review", "direct_apply", "notify_only"]
@@ -59,6 +60,7 @@ def compute_diff(
 TOOL_WRITE_DEFAULTS: dict[str, WriteMode] = {
     "patch_file": "review",
     "rewrite_file": "direct_apply",
+    "create_object": "direct_apply",
 }
 
 WRITE_TOOL_NAMES = frozenset(TOOL_WRITE_DEFAULTS)
@@ -77,13 +79,7 @@ def resolve_write_mode(tool_name: str, run_apply_mode: str) -> WriteMode:
 
 
 def _file_in_scope(file: File, scope: dict) -> bool:
-    file_ids = [int(x) for x in (scope.get("file_ids") or [])]
-    topic_ids = [int(x) for x in (scope.get("topic_ids") or [])]
-    if file_ids:
-        return file.id in file_ids
-    if topic_ids:
-        return file.topic_id in topic_ids
-    return False
+    return file_allowed(file, scope)
 
 
 def _known_object_ids(file_id: int) -> set[int]:

@@ -17,9 +17,11 @@ import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
 import '../data/app_file.dart';
 import '../model/document_text_codec.dart';
+import '../model/line_range.dart';
 import '../model/marker_super_editor_bridge.dart';
 import '../model/object_embed_node.dart';
 import '../rich_text/block_text_actions.dart';
+import '../rich_text/block_text_focus.dart';
 import '../rich_text/document_context_menu.dart';
 import '../rich_text/rtl/rtl.dart';
 import './document_caret_session.dart';
@@ -155,6 +157,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           focusBlock: (_) {},
           flushPendingChanges: _flushPendingChanges,
           focusedTaskId: _focusedTaskId,
+          markedTextForAgent: _markedTextForAgent,
         ),
       );
       unawaited(_loadEmbedsQuietly());
@@ -229,7 +232,31 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         _scheduleEmbedStructureRebuild();
       }
     }
+    final remote = _currentFile.documentJson;
+    if (remote != _lastSavedJson) {
+      // Server/agent wrote a newer body (e.g. selectTopic after apply). Drop
+      // any pending local save so we do not overwrite the applied text.
+      _saveTimer?.cancel();
+      _dirty = false;
+      _scheduleRemoteDocumentReload(remote);
+    }
     _tryFocusPendingObject();
+  }
+
+  void _scheduleRemoteDocumentReload(String? json) {
+    if (!mounted) return;
+    void apply() {
+      if (!mounted) return;
+      final latest = _currentFile.documentJson;
+      if (latest == _lastSavedJson) return;
+      _reloadFromStored(latest);
+    }
+
+    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+      runAfterKeystroke(apply);
+      return;
+    }
+    apply();
   }
 
   /// Ids/types/order changed — not mere payload/title text patches.
@@ -320,6 +347,82 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     if (embed == null) return null;
     final tasks = TaskZones.fromTasks(embed.tasks ?? const <Task>[]).all;
     return tasks.isEmpty ? null : tasks.first.id;
+  }
+
+  /// Selection or caret line/paragraph for `hints.selected_text`.
+  String? _markedTextForAgent() {
+    final embedMark = BlockTextFocusRegistry.resolveMark();
+    if (embedMark.isValid) {
+      final text = embedMark.text.trim();
+      if (text.isNotEmpty) return text;
+    }
+
+    final sel = _composer.selection;
+    if (sel == null) return null;
+
+    if (!sel.isCollapsed) {
+      final text = _plainTextInDocumentSelection(sel).trim();
+      return text.isEmpty ? null : text;
+    }
+
+    final node = _doc.getNodeById(sel.extent.nodeId);
+    if (node is TextNode) {
+      final plain = node.text.toPlainText();
+      if (plain.isEmpty) return null;
+      final offset = sel.extent.nodePosition is TextNodePosition
+          ? (sel.extent.nodePosition as TextNodePosition).offset
+          : 0;
+      final range = LineRange.resolve(
+        plain,
+        TextSelection.collapsed(offset: offset.clamp(0, plain.length)),
+      );
+      final line = plain.substring(range.start, range.end).trim();
+      return line.isEmpty ? null : line;
+    }
+    if (node is ObjectEmbedNode) {
+      return DocumentTextCodec.pointerLine(node.objectId, node.objectType);
+    }
+    return null;
+  }
+
+  String _plainTextInDocumentSelection(DocumentSelection selection) {
+    final selectedNodes = _doc.getNodesInside(selection.base, selection.extent);
+    final buffer = StringBuffer();
+    for (var i = 0; i < selectedNodes.length; i++) {
+      final selectedNode = selectedNodes[i];
+      late final dynamic nodeSelection;
+      if (i == 0) {
+        final baseSelectionPosition =
+            selectedNode.id == selection.base.nodeId
+                ? selection.base.nodePosition
+                : selection.extent.nodePosition;
+        final extentSelectionPosition = selectedNodes.length > 1
+            ? selectedNode.endPosition
+            : selection.extent.nodePosition;
+        nodeSelection = selectedNode.computeSelection(
+          base: baseSelectionPosition,
+          extent: extentSelectionPosition,
+        );
+      } else if (i == selectedNodes.length - 1) {
+        final nodePosition = selectedNode.id == selection.base.nodeId
+            ? selection.base.nodePosition
+            : selection.extent.nodePosition;
+        nodeSelection = selectedNode.computeSelection(
+          base: selectedNode.beginningPosition,
+          extent: nodePosition,
+        );
+      } else {
+        nodeSelection = selectedNode.computeSelection(
+          base: selectedNode.beginningPosition,
+          extent: selectedNode.endPosition,
+        );
+      }
+      final nodeContent = selectedNode.copyContent(nodeSelection);
+      if (nodeContent == null) continue;
+      if (buffer.isNotEmpty) buffer.writeln();
+      buffer.write(nodeContent);
+    }
+    return buffer.toString();
   }
 
   Future<void> _insertAtBlock(String action) async {

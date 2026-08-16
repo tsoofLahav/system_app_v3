@@ -11,11 +11,7 @@ import json
 import logging
 from typing import Any
 
-from models import File, ObjectEmbed, Task, db
-from areas.files.services.document_agent_text import (
-    document_to_agent_text,
-    load_objects_by_id,
-)
+from models import File, db
 from areas.production_agent.services.prompt import (
     ensure_agent_config,
     load_reference_section,
@@ -29,6 +25,13 @@ from areas.production_agent.services.openai_service import (
     output_text_from_response,
 )
 from areas.production_agent.services.open_file_tool import build_open_file_payload
+from areas.production_agent.services.browse_tools import (
+    file_allowed,
+    find_file,
+    find_object,
+    list_entities,
+)
+from areas.production_agent.services.create_object_tool import create_object
 from areas.production_agent.services.write_tools import (
     WRITE_TOOL_NAMES,
     apply_document_text,
@@ -47,102 +50,83 @@ MAX_TOOL_ROUNDS = 8
 __all__ = ["compute_diff", "run_agent"]
 
 
-def _scope_file_ids(scope: dict) -> list[int]:
-    return [int(x) for x in (scope.get("file_ids") or [])]
-
-
-def _scope_topic_ids(scope: dict) -> list[int]:
-    return [int(x) for x in (scope.get("topic_ids") or [])]
-
-
-def _file_in_scope(file: File, scope: dict) -> bool:
-    file_ids = _scope_file_ids(scope)
-    topic_ids = _scope_topic_ids(scope)
-    if file_ids:
-        return file.id in file_ids
-    if topic_ids:
-        return file.topic_id in topic_ids
-    return False
-
-
-def _scoped_files_query(scope: dict, *, include_archived: bool = False):
-    q = File.query
-    if not include_archived:
-        q = q.filter(File.archived_at.is_(None))
-    file_ids = _scope_file_ids(scope)
-    topic_ids = _scope_topic_ids(scope)
-    if file_ids:
-        return q.filter(File.id.in_(file_ids))
-    if topic_ids:
-        return q.filter(File.topic_id.in_(topic_ids))
-    return q.filter(False)
-
-
-def _search_files(scope: dict, query: str) -> list[dict]:
-    # Include archived so the agent can find them when needed; writes stay blocked.
-    rows = _scoped_files_query(scope, include_archived=True).all()
-    query_lower = (query or "").lower()
-    hits: list[dict] = []
-    for f in rows:
-        objects_by_id = load_objects_by_id(f.id)
-        plain = document_to_agent_text(f.document_json or "", objects_by_id=objects_by_id)
-        if query_lower in (f.name or "").lower() or query_lower in plain.lower():
-            hits.append(
-                {
-                    "id": f.id,
-                    "name": f.name,
-                    "topic_id": f.topic_id,
-                    "archived": f.archived_at is not None,
-                    "snippet": plain[:240],
-                }
-            )
-    return hits
-
-
 def _open_file(file_id: int, scope: dict) -> dict:
     file = db.session.get(File, file_id)
     if file is None:
         return {"error": "file not found"}
-    if not _file_in_scope(file, scope):
+    if not file_allowed(file, scope):
         return {"error": "file out of scope"}
     # Archived files are readable; update_file rejects writes.
     return build_open_file_payload(file)
 
 
-def _search_tasks(scope: dict, query: str) -> list[dict]:
-    query_lower = (query or "").lower()
-    file_rows = _scoped_files_query(scope).all()
-    file_ids = {f.id for f in file_rows}
-    if not file_ids:
-        return []
-    embeds = ObjectEmbed.query.filter(
-        ObjectEmbed.file_id.in_(file_ids),
-        ObjectEmbed.type == "task_list",
-    ).all()
-    list_ids = [e.task_list_id for e in embeds if e.task_list_id is not None]
-    if not list_ids:
-        return []
-    tasks = Task.query.filter(
-        Task.archived_at.is_(None),
-        Task.task_list_id.in_(list_ids),
-    ).all()
-    return [
-        t.to_dict()
-        for t in tasks
-        if query_lower in (t.title or "").lower()
-    ]
-
-
 TOOL_DEFS: list[dict[str, Any]] = [
     {
         "type": "function",
-        "name": "search",
-        "description": "Search file names and agent text within the hard scope allow-list.",
+        "name": "list",
+        "description": (
+            "List topics, files, or objects in the workspace. "
+            "kind: topics | files | objects. "
+            "topic_id: 0 = all; else filter files/objects to that topic."
+        ),
         "strict": True,
         "parameters": {
             "type": "object",
-            "properties": {"query": {"type": "string"}},
-            "required": ["query"],
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "description": "topics | files | objects",
+                },
+                "topic_id": {
+                    "type": "integer",
+                    "description": "0 = all topics; else filter",
+                },
+            },
+            "required": ["kind", "topic_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "find_file",
+        "description": (
+            "Find a file by id, or by name substring (optional topic_id). "
+            "file_id: 0 when searching by name. topic_id: 0 = any topic. "
+            "name: \"\" when using file_id."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_id": {"type": "integer", "description": "0 if using name"},
+                "name": {"type": "string", "description": "Substring; \"\" if using file_id"},
+                "topic_id": {"type": "integer", "description": "0 = any topic"},
+            },
+            "required": ["file_id", "name", "topic_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "find_object",
+        "description": (
+            "Find an object by id, or by type and/or name (optional topic_id). "
+            "Types: task_list | info | table | graph | image. "
+            "object_id: 0 when filtering. Unused strings are \"\". topic_id: 0 = any."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "object_id": {"type": "integer", "description": "0 if filtering"},
+                "name": {"type": "string"},
+                "type": {
+                    "type": "string",
+                    "description": "task_list | info | table | graph | image | \"\"",
+                },
+                "topic_id": {"type": "integer", "description": "0 = any topic"},
+            },
+            "required": ["object_id", "name", "type", "topic_id"],
             "additionalProperties": False,
         },
     },
@@ -150,7 +134,7 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "type": "function",
         "name": "open_file",
         "description": (
-            "Open one in-scope file (including archived — read-only). "
+            "Open one workspace file (including archived — read-only). "
             "Returns document_plain (agent text with fenced embeds) and "
             "object_extras when useful (info title + Links: id/type/title). "
             "Never invent file or object ids."
@@ -160,6 +144,36 @@ TOOL_DEFS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {"file_id": {"type": "integer"}},
             "required": ["file_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "create_object",
+        "description": (
+            "Create a new embed in a file and insert its pointer. "
+            "Types: task_list | info | table | graph | image. "
+            "Returns object_id — then open_file and patch_file to fill content. "
+            "after_line: 0 = append at end; else insert after that open_file line. "
+            "title/body optional seeds (\"\" if unused)."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_id": {"type": "integer"},
+                "type": {
+                    "type": "string",
+                    "description": "task_list | info | table | graph | image",
+                },
+                "title": {"type": "string"},
+                "body": {"type": "string"},
+                "after_line": {
+                    "type": "integer",
+                    "description": "0 = end of file; else after this agent-text line",
+                },
+            },
+            "required": ["file_id", "type", "title", "body", "after_line"],
             "additionalProperties": False,
         },
     },
@@ -253,24 +267,47 @@ TOOL_DEFS: list[dict[str, Any]] = [
             "additionalProperties": False,
         },
     },
-    {
-        "type": "function",
-        "name": "search_tasks",
-        "description": "Search task titles within scoped files.",
-        "strict": True,
-        "parameters": {
-            "type": "object",
-            "properties": {"query": {"type": "string"}},
-            "required": ["query"],
-            "additionalProperties": False,
-        },
-    },
 ]
 
 
+def _optional_id(value: Any) -> int | None:
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return None if n == 0 else n
+
+
 def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
-    if name == "search":
-        return _search_files(scope, args.get("query", ""))
+    workspace_id = int(scope.get("workspace_id") or 0)
+    if name == "list":
+        if not workspace_id:
+            return {"error": "workspace_id missing from run"}
+        topic_id = _optional_id(args.get("topic_id"))
+        return list_entities(
+            workspace_id,
+            kind=str(args.get("kind") or ""),
+            topic_id=topic_id,
+        )
+    if name == "find_file":
+        if not workspace_id:
+            return {"error": "workspace_id missing from run"}
+        return find_file(
+            workspace_id,
+            file_id=_optional_id(args.get("file_id")),
+            name=str(args.get("name") or "") or None,
+            topic_id=_optional_id(args.get("topic_id")),
+        )
+    if name == "find_object":
+        if not workspace_id:
+            return {"error": "workspace_id missing from run"}
+        return find_object(
+            workspace_id,
+            object_id=_optional_id(args.get("object_id")),
+            name=str(args.get("name") or "") or None,
+            type_=str(args.get("type") or "") or None,
+            topic_id=_optional_id(args.get("topic_id")),
+        )
     if name == "open_file":
         try:
             file_id = int(args["file_id"])
@@ -282,9 +319,27 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
             "section": str(args.get("section") or "all"),
             "content": load_reference_section(str(args.get("section") or "all")),
         }
+    if name == "create_object":
+        try:
+            file_id = int(args["file_id"])
+        except (KeyError, TypeError, ValueError):
+            return {"error": "file_id required", "tool": "create_object"}
+        write_mode = resolve_write_mode("create_object", apply_mode)
+        after = _optional_id(args.get("after_line"))
+        return create_object(
+            file_id=file_id,
+            type_=str(args.get("type") or ""),
+            scope=scope,
+            write_mode=write_mode,
+            title=str(args.get("title") or ""),
+            body=str(args.get("body") or ""),
+            after_line=after,
+        )
     if name in WRITE_TOOL_NAMES or name == "update_file":
         # update_file kept as alias → patch_file for older prompts.
         tool_name = "patch_file" if name == "update_file" else name
+        if tool_name == "create_object":
+            return {"error": "use create_object handler", "tool": "create_object"}
         try:
             file_id = int(args["file_id"])
         except (KeyError, TypeError, ValueError):
@@ -325,8 +380,6 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
             write_mode=write_mode,
             tool_name=tool_name,
         )
-    if name == "search_tasks":
-        return _search_tasks(scope, args.get("query", ""))
     return {"error": f"unknown tool {name}"}
 
 
@@ -367,23 +420,16 @@ def run_agent(
     context: dict | None = None,
     hints: dict | None = None,
 ) -> dict:
-    scope = scope or {}
+    scope = dict(scope or {})
+    scope["workspace_id"] = int(workspace_id)
     apply_mode = (apply_mode or DEFAULT_MANUAL_APPLY_MODE).strip()
     # `context` is legacy; merge into hints (hints win on key clash).
     merged_hints = {**(context or {}), **(hints or {})}
     hints = _clean_hints(merged_hints)
 
-    if not _scope_file_ids(scope) and not _scope_topic_ids(scope):
-        return {
-            "status": "error",
-            "error": "scope is required (topic_ids and/or file_ids)",
-            "messages": [],
-            "proposed_changes": [],
-            "applied": False,
-        }
-
     instructions = system_prompt_for_workspace(workspace_id)
     model = _model_for_workspace(workspace_id)
+    # First message still shows topic/file context from the client; tools use workspace.
     first_input = _first_turn_input(prompt=prompt, scope=scope, hints=hints)
 
     conversation_id: str | None = None

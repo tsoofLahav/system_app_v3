@@ -17,15 +17,19 @@ Both are disabled when there is no AI context (nothing selected) or a run is alr
 
 ## Scope and hints come from what is open
 
-The frontend does not ask the user what the AI may touch. It sends the current selection:
+The frontend sends preferred context (not a hard tool allow-list — tools may browse the workspace):
 
 ```
 selected topic  → scope.topic_ids
 selected topic's files → scope.file_ids
 active editor file → hints.focused_file_id   (tiny pointer; not the file body)
+caret line / mark → hints.selected_text      (tiny; selection or caret line only)
 ```
 
-This is why the buttons are dead with nothing open — an unscoped agent run is not allowed.
+Before the run, the active editor is flushed so `open_file` matches the open document.
+After apply (or accept review), the topic reloads; open Super Editors pick up a changed `document_json` and remount from stored text (so the user does not need to leave the page).
+
+Buttons stay disabled with nothing open so the run still has a workspace + useful context.
 The backend loads content only via tools; the first turn never includes file bodies.
 
 ## Apply mode defaults
@@ -68,11 +72,11 @@ Key points (review path):
 ## Rules
 
 - Never write a file from an agent result without explicit user acceptance when the result includes a review proposal.
-- Never send a run without scope.
 - Never hardcode manual `apply_mode` defaults on the frontend.
 - Never show raw JSON to the user — always the agent-text diff.
 - Clear `pendingAgentReview` on both accept and cancel so a stale proposal cannot be applied later.
-- Refresh the open topic after applying, or the editor will keep showing the pre-agent document.
+- Refresh the open topic after applying, or the editor will keep showing the pre-agent document. Open editors also reload when `document_json` changes in AppState.
+- Pass `hints.selected_text` from the active mark (selection or caret line) so “delete this line” can resolve correctly.
 
 ## Not done yet
 

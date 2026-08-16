@@ -1571,7 +1571,12 @@ class AppState extends ChangeNotifier {
     aiRunning = true;
     notifyListeners();
     try {
+      // Persist the open editor first so open_file matches what the user sees,
+      // and so a later apply reload is not racing a stale debounce save.
+      await DocumentEditorRegistry.flushActive();
       final focusedFileId = DocumentEditorRegistry.activeFileId;
+      final selectedText =
+          DocumentEditorRegistry.activeMarkedTextForAgent();
       final result = await _agent.run(
         prompt: prompt,
         workspaceId: workspaceId!,
@@ -1581,7 +1586,8 @@ class AppState extends ChangeNotifier {
             'file_ids': selectedDetail!.files.map((f) => f.id).toList(),
         },
         hints: {
-          if (focusedFileId != null) 'focused_file_id': focusedFileId,
+          'focused_file_id': ?focusedFileId,
+          'selected_text': ?selectedText,
         },
         applyMode: applyMode,
       );

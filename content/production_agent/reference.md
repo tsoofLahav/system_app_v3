@@ -95,13 +95,39 @@ Row 1 = labels, row 2 = values, optional row 3 = colors. Same `\t` cell separato
 
 ## tools
 
-### `search`
+### `list`
 
-Find files by name or agent-text substring inside scope.
+```json
+{ "kind": "files", "topic_id": 3 }
+```
+
+`kind`: `topics` | `files` | `objects`. `topic_id` `0` = whole workspace.
+
+### `find_file`
+
+```json
+{ "file_id": 0, "name": "plan", "topic_id": 3 }
+```
+
+Or `{ "file_id": 12, "name": "", "topic_id": 0 }`.
+
+### `find_object`
+
+```json
+{ "object_id": 0, "name": "clinic", "type": "task_list", "topic_id": 0 }
+```
 
 ### `open_file`
 
 Load one file. Returns `document_plain` (agent text), `document_lines` (`[{line, text}, …]` 1-based), and optional `object_extras`.
+
+### `create_object`
+
+```json
+{ "file_id": 12, "type": "task_list", "title": "Week", "body": "", "after_line": 0 }
+```
+
+Creates the embed + pointer; returns `object_id`. Then `open_file` + `patch_file` to fill rows/tasks. `after_line` `0` = end of file.
 
 ### `reference`
 
@@ -120,7 +146,7 @@ This help. `section`: `agent_text` | `tools` | `all`.
 }
 ```
 
-`add` inserts **after** `line` (`0` = start). Inside a fence, `line` must be a **content** line (where the ask wants the insert) — never a `[/…]` closer. New text must match that block’s pattern (e.g. table cells with `\t`). When neighbors are separated by `[SPACER …]`, put that spacer in the `add` `text` too (multi-line: spacer then content). Put **all** edits for the ask in **one** `patch_file`, with every `line` from the same `open_file`. `remove`: only `line`. `replace`: `line`..`end_line` with `text`.
+`add` inserts **after** `line` (`0` = start). Inside a fence, `line` must be a **content** line (where the ask wants the insert) — never a `[/…]` closer. New text must match that block’s pattern (e.g. table cells with `\t`). When neighbors are separated by `[SPACER …]`, put that spacer in the `add` `text` too (multi-line: spacer then content). When using `patch_file`, put **all** edits for the ask in **one** `patch_file`, with every `line` from the same `open_file`. `remove`: only `line`. `replace`: `line`..`end_line` with `text`.
 
 
 ### `rewrite_file` — whole file only when asked
@@ -131,7 +157,3 @@ This help. `section`: `agent_text` | `tools` | `all`.
   "document_text": "## Plan\n\nNew body…\n"
 }
 ```
-
-### `search_tasks`
-
-Search task titles in scoped files.

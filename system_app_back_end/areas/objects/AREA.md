@@ -27,7 +27,7 @@ Every object has a stable id, file id, type, optional typed FKs / payload, and t
 |------|---------|
 | Embed is a pointer | Marker line e.g. `[INFO id="N"]` / `[TASK_LIST id="N"]` / `[TABLE id="N"]` — no payload in the file |
 | Top-level only | Never nested inside list or table fences in editor text |
-| Create inserts the block | `POST /files/:id/objects` creates the row **and** inserts the embed at `block_index` |
+| Create inserts the block | `POST /files/:id/objects` (and agent `create_object`) create the row **and** insert the embed at `block_index` via [`services/create_embed.py`](services/create_embed.py) |
 | Delete cascades | `delete_object_embed_cascade` removes the object and strips the embed from `document_json` |
 
 ## Tasks
