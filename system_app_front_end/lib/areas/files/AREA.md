@@ -300,7 +300,7 @@ In-session undo/redo uses Super Editor’s history stack.
 
 Symptom: `KeyDownEvent … physical key is already pressed` (often loops on one letter). Cause: remounting Super Editor or disposing embed `FocusNode`s / `TextField`s while a key is still down.
 
-**Coding-agent checklist (canonical):** [`DEVELOPMENT.md` § Editor keyboard safety](../../../../../DEVELOPMENT.md#editor-keyboard-safety-read-before-editing-the-file-editor).
+**Coding-agent checklist (canonical):** [`NOTES.md` § Editor keyboard safety](../../../../../NOTES.md#editor-keyboard-safety).
 
 In this area specifically:
 

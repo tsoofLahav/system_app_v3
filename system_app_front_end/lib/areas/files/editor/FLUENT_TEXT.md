@@ -62,7 +62,7 @@ Mechanism ([`embed_caret_bridge.dart`](embed_caret_bridge.dart) + [`document_car
 
 - **Tab / Escape** focus moves use `runNextFrame` (one frame).
 - **Destructive** structure changes (empty Backspace deletes object/row) still use `runAfterKeystroke` so HardwareKeyboard can finish KeyUp.
-- Mid-keystroke remounts (AppState notify, embed list reload, disposing cell `FocusNode`s) cause `KeyDownEvent … already pressed`. Full MUST / MUST NOT checklist: [`DEVELOPMENT.md` § Editor keyboard safety](../../../../../../DEVELOPMENT.md#editor-keyboard-safety-read-before-editing-the-file-editor) and files [`AREA.md`](../AREA.md#keyboard--focus-safety-recurring-bug-class).
+- Mid-keystroke remounts (AppState notify, embed list reload, disposing cell `FocusNode`s) cause `KeyDownEvent … already pressed`. Full MUST / MUST NOT checklist: [`NOTES.md` § Editor keyboard safety](../../../../../../NOTES.md#editor-keyboard-safety) and files [`AREA.md`](../AREA.md#keyboard--focus-safety-recurring-bug-class).
 
 ### Object right-click menus
 

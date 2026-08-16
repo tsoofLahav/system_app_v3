@@ -8,7 +8,8 @@ Monorepo for the personal productivity app.
 
 | Path | Purpose |
 |------|---------|
-| [`DEVELOPMENT.md`](DEVELOPMENT.md) | Working notes for the coding agent, incl. remembered decisions |
+| [`DEVELOPMENT.md`](DEVELOPMENT.md) | How we work, v3 status, area map, index of all docs |
+| [`NOTES.md`](NOTES.md) | Situational rules and remembered decisions, grouped by topic |
 | [`AGENTS.md`](AGENTS.md) | Agent entry point and area routing |
 | [`CONSTITUTION.md`](CONSTITUTION.md) | Product principles (read-only) |
 | [`content/`](content/) | DB-bound app content, e.g. the production agent's prompt — not dev docs |

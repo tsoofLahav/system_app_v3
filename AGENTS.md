@@ -2,7 +2,7 @@
 
 System App is a **document-centric** productivity app: **Topic → File → continuous text with embedded objects**.
 
-**Start here:** [`DEVELOPMENT.md`](DEVELOPMENT.md) — v3 status, deploy loop, area map, and remembered notes.
+**Start here:** [`DEVELOPMENT.md`](DEVELOPMENT.md) — how we work, v3 status, deploy loop, area map, and an index of every other doc. Situational rules live in [`NOTES.md`](NOTES.md).
 
 ## Code is organized by area
 
@@ -32,7 +32,7 @@ Read the relevant `AREA.md` before changing that area, and update it in the same
 
 | Agent | Instructions |
 |-------|--------------|
-| **Coding agent** (Cursor) | [`DEVELOPMENT.md`](DEVELOPMENT.md) + `AREA.md` files. Before editing the file editor / embeds / `AppState` notify paths, read **Editor keyboard safety** in `DEVELOPMENT.md` (avoids `KeyDownEvent … already pressed`). |
+| **Coding agent** (Cursor) | [`DEVELOPMENT.md`](DEVELOPMENT.md) + `AREA.md` files. Before editing the file editor / embeds / `AppState` notify paths, read [**Editor keyboard safety**](NOTES.md#editor-keyboard-safety) in `NOTES.md` (avoids `KeyDownEvent … already pressed`). |
 | **Production agent** (in-app AI) | `agent_configs.system_prompt` in the DB, sourced from [`content/production_agent/system_prompt.md`](content/production_agent/system_prompt.md) |
 
 ## Read-only
