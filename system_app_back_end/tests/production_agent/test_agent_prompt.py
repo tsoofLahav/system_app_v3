@@ -33,15 +33,9 @@ def test_load_prompt_file_is_short_standing_instructions():
 def test_prompt_treats_scope_and_hints_as_context_only():
     """Where the user stands must never read as where the edit has to happen."""
     text = load_prompt_file()
-    assert "not a target and not a boundary" in text
-    assert '"This line", "this file", "this topic"' in text
-    assert "any file in the workspace" in text
-
-
-def test_prompt_says_searching_is_how_a_target_is_found():
-    text = load_prompt_file()
-    assert "search before you write" in text
-    assert "find the right topic, file or object" in text
+    assert '"this line", "this file", "this topic"' in text
+    assert "yours to read and edit" in text
+    assert "The browse tools find the topic, file or object" in text
 
 
 def test_default_tool_allowlist():
