@@ -11,7 +11,8 @@ Lives in the bottom bar ([`ai_tool_bar.dart`](ai_tool_bar.dart)), left to right:
 | Control | Behavior |
 |---------|----------|
 | **Pinned actions** | Up to six saved actions in slot order, each with its icon and its own key (⌘⇧2…⌘⇧7). Pressing one runs it on what is open. |
-| **Bolt menu** | Every saved action, plus *Manage actions…* which opens the automations dialog. |
+| **Bolt menu** | Every saved action — the menu only fires things. |
+| **⋯** | Opens the automations dialog to rename, re-icon, re-seat, or delete an action. Managing sits beside the menu, not inside it. |
 | **Agent button** | Opens the prompt dialog ([`agent_prompt_dialog.dart`](agent_prompt_dialog.dart)) for a one-off request, with **Review changes (diff)** vs **Apply directly** (opens on apply directly — a one-off ask is lighter with the undo toast than with a diff). |
 
 The agent button is last and never moves: it is the one control that is always there, so it must always be in the same place. Everything is disabled when there is no AI context (nothing selected) or a run is already in flight — `AppState.hasAiContext` and `aiRunning` gate them, and `aiRunning` drives the busy state so the user cannot double-fire.

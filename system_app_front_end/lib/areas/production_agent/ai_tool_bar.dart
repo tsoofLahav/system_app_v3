@@ -49,8 +49,8 @@ class AiToolBar extends StatelessWidget {
             enabled: enabled,
             onPressed: () => runSavedAgentAction(context, state, action),
           ),
-        if (all.isNotEmpty)
-          PopupMenuButton<Automation?>(
+        if (all.isNotEmpty) ...[
+          PopupMenuButton<Automation>(
             enabled: enabled,
             tooltip: s['aiActions'],
             icon: Icon(
@@ -75,13 +75,19 @@ class AiToolBar extends StatelessWidget {
                     ],
                   ),
                 ),
-              const PopupMenuDivider(),
-              PopupMenuItem(value: null, child: Text(s['manageAiActions'])),
             ],
-            onSelected: (action) => action == null
-                ? showAutomationDialog(context: context, state: state)
-                : runSavedAgentAction(context, state, action),
+            onSelected: (action) => runSavedAgentAction(context, state, action),
           ),
+          // Managing sits beside the menu, not inside it: the menu is for
+          // firing an action, and a row that opens a dialog reads like one.
+          AiToolButton(
+            tooltip: s['manageAiActions'],
+            icon: AppIcons.more,
+            enabled: enabled,
+            onPressed: () =>
+                showAutomationDialog(context: context, state: state),
+          ),
+        ],
         AiToolButton(
           tooltip: _tooltip(s['aiAgent'], ShortcutActionIds.aiConsult),
           icon: AppIcons.consult,

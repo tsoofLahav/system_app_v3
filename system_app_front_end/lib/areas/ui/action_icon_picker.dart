@@ -68,17 +68,24 @@ class _ActionIconGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
-        for (final key in actionIconKeys)
-          _IconChoice(
-            iconKey: key,
-            selected: key == selectedKey,
-            onTap: () => Navigator.pop(context, key),
-          ),
-      ],
+    // The vocabulary is long enough to scroll rather than stretch the dialog
+    // past the screen on a laptop.
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 300),
+      child: SingleChildScrollView(
+        child: Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final key in actionIconKeys)
+              _IconChoice(
+                iconKey: key,
+                selected: key == selectedKey,
+                onTap: () => Navigator.pop(context, key),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

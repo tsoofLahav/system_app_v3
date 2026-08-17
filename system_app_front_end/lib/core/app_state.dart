@@ -699,6 +699,19 @@ class AppState extends ChangeNotifier {
     return automation;
   }
 
+  /// Rewrites a saved action or automation in place.
+  ///
+  /// Reloads rather than patching the list, because a change of seat moves
+  /// whoever held it too.
+  Future<void> updateAutomation(
+    Automation automation,
+    Map<String, dynamic> changes,
+  ) async {
+    if (changes.isEmpty) return;
+    await _automations.update(automation.id, changes);
+    await loadAutomations();
+  }
+
   /// The lowest bar slot nobody holds, or null when all six are taken.
   int? get firstFreeAiBarSlot {
     final taken = {

@@ -116,6 +116,12 @@ class AppStrings {
   String actionReplaces(String name) =>
       this['actionReplacesBody'].replaceAll('{name}', name);
 
+  String editActionTitle(String name) =>
+      this['editActionTitle'].replaceAll('{name}', name);
+
+  String deleteActionMessage(String name) =>
+      this['deleteActionBody'].replaceAll('{name}', name);
+
   String reviewDecidedCount(int decided, int total) =>
       this['reviewDecidedCount']
           .replaceAll('{decided}', '$decided')
@@ -303,6 +309,9 @@ class AppStrings {
     'actionPlaceMenu': 'In the menu',
     'actionPlaceHint': 'Six actions fit on the bar, each with its own key.',
     'actionReplacesBody': 'Takes the seat of {name}.',
+    'editActionTitle': 'Editing {name}',
+    'deleteActionBody': 'Delete "{name}"?',
+    'saved': 'Saved',
     'actionSaved': 'Action saved',
     'manageAiActions': 'Manage actions…',
     'putOnBar': 'Put on the bar',
@@ -797,6 +806,9 @@ class AppStrings {
     'actionPlaceMenu': 'בתפריט',
     'actionPlaceHint': 'שש פעולות נכנסות לסרגל, לכל אחת מקש משלה.',
     'actionReplacesBody': 'תופסת את מקומה של {name}.',
+    'editActionTitle': 'עריכת {name}',
+    'deleteActionBody': 'למחוק את "{name}"?',
+    'saved': 'נשמר',
     'actionSaved': 'הפעולה נשמרה',
     'manageAiActions': 'ניהול פעולות…',
     'putOnBar': 'הוסף לסרגל',

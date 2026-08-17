@@ -23,6 +23,10 @@ Without a schedule it is a **saved AI action** — the same record, fired by han
 
 Only actions get an icon that matters and a seat — a scheduled automation is never on the bar, because there is no one to press it.
 
+## Managing what is saved
+
+The dialog's list is where an action is changed: the row's pencil (or the row itself) loads it into the form above, which becomes an edit form — same fields, **Save** instead of Create, Cancel to drop the edit. Editing happens where creating happens so there is one description of what an action is. The pin re-seats it, and delete asks first.
+
 Timing uses locked structured controls rather than free text, so an invalid schedule string cannot be produced. Daily picks a time; weekly picks a day and time; monthly picks a placement (first / second / third / last), a weekday, and a time.
 
 ## Running
