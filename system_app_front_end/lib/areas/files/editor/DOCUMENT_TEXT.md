@@ -54,7 +54,7 @@ Object **content** lives in object tables / `objects.payload`. Deleting a pointe
 
 ### Move
 
-Cut the pointer line and paste it elsewhere (or reorder the Super Editor embed node, then save). Never leave empty neighbor stubs around embeds (bridge save prunes them).
+Cut the pointer line and paste it elsewhere (or reorder the Super Editor embed node, then save). The move itself must not leave an empty paragraph behind — the save no longer prunes one, because a blank line beside an object may be the user's ([`FLUENT_TEXT.md`](FLUENT_TEXT.md)).
 
 ## Agent projection
 

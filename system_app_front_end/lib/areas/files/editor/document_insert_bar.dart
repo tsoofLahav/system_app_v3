@@ -34,11 +34,9 @@ class DocumentInsertBar extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _InsertButton(
-                icon: AppIcons.uploadDetails,
-                tooltip: s['paragraph'],
-                onPressed: () => controller.insertAtBlock('paragraph'),
-              ),
+              // No paragraph button — a file is free text, so a plain line is
+              // always one keystroke away. The bar is for what typing cannot
+              // make: a list, and the objects.
               // One list option only. Points vs numbers is a property of
               // an existing list, switched from its right-click menu.
               _InsertButton(

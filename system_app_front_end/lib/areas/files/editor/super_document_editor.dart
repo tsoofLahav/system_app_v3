@@ -33,6 +33,53 @@ import './embed_move_bubble.dart';
 import './object_embed_component.dart';
 import './selection_background_phase.dart';
 
+/// Super Editor's overlays, with a caret only for the pane that owns the
+/// cursor.
+///
+/// A pane keeps its selection when it loses focus — the marking is what every
+/// action runs on — so hiding the caret is the only thing that stops each open
+/// file from blinking a cursor of its own.
+List<SuperEditorLayerBuilder> documentOverlayBuilders({
+  required bool withCaret,
+}) =>
+    [
+      for (final builder in defaultSuperEditorDocumentOverlayBuilders)
+        if (_drawsCursor(builder))
+          _PaneCaretLayerBuilder(builder, visible: withCaret)
+        else
+          builder,
+    ];
+
+/// The default overlays that put a cursor on screen: the desktop caret, and the
+/// iOS / Android handle layers, which draw the caret on their platform.
+bool _drawsCursor(SuperEditorLayerBuilder builder) =>
+    builder is DefaultCaretOverlayBuilder ||
+    builder is SuperEditorIosHandlesDocumentLayerBuilder ||
+    builder is SuperEditorAndroidHandlesDocumentLayerBuilder;
+
+/// One of Super Editor's cursor layers, or an empty layer in its place.
+///
+/// The layer stays in the list either way: `ContentLayers` matches overlays by
+/// index and never deactivates one past the end of a shorter list, so a removed
+/// layer would go on painting. Styling the caret away does not work either — the
+/// blink controller writes its own alpha over the colour, so a transparent caret
+/// comes back opaque black.
+class _PaneCaretLayerBuilder implements SuperEditorLayerBuilder {
+  const _PaneCaretLayerBuilder(this.builder, {required this.visible});
+
+  final SuperEditorLayerBuilder builder;
+  final bool visible;
+
+  @override
+  ContentLayerWidget build(
+    BuildContext context,
+    SuperEditorContext editContext,
+  ) =>
+      visible
+          ? builder.build(context, editContext)
+          : const ContentLayerProxyWidget(child: SizedBox.shrink());
+}
+
 /// File editor surface backed by Super Editor + v4 marker-text persistence.
 class SuperDocumentEditor extends StatefulWidget {
   const SuperDocumentEditor({
@@ -82,6 +129,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   /// recreates the client without disposing the old one, which then serializes
   /// the dead document against the shared composer selection (Escape crash).
   var _superEditorEpoch = 0;
+
+  /// This pane is the one the user last clicked or typed in. Only that pane
+  /// paints a caret; the others keep their marking without a second cursor.
+  var _isClaimedPane = false;
 
   /// Tight constant gap between blocks (Enter creates a new paragraph).
   static const _blockGap = AppSpacing.blockGap;
@@ -148,6 +199,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _lastSavedJson = _currentFile.documentJson;
     _trackedObjectIds = _objectIdsInDocument();
     widget.state.addListener(_onAppStateChanged);
+    DocumentEditorRegistry.notifier.addListener(_onClaimedPaneChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       DocumentEditorRegistry.register(
@@ -170,6 +222,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _removeMoveBubble();
     _saveTimer?.cancel();
     unawaited(_flushPendingChanges());
+    DocumentEditorRegistry.notifier.removeListener(_onClaimedPaneChanged);
     DocumentEditorRegistry.unregister(widget.file.id);
     widget.state.removeListener(_onAppStateChanged);
     _doc.removeListener(_onDocumentChange);
@@ -184,6 +237,15 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   void _onFocusChanged() {
     if (_focusNode.hasFocus) _claimFile();
+  }
+
+  /// Caret visibility only — no focus node or editor is replaced here, so this
+  /// stays safe mid-keystroke.
+  void _onClaimedPaneChanged() {
+    if (!mounted) return;
+    final claimed = DocumentEditorRegistry.activeFileId == widget.file.id;
+    if (claimed == _isClaimedPane) return;
+    setState(() => _isClaimedPane = claimed);
   }
 
   void _onDocumentChange(DocumentChangeLog changeLog) {
@@ -437,28 +499,6 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         action == 'table') {
       final markerGap = markerGapIndexForNodeIndex(_doc, seInsertIndex);
       await _insertObject(action, markerGap);
-      return;
-    }
-
-    if (action == 'paragraph') {
-      final id = Editor.createNodeId();
-      _editor.execute([
-        InsertNodeAtIndexRequest(
-          nodeIndex: seInsertIndex,
-          newNode: ParagraphNode(id: id, text: AttributedText()),
-        ),
-        ChangeSelectionRequest(
-          DocumentSelection.collapsed(
-            position: DocumentPosition(
-              nodeId: id,
-              nodePosition: const TextNodePosition(offset: 0),
-            ),
-          ),
-          SelectionChangeType.placeCaret,
-          SelectionReason.userInteraction,
-        ),
-      ]);
-      _focusNode.requestFocus();
       return;
     }
 
@@ -1349,10 +1389,17 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
               key: ValueKey<int>(_superEditorEpoch),
               editor: _editor,
               focusNode: _focusNode,
+              // One IME identity per file. Panes share the app's single IME
+              // connection, so without a role a second open file registers as
+              // the same input: super_editor throws "duplicate input IDs" and
+              // the two panes fight over the connection.
+              inputRole: 'file-${widget.file.id}',
               documentLayoutKey: _docLayoutKey,
               stylesheet: _stylesheet,
               selectionStyle: _selectionStyles,
               componentBuilders: _componentBuilders(ambient),
+              documentOverlayBuilders:
+                  documentOverlayBuilders(withCaret: _isClaimedPane),
               plugins: {
                 _visibleSelectionPlugin,
                 _visualCaretPlugin,

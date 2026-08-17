@@ -4,7 +4,7 @@ How the file editor keeps **one continuous piece of text** when lists, tables, a
 
 **Storage dialect** (marker text SoT, pointer embeds): [`DOCUMENT_TEXT.md`](DOCUMENT_TEXT.md).
 
-**Editing surface:** Super Editor ([`super_document_editor.dart`](super_document_editor.dart)). Bridge save prunes empty neighbors around embeds.
+**Editing surface:** Super Editor ([`super_document_editor.dart`](super_document_editor.dart)). Bridge save keeps the document as the user left it, blank lines included.
 
 Sibling policy docs: caret/RTL → [`../rich_text/rtl/RTL.md`](../rich_text/rtl/RTL.md). Area overview → [`../AREA.md`](../AREA.md).
 
@@ -12,7 +12,7 @@ Sibling policy docs: caret/RTL → [`../rich_text/rtl/RTL.md`](../rich_text/rtl/
 
 | Layer | Owns |
 |-------|------|
-| Marker text + SE bridge | Persisted placement; save path drops blank neighbors next to embeds |
+| Marker text + SE bridge | Persisted placement; the save path changes nothing the user can see |
 | Super Editor `MutableDocument` | In-session structure, typing, list items, undo |
 | Embed widgets + [`AppState`](../../../../core/app_state.dart) | Object **payload** (info body, tasks, table rows, …). Marker text stores pointer lines only |
 
@@ -31,11 +31,15 @@ A bullet, a table row, and an **embed block** count as **one line** of the docum
 
 ## Three principles
 
-### 1. No empty neighbors
+### 1. A blank line is text
 
-After move, delete, or split, never leave an empty or whitespace/`\n`-only paragraph beside an embed. The bridge serializer drops spacer/empty parts adjacent to pointers.
+A gap the user typed is part of the file, wherever it sits — between two paragraphs, beside an object, or at the end. Empty paragraphs are saved as `[SPACER n="1"]` parts and come back as empty paragraphs, so what is on screen and what is on disk have the same number of lines.
 
-Blank lines the user wants live as `\n` **inside** a paragraph — not as empty sibling blocks.
+That equality is what makes insertion land right: the insert bar turns the caret's node index into a marker part index ([`markerGapIndexForNodeIndex`](../model/marker_super_editor_bridge.dart)), and the server inserts the pointer between stored parts. When the save dropped trailing blanks, the two counts drifted and an object typed under a gap reappeared under the last paragraph.
+
+The one thing the save still decides on its own: leading blanks are dropped (a file cannot start on air, and a new file is one empty paragraph), and a file that is nothing but blanks is an empty file — the same rule the backend applies.
+
+Move and delete clean up after themselves instead: never *leave* an empty paragraph the user did not make.
 
 ### 2. Atomic objects + explicit enter/exit
 

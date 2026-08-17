@@ -258,6 +258,20 @@ void main() {
     await tester.tap(find.byTooltip('Reject'));
     await tester.pumpAndSettle();
 
+    // Last decision made: the bubble steps aside for Finish.
+    expect(find.byTooltip('Accept'), findsNothing);
+    expect(find.text('2 of 2 decided'), findsOneWidget);
+
+    // Touching a decided change brings it back so the choice can be flipped.
+    await tester.tap(find.text('Run twice daily'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Accept'), findsOneWidget);
+    expect(find.text('1 / 2'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Accept'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Accept'), findsNothing);
+
     await tester.tap(find.text('Finish'));
     await tester.pumpAndSettle();
 

@@ -98,6 +98,10 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
   double? _bubbleTop;
   var _busy = false;
 
+  /// Set when the last change is decided: the bubble steps aside and Finish
+  /// takes over. Touching any change brings it back so a choice can be flipped.
+  var _bubbleStoodDown = false;
+
   List<PendingReviewHunk> get _hunks => widget.pending.hunks;
 
   @override
@@ -245,8 +249,11 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
   }
 
   void _activate(String hunkId) {
-    if (_activeId == hunkId) return;
-    setState(() => _activeId = hunkId);
+    if (_activeId == hunkId && !_bubbleStoodDown) return;
+    setState(() {
+      _activeId = hunkId;
+      _bubbleStoodDown = false;
+    });
     _syncToActive();
   }
 
@@ -256,6 +263,7 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
     setState(() {
       _choices[active] = choice;
       _activeId = nextUndecidedHunkId(_hunks, _choices, fromId: active) ?? active;
+      _bubbleStoodDown = _allDecided;
     });
     _syncToActive();
   }
@@ -401,10 +409,29 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
                         child: Text(s['reviewDiscard']),
                       ),
                       const SizedBox(width: 8),
-                      FilledButton(
-                        onPressed: _allDecided && !_busy ? _finish : null,
-                        child: Text(
-                          _busy ? s['reviewSaving'] : s['reviewFinish'],
+                      // Everything decided: the button is where the reviewer
+                      // should look next, so it lights up.
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOut,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: _allDecided && !_busy
+                              ? [
+                                  BoxShadow(
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.45),
+                                    blurRadius: 16,
+                                    spreadRadius: 1,
+                                  ),
+                                ]
+                              : const [],
+                        ),
+                        child: FilledButton(
+                          onPressed: _allDecided && !_busy ? _finish : null,
+                          child: Text(
+                            _busy ? s['reviewSaving'] : s['reviewFinish'],
+                          ),
                         ),
                       ),
                     ],
@@ -531,7 +558,9 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
 
   Widget _bubble(AppStrings s) {
     final top = _bubbleTop;
-    if (top == null || _activeId == null) return const SizedBox.shrink();
+    if (top == null || _activeId == null || _bubbleStoodDown) {
+      return const SizedBox.shrink();
+    }
     final index = _hunks.indexWhere((h) => h.id == _activeId) + 1;
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 200),

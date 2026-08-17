@@ -53,7 +53,7 @@ Detail and fluent-text rules: files [`AREA.md`](system_app_front_end/lib/areas/f
 - **2026-07-27** — **There is only one marking.** Every action (right-click, clipboard, formatting, and AI) resolves its target through `DocumentMark`: the marking if there is one — across as many parts as it covers — otherwise the line at the caret. Never read a single field's selection to decide what an action affects.
 - **2026-07-27** — **A bullet in a list and a row in a table each count as one line of text.** Settle any caret or marking question by asking what a plain line would do: arrow up lands on the *last* line of what is above, marking a whole row and deleting removes the row, marking every row removes the table. Rules in the files [`AREA.md`](system_app_front_end/lib/areas/files/AREA.md).
 - **2026-07-27** — A list has one style; points vs numbers is switched on the existing list from its right-click menu, never offered as two things to insert.
-- **2026-08-09** — Fluent text with embeds: [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md) — no empty neighbors after move/delete, edge landing, stable embed remount.
+- **2026-08-09** — Fluent text with embeds: [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md) — a blank line the user typed is text and is saved, move/delete leave none behind, edge landing, stable embed remount.
 - **2026-08-07** — **RTL solution** for the file editor is gathered under [`system_app_front_end/lib/areas/files/rich_text/rtl/`](system_app_front_end/lib/areas/files/rich_text/rtl/RTL.md) (`RTL.md` + `rtl.dart`). Do not invent caret/direction policy outside that folder.
 
 ---

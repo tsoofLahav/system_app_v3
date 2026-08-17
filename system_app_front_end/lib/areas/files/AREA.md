@@ -34,6 +34,13 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 
 **Persisted SoT** = marker text (`%%system_app_document v4\n` + body). **Session SoT** = Super Editor `MutableDocument` (undo via SE history). Save = bridge serialize → debounced `PATCH document_json`. Embed node ids are stable (`embed:<objectId>`). Object **payloads** stay in the objects area.
 
+### The name in the header
+
+The header of a pane ([`editor/document_pane.dart`](editor/document_pane.dart)) is a plain text field, so a rename ends the way the user ends it: **leaving the field saves** (focus loss, and the pane going away), not only Enter. Two rules keep it honest:
+
+- Compare the typed text against the name **as shown**, not as stored. Built-in files are displayed translated (`Daily` reads `יומי`), so comparing against the stored name would rename a file to its own translation the first time focus passed through.
+- A rename arriving from elsewhere (agent, reload) refreshes the field only while it is not focused — never on top of what is being typed.
+
 ### One scroll owner
 
 Each file pane scrolls its document in a local `CustomScrollView` with `SuperEditor` as a **sliver** (`shrinkWrap: true`). The topic canvas also scrolls; SE always emits a sliver when any ancestor `Scrollable` exists, so it must never sit under `Column` / `Expanded` / box parents.
@@ -71,7 +78,7 @@ Legacy `[TABLE]…[/TABLE]` fences are migrated to table objects on open.
 
 ## Keeping the text fluent
 
-Embeds-in-flow principles (empty neighbors, edge landing, object remount): **[`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md)**.
+Embeds-in-flow principles (blank lines as text, edge landing, object remount): **[`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md)**.
 
 | Context | Key | Behavior |
 |---------|-----|----------|
@@ -90,6 +97,10 @@ Adjacent paragraphs are coalesced on load so a document that was split into many
 A newly inserted list or table gets the caret in its first bullet or its top-left cell, so inserting one is the same gesture as starting a new paragraph — insert and type.
 
 The insert bar offers **one** list button, not two. Points vs numbers is a property of a list that already exists, switched from its right-click menu, so the user chooses "a list" and then how it looks.
+
+It offers no paragraph button either: the file is free text, so a plain line is always one keystroke away. The bar is only for what typing cannot make — a list, and the objects.
+
+Insertion goes where the caret is, blank lines included: press Enter a few times and the object lands in the gap, not back up under the last paragraph. That holds because the save keeps those empty lines ([`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md) § A blank line is text).
 
 ### A row, a bullet, and an embed are each one line of text
 
@@ -166,6 +177,19 @@ Embed-internal fields may still register with `DocumentTextFlow` when nested; th
 Vertical movement is grid-aware because reading order and visual order differ in a table: the cell after `r0c0` is `r0c1`, but the cell *below* it is `r1c0`. `setVerticalLinks` carries that override.
 
 A selection inside a single part is left to that text field's own painting. Only a selection that spans parts is drawn by the editor, over every part it touches, while the focused field keeps the caret.
+
+### And one cursor across open files
+
+A topic shows several files at once, so several Super Editors are mounted at once, and each one is a text input of its own. Two rules keep that from reading as two cursors:
+
+| Rule | Why |
+|------|-----|
+| Every editor gets `inputRole: 'file-<id>'` | The IME connection is global and shared. Without a role the second file registers as the same input, the two panes fight over the connection, and in debug super_editor throws *duplicate input IDs*. |
+| Only the file claimed in [`DocumentEditorRegistry`](editor/document_editor_controller.dart) draws a caret (`documentOverlayBuilders`) | A pane keeps its selection when it loses focus — the marking is what actions run on — so the caret is the only thing left to hide. |
+
+Hiding it means swapping Super Editor's cursor layers (desktop caret + the iOS / Android handle layers) for an empty layer of the same count. Two things that look simpler do not work: **removing** a layer leaves it painting, because `ContentLayers` matches overlays by index and never deactivates one past the end of a shorter list; **styling** the caret away fails too, because the blink controller writes its own alpha over the colour, so a transparent caret comes back opaque black.
+
+Claim follows the click, not the focus node, so opening a dialog or the AI bar leaves the cursor where the user put it.
 
 ## There is only one marking
 

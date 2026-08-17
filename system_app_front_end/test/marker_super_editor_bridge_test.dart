@@ -89,7 +89,7 @@ Outro''';
       expect(markerGapIndexForNodeIndex(doc, 4), 3); // end
     });
 
-    test('prunes empty neighbors around embeds on save', () {
+    test('a gap the user left beside an object is kept', () {
       final doc = MutableDocument(
         nodes: [
           ParagraphNode(id: 'a', text: AttributedText('Hi')),
@@ -103,12 +103,46 @@ Outro''';
           ParagraphNode(id: 'b', text: AttributedText('Bye')),
         ],
       );
-      final out = mutableDocumentToMarkerText(doc);
-      final body = DocumentTextCodec.stripHeader(out);
-      expect(body, isNot(contains('[SPACER')));
-      expect(body, contains('[INFO id="1"]'));
-      expect(body, contains('Hi'));
-      expect(body, contains('Bye'));
+      final body = DocumentTextCodec.stripHeader(
+        mutableDocumentToMarkerText(doc),
+      );
+
+      expect(
+        body,
+        'Hi\n\n[SPACER n="1"]\n\n[INFO id="1"]\n\n[SPACER n="1"]\n\nBye',
+      );
+    });
+
+    test('blank lines at the end of a file survive the save', () {
+      // Otherwise an object inserted down there lands under the last text:
+      // the caret sits past parts the stored file no longer has.
+      final doc = MutableDocument(
+        nodes: [
+          ParagraphNode(id: 'a', text: AttributedText('Hi')),
+          ParagraphNode(id: 'e1', text: AttributedText()),
+          ParagraphNode(id: 'e2', text: AttributedText()),
+        ],
+      );
+      final body = DocumentTextCodec.stripHeader(
+        mutableDocumentToMarkerText(doc),
+      );
+
+      expect(body.split('\n\n'), hasLength(3));
+      expect(markerGapIndexForNodeIndex(doc, doc.nodeCount), 3);
+    });
+
+    test('a file of nothing but blank lines is an empty file', () {
+      final doc = MutableDocument(
+        nodes: [
+          ParagraphNode(id: 'e1', text: AttributedText()),
+          ParagraphNode(id: 'e2', text: AttributedText()),
+        ],
+      );
+
+      expect(
+        DocumentTextCodec.stripHeader(mutableDocumentToMarkerText(doc)),
+        isEmpty,
+      );
     });
   });
 }

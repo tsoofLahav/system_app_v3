@@ -147,7 +147,11 @@ String mutableDocumentToMarkerText(Document document) {
       if (level != null) {
         lines.add('${'#' * level} $text'.trimRight());
       } else if (text.trim().isEmpty) {
-        // Empty paragraphs become spacers only between non-empty content.
+        // A blank line the user made is content: it is kept wherever it sits,
+        // including at the end of the file, so an object inserted there lands
+        // after the gap instead of jumping up under the last text. Only blanks
+        // before any content are dropped — a file cannot start on air, and a
+        // brand new file is one empty paragraph.
         if (lines.isNotEmpty) {
           lines.add('[SPACER n="1"]');
         }
@@ -162,17 +166,8 @@ String mutableDocumentToMarkerText(Document document) {
     i++;
   }
 
-  // Drop trailing spacers / empties — except one after a final embed so
-  // Enter-to-exit / continue-typing below the last object survives save.
-  while (lines.length >= 2 &&
-      DocumentTextCodec.spacerRe.hasMatch(lines.last.trim()) &&
-      !DocumentTextCodec.pointerRe.hasMatch(lines[lines.length - 2].trim())) {
-    lines.removeLast();
-  }
-  // Prune empty neighbors around embeds (fluent rule), keep trailing write line.
-  final pruned = _pruneEmptyNeighbors(lines);
-  if (pruned.isEmpty) return DocumentTextCodec.empty();
-  return DocumentTextCodec.wrap(pruned.join('\n\n'));
+  if (lines.isEmpty) return DocumentTextCodec.empty();
+  return DocumentTextCodec.wrap(lines.join('\n\n'));
 }
 
 /// Map a Super Editor node index to a top-level marker-part insert gap.
@@ -308,35 +303,6 @@ List<List<String>> _parseTableRows(String body) {
 
 String _escapeCell(String text) =>
     text.replaceAll(r'\', r'\\').replaceAll('\t', r'\t');
-
-List<String> _pruneEmptyNeighbors(List<String> lines) {
-  if (lines.isEmpty) return lines;
-  final out = <String>[];
-  for (var i = 0; i < lines.length; i++) {
-    final line = lines[i];
-    final isSpacer = DocumentTextCodec.spacerRe.hasMatch(line.trim());
-    final isEmptyPara = line.trim().isEmpty;
-    if (!isSpacer && !isEmptyPara) {
-      out.add(line);
-      continue;
-    }
-    final prevEmbed = out.isNotEmpty &&
-        DocumentTextCodec.pointerRe.hasMatch(out.last.trim());
-    final nextEmbed = i + 1 < lines.length &&
-        DocumentTextCodec.pointerRe.hasMatch(lines[i + 1].trim());
-    // Keep a single trailing empty/spacer after the last embed (writing surface).
-    final trailingAfterEmbed =
-        prevEmbed && !nextEmbed && i == lines.length - 1;
-    if (trailingAfterEmbed) {
-      out.add(isSpacer ? line : '[SPACER n="1"]');
-      continue;
-    }
-    // Drop empty/spacer neighbors sandwiched against embeds.
-    if (prevEmbed || nextEmbed) continue;
-    if (isSpacer) out.add(line);
-  }
-  return out;
-}
 
 /// Temporary node for unmigrated `[TABLE]…[/TABLE]` fences.
 @immutable

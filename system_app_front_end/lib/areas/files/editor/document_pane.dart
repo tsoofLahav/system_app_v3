@@ -36,14 +36,16 @@ class DocumentPane extends StatefulWidget {
 
 class _DocumentPaneState extends State<DocumentPane> {
   late TextEditingController _titleController;
+  final _titleFocus = FocusNode();
   final _menuButtonKey = GlobalKey();
+
+  String get _shownName => widget.state.fileDisplayName(widget.file.name);
 
   @override
   void initState() {
     super.initState();
-    _titleController = TextEditingController(
-      text: widget.state.fileDisplayName(widget.file.name),
-    );
+    _titleController = TextEditingController(text: _shownName);
+    _titleFocus.addListener(_onTitleFocusChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_maybeOpenPendingReview());
     });
@@ -53,11 +55,21 @@ class _DocumentPaneState extends State<DocumentPane> {
   void didUpdateWidget(DocumentPane oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.file.id != widget.file.id) {
-      _titleController.text = widget.state.fileDisplayName(widget.file.name);
+      _titleController.text = _shownName;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(_maybeOpenPendingReview());
       });
+      return;
     }
+    // A rename from elsewhere (agent, another device) belongs on screen, but
+    // never on top of what the user is in the middle of typing.
+    if (!_titleFocus.hasFocus && _titleController.text != _shownName) {
+      _titleController.text = _shownName;
+    }
+  }
+
+  void _onTitleFocusChanged() {
+    if (!_titleFocus.hasFocus) unawaited(_saveTitle());
   }
 
   Future<void> _maybeOpenPendingReview() async {
@@ -68,18 +80,24 @@ class _DocumentPaneState extends State<DocumentPane> {
   @override
   void deactivate() {
     unawaited(DocumentEditorRegistry.flushActive());
+    unawaited(_saveTitle());
     super.deactivate();
   }
 
   @override
   void dispose() {
+    _titleFocus.removeListener(_onTitleFocusChanged);
+    _titleFocus.dispose();
     _titleController.dispose();
     super.dispose();
   }
 
+  /// Compared against the name as shown, not as stored: built-in files are
+  /// displayed translated, so `Daily` reads `יומי` and an untouched header
+  /// would otherwise rename the file to its own translation.
   Future<void> _saveTitle() async {
     final name = _titleController.text.trim();
-    if (name.isEmpty || name == widget.file.name) return;
+    if (name.isEmpty || name == _shownName) return;
     await widget.state.updateFile(widget.file, {'name': name});
   }
 
@@ -151,10 +169,12 @@ class _DocumentPaneState extends State<DocumentPane> {
                 Expanded(
                   child: TextField(
                     controller: _titleController,
+                    focusNode: _titleFocus,
                     style: AppTypography.noteTitleStyle,
                     decoration: AppTypography.noteInputDecoration(),
-                    onSubmitted: (_) => _saveTitle(),
-                    onEditingComplete: _saveTitle,
+                    // Clicking into the document is how a rename usually ends,
+                    // so leaving the field has to save it, not only Enter.
+                    onSubmitted: (_) => _titleFocus.unfocus(),
                   ),
                 ),
                 _FileMenuButton(
