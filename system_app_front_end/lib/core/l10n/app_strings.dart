@@ -313,7 +313,9 @@ class AppStrings {
     'deleteActionBody': 'Delete "{name}"?',
     'saved': 'Saved',
     'actionSaved': 'Action saved',
-    'manageAiActions': 'Manage actions…',
+    'manageAiActions': 'AI actions…',
+    'noAiActionsHint':
+        'No saved actions yet.\nSave one from the agent when a prompt is worth keeping.',
     'putOnBar': 'Put on the bar',
     'takeOffBar': 'Take off the bar',
     'aiBarFull': 'The bar is full — take one off first.',
@@ -810,7 +812,9 @@ class AppStrings {
     'deleteActionBody': 'למחוק את "{name}"?',
     'saved': 'נשמר',
     'actionSaved': 'הפעולה נשמרה',
-    'manageAiActions': 'ניהול פעולות…',
+    'manageAiActions': 'פעולות AI…',
+    'noAiActionsHint':
+        'אין עדיין פעולות שמורות.\nשמור אחת מהסוכן כשפרומפט שווה לשמור.',
     'putOnBar': 'הוסף לסרגל',
     'takeOffBar': 'הסר מהסרגל',
     'aiBarFull': 'הסרגל מלא — הסר פעולה קודם.',

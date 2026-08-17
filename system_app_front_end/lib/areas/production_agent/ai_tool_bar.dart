@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
-import '../automations/automation.dart';
-import '../automations/automation_dialog.dart';
+import '../automations/ai_actions_dialog.dart';
 import '../ux/shortcuts/app_shortcuts.dart';
 import '../ux/shortcuts/shortcut_catalog.dart';
 import '../ui/action_icons.dart';
@@ -16,9 +15,9 @@ const aiToolTapPadding = 4.0;
 
 /// The AI section of the bottom bar.
 ///
-/// Saved actions the user pinned come first, in slot order, then the menu of
-/// every action, then the agent — which never moves, so the one thing that is
-/// always there is always in the same place.
+/// The agent comes first — leading edge, so right in Hebrew and left in
+/// English — because it is the one control that is always there. Then the
+/// pinned actions in slot order, then ⋯ for the rest of them.
 class AiToolBar extends StatelessWidget {
   const AiToolBar({
     super.key,
@@ -34,11 +33,16 @@ class AiToolBar extends StatelessWidget {
     final s = state.strings;
     final enabled = state.hasAiContext && !state.aiRunning;
     final pinned = state.barAiActions;
-    final all = state.manualAiActions;
 
     return Row(
       mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
       children: [
+        AiToolButton(
+          tooltip: _tooltip(s['aiAgent'], ShortcutActionIds.aiConsult),
+          icon: AppIcons.consult,
+          enabled: enabled,
+          onPressed: () => runAgentPrompt(context, state),
+        ),
         for (final action in pinned)
           AiToolButton(
             tooltip: _tooltip(
@@ -49,50 +53,11 @@ class AiToolBar extends StatelessWidget {
             enabled: enabled,
             onPressed: () => runSavedAgentAction(context, state, action),
           ),
-        if (all.isNotEmpty) ...[
-          PopupMenuButton<Automation>(
-            enabled: enabled,
-            tooltip: s['aiActions'],
-            icon: Icon(
-              Icons.bolt_outlined,
-              size: aiToolIconSize,
-              color: enabled ? AppColors.text : AppColors.textHint,
-            ),
-            itemBuilder: (ctx) => [
-              for (final action in all)
-                PopupMenuItem(
-                  value: action,
-                  child: Row(
-                    children: [
-                      AppIcon(actionIcon(action.icon), size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          action.name,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-            onSelected: (action) => runSavedAgentAction(context, state, action),
-          ),
-          // Managing sits beside the menu, not inside it: the menu is for
-          // firing an action, and a row that opens a dialog reads like one.
-          AiToolButton(
-            tooltip: s['manageAiActions'],
-            icon: AppIcons.more,
-            enabled: enabled,
-            onPressed: () =>
-                showAutomationDialog(context: context, state: state),
-          ),
-        ],
         AiToolButton(
-          tooltip: _tooltip(s['aiAgent'], ShortcutActionIds.aiConsult),
-          icon: AppIcons.consult,
+          tooltip: s['manageAiActions'],
+          icon: AppIcons.more,
           enabled: enabled,
-          onPressed: () => runAgentPrompt(context, state),
+          onPressed: () => showAiActionsDialog(context: context, state: state),
         ),
       ],
     );

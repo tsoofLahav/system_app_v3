@@ -23,9 +23,15 @@ Without a schedule it is a **saved AI action** — the same record, fired by han
 
 Only actions get an icon that matters and a seat — a scheduled automation is never on the bar, because there is no one to press it.
 
-## Managing what is saved
+## Three surfaces, one record
 
-The dialog's list is where an action is changed: the row's pencil (or the row itself) loads it into the form above, which becomes an edit form — same fields, **Save** instead of Create, Cancel to drop the edit. Editing happens where creating happens so there is one description of what an action is. The pin re-seats it, and delete asks first.
+| Surface | What it is for |
+|---------|----------------|
+| Agent dialog | Where an action is **born** — see [production agent](../production_agent/AREA.md) |
+| [`ai_actions_dialog.dart`](ai_actions_dialog.dart) (⋯ on the AI bar) | The saved actions and nothing else: pin, edit, run, delete. No create form, no schedules. |
+| [`automation_dialog.dart`](automation_dialog.dart) (bottom bar) | Automations, with the actions tab alongside for completeness |
+
+Editing anything goes through one editor, [`automation_edit_dialog.dart`](automation_edit_dialog.dart): name, prompt and apply mode for both kinds, a schedule field for the scheduled ones, an icon and a seat for the actions. Deleting asks first. A seat change is only sent when the user actually moves it, so saving a rename never shuffles the bar.
 
 Timing uses locked structured controls rather than free text, so an invalid schedule string cannot be produced. Daily picks a time; weekly picks a day and time; monthly picks a placement (first / second / third / last), a weekday, and a time.
 
@@ -35,7 +41,7 @@ Timing uses locked structured controls rather than free text, so an invalid sche
 |---------|------|
 | **Run now** | `POST /automations/:id/run` — enqueues, shows “started”, polls run status |
 | **Schedule** | Server cron; the app finds out by polling runs |
-| **AI actions menu / bar** | Actions appear in the bolt menu, and pinned ones as their own button — see [production agent](../production_agent/AREA.md) |
+| **AI bar** | Pinned actions are their own button; the rest run from the ⋯ dialog — see [production agent](../production_agent/AREA.md) |
 
 A run started from the app sends the live scope and hints, not the stored scope: the user pressed it while looking at something. Only the cron falls back to what was saved.
 
@@ -45,7 +51,9 @@ Results go through `presentAgentRunResult` (production agent area) — review pr
 
 | File | Role |
 |------|------|
-| [`automation_dialog.dart`](automation_dialog.dart) | Create and edit automations |
+| [`automation_dialog.dart`](automation_dialog.dart) | Create automations and actions, list both |
+| [`ai_actions_dialog.dart`](ai_actions_dialog.dart) | The saved actions, from the ⋯ on the AI bar |
+| [`automation_edit_dialog.dart`](automation_edit_dialog.dart) | The one editor for either kind |
 | [`automation_abandon_dialog.dart`](automation_abandon_dialog.dart) | Confirm discarding edits |
 | [`automation_service.dart`](automation_service.dart) | Automations API |
 | [`automation.dart`](automation.dart), [`automation_run.dart`](automation_run.dart) | Models |

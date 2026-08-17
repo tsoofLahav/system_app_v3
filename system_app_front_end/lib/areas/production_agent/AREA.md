@@ -6,16 +6,15 @@ This is the **user-facing side** of the AI: how a run is started, and how its re
 
 ## The AI bar
 
-Lives in the bottom bar ([`ai_tool_bar.dart`](ai_tool_bar.dart)), left to right:
+Lives in the bottom bar ([`ai_tool_bar.dart`](ai_tool_bar.dart)), in reading order — leading edge first, so right in Hebrew and left in English:
 
 | Control | Behavior |
 |---------|----------|
+| **Agent button** | Opens the prompt dialog ([`agent_prompt_dialog.dart`](agent_prompt_dialog.dart)) for a one-off request, with **Review changes (diff)** vs **Apply directly** (opens on apply directly — a one-off ask is lighter with the undo toast than with a diff). An action is also born here. |
 | **Pinned actions** | Up to six saved actions in slot order, each with its icon and its own key (⌘⇧2…⌘⇧7). Pressing one runs it on what is open. |
-| **Bolt menu** | Every saved action — the menu only fires things. |
-| **⋯** | Opens the automations dialog to rename, re-icon, re-seat, or delete an action. Managing sits beside the menu, not inside it. |
-| **Agent button** | Opens the prompt dialog ([`agent_prompt_dialog.dart`](agent_prompt_dialog.dart)) for a one-off request, with **Review changes (diff)** vs **Apply directly** (opens on apply directly — a one-off ask is lighter with the undo toast than with a diff). |
+| **⋯** | Opens the AI actions dialog ([`ai_actions_dialog.dart`](../automations/ai_actions_dialog.dart)) — the saved actions and nothing else, each with pin, edit, run and delete. |
 
-The agent button is last and never moves: it is the one control that is always there, so it must always be in the same place. Everything is disabled when there is no AI context (nothing selected) or a run is already in flight — `AppState.hasAiContext` and `aiRunning` gate them, and `aiRunning` drives the busy state so the user cannot double-fire.
+The agent comes first and never moves: it is the one control that is always there, so it must always be in the same place. Everything is disabled when there is no AI context (nothing selected) or a run is already in flight — `AppState.hasAiContext` and `aiRunning` gate them, and `aiRunning` drives the busy state so the user cannot double-fire.
 
 ### Keeping an ask
 
