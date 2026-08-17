@@ -10,9 +10,21 @@ import base64
 import json
 from typing import Any
 
-from config import OPENAI_API_KEY, OPENAI_IMAGE_MODEL, OPENAI_MODEL
+from config import (
+    OPENAI_API_KEY,
+    OPENAI_IMAGE_MODEL,
+    OPENAI_MODEL,
+    OPENAI_REASONING_EFFORT,
+)
 from openai import OpenAI
 from urllib.request import urlopen
+
+_REASONING_PREFIXES = ("gpt-5", "o1", "o3", "o4")
+
+
+def is_reasoning_model(model: str) -> bool:
+    """Reasoning models think before answering and reject `temperature`."""
+    return (model or "").strip().lower().startswith(_REASONING_PREFIXES)
 
 
 def _client() -> OpenAI:
@@ -88,15 +100,24 @@ def create_response(
     input: str | list[dict[str, Any]],
     temperature: float = 0.2,
 ) -> Any:
-    """One Responses API turn attached to an existing conversation."""
+    """One Responses API turn attached to an existing conversation.
+
+    A reasoning model takes `reasoning.effort` and refuses `temperature`; an
+    older chat model is the other way round.
+    """
+    tuning: dict[str, Any] = (
+        {"reasoning": {"effort": OPENAI_REASONING_EFFORT}}
+        if is_reasoning_model(model)
+        else {"temperature": temperature}
+    )
     return _client().responses.create(
         model=model,
         conversation=conversation_id,
         instructions=instructions,
         tools=tools,
         input=input,
-        temperature=temperature,
         store=True,
+        **tuning,
     )
 
 

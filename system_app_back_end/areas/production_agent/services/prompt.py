@@ -10,6 +10,11 @@ from pathlib import Path
 from models import AgentConfig, Workspace, db
 
 DEFAULT_CONFIG_NAME = "default"
+# `agent_configs.model` once defaulted to a mini model, so rows carry a value
+# nobody picked — and a stored value outranks `OPENAI_MODEL`, which pinned the
+# whole app to it. Seeing one of these means "never chosen", so it is cleared
+# and the deployment's model applies. A real override survives.
+LEGACY_DEFAULT_MODELS = frozenset({"gpt-4o-mini", "gpt-4o"})
 DEFAULT_TOOL_ALLOWLIST = [
     "list",
     "find_file",
@@ -107,8 +112,14 @@ def ensure_agent_config(workspace_id: int, *, seed_from_file: bool = True) -> Ag
         db.session.flush()
         return config
 
+    changed = False
     if seed_from_file and not (config.system_prompt or "").strip():
         config.system_prompt = load_prompt_file()
+        changed = True
+    if (config.model or "").strip() in LEGACY_DEFAULT_MODELS:
+        config.model = ""
+        changed = True
+    if changed:
         db.session.flush()
     return config
 

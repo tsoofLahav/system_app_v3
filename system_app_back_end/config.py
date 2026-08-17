@@ -42,7 +42,10 @@ def resolve_upload_folder() -> str:
 UPLOAD_FOLDER = resolve_upload_folder()
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6")
+# How hard the agent thinks between tool calls. "low" is the documented setting
+# for tool use and planning that still has to feel interactive.
+OPENAI_REASONING_EFFORT = os.environ.get("OPENAI_REASONING_EFFORT", "low")
 OPENAI_IMAGE_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2")
 OPENAI_PROCESS_UPDATE_TEMPERATURE = float(
     os.environ.get("OPENAI_PROCESS_UPDATE_TEMPERATURE", "0.5")

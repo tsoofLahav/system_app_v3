@@ -23,6 +23,14 @@ That file is **for the model**: short standing instructions in four parts — ap
 
 **Scope and hints are context, never a target.** They say where the user is standing (open topic, `focused_file_id`, `selected_text`); the prompt says what to do and where. The prompt carries this in two plain descriptions rather than rules: the hints bullet notes that "this line / file / topic" means the ones in the hints, and app structure says every file is readable and editable and that the browse tools are what find the topic a piece of writing belongs in. Told only the first, the agent hunts for a line it was handed; told only the second, it writes into whatever file is already open, which once put a nutrition note in the open file instead of the right topic's log. Bulky fence/tool **examples** live in [`content/production_agent/reference.md`](../../../content/production_agent/reference.md) and are loaded on demand via the `reference` tool (`agent_text` | `tools` | `all`). Maintainer notes stay in this `AREA.md`. Scenario-specific jobs belong in topic/automation prompts later — not in generic tool descriptions.
 
+## Which model runs
+
+`config.OPENAI_MODEL` (env `OPENAI_MODEL`, default `gpt-5.6`) is the deployment's model. `agent_configs.model` overrides it per workspace, and **empty means "use the deployment's"** — that emptiness matters: the column used to default to `gpt-4o-mini`, every row took it, the stored value outranks the environment, and so the app ran a mini model that nobody chose and no env var could change. Judgement calls the prompt cannot fix (which topic, which line of a fence) were the model's, not the instructions'. [`migrations/010_agent_model.sql`](../../migrations/010_agent_model.sql) clears the legacy rows.
+
+`ensure_agent_config` clears a stored `gpt-4o-mini` / `gpt-4o` on read, so a deploy fixes itself without waiting for the SQL to be applied by hand. A model anyone actually chose survives.
+
+Reasoning models take `reasoning.effort` (env `OPENAI_REASONING_EFFORT`, default `low` — the documented setting for tool use that still has to feel interactive) and reject `temperature`; older chat models are the reverse. `create_response` picks by model name, so an override to a `gpt-4o`-era model keeps working.
+
 ## What is passed to the agent
 
 | Piece | Contents |

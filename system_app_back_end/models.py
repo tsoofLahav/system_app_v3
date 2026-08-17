@@ -410,7 +410,9 @@ class AgentConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id"), nullable=False)
     name = db.Column(db.Text, nullable=False, default="default")
-    model = db.Column(db.Text, nullable=False, default="gpt-4o-mini")
+    # Empty means "whatever the deployment runs" (config.OPENAI_MODEL). A value
+    # here is a deliberate per-workspace override and outranks the environment.
+    model = db.Column(db.Text, nullable=False, default="")
     system_prompt = db.Column(db.Text, nullable=False, default="")
     tool_allowlist = db.Column(JSONB, nullable=False, default=list)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
