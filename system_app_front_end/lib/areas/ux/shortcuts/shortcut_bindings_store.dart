@@ -35,6 +35,16 @@ class ShortcutBindingsStore {
     }
   }
 
+  /// Reads the saved rebinds into this store.
+  ///
+  /// The app builds its store before there is anything to read, so the saved
+  /// keys are poured into it rather than replacing it — without this call a
+  /// rebind lasts only until the app closes.
+  Future<void> restore() async {
+    final saved = await load();
+    _overrides = saved._overrides;
+  }
+
   ShortcutBinding bindingFor(String actionId) {
     final override = _overrides[actionId];
     if (override != null && override.isValid) return override;

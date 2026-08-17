@@ -276,10 +276,7 @@ class _PhoneBottomToolsSheet extends StatelessWidget {
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: AiToolBar(
-                      state: state,
-                      onTool: (_) => runAgentPrompt(context, state),
-                    ),
+                    child: AiToolBar(state: state),
                   ),
                   if (state.aiRunning)
                     Padding(

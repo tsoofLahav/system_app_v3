@@ -3,13 +3,15 @@ import 'package:flutter/material.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/app_state.dart';
 import './automation.dart';
+import '../ui/action_icon_picker.dart';
+import '../ui/action_icons.dart';
 import '../ui/adaptive_dialog.dart';
 import '../ui/app_icons.dart';
 import '../ui/app_segmented_toggle.dart';
 import '../ui/dialog_field_style.dart';
 import '../ui/dialog_metrics.dart';
+import '../production_agent/agent_result_ui.dart';
 import '../production_agent/agent_run_defaults.dart';
-import '../production_agent/ai_tool_bar.dart';
 
 Future<void> showAutomationDialog({
   required BuildContext context,
@@ -40,6 +42,8 @@ class _AutomationDialogState extends State<_AutomationDialog>
   final _promptController = TextEditingController();
   final _scheduleController = TextEditingController(text: '0 8 * * *');
   var _applyMode = defaultAutomationApplyMode;
+  var _iconKey = defaultActionIconKey;
+  var _onBar = false;
 
   @override
   void initState() {
@@ -59,28 +63,51 @@ class _AutomationDialogState extends State<_AutomationDialog>
 
   AppState get state => widget.state;
 
+  bool get _barIsFull => state.firstFreeAiBarSlot == null;
+
+  /// Puts an action on the bar or takes it off, from its row in the list.
+  Future<void> _togglePin(Automation action) async {
+    if (!action.isOnBar && _barIsFull) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(state.strings['aiBarFull'])),
+      );
+      return;
+    }
+    await state.setAiActionSlot(
+      action,
+      slot: action.isOnBar ? null : state.firstFreeAiBarSlot,
+    );
+    if (mounted) setState(() {});
+  }
+
   Future<void> _create() async {
     final name = _nameController.text.trim();
     final prompt = _promptController.text.trim();
     if (name.isEmpty || prompt.isEmpty) return;
 
+    final isScheduled = _kind == _AutomationKind.scheduled;
     setState(() => _creating = true);
     try {
       await state.createAutomation(
         name: name,
         prompt: prompt,
         applyMode: _applyMode,
-        isScheduled: _kind == _AutomationKind.scheduled,
-        schedule: _kind == _AutomationKind.scheduled
-            ? _scheduleController.text.trim()
-            : null,
+        isScheduled: isScheduled,
+        schedule: isScheduled ? _scheduleController.text.trim() : null,
+        icon: _iconKey,
+        // Only an action goes on the bar, and only if there is room.
+        barSlot: !isScheduled && _onBar ? state.firstFreeAiBarSlot : null,
       );
       if (!mounted) return;
       _nameController.clear();
       _promptController.clear();
-      setState(() => _creating = false);
+      setState(() {
+        _creating = false;
+        _onBar = false;
+        _iconKey = defaultActionIconKey;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(state.strings['created'] ?? 'Created')),
+        SnackBar(content: Text(state.strings['created'])),
       );
     } catch (e) {
       if (!mounted) return;
@@ -140,6 +167,9 @@ class _AutomationDialogState extends State<_AutomationDialog>
                     items: manual,
                     onRun: _runAutomation,
                     onDelete: (a) => state.deleteAutomation(a),
+                    onTogglePin: _togglePin,
+                    pinLabel: s['putOnBar'],
+                    unpinLabel: s['takeOffBar'],
                   ),
                   _AutomationList(
                     emptyLabel: s['noAutomations'],
@@ -210,6 +240,33 @@ class _AutomationDialogState extends State<_AutomationDialog>
           onSelected: (mode) => setState(() => _applyMode = mode),
         ),
         const SizedBox(height: DialogFieldStyle.fieldGap),
+        ActionIconField(
+          label: s['actionIcon'],
+          valueLabel: s['actionIconChoose'],
+          pickerTitle: s['actionIcon'],
+          iconKey: _iconKey,
+          onChanged: (key) => setState(() => _iconKey = key),
+        ),
+        if (_tabs.index == 0) ...[
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          AppDialogField(
+            label: s['actionPlace'],
+            hint: _barIsFull ? s['aiBarFull'] : s['actionPlaceHint'],
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: AppSegmentedToggle<bool>(
+                options: [
+                  AppSegmentedOption(value: false, label: s['actionPlaceMenu']),
+                  AppSegmentedOption(value: true, label: s['putOnBar']),
+                ],
+                selected: _onBar,
+                enabled: !_barIsFull,
+                onSelected: (onBar) => setState(() => _onBar = onBar),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: DialogFieldStyle.fieldGap),
         Align(
           alignment: AlignmentDirectional.centerEnd,
           child: FilledButton(
@@ -235,12 +292,20 @@ class _AutomationList extends StatelessWidget {
     required this.items,
     required this.onRun,
     required this.onDelete,
+    this.onTogglePin,
+    this.pinLabel,
+    this.unpinLabel,
   });
 
   final String emptyLabel;
   final List<Automation> items;
   final Future<void> Function(Automation) onRun;
   final Future<void> Function(Automation) onDelete;
+
+  /// Only actions can sit on the AI bar, so a scheduled list leaves this null.
+  final Future<void> Function(Automation)? onTogglePin;
+  final String? pinLabel;
+  final String? unpinLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -254,6 +319,7 @@ class _AutomationList extends StatelessWidget {
         final item = items[index];
         return ListTile(
           dense: true,
+          leading: AppIcon(actionIcon(item.icon), size: 18),
           title: Text(item.name),
           subtitle: Text(
             item.prompt,
@@ -263,6 +329,15 @@ class _AutomationList extends StatelessWidget {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (onTogglePin != null)
+                IconButton(
+                  tooltip: item.isOnBar ? unpinLabel : pinLabel,
+                  icon: AppIcon(
+                    item.isOnBar ? AppIcons.unpinFromBar : AppIcons.pinToBar,
+                    size: 18,
+                  ),
+                  onPressed: () => onTogglePin!(item),
+                ),
               IconButton(
                 icon: const AppIcon(AppIcons.runNow, size: 18),
                 onPressed: () => onRun(item),

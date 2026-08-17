@@ -187,11 +187,7 @@ class AppBottomBar extends StatelessWidget {
           padding: _segmentPadding,
           label: 'AI',
           labelOnBorder: true,
-          child: AiToolBar(
-            state: state,
-            compact: true,
-            onTool: (_) => runAgentPrompt(context, state),
-          ),
+          child: AiToolBar(state: state, compact: true),
         ),
       ],
       if (state.aiRunning) ...[

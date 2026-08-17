@@ -24,6 +24,8 @@ class AutomationService {
     required Map<String, dynamic> trigger,
     Map<String, dynamic>? scope,
     String? schedule,
+    String icon = '',
+    int? barSlot,
   }) async {
     final data =
         await _api.post('/automations', {
@@ -33,19 +35,53 @@ class AutomationService {
               'apply_mode': applyMode,
               'trigger': trigger,
               'scope': scope ?? {},
-              if (schedule != null) 'schedule': schedule,
+              'icon': icon,
+              'bar_slot': ?barSlot,
+              'schedule': ?schedule,
             })
             as Map<String, dynamic>;
     return Automation.fromJson(data);
+  }
+
+  Future<Automation> update(int id, Map<String, dynamic> body) async {
+    final data =
+        await _api.patch('/automations/$id', body) as Map<String, dynamic>;
+    return Automation.fromJson(data);
+  }
+
+  /// Replaces the AI bar: the first six ids take slots 1..6, the rest unpin.
+  Future<List<Automation>> setBarOrder({
+    required int workspaceId,
+    required List<int> orderedIds,
+  }) async {
+    final data =
+        await _api.put('/automations/bar-order', {
+              'workspace_id': workspaceId,
+              'ordered_ids': orderedIds,
+            })
+            as List<dynamic>;
+    return data
+        .map((e) => Automation.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> delete(int id) async {
     await _api.delete('/automations/$id');
   }
 
-  Future<Map<String, dynamic>> run(int id) async {
+  /// [scope] and [hints] carry what is open when the user fires the action;
+  /// omitting them leaves the run on the scope stored with the record.
+  Future<Map<String, dynamic>> run(
+    int id, {
+    Map<String, dynamic>? scope,
+    Map<String, dynamic>? hints,
+  }) async {
     final data =
-        await _api.post('/automations/$id/run', {}) as Map<String, dynamic>;
+        await _api.post('/automations/$id/run', {
+              'scope': ?scope,
+              'hints': ?hints,
+            })
+            as Map<String, dynamic>;
     return Map<String, dynamic>.from(data);
   }
 }

@@ -126,7 +126,7 @@ The sidebar is navigation only. It never edits content.
 | View section menu | Right-click a section frame on the view page | Edit name / flag / color |
 | View task menu | Right-click a task in a view frame | Reorder tasks (same mode as in-file) |
 | View chrome | Floating capsule on the view page | Sections/topics, add section, reorder frames |
-| AI actions | Bottom bar | Run a prompt or a saved automation — see [production agent](../production_agent/AREA.md) |
+| AI actions | Bottom bar | Pinned actions, the actions menu, and the agent prompt — see [production agent](../production_agent/AREA.md) |
 | Automations | Bottom bar | Manage rules — see [automations](../automations/AREA.md) |
 | Preferences | Bottom bar | App settings, shortcut bindings |
 
@@ -143,9 +143,11 @@ Shortcuts are user-rebindable. [`shortcuts/`](shortcuts/) owns the catalog of av
 | [`shortcuts/shortcut_dispatcher.dart`](shortcuts/shortcut_dispatcher.dart) | Keystroke → action |
 | [`shortcuts/main_file_cycle.dart`](shortcuts/main_file_cycle.dart) | Rotate which of the shown files leads |
 
-**Insert object** (not “blocks”): catalog category `objects` inserts into the **active** file via `DocumentEditorRegistry` — info, task list, table, graph (chart table), image. After insert, the caret enters the new object (first inner field); images with no field keep the block caret. Paragraph / bullet list stay on the insert bar only (document structure, not objects).
+**Insert object** (not “blocks”): catalog category `objects` inserts into the **active** file via `DocumentEditorRegistry` — info, task list, table, graph (chart table), image. After insert, the caret enters the new object (first inner field); images with no field keep the block caret. The bullet list stays on the insert bar only (document structure, not an object); a paragraph has no button anywhere — it is what typing already does.
 
 Default keys match the English name’s letter (`D`etails, `T`ask, `T`able, `G`raph, `I`mage). When two objects share a letter, keep that letter and vary the modifiers (task = ⌘⇧T, table = ⌘⌥T). **Move object** is ⌘⌥M (⌘⇧M is layout toggle).
+
+**AI keys belong to the seat, not the action.** ⌘⇧1 is the agent; ⌘⇧2…⌘⇧7 fire whatever saved action sits in bar slots 1–6, and do nothing while a seat is empty. Moving an action to another seat moves its key with it, so there is no shortcut to pick when creating one. Rebinding a seat works like any other action and now survives a restart — `ShortcutBindingsStore.restore()` runs during `AppState.initialize()`.
 
 ## Rules
 

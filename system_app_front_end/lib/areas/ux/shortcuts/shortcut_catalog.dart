@@ -28,7 +28,6 @@ class ShortcutAction {
     required this.defaultBinding,
     this.context = ShortcutContextRequirement.none,
     this.insertType,
-    this.aiTool,
     this.textAction,
   });
 
@@ -40,7 +39,6 @@ class ShortcutAction {
 
   /// Value for [DocumentEditorController.insertAtBlock] (object or structure).
   final String? insertType;
-  final String? aiTool;
   final String? textAction;
 }
 
@@ -55,13 +53,16 @@ abstract final class ShortcutActionIds {
   static const assignTaskView = 'assign_task_view';
 
   static const aiConsult = 'ai_consult';
-  static const aiSummarize = 'ai_summarize';
-  static const aiSmartList = 'ai_smart_list';
-  static const aiUploadDetails = 'ai_upload_details';
-  static const aiImage = 'ai_image';
-  static const aiGraph = 'ai_graph';
-  static const aiMoveFile = 'ai_move_file';
-  static const aiSuggestEmoji = 'ai_suggest_emoji';
+
+  /// One id per seat on the AI bar. The key belongs to the **slot**, so moving
+  /// an action moves its shortcut with it and there is nothing to pick.
+  static String aiActionSlot(int slot) => 'ai_action_$slot';
+
+  /// The slot an id stands for, or null when the id is something else.
+  static int? slotOfAiAction(String actionId) {
+    final match = _aiActionSlotRe.firstMatch(actionId);
+    return match == null ? null : int.parse(match.group(1)!);
+  }
 
   static const textBold = 'text_bold';
   static const textItalic = 'text_italic';
@@ -81,6 +82,19 @@ abstract final class ShortcutActionIds {
   static const toggleLayoutMode = 'toggle_layout_mode';
   static const toggleLanguage = 'toggle_language';
 }
+
+final _aiActionSlotRe = RegExp(r'^ai_action_(\d+)$');
+
+/// Cmd+Shift+2 .. Cmd+Shift+7 — the digit is the slot plus one, because
+/// Cmd+Shift+1 belongs to the agent button that is always on the bar.
+const _aiActionSlotKeys = [
+  LogicalKeyboardKey.digit2,
+  LogicalKeyboardKey.digit3,
+  LogicalKeyboardKey.digit4,
+  LogicalKeyboardKey.digit5,
+  LogicalKeyboardKey.digit6,
+  LogicalKeyboardKey.digit7,
+];
 
 ShortcutBinding _m(
   LogicalKeyboardKey key, {
@@ -155,64 +169,15 @@ final List<ShortcutAction> kShortcutCatalog = [
     labelKey: 'aiConsult',
     defaultBinding: _m(LogicalKeyboardKey.digit1, shift: true),
     context: ShortcutContextRequirement.aiContext,
-    aiTool: 'consult',
   ),
-  ShortcutAction(
-    id: ShortcutActionIds.aiSummarize,
-    category: ShortcutCategory.ai,
-    labelKey: 'aiSummarize',
-    defaultBinding: _m(LogicalKeyboardKey.digit2, shift: true),
-    context: ShortcutContextRequirement.aiContext,
-    aiTool: 'summarize_to_doc',
-  ),
-  ShortcutAction(
-    id: ShortcutActionIds.aiSmartList,
-    category: ShortcutCategory.ai,
-    labelKey: 'aiSmartList',
-    defaultBinding: _m(LogicalKeyboardKey.digit3, shift: true),
-    context: ShortcutContextRequirement.aiContext,
-    aiTool: 'smart_list',
-  ),
-  ShortcutAction(
-    id: ShortcutActionIds.aiUploadDetails,
-    category: ShortcutCategory.ai,
-    labelKey: 'aiUploadDetails',
-    defaultBinding: _m(LogicalKeyboardKey.digit8, shift: true),
-    context: ShortcutContextRequirement.aiContext,
-    aiTool: 'upload_details',
-  ),
-  ShortcutAction(
-    id: ShortcutActionIds.aiImage,
-    category: ShortcutCategory.ai,
-    labelKey: 'aiImage',
-    defaultBinding: _m(LogicalKeyboardKey.digit4, shift: true),
-    context: ShortcutContextRequirement.aiContext,
-    aiTool: 'create_image',
-  ),
-  ShortcutAction(
-    id: ShortcutActionIds.aiGraph,
-    category: ShortcutCategory.ai,
-    labelKey: 'aiGraph',
-    defaultBinding: _m(LogicalKeyboardKey.digit5, shift: true),
-    context: ShortcutContextRequirement.aiContext,
-    aiTool: 'create_graph',
-  ),
-  ShortcutAction(
-    id: ShortcutActionIds.aiMoveFile,
-    category: ShortcutCategory.ai,
-    labelKey: 'aiMoveFile',
-    defaultBinding: _m(LogicalKeyboardKey.digit6, shift: true),
-    context: ShortcutContextRequirement.aiContext,
-    aiTool: 'move_file_to_topic',
-  ),
-  ShortcutAction(
-    id: ShortcutActionIds.aiSuggestEmoji,
-    category: ShortcutCategory.ai,
-    labelKey: 'aiSuggestEmoji',
-    defaultBinding: _m(LogicalKeyboardKey.digit7, shift: true),
-    context: ShortcutContextRequirement.aiContext,
-    aiTool: 'suggest_emoji',
-  ),
+  for (var slot = 1; slot <= _aiActionSlotKeys.length; slot++)
+    ShortcutAction(
+      id: ShortcutActionIds.aiActionSlot(slot),
+      category: ShortcutCategory.ai,
+      labelKey: 'aiActionSlot$slot',
+      defaultBinding: _m(_aiActionSlotKeys[slot - 1], shift: true),
+      context: ShortcutContextRequirement.aiContext,
+    ),
   ShortcutAction(
     id: ShortcutActionIds.textBold,
     category: ShortcutCategory.text,

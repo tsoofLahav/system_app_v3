@@ -6,16 +6,22 @@ Backend twin: [`system_app_back_end/areas/automations/AREA.md`](../../../../syst
 
 An automation is a **saved AI run**. Creating one is the same act as typing a prompt, except it is stored and can fire on a schedule or from the AI actions menu.
 
+Without a schedule it is a **saved AI action** — the same record, fired by hand. That is why the create form, the actions menu and the AI bar all read one list.
+
 ## What the user configures
 
 | Field | UI |
 |-------|-----|
-| Name | Shown in the automations list and the AI actions menu |
+| Name | Shown in the automations list, the actions menu, and on hover over its bar button |
 | Prompt | The instruction sent to the agent |
 | Scope | Which topic or files it may touch |
 | Apply mode | `direct_apply` writes, `review` proposes, `notify_only` reports — create-form default is `defaultAutomationApplyMode` (must match backend `DEFAULT_AUTOMATION_APPLY_MODE`) |
+| Icon | One of the curated keys in [`action_icons.dart`](../ui/action_icons.dart), picked from a grid |
+| On the bar | An action can take one of six seats; the pin in its row puts it on or takes it off |
 | Schedule | Once a day / week / month, with structured time controls |
 | Enabled | Off means it never fires automatically |
+
+Only actions get an icon that matters and a seat — a scheduled automation is never on the bar, because there is no one to press it.
 
 Timing uses locked structured controls rather than free text, so an invalid schedule string cannot be produced. Daily picks a time; weekly picks a day and time; monthly picks a placement (first / second / third / last), a weekday, and a time.
 
@@ -25,7 +31,9 @@ Timing uses locked structured controls rather than free text, so an invalid sche
 |---------|------|
 | **Run now** | `POST /automations/:id/run` — enqueues, shows “started”, polls run status |
 | **Schedule** | Server cron; the app finds out by polling runs |
-| **AI actions menu** | Manual automations appear in the bolt menu — see [production agent](../production_agent/AREA.md) |
+| **AI actions menu / bar** | Actions appear in the bolt menu, and pinned ones as their own button — see [production agent](../production_agent/AREA.md) |
+
+A run started from the app sends the live scope and hints, not the stored scope: the user pressed it while looking at something. Only the cron falls back to what was saved.
 
 Run now is **non-blocking**. The app does not sit on the request; it polls `automation_runs` and refreshes the open topic or view when a run completes so new or archived files appear.
 
@@ -45,6 +53,8 @@ Results go through `presentAgentRunResult` (production agent area) — review pr
 - Refresh the current topic or view after a run completes — otherwise the user sees stale content.
 - Scope is required, same as a manual agent run.
 - Never build a schedule string by hand; use the structured controls.
+- The bar holds six actions at most; when it is full, say so instead of silently dropping someone's seat.
+- Store the icon **key**, never an `IconData` — the vocabulary must stay ours to change.
 
 ## Legacy models
 

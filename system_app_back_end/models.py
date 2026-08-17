@@ -326,6 +326,10 @@ class Automation(db.Model):
     schedule = db.Column(db.Text)
     timezone = db.Column(db.Text, nullable=False, default="UTC")
     enabled = db.Column(db.Boolean, nullable=False, default=True)
+    # A saved action is an automation with no schedule: `icon` and `bar_slot`
+    # are how it shows up in the app (slot 1..6 = on the AI bar, NULL = menu).
+    icon = db.Column(db.Text, nullable=False, default="")
+    bar_slot = db.Column(db.Integer)
     last_run_at = db.Column(db.DateTime)
     next_run_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -342,6 +346,8 @@ class Automation(db.Model):
             "scope": self.scope if self.scope is not None else {},
             "prompt": self.prompt or "",
             "apply_mode": self.apply_mode,
+            "icon": self.icon or "",
+            "bar_slot": self.bar_slot,
             "schedule": self.schedule,
             "timezone": self.timezone,
             "enabled": self.enabled,

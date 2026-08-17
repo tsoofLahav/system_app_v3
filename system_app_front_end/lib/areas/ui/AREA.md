@@ -201,6 +201,8 @@ The `⋯` on a file opens `AppContextMenu` at the button — the same bubble as 
 
 Sizes in use: 14 dividers and marks · 16 circle buttons and file menus · 18 sidebar and inline actions · 20 default · 22 bottom bar.
 
+A **saved AI action** picks its icon from the small vocabulary in [`action_icons.dart`](action_icons.dart) — the same stroke weight, keyed by name so the database stores `'checklist'` and never a code point. [`action_icon_picker.dart`](action_icon_picker.dart) shows them as a grid in a secondary dialog, and falls back to sparkles for a key it no longer knows.
+
 `GlassCircleButton` and every other chrome control draw through `AppIcon`, never a bare `Icon(...)` with a Material glyph.
 
 ## Bilingual
@@ -218,7 +220,7 @@ Every surface must work in English (LTR) and Hebrew (RTL). Use [`bilingual_layou
 | Glass | [`glass_surface.dart`](glass_surface.dart) |
 | Controls | [`app_segmented_toggle.dart`](app_segmented_toggle.dart), [`app_switch.dart`](app_switch.dart) |
 | Dialogs | [`adaptive_dialog.dart`](adaptive_dialog.dart), [`dialog_metrics.dart`](dialog_metrics.dart), [`color_dialog.dart`](color_dialog.dart), [`overlay_dialog_shell.dart`](overlay_dialog_shell.dart), [`overlay_dialog_style.dart`](overlay_dialog_style.dart), [`dialog_field_style.dart`](dialog_field_style.dart) |
-| Icons | [`app_icons.dart`](app_icons.dart) |
+| Icons | [`app_icons.dart`](app_icons.dart), [`action_icons.dart`](action_icons.dart), [`action_icon_picker.dart`](action_icon_picker.dart) |
 | Cards and previews | [`note_widgets.dart`](note_widgets.dart), [`overlay_file_preview_card.dart`](overlay_file_preview_card.dart), [`layout_preview_icon.dart`](layout_preview_icon.dart) |
 | Carousel | [`horizontal_carousel.dart`](horizontal_carousel.dart) |
 | RTL primitives | [`bilingual_layout.dart`](bilingual_layout.dart) |

@@ -5,7 +5,8 @@ import '../../files/editor/document_editor_controller.dart';
 import '../../objects/views/assign_task_view_dialog.dart';
 import '../create_topic/add_file_dialog.dart';
 import '../sidebar/sidebar_create_menu.dart';
-import '../../production_agent/ai_tool_bar.dart';
+import '../../production_agent/agent_prompt_dialog.dart';
+import '../../production_agent/agent_result_ui.dart';
 import './shortcut_catalog.dart';
 
 Future<void> dispatchShortcutAction(
@@ -14,6 +15,16 @@ Future<void> dispatchShortcutAction(
   String actionId,
 ) async {
   final action = shortcutActionById(actionId);
+
+  // A slot key fires whatever action sits in that seat on the AI bar, and does
+  // nothing while the seat is empty.
+  final slot = ShortcutActionIds.slotOfAiAction(actionId);
+  if (slot != null) {
+    final saved = state.aiActionInSlot(slot);
+    if (saved == null) return;
+    await runSavedAgentAction(context, state, saved);
+    return;
+  }
 
   if (action?.context == ShortcutContextRequirement.insertObject) {
     final insertType = action!.insertType;

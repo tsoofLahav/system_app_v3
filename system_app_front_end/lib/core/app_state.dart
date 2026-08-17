@@ -18,6 +18,7 @@ import './models/tag.dart';
 import '../areas/objects/data/task.dart';
 import '../areas/files/data/topic.dart';
 import '../areas/automations/automation_service.dart';
+import '../areas/production_agent/agent_run_defaults.dart';
 import '../areas/production_agent/agent_service.dart';
 import '../areas/production_agent/agent_time_hints.dart';
 import '../areas/production_agent/pending_review_service.dart';
@@ -198,6 +199,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       await _loadLanguage();
+      await shortcutBindings.restore();
+      shortcutRebuildListenable.notifyListeners();
       await _bootstrap.bootstrap();
       final status = await _bootstrap.status();
       workspaceId = status['workspace_id'] as int?;
@@ -637,6 +640,20 @@ class AppState extends ChangeNotifier {
   List<Automation> get scheduledAutomations =>
       automations.where((a) => a.isScheduled).toList();
 
+  /// Saved actions with a seat on the AI bar, in slot order.
+  List<Automation> get barAiActions {
+    final pinned = manualAiActions.where((a) => a.isOnBar).toList()
+      ..sort((a, b) => a.barSlot!.compareTo(b.barSlot!));
+    return pinned;
+  }
+
+  Automation? aiActionInSlot(int slot) {
+    for (final action in manualAiActions) {
+      if (action.barSlot == slot) return action;
+    }
+    return null;
+  }
+
   Future<void> loadAutomations() async {
     if (workspaceId == null) return;
     automations = await _automations.list(workspaceId: workspaceId);
@@ -649,15 +666,12 @@ class AppState extends ChangeNotifier {
     required String applyMode,
     required bool isScheduled,
     String? schedule,
+    String icon = '',
+    int? barSlot,
   }) async {
     if (workspaceId == null) {
       throw StateError('workspace not ready');
     }
-    final scope = <String, dynamic>{
-      if (selectedTopic != null) 'topic_ids': [selectedTopic!.id],
-      if (selectedDetail != null)
-        'file_ids': selectedDetail!.files.map((f) => f.id).toList(),
-    };
     final automation = await _automations.create(
       workspaceId: workspaceId!,
       name: name,
@@ -666,12 +680,51 @@ class AppState extends ChangeNotifier {
       trigger: isScheduled
           ? {'type': 'schedule'}
           : {'type': 'manual'},
-      scope: scope,
+      scope: agentRunScope(),
       schedule: schedule,
+      icon: icon,
+      barSlot: barSlot,
     );
+    // A new pin takes its slot from whoever had it, so reload rather than
+    // append — the other rows changed too.
+    if (barSlot != null) {
+      await loadAutomations();
+      return automations.firstWhere(
+        (a) => a.id == automation.id,
+        orElse: () => automation,
+      );
+    }
     automations = [...automations, automation];
     notifyListeners();
     return automation;
+  }
+
+  /// The lowest bar slot nobody holds, or null when all six are taken.
+  int? get firstFreeAiBarSlot {
+    final taken = {
+      for (final action in manualAiActions)
+        if (action.isOnBar) action.barSlot!,
+    };
+    for (var slot = 1; slot <= aiBarSlotCount; slot++) {
+      if (!taken.contains(slot)) return slot;
+    }
+    return null;
+  }
+
+  /// Gives an action a bar slot, or takes it off the bar with `slot: null`.
+  /// Whoever held that slot goes back to the menu (the server decides).
+  Future<void> setAiActionSlot(Automation action, {int? slot}) async {
+    await _automations.update(action.id, {'bar_slot': slot});
+    await loadAutomations();
+  }
+
+  Future<void> setAiActionBarOrder(List<int> orderedIds) async {
+    if (workspaceId == null) return;
+    automations = await _automations.setBarOrder(
+      workspaceId: workspaceId!,
+      orderedIds: orderedIds,
+    );
+    notifyListeners();
   }
 
   Future<void> deleteAutomation(Automation automation) async {
@@ -680,11 +733,19 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Runs a saved action on what is open right now — the same scope and hints
+  /// the agent dialog sends. The scheduler runs server-side and keeps using the
+  /// scope stored on the record.
   Future<Map<String, dynamic>> runAutomationRecord(Automation automation) async {
     aiRunning = true;
     notifyListeners();
     try {
-      final result = await _automations.run(automation.id);
+      await DocumentEditorRegistry.flushActive();
+      final result = await _automations.run(
+        automation.id,
+        scope: agentRunScope(),
+        hints: agentRunHints(),
+      );
       final agent = result['agent'];
       final changes = agent is Map ? agent['proposed_changes'] : null;
       if (changes is List &&
@@ -1588,6 +1649,22 @@ class AppState extends ChangeNotifier {
     return count;
   }
 
+  /// The topic and files the run should look at first.
+  Map<String, dynamic> agentRunScope() => {
+    if (selectedTopic != null) 'topic_ids': [selectedTopic!.id],
+    if (selectedDetail != null)
+      'file_ids': selectedDetail!.files.map((f) => f.id).toList(),
+  };
+
+  /// Pointers into what is open: the clock, the file being edited, the mark.
+  ///
+  /// Call after flushing the editor — `selected_text` reads the live mark.
+  Map<String, dynamic> agentRunHints() => {
+    ...agentTimeHints(),
+    'focused_file_id': ?DocumentEditorRegistry.activeFileId,
+    'selected_text': ?DocumentEditorRegistry.activeMarkedTextForAgent(),
+  };
+
   Future<Map<String, dynamic>?> runAgentPrompt(
     String prompt, {
     String? applyMode,
@@ -1599,22 +1676,11 @@ class AppState extends ChangeNotifier {
       // Persist the open editor first so open_file matches what the user sees,
       // and so a later apply reload is not racing a stale debounce save.
       await DocumentEditorRegistry.flushActive();
-      final focusedFileId = DocumentEditorRegistry.activeFileId;
-      final selectedText =
-          DocumentEditorRegistry.activeMarkedTextForAgent();
       final result = await _agent.run(
         prompt: prompt,
         workspaceId: workspaceId!,
-        scope: {
-          if (selectedTopic != null) 'topic_ids': [selectedTopic!.id],
-          if (selectedDetail != null)
-            'file_ids': selectedDetail!.files.map((f) => f.id).toList(),
-        },
-        hints: {
-          ...agentTimeHints(),
-          'focused_file_id': ?focusedFileId,
-          'selected_text': ?selectedText,
-        },
+        scope: agentRunScope(),
+        hints: agentRunHints(),
         applyMode: applyMode,
       );
       return result;
@@ -1694,9 +1760,6 @@ class AppState extends ChangeNotifier {
 
   void setAiFocus({int? fileId, int? blockId, String? field}) {}
   AppFile? get aiFocusedFile => selectedDetail?.files.firstOrNull;
-  Future<dynamic> runAiTool(String tool) async => null;
-  Future<dynamic> runAiMoveFile(Topic topic, AppFile file) async => null;
-  Future<bool> runUploadDetails() async => false;
   Block? taskRowBlockInFile(AppFile file, Task task) => null;
   Future<void> applyTaskDrop({
     required AppFile file,

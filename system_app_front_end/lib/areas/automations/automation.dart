@@ -1,5 +1,10 @@
 import '../production_agent/agent_run_defaults.dart';
 
+/// A saved agent run.
+///
+/// With a schedule it is an automation; without one it is a **saved AI action**
+/// the user fires from the actions menu or from its own button on the AI bar
+/// ([icon] + [barSlot]).
 class Automation {
   const Automation({
     required this.id,
@@ -9,6 +14,8 @@ class Automation {
     required this.applyMode,
     this.trigger = const {},
     this.scope = const {},
+    this.icon = '',
+    this.barSlot,
     this.schedule,
     this.timezone = 'UTC',
     this.enabled = true,
@@ -21,6 +28,14 @@ class Automation {
   final String applyMode;
   final Map<String, dynamic> trigger;
   final Map<String, dynamic> scope;
+
+  /// Key into the action icon vocabulary ([`action_icons.dart`]), not a code
+  /// point — the set is ours to change without touching stored rows.
+  final String icon;
+
+  /// 1..6 for an action on the AI bar, null for one that lives in the menu.
+  final int? barSlot;
+
   final String? schedule;
   final String timezone;
   final bool enabled;
@@ -28,6 +43,7 @@ class Automation {
   bool get isManual => trigger['type'] == 'manual';
   bool get isScheduled =>
       trigger['type'] == 'schedule' || (schedule != null && schedule!.isNotEmpty);
+  bool get isOnBar => barSlot != null;
 
   factory Automation.fromJson(Map<String, dynamic> json) {
     final trigger = json['trigger'];
@@ -45,6 +61,8 @@ class Automation {
       scope: scope is Map<String, dynamic>
           ? Map<String, dynamic>.from(scope)
           : const {},
+      icon: json['icon'] as String? ?? '',
+      barSlot: json['bar_slot'] as int?,
       schedule: json['schedule'] as String?,
       timezone: json['timezone'] as String? ?? 'UTC',
       enabled: json['enabled'] as bool? ?? true,
@@ -58,6 +76,8 @@ class Automation {
     'apply_mode': applyMode,
     'trigger': trigger,
     'scope': scope,
+    'icon': icon,
+    if (barSlot != null) 'bar_slot': barSlot,
     if (schedule != null) 'schedule': schedule,
     'timezone': timezone,
     'enabled': enabled,

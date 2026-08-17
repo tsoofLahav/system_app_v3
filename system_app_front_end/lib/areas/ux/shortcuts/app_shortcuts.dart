@@ -64,7 +64,8 @@ class _AppShortcutsScopeState extends State<AppShortcutsScope> {
     final out = <ShortcutActivator, Intent>{};
     for (final action in kShortcutCatalog) {
       // Only wire actions the dispatcher knows; others stay catalog-only.
-      if (!_dispatchableIds.contains(action.id)) continue;
+      final isAiActionSlot = ShortcutActionIds.slotOfAiAction(action.id) != null;
+      if (!isAiActionSlot && !_dispatchableIds.contains(action.id)) continue;
       final binding = widget.state.shortcutBindings.bindingFor(action.id);
       if (!binding.isValid) continue;
       out[binding.toActivator()] = AppShortcutIntent(action.id);

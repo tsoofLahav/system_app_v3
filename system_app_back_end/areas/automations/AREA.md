@@ -6,6 +6,8 @@ Automations are saved agent runs that fire on a schedule instead of a button pre
 
 An automation adds **no new AI logic**. It stores a prompt plus a scope and hands them to the same [production agent](../production_agent/AREA.md) pipeline a manual run uses.
 
+An automation with **no schedule** is a *saved AI action*: the same row, fired from a button instead of the clock. One table serves both, so an action becomes an automation by gaining a schedule and nothing else moves.
+
 ## Configuration
 
 Row in `automations`:
@@ -18,9 +20,27 @@ Row in `automations`:
 | `apply_mode` | `direct_apply`, `review`, or `notify_only` — create/DB default from [`shared/run_config.py`](../../shared/run_config.py) (`DEFAULT_AUTOMATION_APPLY_MODE`) |
 | `schedule` | `daily HH:MM`, `weekly DAY HH:MM`, `monthly PLACEMENT DAY HH:MM`, `quarterly INTERVAL PLACEMENT DAY HH:MM` |
 | `timezone` | Schedule is interpreted in this zone, stored UTC |
-| `trigger` | JSONB — reserved for event triggers |
+| `trigger` | JSONB — `{"type": "manual"}` for an action, reserved otherwise for event triggers |
 | `enabled` | Disabled automations never fire automatically |
+| `icon` | Key into the frontend icon vocabulary — a name, never a code point |
+| `bar_slot` | 1–6 = a seat on the AI bar (unique per workspace), NULL = actions menu only |
 | `last_run_at`, `next_run_at` | Scheduling bookkeeping |
+
+## Seats on the AI bar
+
+Six slots, because that is what fits beside the other bottom-bar tools. Taking a
+slot frees it on whoever held it — slot n is also keyboard shortcut n, so the
+other five must not shuffle under the user's fingers. The rules live in
+[`services/action_bar.py`](services/action_bar.py) as plain `{id: slot}` maps;
+routes only read and write rows. Slots are cleared in their own flush before
+being filled, since the unique index is checked per statement.
+
+## A button runs on what is open
+
+`POST /automations/:id/run` takes optional `scope` and `hints`. The bar sends
+the topic, the open files, the focused file and the clock — the same context a
+typed prompt sends — because the user pressed the button while looking at
+something. The cron script sends neither and the stored `scope` applies.
 
 ## Cron job on the server
 
@@ -52,7 +72,8 @@ Manual runs (`POST /automations/:id/run`) do the same thing with `trigger_source
 
 | Module | Role |
 |--------|------|
-| [`routes/automations.py`](routes/automations.py) | CRUD + `POST /automations/:id/run` |
+| [`routes/automations.py`](routes/automations.py) | CRUD + `PUT /automations/bar-order` + `POST /automations/:id/run` |
+| [`services/action_bar.py`](services/action_bar.py) | Slot rules and which scope a run uses |
 | [`services/automation_schedule.py`](services/automation_schedule.py) | `next_run_after()` — schedule string → next UTC datetime |
 | [`../../scripts/run_automations.py`](../../scripts/run_automations.py) | Cron entry point |
 
@@ -63,6 +84,7 @@ Manual runs (`POST /automations/:id/run`) do the same thing with `trigger_source
 - Schedules are stored as strings and resolved in the automation's timezone — never assume UTC input.
 - Automations must respect `scope` exactly like manual runs.
 - `review` automations produce proposals; they must not write files directly.
+- Never write `bar_slot` as a plain field update — go through the slot rules, or two actions end up in one seat.
 
 ## Known gaps
 

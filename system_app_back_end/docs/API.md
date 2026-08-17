@@ -186,10 +186,11 @@ Successful DELETE returns `204` with empty body.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/automations` | List |
-| POST | `/automations` | Create |
-| PATCH | `/automations/<id>` | Update |
+| POST | `/automations` | Create — `icon`, `bar_slot` optional (saved AI action) |
+| PATCH | `/automations/<id>` | Update; `bar_slot` (1–6 or null) pins/unpins and frees the old holder |
+| PUT | `/automations/bar-order` | `{"ordered_ids": [...]}` → first six take slots 1..6, the rest unpin |
 | DELETE | `/automations/<id>` | Delete |
-| POST | `/automations/<id>/run` | Manual run → same as agent |
+| POST | `/automations/<id>/run` | Manual run → same as agent; optional `scope` / `hints` override the stored scope |
 
 ---
 

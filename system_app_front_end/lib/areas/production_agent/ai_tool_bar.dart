@@ -2,139 +2,55 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
 import '../automations/automation.dart';
+import '../automations/automation_dialog.dart';
+import '../ux/shortcuts/app_shortcuts.dart';
 import '../ux/shortcuts/shortcut_catalog.dart';
-import '../ui/adaptive_dialog.dart';
+import '../ui/action_icons.dart';
 import '../ui/app_colors.dart';
 import '../ui/app_icons.dart';
-import '../ui/app_segmented_toggle.dart';
-import '../ui/dialog_field_style.dart';
+import './agent_prompt_dialog.dart';
 import './agent_result_ui.dart';
 
 const aiToolIconSize = 22.0;
 const aiToolTapPadding = 4.0;
 
-Future<void> runSavedAgentAction(
-  BuildContext context,
-  AppState state,
-  Automation automation,
-) async {
-  try {
-    final result = await state.runAutomationRecord(automation);
-    if (!context.mounted) return;
-    final agent = result['agent'];
-    if (agent is! Map) return;
-    await presentAgentRunResult(context, state, agent);
-  } catch (e) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(e.toString())),
-    );
-  }
-}
-
-Future<void> runAgentPrompt(BuildContext context, AppState state) async {
-  final s = state.strings;
-  if (!state.hasAiContext || state.aiRunning) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(s['aiNoContext'])),
-    );
-    return;
-  }
-
-  final controller = TextEditingController();
-  var applyMode = 'review';
-  final prompt = await showAppDialog<String>(
-    context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setLocal) => AppAdaptiveDialogShell(
-        title: Text(s['aiAgent']),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s['cancel']),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: Text(s['run']),
-          ),
-        ],
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            AppDialogField(
-              label: s['aiAgentPromptHint'],
-              child: TextField(
-                controller: controller,
-                autofocus: true,
-                maxLines: 4,
-                decoration: DialogFieldStyle.decoration(),
-              ),
-            ),
-            const SizedBox(height: DialogFieldStyle.fieldGap),
-            AppDialogField(
-              label: s['consultApplyMode'],
-              hint: s['consultApplyModeHint'],
-              child: Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: AppSegmentedToggle<String>(
-                  options: [
-                    AppSegmentedOption(
-                      value: 'review',
-                      label: s['consultApplyModeReview'],
-                    ),
-                    AppSegmentedOption(
-                      value: 'direct_apply',
-                      label: s['consultApplyModeDirect'],
-                    ),
-                  ],
-                  selected: applyMode,
-                  onSelected: (mode) => setLocal(() => applyMode = mode),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-  if (prompt == null || prompt.isEmpty || !context.mounted) return;
-
-  try {
-    final result = await state.runAgentPrompt(prompt, applyMode: applyMode);
-    if (!context.mounted || result == null) return;
-    await presentAgentRunResult(context, state, result);
-  } catch (e) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(e.toString())),
-    );
-  }
-}
-
+/// The AI section of the bottom bar.
+///
+/// Saved actions the user pinned come first, in slot order, then the menu of
+/// every action, then the agent — which never moves, so the one thing that is
+/// always there is always in the same place.
 class AiToolBar extends StatelessWidget {
   const AiToolBar({
     super.key,
     required this.state,
-    required this.onTool,
     this.compact = false,
   });
 
   final AppState state;
-  final ValueChanged<String> onTool;
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final s = state.strings;
     final enabled = state.hasAiContext && !state.aiRunning;
-    final actions = state.manualAiActions;
+    final pinned = state.barAiActions;
+    final all = state.manualAiActions;
 
     return Row(
       mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
       children: [
-        if (actions.isNotEmpty)
-          PopupMenuButton<Automation>(
+        for (final action in pinned)
+          AiToolButton(
+            tooltip: _tooltip(
+              action.name,
+              ShortcutActionIds.aiActionSlot(action.barSlot!),
+            ),
+            icon: actionIcon(action.icon),
+            enabled: enabled,
+            onPressed: () => runSavedAgentAction(context, state, action),
+          ),
+        if (all.isNotEmpty)
+          PopupMenuButton<Automation?>(
             enabled: enabled,
             tooltip: s['aiActions'],
             icon: Icon(
@@ -143,13 +59,28 @@ class AiToolBar extends StatelessWidget {
               color: enabled ? AppColors.text : AppColors.textHint,
             ),
             itemBuilder: (ctx) => [
-              for (final action in actions)
+              for (final action in all)
                 PopupMenuItem(
                   value: action,
-                  child: Text(action.name, overflow: TextOverflow.ellipsis),
+                  child: Row(
+                    children: [
+                      AppIcon(actionIcon(action.icon), size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          action.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              const PopupMenuDivider(),
+              PopupMenuItem(value: null, child: Text(s['manageAiActions'])),
             ],
-            onSelected: (action) => runSavedAgentAction(context, state, action),
+            onSelected: (action) => action == null
+                ? showAutomationDialog(context: context, state: state)
+                : runSavedAgentAction(context, state, action),
           ),
         AiToolButton(
           tooltip: _tooltip(s['aiAgent'], ShortcutActionIds.aiConsult),
@@ -161,7 +92,10 @@ class AiToolBar extends StatelessWidget {
     );
   }
 
-  String _tooltip(String label, String actionId) => label;
+  String _tooltip(String label, String actionId) {
+    final suffix = shortcutTooltipSuffix(state, actionId);
+    return suffix == null ? label : '$label ($suffix)';
+  }
 }
 
 class AiToolButton extends StatelessWidget {

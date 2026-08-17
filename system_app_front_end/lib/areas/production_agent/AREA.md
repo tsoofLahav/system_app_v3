@@ -4,16 +4,23 @@ Backend twin: [`system_app_back_end/areas/production_agent/AREA.md`](../../../..
 
 This is the **user-facing side** of the AI: how a run is started, and how its result is reviewed.
 
-## AI actions menu
+## The AI bar
 
-Lives in the bottom bar ([`ai_tool_bar.dart`](ai_tool_bar.dart)) and has two controls:
+Lives in the bottom bar ([`ai_tool_bar.dart`](ai_tool_bar.dart)), left to right:
 
 | Control | Behavior |
 |---------|----------|
-| **Bolt menu** | Saved AI actions — automations the user marked as manual. Picking one runs it immediately. |
-| **Consult button** | Opens a prompt dialog for a one-off request, with **Review changes (diff)** vs **Apply directly** (default review). |
+| **Pinned actions** | Up to six saved actions in slot order, each with its icon and its own key (⌘⇧2…⌘⇧7). Pressing one runs it on what is open. |
+| **Bolt menu** | Every saved action, plus *Manage actions…* which opens the automations dialog. |
+| **Agent button** | Opens the prompt dialog ([`agent_prompt_dialog.dart`](agent_prompt_dialog.dart)) for a one-off request, with **Review changes (diff)** vs **Apply directly** (opens on apply directly — a one-off ask is lighter with the undo toast than with a diff). |
 
-Both are disabled when there is no AI context (nothing selected) or a run is already in flight. `AppState.hasAiContext` and `aiRunning` gate them; `aiRunning` also drives the busy state so the user cannot double-fire.
+The agent button is last and never moves: it is the one control that is always there, so it must always be in the same place. Everything is disabled when there is no AI context (nothing selected) or a run is already in flight — `AppState.hasAiContext` and `aiRunning` gate them, and `aiRunning` drives the busy state so the user cannot double-fire.
+
+### Keeping an ask
+
+The prompt dialog opens small. **Save as action…** grows it into a name, an icon grid and a seat choice, and the footer becomes Cancel / Save and run / Save — naming and placing something is only interesting once the user has decided to keep it. Saving writes a manual automation ([automations](../automations/AREA.md)); it is the same record the automations dialog creates.
+
+A saved action runs through `runSavedAgentAction` and ends the same way a typed prompt does — review dialog, undo toast, or summary.
 
 ## Scope and hints come from what is open
 
@@ -55,13 +62,15 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 - Panes render real blocks — headings, lists, tables, tasks, graphs — never marker text. Agent text is parsed by [`agent_text_blocks.dart`](../files/model/agent_text_blocks.dart) and drawn by [`read_only_document_view.dart`](../files/editor/read_only_document_view.dart).
 - A hunk is mapped to the lines it touches ([`review_marks.dart`](review_marks.dart)). One table row, task or list item is one agent-text line, so a change inside an embed tints that row alone; a hunk over the whole fence tints the embed.
 - States: pending (faint op tint), active (stronger tint plus a left rule), accepted (teal with a check), rejected (grey, dimmed, with a cross). Word marks stay for changed text lines.
-- One bubble in the gutter between the panes carries `n / m` and Accept | Reject. Deciding advances it to the next undecided change and scrolls both panes there; clicking any change brings it back so a choice can be flipped. Enter accepts, Backspace rejects, Up/Down walk the changes.
+- One bubble in the gutter between the panes carries `n / m` and Accept | Reject. Deciding advances it to the next undecided change and scrolls both panes there. Enter accepts, Backspace rejects, Up/Down walk the changes.
+- On the last decision the bubble disappears and Finish lights up, so attention moves to the one thing left to do. Clicking any change brings the bubble back to flip that choice.
 - Finish (disabled until all decided) → `POST /files/:id/pending-review/finish` (archive copy + merge apply); Discard → `DELETE /files/:id/pending-review`.
 
 | File | Role |
 |------|------|
-| [`ai_tool_bar.dart`](ai_tool_bar.dart) | Actions menu, prompt dialog + apply toggle, run orchestration |
-| [`agent_result_ui.dart`](agent_result_ui.dart) | Result → dialog or snackbar |
+| [`ai_tool_bar.dart`](ai_tool_bar.dart) | Pinned action buttons, bolt menu, agent button |
+| [`agent_prompt_dialog.dart`](agent_prompt_dialog.dart) | Prompt + apply toggle + save-as-action, run orchestration |
+| [`agent_result_ui.dart`](agent_result_ui.dart) | Result → dialog or snackbar; runs a saved action |
 | [`pending_review_ui.dart`](pending_review_ui.dart) | Shared open-pending helper (anti double-open) |
 | [`pending_review_service.dart`](pending_review_service.dart) | GET/DELETE/finish pending |
 | [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart) | Two file panes on glass + the moving bubble |

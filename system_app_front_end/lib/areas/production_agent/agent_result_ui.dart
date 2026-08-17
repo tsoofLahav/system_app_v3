@@ -1,8 +1,32 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
+import '../automations/automation.dart';
 import './compact_undo_toast.dart';
 import './pending_review_ui.dart';
+
+/// Fire a saved AI action and show whatever it did.
+///
+/// Same ending as a typed prompt — a review dialog, an undo toast or a
+/// summary — because a saved action is a prompt the user wrote once.
+Future<void> runSavedAgentAction(
+  BuildContext context,
+  AppState state,
+  Automation automation,
+) async {
+  try {
+    final result = await state.runAutomationRecord(automation);
+    if (!context.mounted) return;
+    final agent = result['agent'];
+    if (agent is! Map) return;
+    await presentAgentRunResult(context, state, agent);
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(e.toString())),
+    );
+  }
+}
 
 /// Present an agent run from its result shape — not from a copied apply_mode.
 ///
