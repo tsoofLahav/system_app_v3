@@ -54,7 +54,13 @@ Value 1\tValue 2
 [/TABLE]
 ```
 
-Cells are separated by the two characters `\t`. In-cell tab/backslash are escaped as `\\t` and `\\`. Preserve `id="…"`. Never invent object ids. A `[TABLE]` fence **without** `id="…"` is rejected on write.
+One line per row. Cells are separated by the two characters `\t`. In-cell tab/backslash are escaped as `\\t` and `\\`. Preserve `id="…"`. Never invent object ids. A `[TABLE]` fence **without** `id="…"` is rejected on write.
+
+A new row goes after the last row, inside the markers. Adding after the `[/TABLE]` line writes a paragraph under the table instead:
+
+```text
+patch_file: {"edits": [{"op": "add", "line": 31, "text": "Value 3\tValue 4", "end_line": 0}]}
+```
 
 ### Task list embed
 

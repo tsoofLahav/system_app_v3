@@ -24,6 +24,8 @@ def test_load_prompt_file_is_short_standing_instructions():
     assert "patch_file" in text
     assert "one `patch_file` call" in text
     assert "[SPACER" in text
+    # A row added after the closing marker lands under the table, not in it.
+    assert "before** its closing marker" in text
     assert "search_tasks" not in text
     assert "Scope is hard" not in text
     # Examples stay in reference.md — no code fences in the standing prompt.
@@ -50,6 +52,8 @@ def test_reference_sections():
     assert "[BULLET_LIST]" in agent_text
     assert "[TASK_LIST" in agent_text
     assert "## tools" not in agent_text
+
+    assert "A new row goes after the last row" in agent_text
 
     tools = load_reference_section("tools")
     assert "patch_file" in tools
