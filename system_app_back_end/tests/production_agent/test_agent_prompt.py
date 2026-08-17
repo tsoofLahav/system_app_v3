@@ -34,8 +34,14 @@ def test_prompt_treats_scope_and_hints_as_context_only():
     """Where the user stands must never read as where the edit has to happen."""
     text = load_prompt_file()
     assert "not a target and not a boundary" in text
-    assert "selected_text" in text
-    assert "which text the user means, not where the result belongs" in text
+    assert '"This line", "this file", "this topic"' in text
+    assert "any file in the workspace" in text
+
+
+def test_prompt_says_searching_is_how_a_target_is_found():
+    text = load_prompt_file()
+    assert "search before you write" in text
+    assert "find the right topic, file or object" in text
 
 
 def test_default_tool_allowlist():

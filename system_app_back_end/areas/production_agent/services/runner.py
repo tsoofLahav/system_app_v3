@@ -46,7 +46,10 @@ from shared.run_config import DEFAULT_MANUAL_APPLY_MODE
 
 logger = logging.getLogger(__name__)
 
-MAX_TOOL_ROUNDS = 8
+# Finding the right topic, opening a file, creating an embed and filling it is
+# already six rounds before anything goes wrong. A ceiling that stops the run
+# mid-search is worse than a slow run.
+MAX_TOOL_ROUNDS = 16
 
 # Re-export for file_versions / tests.
 __all__ = ["compute_diff", "run_agent"]

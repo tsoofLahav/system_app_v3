@@ -21,7 +21,7 @@ Bootstrap seeds the DB row on first launch. The runner never reads the markdown 
 
 That file is **for the model**: short standing instructions in four parts — app structure, tools, agent text, input. It describes **what exists and how the tools behave**, and leaves the implementation to the model; a capable model given an accurate map is more flexible than one walked through steps. Add a line only when it states a fact the model cannot discover (a schema rule, a system constraint), not to coach judgement or guard against one past mistake.
 
-**Scope and hints are context, never a target.** They say where the user is standing (open topic, `focused_file_id`, `selected_text`); the prompt says what to do and where. `selected_text` identifies the text the user means — it must never read as "edit these lines here", which once made the agent build a table in the open file instead of moving the sentence to the right topic. Bulky fence/tool **examples** live in [`content/production_agent/reference.md`](../../../content/production_agent/reference.md) and are loaded on demand via the `reference` tool (`agent_text` | `tools` | `all`). Maintainer notes stay in this `AREA.md`. Scenario-specific jobs belong in topic/automation prompts later — not in generic tool descriptions.
+**Scope and hints are context, never a target.** They say where the user is standing (open topic, `focused_file_id`, `selected_text`); the prompt says what to do and where. "This line / file / topic" resolves to the hints, and everything else is open — the prompt states plainly that any file in the workspace may be written, and that `list` / `find_file` / `find_object` are how a target is found when the ask says to find one. Both halves are needed: without the first the agent hunts for a line it was handed, and without the second it writes into whatever file is already open, which once put a nutrition note in the open file instead of the right topic's log. Bulky fence/tool **examples** live in [`content/production_agent/reference.md`](../../../content/production_agent/reference.md) and are loaded on demand via the `reference` tool (`agent_text` | `tools` | `all`). Maintainer notes stay in this `AREA.md`. Scenario-specific jobs belong in topic/automation prompts later — not in generic tool descriptions.
 
 ## What is passed to the agent
 
@@ -51,6 +51,8 @@ delete conversation
 ```
 
 Short-term memory is the OpenAI conversation for that run only. It is dropped when the run ends. Pending reviews live in `agent_pending_reviews`.
+
+`MAX_TOOL_ROUNDS` is 16. Finding a topic, opening a file, creating an embed and filling it costs six rounds before anything goes wrong, and a run that stops mid-search is worse than a slow one — it lands the work in the wrong place and looks random from one run to the next.
 
 ## Tools
 
