@@ -23,39 +23,51 @@ from areas.automations.services.run_automation import run_automation
 logger = logging.getLogger(__name__)
 
 
+def _log(message: str) -> None:
+    # Render captures stdout. `logger.info` is silent unless Flask configured it.
+    print(message, flush=True)
+    logger.info(message)
+
+
 def tick(now: datetime | None = None) -> int:
     """Returns how many automations ran."""
     now = now or datetime.now(dt_timezone.utc)
     rows = Automation.query.filter(
         Automation.enabled.is_(True),
         Automation.schedule.isnot(None),
+        Automation.schedule != "",
     ).all()
 
+    _log(f"[automations] tick {now.isoformat()} rows={len(rows)}")
     ran = 0
     for row in rows:
         try:
-            action, next_run_at = plan_tick(
+            action, planned_next = plan_tick(
                 schedule=row.schedule,
                 timezone=row.timezone,
                 now_utc=now,
                 next_run_at=row.next_run_at,
             )
+            _log(
+                f"[automations] id={row.id} {action} "
+                f"schedule={row.schedule!r} tz={row.timezone} "
+                f"next_run_at={row.next_run_at} -> {planned_next}"
+            )
             if action == "skip":
                 continue
 
-            row.next_run_at = next_run_at
+            row.next_run_at = planned_next
             if action == "run":
                 run = run_automation(row, trigger_source="schedule")
                 ran += 1
-                logger.info(
-                    "automation %s finished: %s (%s)",
-                    row.id,
-                    run.status,
-                    run.error or "ok",
+                _log(
+                    f"[automations] id={row.id} finished: {run.status} "
+                    f"({run.error or 'ok'})"
                 )
             db.session.commit()
         except Exception:
             logger.exception("automation %s tick failed", row.id)
+            print(f"[automations] id={row.id} tick failed", flush=True)
             db.session.rollback()
     return ran
 
