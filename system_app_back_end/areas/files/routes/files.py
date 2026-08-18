@@ -6,7 +6,8 @@ from areas.objects.services.delete_cascade import (
     delete_file_cascade,
     purge_unreferenced_embeds_for_file,
 )
-from areas.files.services.document_v3 import empty_document_json, validate_document
+from areas.files.services import file_ops
+from areas.files.services.document_v3 import validate_document
 from areas.files.services.document_promote import promote_legacy_embeds
 from areas.files.services.file_versions import save_file_version
 
@@ -65,15 +66,13 @@ def create_file():
         return jsonify({"error": "name and topic_id are required"}), 400
     get_or_404(Topic, data["topic_id"])
 
-    document_json = data.get("document_json") or empty_document_json()
-    file = File(
+    file = file_ops.create_file(
         topic_id=data["topic_id"],
         name=data["name"],
-        document_json=document_json,
+        document_json=data.get("document_json"),
         order_index=data.get("order_index", 0),
-        meta=data.get("meta") or {},
+        meta=data.get("meta"),
     )
-    db.session.add(file)
     db.session.commit()
     return jsonify(file.to_dict()), 201
 

@@ -1,40 +1,61 @@
 #!/usr/bin/env python3
-"""Run due automations by calling the v2 agent pipeline."""
+"""Every minute: run the automations that are due, and only those.
+
+This used to load every enabled row and run it, which meant a saved AI action
+— same table back then — fired 1,440 times a day. Actions live in their own
+table now, and what is left here consults the schedule.
+"""
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app import app
-from models import Automation, AutomationRun, db
-from areas.production_agent.services.runner import run_agent
+from models import Automation, db
+from areas.automations.services.automation_schedule import plan_tick
+from areas.automations.services.run_automation import run_automation
+
+logger = logging.getLogger(__name__)
+
+
+def tick(now: datetime | None = None) -> int:
+    """Returns how many automations ran."""
+    now = now or datetime.utcnow()
+    rows = Automation.query.filter(
+        Automation.enabled.is_(True),
+        Automation.schedule.isnot(None),
+    ).all()
+
+    ran = 0
+    for row in rows:
+        action, next_run_at = plan_tick(
+            schedule=row.schedule,
+            timezone=row.timezone,
+            now_utc=now,
+            next_run_at=row.next_run_at,
+        )
+        if action == "skip":
+            continue
+
+        row.next_run_at = next_run_at
+        if action == "run":
+            run = run_automation(row, trigger_source="schedule")
+            ran += 1
+            logger.info(
+                "automation %s finished: %s (%s)", row.id, run.status, run.error or "ok"
+            )
+        db.session.commit()
+    return ran
 
 
 def main() -> int:
     with app.app_context():
-        rows = Automation.query.filter_by(enabled=True).all()
-        for row in rows:
-            run = AutomationRun(
-                automation_id=row.id,
-                status="running",
-                trigger_source="schedule",
-            )
-            db.session.add(run)
-            db.session.flush()
-            result = run_agent(
-                prompt=row.prompt,
-                workspace_id=row.workspace_id,
-                scope=row.scope or {},
-                apply_mode=row.apply_mode,
-            )
-            run.status = "completed" if result.get("status") == "ok" else "failed"
-            run.result = result
-            if result.get("status") != "ok":
-                run.error = result.get("error")
-            db.session.commit()
+        tick()
     return 0
 
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
-import '../automations/automation.dart';
+import '../production_agent/ai_action.dart';
 import './compact_undo_toast.dart';
 import './pending_review_ui.dart';
 
@@ -12,20 +12,65 @@ import './pending_review_ui.dart';
 Future<void> runSavedAgentAction(
   BuildContext context,
   AppState state,
-  Automation automation,
+  AiAction action,
 ) async {
   try {
-    final result = await state.runAutomationRecord(automation);
+    final result = await state.runAiAction(action);
     if (!context.mounted) return;
-    final agent = result['agent'];
-    if (agent is! Map) return;
-    await presentAgentRunResult(context, state, agent);
+    await presentAgentRunResult(context, state, result);
   } catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(e.toString())),
     );
   }
+}
+
+/// An automation run is a series: show each AI step the way a typed prompt
+/// would, then a short line for the rest.
+Future<void> presentAutomationRunResult(
+  BuildContext context,
+  AppState state,
+  Map<dynamic, dynamic> result,
+) async {
+  final s = state.strings;
+  final run = result['run'];
+  if (run is! Map) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(s['automationFailed'])),
+    );
+    return;
+  }
+  final payload = run['result'];
+  final steps = payload is Map ? payload['steps'] : null;
+  if (steps is List) {
+    for (final step in steps) {
+      if (step is! Map) continue;
+      final agent = step['agent'];
+      if (agent is Map) {
+        await presentAgentRunResult(context, state, agent);
+        if (!context.mounted) return;
+      }
+    }
+  }
+  if (state.selectedTopic != null) {
+    await state.selectTopic(state.selectedTopic!);
+  }
+  if (!context.mounted) return;
+  final failed = run['status'] != 'completed';
+  final error = '${run['error'] ?? ''}'.trim();
+  final summaries = <String>[];
+  if (steps is List) {
+    for (final step in steps) {
+      if (step is Map && step['summary'] != null) {
+        summaries.add('${step['summary']}');
+      }
+    }
+  }
+  final message = failed
+      ? (error.isNotEmpty ? error : s['automationFailed'])
+      : (summaries.isNotEmpty ? summaries.join(' · ') : s['automationRan']);
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 }
 
 /// Present an agent run from its result shape — not from a copied apply_mode.

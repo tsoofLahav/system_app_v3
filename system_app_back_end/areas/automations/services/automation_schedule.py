@@ -38,6 +38,32 @@ def local_to_utc_naive(dt_local):
     return dt_local.astimezone(UTC).replace(tzinfo=None)
 
 
+def plan_tick(*, schedule, timezone, now_utc, next_run_at):
+    """What the clock should do with one automation this minute.
+
+    Returns `(action, next_run_at)` where action is:
+
+    - `"run"` — it is due; the new `next_run_at` is already computed
+    - `"arm"` — first sight of it, so record when it should fire and wait.
+      Without this a `daily 08:00` created at 10:00 would run the moment it
+      was saved, which is not what "daily at eight" means to anyone
+    - `"skip"` — not due, or the schedule string is not one we can read
+
+    Pure so the timing rules can be tested without a database or a clock.
+    """
+    if not (schedule or "").strip():
+        return "skip", next_run_at
+
+    try:
+        if next_run_at is None:
+            return "arm", next_run_after(schedule, now_utc, timezone)
+        if next_run_at <= now_utc:
+            return "run", next_run_after(schedule, now_utc, timezone)
+    except ValueError:
+        return "skip", next_run_at
+    return "skip", next_run_at
+
+
 def next_run_after(schedule, after_utc, timezone=UTC.key):
     if not schedule:
         raise ValueError("schedule is required")

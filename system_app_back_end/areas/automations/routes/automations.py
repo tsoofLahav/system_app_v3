@@ -1,45 +1,19 @@
-from datetime import datetime
+"""Automations: a scope, a trigger, and an ordered series of steps.
+
+Saved AI actions are a different thing and live at `/ai-actions`. They only
+ever shared this table because both stored a prompt.
+"""
 
 from flask import Blueprint, jsonify, request
 
-from models import Automation, AutomationRun, db
-from shared.helpers import apply_updates, get_or_404
-from areas.production_agent.services.runner import run_agent
+from models import Automation, db
 from shared.bootstrap import default_workspace_id
-from shared.run_config import DEFAULT_AUTOMATION_APPLY_MODE
+from shared.helpers import apply_updates, get_or_404
 from areas.objects.services.delete_cascade import delete_automation_cascade
-from areas.automations.services.action_bar import (
-    run_scope,
-    slots_after_claim,
-    slots_from_order,
-)
+from areas.automations.services.run_automation import run_automation
+from areas.automations.services.steps import StepError, validate_steps
 
 automations_bp = Blueprint("automations", __name__)
-
-
-def _pinned_slots(workspace_id: int) -> dict[int, int]:
-    rows = Automation.query.filter(
-        Automation.workspace_id == workspace_id,
-        Automation.bar_slot.isnot(None),
-    ).all()
-    return {row.id: row.bar_slot for row in rows}
-
-
-def _write_slots(workspace_id: int, slots: dict[int, int]) -> None:
-    """Push a whole `{id: slot}` map onto the workspace's automations.
-
-    Slots are cleared in their own flush first: the unique index is checked per
-    statement, so handing slot 3 from one action to another has to empty it
-    before filling it again.
-    """
-    rows = Automation.query.filter_by(workspace_id=workspace_id).all()
-    moved = [row for row in rows if row.bar_slot != slots.get(row.id)]
-    for row in moved:
-        row.bar_slot = None
-    db.session.flush()
-    for row in moved:
-        row.bar_slot = slots.get(row.id)
-    db.session.flush()
 
 
 @automations_bp.route("/automations", methods=["GET"])
@@ -52,35 +26,6 @@ def list_automations():
     return jsonify([r.to_dict() for r in rows])
 
 
-@automations_bp.route("/automations/bar-order", methods=["PUT"])
-def reorder_automation_bar():
-    """Set the AI bar: `ordered_ids` take slots 1..6, everything else unpins."""
-    data = request.get_json(silent=True) or {}
-    workspace_id = data.get("workspace_id") or default_workspace_id()
-    if not workspace_id:
-        return jsonify({"error": "workspace_id is required"}), 400
-    try:
-        slots = slots_from_order(data.get("ordered_ids") or [])
-    except (TypeError, ValueError) as error:
-        return jsonify({"error": str(error)}), 400
-
-    owned = {
-        row.id
-        for row in Automation.query.filter_by(workspace_id=workspace_id).all()
-    }
-    if not set(slots).issubset(owned):
-        return jsonify({"error": "automation ids must belong to the workspace"}), 400
-
-    _write_slots(workspace_id, slots)
-    db.session.commit()
-    rows = (
-        Automation.query.filter_by(workspace_id=workspace_id)
-        .order_by(Automation.id)
-        .all()
-    )
-    return jsonify([r.to_dict() for r in rows])
-
-
 @automations_bp.route("/automations", methods=["POST"])
 def create_automation():
     data = request.get_json(silent=True) or {}
@@ -89,31 +34,22 @@ def create_automation():
     workspace_id = data.get("workspace_id") or default_workspace_id()
     if not workspace_id:
         return jsonify({"error": "workspace_id is required"}), 400
+    try:
+        steps = validate_steps(data.get("steps") or [])
+    except StepError as error:
+        return jsonify({"error": str(error)}), 400
+
     row = Automation(
         workspace_id=workspace_id,
         name=data["name"],
         trigger=data.get("trigger") or {},
         scope=data.get("scope") or {},
-        prompt=data.get("prompt") or "",
-        apply_mode=data.get("apply_mode") or DEFAULT_AUTOMATION_APPLY_MODE,
-        icon=data.get("icon") or "",
+        steps=steps,
         schedule=data.get("schedule"),
         timezone=data.get("timezone", "UTC"),
         enabled=bool(data.get("enabled", True)),
     )
     db.session.add(row)
-    db.session.flush()
-
-    if data.get("bar_slot") is not None:
-        try:
-            slots = slots_after_claim(
-                _pinned_slots(workspace_id), row.id, data["bar_slot"]
-            )
-        except (TypeError, ValueError) as error:
-            db.session.rollback()
-            return jsonify({"error": str(error)}), 400
-        _write_slots(workspace_id, slots)
-
     db.session.commit()
     return jsonify(row.to_dict()), 201
 
@@ -122,16 +58,15 @@ def create_automation():
 def update_automation(automation_id):
     row = get_or_404(Automation, automation_id)
     data = request.get_json(silent=True) or {}
-    # Pinning goes through the slot rules, not a plain field write: taking a
-    # slot has to free it on whoever held it.
-    if "bar_slot" in data:
+    if "steps" in data:
         try:
-            slots = slots_after_claim(
-                _pinned_slots(row.workspace_id), row.id, data["bar_slot"]
-            )
-        except (TypeError, ValueError) as error:
+            data = {**data, "steps": validate_steps(data.get("steps") or [])}
+        except StepError as error:
             return jsonify({"error": str(error)}), 400
-        _write_slots(row.workspace_id, slots)
+    # A new clock means a new next fire — otherwise yesterday's 08:00 still
+    # wins after the user moved it to 20:00.
+    if "schedule" in data or "timezone" in data:
+        data = {**data, "next_run_at": None}
 
     apply_updates(
         row,
@@ -140,9 +75,7 @@ def update_automation(automation_id):
             "name",
             "trigger",
             "scope",
-            "prompt",
-            "apply_mode",
-            "icon",
+            "steps",
             "schedule",
             "timezone",
             "enabled",
@@ -164,41 +97,10 @@ def delete_automation(automation_id):
 
 
 @automations_bp.route("/automations/<int:automation_id>/run", methods=["POST"])
-def run_automation(automation_id):
+def run_automation_now(automation_id):
+    """Run it this second, on its own stored scope — the same thing the clock
+    would do, so testing an automation shows what it will really do."""
     automation = get_or_404(Automation, automation_id)
-    data = request.get_json(silent=True) or {}
-    # Pressed from the AI bar, a saved action runs on what the user is looking
-    # at, so the client sends live scope and hints. The scheduler sends neither
-    # and falls back to the scope stored on the row.
-    scope = run_scope(automation.scope, data.get("scope"))
-    hints = data.get("hints") or {}
-    run = AutomationRun(
-        automation_id=automation.id,
-        status="running",
-        trigger_source="manual",
-    )
-    db.session.add(run)
-    db.session.flush()
-
-    try:
-        result = run_agent(
-            prompt=automation.prompt,
-            workspace_id=automation.workspace_id,
-            scope=scope,
-            apply_mode=automation.apply_mode,
-            hints=hints,
-        )
-        run.status = "completed" if result.get("status") == "ok" else "failed"
-        run.result = result
-        run.finished_at = datetime.utcnow()
-        automation.last_run_at = run.finished_at
-        if result.get("status") != "ok":
-            run.error = result.get("error")
-    except Exception as error:
-        run.status = "failed"
-        run.error = str(error)
-        run.finished_at = datetime.utcnow()
-        result = {"status": "error", "error": str(error)}
-
+    run = run_automation(automation, trigger_source="manual")
     db.session.commit()
-    return jsonify({"run": run.to_dict(), "agent": result})
+    return jsonify({"run": run.to_dict()})

@@ -1,12 +1,12 @@
-"""Which saved actions sit on the AI bar, and in what order.
+"""Which saved AI actions sit on the AI bar, and in what order.
 
-A saved action is an automation with a manual trigger. `bar_slot` is 1..6 for
-the ones the user put on the bar and NULL for the rest, which live in the
-actions menu only. The bar is small on purpose: six is what fits beside the
-other bottom-bar tools without pushing the agent button off screen.
+`bar_slot` is 1..6 for the ones the user put on the bar and NULL for the rest,
+which live in the actions menu only. The bar is small on purpose: six is what
+fits beside the other bottom-bar tools without pushing the agent button off
+screen.
 
-The functions here work on plain `{automation_id: slot}` maps so the rules can
-be read (and tested) without a database.
+The functions here work on plain `{action_id: slot}` maps so the rules can be
+read (and tested) without a database.
 """
 
 AI_BAR_SLOTS = 6
@@ -17,7 +17,7 @@ def slots_from_order(ordered_ids) -> dict[int, int]:
     sixth stays off the bar."""
     ids = [int(i) for i in ordered_ids]
     if len(set(ids)) != len(ids):
-        raise ValueError("duplicate automation ids")
+        raise ValueError("duplicate action ids")
     return {action_id: slot for slot, action_id in enumerate(ids[:AI_BAR_SLOTS], 1)}
 
 
@@ -37,16 +37,6 @@ def slots_after_claim(slots: dict[int, int], action_id: int, slot) -> dict[int, 
     kept = {k: v for k, v in slots.items() if k != action_id and v != slot}
     kept[action_id] = slot
     return kept
-
-
-def run_scope(stored_scope, requested_scope) -> dict:
-    """What a run looks at: the caller's scope when there is one.
-
-    The bar sends the topic and files that are open, which is the whole point
-    of a button you press while reading something. The scheduler sends nothing
-    and gets the scope saved on the action.
-    """
-    return dict(requested_scope or stored_scope or {})
 
 
 def first_free_slot(slots: dict[int, int]) -> int | None:

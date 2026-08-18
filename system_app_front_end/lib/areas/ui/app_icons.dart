@@ -33,6 +33,7 @@ abstract final class AppIcons {
   static const chevronRight = LucideIcons.chevronRight200;
   static const chevronLeft = LucideIcons.chevronLeft200;
   static const chevronDown = LucideIcons.chevronDown200;
+  static const chevronUp = LucideIcons.chevronUp200;
   static const addFile = LucideIcons.filePlus200;
   static const bringFile = LucideIcons.folderInput200;
   static const logForProject = LucideIcons.notebookPen200;

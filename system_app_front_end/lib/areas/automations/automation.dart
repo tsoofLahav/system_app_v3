@@ -1,85 +1,100 @@
-import '../production_agent/agent_run_defaults.dart';
-
-/// A saved agent run.
+/// A scope, a trigger, and an ordered series of steps.
 ///
-/// With a schedule it is an automation; without one it is a **saved AI action**
-/// the user fires from the actions menu or from its own button on the AI bar
-/// ([icon] + [barSlot]).
+/// Saved AI actions are a different thing — see
+/// `areas/production_agent/ai_action.dart`. They meet only here: one kind of
+/// step runs one of them.
 class Automation {
   const Automation({
     required this.id,
     required this.workspaceId,
     required this.name,
-    required this.prompt,
-    required this.applyMode,
     this.trigger = const {},
     this.scope = const {},
-    this.icon = '',
-    this.barSlot,
+    this.steps = const [],
     this.schedule,
     this.timezone = 'UTC',
     this.enabled = true,
+    this.lastRunAt,
+    this.nextRunAt,
   });
 
   final int id;
   final int workspaceId;
   final String name;
-  final String prompt;
-  final String applyMode;
+
+  /// `{"type": "schedule"}` today; event types arrive with phase two.
   final Map<String, dynamic> trigger;
+
+  /// `{"kind": "all" | "topic" | "topic_type", …}` — see `AutomationScope`.
   final Map<String, dynamic> scope;
 
-  /// Key into the action icon vocabulary ([`action_icons.dart`]), not a code
-  /// point — the set is ours to change without touching stored rows.
-  final String icon;
-
-  /// 1..6 for an action on the AI bar, null for one that lives in the menu.
-  final int? barSlot;
+  /// Each entry is `{"kind": …}` plus that kind's parameters.
+  final List<Map<String, dynamic>> steps;
 
   final String? schedule;
   final String timezone;
   final bool enabled;
+  final DateTime? lastRunAt;
+  final DateTime? nextRunAt;
 
-  bool get isManual => trigger['type'] == 'manual';
-  bool get isScheduled =>
-      trigger['type'] == 'schedule' || (schedule != null && schedule!.isNotEmpty);
-  bool get isOnBar => barSlot != null;
+  bool get isScheduled => (schedule ?? '').isNotEmpty;
 
   factory Automation.fromJson(Map<String, dynamic> json) {
     final trigger = json['trigger'];
     final scope = json['scope'];
+    final steps = json['steps'];
     return Automation(
       id: json['id'] as int,
       workspaceId: json['workspace_id'] as int,
       name: json['name'] as String,
-      prompt: json['prompt'] as String? ?? '',
-      applyMode:
-          json['apply_mode'] as String? ?? defaultAutomationApplyMode,
-      trigger: trigger is Map<String, dynamic>
-          ? Map<String, dynamic>.from(trigger)
-          : const {},
-      scope: scope is Map<String, dynamic>
-          ? Map<String, dynamic>.from(scope)
-          : const {},
-      icon: json['icon'] as String? ?? '',
-      barSlot: json['bar_slot'] as int?,
+      trigger: trigger is Map ? Map<String, dynamic>.from(trigger) : const {},
+      scope: scope is Map ? Map<String, dynamic>.from(scope) : const {},
+      steps: steps is List
+          ? steps
+                .whereType<Map>()
+                .map((e) => Map<String, dynamic>.from(e))
+                .toList()
+          : const [],
       schedule: json['schedule'] as String?,
       timezone: json['timezone'] as String? ?? 'UTC',
       enabled: json['enabled'] as bool? ?? true,
+      lastRunAt: DateTime.tryParse(json['last_run_at'] as String? ?? ''),
+      nextRunAt: DateTime.tryParse(json['next_run_at'] as String? ?? ''),
     );
   }
+}
 
-  Map<String, dynamic> toJson({required int workspaceId}) => {
-    'workspace_id': workspaceId,
-    'name': name,
-    'prompt': prompt,
-    'apply_mode': applyMode,
-    'trigger': trigger,
-    'scope': scope,
-    'icon': icon,
-    if (barSlot != null) 'bar_slot': barSlot,
-    if (schedule != null) 'schedule': schedule,
-    'timezone': timezone,
-    'enabled': enabled,
+/// The three shapes a scope can take, and the labels that read like a sentence.
+class AutomationScope {
+  static const all = 'all';
+  static const topic = 'topic';
+  static const topicType = 'topic_type';
+
+  static String kindOf(Map<String, dynamic> scope) =>
+      scope['kind'] as String? ?? all;
+
+  static Map<String, dynamic> everywhere() => {'kind': all};
+  static Map<String, dynamic> oneTopic(int topicId) => {
+    'kind': topic,
+    'topic_id': topicId,
   };
+  static Map<String, dynamic> ofType(String tag) => {
+    'kind': topicType,
+    'tag': tag,
+  };
+
+  /// The topic a placeless step lands in, when the scope names exactly one.
+  static int? targetTopicId(Map<String, dynamic> scope) =>
+      kindOf(scope) == topic ? scope['topic_id'] as int? : null;
+}
+
+/// Step kinds, twinned with `STEP_SPECS` in
+/// `areas/automations/services/steps.py`.
+class StepKinds {
+  static const ai = 'ai';
+  static const createFile = 'create_file';
+  static const unmarkTasks = 'unmark_tasks';
+  static const archiveFiles = 'archive_files';
+
+  static const all = [ai, createFile, unmarkTasks, archiveFiles];
 }

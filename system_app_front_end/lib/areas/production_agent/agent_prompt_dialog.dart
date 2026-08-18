@@ -57,11 +57,10 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
 
   try {
     if (request.saves) {
-      await state.createAutomation(
+      await state.createAiAction(
         name: request.name,
         prompt: request.prompt,
         applyMode: request.applyMode,
-        isScheduled: false,
         icon: request.iconKey,
         barSlot: request.barSlot,
       );

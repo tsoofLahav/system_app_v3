@@ -20,6 +20,8 @@ import '../areas/files/data/topic.dart';
 import '../areas/automations/automation_service.dart';
 import '../areas/production_agent/agent_run_defaults.dart';
 import '../areas/production_agent/agent_service.dart';
+import '../areas/production_agent/ai_action.dart';
+import '../areas/production_agent/ai_action_service.dart';
 import '../areas/production_agent/agent_time_hints.dart';
 import '../areas/production_agent/pending_review_service.dart';
 import './services/api_service.dart';
@@ -59,6 +61,7 @@ class AppState extends ChangeNotifier {
     _agent = AgentService(_api);
     _pendingReviews = PendingReviewService(_api);
     _automations = AutomationService(_api);
+    _aiActions = AiActionService(_api);
     _images = ImageService(_api);
   }
 
@@ -73,6 +76,7 @@ class AppState extends ChangeNotifier {
   late final AgentService _agent;
   late final PendingReviewService _pendingReviews;
   late final AutomationService _automations;
+  late final AiActionService _aiActions;
   late final ImageService _images;
 
   AppLanguage _language = AppLanguage.en;
@@ -84,6 +88,7 @@ class AppState extends ChangeNotifier {
   List<Topic> allTopics = [];
   List<AppTag> allTags = [];
   List<AppView> userViews = [];
+  List<AiAction> aiActions = [];
   List<Automation> automations = [];
   Topic? selectedTopic;
   TopicDetail? selectedDetail;
@@ -206,6 +211,7 @@ class AppState extends ChangeNotifier {
       workspaceId = status['workspace_id'] as int?;
       await _reloadAll();
       appReady = true;
+      await loadAiActions();
       await loadAutomations();
       if (selectedTopic == null && allTopics.isNotEmpty) {
         final home = allTopics.where((t) => t.isMain).firstOrNull ?? allTopics.first;
@@ -634,25 +640,127 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  List<Automation> get manualAiActions =>
-      automations.where((a) => a.isManual).toList();
+  // --- Saved AI actions: prompts on buttons ---------------------------------
 
-  List<Automation> get scheduledAutomations =>
-      automations.where((a) => a.isScheduled).toList();
-
-  /// Saved actions with a seat on the AI bar, in slot order.
-  List<Automation> get barAiActions {
-    final pinned = manualAiActions.where((a) => a.isOnBar).toList()
+  /// Actions with a seat on the AI bar, in slot order.
+  List<AiAction> get barAiActions {
+    final pinned = aiActions.where((a) => a.isOnBar).toList()
       ..sort((a, b) => a.barSlot!.compareTo(b.barSlot!));
     return pinned;
   }
 
-  Automation? aiActionInSlot(int slot) {
-    for (final action in manualAiActions) {
+  AiAction? aiActionInSlot(int slot) {
+    for (final action in aiActions) {
       if (action.barSlot == slot) return action;
     }
     return null;
   }
+
+  /// The lowest bar slot nobody holds, or null when all six are taken.
+  int? get firstFreeAiBarSlot {
+    final taken = {
+      for (final action in aiActions)
+        if (action.isOnBar) action.barSlot!,
+    };
+    for (var slot = 1; slot <= aiBarSlotCount; slot++) {
+      if (!taken.contains(slot)) return slot;
+    }
+    return null;
+  }
+
+  Future<void> loadAiActions() async {
+    if (workspaceId == null) return;
+    aiActions = await _aiActions.list(workspaceId: workspaceId);
+    notifyListeners();
+  }
+
+  Future<AiAction> createAiAction({
+    required String name,
+    required String prompt,
+    required String applyMode,
+    String icon = '',
+    int? barSlot,
+  }) async {
+    if (workspaceId == null) {
+      throw StateError('workspace not ready');
+    }
+    final action = await _aiActions.create(
+      workspaceId: workspaceId!,
+      name: name,
+      prompt: prompt,
+      applyMode: applyMode,
+      icon: icon,
+      barSlot: barSlot,
+    );
+    // A new pin takes its slot from whoever had it, so reload rather than
+    // append — the other rows changed too.
+    if (barSlot != null) {
+      await loadAiActions();
+      return aiActions.firstWhere((a) => a.id == action.id, orElse: () => action);
+    }
+    aiActions = [...aiActions, action];
+    notifyListeners();
+    return action;
+  }
+
+  /// Reloads rather than patching the list, because a change of seat moves
+  /// whoever held it too.
+  Future<void> updateAiAction(
+    AiAction action,
+    Map<String, dynamic> changes,
+  ) async {
+    if (changes.isEmpty) return;
+    await _aiActions.update(action.id, changes);
+    await loadAiActions();
+  }
+
+  /// Gives an action a bar slot, or takes it off the bar with `slot: null`.
+  /// Whoever held that slot goes back to the menu (the server decides).
+  Future<void> setAiActionSlot(AiAction action, {int? slot}) async {
+    await _aiActions.update(action.id, {'bar_slot': slot});
+    await loadAiActions();
+  }
+
+  Future<void> setAiActionBarOrder(List<int> orderedIds) async {
+    if (workspaceId == null) return;
+    aiActions = await _aiActions.setBarOrder(
+      workspaceId: workspaceId!,
+      orderedIds: orderedIds,
+    );
+    notifyListeners();
+  }
+
+  Future<void> deleteAiAction(AiAction action) async {
+    await _aiActions.delete(action.id);
+    aiActions = aiActions.where((a) => a.id != action.id).toList();
+    notifyListeners();
+  }
+
+  /// Runs a saved action on what is open right now — the same scope and hints
+  /// the agent dialog sends.
+  Future<Map<String, dynamic>> runAiAction(AiAction action) async {
+    aiRunning = true;
+    notifyListeners();
+    try {
+      await DocumentEditorRegistry.flushActive();
+      final result = await _aiActions.run(
+        action.id,
+        scope: agentRunScope(),
+        hints: agentRunHints(),
+      );
+      final changes = result['proposed_changes'];
+      if (changes is List &&
+          changes.any((c) => c is Map && c['review'] != null)) {
+        pendingAgentReview = Map<String, dynamic>.from(result);
+      }
+      return result;
+    } finally {
+      aiRunning = false;
+      notifyListeners();
+    }
+  }
+
+  // --- Automations: scope, trigger, a series of steps -----------------------
 
   Future<void> loadAutomations() async {
     if (workspaceId == null) return;
@@ -662,12 +770,12 @@ class AppState extends ChangeNotifier {
 
   Future<Automation> createAutomation({
     required String name,
-    required String prompt,
-    required String applyMode,
-    required bool isScheduled,
+    required Map<String, dynamic> scope,
+    required Map<String, dynamic> trigger,
+    required List<Map<String, dynamic>> steps,
     String? schedule,
-    String icon = '',
-    int? barSlot,
+    String timezone = 'UTC',
+    bool enabled = true,
   }) async {
     if (workspaceId == null) {
       throw StateError('workspace not ready');
@@ -675,68 +783,27 @@ class AppState extends ChangeNotifier {
     final automation = await _automations.create(
       workspaceId: workspaceId!,
       name: name,
-      prompt: prompt,
-      applyMode: applyMode,
-      trigger: isScheduled
-          ? {'type': 'schedule'}
-          : {'type': 'manual'},
-      scope: agentRunScope(),
+      scope: scope,
+      trigger: trigger,
+      steps: steps,
       schedule: schedule,
-      icon: icon,
-      barSlot: barSlot,
+      timezone: timezone,
+      enabled: enabled,
     );
-    // A new pin takes its slot from whoever had it, so reload rather than
-    // append — the other rows changed too.
-    if (barSlot != null) {
-      await loadAutomations();
-      return automations.firstWhere(
-        (a) => a.id == automation.id,
-        orElse: () => automation,
-      );
-    }
     automations = [...automations, automation];
     notifyListeners();
     return automation;
   }
 
-  /// Rewrites a saved action or automation in place.
-  ///
-  /// Reloads rather than patching the list, because a change of seat moves
-  /// whoever held it too.
   Future<void> updateAutomation(
     Automation automation,
     Map<String, dynamic> changes,
   ) async {
     if (changes.isEmpty) return;
-    await _automations.update(automation.id, changes);
-    await loadAutomations();
-  }
-
-  /// The lowest bar slot nobody holds, or null when all six are taken.
-  int? get firstFreeAiBarSlot {
-    final taken = {
-      for (final action in manualAiActions)
-        if (action.isOnBar) action.barSlot!,
-    };
-    for (var slot = 1; slot <= aiBarSlotCount; slot++) {
-      if (!taken.contains(slot)) return slot;
-    }
-    return null;
-  }
-
-  /// Gives an action a bar slot, or takes it off the bar with `slot: null`.
-  /// Whoever held that slot goes back to the menu (the server decides).
-  Future<void> setAiActionSlot(Automation action, {int? slot}) async {
-    await _automations.update(action.id, {'bar_slot': slot});
-    await loadAutomations();
-  }
-
-  Future<void> setAiActionBarOrder(List<int> orderedIds) async {
-    if (workspaceId == null) return;
-    automations = await _automations.setBarOrder(
-      workspaceId: workspaceId!,
-      orderedIds: orderedIds,
-    );
+    final saved = await _automations.update(automation.id, changes);
+    automations = [
+      for (final a in automations) a.id == saved.id ? saved : a,
+    ];
     notifyListeners();
   }
 
@@ -746,26 +813,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Runs a saved action on what is open right now — the same scope and hints
-  /// the agent dialog sends. The scheduler runs server-side and keeps using the
-  /// scope stored on the record.
-  Future<Map<String, dynamic>> runAutomationRecord(Automation automation) async {
+  /// Run it now, on its stored scope — what the clock would have done.
+  Future<Map<String, dynamic>> runAutomationNow(Automation automation) async {
     aiRunning = true;
     notifyListeners();
     try {
       await DocumentEditorRegistry.flushActive();
-      final result = await _automations.run(
-        automation.id,
-        scope: agentRunScope(),
-        hints: agentRunHints(),
-      );
-      final agent = result['agent'];
-      final changes = agent is Map ? agent['proposed_changes'] : null;
-      if (changes is List &&
-          changes.any((c) => c is Map && c['review'] != null)) {
-        pendingAgentReview = Map<String, dynamic>.from(agent as Map);
-      }
-      return result;
+      return await _automations.run(automation.id);
     } finally {
       aiRunning = false;
       notifyListeners();

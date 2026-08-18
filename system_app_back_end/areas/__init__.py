@@ -16,6 +16,7 @@ def register_blueprints(app):
     from areas.objects.routes.tasks import tasks_bp
     from areas.objects.routes.views import views_bp
     from areas.production_agent.routes.agent import agent_bp
+    from areas.production_agent.routes.ai_actions import ai_actions_bp
     from shared.routes.bootstrap import bootstrap_bp
     from shared.routes.tags import tags_bp
     from shared.routes.upload import upload_bp
@@ -32,6 +33,7 @@ def register_blueprints(app):
     app.register_blueprint(information_bp)
     app.register_blueprint(views_bp)
     app.register_blueprint(agent_bp)
+    app.register_blueprint(ai_actions_bp)
     app.register_blueprint(automations_bp)
     app.register_blueprint(tags_bp)
     app.register_blueprint(upload_bp)

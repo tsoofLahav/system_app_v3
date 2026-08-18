@@ -1,46 +1,40 @@
 # Area: Automations (backend)
 
-Automations are saved agent runs that fire on a schedule instead of a button press. Frontend counterpart: [`system_app_front_end/lib/areas/automations/AREA.md`](../../../system_app_front_end/lib/areas/automations/AREA.md).
+Frontend counterpart: [`system_app_front_end/lib/areas/automations/AREA.md`](../../../system_app_front_end/lib/areas/automations/AREA.md).
+
+Saved AI actions are a **different thing** — they live at [`/ai-actions`](../production_agent/AREA.md). They meet an automation only as one kind of step.
 
 ## Core rule
 
-An automation adds **no new AI logic**. It stores a prompt plus a scope and hands them to the same [production agent](../production_agent/AREA.md) pipeline a manual run uses.
-
-An automation with **no schedule** is a *saved AI action*: the same row, fired from a button instead of the clock. One table serves both, so an action becomes an automation by gaining a schedule and nothing else moves.
+An automation is a **scope**, a **trigger**, and an ordered **series of steps**. It adds no new AI logic: an `ai` step hands a prompt to the same [production agent](../production_agent/AREA.md) pipeline a typed prompt uses. The other steps are ordinary app operations, callable without a request.
 
 ## Configuration
 
-Row in `automations`:
+Row in `automations` (migration [`011_ai_actions_split.sql`](../../migrations/011_ai_actions_split.sql) moved the old button-rows out):
 
 | Field | Meaning |
 |-------|---------|
-| `name` | Shown in the automations menu |
-| `prompt` | The task text sent to the agent |
-| `scope` | `{ "topic_ids": [...] }` / `{ "file_ids": [...] }` — what it may touch |
-| `apply_mode` | `direct_apply`, `review`, or `notify_only` — create/DB default from [`shared/run_config.py`](../../shared/run_config.py) (`DEFAULT_AUTOMATION_APPLY_MODE`) |
-| `schedule` | `daily HH:MM`, `weekly DAY HH:MM`, `monthly PLACEMENT DAY HH:MM`, `quarterly INTERVAL PLACEMENT DAY HH:MM` |
-| `timezone` | Schedule is interpreted in this zone, stored UTC |
-| `trigger` | JSONB — `{"type": "manual"}` for an action, reserved otherwise for event triggers |
+| `name` | Shown in the automations dialog |
+| `scope` | `{"kind": "all"}` / `{"kind": "topic", "topic_id"}` / `{"kind": "topic_type", "tag"}`. Legacy `{topic_ids, file_ids}` still resolves. |
+| `trigger` | `{"type": "schedule"}` today. Event types are stored but not dispatched. |
+| `steps` | `[{ "kind": …, …params }]` — the work, in order |
+| `schedule` | `daily HH:MM`, `weekly DAY HH:MM`, `monthly PLACEMENT DAY HH:MM` |
+| `timezone` | Schedule is interpreted here, stored UTC. Default for new rows from the app: `Asia/Jerusalem`. |
 | `enabled` | Disabled automations never fire automatically |
-| `icon` | Key into the frontend icon vocabulary — a name, never a code point |
-| `bar_slot` | 1–6 = a seat on the AI bar (unique per workspace), NULL = actions menu only |
 | `last_run_at`, `next_run_at` | Scheduling bookkeeping |
 
-## Seats on the AI bar
+A single-topic scope is also the **target**: a step that has to put something somewhere (create a file) uses it. Broader scope leaves the step to carry its own `topic_id`.
 
-Six slots, because that is what fits beside the other bottom-bar tools. Taking a
-slot frees it on whoever held it — slot n is also keyboard shortcut n, so the
-other five must not shuffle under the user's fingers. The rules live in
-[`services/action_bar.py`](services/action_bar.py) as plain `{id: slot}` maps;
-routes only read and write rows. Slots are cleared in their own flush before
-being filled, since the unique index is checked per statement.
+## Steps
 
-## A button runs on what is open
+| Kind | What it does |
+|------|----------------|
+| `ai` | Run a prompt, either inline or from a saved `action_id`. Each step has its own `apply_mode`. |
+| `create_file` | Create a file. `{date}` `{weekday}` `{month}` `{year}` in the name move with the calendar. |
+| `unmark_tasks` | Send done tasks in scope (or one `task_list_id`) back to active. |
+| `archive_files` | Soft-archive files in scope; optional `older_than_days` or `file_ids`. |
 
-`POST /automations/:id/run` takes optional `scope` and `hints`. The bar sends
-the topic, the open files, the focused file and the clock — the same context a
-typed prompt sends — because the user pressed the button while looking at
-something. The cron script sends neither and the stored `scope` applies.
+Adding a kind is an entry in [`services/steps.py`](services/steps.py) `STEP_SPECS` and a function in [`services/actions/`](services/actions/). Validation refuses a bad series when it is saved, not at 2am when it fires. Steps stop at the first error; earlier ones stand.
 
 ## Cron job on the server
 
@@ -52,40 +46,42 @@ Render runs a **Cron Job service** separate from the web service:
 | Command | `cd system_app_back_end && python scripts/run_automations.py` |
 | Database | Same `DATABASE_URL` as the web service |
 
-The script is deliberately dumb:
-
 ```
 every minute
-  → load enabled automations
-  → for each: create automation_runs row (status=running, trigger_source=schedule)
-  → run_agent(prompt, workspace_id, scope, apply_mode)
-  → status = completed | failed, store result, commit
+  → load enabled automations that have a schedule
+  → plan_tick: arm (first sight), run (due), or skip
+  → run_automation → walk steps → automation_runs row
+  → write last_run_at, next_run_at, finished_at
 ```
 
-Manual runs (`POST /automations/:id/run`) do the same thing with `trigger_source=manual`, synchronously.
+A new `daily 08:00` saved at 10:00 is **armed**, not run — "daily at eight" means the next eight. `POST /automations/:id/run` does the same walk with `trigger_source=manual`, on the stored scope (this is a background job, not a button pressed while looking at something).
 
 ## Run history
 
-`automation_runs` stores every execution: status, trigger source, full agent result, error, timestamps. The frontend polls this to report progress and surface proposals from `review` runs.
+`automation_runs` stores every execution: status, trigger source, per-step result, error, timestamps.
 
 ## Modules
 
 | Module | Role |
 |--------|------|
-| [`routes/automations.py`](routes/automations.py) | CRUD + `PUT /automations/bar-order` + `POST /automations/:id/run` |
-| [`services/action_bar.py`](services/action_bar.py) | Slot rules and which scope a run uses |
-| [`services/automation_schedule.py`](services/automation_schedule.py) | `next_run_after()` — schedule string → next UTC datetime |
+| [`routes/automations.py`](routes/automations.py) | CRUD + `POST /automations/:id/run` |
+| [`services/steps.py`](services/steps.py) | Step vocabulary and save-time validation |
+| [`services/scope.py`](services/scope.py) | Kind → `{workspace_id, topic_ids, file_ids}` |
+| [`services/run_automation.py`](services/run_automation.py) | Walk the series, record the run |
+| [`services/actions/`](services/actions/) | `ai`, `create_file`, `unmark_tasks`, `archive_files` |
+| [`services/automation_schedule.py`](services/automation_schedule.py) | `next_run_after()` / `plan_tick()` |
 | [`../../scripts/run_automations.py`](../../scripts/run_automations.py) | Cron entry point |
+
+File and task mutations used by the actions live next to their HTTP routes: [`areas/files/services/file_ops.py`](../files/services/file_ops.py), [`areas/objects/services/task_ops.py`](../objects/services/task_ops.py).
 
 ## Rules
 
 - Disabled automations must not run automatically; manual run stays allowed.
-- A disabled automation whose run was already queued should be skipped, not executed.
 - Schedules are stored as strings and resolved in the automation's timezone — never assume UTC input.
-- Automations must respect `scope` exactly like manual runs.
-- `review` automations produce proposals; they must not write files directly.
-- Never write `bar_slot` as a plain field update — go through the slot rules, or two actions end up in one seat.
+- Never send a cron line; the parser only reads the DSL above.
+- Automations must respect `scope` the same way agent tools do (`file_allowed` after resolve).
+- An `ai` step's `apply_mode` is its own. `review` produces proposals; it must not write files directly.
 
 ## Known gaps
 
-Only schedule triggers are wired. `trigger` (event-based, e.g. "file changed") is stored but not dispatched. Scheduling currently runs every enabled automation each minute rather than consulting `next_run_at` — `next_run_after()` exists but is not yet used by the cron script.
+Event triggers (`file.updated`, `task.unmarked`, another automation finished) are not dispatched. Phase two: an `automation_events` queue drained by the same minute cron.

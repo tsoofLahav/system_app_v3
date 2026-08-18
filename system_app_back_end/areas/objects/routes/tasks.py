@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from models import Task, ViewTaskMembership, db
 from shared.helpers import active_query, apply_updates, get_or_404
+from areas.objects.services import task_ops
 from areas.objects.services.delete_cascade import delete_task_cascade
 
 tasks_bp = Blueprint("tasks", __name__)
@@ -34,8 +35,7 @@ def update_task(task_id):
 
 @tasks_bp.route("/tasks/<int:task_id>/toggle", methods=["POST"])
 def toggle_task(task_id):
-    task = get_or_404(Task, task_id)
-    task.status = "done" if task.status != "done" else "active"
+    task = task_ops.toggle_task(get_or_404(Task, task_id))
     db.session.commit()
     return jsonify(task.to_dict())
 

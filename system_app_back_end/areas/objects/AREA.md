@@ -111,6 +111,7 @@ Deleting anything that contains objects must cascade, or the database keeps orph
 | [`routes/information.py`](routes/information.py) | Info pieces |
 | [`routes/views.py`](routes/views.py) | Views and memberships |
 | [`services/task_list_order.py`](services/task_list_order.py) | Canonical ordering within a list |
+| [`services/task_ops.py`](services/task_ops.py) | Toggle / unmark without a request — used by automations and by the HTTP routes |
 | [`services/delete_cascade.py`](services/delete_cascade.py) | Cascade rules for every container |
 
 ## Rules

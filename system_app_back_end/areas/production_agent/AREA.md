@@ -79,7 +79,7 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 
 Browse helpers: [`services/browse_tools.py`](services/browse_tools.py). Create: [`services/create_object_tool.py`](services/create_object_tool.py) + shared [`areas/objects/services/create_embed.py`](../objects/services/create_embed.py). `open_file` payload: [`services/open_file_tool.py`](services/open_file_tool.py). Writes: [`services/write_tools.py`](services/write_tools.py).
 
-**Apply vs review:** the run’s `apply_mode` wins (`review` / `direct_apply` / `notify_only`). Defaults live in **one place**: [`shared/run_config.py`](../../shared/run_config.py) (`DEFAULT_MANUAL_APPLY_MODE`, `DEFAULT_AUTOMATION_APPLY_MODE`). Routes/runner/models import those — do not hardcode fallback strings. Manual **Consult** sends `apply_mode` from the FE toggle (default review). Automations store their own mode. The model does not choose the dialog.
+**Apply vs review:** the run’s `apply_mode` wins (`review` / `direct_apply` / `notify_only`). Defaults live in **one place**: [`shared/run_config.py`](../../shared/run_config.py) (`DEFAULT_MANUAL_APPLY_MODE`, `DEFAULT_AUTOMATION_APPLY_MODE`). Routes/runner/models import those — do not hardcode fallback strings. Manual **Consult** sends `apply_mode` from the FE toggle (default apply directly). A saved AI action stores its own mode. An automation `ai` step stores its own mode, default review — nobody is watching at 2am. The model does not choose the dialog.
 
 The agent never sees or writes raw JSON. It reads and writes **agent text**; the [files area](../files/AREA.md) converts in both directions.
 
@@ -142,6 +142,8 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 | [`services/prompt.py`](services/prompt.py) | Load/seed/sync the system prompt from the DB |
 | [`services/openai_service.py`](services/openai_service.py) | Responses conversation helpers + legacy chat/image helpers |
 | [`routes/agent.py`](routes/agent.py) | `POST /agent/run`; apply-agent-text; pending-review routes |
+| [`routes/ai_actions.py`](routes/ai_actions.py) | Saved AI actions: CRUD, bar order, run on live scope |
+| [`services/action_bar.py`](services/action_bar.py) | Slot rules (1–6); a seat is also a keyboard shortcut |
 
 ## Rules
 

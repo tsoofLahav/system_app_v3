@@ -3,7 +3,7 @@ from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects.postgresql import JSONB
 
-from shared.run_config import DEFAULT_AUTOMATION_APPLY_MODE
+from shared.run_config import DEFAULT_MANUAL_APPLY_MODE
 
 db = SQLAlchemy()
 
@@ -311,7 +311,50 @@ class ViewTaskMembership(db.Model):
         }
 
 
+class AiAction(db.Model):
+    """A prompt on a button. Not an automation — see `Automation` below.
+
+    No scope column on purpose: an action runs on whatever the user has open
+    when they press it, which is the whole point of pressing it there.
+    """
+
+    __tablename__ = "ai_actions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id"), nullable=False)
+    name = db.Column(db.Text, nullable=False)
+    prompt = db.Column(db.Text, nullable=False, default="")
+    apply_mode = db.Column(db.Text, nullable=False, default=DEFAULT_MANUAL_APPLY_MODE)
+    icon = db.Column(db.Text, nullable=False, default="")
+    # 1..6 = a seat on the AI bar (unique per workspace), NULL = actions menu.
+    bar_slot = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workspace_id": self.workspace_id,
+            "name": self.name,
+            "prompt": self.prompt or "",
+            "apply_mode": self.apply_mode,
+            "icon": self.icon or "",
+            "bar_slot": self.bar_slot,
+            "created_at": _iso(self.created_at),
+            "updated_at": _iso(self.updated_at),
+        }
+
+
 class Automation(db.Model):
+    """A scope, a trigger, and an ordered series of steps.
+
+    `steps` is the work: each entry is `{"kind": …}` plus its own parameters,
+    and an `ai` step carries its own `apply_mode`, so one step can leave a diff
+    to review while the next writes straight through.
+    """
+
     __tablename__ = "automations"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -319,17 +362,10 @@ class Automation(db.Model):
     name = db.Column(db.Text, nullable=False)
     trigger = db.Column(JSONB, nullable=False, default=dict)
     scope = db.Column(JSONB, nullable=False, default=dict)
-    prompt = db.Column(db.Text, nullable=False, default="")
-    apply_mode = db.Column(
-        db.Text, nullable=False, default=DEFAULT_AUTOMATION_APPLY_MODE
-    )
+    steps = db.Column(JSONB, nullable=False, default=list)
     schedule = db.Column(db.Text)
     timezone = db.Column(db.Text, nullable=False, default="UTC")
     enabled = db.Column(db.Boolean, nullable=False, default=True)
-    # A saved action is an automation with no schedule: `icon` and `bar_slot`
-    # are how it shows up in the app (slot 1..6 = on the AI bar, NULL = menu).
-    icon = db.Column(db.Text, nullable=False, default="")
-    bar_slot = db.Column(db.Integer)
     last_run_at = db.Column(db.DateTime)
     next_run_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -344,10 +380,7 @@ class Automation(db.Model):
             "name": self.name,
             "trigger": self.trigger if self.trigger is not None else {},
             "scope": self.scope if self.scope is not None else {},
-            "prompt": self.prompt or "",
-            "apply_mode": self.apply_mode,
-            "icon": self.icon or "",
-            "bar_slot": self.bar_slot,
+            "steps": self.steps if self.steps is not None else [],
             "schedule": self.schedule,
             "timezone": self.timezone,
             "enabled": self.enabled,

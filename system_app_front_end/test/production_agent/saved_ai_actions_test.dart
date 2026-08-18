@@ -1,20 +1,21 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/automations/automation.dart';
+import 'package:system_app_front_end/areas/automations/schedule_format.dart';
 import 'package:system_app_front_end/areas/production_agent/agent_run_defaults.dart';
+import 'package:system_app_front_end/areas/production_agent/ai_action.dart';
 import 'package:system_app_front_end/areas/ui/action_icons.dart';
 import 'package:system_app_front_end/areas/ux/shortcuts/shortcut_catalog.dart';
 
 void main() {
   group('a saved action carries its face and its seat', () {
     test('icon and bar slot survive the trip to JSON and back', () {
-      final action = Automation.fromJson({
+      final action = AiAction.fromJson({
         'id': 4,
         'workspace_id': 1,
         'name': 'Tidy the log',
         'prompt': 'tidy it',
         'apply_mode': 'review',
-        'trigger': {'type': 'manual'},
         'icon': 'checklist',
         'bar_slot': 3,
       });
@@ -22,25 +23,79 @@ void main() {
       expect(action.icon, 'checklist');
       expect(action.barSlot, 3);
       expect(action.isOnBar, isTrue);
-      expect(action.isManual, isTrue);
-
-      final json = action.toJson(workspaceId: 1);
-      expect(json['icon'], 'checklist');
-      expect(json['bar_slot'], 3);
     });
 
     test('an action with no slot lives in the menu', () {
-      final action = Automation.fromJson({
+      final action = AiAction.fromJson({
         'id': 5,
         'workspace_id': 1,
         'name': 'Weekly summary',
         'prompt': 'summarise',
-        'trigger': {'type': 'manual'},
       });
 
       expect(action.isOnBar, isFalse);
       expect(action.icon, '');
-      expect(action.toJson(workspaceId: 1).containsKey('bar_slot'), isFalse);
+    });
+  });
+
+  group('an automation is a scope, a trigger, and steps', () {
+    test('steps survive JSON', () {
+      final automation = Automation.fromJson({
+        'id': 2,
+        'workspace_id': 1,
+        'name': 'Sunday reset',
+        'trigger': {'type': 'schedule'},
+        'scope': {'kind': 'topic', 'topic_id': 3},
+        'steps': [
+          {'kind': 'unmark_tasks'},
+          {'kind': 'ai', 'prompt': 'summarise', 'apply_mode': 'review'},
+        ],
+        'schedule': 'weekly sun 06:00',
+      });
+
+      expect(automation.steps.length, 2);
+      expect(automation.steps.first['kind'], StepKinds.unmarkTasks);
+      expect(AutomationScope.targetTopicId(automation.scope), 3);
+      expect(automation.isScheduled, isTrue);
+    });
+  });
+
+  group('schedule strings the backend can read', () {
+    test('daily weekly monthly round-trip', () {
+      expect(
+        const AutomationSchedule(kind: 'daily', time: '8:05').toDsl(),
+        'daily 08:05',
+      );
+      expect(
+        const AutomationSchedule(
+          kind: 'weekly',
+          weekday: 'sun',
+          time: '06:00',
+        ).toDsl(),
+        'weekly sun 06:00',
+      );
+      expect(
+        const AutomationSchedule(
+          kind: 'monthly',
+          placement: 'last',
+          weekday: 'fri',
+          time: '18:00',
+        ).toDsl(),
+        'monthly last fri 18:00',
+      );
+    });
+
+    test('an old cron line becomes a daily eight oclock', () {
+      final parsed = AutomationSchedule.parse('0 8 * * *');
+      expect(parsed.kind, 'daily');
+      expect(parsed.toDsl(), 'daily 08:00');
+    });
+
+    test('a stored dsl is read back', () {
+      final parsed = AutomationSchedule.parse('weekly mon 09:30');
+      expect(parsed.kind, 'weekly');
+      expect(parsed.weekday, 'mon');
+      expect(parsed.time, '09:30');
     });
   });
 

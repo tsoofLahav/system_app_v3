@@ -1,11 +1,10 @@
-"""Tests for AI bar slot rules (saved actions)."""
+"""Tests for AI bar slot rules (saved AI actions)."""
 
 import pytest
 
-from areas.automations.services.action_bar import (
+from areas.production_agent.services.action_bar import (
     AI_BAR_SLOTS,
     first_free_slot,
-    run_scope,
     slots_after_claim,
     slots_from_order,
 )
@@ -43,20 +42,6 @@ def test_slot_out_of_range_is_rejected():
         slots_after_claim({}, 1, 0)
     with pytest.raises(ValueError):
         slots_after_claim({}, 1, AI_BAR_SLOTS + 1)
-
-
-def test_run_scope_prefers_what_is_open_over_the_saved_scope():
-    stored = {"topic_ids": [1]}
-    assert run_scope(stored, {"topic_ids": [9], "file_ids": [4]}) == {
-        "topic_ids": [9],
-        "file_ids": [4],
-    }
-
-
-def test_run_scope_falls_back_to_the_saved_scope_for_the_scheduler():
-    assert run_scope({"topic_ids": [1]}, None) == {"topic_ids": [1]}
-    assert run_scope({"topic_ids": [1]}, {}) == {"topic_ids": [1]}
-    assert run_scope(None, None) == {}
 
 
 def test_first_free_slot_fills_gaps_then_gives_up():

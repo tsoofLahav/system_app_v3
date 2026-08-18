@@ -65,10 +65,7 @@ Code: [`areas/automations/`](system_app_back_end/areas/automations/) · Cron: [`
 
 | # | Sev | Issue |
 |---|-----|-------|
-| A1 | **P1** | **Scheduling does not work.** The cron runs every enabled automation every minute and never reads `schedule`, `timezone`, or `next_run_at`. Each automation fires ~1,440 times a day, each one a paid agent call. |
-| A2 | **P2** | `next_run_after()` in `automation_schedule.py` is fully implemented and timezone-aware, but nothing calls it. Wiring it into the cron is the fix for A1. |
-| A3 | **P2** | The cron path never sets `last_run_at` or `finished_at`, unlike `POST /automations/:id/run`. Run history is incomplete for scheduled runs. |
-| A4 | **P3** | Event triggers are stored in `trigger` (JSONB) but never dispatched — schedule is the only live trigger. |
+| A4 | **P3** | Event triggers (`file.updated`, `task.unmarked`, another automation finished) are stored in `trigger` but never dispatched — schedule is the only live trigger. |
 
 ---
 
@@ -118,7 +115,7 @@ The spec says every visual constant lives in `areas/ui/`. These are the places t
 
 | # | Sev | Issue |
 |---|-----|-------|
-| C1 | **P3** | ~30 Dart files under `lib/` are unreachable from `main.dart` — leftovers from v1 (`part.dart`, `brought_file_snapshot.dart`, `automation_rule.dart`, and more). Old `list_block_widget` / `table_block_widget` / `document_undo_stack` / `document_body.py` removed in the post-v4 cleanup. |
+| C1 | **P3** | ~30 Dart files under `lib/` are unreachable from `main.dart` — leftovers from v1 (`part.dart`, `brought_file_snapshot.dart`, and more). Old `list_block_widget` / `table_block_widget` / `document_undo_stack` / `document_body.py` removed in the post-v4 cleanup. |
 | ~~C2~~ | — | ~~`document_body.py` dead re-export.~~ **Done** — deleted. |
 | C3 | **P3** | 35 analyzer warnings, all `dead_null_aware_expression` / `dead_code` from `??` applied to non-nullable `AppStrings` getters. |
 

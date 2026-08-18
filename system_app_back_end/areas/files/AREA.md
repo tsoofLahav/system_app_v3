@@ -91,6 +91,7 @@ Format examples: [`content/production_agent/reference.md`](../../../content/prod
 | [`services/document_agent_text.py`](services/document_agent_text.py) | Editor text ↔ expanded agent text |
 | [`services/document_promote.py`](services/document_promote.py) | Promote legacy inline embeds → object rows; writes v4 editor text |
 | [`services/file_versions.py`](services/file_versions.py) | Snapshot before agent/automation writes |
+| [`services/file_ops.py`](services/file_ops.py) | Create / archive without a request — used by automations and by the HTTP routes |
 | [`routes/files.py`](routes/files.py) | File CRUD |
 | [`routes/file_versions.py`](routes/file_versions.py) | History and `POST /files/:id/diff` |
 | [`routes/topics.py`](routes/topics.py) | Topics — the container files live in |

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
 import '../production_agent/agent_result_ui.dart';
+import '../production_agent/ai_action.dart';
+import '../production_agent/ai_action_edit_dialog.dart';
 import '../ui/action_icons.dart';
 import '../ui/adaptive_dialog.dart';
 import '../ui/app_colors.dart';
@@ -9,14 +11,11 @@ import '../ui/app_icons.dart';
 import '../ui/app_typography.dart';
 import '../ui/confirm_dialog.dart';
 import '../ui/dialog_metrics.dart';
-import './automation.dart';
-import './automation_edit_dialog.dart';
 
 /// The saved AI actions, and nothing else.
 ///
-/// Opened from the ⋯ beside the AI bar. It only shows what already exists:
-/// an action is born in the agent dialog, and scheduled automations live in
-/// the automations dialog.
+/// Opened from the ⋯ beside the AI bar. An action is born in the agent
+/// dialog; automations live in their own dialog.
 Future<void> showAiActionsDialog({
   required BuildContext context,
   required AppState state,
@@ -42,19 +41,19 @@ class _AiActionsDialogState extends State<_AiActionsDialog> {
   @override
   void initState() {
     super.initState();
-    state.loadAutomations();
+    state.loadAiActions();
   }
 
-  Future<void> _edit(Automation action) async {
-    final saved = await showAutomationEditDialog(
+  Future<void> _edit(AiAction action) async {
+    final saved = await showAiActionEditDialog(
       context: context,
       state: state,
-      automation: action,
+      action: action,
     );
     if (saved && mounted) setState(() {});
   }
 
-  Future<void> _togglePin(Automation action) async {
+  Future<void> _togglePin(AiAction action) async {
     if (!action.isOnBar && state.firstFreeAiBarSlot == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(state.strings['aiBarFull'])),
@@ -68,7 +67,7 @@ class _AiActionsDialogState extends State<_AiActionsDialog> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _delete(Automation action) async {
+  Future<void> _delete(AiAction action) async {
     final s = state.strings;
     final confirmed = await showAppConfirmDialog(
       context: context,
@@ -79,11 +78,11 @@ class _AiActionsDialogState extends State<_AiActionsDialog> {
       destructive: true,
     );
     if (!confirmed || !mounted) return;
-    await state.deleteAutomation(action);
+    await state.deleteAiAction(action);
     if (mounted) setState(() {});
   }
 
-  Future<void> _run(Automation action) async {
+  Future<void> _run(AiAction action) async {
     Navigator.pop(context);
     await runSavedAgentAction(context, state, action);
   }
@@ -91,7 +90,7 @@ class _AiActionsDialogState extends State<_AiActionsDialog> {
   @override
   Widget build(BuildContext context) {
     final s = state.strings;
-    final actions = state.manualAiActions;
+    final actions = state.aiActions;
 
     return AppAdaptiveDialogShell(
       title: Text(s['aiActions']),

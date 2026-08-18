@@ -183,14 +183,32 @@ Successful DELETE returns `204` with empty body.
 
 ## Automations
 
+A scope, a trigger, and an ordered series of steps. Saved AI actions are a different resource.
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/automations` | List |
-| POST | `/automations` | Create — `icon`, `bar_slot` optional (saved AI action) |
-| PATCH | `/automations/<id>` | Update; `bar_slot` (1–6 or null) pins/unpins and frees the old holder |
-| PUT | `/automations/bar-order` | `{"ordered_ids": [...]}` → first six take slots 1..6, the rest unpin |
-| DELETE | `/automations/<id>` | Delete |
-| POST | `/automations/<id>/run` | Manual run → same as agent; optional `scope` / `hints` override the stored scope |
+| POST | `/automations` | Create — `name`, `scope`, `trigger`, `steps`, `schedule`, `timezone`, `enabled` |
+| PATCH | `/automations/<id>` | Partial update of those fields |
+| DELETE | `/automations/<id>` | Delete (cascades runs) |
+| POST | `/automations/<id>/run` | Run now on the **stored** scope — same walk the clock would do |
+
+`steps` is `[{ "kind": "ai" \| "create_file" \| "unmark_tasks" \| "archive_files", … }]`. An `ai` step is either `{ "action_id" }` or `{ "prompt", "apply_mode" }`.
+
+`schedule` is `daily HH:MM` / `weekly DAY HH:MM` / `monthly PLACEMENT DAY HH:MM`, not a cron line.
+
+## Saved AI actions
+
+A prompt on a button. No stored scope — the client sends live `scope` / `hints`, like a typed prompt.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/ai-actions` | List |
+| POST | `/ai-actions` | Create — `icon`, `bar_slot` optional |
+| PATCH | `/ai-actions/<id>` | Update; `bar_slot` (1–6 or null) pins/unpins and frees the old holder |
+| PUT | `/ai-actions/bar-order` | `{"ordered_ids": [...]}` → first six take slots 1..6, the rest unpin |
+| DELETE | `/ai-actions/<id>` | Delete |
+| POST | `/ai-actions/<id>/run` | Run on optional live `scope` / `hints` |
 
 ---
 

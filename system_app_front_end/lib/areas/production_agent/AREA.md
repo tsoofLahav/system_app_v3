@@ -18,7 +18,7 @@ The agent comes first and never moves: it is the one control that is always ther
 
 ### Keeping an ask
 
-The prompt dialog opens small. **Save as action…** grows it into a name, an icon grid and a seat choice, and the footer becomes Cancel / Save and run / Save — naming and placing something is only interesting once the user has decided to keep it. Saving writes a manual automation ([automations](../automations/AREA.md)); it is the same record the automations dialog creates.
+The prompt dialog opens small. **Save as action…** grows it into a name, an icon grid and a seat choice, and the footer becomes Cancel / Save and run / Save — naming and placing something is only interesting once the user has decided to keep it. Saving writes an `ai_actions` row ([`ai_action.dart`](ai_action.dart)); it is not an automation.
 
 A saved action runs through `runSavedAgentAction` and ends the same way a typed prompt does — review dialog, undo toast, or summary.
 
@@ -43,7 +43,7 @@ After finish pending / direct apply, the topic reloads; open Super Editors pick 
 
 - **Consult** always sends `apply_mode`: `review` | `direct_apply` (dialog default = review).
 - If somehow omitted, backend [`DEFAULT_MANUAL_APPLY_MODE`](../../../../system_app_back_end/shared/run_config.py) applies.
-- Automations use their stored mode; create UI default is [`agent_run_defaults.dart`](agent_run_defaults.dart).
+- Automations use a per-step `apply_mode`; create UI default is [`agent_run_defaults.dart`](agent_run_defaults.dart).
 
 ## Presenting a run result
 
@@ -68,8 +68,10 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 
 | File | Role |
 |------|------|
-| [`ai_tool_bar.dart`](ai_tool_bar.dart) | Pinned action buttons, bolt menu, agent button |
+| [`ai_tool_bar.dart`](ai_tool_bar.dart) | Pinned action buttons, ⋯ menu, agent button |
 | [`agent_prompt_dialog.dart`](agent_prompt_dialog.dart) | Prompt + apply toggle + save-as-action, run orchestration |
+| [`ai_action.dart`](ai_action.dart) / [`ai_action_service.dart`](ai_action_service.dart) | Saved-action model and `/ai-actions` |
+| [`ai_action_edit_dialog.dart`](ai_action_edit_dialog.dart) | Rewrite a saved action |
 | [`agent_result_ui.dart`](agent_result_ui.dart) | Result → dialog or snackbar; runs a saved action |
 | [`pending_review_ui.dart`](pending_review_ui.dart) | Shared open-pending helper (anti double-open) |
 | [`pending_review_service.dart`](pending_review_service.dart) | GET/DELETE/finish pending |
