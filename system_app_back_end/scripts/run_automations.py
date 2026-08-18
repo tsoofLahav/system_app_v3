@@ -19,6 +19,7 @@ from app import app
 from models import Automation, db
 from areas.automations.services.automation_schedule import plan_tick
 from areas.automations.services.run_automation import run_automation
+from config import openai_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,12 @@ def tick(now: datetime | None = None) -> int:
         Automation.schedule != "",
     ).all()
 
-    _log(f"[automations] tick {now.isoformat()} rows={len(rows)}")
+    openai_names = sorted(k for k in os.environ if "OPENAI" in k.upper())
+    _log(
+        f"[automations] tick {now.isoformat()} rows={len(rows)} "
+        f"openai_key={'yes' if openai_api_key() else 'no'} "
+        f"openai_env={openai_names or '[]'}"
+    )
     ran = 0
     for row in rows:
         try:

@@ -80,6 +80,7 @@ File and task mutations used by the actions live next to their HTTP routes: [`ar
 - Schedules are stored as strings and resolved in the automation's timezone — never assume UTC input.
 - `plan_tick` compares naive UTC. Postgres may return `next_run_at` timezone-aware; strip that before comparing, or the cron dies.
 - Cron prints one line per automation every minute (`skip` / `arm` / `run`) to stdout, so Render logs show the decision. `logger.info` alone is silent there.
+- The cron process must have `OPENAI_API_KEY` as an **environment variable** on that Cron Job (Secret Files are not `os.environ`). Each tick logs `openai_key=yes/no` and the `OPENAI*` env names, never the secret.
 - Never send a cron line; the parser only reads the DSL above.
 - Automations must respect `scope` the same way agent tools do (`file_allowed` after resolve).
 - An `ai` step's `apply_mode` is its own. `review` produces proposals; it must not write files directly.

@@ -12,7 +12,11 @@ def _load_dotenv() -> None:
                 continue
             key, _, value = line.partition("=")
             key = key.strip()
+            if key.lower().startswith("export "):
+                key = key[7:].strip()
             value = value.strip().strip('"').strip("'")
+            if not key or not value:
+                continue
             os.environ.setdefault(key, value)
 
 
@@ -41,7 +45,34 @@ def resolve_upload_folder() -> str:
 
 UPLOAD_FOLDER = resolve_upload_folder()
 
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+def openai_api_key():
+    """Live env lookup — import-time snapshots miss vars Render injects later.
+
+    Dashboard env vars are preferred. A Secret File named OPENAI_API_KEY is
+    also accepted; those are files, not `os.environ` entries.
+    """
+    raw = (os.environ.get("OPENAI_API_KEY") or "").strip().strip('"').strip("'")
+    if raw:
+        return raw
+    file_path = (os.environ.get("OPENAI_API_KEY_FILE") or "").strip()
+    if not file_path:
+        for candidate in (
+            "/etc/secrets/OPENAI_API_KEY",
+            "/etc/secrets/openai_api_key",
+        ):
+            if os.path.isfile(candidate):
+                file_path = candidate
+                break
+    if file_path and os.path.isfile(file_path):
+        with open(file_path, encoding="utf-8") as handle:
+            raw = handle.read().strip().strip('"').strip("'")
+        if raw:
+            return raw
+    return None
+
+
+OPENAI_API_KEY = openai_api_key()
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6")
 # How hard the agent thinks between tool calls. "low" is the documented setting
 # for tool use and planning that still has to feel interactive.

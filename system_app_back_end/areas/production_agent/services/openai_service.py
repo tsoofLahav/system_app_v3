@@ -11,10 +11,10 @@ import json
 from typing import Any
 
 from config import (
-    OPENAI_API_KEY,
     OPENAI_IMAGE_MODEL,
     OPENAI_MODEL,
     OPENAI_REASONING_EFFORT,
+    openai_api_key,
 )
 from openai import OpenAI
 from urllib.request import urlopen
@@ -28,9 +28,10 @@ def is_reasoning_model(model: str) -> bool:
 
 
 def _client() -> OpenAI:
-    if not OPENAI_API_KEY:
+    key = openai_api_key()
+    if not key:
         raise RuntimeError("OPENAI_API_KEY is not configured")
-    return OpenAI(api_key=OPENAI_API_KEY)
+    return OpenAI(api_key=key)
 
 
 def chat_text(system: str, user: str, *, max_tokens: int = 500) -> str:
