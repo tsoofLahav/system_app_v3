@@ -54,7 +54,7 @@ every minute
   → write last_run_at, next_run_at, finished_at
 ```
 
-A new `daily 08:00` saved at 10:00 is **armed**, not run — "daily at eight" means the next eight. `POST /automations/:id/run` does the same walk with `trigger_source=manual`, on the stored scope (this is a background job, not a button pressed while looking at something).
+A new `daily 08:00` saved at 10:00 is **armed**, not run — "daily at eight" means the next eight. Saved *during* the 08:00 minute, it runs that minute; otherwise a 08:00:04 first sight jumps to tomorrow and today never fires. `POST /automations/:id/run` does the same walk with `trigger_source=manual`, on the stored scope (this is a background job, not a button pressed while looking at something).
 
 ## Run history
 

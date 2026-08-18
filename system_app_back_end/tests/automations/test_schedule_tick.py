@@ -75,3 +75,16 @@ def test_the_timezone_is_the_users_not_utc():
     assert next_run_after("daily 08:00", NOW, "Asia/Jerusalem") == datetime(
         2026, 8, 19, 5, 0
     )
+
+
+def test_first_sight_during_the_due_minute_still_runs():
+    """Saving `weekly tue 13:10` at 13:10:04 used to arm next Tuesday."""
+    now = datetime(2026, 8, 18, 10, 10, 4)
+    action, next_run_at = plan_tick(
+        schedule="weekly tue 13:10",
+        timezone="Asia/Jerusalem",
+        now_utc=now,
+        next_run_at=None,
+    )
+    assert action == "run"
+    assert next_run_at == datetime(2026, 8, 25, 10, 10)

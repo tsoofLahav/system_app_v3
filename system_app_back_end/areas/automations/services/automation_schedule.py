@@ -55,7 +55,9 @@ def plan_tick(*, schedule, timezone, now_utc, next_run_at):
     - `"run"` — it is due; the new `next_run_at` is already computed
     - `"arm"` — first sight of it, so record when it should fire and wait.
       Without this a `daily 08:00` created at 10:00 would run the moment it
-      was saved, which is not what "daily at eight" means to anyone
+      was saved, which is not what "daily at eight" means to anyone.
+      First sight *during* that 08:00 minute still runs — otherwise a save
+      at 08:00:04 jumps to tomorrow and today's slot never happens.
     - `"skip"` — not due, or the schedule string is not one we can read
 
     Pure so the timing rules can be tested without a database or a clock.
@@ -67,12 +69,62 @@ def plan_tick(*, schedule, timezone, now_utc, next_run_at):
 
     try:
         if next_run_at is None:
-            return "arm", next_run_after(schedule, now_utc, timezone)
+            planned = next_run_after(schedule, now_utc, timezone)
+            # Saving `weekly tue 13:10` at 13:10:04 used to arm next week,
+            # so the slot the user was aiming at never ran.
+            if in_current_slot(schedule, now_utc, timezone):
+                return "run", planned
+            return "arm", planned
         if next_run_at <= now_utc:
             return "run", next_run_after(schedule, now_utc, timezone)
     except ValueError:
         return "skip", next_run_at
     return "skip", next_run_at
+
+
+SLOT_GRACE = timedelta(seconds=90)
+
+
+def in_current_slot(schedule, now_utc, timezone=UTC.key):
+    """True when local time is in this occurrence's minute (plus a short grace)."""
+    tz = resolve_timezone(timezone)
+    now_local = utc_naive_to_local(now_utc, tz)
+    slot = _this_occurrence_local(schedule, now_local, tz)
+    if slot is None:
+        return False
+    return slot <= now_local < slot + SLOT_GRACE
+
+
+def _this_occurrence_local(schedule, after_local, tz):
+    kind, *parts = schedule.split()
+    kind = kind.lower()
+    if kind == "daily":
+        hour, minute = _parse_time(parts[0] if parts else "00:00")
+        return after_local.replace(
+            hour=hour, minute=minute, second=0, microsecond=0
+        )
+    if kind == "weekly":
+        weekday = WEEKDAYS.get((parts[0] if parts else "mon").lower(), 0)
+        hour, minute = _parse_time(parts[1] if len(parts) > 1 else "00:00")
+        candidate = after_local.replace(
+            hour=hour, minute=minute, second=0, microsecond=0
+        )
+        days = (weekday - candidate.weekday()) % 7
+        return candidate + timedelta(days=days)
+    if kind == "monthly":
+        placement = (parts[0] if parts else "first").lower()
+        weekday = WEEKDAYS.get((parts[1] if len(parts) > 1 else "mon").lower(), 0)
+        hour, minute = _parse_time(parts[2] if len(parts) > 2 else "00:00")
+        return _monthly_candidate_local(
+            after_local.year,
+            after_local.month,
+            placement,
+            weekday,
+            hour,
+            minute,
+            tz,
+        )
+    return None
 
 
 def next_run_after(schedule, after_utc, timezone=UTC.key):
