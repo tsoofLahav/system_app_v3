@@ -30,8 +30,17 @@ def resolve_timezone(timezone_name):
         return UTC
 
 
+def as_utc_naive(dt):
+    """Postgres `timestamptz` comes back aware; the rest of this module is naive UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone(UTC).replace(tzinfo=None)
+
+
 def utc_naive_to_local(dt_utc_naive, tz):
-    return dt_utc_naive.replace(tzinfo=UTC).astimezone(tz)
+    return as_utc_naive(dt_utc_naive).replace(tzinfo=UTC).astimezone(tz)
 
 
 def local_to_utc_naive(dt_local):
@@ -51,6 +60,8 @@ def plan_tick(*, schedule, timezone, now_utc, next_run_at):
 
     Pure so the timing rules can be tested without a database or a clock.
     """
+    now_utc = as_utc_naive(now_utc)
+    next_run_at = as_utc_naive(next_run_at)
     if not (schedule or "").strip():
         return "skip", next_run_at
 

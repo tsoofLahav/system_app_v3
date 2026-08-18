@@ -4,7 +4,7 @@ The old script ran every enabled row every minute. These are the rules that
 replace it.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from areas.automations.services.automation_schedule import next_run_after, plan_tick
 
@@ -56,6 +56,18 @@ def test_an_unreadable_schedule_is_skipped_not_raised():
         schedule="0 8 * * *", timezone="UTC", now_utc=NOW, next_run_at=None
     )
     assert action == "skip"
+
+
+def test_aware_and_naive_datetimes_can_be_compared():
+    """Postgres timestamptz vs datetime.utcnow() used to crash the cron."""
+    action, next_run_at = plan_tick(
+        schedule="daily 08:00",
+        timezone="UTC",
+        now_utc=NOW,
+        next_run_at=datetime(2026, 8, 18, 8, 0, tzinfo=timezone.utc),
+    )
+    assert action == "run"
+    assert next_run_at == datetime(2026, 8, 19, 8, 0)
 
 
 def test_the_timezone_is_the_users_not_utc():
