@@ -66,7 +66,6 @@ class TopicType(db.Model):
     name = db.Column(db.Text, nullable=False)
     order_index = db.Column(db.Integer, nullable=False, default=0)
     template_topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         return {
