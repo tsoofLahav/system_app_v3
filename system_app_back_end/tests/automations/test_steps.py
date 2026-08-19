@@ -44,9 +44,18 @@ def test_apply_mode_is_checked():
         validate_steps([{"kind": "ai", "prompt": "x", "apply_mode": "whenever"}])
 
 
-def test_a_new_file_needs_a_name():
-    with pytest.raises(StepError, match="needs a name"):
+def test_a_new_file_needs_a_name_or_a_slot():
+    with pytest.raises(StepError, match="name or a template slot"):
         validate_steps([{"kind": "create_file", "name": "   "}])
+    assert validate_steps([{"kind": "create_file", "template_slot": "doc"}]) == [
+        {"kind": "create_file", "template_slot": "doc"}
+    ]
+
+
+def test_archiving_can_target_a_template_slot():
+    assert validate_steps([{"kind": "archive_files", "template_slot": "doc"}]) == [
+        {"kind": "archive_files", "template_slot": "doc"}
+    ]
 
 
 def test_archiving_with_no_filter_means_everything_in_scope():

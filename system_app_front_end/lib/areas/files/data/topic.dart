@@ -9,6 +9,7 @@ class Topic {
     this.color,
     this.orderIndex = 0,
     this.fileLayout = 'single',
+    this.topicTypeId,
     this.archivedAt,
     this.createdAt,
     this.tags = const [],
@@ -23,6 +24,9 @@ class Topic {
 
   /// How this topic arranges its files, and with that how many it shows at all.
   final String fileLayout;
+
+  /// User-defined kind. Home stays untyped.
+  final int? topicTypeId;
 
   final String? archivedAt;
   final String? createdAt;
@@ -43,6 +47,7 @@ class Topic {
       color: json['color'] as String?,
       orderIndex: json['order_index'] as int? ?? 0,
       fileLayout: json['file_layout'] as String? ?? 'single',
+      topicTypeId: json['topic_type_id'] as int?,
       archivedAt: json['archived_at'] as String?,
       createdAt: json['created_at'] as String?,
       tags: rawTags is List
@@ -59,6 +64,8 @@ class Topic {
     String? color,
     int? orderIndex,
     String? fileLayout,
+    int? topicTypeId,
+    bool clearTopicType = false,
     List<AppTag>? tags,
   }) {
     return Topic(
@@ -69,6 +76,7 @@ class Topic {
       color: color ?? this.color,
       orderIndex: orderIndex ?? this.orderIndex,
       fileLayout: fileLayout ?? this.fileLayout,
+      topicTypeId: clearTopicType ? null : (topicTypeId ?? this.topicTypeId),
       archivedAt: archivedAt,
       createdAt: createdAt,
       tags: tags ?? this.tags,
@@ -81,6 +89,7 @@ class Topic {
     if (color != null) 'color': color,
     'order_index': orderIndex,
     'file_layout': fileLayout,
+    if (topicTypeId != null) 'topic_type_id': topicTypeId,
     if (archivedAt != null) 'archived_at': archivedAt,
   };
 }

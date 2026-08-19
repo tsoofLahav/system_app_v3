@@ -35,6 +35,21 @@ void main() {
 
       expect(action.isOnBar, isFalse);
       expect(action.icon, '');
+      expect(action.topicTypeId, isNull);
+      expect(action.visibleOnTopicType(3), isTrue);
+    });
+
+    test('a typed action is extra, not instead of globals', () {
+      final action = AiAction.fromJson({
+        'id': 6,
+        'workspace_id': 1,
+        'name': 'Process recap',
+        'prompt': 'recap',
+        'topic_type_id': 2,
+      });
+      expect(action.visibleOnTopicType(2), isTrue);
+      expect(action.visibleOnTopicType(9), isFalse);
+      expect(action.visibleOnTopicType(null), isFalse);
     });
   });
 
@@ -57,6 +72,12 @@ void main() {
       expect(automation.steps.first['kind'], StepKinds.unmarkTasks);
       expect(AutomationScope.targetTopicId(automation.scope), 3);
       expect(automation.isScheduled, isTrue);
+    });
+
+    test('a type scope stores the type id', () {
+      final scope = AutomationScope.ofType(4);
+      expect(scope['kind'], AutomationScope.topicType);
+      expect(AutomationScope.typeIdOf(scope), 4);
     });
   });
 
@@ -96,6 +117,51 @@ void main() {
       expect(parsed.kind, 'weekly');
       expect(parsed.weekday, 'mon');
       expect(parsed.time, '09:30');
+    });
+
+    test('a calendar tap infers weekday and monthly placement', () {
+      const weekly = AutomationSchedule(kind: 'weekly');
+      expect(
+        weekly.applyingDate(DateTime(2026, 8, 18)).weekday,
+        'tue',
+      );
+      expect(weekly.marksDate(DateTime(2026, 8, 18)), isFalse);
+      expect(
+        weekly.applyingDate(DateTime(2026, 8, 18)).marksDate(
+              DateTime(2026, 8, 25),
+            ),
+        isTrue,
+      );
+
+      // August 2026 has five Sundays: 2, 9, 16, 23, 30.
+      expect(
+        AutomationSchedule.placementFromDate(DateTime(2026, 8, 2)),
+        'first',
+      );
+      expect(
+        AutomationSchedule.placementFromDate(DateTime(2026, 8, 9)),
+        'second',
+      );
+      expect(
+        AutomationSchedule.placementFromDate(DateTime(2026, 8, 16)),
+        'third',
+      );
+      expect(
+        AutomationSchedule.placementFromDate(DateTime(2026, 8, 23)),
+        'third',
+      );
+      expect(
+        AutomationSchedule.placementFromDate(DateTime(2026, 8, 30)),
+        'last',
+      );
+
+      final monthly = const AutomationSchedule(kind: 'monthly')
+          .applyingDate(DateTime(2026, 8, 30));
+      expect(monthly.weekday, 'sun');
+      expect(monthly.placement, 'last');
+      expect(monthly.marksDate(DateTime(2026, 8, 30)), isTrue);
+      expect(monthly.marksDate(DateTime(2026, 8, 23)), isFalse);
+      expect(monthly.marksDate(DateTime(2026, 9, 27)), isTrue);
     });
   });
 

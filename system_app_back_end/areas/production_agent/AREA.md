@@ -142,7 +142,7 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 | [`services/prompt.py`](services/prompt.py) | Load/seed/sync the system prompt from the DB |
 | [`services/openai_service.py`](services/openai_service.py) | Responses conversation helpers + legacy chat/image helpers |
 | [`routes/agent.py`](routes/agent.py) | `POST /agent/run`; apply-agent-text; pending-review routes |
-| [`routes/ai_actions.py`](routes/ai_actions.py) | Saved AI actions: CRUD, bar order, run on live scope |
+| [`routes/ai_actions.py`](routes/ai_actions.py) | Saved AI actions: CRUD, bar order, run on live scope. `topic_type_id` null = every topic; set = that type plus the globals |
 | [`services/action_bar.py`](services/action_bar.py) | Slot rules (1–6); a seat is also a keyboard shortcut |
 
 ## Rules

@@ -4,6 +4,7 @@ import '../../core/app_state.dart';
 import '../production_agent/agent_result_ui.dart';
 import '../ui/adaptive_dialog.dart';
 import '../ui/app_icons.dart';
+import '../ui/app_switch.dart';
 import '../ui/app_typography.dart';
 import '../ui/confirm_dialog.dart';
 import '../ui/dialog_metrics.dart';
@@ -71,6 +72,18 @@ class _AutomationDialogState extends State<_AutomationDialog> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _setEnabled(Automation automation, bool enabled) async {
+    try {
+      await state.updateAutomation(automation, {'enabled': enabled});
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
   Future<void> _run(Automation automation) async {
     Navigator.pop(context);
     await presentAutomationRun(context, state, automation);
@@ -94,15 +107,6 @@ class _AutomationDialogState extends State<_AutomationDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: FilledButton.icon(
-              onPressed: _create,
-              icon: const AppIcon(AppIcons.add, size: 16),
-              label: Text(s['createAutomation']),
-            ),
-          ),
-          const SizedBox(height: 8),
           SizedBox(
             height: 280,
             child: items.isEmpty
@@ -145,11 +149,24 @@ class _AutomationDialogState extends State<_AutomationDialog> {
                               icon: const AppIcon(AppIcons.trash, size: 18),
                               onPressed: () => _confirmDelete(item),
                             ),
+                            AppSwitch(
+                              value: item.enabled,
+                              onChanged: (on) => _setEnabled(item, on),
+                            ),
                           ],
                         ),
                       );
                     },
                   ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: FilledButton.icon(
+              onPressed: _create,
+              icon: const AppIcon(AppIcons.add, size: 16),
+              label: Text(s['createAutomation']),
+            ),
           ),
         ],
       ),
@@ -159,8 +176,7 @@ class _AutomationDialogState extends State<_AutomationDialog> {
   String _subtitle(Automation item) {
     final schedule = item.schedule ?? '';
     final n = item.steps.length;
-    final off = item.enabled ? '' : state.strings['disabled'];
-    return [schedule, '$n', if (off.isNotEmpty) off].join(' · ');
+    return [schedule, '$n'].join(' · ');
   }
 }
 

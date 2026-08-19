@@ -1,8 +1,9 @@
 from flask import Blueprint, jsonify, request
 
-from models import EntityTag, Tag, Topic, db
+from models import EntityTag, Tag, Topic, TopicType, db
 from shared.helpers import active_query, apply_updates, get_or_404
 from shared.bootstrap import default_workspace_id
+from areas.files.services.clone_topic_skeleton import clone_topic_skeleton
 from areas.objects.services.delete_cascade import delete_topic_cascade
 
 topics_bp = Blueprint("topics", __name__)
@@ -16,6 +17,13 @@ def _tags_for_topic(topic_id: int) -> list[dict]:
         .all()
     )
     return [t.to_dict() for t in rows]
+
+
+def _type_in_workspace(type_id: int, workspace_id: int) -> TopicType | None:
+    row = db.session.get(TopicType, int(type_id))
+    if row is None or int(row.workspace_id) != int(workspace_id):
+        return None
+    return row
 
 
 @topics_bp.route("/topics", methods=["GET"])
@@ -50,6 +58,13 @@ def create_topic():
     if not workspace_id:
         return jsonify({"error": "workspace_id is required"}), 400
 
+    topic_type_id = data.get("topic_type_id")
+    type_row = None
+    if topic_type_id not in (None, ""):
+        type_row = _type_in_workspace(int(topic_type_id), workspace_id)
+        if type_row is None:
+            return jsonify({"error": "topic type not found"}), 400
+
     topic = Topic(
         workspace_id=workspace_id,
         name=data["name"],
@@ -57,6 +72,7 @@ def create_topic():
         color=data.get("color"),
         order_index=data.get("order_index", 0),
         file_layout=data.get("file_layout") or "single",
+        topic_type_id=type_row.id if type_row else None,
     )
     db.session.add(topic)
     db.session.flush()
@@ -66,6 +82,20 @@ def create_topic():
         db.session.add(
             EntityTag(tag_id=int(tag_id), entity_type="topic", entity_id=topic.id)
         )
+
+    source = None
+    clone_from = data.get("clone_from_topic_id")
+    if clone_from not in (None, ""):
+        source = db.session.get(Topic, int(clone_from))
+        if source is None or int(source.workspace_id) != int(workspace_id):
+            return jsonify({"error": "topic to copy from not found"}), 400
+        if topic.topic_type_id is None:
+            topic.topic_type_id = source.topic_type_id
+    elif type_row is not None and type_row.template_topic_id:
+        source = db.session.get(Topic, type_row.template_topic_id)
+
+    if source is not None:
+        clone_topic_skeleton(topic, source)
 
     db.session.commit()
     result = topic.to_dict()
@@ -83,6 +113,16 @@ def update_topic(topic_id):
         {"name", "icon", "color", "order_index", "file_layout", "archived_at"},
         datetime_fields={"archived_at"},
     )
+
+    if "topic_type_id" in data:
+        raw = data.get("topic_type_id")
+        if raw in (None, ""):
+            topic.topic_type_id = None
+        else:
+            type_row = _type_in_workspace(int(raw), topic.workspace_id)
+            if type_row is None:
+                return jsonify({"error": "topic type not found"}), 400
+            topic.topic_type_id = type_row.id
 
     if "tag_ids" in data:
         EntityTag.query.filter_by(entity_type="topic", entity_id=topic.id).delete(

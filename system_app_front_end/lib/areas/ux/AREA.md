@@ -112,7 +112,8 @@ Phone uses its own shell ([`shell/phone_app_shell.dart`](shell/phone_app_shell.d
 - Open user-created task views
 - Open the **Objects map** (info object graph) — listed after topics
 - Reach the archive
-- Create a topic, view, or tag from the centered sidebar **+** — a context-menu bubble lists the three choices; each opens its own create dialog (tags are filtered on the objects map, not listed as a sidebar section)
+- Create a topic, view, tag, or **topic type** from the centered sidebar **+** — a context-menu bubble lists the choices; each opens its own create dialog (tags are filtered on the objects map, not listed as a sidebar section)
+- Topic types are user-defined. The sidebar has one section per type, plus Main (Home) and Others (untyped non-Home topics). Configure types from Preferences, or create one from **+**.
 
 The sidebar is navigation only. It never edits content.
 
@@ -128,7 +129,7 @@ The sidebar is navigation only. It never edits content.
 | View chrome | Floating capsule on the view page | Sections/topics, add section, reorder frames |
 | AI actions | Bottom bar | Pinned actions, the actions menu, and the agent prompt — see [production agent](../production_agent/AREA.md) |
 | Automations | Bottom bar | Manage rules — see [automations](../automations/AREA.md) |
-| Preferences | Bottom bar | App settings, shortcut bindings |
+| Preferences | Bottom bar | App settings, shortcut bindings, topic types |
 
 Context menus are built on [`widgets/app_context_menu.dart`](widgets/app_context_menu.dart) so they behave and look consistent.
 
@@ -152,7 +153,7 @@ Default keys match the English name’s letter (`D`etails, `T`ask, `T`able, `G`r
 ## Rules
 
 - Section changes swap the main pane only. Never rebuild or hide the sidebar and bottom bar on desktop.
-- On desktop, document insert tools join the centered bottom-bar group beside preferences / automations / AI — same baseline, not above the bar and not pinned to a screen edge.
+- On desktop, preferences and automations sit at the **start** of the bottom bar (left in English, right in Hebrew). Document insert tools and AI stay in the remaining center, on the same baseline — not above the bar.
 - Navigation never mutates content. Opening, browsing, and arranging are separate from editing.
 - Every menu action is also reachable without the menu where it makes sense (shortcut or inline control).
 - Overlay modes (arrange, bring file, previews) must be cancellable without saving.

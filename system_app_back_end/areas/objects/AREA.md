@@ -117,6 +117,7 @@ Deleting anything that contains objects must cascade, or the database keeps orph
 ## Rules
 
 - A task exists once. Views reference it; they never copy it.
+- Topic types are not tags. Tags stay on objects (and leftover topic tag rows). Classification lives in `topic_types`.
 - Ordering is explicit (`list_order_index`), never implied by id.
 - Creating an object via `POST /files/:id/objects` must also insert its embed block — an object with no block is invisible.
 - Never delete a container without its cascade.

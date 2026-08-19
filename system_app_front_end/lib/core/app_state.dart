@@ -17,6 +17,7 @@ import '../areas/objects/data/object_embed.dart';
 import './models/tag.dart';
 import '../areas/objects/data/task.dart';
 import '../areas/files/data/topic.dart';
+import '../areas/files/data/topic_type.dart';
 import '../areas/automations/automation_service.dart';
 import '../areas/production_agent/agent_run_defaults.dart';
 import '../areas/production_agent/agent_service.dart';
@@ -32,6 +33,7 @@ import '../areas/objects/data/object_service.dart';
 import './services/tag_service.dart';
 import '../areas/objects/data/task_service.dart';
 import '../areas/files/data/topic_service.dart';
+import '../areas/files/data/topic_type_service.dart';
 import '../areas/objects/data/view_layout.dart';
 import '../areas/objects/data/view_service.dart';
 import '../areas/ux/layout/topic_file_slots.dart';
@@ -53,6 +55,7 @@ class AppState extends ChangeNotifier {
   AppState() : _api = ApiService() {
     _bootstrap = BootstrapService(_api);
     _topics = TopicService(_api);
+    _topicTypes = TopicTypeService(_api);
     _files = FileService(_api);
     _objects = ObjectService(_api);
     _views = ViewService(_api);
@@ -68,6 +71,7 @@ class AppState extends ChangeNotifier {
   final ApiService _api;
   late final BootstrapService _bootstrap;
   late final TopicService _topics;
+  late final TopicTypeService _topicTypes;
   late final FileService _files;
   late final ObjectService _objects;
   late final ViewService _views;
@@ -86,6 +90,7 @@ class AppState extends ChangeNotifier {
   int? workspaceId;
 
   List<Topic> allTopics = [];
+  List<TopicType> topicTypes = [];
   List<AppTag> allTags = [];
   List<AppView> userViews = [];
   List<AiAction> aiActions = [];
@@ -182,21 +187,30 @@ class AppState extends ChangeNotifier {
   bool get isRtl => strings.isRtl;
 
   List<Topic> get activeTopics => allTopics.where((t) => !t.isArchived).toList();
-  List<Topic> get projects => _topicsForTag('project');
-  List<Topic> get processes => _topicsForTag('process');
-  List<Topic> get areas => _topicsForTag('area');
-  List<Topic> get others => allTopics
-      .where((t) => t.primaryTag == null || t.primaryTag == 'other')
-      .toList();
 
-  static const topicTypeTagNames = {'project', 'process', 'area', 'other'};
+  List<Topic> get untypedTopics => [
+    for (final topic in activeTopics)
+      if (!topic.isMain && topic.topicTypeId == null) topic,
+  ];
 
-  /// Freeform object tags (excludes topic classification tags).
-  List<AppTag> get objectTags =>
-      allTags.where((t) => !topicTypeTagNames.contains(t.name)).toList();
+  List<Topic> topicsOfType(int typeId) => [
+    for (final topic in activeTopics)
+      if (!topic.isMain && topic.topicTypeId == typeId) topic,
+  ];
 
-  List<Topic> _topicsForTag(String tag) =>
-      allTopics.where((t) => t.primaryTag == tag).toList();
+  TopicType? topicTypeById(int? id) {
+    if (id == null) return null;
+    for (final type in topicTypes) {
+      if (type.id == id) return type;
+    }
+    return null;
+  }
+
+  String topicTypeDisplayName(TopicType type) =>
+      strings.topicTypeLabel(type.name);
+
+  /// Object tags are freeform. Types live on `topic_types`, not as tags.
+  List<AppTag> get objectTags => allTags;
 
   Future<void> initialize() async {
     loading = true;
@@ -227,6 +241,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _reloadAll() async {
     allTopics = await _topics.listTopics(workspaceId: workspaceId);
+    topicTypes = await _topicTypes.list(workspaceId: workspaceId);
     allTags = await _tags.listTags(workspaceId: workspaceId);
     userViews = await _views.listViews(workspaceId: workspaceId);
     await loadArchive();
@@ -585,18 +600,19 @@ class AppState extends ChangeNotifier {
 
   Future<void> createTopic({
     required String name,
-    required String type,
+    int? topicTypeId,
+    int? cloneFromTopicId,
     String? icon,
     String? color,
   }) async {
     if (workspaceId == null) return;
-    final tag = allTags.where((t) => t.name == type).firstOrNull;
     final topic = await _topics.createTopic(
       name: name,
       workspaceId: workspaceId!,
       icon: icon,
       color: color,
-      tagIds: tag != null ? [tag.id] : null,
+      topicTypeId: topicTypeId,
+      cloneFromTopicId: cloneFromTopicId,
     );
     allTopics = [...allTopics, topic];
     await selectTopic(topic);
@@ -608,12 +624,19 @@ class AppState extends ChangeNotifier {
     String? icon,
     String? color,
     String? fileLayout,
+    int? topicTypeId,
+    bool clearTopicType = false,
   }) async {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
     if (icon != null) body['icon'] = icon;
     if (color != null) body['color'] = color;
     if (fileLayout != null) body['file_layout'] = fileLayout;
+    if (clearTopicType) {
+      body['topic_type_id'] = null;
+    } else if (topicTypeId != null) {
+      body['topic_type_id'] = topicTypeId;
+    }
     final updated = await _topics.updateTopic(topic.id, body);
     allTopics = allTopics.map((t) => t.id == updated.id ? updated : t).toList();
     if (selectedTopic?.id == updated.id) selectedTopic = updated;
@@ -636,17 +659,93 @@ class AppState extends ChangeNotifier {
   Future<void> duplicateTopic(Topic topic) async {
     await createTopic(
       name: '${topic.name} copy',
-      type: topic.primaryTag ?? 'other',
+      topicTypeId: topic.topicTypeId,
+      cloneFromTopicId: topic.id,
     );
   }
 
+  Future<List<AppFile>> filesForTopic(int topicId) =>
+      _files.listFilesForTopic(topicId);
+
+  Future<Topic> loadTopic(int id) => _topics.getTopic(id);
+
+  Future<List<AppFile>> templateFilesForType(TopicType type) async {
+    final templateId = type.templateTopicId;
+    if (templateId == null) return const [];
+    return filesForTopic(templateId);
+  }
+
+  // --- Topic types ----------------------------------------------------------
+
+  Future<void> loadTopicTypes() async {
+    if (workspaceId == null) return;
+    topicTypes = await _topicTypes.list(workspaceId: workspaceId);
+    notifyListeners();
+  }
+
+  Future<TopicType> createTopicType({required String name}) async {
+    if (workspaceId == null) {
+      throw StateError('workspace not ready');
+    }
+    final type = await _topicTypes.create(
+      workspaceId: workspaceId!,
+      name: name,
+    );
+    topicTypes = [...topicTypes, type];
+    notifyListeners();
+    return type;
+  }
+
+  Future<void> updateTopicType(
+    TopicType type,
+    Map<String, dynamic> changes,
+  ) async {
+    if (changes.isEmpty) return;
+    final updated = await _topicTypes.update(type.id, changes);
+    topicTypes = [
+      for (final row in topicTypes)
+        if (row.id == updated.id) updated else row,
+    ];
+    notifyListeners();
+  }
+
+  Future<void> deleteTopicType(TopicType type) async {
+    await _topicTypes.delete(type.id);
+    topicTypes = topicTypes.where((t) => t.id != type.id).toList();
+    notifyListeners();
+  }
+
+  List<Automation> automationsForType(int typeId) => [
+    for (final automation in automations)
+      if (AutomationScope.kindOf(automation.scope) == AutomationScope.topicType &&
+          AutomationScope.typeIdOf(automation.scope) == typeId)
+        automation,
+  ];
+
+  List<AiAction> aiActionsForType(int? typeId) => [
+    for (final action in aiActions)
+      if (action.topicTypeId == typeId) action,
+  ];
+
   // --- Saved AI actions: prompts on buttons ---------------------------------
 
-  /// Actions with a seat on the AI bar, in slot order.
+  /// Actions with a seat on the AI bar, in slot order, for what is open.
   List<AiAction> get barAiActions {
-    final pinned = aiActions.where((a) => a.isOnBar).toList()
-      ..sort((a, b) => a.barSlot!.compareTo(b.barSlot!));
+    final typeId = selectedTopic?.topicTypeId;
+    final pinned = [
+      for (final action in aiActions)
+        if (action.isOnBar && action.visibleOnTopicType(typeId)) action,
+    ]..sort((a, b) => a.barSlot!.compareTo(b.barSlot!));
     return pinned;
+  }
+
+  /// Globals plus actions for the open topic's type (Home / untyped: globals).
+  List<AiAction> get visibleAiActions {
+    final typeId = selectedTopic?.topicTypeId;
+    return [
+      for (final action in aiActions)
+        if (action.visibleOnTopicType(typeId)) action,
+    ];
   }
 
   AiAction? aiActionInSlot(int slot) {
@@ -680,6 +779,7 @@ class AppState extends ChangeNotifier {
     required String applyMode,
     String icon = '',
     int? barSlot,
+    int? topicTypeId,
   }) async {
     if (workspaceId == null) {
       throw StateError('workspace not ready');
@@ -691,6 +791,7 @@ class AppState extends ChangeNotifier {
       applyMode: applyMode,
       icon: icon,
       barSlot: barSlot,
+      topicTypeId: topicTypeId,
     );
     // A new pin takes its slot from whoever had it, so reload rather than
     // append — the other rows changed too.

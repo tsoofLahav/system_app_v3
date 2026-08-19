@@ -75,6 +75,12 @@ def embed_ids_in_text(text: str) -> set[int]:
     return {int(m.group(2)) for m in _POINTER_LINE_RE.finditer(text or "")}
 
 
+def iter_embed_pointers(text: str):
+    """Yield ``(tag, object_id)`` for each pointer line, in document order."""
+    for match in _POINTER_RE.finditer(text or ""):
+        yield match.group(1).lower(), int(match.group(2))
+
+
 def _escape_cell(text: str) -> str:
     """Escape cell text for agent/table rows joined by visible ``\\t``.
 

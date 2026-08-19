@@ -10,7 +10,7 @@ Follow this whenever you add labels, rows with controls, or dialogs.
 | Database / API | English keys only | `process_refresh`, `weekly`, `Daily` |
 | On-screen UI | Translated via `AppStrings` | `עדכון כל התהליכים` |
 
-- User-written content (topic names, task titles, notes) stays as typed — never auto-translated.
+- User-written content (topic names, **topic type names**, task titles, notes) stays as typed — never auto-translated.
 - Built-in catalog items (view types, file names, automation definitions) map English keys → localized labels in [`app_strings.dart`](app_strings.dart).
 
 ### Adding a new built-in catalog item
@@ -66,6 +66,8 @@ Use [`DialogActionsRow`](../../areas/ui/bilingual_layout.dart) inside `AppGlassD
 ### When physical placement is required (rare)
 
 If a control must stay on a specific **physical** side regardless of language (e.g. a canvas tool), document why in code and use explicit `Alignment.centerLeft` / `Alignment.centerRight`. Default to directional layout unless there is a strong reason.
+
+**Numeric clock notation is LTR in both languages.** Hour then colon then minute (`08:00`) does not swap in Hebrew. Wrap that row in `Directionality(textDirection: TextDirection.ltr)` (see [`time_picker_dialog.dart`](../../areas/ui/time_picker_dialog.dart)). Do not use this for ordinary labels or chrome.
 
 ## Strings checklist
 

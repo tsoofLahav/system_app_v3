@@ -1,4 +1,4 @@
-from models import File, Tag, Topic, Workspace, db
+from models import File, Topic, Workspace, db
 from areas.files.services.document_v3 import empty_document_json
 from areas.production_agent.services.prompt import ensure_agent_config
 
@@ -32,11 +32,6 @@ def bootstrap_if_empty() -> dict:
         meta={"automation_anchor": "daily"},
     )
     db.session.add(daily)
-
-    for tag_name in ("project", "process", "area", "other"):
-        db.session.add(
-            Tag(workspace_id=workspace.id, name=tag_name, color=None)
-        )
 
     ensure_agent_config(workspace.id)
 

@@ -78,10 +78,17 @@ class AutomationScope {
     'kind': topic,
     'topic_id': topicId,
   };
-  static Map<String, dynamic> ofType(String tag) => {
+  static Map<String, dynamic> ofType(int typeId) => {
     'kind': topicType,
-    'tag': tag,
+    'topic_type_id': typeId,
   };
+
+  static int? typeIdOf(Map<String, dynamic> scope) {
+    final raw = scope['topic_type_id'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return null;
+  }
 
   /// The topic a placeless step lands in, when the scope names exactly one.
   static int? targetTopicId(Map<String, dynamic> scope) =>

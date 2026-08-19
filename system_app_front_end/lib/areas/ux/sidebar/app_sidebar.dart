@@ -159,43 +159,28 @@ class _AppSidebarState extends State<AppSidebar> {
                       children: [
                         _ViewSection(state: state, onSelectView: _selectView),
                         const _SidebarDivider(),
-                        _TopicSection(
-                          title: s['projects'],
-                          topics: state.projects,
-                          selected: state.selectedTopic,
-                          isViewMode: state.isViewMode ||
-                              state.isArchiveMode ||
-                              state.isDiagramMode,
-                          state: state,
-                          onSelect: _selectTopic,
-                        ),
-                        _TopicSection(
-                          title: s['processes'],
-                          topics: state.processes,
-                          selected: state.selectedTopic,
-                          isViewMode:
-                              state.isViewMode || state.isDiagramMode,
-                          state: state,
-                          onSelect: _selectTopic,
-                        ),
-                        _TopicSection(
-                          title: s['areas'],
-                          topics: state.areas,
-                          selected: state.selectedTopic,
-                          isViewMode:
-                              state.isViewMode || state.isDiagramMode,
-                          state: state,
-                          onSelect: _selectTopic,
-                        ),
-                        _TopicSection(
-                          title: s['others'],
-                          topics: state.others,
-                          selected: state.selectedTopic,
-                          isViewMode:
-                              state.isViewMode || state.isDiagramMode,
-                          state: state,
-                          onSelect: _selectTopic,
-                        ),
+                        for (final type in state.topicTypes)
+                          _TopicSection(
+                            title: state.topicTypeDisplayName(type),
+                            topics: state.topicsOfType(type.id),
+                            selected: state.selectedTopic,
+                            isViewMode: state.isViewMode ||
+                                state.isArchiveMode ||
+                                state.isDiagramMode,
+                            state: state,
+                            onSelect: _selectTopic,
+                          ),
+                        if (state.untypedTopics.isNotEmpty)
+                          _TopicSection(
+                            title: s['others'],
+                            topics: state.untypedTopics,
+                            selected: state.selectedTopic,
+                            isViewMode: state.isViewMode ||
+                                state.isArchiveMode ||
+                                state.isDiagramMode,
+                            state: state,
+                            onSelect: _selectTopic,
+                          ),
                         const _SidebarDivider(),
                         _DiagramEntry(state: state, onOpen: _openDiagram),
                         if (!widget.isPhone) ...[
@@ -440,9 +425,7 @@ class _ArchiveSection extends StatefulWidget {
 
 class _ArchiveSectionState extends State<_ArchiveSection> {
   bool expanded = false;
-  var _projectsExpanded = true;
-  var _processesExpanded = true;
-  var _areasExpanded = true;
+  final Set<int> _collapsedTypeIds = {};
   var _othersExpanded = true;
 
   @override
@@ -484,39 +467,26 @@ class _ArchiveSectionState extends State<_ArchiveSection> {
               onTap: () => widget.state.selectArchiveTopic(index.daily!.topic),
               onEdit: () {},
             ),
-          if (index.projects.isNotEmpty)
-            _ArchiveTopicGroup(
-              title: s['projects'],
-              expanded: _projectsExpanded,
-              onToggle: () =>
-                  setState(() => _projectsExpanded = !_projectsExpanded),
-              entries: index.projects,
-              state: widget.state,
-            ),
-          if (index.processes.isNotEmpty)
-            _ArchiveTopicGroup(
-              title: s['processes'],
-              expanded: _processesExpanded,
-              onToggle: () =>
-                  setState(() => _processesExpanded = !_processesExpanded),
-              entries: index.processes,
-              state: widget.state,
-            ),
-          if (index.areas.isNotEmpty)
-            _ArchiveTopicGroup(
-              title: s['areas'],
-              expanded: _areasExpanded,
-              onToggle: () => setState(() => _areasExpanded = !_areasExpanded),
-              entries: index.areas,
-              state: widget.state,
-            ),
-          if (index.others.isNotEmpty)
+          for (final type in widget.state.topicTypes)
+            if (index.topicsOfType(type.id).isNotEmpty)
+              _ArchiveTopicGroup(
+                title: widget.state.topicTypeDisplayName(type),
+                expanded: !_collapsedTypeIds.contains(type.id),
+                onToggle: () => setState(() {
+                  if (!_collapsedTypeIds.add(type.id)) {
+                    _collapsedTypeIds.remove(type.id);
+                  }
+                }),
+                entries: index.topicsOfType(type.id),
+                state: widget.state,
+              ),
+          if (index.untypedTopics.isNotEmpty)
             _ArchiveTopicGroup(
               title: s['others'],
               expanded: _othersExpanded,
               onToggle: () =>
                   setState(() => _othersExpanded = !_othersExpanded),
-              entries: index.others,
+              entries: index.untypedTopics,
               state: widget.state,
             ),
         ],
@@ -667,6 +637,8 @@ class _TopicSectionState extends State<_TopicSection> {
       name: result.name,
       icon: result.icon,
       color: result.color,
+      topicTypeId: result.topicTypeId,
+      clearTopicType: result.topicTypeId == null,
     );
   }
 

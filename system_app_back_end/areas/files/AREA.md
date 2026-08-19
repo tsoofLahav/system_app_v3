@@ -14,7 +14,7 @@ Everything the user sees in a file is stored in **one column**: `files.document_
 |--------|---------|
 | `document_json` | **Editor text (v4)** — marker string with header `%%system_app_document v4` (column name kept for now) |
 | `name`, `topic_id`, `order_index` | Placement inside a topic |
-| `meta` (JSONB) | Automation anchors and misc flags |
+| `meta` (JSONB) | Automation anchors, `template_slot`, and misc flags |
 | `archived_at` | Soft archive |
 
 Legacy **v3 JSON** in this column is migrated to editor text on read (`File.to_dict`) and rewritten on the next save. **Spans are dropped** on migrate (span encoding is a follow-up). Spec: frontend [`DOCUMENT_TEXT.md`](../../../system_app_front_end/lib/areas/files/editor/DOCUMENT_TEXT.md).
@@ -95,6 +95,15 @@ Format examples: [`content/production_agent/reference.md`](../../../content/prod
 | [`routes/files.py`](routes/files.py) | File CRUD |
 | [`routes/file_versions.py`](routes/file_versions.py) | History and `POST /files/:id/diff` |
 | [`routes/topics.py`](routes/topics.py) | Topics — the container files live in |
+| [`routes/topic_types.py`](routes/topic_types.py) | User-defined topic kinds (`/topic-types`) |
+| [`services/template_slots.py`](services/template_slots.py) | Stamp `files.meta.template_slot` when a topic becomes a type template |
+| [`services/clone_topic_skeleton.py`](services/clone_topic_skeleton.py) | Copy file structure (names, layout, empty objects) onto a new topic |
+
+## Topic types
+
+A type is a row in `topic_types`, not a tag. `topics.topic_type_id` is optional (Home stays untyped). A type may point at a live `template_topic_id`. Creating a topic of that type copies the template's **structure only**: file names, `file_layout`, `order_index`, `template_slot`, and empty objects of the same kind. Changing a topic's type later does not re-apply the template. Duplicate uses `clone_from_topic_id` so it copies that topic, not only the type template.
+
+`files.meta.template_slot` is a stable key (`doc`, `plan`, …) stamped from the file name when the topic is set as the template, so automations can still find “the doc file” after a rename. Copies inherit the same key. Hebrew or empty names fall back to `file-{id}`.
 
 ## Sending documents to the app
 

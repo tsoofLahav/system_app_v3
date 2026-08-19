@@ -76,7 +76,7 @@ Code: [`areas/objects/`](system_app_back_end/areas/objects/) · Frontend data/vi
 | # | Sev | Issue |
 |---|-----|-------|
 | O1 | **P1** | Task identity is destroyed by agent applies (see F5). `view_task_memberships` survive pointing at archived tasks. Fixing F5 fixes this. |
-| O2 | **P2** | Tag mutation is unreachable from the app: `POST /tags`, `DELETE /tags/:id`, and `POST`/`DELETE /tags/assign` have no frontend caller, so topics cannot actually be tagged. Tags are the v3 replacement for hardcoded topic types. |
+| O2 | — | ~~Tag mutation is unreachable… Tags are the v3 replacement for hardcoded topic types.~~ **Done** — types are their own table (`topic_types`); tags stay for objects. |
 | O3 | **P2** | Nested caret inside object fields is not yet linked to `DocumentTextFlow` as segments — Exit-below bridges work; full in-flow segments remain. |
 | O4 | **P2** | Convert selected text → Info / list → Task list helpers exist in `AppState` but have no UI entry. |
 | O5 | **P3** | Image resize handles are not built; width lives in payload only. |

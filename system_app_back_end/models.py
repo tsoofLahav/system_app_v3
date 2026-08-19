@@ -37,6 +37,7 @@ class Topic(db.Model):
     color = db.Column(db.Text)
     order_index = db.Column(db.Integer, nullable=False, default=0)
     file_layout = db.Column(db.Text, nullable=False, default="single")
+    topic_type_id = db.Column(db.Integer, db.ForeignKey("topic_types.id"))
     archived_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -49,8 +50,31 @@ class Topic(db.Model):
             "color": self.color,
             "order_index": self.order_index,
             "file_layout": self.file_layout or "single",
+            "topic_type_id": self.topic_type_id,
             "archived_at": _iso(self.archived_at),
             "created_at": _iso(self.created_at),
+        }
+
+
+class TopicType(db.Model):
+    """A user-defined kind of topic: name, optional template, related actions."""
+
+    __tablename__ = "topic_types"
+
+    id = db.Column(db.Integer, primary_key=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id"), nullable=False)
+    name = db.Column(db.Text, nullable=False)
+    order_index = db.Column(db.Integer, nullable=False, default=0)
+    template_topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workspace_id": self.workspace_id,
+            "name": self.name,
+            "order_index": self.order_index,
+            "template_topic_id": self.template_topic_id,
         }
 
 
@@ -314,8 +338,8 @@ class ViewTaskMembership(db.Model):
 class AiAction(db.Model):
     """A prompt on a button. Not an automation — see `Automation` below.
 
-    No scope column on purpose: an action runs on whatever the user has open
-    when they press it, which is the whole point of pressing it there.
+    It still runs on whatever is open. `topic_type_id` only decides whether the
+    button is offered: null = every topic; set = that type plus the globals.
     """
 
     __tablename__ = "ai_actions"
@@ -328,6 +352,7 @@ class AiAction(db.Model):
     icon = db.Column(db.Text, nullable=False, default="")
     # 1..6 = a seat on the AI bar (unique per workspace), NULL = actions menu.
     bar_slot = db.Column(db.Integer)
+    topic_type_id = db.Column(db.Integer, db.ForeignKey("topic_types.id"))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -342,6 +367,7 @@ class AiAction(db.Model):
             "apply_mode": self.apply_mode,
             "icon": self.icon or "",
             "bar_slot": self.bar_slot,
+            "topic_type_id": self.topic_type_id,
             "created_at": _iso(self.created_at),
             "updated_at": _iso(self.updated_at),
         }

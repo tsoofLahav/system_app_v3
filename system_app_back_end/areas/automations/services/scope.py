@@ -2,16 +2,19 @@
 
 Scope is one of three shapes:
 
-    {"kind": "all"}                          the whole workspace
-    {"kind": "topic", "topic_id": 3}         one topic
-    {"kind": "topic_type", "tag": "process"} every topic tagged that way
+    {"kind": "all"}                                   the whole workspace
+    {"kind": "topic", "topic_id": 3}                  one topic
+    {"kind": "topic_type", "topic_type_id": 2}        every topic of that type
 
 A single-topic scope is also the **target**: a step that has to put something
 somewhere (create a file) uses it, so the user does not name the same topic
-twice. Any broader scope leaves the step to carry its own `topic_id`.
+twice. Any broader scope leaves the step to carry its own `topic_id`, except
+create-from-slot which runs once per topic in a type scope.
 
 Rows written before this vocabulary existed hold `{"topic_ids": [...]}` and
-still resolve, so nothing has to be migrated to be readable.
+still resolve, so nothing has to be migrated to be readable. One-release
+fallback: `{"kind": "topic_type", "tag": "process"}` still resolves by tag
+name if `topic_type_id` is missing.
 """
 
 from __future__ import annotations
@@ -41,6 +44,20 @@ def topic_ids_for_tag(workspace_id: int, tag_name: str) -> list[int]:
     return [row[0] for row in rows]
 
 
+def topic_ids_for_type(workspace_id: int, type_id: int) -> list[int]:
+    rows = (
+        db.session.query(Topic.id)
+        .filter(
+            Topic.workspace_id == workspace_id,
+            Topic.topic_type_id == int(type_id),
+            Topic.archived_at.is_(None),
+        )
+        .order_by(Topic.id)
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
 def resolve_scope(scope: dict | None, *, workspace_id: int) -> dict:
     """Stored scope → the `{workspace_id, topic_ids, file_ids}` shape the agent
     tools and the actions both read."""
@@ -50,8 +67,13 @@ def resolve_scope(scope: dict | None, *, workspace_id: int) -> dict:
 
     if kind == TOPIC and scope.get("topic_id") is not None:
         resolved["topic_ids"] = [int(scope["topic_id"])]
-    elif kind == TOPIC_TYPE and scope.get("tag"):
-        resolved["topic_ids"] = topic_ids_for_tag(workspace_id, str(scope["tag"]))
+    elif kind == TOPIC_TYPE:
+        if scope.get("topic_type_id") is not None:
+            resolved["topic_ids"] = topic_ids_for_type(
+                workspace_id, int(scope["topic_type_id"])
+            )
+        elif scope.get("tag"):
+            resolved["topic_ids"] = topic_ids_for_tag(workspace_id, str(scope["tag"]))
     elif kind in (None, ALL):
         # Legacy rows: explicit ids, no kind.
         if scope.get("topic_ids"):
@@ -76,6 +98,8 @@ def describe(scope: dict | None) -> str:
     if kind == TOPIC:
         return f"topic {scope.get('topic_id')}"
     if kind == TOPIC_TYPE:
+        if scope.get("topic_type_id") is not None:
+            return f"topics of type {scope.get('topic_type_id')}"
         return f"topics tagged {scope.get('tag')!r}"
     if scope.get("topic_ids"):
         return f"topics {list(scope['topic_ids'])}"

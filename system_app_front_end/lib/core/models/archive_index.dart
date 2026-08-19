@@ -14,29 +14,22 @@ class ArchiveTopicEntry {
 }
 
 class ArchiveIndex {
-  const ArchiveIndex({
-    this.daily,
-    this.topics = const [],
-    this.projects = const [],
-    this.processes = const [],
-    this.areas = const [],
-    this.others = const [],
-  });
+  const ArchiveIndex({this.daily, this.topics = const []});
 
   final ArchiveTopicEntry? daily;
   final List<ArchiveTopicEntry> topics;
-  final List<ArchiveTopicEntry> projects;
-  final List<ArchiveTopicEntry> processes;
-  final List<ArchiveTopicEntry> areas;
-  final List<ArchiveTopicEntry> others;
 
   static const empty = ArchiveIndex();
 
-  bool get isEmpty =>
-      daily == null &&
-      topics.isEmpty &&
-      projects.isEmpty &&
-      processes.isEmpty &&
-      areas.isEmpty &&
-      others.isEmpty;
+  bool get isEmpty => daily == null && topics.isEmpty;
+
+  List<ArchiveTopicEntry> topicsOfType(int typeId) => [
+    for (final entry in topics)
+      if (entry.topic.topicTypeId == typeId) entry,
+  ];
+
+  List<ArchiveTopicEntry> get untypedTopics => [
+    for (final entry in topics)
+      if (entry.topic.topicTypeId == null) entry,
+  ];
 }

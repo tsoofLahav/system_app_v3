@@ -7,7 +7,7 @@ like a typed prompt.
 
 from flask import Blueprint, jsonify, request
 
-from models import AiAction, db
+from models import AiAction, TopicType, db
 from shared.bootstrap import default_workspace_id
 from shared.helpers import apply_updates, get_or_404
 from shared.run_config import DEFAULT_MANUAL_APPLY_MODE
@@ -18,6 +18,15 @@ from areas.production_agent.services.action_bar import (
 from areas.production_agent.services.runner import run_agent
 
 ai_actions_bp = Blueprint("ai_actions", __name__)
+
+
+def _topic_type_in_workspace(type_id, workspace_id: int) -> TopicType | None:
+    if type_id in (None, ""):
+        return None
+    row = db.session.get(TopicType, int(type_id))
+    if row is None or int(row.workspace_id) != int(workspace_id):
+        return None
+    return row
 
 
 def _pinned_slots(workspace_id: int) -> dict[int, int]:
@@ -94,6 +103,15 @@ def create_ai_action():
         apply_mode=data.get("apply_mode") or DEFAULT_MANUAL_APPLY_MODE,
         icon=data.get("icon") or "",
     )
+    if "topic_type_id" in data:
+        raw = data.get("topic_type_id")
+        if raw not in (None, ""):
+            type_row = _topic_type_in_workspace(raw, workspace_id)
+            if type_row is None:
+                return jsonify({"error": "topic type not found"}), 400
+            row.topic_type_id = type_row.id
+        else:
+            row.topic_type_id = None
     db.session.add(row)
     db.session.flush()
 
@@ -125,6 +143,16 @@ def update_ai_action(action_id):
         except (TypeError, ValueError) as error:
             return jsonify({"error": str(error)}), 400
         _write_slots(row.workspace_id, slots)
+
+    if "topic_type_id" in data:
+        raw = data.get("topic_type_id")
+        if raw in (None, ""):
+            row.topic_type_id = None
+        else:
+            type_row = _topic_type_in_workspace(raw, row.workspace_id)
+            if type_row is None:
+                return jsonify({"error": "topic type not found"}), 400
+            row.topic_type_id = type_row.id
 
     apply_updates(row, data, {"name", "prompt", "apply_mode", "icon"})
     db.session.commit()

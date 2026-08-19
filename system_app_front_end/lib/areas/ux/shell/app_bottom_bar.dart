@@ -70,7 +70,8 @@ class AppBottomBar extends StatelessWidget {
     final hasEditor = DocumentEditorRegistry.active != null;
     final diagramMode = state.isDiagramMode;
 
-    final toolSegments = _buildToolSegments(context, s, canAi);
+    final chrome = _chromeSegment(context, s);
+    final center = _centerSegments(context, s, canAi);
 
     return SafeArea(
       top: false,
@@ -79,90 +80,100 @@ class AppBottomBar extends StatelessWidget {
           horizontal: 20,
           vertical: AppBottomBarMetrics.floatMargin,
         ),
-        child: diagramMode
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(child: DiagramTagFilterBar(state: state)),
-                  const SizedBox(width: 8),
-                  ...toolSegments,
-                ],
-              )
-            : Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (hasEditor) ...[
-                      DocumentInsertBar(state: state, embedded: true),
-                      const SizedBox(width: 8),
-                    ],
-                    ...toolSegments,
-                  ],
-                ),
-              ),
+        child: Row(
+          // Preferences / automations at the start edge (left in English,
+          // right in Hebrew). Insert tools and AI stay in the remaining middle.
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            chrome,
+            const SizedBox(width: 8),
+            Expanded(
+              child: diagramMode
+                  ? DiagramTagFilterBar(state: state)
+                  : Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (hasEditor) ...[
+                            DocumentInsertBar(state: state, embedded: true),
+                            if (center.isNotEmpty) const SizedBox(width: 8),
+                          ],
+                          ...center,
+                        ],
+                      ),
+                    ),
+            ),
+            if (diagramMode && center.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              ...center,
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  List<Widget> _buildToolSegments(
+  Widget _chromeSegment(BuildContext context, AppStrings s) {
+    return GlassBarSegment(
+      height: AppBottomBarMetrics.barHeight,
+      padding: _segmentPadding,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _BarIconButton(
+            tooltip: s['preferences'],
+            icon: AppIcons.preferences,
+            onPressed: () => showPreferencesDialog(
+              context: context,
+              state: state,
+            ),
+          ),
+          _BarIconButton(
+            tooltip: s['automations'],
+            icon: AppIcons.automations,
+            onPressed: () => showAutomationDialog(
+              context: context,
+              state: state,
+            ),
+          ),
+          if (state.isDiagramMode)
+            _BarIconButton(
+              tooltip: s['diagramGraphConfig'],
+              icon: AppIcons.diagramGraphConfig,
+              onPressed: () => showDiagramGraphConfigDialog(
+                context: context,
+                state: state,
+              ),
+            ),
+          if (_showArrange)
+            _BarIconButton(
+              tooltip: s['arrangeFiles'],
+              icon: AppIcons.arrange,
+              onPressed: () => showFileArrangeOverlay(context, state),
+            ),
+          if (_showArchiveDelete)
+            _BarIconButton(
+              tooltip: state.archiveDeleteMode
+                  ? (state.archiveDeleteSelection.isEmpty
+                        ? s['archiveDeleteDone']
+                        : s['archiveDeleteConfirm'])
+                  : s['archiveDeleteSelect'],
+              icon: AppIcons.trash,
+              active: state.archiveDeleteMode,
+              onPressed: () => _handleArchiveDelete(context),
+            ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _centerSegments(
     BuildContext context,
     AppStrings s,
     bool canAi,
   ) {
     return [
-      GlassBarSegment(
-        height: AppBottomBarMetrics.barHeight,
-        padding: _segmentPadding,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _BarIconButton(
-              tooltip: s['preferences'],
-              icon: AppIcons.preferences,
-              onPressed: () => showPreferencesDialog(
-                context: context,
-                state: state,
-              ),
-            ),
-            _BarIconButton(
-              tooltip: s['automations'],
-              icon: AppIcons.automations,
-              onPressed: () => showAutomationDialog(
-                context: context,
-                state: state,
-              ),
-            ),
-            if (state.isDiagramMode)
-              _BarIconButton(
-                tooltip: s['diagramGraphConfig'],
-                icon: AppIcons.diagramGraphConfig,
-                onPressed: () => showDiagramGraphConfigDialog(
-                  context: context,
-                  state: state,
-                ),
-              ),
-            if (_showArrange)
-              _BarIconButton(
-                tooltip: s['arrangeFiles'],
-                icon: AppIcons.arrange,
-                onPressed: () => showFileArrangeOverlay(context, state),
-              ),
-            if (_showArchiveDelete)
-              _BarIconButton(
-                tooltip: state.archiveDeleteMode
-                    ? (state.archiveDeleteSelection.isEmpty
-                          ? s['archiveDeleteDone']
-                          : s['archiveDeleteConfirm'])
-                    : s['archiveDeleteSelect'],
-                icon: AppIcons.trash,
-                active: state.archiveDeleteMode,
-                onPressed: () => _handleArchiveDelete(context),
-              ),
-          ],
-        ),
-      ),
       if (_showArchiveDelete && state.archiveDeleteMode) ...[
-        const SizedBox(width: 8),
         GlassBarSegment(
           height: AppBottomBarMetrics.barHeight,
           padding: _segmentPadding,
@@ -178,9 +189,9 @@ class AppBottomBar extends StatelessWidget {
             ),
           ),
         ),
+        if (canAi || state.aiRunning) const SizedBox(width: 8),
       ],
-      if (canAi) ...[
-        const SizedBox(width: 8),
+      if (canAi)
         GlassBarSegment(
           style: AppGlassStyle.aiAccent,
           height: AppBottomBarMetrics.barHeight,
@@ -189,9 +200,8 @@ class AppBottomBar extends StatelessWidget {
           labelOnBorder: true,
           child: AiToolBar(state: state, compact: true),
         ),
-      ],
       if (state.aiRunning) ...[
-        const SizedBox(width: 8),
+        if (canAi) const SizedBox(width: 8),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [

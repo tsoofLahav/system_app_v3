@@ -9,6 +9,7 @@ def register_blueprints(app):
     from areas.automations.routes.automations import automations_bp
     from areas.files.routes.file_versions import file_versions_bp
     from areas.files.routes.files import files_bp
+    from areas.files.routes.topic_types import topic_types_bp
     from areas.files.routes.topics import topics_bp
     from areas.objects.routes.information import information_bp
     from areas.objects.routes.objects import objects_bp
@@ -25,6 +26,7 @@ def register_blueprints(app):
     app.register_blueprint(bootstrap_bp)
     app.register_blueprint(workspaces_bp)
     app.register_blueprint(topics_bp)
+    app.register_blueprint(topic_types_bp)
     app.register_blueprint(files_bp)
     app.register_blueprint(file_versions_bp)
     app.register_blueprint(objects_bp)

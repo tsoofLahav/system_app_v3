@@ -14,6 +14,7 @@ class AiAction {
     required this.applyMode,
     this.icon = '',
     this.barSlot,
+    this.topicTypeId,
   });
 
   final int id;
@@ -29,7 +30,13 @@ class AiAction {
   /// 1..6 for an action on the AI bar, null for one that lives in the menu.
   final int? barSlot;
 
+  /// Null = offered on every topic. Set = this type plus the globals.
+  final int? topicTypeId;
+
   bool get isOnBar => barSlot != null;
+
+  bool visibleOnTopicType(int? typeId) =>
+      topicTypeId == null || topicTypeId == typeId;
 
   factory AiAction.fromJson(Map<String, dynamic> json) => AiAction(
     id: json['id'] as int,
@@ -39,5 +46,6 @@ class AiAction {
     applyMode: json['apply_mode'] as String? ?? defaultConsultApplyMode,
     icon: json['icon'] as String? ?? '',
     barSlot: json['bar_slot'] as int?,
+    topicTypeId: json['topic_type_id'] as int?,
   );
 }

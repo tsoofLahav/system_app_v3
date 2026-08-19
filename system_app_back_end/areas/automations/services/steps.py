@@ -18,9 +18,9 @@ APPLY_MODES = ("review", "direct_apply", "notify_only")
 # step never accumulates fields nobody reads.
 STEP_SPECS: dict[str, tuple[str, ...]] = {
     "ai": ("action_id", "prompt", "apply_mode"),
-    "create_file": ("name", "topic_id"),
+    "create_file": ("name", "topic_id", "template_slot"),
     "unmark_tasks": ("task_list_id",),
-    "archive_files": ("file_ids", "older_than_days"),
+    "archive_files": ("file_ids", "older_than_days", "template_slot"),
 }
 
 STEP_KINDS = tuple(STEP_SPECS)
@@ -57,8 +57,9 @@ def _validate_one(step: dict, *, position: int) -> dict:
         )
     elif kind == "create_file":
         _require(
-            bool(str(kept.get("name") or "").strip()),
-            f"step {position}: a file needs a name",
+            bool(str(kept.get("name") or "").strip())
+            or bool(str(kept.get("template_slot") or "").strip()),
+            f"step {position}: a file needs a name or a template slot",
         )
     # archive_files with no extra fields means every live file in scope.
 

@@ -15,7 +15,7 @@ Row in `automations` (migration [`011_ai_actions_split.sql`](../../migrations/01
 | Field | Meaning |
 |-------|---------|
 | `name` | Shown in the automations dialog |
-| `scope` | `{"kind": "all"}` / `{"kind": "topic", "topic_id"}` / `{"kind": "topic_type", "tag"}`. Legacy `{topic_ids, file_ids}` still resolves. |
+| `scope` | `{"kind": "all"}` / `{"kind": "topic", "topic_id"}` / `{"kind": "topic_type", "topic_type_id"}`. One-release fallback still reads `"tag": "process"`. Legacy `{topic_ids, file_ids}` still resolves. |
 | `trigger` | `{"type": "schedule"}` today. Event types are stored but not dispatched. |
 | `steps` | `[{ "kind": …, …params }]` — the work, in order |
 | `schedule` | `daily HH:MM`, `weekly DAY HH:MM`, `monthly PLACEMENT DAY HH:MM` |
@@ -23,16 +23,16 @@ Row in `automations` (migration [`011_ai_actions_split.sql`](../../migrations/01
 | `enabled` | Disabled automations never fire automatically |
 | `last_run_at`, `next_run_at` | Scheduling bookkeeping |
 
-A single-topic scope is also the **target**: a step that has to put something somewhere (create a file) uses it. Broader scope leaves the step to carry its own `topic_id`.
+A single-topic scope is also the **target**: a step that has to put something somewhere (create a file) uses it. Broader scope leaves the step to carry its own `topic_id`, except `create_file` with `template_slot`, which skeleton-clones that slot into **each** topic in a type scope.
 
 ## Steps
 
 | Kind | What it does |
 |------|----------------|
 | `ai` | Run a prompt, either inline or from a saved `action_id`. Each step has its own `apply_mode`. |
-| `create_file` | Create a file. `{date}` `{weekday}` `{month}` `{year}` in the name move with the calendar. |
+| `create_file` | Create a file. `{date}` `{weekday}` `{month}` `{year}` in the name move with the calendar. With `template_slot`, copy that empty shell from the type template into every topic in scope. |
 | `unmark_tasks` | Send done tasks in scope (or one `task_list_id`) back to active. |
-| `archive_files` | Soft-archive files in scope; optional `older_than_days` or `file_ids`. |
+| `archive_files` | Soft-archive files in scope; optional `older_than_days`, `file_ids`, or `template_slot`. |
 
 Adding a kind is an entry in [`services/steps.py`](services/steps.py) `STEP_SPECS` and a function in [`services/actions/`](services/actions/). Validation refuses a bad series when it is saved, not at 2am when it fires. Steps stop at the first error; earlier ones stand.
 

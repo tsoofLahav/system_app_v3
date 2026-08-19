@@ -24,6 +24,12 @@ class AppFile {
 
   bool get isArchived => archivedAt != null;
 
+  String? get templateSlot {
+    final value = meta['template_slot'];
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+    return null;
+  }
+
   factory AppFile.fromJson(Map<String, dynamic> json) {
     final rawMeta = json['meta'];
     return AppFile(
@@ -32,7 +38,7 @@ class AppFile {
       name: json['name'] as String,
       documentJson: json['document_json'] as String? ?? '',
       orderIndex: json['order_index'] as int? ?? 0,
-      meta: rawMeta is Map<String, dynamic>
+      meta: rawMeta is Map
           ? Map<String, dynamic>.from(rawMeta)
           : const {},
       archivedAt: json['archived_at'] as String?,

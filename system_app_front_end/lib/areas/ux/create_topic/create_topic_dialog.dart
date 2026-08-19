@@ -4,21 +4,22 @@ import '../../../core/app_state.dart';
 import '../../files/data/topic.dart';
 import '../topic/topic_appearance.dart';
 import '../../ui/adaptive_dialog.dart';
-import '../../ui/app_segmented_toggle.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/dialog_field_style.dart';
+import '../../ui/dialog_metrics.dart';
 import './topic_color_dialog.dart';
 import './topic_emoji_dialog.dart';
 
 class CreateTopicResult {
   CreateTopicResult({
     required this.name,
-    required this.type,
+    required this.topicTypeId,
     required this.icon,
     required this.color,
   });
 
   final String name;
-  final String type;
+  final int? topicTypeId;
   final String icon;
   final String color;
 }
@@ -28,11 +29,13 @@ class EditTopicResult {
     required this.name,
     required this.icon,
     required this.color,
+    required this.topicTypeId,
   });
 
   final String name;
   final String icon;
   final String color;
+  final int? topicTypeId;
 }
 
 class CreateTopicDialog extends StatefulWidget {
@@ -49,7 +52,7 @@ class CreateTopicDialog extends StatefulWidget {
 
 class _CreateTopicDialogState extends State<CreateTopicDialog> {
   final _nameController = TextEditingController();
-  late String _type;
+  int? _topicTypeId;
   late String _icon;
   late Color _pickerColor;
 
@@ -61,11 +64,11 @@ class _CreateTopicDialogState extends State<CreateTopicDialog> {
     final topic = widget.topic;
     if (topic != null) {
       _nameController.text = topic.name;
-      _type = topic.primaryTag ?? 'project';
+      _topicTypeId = topic.topicTypeId;
       _icon = topic.icon ?? TopicAppearance.defaultEmoji;
       _pickerColor = TopicAppearance.colorFromHex(topic.color);
     } else {
-      _type = 'project';
+      _topicTypeId = widget.state.topicTypes.firstOrNull?.id;
       _icon = TopicAppearance.defaultEmoji;
       _pickerColor = TopicAppearance.colorFromHex(TopicAppearance.defaultColor);
     }
@@ -75,6 +78,53 @@ class _CreateTopicDialogState extends State<CreateTopicDialog> {
   void dispose() {
     _nameController.dispose();
     super.dispose();
+  }
+
+  String _typeLabel(int? id) {
+    final s = widget.state.strings;
+    if (id == null) return s['untyped'];
+    final type = widget.state.topicTypeById(id);
+    return type == null ? s['untyped'] : widget.state.topicTypeDisplayName(type);
+  }
+
+  Future<void> _pickType() async {
+    final types = widget.state.topicTypes;
+    final picked = await showAppDialog<int?>(
+      context: context,
+      builder: (ctx) => AppAdaptiveDialogShell(
+        title: Text(widget.state.strings['type']),
+        width: AppDialogMetrics.wideWidth,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(widget.state.strings['cancel']),
+          ),
+        ],
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 320),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              ListTile(
+                dense: true,
+                selected: _topicTypeId == null,
+                title: Text(widget.state.strings['untyped']),
+                onTap: () => Navigator.pop(ctx, -1),
+              ),
+              for (final type in types)
+                ListTile(
+                  dense: true,
+                  selected: type.id == _topicTypeId,
+                  title: Text(widget.state.topicTypeDisplayName(type)),
+                  onTap: () => Navigator.pop(ctx, type.id),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _topicTypeId = picked < 0 ? null : picked);
   }
 
   @override
@@ -93,14 +143,19 @@ class _CreateTopicDialogState extends State<CreateTopicDialog> {
             if (isEdit) {
               Navigator.pop(
                 context,
-                EditTopicResult(name: name, icon: _icon, color: _colorHex),
+                EditTopicResult(
+                  name: name,
+                  icon: _icon,
+                  color: _colorHex,
+                  topicTypeId: _topicTypeId,
+                ),
               );
             } else {
               Navigator.pop(
                 context,
                 CreateTopicResult(
                   name: name,
-                  type: _type,
+                  topicTypeId: _topicTypeId,
                   icon: _icon,
                   color: _colorHex,
                 ),
@@ -121,19 +176,16 @@ class _CreateTopicDialogState extends State<CreateTopicDialog> {
               autofocus: !isEdit,
             ),
           ),
-          const SizedBox(height: DialogFieldStyle.fieldGap),
-          AppDialogChoiceField<String>(
-            label: s['type'],
-            // A topic's type decides where it files itself in the sidebar, so
-            // it is settled once, at creation.
-            enabled: !isEdit,
-            options: [
-              for (final type in const ['project', 'process', 'area', 'other'])
-                AppSegmentedOption(value: type, label: s.topicTypeLabel(type)),
-            ],
-            selected: _type,
-            onSelected: (type) => setState(() => _type = type),
-          ),
+          if ((!isEdit || widget.topic?.isMain != true) &&
+              (widget.state.topicTypes.isNotEmpty || isEdit)) ...[
+            const SizedBox(height: DialogFieldStyle.fieldGap),
+            AppDialogPickerField(
+              label: s['type'],
+              preview: const AppIcon(AppIcons.bringFile, size: 16),
+              valueLabel: _typeLabel(_topicTypeId),
+              onTap: _pickType,
+            ),
+          ],
           const SizedBox(height: DialogFieldStyle.fieldGap),
           AppDialogPickerField(
             label: s['emoji'],

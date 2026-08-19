@@ -6,6 +6,7 @@ import '../../../core/platform/app_form_factor.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_segmented_toggle.dart';
 import '../../ui/dialog_field_style.dart';
+import '../topic_types/topic_type_dialog.dart';
 import './shortcut_preferences_dialog.dart';
 
 Future<void> showPreferencesDialog({
@@ -56,6 +57,20 @@ class PreferencesDialog extends StatelessWidget {
                 ],
                 selected: state.language,
                 onSelected: state.setLanguage,
+              ),
+              const SizedBox(height: DialogFieldStyle.fieldGap),
+              AppDialogField(
+                label: s['topicTypes'],
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: FilledButton(
+                    onPressed: () => showTopicTypesListDialog(
+                      context: context,
+                      state: state,
+                    ),
+                    child: Text(s['manageTopicTypes']),
+                  ),
+                ),
               ),
               if (!isPhoneLayout) ...[
                 const SizedBox(height: DialogFieldStyle.fieldGap),

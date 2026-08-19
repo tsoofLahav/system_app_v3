@@ -5,6 +5,7 @@ import '../../objects/tags/create_tag_dialog.dart';
 import '../../objects/views/create_view_dialog.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../create_topic/create_topic_dialog.dart';
+import '../topic_types/topic_type_dialog.dart';
 import '../widgets/app_context_menu.dart';
 
 /// Bubble menu anchored at [globalPosition] (typically the sidebar `+`).
@@ -23,6 +24,7 @@ Future<void> showSidebarCreateMenu({
     arrow: ContextMenuArrow.down,
     entries: [
       AppContextMenuItem(value: 'topic', label: s['topic']),
+      AppContextMenuItem(value: 'topicType', label: s['topicType']),
       AppContextMenuItem(value: 'view', label: s['view']),
       AppContextMenuItem(value: 'tag', label: s['tag']),
     ],
@@ -31,6 +33,8 @@ Future<void> showSidebarCreateMenu({
   switch (choice) {
     case 'topic':
       await createTopicFromDialog(context, state);
+    case 'topicType':
+      await createTopicTypeFromDialog(context: context, state: state);
     case 'view':
       await createViewFromDialog(context, state);
     case 'tag':
@@ -46,7 +50,7 @@ Future<void> createTopicFromDialog(BuildContext context, AppState state) async {
   if (result == null) return;
   await state.createTopic(
     name: result.name,
-    type: result.type,
+    topicTypeId: result.topicTypeId,
     icon: result.icon,
     color: result.color,
   );

@@ -50,7 +50,7 @@ class _AiActionsDialogState extends State<_AiActionsDialog> {
       state: state,
       action: action,
     );
-    if (saved && mounted) setState(() {});
+    if (saved != null && mounted) setState(() {});
   }
 
   Future<void> _togglePin(AiAction action) async {
@@ -90,7 +90,7 @@ class _AiActionsDialogState extends State<_AiActionsDialog> {
   @override
   Widget build(BuildContext context) {
     final s = state.strings;
-    final actions = state.aiActions;
+    final actions = state.visibleAiActions;
 
     return AppAdaptiveDialogShell(
       title: Text(s['aiActions']),

@@ -28,7 +28,7 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | [`editor/object_embed_component.dart`](editor/object_embed_component.dart) | SE `ComponentBuilder` wrapping embed UIs |
 | [`rich_text/`](rich_text/) | Span formatting used inside embeds (tables, info, …) |
 | [`rich_text/rtl/`](rich_text/rtl/RTL.md) | **RTL solution** — Hebrew/BiDi direction helpers |
-| [`data/`](data/) | File and topic models + API services |
+| [`data/`](data/) | File, topic, and topic-type models + API services. `files.meta.template_slot` is the stable key automations use |
 
 ### Document vs Super Editor (one sync rule)
 

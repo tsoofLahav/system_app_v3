@@ -91,6 +91,65 @@ class AutomationSchedule {
     return const AutomationSchedule(kind: 'daily');
   }
 
+  static String weekdayFromDart(int dartWeekday) {
+    final index = (dartWeekday - 1).clamp(0, 6);
+    return weekdays[index];
+  }
+
+  int get dartWeekday {
+    final index = weekdays.indexOf(weekday);
+    return (index < 0 ? 0 : index) + 1;
+  }
+
+  /// First / second / third / last occurrence of this date's weekday in its month.
+  static String placementFromDate(DateTime date) {
+    final days = _weekdayDaysInMonth(date.year, date.month, date.weekday);
+    final index = days.indexOf(date.day);
+    if (index < 0) return 'first';
+    if (index == days.length - 1) return 'last';
+    return placements[index.clamp(0, placements.length - 2)];
+  }
+
+  /// Weekly takes the weekday; monthly also infers first / second / third / last.
+  AutomationSchedule applyingDate(DateTime date) {
+    final day = weekdayFromDart(date.weekday);
+    if (kind == 'monthly') {
+      return copyWith(weekday: day, placement: placementFromDate(date));
+    }
+    if (kind == 'weekly') {
+      return copyWith(weekday: day);
+    }
+    return this;
+  }
+
+  /// Which days in [month] this schedule would fire (weekly: every matching
+  /// weekday; monthly: the inferred placement).
+  bool marksDate(DateTime date) {
+    if (kind == 'weekly') return date.weekday == dartWeekday;
+    if (kind == 'monthly') {
+      final day = occurrenceDay(date.year, date.month);
+      return day != null && date.day == day;
+    }
+    return false;
+  }
+
+  int? occurrenceDay(int year, int month) {
+    final days = _weekdayDaysInMonth(year, month, dartWeekday);
+    if (days.isEmpty) return null;
+    if (placement == 'last') return days.last;
+    final index = placements.indexOf(placement);
+    if (index < 0 || index >= days.length) return null;
+    return days[index];
+  }
+
+  static List<int> _weekdayDaysInMonth(int year, int month, int dartWeekday) {
+    final last = DateTime(year, month + 1, 0).day;
+    return [
+      for (var day = 1; day <= last; day++)
+        if (DateTime(year, month, day).weekday == dartWeekday) day,
+    ];
+  }
+
   static String _weekday(String raw) {
     if (weekdays.contains(raw)) return raw;
     for (final entry in weekdayKeys.entries) {

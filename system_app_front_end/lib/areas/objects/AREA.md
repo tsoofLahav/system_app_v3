@@ -108,6 +108,7 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 - Deleting an embed goes through the object service so the backing row is cleaned up.
 - Any object may link to any object; do not hardcode allowed link pairs.
 - Do not put document caret/mark/menu rules here — that is files.
+- Topic types are not tags. Object-tag UI lists every workspace tag.
 
 ## Shipped vs next
 

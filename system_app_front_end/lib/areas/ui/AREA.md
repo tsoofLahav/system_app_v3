@@ -20,7 +20,7 @@ Loudest last:
 | **File panes** — the working surfaces | Topic colour at a gentle strength, thin saturated topic border |
 | **View list frames** — section/topic cards on the view page | Same file-pane treatment (`NoteCard` / `filePaneDecoration`); topic frames use topic colour, section frames use optional section colour |
 | **Sidebar** | Soft glass floating above the canvas — never paints the topic wash itself |
-| **Floating chrome** — bottom bar, insert bar, pills | Glass or solid white with a lift shadow; insert tools join the centered bottom-bar group on the same baseline |
+| **Floating chrome** — bottom bar, insert bar, pills | Glass or solid white with a lift shadow; insert tools stay on the bottom-bar baseline; preferences / automations sit at the start edge |
 | **Dialogs** | Glass panels over a light scrim |
 | **Context menus** | The topmost layer — cooler frost, tighter rows |
 
@@ -167,7 +167,7 @@ Marking and selection are **gentle by rule**: a translucent fill or a hairline r
 
 ## Dialogs and menus
 
-**Hug the content.** Dialogs and choice bubbles are sized and padded for what they hold — not for empty air. Default max width is `AppDialogMetrics.maxWidth` (280); only pickers/lists that need room use `wideWidth` (400). Chrome padding is 12/10/12/8; field gaps are 8. Do not pass a custom `width:` on a dialog unless the body truly overflows at 280. Metrics live in [`dialog_metrics.dart`](dialog_metrics.dart).
+**Hug the content.** Dialogs and choice bubbles are sized and padded for what they hold — not for empty air. Default max width is `AppDialogMetrics.maxWidth` (280); only pickers/lists that need room use `wideWidth` (400), and the automation builder uses `extraWideWidth` (460) so a calendar and clock can sit side by side. Chrome padding is 12/10/12/8; field gaps are 8. Do not pass a custom `width:` on a dialog unless the body truly overflows at 280. Metrics live in [`dialog_metrics.dart`](dialog_metrics.dart).
 
 The preferences dialog is the **reference** glass dialog. Every other dialog uses the same shell and the same field language.
 
@@ -175,7 +175,8 @@ The preferences dialog is the **reference** glass dialog. Every other dialog use
 |------|--------|-------|
 | Standard dialog | `AppAdaptiveDialogShell` → `AppGlassDialog` | Max width 280, radius 16, padding 12/10/12/8, tight hairline dividers |
 | Phone dialog | `AppAdaptiveDialogShell` | Radius 16, inset 14×16, tint 0.94, matching tight padding |
-| Wide dialog | same shell + `wideWidth` | 400 — colour/emoji pickers, shortcut list, automations |
+| Wide dialog | same shell + `wideWidth` | 400 — colour/emoji pickers, shortcut list, automations list |
+| Extra-wide dialog | same shell + `extraWideWidth` | 460 — automation builder (calendar + clock) |
 | Confirm | `showAppConfirmDialog` | Same shell; destructive answers use amber-brown text |
 | Full-screen overlay | `OverlayDialogShell` + `OverlayDialogStyle` | Scrim black 18%, cards radius 14 |
 | Context menu (right-click **and** file `⋯`) | `../ux/widgets/app_context_menu.dart` | Bubble radius 12, rows 28 high, 11.5px labels, `menuTint` frost, highlight in `primary`; compact width 128 + downward caret for anchored create menus |
@@ -188,8 +189,10 @@ Route every dialog through [`adaptive_dialog.dart`](adaptive_dialog.dart). Field
 |--------|------|
 | `AppDialogField` | The field's **name sits above it** in 11px meta text — never as a hint inside the field |
 | `AppDialogChoiceField` | Multiple choices as chips; the chosen one is filled in **bright teal** (`primaryBright`) |
-| `AppDialogPickerField` | Opens a **secondary** dialog for the value (colour, emoji) — a dialog never grows a picker inside itself |
+| `AppDialogPickerField` | Opens a **secondary** dialog for the value (colour, emoji) — a dialog never grows a picker inside itself, except the automation builder's When section |
 | Colour | [`color_dialog.dart`](color_dialog.dart) → `showAppColorDialog` | Full HSV spectrum + hex field; optional preset swatches. Used for topic theme, text colour, graph colour |
+| Time | [`time_picker_dialog.dart`](time_picker_dialog.dart) → `AppCompactTimePicker` | Same card size as the calendar. 24-hour numbered dial above, typed hour and minute below (no AM/PM, no dropdowns). Hour then minute stays **LTR** even in Hebrew — it is numeric clock notation. `showAppTimePicker` remains for a secondary dial if something else needs one. |
+| Calendar | [`compact_calendar.dart`](compact_calendar.dart) → `AppCompactCalendar` | Compact month grid. Presentational: marked days and labels come from the caller. |
 
 A **secondary** dialog — one opened from a dialog — keeps the same shell and gains no chrome. Depth is expressed by the scrim stacking, not by shadows getting heavier. Topic colour and emoji are picked this way from the create/edit topic dialog.
 
@@ -219,7 +222,7 @@ Every surface must work in English (LTR) and Hebrew (RTL). Use [`bilingual_layou
 | Text | [`app_typography.dart`](app_typography.dart) |
 | Glass | [`glass_surface.dart`](glass_surface.dart) |
 | Controls | [`app_segmented_toggle.dart`](app_segmented_toggle.dart), [`app_switch.dart`](app_switch.dart) |
-| Dialogs | [`adaptive_dialog.dart`](adaptive_dialog.dart), [`dialog_metrics.dart`](dialog_metrics.dart), [`color_dialog.dart`](color_dialog.dart), [`overlay_dialog_shell.dart`](overlay_dialog_shell.dart), [`overlay_dialog_style.dart`](overlay_dialog_style.dart), [`dialog_field_style.dart`](dialog_field_style.dart) |
+| Dialogs | [`adaptive_dialog.dart`](adaptive_dialog.dart), [`dialog_metrics.dart`](dialog_metrics.dart), [`color_dialog.dart`](color_dialog.dart), [`time_picker_dialog.dart`](time_picker_dialog.dart), [`compact_calendar.dart`](compact_calendar.dart), [`overlay_dialog_shell.dart`](overlay_dialog_shell.dart), [`overlay_dialog_style.dart`](overlay_dialog_style.dart), [`dialog_field_style.dart`](dialog_field_style.dart) |
 | Icons | [`app_icons.dart`](app_icons.dart), [`action_icons.dart`](action_icons.dart), [`action_icon_picker.dart`](action_icon_picker.dart) |
 | Cards and previews | [`note_widgets.dart`](note_widgets.dart), [`overlay_file_preview_card.dart`](overlay_file_preview_card.dart), [`layout_preview_icon.dart`](layout_preview_icon.dart) |
 | Carousel | [`horizontal_carousel.dart`](horizontal_carousel.dart) |
@@ -237,4 +240,4 @@ Every surface must work in English (LTR) and Hebrew (RTL). Use [`bilingual_layou
 
 ## Where the style is still not honest
 
-Tracked as **U1–U5** in [`BACKLOG.md`](../../../../BACKLOG.md): the context menu and hover bubble keep some local blur values instead of an `AppGlassStyle` preset, the legacy AI diff dialog and its shell bypass `AppGlassDialog` and `AppTypography`, document heading sizes still derive from a formula (now named as `documentHeadingStyle`), some Material icons remain among the Lucide ones in older surfaces, and `AppSwitch` is themed but unused.
+Tracked as **U1–U5** in [`BACKLOG.md`](../../../../BACKLOG.md): the context menu and hover bubble keep some local blur values instead of an `AppGlassStyle` preset, the legacy AI diff dialog and its shell bypass `AppGlassDialog` and `AppTypography`, document heading sizes still derive from a formula (now named as `documentHeadingStyle`), and some Material icons remain among the Lucide ones in older surfaces.

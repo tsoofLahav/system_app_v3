@@ -11,8 +11,8 @@ Lives in the bottom bar ([`ai_tool_bar.dart`](ai_tool_bar.dart)), in reading ord
 | Control | Behavior |
 |---------|----------|
 | **Agent button** | Opens the prompt dialog ([`agent_prompt_dialog.dart`](agent_prompt_dialog.dart)) for a one-off request, with **Review changes (diff)** vs **Apply directly** (opens on apply directly — a one-off ask is lighter with the undo toast than with a diff). An action is also born here. |
-| **Pinned actions** | Up to six saved actions in slot order, each with its icon and its own key (⌘⇧2…⌘⇧7). Pressing one runs it on what is open. |
-| **⋯** | Opens the AI actions dialog ([`ai_actions_dialog.dart`](../automations/ai_actions_dialog.dart)) — the saved actions and nothing else, each with pin, edit, run and delete. |
+| **Pinned actions** | Up to six saved actions in slot order, each with its icon and its own key (⌘⇧2…⌘⇧7). Pressing one runs it on what is open. Globals always show; a type-specific pin only while a topic of that type is open. |
+| **⋯** | Opens the AI actions dialog ([`ai_actions_dialog.dart`](../automations/ai_actions_dialog.dart)) — the same filter as the bar (globals + the open type), each with pin, edit, run and delete. |
 
 The agent comes first and never moves: it is the one control that is always there, so it must always be in the same place. Everything is disabled when there is no AI context (nothing selected) or a run is already in flight — `AppState.hasAiContext` and `aiRunning` gate them, and `aiRunning` drives the busy state so the user cannot double-fire.
 
@@ -70,8 +70,8 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 |------|------|
 | [`ai_tool_bar.dart`](ai_tool_bar.dart) | Pinned action buttons, ⋯ menu, agent button |
 | [`agent_prompt_dialog.dart`](agent_prompt_dialog.dart) | Prompt + apply toggle + save-as-action, run orchestration |
-| [`ai_action.dart`](ai_action.dart) / [`ai_action_service.dart`](ai_action_service.dart) | Saved-action model and `/ai-actions` |
-| [`ai_action_edit_dialog.dart`](ai_action_edit_dialog.dart) | Rewrite a saved action |
+| [`ai_action.dart`](ai_action.dart) / [`ai_action_service.dart`](ai_action_service.dart) | Saved-action model and `/ai-actions`. Optional `topicTypeId` (null = every topic) |
+| [`ai_action_edit_dialog.dart`](ai_action_edit_dialog.dart) | Rewrite a saved action, including which type it belongs to |
 | [`agent_result_ui.dart`](agent_result_ui.dart) | Result → dialog or snackbar; runs a saved action |
 | [`pending_review_ui.dart`](pending_review_ui.dart) | Shared open-pending helper (anti double-open) |
 | [`pending_review_service.dart`](pending_review_service.dart) | GET/DELETE/finish pending |

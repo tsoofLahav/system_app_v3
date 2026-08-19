@@ -21,6 +21,7 @@ class AiActionService {
     required String applyMode,
     String icon = '',
     int? barSlot,
+    int? topicTypeId,
   }) async {
     final data =
         await _api.post('/ai-actions', {
@@ -30,6 +31,7 @@ class AiActionService {
               'apply_mode': applyMode,
               'icon': icon,
               'bar_slot': ?barSlot,
+              'topic_type_id': ?topicTypeId,
             })
             as Map<String, dynamic>;
     return AiAction.fromJson(data);

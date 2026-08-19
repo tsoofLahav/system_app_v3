@@ -85,6 +85,9 @@ class AppStrings {
   String deleteTopicMessage(String name) =>
       this['deleteTopicBody'].replaceAll('{name}', name);
 
+  String deleteTopicTypeMessage(String name) =>
+      this['deleteTopicTypeBody'].replaceAll('{name}', name);
+
   String deletePartMessage(String name) =>
       this['deletePartBody'].replaceAll('{name}', name);
 
@@ -127,6 +130,48 @@ class AppStrings {
 
   String deleteAutomationMessage(String name) =>
       this['deleteAutomationBody'].replaceAll('{name}', name);
+
+  String weeklyScheduleCaption(String dayKey) =>
+      this['weeklyScheduleCaption'].replaceAll('{day}', this[dayKey]);
+
+  String monthlyScheduleCaption(String placementKey, String dayKey) {
+    var placement = this[placementKey];
+    if (language == AppLanguage.en) placement = placement.toLowerCase();
+    return this['monthlyScheduleCaption']
+        .replaceAll('{placement}', placement)
+        .replaceAll('{day}', this[dayKey]);
+  }
+
+  static const _monthKeys = [
+    'monthJan',
+    'monthFeb',
+    'monthMar',
+    'monthApr',
+    'monthMay',
+    'monthJun',
+    'monthJul',
+    'monthAug',
+    'monthSep',
+    'monthOct',
+    'monthNov',
+    'monthDec',
+  ];
+
+  String monthYear(DateTime date) {
+    final month = this[_monthKeys[date.month - 1]];
+    if (language == AppLanguage.en) return '$month, ${date.year}';
+    return '$month ${date.year}';
+  }
+
+  List<String> get narrowWeekdaysSundayFirst => [
+        this['narrowSun'],
+        this['narrowMon'],
+        this['narrowTue'],
+        this['narrowWed'],
+        this['narrowThu'],
+        this['narrowFri'],
+        this['narrowSat'],
+      ];
 
   String reviewDecidedCount(int decided, int total) =>
       this['reviewDecidedCount']
@@ -331,6 +376,8 @@ class AppStrings {
     'scopeTopicType': 'Topic type',
     'pickTopic': 'Choose a topic',
     'automationSteps': 'Steps',
+    'builderSectionBasics': 'Details',
+    'builderSectionWhen': 'When',
     'addStep': 'Add a step',
     'addStepHint': 'Add at least one step — a file, a task reset, or an AI run.',
     'stepAi': 'Run AI',
@@ -424,6 +471,36 @@ class AppStrings {
     'editTopic': 'Edit topic',
     'name': 'Name',
     'type': 'Type',
+    'topicType': 'Topic type',
+    'topicTypes': 'Topic types',
+    'newTopicType': 'New topic type',
+    'editTopicType': 'Topic type',
+    'deleteTopicTypeTitle': 'Delete this type?',
+    'deleteTopicTypeBody': 'Delete "{name}"? Topics that still use it must be retyped first.',
+    'typeInUse': 'This type is still used.',
+    'noTopicTypes': 'No topic types yet.',
+    'untyped': 'None',
+    'template': 'Template',
+    'templateTopic': 'Template topic',
+    'pickTemplate': 'Choose a topic',
+    'noTemplate': 'No template',
+    'templateArchived': 'This template is archived. New topics still copy it.',
+    'templateFiles': 'Files copied on create',
+    'noTemplateFiles': 'This topic has no files yet.',
+    'typeAiActions': 'AI actions',
+    'typeAutomations': 'Automations',
+    'addExistingAction': 'Add an existing action',
+    'noTypeActions': 'No actions for this type yet.',
+    'noTypeAutomations': 'No automations for this type yet.',
+    'noGlobalActionsToAdd': 'Every saved action is already typed.',
+    'actionAppliesTo': 'Shown on',
+    'actionAppliesEveryTopic': 'Every topic',
+    'templateSlot': 'Template file',
+    'pickTemplateSlot': 'Choose a file from the template',
+    'createFromSlot': 'From the template',
+    'createNamedFile': 'Named file',
+    'archiveBySlot': 'Template file',
+    'archiveAllOrSlot': 'Which files',
     'emoji': 'Emoji',
     'color': 'Color',
     'filesToInclude': 'Files to include',
@@ -561,6 +638,7 @@ class AppStrings {
     'choose': 'Choose',
     'language': 'Language',
     'preferences': 'Preferences',
+    'manageTopicTypes': 'Manage types…',
     'shortcuts': 'Shortcuts',
     'shortcutHint': 'Shortcuts work when not typing in a dialog.',
     'shortcutPressKeys': 'Press shortcut…',
@@ -625,6 +703,27 @@ class AppStrings {
     'onceAMonth': 'Once a month',
     'time': 'Time',
     'chooseDay': 'Choose day',
+    'weeklyScheduleCaption': 'Every {day}',
+    'monthlyScheduleCaption': 'The {placement} {day} of each month',
+    'narrowSun': 'S',
+    'narrowMon': 'M',
+    'narrowTue': 'T',
+    'narrowWed': 'W',
+    'narrowThu': 'T',
+    'narrowFri': 'F',
+    'narrowSat': 'S',
+    'monthJan': 'January',
+    'monthFeb': 'February',
+    'monthMar': 'March',
+    'monthApr': 'April',
+    'monthMay': 'May',
+    'monthJun': 'June',
+    'monthJul': 'July',
+    'monthAug': 'August',
+    'monthSep': 'September',
+    'monthOct': 'October',
+    'monthNov': 'November',
+    'monthDec': 'December',
     'dayOfWeek': 'Day of week',
     'placementInMonth': 'Placement in month',
     'first': 'First',
@@ -859,6 +958,8 @@ class AppStrings {
     'scopeTopicType': 'סוג נושא',
     'pickTopic': 'בחר נושא',
     'automationSteps': 'שלבים',
+    'builderSectionBasics': 'פרטים',
+    'builderSectionWhen': 'מתי',
     'addStep': 'הוסף שלב',
     'addStepHint': 'הוסף לפחות שלב אחד — קובץ, איפוס משימות, או הרצת AI.',
     'stepAi': 'הרץ AI',
@@ -952,6 +1053,36 @@ class AppStrings {
     'editTopic': 'עריכת נושא',
     'name': 'שם',
     'type': 'סוג',
+    'topicType': 'סוג נושא',
+    'topicTypes': 'סוגי נושאים',
+    'newTopicType': 'סוג נושא חדש',
+    'editTopicType': 'סוג נושא',
+    'deleteTopicTypeTitle': 'למחוק את הסוג?',
+    'deleteTopicTypeBody': 'למחוק את "{name}"? נושאים שעדיין משתמשים בו צריכים סוג אחר קודם.',
+    'typeInUse': 'הסוג עדיין בשימוש.',
+    'noTopicTypes': 'אין עדיין סוגי נושאים.',
+    'untyped': 'ללא',
+    'template': 'תבנית',
+    'templateTopic': 'נושא תבנית',
+    'pickTemplate': 'בחרו נושא',
+    'noTemplate': 'אין תבנית',
+    'templateArchived': 'התבנית בארכיון. נושאים חדשים עדיין מועתקים ממנה.',
+    'templateFiles': 'קבצים שמועתקים ביצירה',
+    'noTemplateFiles': 'לנושא הזה אין עדיין קבצים.',
+    'typeAiActions': 'פעולות AI',
+    'typeAutomations': 'אוטומציות',
+    'addExistingAction': 'הוסיפו פעולה קיימת',
+    'noTypeActions': 'אין עדיין פעולות לסוג הזה.',
+    'noTypeAutomations': 'אין עדיין אוטומציות לסוג הזה.',
+    'noGlobalActionsToAdd': 'כל הפעולות השמורות כבר משויכות לסוג.',
+    'actionAppliesTo': 'מוצג ב',
+    'actionAppliesEveryTopic': 'כל נושא',
+    'templateSlot': 'קובץ תבנית',
+    'pickTemplateSlot': 'בחרו קובץ מהתבנית',
+    'createFromSlot': 'מהתבנית',
+    'createNamedFile': 'קובץ בשם',
+    'archiveBySlot': 'קובץ תבנית',
+    'archiveAllOrSlot': 'אילו קבצים',
     'emoji': 'אמוג\'י',
     'color': 'צבע',
     'filesToInclude': 'קבצים לכלול',
@@ -1089,6 +1220,7 @@ class AppStrings {
     'choose': 'בחר',
     'language': 'שפה',
     'preferences': 'העדפות',
+    'manageTopicTypes': 'ניהול סוגים…',
     'shortcuts': 'קיצורי מקלדת',
     'shortcutHint': 'קיצורי מקלדת פועלים כשאינך מקליד בתוך דו-שיח.',
     'shortcutPressKeys': 'הקש קיצור…',
@@ -1153,6 +1285,27 @@ class AppStrings {
     'onceAMonth': 'פעם בחודש',
     'time': 'שעה',
     'chooseDay': 'בחר יום',
+    'weeklyScheduleCaption': 'כל {day}',
+    'monthlyScheduleCaption': 'יום {day} ה{placement} בכל חודש',
+    'narrowSun': 'א',
+    'narrowMon': 'ב',
+    'narrowTue': 'ג',
+    'narrowWed': 'ד',
+    'narrowThu': 'ה',
+    'narrowFri': 'ו',
+    'narrowSat': 'ש',
+    'monthJan': 'ינואר',
+    'monthFeb': 'פברואר',
+    'monthMar': 'מרץ',
+    'monthApr': 'אפריל',
+    'monthMay': 'מאי',
+    'monthJun': 'יוני',
+    'monthJul': 'יולי',
+    'monthAug': 'אוגוסט',
+    'monthSep': 'ספטמבר',
+    'monthOct': 'אוקטובר',
+    'monthNov': 'נובמבר',
+    'monthDec': 'דצמבר',
     'dayOfWeek': 'יום בשבוע',
     'placementInMonth': 'מיקום בחודש',
     'first': 'ראשון',

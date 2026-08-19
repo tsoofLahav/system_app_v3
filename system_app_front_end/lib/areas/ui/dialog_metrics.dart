@@ -8,6 +8,14 @@ abstract final class AppDialogMetrics {
   /// Wider panels only when the body needs it (tables, shortcut lists).
   static const wideWidth = 400.0;
 
+  /// Calendar + compact clock side by side in the automation builder.
+  static const extraWideWidth = 460.0;
+
+  static const compactCalendarDay = 20.0;
+
+  /// Shared card size so the day and time pickers sit as a matching pair.
+  static const compactPickerCardHeight = 252.0;
+
   static const padding = EdgeInsets.fromLTRB(12, 10, 12, 8);
   static const phoneInset = EdgeInsets.symmetric(horizontal: 14, vertical: 16);
   static const phoneTitlePadding = EdgeInsets.fromLTRB(12, 10, 12, 4);
