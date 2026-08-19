@@ -69,6 +69,7 @@ abstract final class AppContextMenu {
 
   /// Closes the currently open context menu, if any.
   static void dismissActive() {
+    dismissHint();
     final dismiss = _dismissActive;
     _dismissActive = null;
     _dismissActiveSession = null;
@@ -155,6 +156,89 @@ abstract final class AppContextMenu {
 
     overlay.insert(entry);
     return completer.future;
+  }
+
+  static OverlayEntry? _hintEntry;
+  static Timer? _hintTimer;
+
+  /// Short glass note above [globalPosition], then it disappears.
+  static void showHint({
+    required BuildContext context,
+    required Offset globalPosition,
+    required String text,
+    required bool isRtl,
+    double width = 220,
+    Duration duration = const Duration(seconds: 4),
+  }) {
+    dismissHint();
+    dismissActive();
+    final overlay = Overlay.of(context, rootOverlay: true);
+    late OverlayEntry entry;
+
+    void close() {
+      if (!identical(_hintEntry, entry)) return;
+      dismissHint();
+    }
+
+    entry = OverlayEntry(
+      builder: (overlayContext) {
+        final overlayBox =
+            Overlay.of(overlayContext, rootOverlay: true).context
+                    .findRenderObject()
+                as RenderBox;
+        final local = overlayBox.globalToLocal(globalPosition);
+        final left = (local.dx - width / 2).clamp(
+          8.0,
+          overlayBox.size.width - width - 8,
+        );
+        return Directionality(
+          textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: close,
+                ),
+              ),
+              Positioned(
+                left: left,
+                width: width,
+                bottom: overlayBox.size.height - local.dy + 6,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _BubbleMenuPanel(
+                      width: width,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 4, 10, 6),
+                          child: Text(
+                            text,
+                            style: _labelStyle(),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const _BubbleArrowDown(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    _hintEntry = entry;
+    overlay.insert(entry);
+    _hintTimer = Timer(duration, close);
+  }
+
+  static void dismissHint() {
+    _hintTimer?.cancel();
+    _hintTimer = null;
+    _hintEntry?.remove();
+    _hintEntry = null;
   }
 
   /// Flat list menu for keyboard-only selection (↑/↓, Enter, Esc).

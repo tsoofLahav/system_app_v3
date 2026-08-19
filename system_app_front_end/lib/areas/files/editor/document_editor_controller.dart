@@ -8,6 +8,8 @@ class DocumentEditorController {
     required this.flushPendingChanges,
     this.focusedTaskId,
     this.markedTextForAgent,
+    this.applyTextAction,
+    this.isFocused,
   });
 
   final int fileId;
@@ -20,6 +22,12 @@ class DocumentEditorController {
 
   /// Selection, or caret line/paragraph when nothing is marked — for agent hints.
   final String? Function()? markedTextForAgent;
+
+  /// Bold / italic / clipboard / emoji when the document caret has focus.
+  final Future<void> Function(String action)? applyTextAction;
+
+  /// True while this file's Super Editor focus node owns the keyboard.
+  final bool Function()? isFocused;
 }
 
 /// Tracks every open file editor. Inserts go to the **last claimed** file —

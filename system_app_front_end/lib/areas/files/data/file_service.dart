@@ -1,4 +1,5 @@
 import './app_file.dart';
+import '../../../core/models/archive_files_page.dart';
 import '../../../core/services/api_service.dart';
 
 class FileService {
@@ -8,6 +9,11 @@ class FileService {
 
   Future<List<AppFile>> listFilesForTopic(int topicId) async {
     final data = await _api.get('/topics/$topicId/files') as List<dynamic>;
+    return data.map((e) => AppFile.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<AppFile>> listAllFiles() async {
+    final data = await _api.get('/files') as List<dynamic>;
     return data.map((e) => AppFile.fromJson(e as Map<String, dynamic>)).toList();
   }
 
@@ -58,9 +64,37 @@ class FileService {
     await _api.delete('/files/$id');
   }
 
-  Future<List<AppFile>> listArchivedForTopic(int topicId) async {
-    final data =
-        await _api.get('/topics/$topicId/archive/files') as List<dynamic>;
-    return data.map((e) => AppFile.fromJson(e as Map<String, dynamic>)).toList();
+  Future<ArchiveFilesPage> listArchivedForTopic(
+    int topicId, {
+    int limit = 24,
+    int offset = 0,
+    String? query,
+  }) async {
+    final params = <String>[
+      'limit=$limit',
+      'offset=$offset',
+      if (query != null && query.trim().isNotEmpty)
+        'q=${Uri.encodeQueryComponent(query.trim())}',
+    ];
+    final data = await _api.get(
+      '/topics/$topicId/archive/files?${params.join('&')}',
+    );
+    if (data is List) {
+      final files = data
+          .map((e) => AppFile.fromJson(e as Map<String, dynamic>))
+          .toList();
+      return ArchiveFilesPage(
+        files: files,
+        total: files.length,
+        hasMore: false,
+        headerTextsByFileId: const {},
+      );
+    }
+    return ArchiveFilesPage.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<String> agentTextForFile(int id) async {
+    final data = await _api.get('/files/$id/agent-text') as Map<String, dynamic>;
+    return data['agent_text'] as String? ?? '';
   }
 }

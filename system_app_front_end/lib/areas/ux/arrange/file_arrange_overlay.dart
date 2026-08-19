@@ -272,6 +272,11 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
     return (_overlayWidth * 0.62).clamp(300.0, 420.0);
   }
 
+  Topic _topicFor(AppFile file) =>
+      widget.state.canvasTopicFor(widget.topic, file);
+
+  Color _accentFor(AppFile file) => TopicAppearance.accentFor(_topicFor(file));
+
   Future<void> _save() async {
     if (_saving) return;
     setState(() => _saving = true);
@@ -345,7 +350,6 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   @override
   Widget build(BuildContext context) {
     final s = widget.state.strings;
-    final accent = TopicAppearance.accentFor(widget.topic);
     final hasHidden = _draft.hidden.isNotEmpty;
 
     return Focus(
@@ -387,8 +391,8 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
                             ),
                             files: _draft.shown,
                             layoutId: _draft.layoutId,
-                            topic: widget.topic,
-                            accent: accent,
+                            topicFor: _topicFor,
+                            accentFor: _accentFor,
                             fileNameFor: (file) =>
                                 widget.state.fileDisplayName(file.name),
                             onFileTap: _onShownFileTap,
@@ -416,7 +420,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
                     focused: _focusZone == ArrangeFocusZone.hidden,
                     child: SizedBox(
                       height: _carouselHeight,
-                      child: _buildHiddenCarousel(accent, s),
+                      child: _buildHiddenCarousel(s),
                     ),
                   ),
                 ],
@@ -435,7 +439,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
 
   /// The files the layout has no room for. This strip is the only place they
   /// appear, so it is how the user gets one back on screen.
-  Widget _buildHiddenCarousel(Color accent, AppStrings s) {
+  Widget _buildHiddenCarousel(AppStrings s) {
     final files = _draft.hidden;
 
     return Listener(
@@ -486,9 +490,9 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
                       height: _carouselHeight,
                       child: OverlayFilePreviewCard(
                         file: file,
-                        topic: widget.topic,
+                        topic: _topicFor(file),
                         fileName: widget.state.fileDisplayName(file.name),
-                        accent: accent,
+                        accent: _accentFor(file),
                         preview:
                             _previewsByFileId[file.id] ?? OverlayFilePreviewData.empty,
                         previewsLoaded: _previewsLoaded,

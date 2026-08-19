@@ -220,12 +220,12 @@ void main() {
       }
     });
 
-    test('consult keeps Cmd+Shift+1 — it is always on the bar', () {
-      final consult = kShortcutCatalog
+    test('agent keeps Cmd+Shift+1 — it is always on the bar', () {
+      final agent = kShortcutCatalog
           .firstWhere((a) => a.id == ShortcutActionIds.aiConsult);
-      expect(consult.defaultBinding.keyId, LogicalKeyboardKey.digit1.keyId);
-      expect(consult.defaultBinding.meta, isTrue);
-      expect(consult.defaultBinding.shift, isTrue);
+      expect(agent.defaultBinding.keyId, LogicalKeyboardKey.digit1.keyId);
+      expect(agent.defaultBinding.meta, isTrue);
+      expect(agent.defaultBinding.shift, isTrue);
     });
 
     test('no two catalog actions want the same keys', () {

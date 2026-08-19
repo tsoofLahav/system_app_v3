@@ -45,8 +45,15 @@ def test_topic_file_list_includes_documents():
     )
 
 
-def test_archived_file_list_includes_documents():
-    assert _is_true(_include_document_arg(files_routes.list_archived_files_by_topic))
+def test_archived_file_list_omits_documents():
+    source = inspect.getsource(files_routes.list_archived_files_by_topic)
+    assert "list_archived_files_for_topic" in source
+    assert "include_document=True" not in source
+
+
+def test_agent_text_route_exists():
+    source = inspect.getsource(files_routes)
+    assert '"/files/<int:file_id>/agent-text"' in source
 
 
 def test_single_file_includes_documents():

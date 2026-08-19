@@ -37,7 +37,7 @@ void main() {
     expect(binding.displayLabel(), contains(']'));
   });
 
-  test('toActivator builds SingleActivator with modifiers', () {
+  test('toActivator follows the binding, including Shift+- aliases', () {
     final binding = ShortcutBinding(
       keyId: LogicalKeyboardKey.keyH.keyId,
       meta: true,
@@ -45,10 +45,21 @@ void main() {
     );
 
     final activator = binding.toActivator();
-    expect(activator, isA<SingleActivator>());
-    expect((activator as SingleActivator).trigger, LogicalKeyboardKey.keyH);
-    expect(activator.meta, isTrue);
-    expect(activator.shift, isTrue);
+    expect(activator, isA<BindingShortcutActivator>());
+    expect(
+      (activator as BindingShortcutActivator).binding,
+      binding,
+    );
+
+    final sizeDown = ShortcutBinding(
+      keyId: LogicalKeyboardKey.minus.keyId,
+      meta: true,
+      shift: true,
+    );
+    expect(
+      sizeDown.toActivator().triggers,
+      contains(LogicalKeyboardKey.underscore),
+    );
   });
 
   test('isValid requires modifier or function key', () {
@@ -67,5 +78,28 @@ void main() {
       ShortcutBinding(keyId: LogicalKeyboardKey.f1.keyId).isValid,
       isTrue,
     );
+  });
+
+  testWidgets('Cmd+Shift+- matches when the key is reported as underscore', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const SizedBox());
+    final binding = ShortcutBinding(
+      keyId: LogicalKeyboardKey.minus.keyId,
+      meta: true,
+      shift: true,
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    final event = KeyDownEvent(
+      physicalKey: PhysicalKeyboardKey.minus,
+      logicalKey: LogicalKeyboardKey.underscore,
+      timeStamp: Duration.zero,
+      character: '_',
+    );
+    expect(binding.matchesHardware(event), isTrue);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
   });
 }

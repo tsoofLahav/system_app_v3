@@ -5,6 +5,7 @@ import '../../files/data/app_file.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
+import '../topic/topic_appearance.dart';
 
 class ArchiveFileGrid extends StatelessWidget {
   const ArchiveFileGrid({
@@ -16,6 +17,7 @@ class ArchiveFileGrid extends StatelessWidget {
     this.deleteMode = false,
     this.markedForDelete = const {},
     this.onToggleDelete,
+    this.onContextMenu,
   });
 
   final List<AppFile> files;
@@ -25,9 +27,15 @@ class ArchiveFileGrid extends StatelessWidget {
   final bool deleteMode;
   final Set<int> markedForDelete;
   final ValueChanged<AppFile>? onToggleDelete;
+  final void Function(AppFile file, Offset globalPosition)? onContextMenu;
 
   @override
   Widget build(BuildContext context) {
+    final topic = state.selectedArchiveTopic;
+    final accent =
+        topic == null ? null : TopicAppearance.accentFor(topic);
+    final isMain = topic?.isMain ?? false;
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -43,6 +51,19 @@ class ArchiveFileGrid extends StatelessWidget {
         final marked = markedForDelete.contains(file.id);
         final selected = !deleteMode && file.id == selectedFileId;
         final title = state.fileDisplayName(file.name);
+        final decoration = accent != null
+            ? AppColors.filePaneDecoration(
+                accent,
+                file.id,
+                isMainTopic: isMain,
+              )
+            : BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: AppColors.noteTop,
+                border: Border.all(
+                  color: AppColors.noteBorder.withValues(alpha: 0.55),
+                ),
+              );
 
         return Material(
           color: Colors.transparent,
@@ -51,21 +72,28 @@ class ArchiveFileGrid extends StatelessWidget {
             onTap: deleteMode
                 ? () => onToggleDelete?.call(file)
                 : () => onSelect(file),
+            onSecondaryTapUp: deleteMode || onContextMenu == null
+                ? null
+                : (details) => onContextMenu!(file, details.globalPosition),
+            onLongPress: deleteMode || onContextMenu == null
+                ? null
+                : () {
+                    final box = context.findRenderObject() as RenderBox?;
+                    if (box == null) return;
+                    onContextMenu!(
+                      file,
+                      box.localToGlobal(box.size.center(Offset.zero)),
+                    );
+                  },
             child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                color: marked
-                    ? AppColors.primary.withValues(alpha: 0.16)
-                    : selected
-                    ? AppColors.primary.withValues(alpha: 0.12)
-                    : AppColors.noteTop,
+              decoration: decoration.copyWith(
                 border: Border.all(
                   color: marked
                       ? AppColors.primary.withValues(alpha: 0.72)
                       : selected
-                      ? AppColors.primary.withValues(alpha: 0.55)
-                      : AppColors.noteBorder.withValues(alpha: 0.55),
-                  width: marked || selected ? 1.2 : 0.8,
+                          ? AppColors.primary.withValues(alpha: 0.55)
+                          : AppColors.noteBorder.withValues(alpha: 0.45),
+                  width: marked || selected ? 1.4 : 0.8,
                 ),
               ),
               child: Stack(
@@ -87,18 +115,16 @@ class ArchiveFileGrid extends StatelessWidget {
                           ),
                         ),
                         const Spacer(),
-                        if (file.archivedAt != null) ...[
+                        if (file.archivedAt != null)
                           Text(
-                            file.archivedAt!,
+                            _archiveDateLabel(file.archivedAt!),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.start,
                             style: AppTypography.metaStyle.copyWith(
                               fontSize: 9,
                               color: AppColors.textHint.withValues(alpha: 0.85),
                             ),
                           ),
-                        ],
                       ],
                     ),
                   ),
@@ -113,7 +139,7 @@ class ArchiveFileGrid extends StatelessWidget {
                         ),
                         child: const Padding(
                           padding: EdgeInsets.all(2),
-                          child: Icon(
+                          child: AppIcon(
                             AppIcons.check,
                             size: 12,
                             color: Colors.white,
@@ -129,4 +155,14 @@ class ArchiveFileGrid extends StatelessWidget {
       },
     );
   }
+}
+
+String _archiveDateLabel(String iso) {
+  final parsed = DateTime.tryParse(iso);
+  if (parsed == null) return iso;
+  final local = parsed.toLocal();
+  final y = local.year.toString().padLeft(4, '0');
+  final m = local.month.toString().padLeft(2, '0');
+  final d = local.day.toString().padLeft(2, '0');
+  return '$y-$m-$d';
 }

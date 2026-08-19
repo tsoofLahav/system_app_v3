@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import './shortcut_binding.dart';
@@ -86,6 +87,15 @@ class ShortcutBindingsStore {
   }
 
   bool hasOverride(String actionId) => _overrides.containsKey(actionId);
+
+  String? actionIdMatchingHardware(KeyEvent event) {
+    for (final action in kShortcutCatalog) {
+      final binding = bindingFor(action.id);
+      if (!binding.isValid) continue;
+      if (binding.matchesHardware(event)) return action.id;
+    }
+    return null;
+  }
 
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();

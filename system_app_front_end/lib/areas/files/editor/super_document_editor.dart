@@ -210,6 +210,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           flushPendingChanges: _flushPendingChanges,
           focusedTaskId: _focusedTaskId,
           markedTextForAgent: _markedTextForAgent,
+          applyTextAction: _handleTextMenuAction,
+          isFocused: () => _focusNode.hasFocus,
         ),
       );
       unawaited(_loadEmbedsQuietly());
@@ -351,9 +353,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   Future<void> _loadEmbedsQuietly() async {
     await widget.state.loadEmbedsForFile(widget.file.id, notify: false);
     if (!mounted) return;
-    setState(() {
-      _embedsSnapshot = widget.state.embedsByFileId[widget.file.id];
-    });
+    _embedsSnapshot = widget.state.embedsByFileId[widget.file.id];
+    _scheduleEmbedStructureRebuild();
   }
 
   void _tryFocusPendingObject() {
@@ -399,6 +400,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       _embeds.where((e) => e.id == objectId).firstOrNull;
 
   int? _focusedTaskId() {
+    final fromField = BlockTextFocusRegistry.activeTaskId;
+    if (fromField != null) return fromField;
     final sel = _composer.selection;
     if (sel == null) return null;
     final node = _doc.getNodeById(sel.extent.nodeId);
@@ -1265,7 +1268,12 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       case 'text:paste':
         if (_composer.selection != null) _docOps.paste();
       default:
-        if (action.startsWith('text:color:') &&
+        if (action.startsWith('text:emoji:')) {
+          final emoji = action.substring('text:emoji:'.length);
+          if (emoji.isNotEmpty) {
+            _editor.execute([InsertPlainTextAtCaretRequest(emoji)]);
+          }
+        } else if (action.startsWith('text:color:') &&
             action != 'text:color:pick' &&
             action != 'text:color:clear') {
           final hex = action.substring('text:color:'.length);
@@ -1275,8 +1283,24 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   void _applyFontSizeDelta(double delta) {
-    final sel = _composer.selection;
-    if (sel == null || sel.isCollapsed) return;
+    var sel = _composer.selection;
+    if (sel == null) return;
+    if (sel.isCollapsed) {
+      final node = _doc.getNodeById(sel.extent.nodeId);
+      if (node is! TextNode) return;
+      final length = node.text.length;
+      if (length <= 0) return;
+      sel = DocumentSelection(
+        base: DocumentPosition(
+          nodeId: node.id,
+          nodePosition: const TextNodePosition(offset: 0),
+        ),
+        extent: DocumentPosition(
+          nodeId: node.id,
+          nodePosition: TextNodePosition(offset: length),
+        ),
+      );
+    }
     final base =
         AppTypography.documentParagraphStyle.fontSize ?? 12.5;
     // Bump relative to the size already on the text — not always base±delta.

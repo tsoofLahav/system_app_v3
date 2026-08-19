@@ -52,6 +52,7 @@ class AppFile {
     int? orderIndex,
     Map<String, dynamic>? meta,
     String? archivedAt,
+    bool clearArchivedAt = false,
   }) {
     return AppFile(
       id: id,
@@ -60,7 +61,7 @@ class AppFile {
       documentJson: documentJson ?? this.documentJson,
       orderIndex: orderIndex ?? this.orderIndex,
       meta: meta ?? this.meta,
-      archivedAt: archivedAt ?? this.archivedAt,
+      archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
       createdAt: createdAt,
     );
   }

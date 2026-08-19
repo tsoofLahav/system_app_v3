@@ -13,8 +13,8 @@ class ArrangeLayoutPreview extends StatelessWidget {
     super.key,
     required this.files,
     required this.layoutId,
-    required this.topic,
-    required this.accent,
+    required this.topicFor,
+    required this.accentFor,
     required this.fileNameFor,
     required this.onFileTap,
     this.onFileSecondaryTap,
@@ -25,8 +25,8 @@ class ArrangeLayoutPreview extends StatelessWidget {
 
   final List<AppFile> files;
   final String layoutId;
-  final Topic topic;
-  final Color accent;
+  final Topic Function(AppFile file) topicFor;
+  final Color Function(AppFile file) accentFor;
   final String Function(AppFile file) fileNameFor;
   final void Function(AppFile file) onFileTap;
   final void Function(AppFile file)? onFileSecondaryTap;
@@ -45,9 +45,9 @@ class ArrangeLayoutPreview extends StatelessWidget {
             SizedBox.expand(
               child: OverlayFilePreviewCard(
                 file: files[i],
-                topic: topic,
+                topic: topicFor(files[i]),
                 fileName: fileNameFor(files[i]),
-                accent: accent,
+                accent: accentFor(files[i]),
                 preview: previewsByFileId[files[i].id] ??
                     OverlayFilePreviewData.fromFile(files[i]),
                 previewsLoaded: previewsLoaded,

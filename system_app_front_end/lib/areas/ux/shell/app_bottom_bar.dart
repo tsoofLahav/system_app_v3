@@ -15,6 +15,7 @@ import '../../files/editor/document_editor_controller.dart';
 import '../../files/editor/document_insert_bar.dart';
 import '../../objects/diagram/diagram_graph_config_dialog.dart';
 import '../../objects/diagram/diagram_tag_filter_bar.dart';
+import './chrome_anchors.dart';
 import './preferences_dialog.dart';
 
 abstract final class AppBottomBarMetrics {
@@ -121,6 +122,7 @@ class AppBottomBar extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _BarIconButton(
+            buttonKey: ChromeAnchors.preferencesButton,
             tooltip: s['preferences'],
             icon: AppIcons.preferences,
             onPressed: () => showPreferencesDialog(
@@ -255,16 +257,19 @@ class _BarIconButton extends StatelessWidget {
     required this.icon,
     required this.onPressed,
     this.active = false,
+    this.buttonKey,
   });
 
   final String tooltip;
   final IconData icon;
   final VoidCallback onPressed;
   final bool active;
+  final Key? buttonKey;
 
   @override
   Widget build(BuildContext context) {
     return IconButton(
+      key: buttonKey,
       tooltip: tooltip,
       padding: const EdgeInsets.all(_iconTapPadding),
       constraints: const BoxConstraints(minWidth: 34, minHeight: 34),

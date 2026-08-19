@@ -16,6 +16,8 @@ import '../../ui/app_typography.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/dialog_field_style.dart';
 import '../../ui/dialog_metrics.dart';
+import '../shell/chrome_anchors.dart';
+import '../widgets/app_context_menu.dart';
 import '../widgets/topic_emoji.dart';
 
 Future<void> showTopicTypesListDialog({
@@ -28,20 +30,21 @@ Future<void> showTopicTypesListDialog({
   );
 }
 
-/// Name-only create, then the type editor.
+/// Name-only create. Config is in Preferences, not opened automatically.
 Future<void> createTopicTypeFromDialog({
   required BuildContext context,
   required AppState state,
+  bool showConfigHint = true,
 }) async {
-  final name = await showAppDialog<String>(
+  final names = await showAppDialog<_TypeNames>(
     context: context,
     builder: (_) => _TopicTypeNameDialog(state: state),
   );
-  if (name == null || !context.mounted) return;
+  if (names == null || !context.mounted) return;
   try {
-    final type = await state.createTopicType(name: name);
-    if (!context.mounted) return;
-    await showTopicTypeDialog(context: context, state: state, type: type);
+    await state.createTopicType(name: names.name, nameHe: names.nameHe);
+    if (!context.mounted || !showConfigHint) return;
+    showTopicTypeConfigHint(context, state);
   } on ApiException catch (error) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -61,6 +64,26 @@ Future<void> showTopicTypeDialog({
   );
 }
 
+void showTopicTypeConfigHint(BuildContext context, AppState state) {
+  final box = ChromeAnchors.preferencesButton.currentContext
+      ?.findRenderObject() as RenderBox?;
+  if (box == null || !box.hasSize) return;
+  final anchor = box.localToGlobal(Offset(box.size.width / 2, 0));
+  AppContextMenu.showHint(
+    context: context,
+    globalPosition: anchor,
+    text: state.strings['topicTypeConfigHint'],
+    isRtl: state.strings.isRtl,
+  );
+}
+
+class _TypeNames {
+  const _TypeNames({required this.name, required this.nameHe});
+
+  final String name;
+  final String nameHe;
+}
+
 class _TopicTypeNameDialog extends StatefulWidget {
   const _TopicTypeNameDialog({required this.state});
 
@@ -72,18 +95,31 @@ class _TopicTypeNameDialog extends StatefulWidget {
 
 class _TopicTypeNameDialogState extends State<_TopicTypeNameDialog> {
   late final TextEditingController _name;
+  late final TextEditingController _nameHe;
 
   @override
   void initState() {
     super.initState();
     _name = TextEditingController();
-    _name.addListener(() => setState(() {}));
+    _nameHe = TextEditingController();
   }
 
   @override
   void dispose() {
     _name.dispose();
+    _nameHe.dispose();
     super.dispose();
+  }
+
+  bool get _ready =>
+      _name.text.trim().isNotEmpty && _nameHe.text.trim().isNotEmpty;
+
+  void _submit() {
+    if (!_ready) return;
+    Navigator.pop(
+      context,
+      _TypeNames(name: _name.text.trim(), nameHe: _nameHe.text.trim()),
+    );
   }
 
   @override
@@ -96,20 +132,38 @@ class _TopicTypeNameDialogState extends State<_TopicTypeNameDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(s['cancel']),
         ),
-        FilledButton(
-          onPressed: _name.text.trim().isEmpty
-              ? null
-              : () => Navigator.pop(context, _name.text.trim()),
-          child: Text(s['create']),
+        ListenableBuilder(
+          listenable: Listenable.merge([_name, _nameHe]),
+          builder: (context, _) {
+            return FilledButton(
+              onPressed: _ready ? _submit : null,
+              child: Text(s['create']),
+            );
+          },
         ),
       ],
-      child: AppDialogField(
-        label: s['name'],
-        child: TextField(
-          controller: _name,
-          autofocus: true,
-          decoration: DialogFieldStyle.decoration(),
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppDialogField(
+            label: s['nameEnglish'],
+            child: TextField(
+              controller: _name,
+              autofocus: true,
+              decoration: DialogFieldStyle.decoration(),
+            ),
+          ),
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          AppDialogField(
+            label: s['nameHebrew'],
+            child: TextField(
+              controller: _nameHe,
+              textDirection: TextDirection.rtl,
+              decoration: DialogFieldStyle.decoration(),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -128,7 +182,11 @@ class _TopicTypesListDialogState extends State<_TopicTypesListDialog> {
   AppState get state => widget.state;
 
   Future<void> _create() async {
-    await createTopicTypeFromDialog(context: context, state: state);
+    await createTopicTypeFromDialog(
+      context: context,
+      state: state,
+      showConfigHint: false,
+    );
     if (mounted) setState(() {});
   }
 
@@ -142,7 +200,7 @@ class _TopicTypesListDialogState extends State<_TopicTypesListDialog> {
     final confirmed = await showAppConfirmDialog(
       context: context,
       title: s['deleteTopicTypeTitle'],
-      message: s.deleteTopicTypeMessage(type.name),
+      message: s.deleteTopicTypeMessage(state.topicTypeDisplayName(type)),
       confirmLabel: s['delete'],
       cancelLabel: s['cancel'],
       destructive: true,
@@ -219,6 +277,7 @@ class _TopicTypeDialog extends StatefulWidget {
 class _TopicTypeDialogState extends State<_TopicTypeDialog> {
   AppState get state => widget.state;
   late final TextEditingController _name;
+  late final TextEditingController _nameHe;
   List<AppFile> _templateFiles = const [];
   Topic? _templateTopic;
   var _loadingFiles = false;
@@ -229,7 +288,7 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
   void initState() {
     super.initState();
     _name = TextEditingController(text: _type?.name ?? '');
-    _name.addListener(() => setState(() {}));
+    _nameHe = TextEditingController(text: _type?.nameHe ?? '');
     state.loadAutomations();
     state.loadAiActions();
     _loadTemplate();
@@ -238,6 +297,7 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
   @override
   void dispose() {
     _name.dispose();
+    _nameHe.dispose();
     super.dispose();
   }
 
@@ -271,18 +331,27 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
     }
   }
 
-  Future<void> _saveName() async {
+  Future<void> _saveAndClose() async {
     final type = _type;
     final name = _name.text.trim();
-    if (type == null || name.isEmpty || name == type.name) return;
-    try {
-      await state.updateTopicType(type, {'name': name});
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+    final nameHe = _nameHe.text.trim();
+    if (type == null) return;
+    if (name.isEmpty || nameHe.isEmpty) return;
+    if (name != type.name || nameHe != type.nameHe) {
+      try {
+        await state.updateTopicType(type, {
+          'name': name,
+          'name_he': nameHe,
+        });
+      } on ApiException catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+        return;
+      }
     }
+    if (mounted) Navigator.pop(context);
   }
 
   Future<void> _pickTemplate() async {
@@ -444,18 +513,34 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(s['close']),
         ),
-        FilledButton(
-          onPressed: _name.text.trim().isEmpty ? null : _saveName,
-          child: Text(s['save']),
+        ListenableBuilder(
+          listenable: Listenable.merge([_name, _nameHe]),
+          builder: (context, _) {
+            final ready =
+                _name.text.trim().isNotEmpty && _nameHe.text.trim().isNotEmpty;
+            return FilledButton(
+              onPressed: ready ? _saveAndClose : null,
+              child: Text(s['save']),
+            );
+          },
         ),
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AppDialogField(
-            label: s['name'],
+            label: s['nameEnglish'],
             child: TextField(
               controller: _name,
+              decoration: DialogFieldStyle.decoration(),
+            ),
+          ),
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          AppDialogField(
+            label: s['nameHebrew'],
+            child: TextField(
+              controller: _nameHe,
+              textDirection: TextDirection.rtl,
               decoration: DialogFieldStyle.decoration(),
             ),
           ),

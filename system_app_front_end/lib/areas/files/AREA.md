@@ -21,7 +21,7 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | [`model/document_text_codec.dart`](model/document_text_codec.dart) | Marker parse/serialize helpers |
 | [`model/document_buffer.dart`](model/document_buffer.dart) | Marker-range helpers (tests / legacy ops) |
 | [`model/agent_text_blocks.dart`](model/agent_text_blocks.dart) | Agent text → display blocks, each keyed to its line |
-| [`editor/read_only_document_view.dart`](editor/read_only_document_view.dart) | Draws those blocks read-only (AI diff review) |
+| [`editor/read_only_document_view.dart`](editor/read_only_document_view.dart) | Draws those blocks read-only (AI diff review and archive preview) |
 | [`editor/DOCUMENT_TEXT.md`](editor/DOCUMENT_TEXT.md) | Marker-text dialect (SoT vs agent expand) |
 | [`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md) | Fluent-text principles for embeds |
 | [`editor/embeds/`](editor/embeds/) | In-file presentation of objects (task list, info, image, graph, table) |
@@ -29,6 +29,8 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | [`rich_text/`](rich_text/) | Span formatting used inside embeds (tables, info, …) |
 | [`rich_text/rtl/`](rich_text/rtl/RTL.md) | **RTL solution** — Hebrew/BiDi direction helpers |
 | [`data/`](data/) | File, topic, and topic-type models + API services. `files.meta.template_slot` is the stable key automations use |
+
+A type's template is `template_topic_id` on that type. Set it from Preferences or by right-clicking a topic of that type. New topics copy structure only (backend). Creating a type asks for an English name and a Hebrew name; the sidebar follows the app language.
 
 ### Document vs Super Editor (one sync rule)
 
@@ -40,6 +42,10 @@ The header of a pane ([`editor/document_pane.dart`](editor/document_pane.dart)) 
 
 - Compare the typed text against the name **as shown**, not as stored. Built-in files are displayed translated (`Daily` reads `יומי`), so comparing against the stored name would rename a file to its own translation the first time focus passed through.
 - A rename arriving from elsewhere (agent, reload) refreshes the field only while it is not focused — never on top of what is being typed.
+
+A pane with `isBrought` is a file **visiting Home** from another topic (UX bring-file). It occupies a layout slot like any other file and can be rearranged with them. Edits save to that file; the ⋯ menu can dismiss that visit without archiving or deleting it.
+
+Archive preview is the same read-only document as AI review: `GET /files/:id/agent-text` (expanded fences) → `parseAgentTextBlocks` → [`ReadOnlyDocumentView`](editor/read_only_document_view.dart) in a tinted `NoteCard`. It does not mount `SuperDocumentEditor`. The archive list itself never downloads `document_json`; cards use id, name, and `archived_at`.
 
 ### One scroll owner
 
@@ -185,7 +191,7 @@ A topic shows several files at once, so several Super Editors are mounted at onc
 | Rule | Why |
 |------|-----|
 | Every editor gets `inputRole: 'file-<id>'` | The IME connection is global and shared. Without a role the second file registers as the same input, the two panes fight over the connection, and in debug super_editor throws *duplicate input IDs*. |
-| Only the file claimed in [`DocumentEditorRegistry`](editor/document_editor_controller.dart) draws a caret (`documentOverlayBuilders`) | A pane keeps its selection when it loses focus — the marking is what actions run on — so the caret is the only thing left to hide. |
+| Only the file claimed in [`DocumentEditorRegistry`](editor/document_editor_controller.dart) draws a caret (`documentOverlayBuilders`) | A pane keeps its selection when it loses focus — the marking is what actions run on — so the caret is the only thing left to hide. Text shortcuts Super Editor does not handle itself (underline, size) go through `applyTextAction` on that claimed controller. |
 
 Hiding it means swapping Super Editor's cursor layers (desktop caret + the iOS / Android handle layers) for an empty layer of the same count. Two things that look simpler do not work: **removing** a layer leaves it painting, because `ContentLayers` matches overlays by index and never deactivates one past the end of a shorter list; **styling** the caret away fails too, because the blink controller writes its own alpha over the colour, so a transparent caret comes back opaque black.
 
@@ -324,6 +330,8 @@ The display side is deliberately forgiving where the write side is strict: item 
 
 Edits mutate the Super Editor document; save serializes via the marker bridge and `PATCH document_json` (`%%system_app_document v4\n` + body). Saves are debounced and silent — typing never triggers a full editor remount from `AppState`.
 
+A newer body from elsewhere (phone, agent) is applied **into** the already-open `SuperDocumentEditor`. The topic page is not rebuilt for that. Who listens where: UX [`AREA.md` § Who rebuilds](../ux/AREA.md#who-rebuilds).
+
 In-session undo/redo uses Super Editor’s history stack.
 
 ## Keyboard / focus safety (recurring bug class)
@@ -336,7 +344,8 @@ In this area specifically:
 
 | Do | Don't |
 |----|--------|
-| `updateFile` / `updateObjectPayload` / task+info title saves with `notify: false` | `ListenableBuilder` on `AppState` around `DocumentEditor` |
+| Keep the open editor mounted; apply remote body/embed updates into it | Rebuild `MaterialApp` or the topic canvas on every `AppState` notify; wrap `DocumentEditor` in `ListenableBuilder(listenable: appState)` |
+| `updateFile` / `updateObjectPayload` / task+info title saves with `notify: false` | `notifyListeners` from a keystroke / `onChanged` path |
 | Debounce embed PATCHes; patch cache **before** `await` | PATCH + `notifyListeners` / full embed reload on every `onChanged` |
 | Super Editor `setState` only when embed **id/type/order** changes; defer with `runAfterKeystroke` if keys are down | Treat every new embeds-list identity as a reason to remount |
 | Keep controllers as SoT while focused; skip `didUpdateWidget` resync if focused or keys down | Dispose cell/task/info focus nodes mid-KeyDown |

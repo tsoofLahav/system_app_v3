@@ -4,6 +4,7 @@ import '../../../core/app_state.dart';
 import '../../files/data/app_file.dart';
 import '../../files/data/topic.dart';
 import '../../files/editor/document_pane.dart';
+import '../topic/topic_appearance.dart';
 import './file_layouts.dart';
 import './topic_file_slots.dart';
 
@@ -19,7 +20,6 @@ class FileLayoutBoard extends StatelessWidget {
     required this.files,
     required this.layoutId,
     required this.state,
-    required this.accent,
     required this.onDeleteFile,
     this.slotHeight,
   });
@@ -28,7 +28,6 @@ class FileLayoutBoard extends StatelessWidget {
   final List<AppFile> files;
   final String layoutId;
   final AppState state;
-  final Color accent;
   final void Function(AppFile file) onDeleteFile;
 
   /// Height for the layouts that fill the viewport. `row` and `grid` size
@@ -43,11 +42,16 @@ class FileLayoutBoard extends StatelessWidget {
       for (final file in files)
         SizedBox.expand(
           child: DocumentPane(
-            key: ValueKey(file.id),
-            topic: topic,
+            key: ValueKey(
+              state.isBroughtFileOnCanvas(topic, file.id)
+                  ? 'brought-${file.id}'
+                  : file.id,
+            ),
+            topic: state.canvasTopicFor(topic, file),
             file: file,
             state: state,
-            accent: accent,
+            accent: TopicAppearance.accentFor(state.canvasTopicFor(topic, file)),
+            isBrought: state.isBroughtFileOnCanvas(topic, file.id),
             onDelete: () => onDeleteFile(file),
           ),
         ),

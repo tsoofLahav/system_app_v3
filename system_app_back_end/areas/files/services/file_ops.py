@@ -49,6 +49,26 @@ def archive_file(file: File, *, when: datetime | None = None) -> File:
     return file
 
 
+def unarchive_file(file: File) -> File:
+    """Clear the archive stamp and put the file first so it is on screen."""
+    file.archived_at = None
+    _place_file_first(file)
+    return file
+
+
+def _place_file_first(file: File) -> None:
+    siblings = (
+        File.query.filter_by(topic_id=file.topic_id)
+        .filter(File.archived_at.is_(None))
+        .filter(File.id != file.id)
+        .order_by(File.order_index, File.id)
+        .all()
+    )
+    file.order_index = 0
+    for index, sibling in enumerate(siblings):
+        sibling.order_index = index + 1
+
+
 def move_file_to_topic(file: File, *, topic_id: int) -> File:
     topic = db.session.get(Topic, int(topic_id))
     if topic is None:

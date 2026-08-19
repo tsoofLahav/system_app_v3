@@ -97,6 +97,9 @@ class AppStrings {
   String archiveFileMessage(String name) =>
       this['archiveFileBody'].replaceAll('{name}', name);
 
+  String unarchiveFileMessage(String name) =>
+      this['unarchiveFileBody'].replaceAll('{name}', name);
+
   String compactUndoInFile(String file, String topic) => this['compactUndoInFile']
       .replaceAll('{file}', file)
       .replaceAll('{topic}', topic);
@@ -470,6 +473,8 @@ class AppStrings {
     'copyAllTasks': 'Copy all tasks',
     'editTopic': 'Edit topic',
     'name': 'Name',
+    'nameEnglish': 'English name',
+    'nameHebrew': 'Hebrew name',
     'type': 'Type',
     'topicType': 'Topic type',
     'topicTypes': 'Topic types',
@@ -515,6 +520,10 @@ class AppStrings {
     'archiveFileTitle': 'Archive file?',
     'archiveFileBody':
         'Move "{name}" to Archive? You can browse it later from the sidebar.',
+    'unarchiveFile': 'Unarchive',
+    'unarchiveFileTitle': 'Unarchive file?',
+    'unarchiveFileBody':
+        'Restore "{name}" to its topic? It will appear first on the page.',
     'allFilesExist': 'All available files already exist for this topic.',
     'ok': 'OK',
     'addBlock': 'Add block',
@@ -639,8 +648,10 @@ class AppStrings {
     'language': 'Language',
     'preferences': 'Preferences',
     'manageTopicTypes': 'Manage types…',
+    'topicTypeConfigHint': 'Type settings are managed from here.',
+    'useAsTypeTemplate': 'Use as template for this type',
     'shortcuts': 'Shortcuts',
-    'shortcutHint': 'Shortcuts work when not typing in a dialog.',
+    'shortcutHint': 'Text shortcuts need a caret. The rest work anywhere except inside a dialog.',
     'shortcutPressKeys': 'Press shortcut…',
     'shortcutConflict': 'Already used by {action}',
     'shortcutChange': 'Change',
@@ -651,7 +662,8 @@ class AppStrings {
     'shortcutInsertEmoji': 'Insert emoji',
     'shortcutBringFile': 'Bring file',
     'shortcutOpenArrange': 'Arrange files',
-    'shortcutCycleMainFiles': 'Cycle the files on screen',
+    'shortcutCycleMainFiles': 'Cycle files',
+    'shortcutCycleMainFilesBack': 'Cycle files backward',
     'shortcutAddFile': 'Add file',
     'shortcutAddTopic': 'Add topic',
     'shortcutAddView': 'Add view',
@@ -1052,6 +1064,8 @@ class AppStrings {
     'copyAllTasks': 'העתק את כל המשימות',
     'editTopic': 'עריכת נושא',
     'name': 'שם',
+    'nameEnglish': 'שם באנגלית',
+    'nameHebrew': 'שם בעברית',
     'type': 'סוג',
     'topicType': 'סוג נושא',
     'topicTypes': 'סוגי נושאים',
@@ -1097,6 +1111,10 @@ class AppStrings {
     'archiveFileTitle': 'להעביר לארכיון?',
     'archiveFileBody':
         'להעביר את "{name}" לארכיון? אפשר לצפות בו מאוחר יותר מהתפריט בצד.',
+    'unarchiveFile': 'שחזר מהארכיון',
+    'unarchiveFileTitle': 'לשחזר מהארכיון?',
+    'unarchiveFileBody':
+        'להחזיר את "{name}" לנושא? הוא יופיע ראשון בעמוד.',
     'allFilesExist': 'כל הקבצים הזמינים כבר קיימים לנושא זה.',
     'ok': 'אישור',
     'addBlock': 'הוסף בלוק',
@@ -1221,8 +1239,10 @@ class AppStrings {
     'language': 'שפה',
     'preferences': 'העדפות',
     'manageTopicTypes': 'ניהול סוגים…',
+    'topicTypeConfigHint': 'הגדרות הסוג מנוהלות מכאן.',
+    'useAsTypeTemplate': 'הפוך לתבנית של הסוג הזה',
     'shortcuts': 'קיצורי מקלדת',
-    'shortcutHint': 'קיצורי מקלדת פועלים כשאינך מקליד בתוך דו-שיח.',
+    'shortcutHint': 'קיצורי טקסט דורשים סמן. השאר פועלים בכל מקום, חוץ מבתוך דו-שיח.',
     'shortcutPressKeys': 'הקש קיצור…',
     'shortcutConflict': 'כבר בשימוש עבור {action}',
     'shortcutChange': 'שנה',
@@ -1233,7 +1253,8 @@ class AppStrings {
     'shortcutInsertEmoji': 'הוסף אמוג\'י',
     'shortcutBringFile': 'הבא קובץ',
     'shortcutOpenArrange': 'סידור קבצים',
-    'shortcutCycleMainFiles': 'מעבר בין קבצי עיקר',
+    'shortcutCycleMainFiles': 'מעבר בין הקבצים',
+    'shortcutCycleMainFilesBack': 'מעבר בין הקבצים אחורה',
     'shortcutAddFile': 'הוסף קובץ',
     'shortcutAddTopic': 'נושא חדש',
     'shortcutAddView': 'תצוגה חדשה',

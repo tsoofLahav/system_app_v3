@@ -8,17 +8,21 @@ When the user says “remember this”, add the note here under the matching sec
 
 ## Editor keyboard safety
 
-**Read before changing** `SuperDocumentEditor`, embeds, `AppState` notify paths, or any in-document `TextField`.
+**Read before changing** `SuperDocumentEditor`, embeds, `AppState` notify paths, `app.dart`, the shells, or any in-document `TextField`.
 
 Flutter desyncs when a `TextField` / `FocusNode` is disposed or the editor tree remounts **while a physical key is still down**. Symptom: looping console errors
 
 `KeyDownEvent is dispatched, but the state shows that the physical key is already pressed`
 
-This class of bug comes back often after embed/save/focus changes. (Reconfirmed **2026-08-11** after table payload patches remounted Super Editor while typing.)
+**Structure (do this):** the typing surface stays mounted. Chrome may rebuild; the open document is not thrown away and created again for unrelated `notifyListeners`. Incoming file-body / embed updates apply **into** the open editor ([`SuperDocumentEditor`](system_app_front_end/lib/areas/files/editor/super_document_editor.dart) listens itself). Who listens where: UX [`AREA.md`](system_app_front_end/lib/areas/ux/AREA.md) § Who rebuilds.
+
+Do not rebuild `MaterialApp` / the topic canvas on every `AppState` notify, and do not wrap `DocumentEditor` in `ListenableBuilder(listenable: appState)`. That was the old tree-wide rebuild; do not bring it back.
+
+This class of bug also comes back after embed/save/focus changes inside a file (payload patches remounting Super Editor while typing).
 
 ### MUST NOT
 
-1. Wrap `DocumentEditor` / `SuperDocumentEditor` in `ListenableBuilder(listenable: appState)` (or any parent that rebuilds the whole file on every `notifyListeners`).
+1. Rebuild `MaterialApp`, `AppShell`, or the topic canvas on every `notifyListeners`, or wrap `DocumentEditor` / `SuperDocumentEditor` in `ListenableBuilder(listenable: appState)`.
 2. Call `notifyListeners()` / `loadEmbedsForFile(notify: true)` / `_reloadEmbedsForOpenFiles` **from a keystroke path** (cell/title/body `onChanged`, every character).
 3. `setState` the Super Editor (or replace `Editor` / remount embeds) while `HardwareKeyboard.instance.physicalKeysPressed` is non-empty — unless the change is purely visual and keeps the same `FocusNode`s.
 4. Dispose or recreate cell/task/info `FocusNode`s / controllers in `didUpdateWidget` while those fields have focus or keys are down.

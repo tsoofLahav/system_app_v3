@@ -71,12 +71,16 @@ Successful DELETE returns `204` with empty body.
 |--------|------|-------------|
 | GET | `/files` | List all |
 | GET | `/files/<id>` | Get one (includes `body`) |
+| GET | `/files/<id>/agent-text` | Expanded agent text (archived files included) |
 | GET | `/topics/<topic_id>/files` | Files for topic |
+| GET | `/topics/<topic_id>/archive/files` | Paginated archived files (`limit`, `offset`, `q`) — no `document_json` |
 | POST | `/files` | Create |
 | PATCH | `/files/<id>` | Update (name, body, order_index, meta, archived_at) |
 | DELETE | `/files/<id>` | Delete cascade |
 
 **POST body:** `{ "topic_id", "name", "body?", "order_index?", "meta?" }`
+
+Archive list response: `{ "files", "total", "has_more", "heading_texts_by_file_id" }`. Cards omit `document_json`. Search (`q`) matches the file name or `#`…`######` heading lines in the marker body, not expanded objects. `limit=0` returns the count only (used by the sidebar index). Preview a body with `GET /files/<id>/agent-text` (`{ "agent_text" }`), including archived files. `PATCH` `{ "archived_at": null }` unarchives and places the file first in its topic.
 
 ---
 

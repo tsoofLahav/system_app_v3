@@ -14,13 +14,14 @@ class ArchiveFilesPage {
   final Map<int, List<String>> headerTextsByFileId;
 
   factory ArchiveFilesPage.fromJson(Map<String, dynamic> json) {
-    final rawHeaders =
-        json['header_texts_by_file_id'] as Map<String, dynamic>? ?? {};
-    final headerTexts = <int, List<String>>{};
+    final rawHeaders = json['heading_texts_by_file_id'] as Map<String, dynamic>? ??
+        json['header_texts_by_file_id'] as Map<String, dynamic>? ??
+        {};
+    final headingTexts = <int, List<String>>{};
     rawHeaders.forEach((key, value) {
       final id = int.tryParse(key);
       if (id == null || value is! List) return;
-      headerTexts[id] = [
+      headingTexts[id] = [
         for (final item in value)
           if (item.toString().trim().isNotEmpty) item.toString().trim(),
       ];
@@ -32,7 +33,7 @@ class ArchiveFilesPage {
           .toList(),
       total: json['total'] as int? ?? 0,
       hasMore: json['has_more'] as bool? ?? false,
-      headerTextsByFileId: headerTexts,
+      headerTextsByFileId: headingTexts,
     );
   }
 }

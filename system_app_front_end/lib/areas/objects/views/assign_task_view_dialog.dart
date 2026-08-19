@@ -8,16 +8,24 @@ import '../../ui/app_typography.dart';
 import '../../ui/dialog_field_style.dart';
 import '../data/app_view.dart';
 
+var _assignTaskViewDialogOpen = false;
+
 /// Pick exactly one view for a task (replaces any previous view).
 Future<void> showAssignTaskViewDialog({
   required BuildContext context,
   required AppState state,
   required int taskId,
-}) {
-  return showAppDialog<void>(
-    context: context,
-    builder: (_) => _AssignTaskViewDialog(state: state, taskId: taskId),
-  );
+}) async {
+  if (_assignTaskViewDialogOpen) return;
+  _assignTaskViewDialogOpen = true;
+  try {
+    await showAppDialog<void>(
+      context: context,
+      builder: (_) => _AssignTaskViewDialog(state: state, taskId: taskId),
+    );
+  } finally {
+    _assignTaskViewDialogOpen = false;
+  }
 }
 
 class _AssignTaskViewDialog extends StatefulWidget {

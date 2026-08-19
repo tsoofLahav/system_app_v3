@@ -9,11 +9,22 @@ void main() {
       'id': 2,
       'workspace_id': 1,
       'name': 'process',
+      'name_he': 'תהליך',
       'order_index': 1,
       'template_topic_id': 9,
     });
     expect(type.name, 'process');
+    expect(type.nameHe, 'תהליך');
     expect(type.templateTopicId, 9);
+  });
+
+  test('a type without a hebrew name still loads', () {
+    final type = TopicType.fromJson({
+      'id': 3,
+      'workspace_id': 1,
+      'name': 'Custom',
+    });
+    expect(type.nameHe, isEmpty);
   });
 
   test('a topic stores its type id, not a magic tag', () {

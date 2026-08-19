@@ -7,6 +7,8 @@ from areas.objects.services.delete_cascade import (
     purge_unreferenced_embeds_for_file,
 )
 from areas.files.services import file_ops
+from areas.files.services.archive_files import list_archived_files_for_topic
+from areas.files.services.document_agent_text import agent_text_from_document_json
 from areas.files.services.document_v3 import validate_document
 from areas.files.services.document_promote import promote_legacy_embeds
 from areas.files.services.file_versions import save_file_version
@@ -47,16 +49,33 @@ def list_files_by_topic(topic_id):
     return jsonify([f.to_dict(include_document=True) for f in files])
 
 
+@files_bp.route("/files/<int:file_id>/agent-text", methods=["GET"])
+def get_file_agent_text(file_id):
+    file = get_or_404(File, file_id)
+    return jsonify(
+        {
+            "agent_text": agent_text_from_document_json(
+                file.document_json,
+                file_id=file.id,
+            )
+        }
+    )
+
+
 @files_bp.route("/topics/<int:topic_id>/archive/files", methods=["GET"])
 def list_archived_files_by_topic(topic_id):
-    get_or_404(Topic, topic_id)
-    files = (
-        File.query.filter_by(topic_id=topic_id)
-        .filter(File.archived_at.isnot(None))
-        .order_by(File.archived_at.desc(), File.id.desc())
-        .all()
+    limit = request.args.get("limit", default=24, type=int)
+    offset = request.args.get("offset", default=0, type=int)
+    q = request.args.get("q", type=str)
+    payload = list_archived_files_for_topic(
+        topic_id,
+        limit=limit if limit is not None else 24,
+        offset=offset or 0,
+        q=q,
     )
-    return jsonify([f.to_dict(include_document=True) for f in files])
+    if payload is None:
+        return jsonify({"error": "topic not found"}), 404
+    return jsonify(payload)
 
 
 @files_bp.route("/files", methods=["POST"])
@@ -92,6 +111,7 @@ def update_file(file_id):
         except ValueError as error:
             return jsonify({"error": str(error)}), 400
 
+    was_archived = file.archived_at is not None
     apply_updates(
         file,
         data,
@@ -105,6 +125,8 @@ def update_file(file_id):
         },
         datetime_fields={"archived_at"},
     )
+    if was_archived and file.archived_at is None:
+        file_ops.unarchive_file(file)
     promote_legacy_embeds(file)
     # Pointers removed from the file body must drop the object rows too
     # (selection Backspace/Cut in the editor often only PATCHes the document).

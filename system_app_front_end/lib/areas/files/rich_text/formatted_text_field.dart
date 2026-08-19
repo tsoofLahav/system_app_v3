@@ -13,7 +13,6 @@ import './format_range.dart';
 import './frozen_selection_painter.dart';
 import './rtl/rtl.dart';
 import './span_text_editing_controller.dart';
-import './text_emoji_picker.dart';
 
 /// Text field that registers for block context-menu clipboard/format actions.
 class DescriptionTextRange {
@@ -49,10 +48,9 @@ class FormattedTextField extends StatefulWidget {
     this.onSecondaryTapDown,
     this.textAlignVertical,
     this.blockId,
+    this.taskId,
     this.segmentId,
     this.documentBaseOffset = 0,
-    this.emojiSearchHint = 'Search emoji',
-    this.emojiPickerTitle = 'Insert emoji…',
     this.descriptionRanges = const [],
     this.onDescriptionHover,
     this.onDescriptionDoubleTap,
@@ -81,6 +79,7 @@ class FormattedTextField extends StatefulWidget {
   final GestureTapDownCallback? onSecondaryTapDown;
   final TextAlignVertical? textAlignVertical;
   final int? blockId;
+  final int? taskId;
 
   /// Runs on this field's [FocusNode] **before** in-field editing (table/chart
   /// cells: Enter/Tab/edge arrows). Return [KeyEventResult.ignored] to let
@@ -109,9 +108,6 @@ class FormattedTextField extends StatefulWidget {
   /// When there is no [DocumentTextFlow], → at the visual right edge of the
   /// text calls this — e.g. table cell to the right.
   final VoidCallback? onArrowExitRight;
-
-  final String emojiSearchHint;
-  final String emojiPickerTitle;
 
   final List<DescriptionTextRange> descriptionRanges;
   final ValueChanged<DescriptionTextRange?>? onDescriptionHover;
@@ -309,6 +305,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         fontSize: widget.style.fontSize ?? 12.5,
         focusNode: _focusNode,
         blockId: widget.blockId,
+        taskId: widget.taskId,
         flow: _flow,
       );
       // File pane owns scrolling — keep the caret in view without letting each
@@ -427,12 +424,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     final isMeta = HardwareKeyboard.instance.isMetaPressed;
-    if (isMeta && event.logicalKey == LogicalKeyboardKey.keyE &&
-        HardwareKeyboard.instance.isShiftPressed) {
-      _openEmojiPicker();
-      return KeyEventResult.handled;
-    }
-
     if (isMeta && !HardwareKeyboard.instance.isShiftPressed &&
         event.logicalKey == LogicalKeyboardKey.keyC) {
       _copySelection();
@@ -445,7 +436,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       return KeyEventResult.handled;
     }
 
-    if (isMeta && event.logicalKey == LogicalKeyboardKey.keyA) {
+    if (isMeta && !HardwareKeyboard.instance.isShiftPressed &&
+        event.logicalKey == LogicalKeyboardKey.keyA) {
       widget.onSelectAll?.call();
       final flow = _flow;
       if (flow != null && flow.order.length > 1) {
@@ -643,6 +635,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       fontSize: widget.style.fontSize ?? 12.5,
       focusNode: _focusNode,
       blockId: widget.blockId,
+      taskId: widget.taskId,
       flow: _flow,
     );
 
@@ -930,15 +923,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     return selection.isValid &&
         selection.isCollapsed &&
         selection.start == 0;
-  }
-
-  void _openEmojiPicker() {
-    if (!mounted) return;
-    showTextEmojiPicker(
-      context: context,
-      searchHint: widget.emojiSearchHint,
-      title: widget.emojiPickerTitle,
-    );
   }
 
   @override

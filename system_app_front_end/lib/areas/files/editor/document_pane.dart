@@ -22,6 +22,7 @@ class DocumentPane extends StatefulWidget {
     required this.state,
     this.accent,
     required this.onDelete,
+    this.isBrought = false,
   });
 
   final Topic topic;
@@ -29,6 +30,9 @@ class DocumentPane extends StatefulWidget {
   final AppState state;
   final Color? accent;
   final VoidCallback onDelete;
+
+  /// Visiting Home from another topic — dismiss from the file menu.
+  final bool isBrought;
 
   @override
   State<DocumentPane> createState() => _DocumentPaneState();
@@ -132,6 +136,12 @@ class _DocumentPaneState extends State<DocumentPane> {
       globalPosition: corner,
       isRtl: isRtl,
       entries: [
+        if (widget.isBrought)
+          AppContextMenuItem(
+            value: 'dismiss',
+            label: s['bringFileDismiss'],
+          ),
+        if (widget.isBrought) const AppContextMenuDivider(),
         AppContextMenuItem(value: 'archive', label: s['archiveFile']),
         const AppContextMenuDivider(),
         AppContextMenuItem(
@@ -143,16 +153,22 @@ class _DocumentPaneState extends State<DocumentPane> {
     );
 
     if (!mounted || value == null) return;
+    if (value == 'dismiss') {
+      await widget.state.dismissBroughtFile(widget.file.id);
+      return;
+    }
     if (value == 'archive') await _archive();
     if (value == 'delete') widget.onDelete();
   }
 
   @override
   Widget build(BuildContext context) {
-    final file = widget.state.selectedDetail?.files
-            .where((f) => f.id == widget.file.id)
-            .firstOrNull ??
-        widget.file;
+    final file = widget.isBrought
+        ? (widget.state.broughtFileById(widget.file.id) ?? widget.file)
+        : widget.state.selectedDetail?.files
+                .where((f) => f.id == widget.file.id)
+                .firstOrNull ??
+            widget.file;
 
     return NoteCard(
       topicAccent: widget.accent,

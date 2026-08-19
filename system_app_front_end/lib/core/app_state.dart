@@ -36,6 +36,8 @@ import '../areas/files/data/topic_service.dart';
 import '../areas/files/data/topic_type_service.dart';
 import '../areas/objects/data/view_layout.dart';
 import '../areas/objects/data/view_service.dart';
+import '../areas/ux/bring_file/bring_file_catalog.dart';
+import '../areas/ux/bring_file/brought_file_store.dart';
 import '../areas/ux/layout/topic_file_slots.dart';
 import '../areas/ux/shortcuts/shortcut_binding.dart';
 import '../areas/ux/shortcuts/shortcut_bindings_store.dart';
@@ -109,6 +111,17 @@ class AppState extends ChangeNotifier {
   bool isArchiveMode = false;
   Topic? selectedArchiveTopic;
   ArchiveIndex archiveIndex = ArchiveIndex.empty;
+  static const archivePageSize = 24;
+  List<AppFile> archiveFilesForTopic = const [];
+  final Map<int, List<String>> archiveHeadingTextsByFileId = {};
+  final Map<int, String> archiveAgentTextByFileId = {};
+  AppFile? selectedArchiveFile;
+  String archiveSearchQuery = '';
+  List<AppFile> archiveRemoteSearchResults = const [];
+  var archiveBrowseHasMore = false;
+  var archiveSearchHasMore = false;
+  var archiveLoading = false;
+  Timer? _archiveSearchDebounce;
 
   bool isDiagramMode = false;
   ObjectGraphData? objectGraph;
@@ -125,6 +138,15 @@ class AppState extends ChangeNotifier {
   bool archiveDeleteMode = false;
   final Set<int> archiveDeleteSelection = {};
   Map<String, dynamic>? pendingAgentReview;
+
+  /// Files visiting Home — still belong to their source topics, not Home.
+  /// Order among Home files is [homeCanvasOrderIds], not this list alone.
+  List<AppFile> broughtFiles = [];
+  final Map<int, Topic> broughtTopics = {};
+  /// Mixed Home canvas order (visits interleaved with Home files). Empty when
+  /// there are no visits.
+  List<int> homeCanvasOrderIds = [];
+  final BroughtFileStore broughtFileStore = BroughtFileStore();
   /// File id whose lookalike pending dialog is currently open (anti double-open).
   int? _pendingReviewDialogFileId;
 
@@ -142,9 +164,16 @@ class AppState extends ChangeNotifier {
   }
 
   bool isFileOnScreen(int fileId) {
-    final files = selectedDetail?.files;
-    if (files == null) return false;
-    return files.any((f) => f.id == fileId);
+    final topic = selectedTopic;
+    final detail = selectedDetail;
+    if (topic == null ||
+        detail == null ||
+        isViewMode ||
+        isArchiveMode ||
+        isDiagramMode) {
+      return false;
+    }
+    return shownFilesFor(topic, detail.files).any((f) => f.id == fileId);
   }
 
   void toggleArchiveDeleteMode() {
@@ -153,17 +182,44 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void toggleArchiveDeleteSelection(AppFile file) {
+    if (archiveDeleteSelection.contains(file.id)) {
+      archiveDeleteSelection.remove(file.id);
+    } else {
+      archiveDeleteSelection.add(file.id);
+    }
+    notifyListeners();
+  }
+
   Future<void> deleteSelectedArchiveFiles() async {
+    final ids = archiveDeleteSelection.toList();
+    for (final id in ids) {
+      await _files.deleteFile(id);
+      archiveAgentTextByFileId.remove(id);
+    }
     archiveDeleteSelection.clear();
     archiveDeleteMode = false;
-    notifyListeners();
+    final topic = selectedArchiveTopic;
+    await loadArchive();
+    if (topic != null && _archiveIndexHasTopic(topic.id)) {
+      await selectArchiveTopic(topic);
+    } else {
+      _leaveArchive();
+    }
+  }
+
+  Future<void> deleteArchiveFile(AppFile file) async {
+    archiveDeleteSelection
+      ..clear()
+      ..add(file.id);
+    await deleteSelectedArchiveFiles();
   }
 
   Future<void> setShortcutBinding(String actionId, dynamic binding) async {
     if (binding is! ShortcutBinding) return;
     await shortcutBindings.setBinding(actionId, binding);
     shortcutRebuildListenable.notifyListeners();
-    notifyListeners();
+      notifyListeners();
   }
 
   Future<void> resetShortcut(String actionId) async {
@@ -175,7 +231,7 @@ class AppState extends ChangeNotifier {
   Future<void> resetAllShortcuts() async {
     await shortcutBindings.resetAll();
     shortcutRebuildListenable.notifyListeners();
-    notifyListeners();
+      notifyListeners();
   }
 
   final ChangeNotifier shortcutRebuildListenable = ChangeNotifier();
@@ -206,8 +262,12 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  String topicTypeDisplayName(TopicType type) =>
-      strings.topicTypeLabel(type.name);
+  String topicTypeDisplayName(TopicType type) {
+    if (language == AppLanguage.he && type.nameHe.trim().isNotEmpty) {
+      return type.nameHe.trim();
+    }
+    return strings.topicTypeLabel(type.name);
+  }
 
   /// Object tags are freeform. Types live on `topic_types`, not as tags.
   List<AppTag> get objectTags => allTags;
@@ -224,6 +284,7 @@ class AppState extends ChangeNotifier {
       final status = await _bootstrap.status();
       workspaceId = status['workspace_id'] as int?;
       await _reloadAll();
+      await _restoreBroughtFile();
       appReady = true;
       await loadAiActions();
       await loadAutomations();
@@ -316,7 +377,7 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       error = e.toString();
     }
-    notifyListeners();
+      notifyListeners();
   }
 
   Future<void> selectView(String viewType) async {
@@ -366,8 +427,96 @@ class AppState extends ChangeNotifier {
     isViewMode = false;
     isDiagramMode = false;
     selectedArchiveTopic = topic;
+    _resetArchiveBrowse();
+    notifyListeners();
+    await _loadArchiveBrowsePage(append: false);
+  }
+
+  void _leaveArchive() {
+    isArchiveMode = false;
+    selectedArchiveTopic = null;
+    selectedArchiveFile = null;
+    _resetArchiveBrowse();
     notifyListeners();
   }
+
+  void _resetArchiveBrowse() {
+    archiveFilesForTopic = const [];
+    archiveRemoteSearchResults = const [];
+    archiveSearchQuery = '';
+    archiveBrowseHasMore = false;
+    archiveSearchHasMore = false;
+    archiveLoading = false;
+    archiveDeleteMode = false;
+    archiveDeleteSelection.clear();
+    selectedArchiveFile = null;
+    _archiveSearchDebounce?.cancel();
+  }
+
+  bool _archiveIndexHasTopic(int topicId) {
+    if (archiveIndex.daily?.topic.id == topicId) return true;
+    return archiveIndex.topics.any((entry) => entry.topic.id == topicId);
+  }
+
+  List<AppFile> get displayArchiveFiles {
+    final query = archiveSearchQuery.trim();
+    if (query.isEmpty) return archiveFilesForTopic;
+    final seen = <int>{};
+    final out = <AppFile>[];
+    for (final file in archiveFilesForTopic) {
+      if (_archiveFileMatchesQuery(file, query) && seen.add(file.id)) {
+        out.add(file);
+      }
+    }
+    for (final file in archiveRemoteSearchResults) {
+      if (seen.add(file.id)) out.add(file);
+    }
+    return out;
+  }
+
+  String archiveFileSearchLabel(AppFile file) {
+    final title = fileDisplayName(file.name);
+    final headings = archiveHeadingTextsByFileId[file.id] ?? const [];
+    if (headings.isEmpty) return title;
+    return '$title ${headings.join(' ')}';
+  }
+
+  bool _archiveFileMatchesQuery(AppFile file, String query) {
+    return archiveFileSearchLabel(file)
+        .toLowerCase()
+        .contains(query.toLowerCase());
+  }
+
+  void onArchiveSearchQueryChanged(String query) {
+    archiveSearchQuery = query;
+    archiveRemoteSearchResults = const [];
+    archiveSearchHasMore = false;
+    notifyListeners();
+    _archiveSearchDebounce?.cancel();
+    if (query.trim().isEmpty) return;
+    _archiveSearchDebounce = Timer(const Duration(milliseconds: 350), () {
+      unawaited(_fetchArchiveSearchPage(reset: true));
+    });
+  }
+
+  Future<void> loadMoreArchiveContent() async {
+    if (archiveLoading) return;
+    if (archiveSearchQuery.trim().isNotEmpty) {
+      if (!archiveSearchHasMore) return;
+      await _fetchArchiveSearchPage(reset: false);
+      return;
+    }
+    if (!archiveBrowseHasMore) return;
+    await _loadArchiveBrowsePage(append: true);
+  }
+
+  Future<void> selectArchiveFile(AppFile file) async {
+    selectedArchiveFile = file;
+    notifyListeners();
+    await _loadArchivePreviewForFile(file);
+  }
+
+  String? archiveAgentTextFor(int fileId) => archiveAgentTextByFileId[fileId];
 
   Future<void> openDiagram() async {
     isDiagramMode = true;
@@ -386,7 +535,7 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       error = e.toString();
     }
-    notifyListeners();
+      notifyListeners();
   }
 
   void toggleDiagramFilterTag(int tagId) {
@@ -401,7 +550,7 @@ class AppState extends ChangeNotifier {
   void setDiagramColorMode(DiagramColorMode mode) {
     if (diagramColorMode == mode) return;
     diagramColorMode = mode;
-    notifyListeners();
+      notifyListeners();
   }
 
   /// Patch info content from the objects map without leaving diagram mode.
@@ -549,7 +698,7 @@ class AppState extends ChangeNotifier {
     }
     await selectTopic(topic);
     setEditingFileId(resolvedFileId);
-    notifyListeners();
+      notifyListeners();
   }
 
   int? takePendingFocusObjectId() {
@@ -561,35 +710,145 @@ class AppState extends ChangeNotifier {
   Future<void> loadArchive() async {
     final entries = <ArchiveTopicEntry>[];
     ArchiveTopicEntry? daily;
-    for (final topic in allTopics) {
-      final archived = await _files.listArchivedForTopic(topic.id);
-      if (archived.isEmpty) continue;
-      final entry = ArchiveTopicEntry(
-        topic: topic,
-        archivedFileCount: archived.length,
-        files: archived,
-      );
-      if (topic.isMain) {
-        daily = entry;
-      } else {
-        entries.add(entry);
+    try {
+      for (final topic in allTopics) {
+        final page = await _files.listArchivedForTopic(topic.id, limit: 0);
+        if (page.total == 0) continue;
+        final entry = ArchiveTopicEntry(
+          topic: topic,
+          archivedFileCount: page.total,
+        );
+        if (topic.isMain) {
+          daily = entry;
+        } else {
+          entries.add(entry);
+        }
       }
+      archiveIndex = ArchiveIndex(daily: daily, topics: entries);
+    } catch (e) {
+      error = e.toString();
     }
-    archiveIndex = ArchiveIndex(daily: daily, topics: entries);
     notifyListeners();
   }
 
+  void _mergeArchiveHeadings(Map<int, List<String>> incoming) {
+    archiveHeadingTextsByFileId.addAll(incoming);
+  }
+
+  Future<void> _loadArchiveBrowsePage({required bool append}) async {
+    final topic = selectedArchiveTopic;
+    if (topic == null) return;
+    archiveLoading = true;
+    notifyListeners();
+    try {
+      final offset = append ? archiveFilesForTopic.length : 0;
+      final page = await _files.listArchivedForTopic(
+        topic.id,
+        limit: archivePageSize,
+        offset: offset,
+      );
+      archiveFilesForTopic = append
+          ? [...archiveFilesForTopic, ...page.files]
+          : page.files;
+      _mergeArchiveHeadings(page.headerTextsByFileId);
+      archiveBrowseHasMore = page.hasMore;
+      if (selectedArchiveFile == null && archiveFilesForTopic.isNotEmpty) {
+        await selectArchiveFile(archiveFilesForTopic.first);
+        return;
+      }
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      archiveLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _fetchArchiveSearchPage({required bool reset}) async {
+    final topic = selectedArchiveTopic;
+    final query = archiveSearchQuery.trim();
+    if (topic == null || query.isEmpty) return;
+    archiveLoading = true;
+    notifyListeners();
+    try {
+      final offset = reset ? 0 : archiveRemoteSearchResults.length;
+      final page = await _files.listArchivedForTopic(
+        topic.id,
+        limit: archivePageSize,
+        offset: offset,
+        query: query,
+      );
+      _mergeArchiveHeadings(page.headerTextsByFileId);
+      archiveRemoteSearchResults = reset
+          ? page.files
+          : [...archiveRemoteSearchResults, ...page.files];
+      archiveSearchHasMore = page.hasMore;
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      archiveLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadArchivePreviewForFile(AppFile file) async {
+    if (archiveAgentTextByFileId.containsKey(file.id)) return;
+    try {
+      final text = await _files.agentTextForFile(file.id);
+      archiveAgentTextByFileId[file.id] = text;
+    } catch (e) {
+      error = e.toString();
+      archiveAgentTextByFileId[file.id] = '';
+    }
+    if (selectedArchiveFile?.id == file.id) notifyListeners();
+  }
+
+  Future<void> unarchiveFile(AppFile file) async {
+    await _files.updateFile(file.id, {'archived_at': null});
+    archiveAgentTextByFileId.remove(file.id);
+    final topic = selectedArchiveTopic;
+    if (selectedDetail?.topic.id == file.topicId) {
+      await _refreshTopicFiles(selectedDetail!.topic);
+    }
+    await loadArchive();
+    if (topic != null && _archiveIndexHasTopic(topic.id)) {
+      await selectArchiveTopic(topic);
+    } else {
+      _leaveArchive();
+    }
+  }
+
   /// Every file of the topic in the one order that decides placement.
-  List<AppFile> orderedFilesFor(Topic topic, List<AppFile> files) =>
-      orderedFiles(files);
+  /// On Home this includes visiting files, interleaved with Home's own.
+  List<AppFile> orderedFilesFor(Topic topic, List<AppFile> files) {
+    if (!topic.isMain || broughtFiles.isEmpty) return orderedFiles(files);
+    return mergeHomeCanvasFiles(
+      homeFiles: files,
+      visits: broughtFiles,
+      storedOrder: homeCanvasOrderIds,
+    );
+  }
 
   /// The files the topic's layout has room for.
   List<AppFile> shownFilesFor(Topic topic, List<AppFile> files) =>
-      shownFiles(orderedFiles(files), layoutFor(topic));
+      shownFiles(orderedFilesFor(topic, files), layoutFor(topic));
 
   /// The files past the last slot — off screen until the topic is rearranged.
   List<AppFile> hiddenFilesFor(Topic topic, List<AppFile> files) =>
-      hiddenFiles(orderedFiles(files), layoutFor(topic));
+      hiddenFiles(orderedFilesFor(topic, files), layoutFor(topic));
+
+  bool isBroughtFile(int fileId) =>
+      broughtFiles.any((file) => file.id == fileId);
+
+  /// Visiting panes only exist on Home. The same file on its own topic is not a visit.
+  bool isBroughtFileOnCanvas(Topic topic, int fileId) =>
+      topic.isMain && isBroughtFile(fileId);
+
+  Topic canvasTopicFor(Topic openTopic, AppFile file) =>
+      broughtTopics[file.id] ?? openTopic;
+
+  AppFile? broughtFileById(int fileId) =>
+      broughtFiles.where((file) => file.id == fileId).firstOrNull;
 
   String layoutFor(Topic topic) => topic.fileLayout;
 
@@ -643,7 +902,7 @@ class AppState extends ChangeNotifier {
     if (selectedDetail?.topic.id == updated.id) {
       selectedDetail = TopicDetail(topic: updated, files: selectedDetail!.files);
     }
-    notifyListeners();
+      notifyListeners();
   }
 
   Future<void> deleteTopic(Topic topic) async {
@@ -680,16 +939,20 @@ class AppState extends ChangeNotifier {
   Future<void> loadTopicTypes() async {
     if (workspaceId == null) return;
     topicTypes = await _topicTypes.list(workspaceId: workspaceId);
-    notifyListeners();
+        notifyListeners();
   }
 
-  Future<TopicType> createTopicType({required String name}) async {
+  Future<TopicType> createTopicType({
+    required String name,
+    required String nameHe,
+  }) async {
     if (workspaceId == null) {
       throw StateError('workspace not ready');
     }
     final type = await _topicTypes.create(
       workspaceId: workspaceId!,
       name: name,
+      nameHe: nameHe,
     );
     topicTypes = [...topicTypes, type];
     notifyListeners();
@@ -706,13 +969,13 @@ class AppState extends ChangeNotifier {
       for (final row in topicTypes)
         if (row.id == updated.id) updated else row,
     ];
-    notifyListeners();
+      notifyListeners();
   }
 
   Future<void> deleteTopicType(TopicType type) async {
     await _topicTypes.delete(type.id);
     topicTypes = topicTypes.where((t) => t.id != type.id).toList();
-    notifyListeners();
+      notifyListeners();
   }
 
   List<Automation> automationsForType(int typeId) => [
@@ -892,7 +1155,7 @@ class AppState extends ChangeNotifier {
       enabled: enabled,
     );
     automations = [...automations, automation];
-    notifyListeners();
+      notifyListeners();
     return automation;
   }
 
@@ -941,6 +1204,14 @@ class AppState extends ChangeNotifier {
     for (var i = 0; i < existing.length; i++) {
       await _files.updateFile(existing[i].id, {'order_index': i + 1});
     }
+    if (topic.isMain && broughtFiles.isNotEmpty) {
+      final canvas = orderedFilesFor(topic, existing);
+      homeCanvasOrderIds = [
+        file.id,
+        for (final placed in canvas) placed.id,
+      ];
+      await _persistBroughtFileLayout();
+    }
     await _refreshTopicFiles(topic);
     return file;
   }
@@ -952,6 +1223,13 @@ class AppState extends ChangeNotifier {
   }) async {
     final updated = await _files.updateFile(file.id, body);
     _patchFileInDetail(updated);
+    final broughtIndex = broughtFiles.indexWhere((f) => f.id == updated.id);
+    if (broughtIndex >= 0) {
+      broughtFiles = [
+        for (var i = 0; i < broughtFiles.length; i++)
+          i == broughtIndex ? updated : broughtFiles[i],
+      ];
+    }
     // Silent document autosaves must not notify — MaterialApp's Consumer and
     // other listeners rebuilding mid-keystroke desync HardwareKeyboard.
     if (notify) notifyListeners();
@@ -961,13 +1239,24 @@ class AppState extends ChangeNotifier {
     await _files.updateFile(file.id, {
       'archived_at': DateTime.now().toUtc().toIso8601String(),
     });
-    await _refreshTopicFiles(selectedDetail!.topic);
+    if (isBroughtFile(file.id)) {
+      await dismissBroughtFile(file.id);
+    }
+    if (selectedDetail != null) {
+      await _refreshTopicFiles(selectedDetail!.topic);
+    }
     await loadArchive();
   }
 
   Future<void> deleteFile(AppFile file) async {
     await _files.deleteFile(file.id);
-    await _refreshTopicFiles(selectedDetail!.topic);
+    if (isBroughtFile(file.id)) {
+      await dismissBroughtFile(file.id);
+    }
+    if (selectedDetail != null) {
+      await _refreshTopicFiles(selectedDetail!.topic);
+    }
+    await loadArchive();
   }
 
   Future<void> _refreshTopicFiles(Topic topic) async {
@@ -1538,18 +1827,183 @@ class AppState extends ChangeNotifier {
 
   /// Writes the topic's file order. The layout then decides how far down that
   /// order the screen reaches.
+  ///
+  /// Visiting files on Home are not Home's files — their `order_index` on the
+  /// source topic is left alone. The mixed canvas order is stored locally.
   Future<String?> reorderTopicFiles(
     Topic topic, {
     required List<AppFile> ordered,
   }) async {
-    for (var index = 0; index < ordered.length; index++) {
-      await _files.updateFile(ordered[index].id, {'order_index': index});
+    final visitIds = {for (final file in broughtFiles) file.id};
+    final owned = [
+      for (final file in ordered)
+        if (!topic.isMain || !visitIds.contains(file.id)) file,
+    ];
+    for (var index = 0; index < owned.length; index++) {
+      await _files.updateFile(owned[index].id, {'order_index': index});
+    }
+    if (topic.isMain) {
+      broughtFiles = [
+        for (final file in ordered)
+          if (visitIds.contains(file.id)) file,
+      ];
+      homeCanvasOrderIds = broughtFiles.isEmpty
+          ? const []
+          : [for (final file in ordered) file.id];
+      await _persistBroughtFileLayout();
     }
     await _refreshTopicFiles(topic);
     return null;
   }
 
   Future<List<AppFile>> loadBringFilePreviews(List<AppFile> files) async => files;
+
+  Future<List<BrowseFileEntry>> loadBringFileCatalog() async {
+    final files = await _files.listAllFiles();
+    return buildBringFileCatalog(
+      topics: allTopics,
+      files: files,
+      mainTopic: allTopics.where((t) => t.isMain).firstOrNull,
+      excludeFileIds: {for (final file in broughtFiles) file.id},
+    );
+  }
+
+  Future<void> setBroughtFile(BrowseFileEntry entry) async {
+    final live = await _files.getFile(entry.file.id);
+    final topic =
+        allTopics.where((t) => t.id == live.topicId).firstOrNull ?? entry.topic;
+    final home = allTopics.where((t) => t.isMain).firstOrNull;
+    final homeFiles = home != null && selectedDetail?.topic.id == home.id
+        ? selectedDetail!.files
+        : const <AppFile>[];
+    final canvas = home == null
+        ? <AppFile>[live]
+        : orderedFilesFor(home, homeFiles);
+    broughtFiles = [
+      live,
+      for (final file in broughtFiles)
+        if (file.id != live.id) file,
+    ];
+    broughtTopics
+      ..removeWhere((id, _) => id == live.id)
+      ..[live.id] = topic;
+    homeCanvasOrderIds = [
+      live.id,
+      for (final file in canvas)
+        if (file.id != live.id) file.id,
+    ];
+    await loadEmbedsForFile(live.id, notify: false);
+    await _persistBroughtFileLayout();
+    notifyListeners();
+  }
+
+  Future<void> dismissBroughtFile(int fileId) async {
+    final home = allTopics.where((t) => t.isMain).firstOrNull;
+    final homeFiles = home != null && selectedDetail?.topic.id == home.id
+        ? selectedDetail!.files
+        : const <AppFile>[];
+    final canvas = home == null
+        ? broughtFiles
+        : orderedFilesFor(home, homeFiles);
+    broughtFiles = [
+      for (final file in broughtFiles)
+        if (file.id != fileId) file,
+    ];
+    broughtTopics.remove(fileId);
+    homeCanvasOrderIds = broughtFiles.isEmpty
+        ? const []
+        : [
+            for (final file in canvas)
+              if (file.id != fileId) file.id,
+          ];
+    await _persistBroughtFileLayout();
+    notifyListeners();
+  }
+
+  Future<void> _persistBroughtFileLayout() async {
+    final id = workspaceId;
+    if (id == null) return;
+    await broughtFileStore.save(
+      id,
+      BroughtFileLayout(
+        visitIds: [for (final file in broughtFiles) file.id],
+        order: homeCanvasOrderIds,
+      ),
+    );
+  }
+
+  Future<void> _restoreBroughtFile() async {
+    final id = workspaceId;
+    if (id == null) return;
+    final stored = await broughtFileStore.load(id);
+    if (stored.isEmpty) {
+      broughtFiles = [];
+      broughtTopics.clear();
+      homeCanvasOrderIds = [];
+      return;
+    }
+    final home = allTopics.where((t) => t.isMain).firstOrNull;
+    final byId = <int, AppFile>{};
+    final nextTopics = <int, Topic>{};
+    for (final fileId in stored.visitIds) {
+      try {
+        final file = await _files.getFile(fileId);
+        final topic = allTopics.where((t) => t.id == file.topicId).firstOrNull;
+        if (file.isArchived ||
+            topic == null ||
+            topic.isArchived ||
+            topic.isMain ||
+            (home != null && file.topicId == home.id)) {
+          continue;
+        }
+        byId[file.id] = file;
+        nextTopics[file.id] = topic;
+        await loadEmbedsForFile(file.id, notify: false);
+      } catch (_) {
+        continue;
+      }
+    }
+    final homeFiles = home == null
+        ? const <AppFile>[]
+        : selectedDetail?.topic.id == home.id
+            ? selectedDetail!.files
+            : await _files.listFilesForTopic(home.id);
+    final visits = [
+      for (final fileId in stored.visitIds)
+        if (byId[fileId] != null) byId[fileId]!,
+    ];
+    final canvas = mergeHomeCanvasFiles(
+      homeFiles: homeFiles,
+      visits: visits,
+      storedOrder: stored.order,
+    );
+    broughtFiles = [
+      for (final file in canvas)
+        if (byId.containsKey(file.id)) file,
+    ];
+    broughtTopics
+      ..clear()
+      ..addAll(nextTopics);
+    homeCanvasOrderIds = broughtFiles.isEmpty
+        ? const []
+        : [for (final file in canvas) file.id];
+    final nextIds = [for (final file in broughtFiles) file.id];
+    final orderChanged = homeCanvasOrderIds.length != stored.order.length ||
+        !_sameIds(homeCanvasOrderIds, stored.order);
+    if (nextIds.length != stored.visitIds.length ||
+        !_sameIds(nextIds, stored.visitIds) ||
+        orderChanged) {
+      await _persistBroughtFileLayout();
+    }
+  }
+
+  static bool _sameIds(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 
   List<Task> get viewTasks {
     return viewMemberships
@@ -1854,7 +2308,7 @@ class AppState extends ChangeNotifier {
       return result;
     } finally {
       aiRunning = false;
-      notifyListeners();
+    notifyListeners();
     }
   }
 

@@ -23,15 +23,24 @@ class DesktopAppShell extends StatefulWidget {
 
 class _DesktopAppShellState extends State<DesktopAppShell> {
   var _sidebarWidth = AppSidebarMetrics.defaultWidth;
+  late final Widget _topicView = TopicView(
+    key: const ValueKey('topic-canvas'),
+    state: widget.state,
+  );
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: widget.state,
-      builder: (context, _) {
+      // Same [TopicView] instance across AppState notifies so Super Editor is
+      // not rebuilt mid-keystroke (HardwareKeyboard "already pressed").
+      child: _topicView,
+      builder: (context, topicView) {
         final state = widget.state;
         final contentInset = AppSidebarMetrics.contentInset(_sidebarWidth);
-        final topic = state.selectedDetail?.topic ?? state.selectedTopic;
+        final topic = state.isArchiveMode
+            ? state.selectedArchiveTopic
+            : (state.selectedDetail?.topic ?? state.selectedTopic);
         final accent = topic == null ? null : TopicAppearance.accentFor(topic);
         final isMain = topic?.isMain ?? true;
 
@@ -75,12 +84,7 @@ class _DesktopAppShellState extends State<DesktopAppShell> {
                                         ),
                                         state: state,
                                       )
-                                    : TopicView(
-                                        key: ValueKey(
-                                          'topic-${state.selectedDetail?.topic.id ?? 'none'}',
-                                        ),
-                                        state: state,
-                                      ),
+                                    : topicView!,
                               ),
                       ),
                       if (state.isViewMode && state.loading)

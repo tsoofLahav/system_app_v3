@@ -91,8 +91,9 @@ Format examples: [`content/production_agent/reference.md`](../../../content/prod
 | [`services/document_agent_text.py`](services/document_agent_text.py) | Editor text ↔ expanded agent text |
 | [`services/document_promote.py`](services/document_promote.py) | Promote legacy inline embeds → object rows; writes v4 editor text |
 | [`services/file_versions.py`](services/file_versions.py) | Snapshot before agent/automation writes |
-| [`services/file_ops.py`](services/file_ops.py) | Create / archive without a request — used by automations and by the HTTP routes |
-| [`routes/files.py`](routes/files.py) | File CRUD |
+| [`services/file_ops.py`](services/file_ops.py) | Create / archive / unarchive without a request — used by automations and by the HTTP routes |
+| [`services/archive_files.py`](services/archive_files.py) | Paginated archive listing + heading search (no document bodies) |
+| [`routes/files.py`](routes/files.py) | File CRUD, `GET /files/:id/agent-text`, archive pages |
 | [`routes/file_versions.py`](routes/file_versions.py) | History and `POST /files/:id/diff` |
 | [`routes/topics.py`](routes/topics.py) | Topics — the container files live in |
 | [`routes/topic_types.py`](routes/topic_types.py) | User-defined topic kinds (`/topic-types`) |
@@ -111,7 +112,7 @@ A type is a row in `topic_types`, not a tag. Each type has an English `name` and
 
 Leaving the document out of that response is a data-loss bug, not a display one: each editor opens empty, and the first keystroke saves that emptiness over the stored document. `tests/files/test_file_routes_document.py` guards it.
 
-`include_document=False` is for callers that only want names — currently the agent's file listing, so a tool call does not pour every document into the prompt.
+`include_document=False` is for callers that only want names — currently the agent's file listing, so a tool call does not pour every document into the prompt, and the archive page list (`GET /topics/:id/archive/files`), which loads bodies only for the selected preview via `GET /files/:id/agent-text`.
 
 ## Rules
 

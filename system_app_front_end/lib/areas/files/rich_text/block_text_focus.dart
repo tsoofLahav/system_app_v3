@@ -19,6 +19,7 @@ class BlockTextFocusRegistry {
   static Map<String, dynamic>? activeBlockContent;
   static FocusNode? activeFocusNode;
   static int? activeBlockId;
+  static int? activeTaskId;
   static double baseFontSize = 12.5;
 
   /// The flow of the editor the caret is in, when there is one. Its presence is
@@ -167,6 +168,7 @@ class BlockTextFocusRegistry {
     double? fontSize,
     FocusNode? focusNode,
     int? blockId,
+    int? taskId,
     DocumentTextFlow? flow,
   }) {
     activeController = controller;
@@ -174,6 +176,7 @@ class BlockTextFocusRegistry {
     activeBlockContent = blockContent;
     activeFocusNode = focusNode;
     activeBlockId = blockId;
+    activeTaskId = taskId;
     activeFlow = flow;
     if (fontSize != null) baseFontSize = fontSize;
     _recentTarget = _RecentTextTarget(
@@ -204,6 +207,7 @@ class BlockTextFocusRegistry {
     activeBlockContent = null;
     activeFocusNode = null;
     activeBlockId = null;
+    activeTaskId = null;
     _bumpFocus();
   }
 
@@ -214,6 +218,7 @@ class BlockTextFocusRegistry {
     activeBlockContent = null;
     activeFocusNode = null;
     activeBlockId = null;
+    activeTaskId = null;
     activeFlow = null;
     _recentTarget = null;
     _frozenMark = null;

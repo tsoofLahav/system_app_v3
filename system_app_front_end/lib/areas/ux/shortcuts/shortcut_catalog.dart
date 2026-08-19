@@ -47,6 +47,7 @@ abstract final class ShortcutActionIds {
   static const bringFile = 'bring_file';
   static const openArrange = 'open_arrange';
   static const cycleMainFiles = 'cycle_main_files';
+  static const cycleMainFilesBack = 'cycle_main_files_back';
   static const addFile = 'add_file';
   static const addTopic = 'add_topic';
   static const addView = 'add_view';
@@ -70,7 +71,6 @@ abstract final class ShortcutActionIds {
   static const textCut = 'text_cut';
   static const textCopy = 'text_copy';
   static const textPaste = 'text_paste';
-  static const textEmoji = 'text_emoji';
   static const textSizeUp = 'text_size_up';
   static const textSizeDown = 'text_size_down';
 
@@ -134,6 +134,13 @@ final List<ShortcutAction> kShortcutCatalog = [
     id: ShortcutActionIds.cycleMainFiles,
     category: ShortcutCategory.navigation,
     labelKey: 'shortcutCycleMainFiles',
+    defaultBinding: _m(LogicalKeyboardKey.bracketLeft),
+    context: ShortcutContextRequirement.topicMode,
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.cycleMainFilesBack,
+    category: ShortcutCategory.navigation,
+    labelKey: 'shortcutCycleMainFilesBack',
     defaultBinding: _m(LogicalKeyboardKey.bracketRight),
     context: ShortcutContextRequirement.topicMode,
   ),
@@ -161,12 +168,11 @@ final List<ShortcutAction> kShortcutCatalog = [
     category: ShortcutCategory.navigation,
     labelKey: 'shortcutAssignTaskView',
     defaultBinding: _m(LogicalKeyboardKey.keyJ),
-    context: ShortcutContextRequirement.textFocus,
   ),
   ShortcutAction(
     id: ShortcutActionIds.aiConsult,
     category: ShortcutCategory.ai,
-    labelKey: 'aiConsult',
+    labelKey: 'aiAgent',
     defaultBinding: _m(LogicalKeyboardKey.digit1, shift: true),
     context: ShortcutContextRequirement.aiContext,
   ),
@@ -225,14 +231,6 @@ final List<ShortcutAction> kShortcutCatalog = [
     defaultBinding: _m(LogicalKeyboardKey.keyV),
     context: ShortcutContextRequirement.textFocus,
     textAction: 'text:paste',
-  ),
-  ShortcutAction(
-    id: ShortcutActionIds.textEmoji,
-    category: ShortcutCategory.text,
-    labelKey: 'shortcutInsertEmoji',
-    defaultBinding: _m(LogicalKeyboardKey.keyE, shift: true),
-    context: ShortcutContextRequirement.textFocus,
-    textAction: 'text:emoji',
   ),
   ShortcutAction(
     id: ShortcutActionIds.textSizeUp,
@@ -303,7 +301,7 @@ final List<ShortcutAction> kShortcutCatalog = [
     id: ShortcutActionIds.toggleLanguage,
     category: ShortcutCategory.navigation,
     labelKey: 'shortcutToggleLanguage',
-    defaultBinding: _m(LogicalKeyboardKey.digit9, shift: true),
+    defaultBinding: _m(LogicalKeyboardKey.keyE),
   ),
 ];
 

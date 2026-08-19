@@ -15,6 +15,7 @@ List<BrowseFileEntry> buildBringFileCatalog({
   required List<Topic> topics,
   required List<AppFile> files,
   required Topic? mainTopic,
+  Set<int> excludeFileIds = const {},
 }) {
   if (mainTopic == null) return const [];
 
@@ -24,6 +25,7 @@ List<BrowseFileEntry> buildBringFileCatalog({
   for (final file in files) {
     if (file.archivedAt != null) continue;
     if (file.topicId == mainTopic.id) continue;
+    if (excludeFileIds.contains(file.id)) continue;
     final topic = topicById[file.topicId];
     if (topic == null || topic.isArchived) continue;
     entries.add(BrowseFileEntry(topic: topic, file: file));

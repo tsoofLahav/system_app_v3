@@ -14,6 +14,7 @@ import '../../ui/app_typography.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/glass_surface.dart';
+import '../widgets/app_context_menu.dart';
 import '../widgets/topic_emoji.dart';
 import '../widgets/disclosure_icon.dart';
 import '../create_topic/create_topic_dialog.dart';
@@ -183,10 +184,14 @@ class _AppSidebarState extends State<AppSidebar> {
                           ),
                         const _SidebarDivider(),
                         _DiagramEntry(state: state, onOpen: _openDiagram),
-                        if (!widget.isPhone) ...[
-                          const _SidebarDivider(),
-                          _ArchiveSection(state: state),
-                        ],
+                        const _SidebarDivider(),
+                        _ArchiveSection(
+                          state: state,
+                          onSelect: (topic) {
+                            _closeDrawerIfOpen();
+                            state.selectArchiveTopic(topic);
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -370,17 +375,12 @@ class _ViewTile extends StatelessWidget {
     BuildContext context,
     Offset globalPosition,
   ) async {
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final position = RelativeRect.fromRect(
-      Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
-      Offset.zero & overlay.size,
-    );
-
-    final action = await showMenu<String>(
+    final action = await AppContextMenu.show(
       context: context,
-      position: position,
-      items: [
-        PopupMenuItem(value: 'edit', child: Text(strings['edit'])),
+      globalPosition: globalPosition,
+      isRtl: strings.isRtl,
+      entries: [
+        AppContextMenuItem(value: 'edit', label: strings['edit']),
       ],
     );
 
@@ -415,9 +415,13 @@ class _ViewTile extends StatelessWidget {
 }
 
 class _ArchiveSection extends StatefulWidget {
-  const _ArchiveSection({required this.state});
+  const _ArchiveSection({
+    required this.state,
+    required this.onSelect,
+  });
 
   final AppState state;
+  final ValueChanged<Topic> onSelect;
 
   @override
   State<_ArchiveSection> createState() => _ArchiveSectionState();
@@ -464,7 +468,7 @@ class _ArchiveSectionState extends State<_ArchiveSection> {
               selected: widget.state.isArchiveMode &&
                   widget.state.selectedArchiveTopic?.id == index.daily!.topic.id,
               state: widget.state,
-              onTap: () => widget.state.selectArchiveTopic(index.daily!.topic),
+              onTap: () => widget.onSelect(index.daily!.topic),
               onEdit: () {},
             ),
           for (final type in widget.state.topicTypes)
@@ -479,6 +483,7 @@ class _ArchiveSectionState extends State<_ArchiveSection> {
                 }),
                 entries: index.topicsOfType(type.id),
                 state: widget.state,
+                onSelect: widget.onSelect,
               ),
           if (index.untypedTopics.isNotEmpty)
             _ArchiveTopicGroup(
@@ -488,6 +493,7 @@ class _ArchiveSectionState extends State<_ArchiveSection> {
                   setState(() => _othersExpanded = !_othersExpanded),
               entries: index.untypedTopics,
               state: widget.state,
+              onSelect: widget.onSelect,
             ),
         ],
         const SizedBox(height: 2),
@@ -503,6 +509,7 @@ class _ArchiveTopicGroup extends StatelessWidget {
     required this.onToggle,
     required this.entries,
     required this.state,
+    required this.onSelect,
   });
 
   final String title;
@@ -510,6 +517,7 @@ class _ArchiveTopicGroup extends StatelessWidget {
   final VoidCallback onToggle;
   final List<ArchiveTopicEntry> entries;
   final AppState state;
+  final ValueChanged<Topic> onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -549,7 +557,7 @@ class _ArchiveTopicGroup extends StatelessWidget {
               selected: state.isArchiveMode &&
                   state.selectedArchiveTopic?.id == entry.topic.id,
               state: state,
-              onTap: () => state.selectArchiveTopic(entry.topic),
+              onTap: () => onSelect(entry.topic),
               onEdit: () {},
             ),
       ],
@@ -684,27 +692,37 @@ class _TopicTile extends StatelessWidget {
     Offset globalPosition,
   ) async {
     final s = state.strings;
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final position = RelativeRect.fromRect(
-      Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
-      Offset.zero & overlay.size,
-    );
-
-    final action = await showMenu<String>(
+    final type = state.topicTypeById(topic.topicTypeId);
+    final action = await AppContextMenu.show(
       context: context,
-      position: position,
-      items: [
-        PopupMenuItem(value: 'edit', child: Text(s['edit'])),
+      globalPosition: globalPosition,
+      isRtl: s.isRtl,
+      entries: [
+        AppContextMenuItem(value: 'edit', label: s['edit']),
+        if (type != null)
+          AppContextMenuItem(
+            value: 'template',
+            label: s['useAsTypeTemplate'],
+            checked: type.templateTopicId == topic.id,
+          ),
         if (onDuplicate != null)
-          PopupMenuItem(value: 'duplicate', child: Text(s['duplicateTopic'])),
+          AppContextMenuItem(value: 'duplicate', label: s['duplicateTopic']),
         if (onDelete != null)
-          PopupMenuItem(value: 'delete', child: Text(s['delete'])),
+          AppContextMenuItem(
+            value: 'delete',
+            label: s['delete'],
+            destructive: true,
+          ),
       ],
     );
 
+    if (!context.mounted) return;
     if (action == 'edit') onEdit();
     if (action == 'duplicate') await onDuplicate?.call();
     if (action == 'delete') onDelete?.call();
+    if (action == 'template' && type != null) {
+      await state.updateTopicType(type, {'template_topic_id': topic.id});
+    }
   }
 
   @override

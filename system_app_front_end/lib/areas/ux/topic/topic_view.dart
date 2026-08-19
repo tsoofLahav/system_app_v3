@@ -16,11 +16,83 @@ import '../create_topic/add_file_dialog.dart';
 import '../../files/editor/document_pane.dart';
 
 /// The topic canvas: the files the topic's layout has room for, and nothing
-/// else. Files past the last slot are reached by arranging the topic.
-class TopicView extends StatelessWidget {
+/// else. On Home, visiting files from other topics sit in that same order.
+/// Files past the last slot are reached by arranging the topic.
+///
+/// Listens to [AppState] itself and only rebuilds when the open topic / files /
+/// layout / language change — not on every `notifyListeners` (AI actions,
+/// automations, embed payload patches). A parent [ListenableBuilder] around
+/// this widget remounts Super Editor mid-keystroke and desyncs
+/// [HardwareKeyboard].
+class TopicView extends StatefulWidget {
   const TopicView({super.key, required this.state});
 
   final AppState state;
+
+  @override
+  State<TopicView> createState() => _TopicViewState();
+}
+
+class _TopicViewState extends State<TopicView> {
+  AppState get state => widget.state;
+  late Object _signature;
+
+  @override
+  void initState() {
+    super.initState();
+    _signature = _canvasSignature(state);
+    state.addListener(_onState);
+  }
+
+  @override
+  void didUpdateWidget(covariant TopicView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state != widget.state) {
+      oldWidget.state.removeListener(_onState);
+      _signature = _canvasSignature(state);
+      state.addListener(_onState);
+    }
+  }
+
+  @override
+  void dispose() {
+    state.removeListener(_onState);
+    super.dispose();
+  }
+
+  void _onState() {
+    final next = _canvasSignature(state);
+    if (next == _signature || !mounted) return;
+    setState(() => _signature = next);
+  }
+
+  /// What the canvas actually paints — not embed payloads, AI actions, etc.
+  static Object _canvasSignature(AppState s) {
+    final topic = s.selectedDetail?.topic ?? s.selectedTopic;
+    final files = s.selectedDetail?.files;
+    return Object.hash(
+      s.loading,
+      s.error,
+      s.topicDetailStale,
+      s.language,
+      topic?.id,
+      topic?.name,
+      topic?.icon,
+      topic?.color,
+      topic?.fileLayout,
+      topic?.isMain,
+      Object.hashAll([
+        for (final file in files ?? const <AppFile>[])
+          Object.hash(file.id, file.name, file.orderIndex),
+      ]),
+      Object.hashAll([
+        for (final file in topic == null
+            ? const <AppFile>[]
+            : s.orderedFilesFor(topic, files ?? const <AppFile>[]))
+          Object.hash(file.id, file.name, file.topicId),
+      ]),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +155,7 @@ class TopicView extends StatelessWidget {
             padding: canvasPadding,
             child: shown.isEmpty
                 ? _EmptyTopic(state: state)
-                : _board(context, topic, shown, accent, canvasPadding),
+                : _board(context, topic, shown, canvasPadding),
           ),
         ),
         Positioned(
@@ -105,9 +177,25 @@ class TopicView extends StatelessWidget {
     BuildContext context,
     Topic topic,
     List<AppFile> shown,
-    Color accent,
     EdgeInsets canvasPadding,
   ) {
+    DocumentPane paneFor(AppFile file) {
+      final paneTopic = state.canvasTopicFor(topic, file);
+      return DocumentPane(
+        key: ValueKey(
+          state.isBroughtFileOnCanvas(topic, file.id)
+              ? 'brought-${file.id}'
+              : file.id,
+        ),
+        topic: paneTopic,
+        file: file,
+        state: state,
+        accent: TopicAppearance.accentFor(paneTopic),
+        isBrought: state.isBroughtFileOnCanvas(topic, file.id),
+        onDelete: () => state.deleteFile(file),
+      );
+    }
+
     // Two files cannot sit side by side on a phone, so there the shape
     // collapses to one file per row. Which files appear is still the layout's
     // answer, so a file hidden on desktop stays hidden here.
@@ -119,17 +207,7 @@ class TopicView extends StatelessWidget {
           for (final file in shown)
             Padding(
               padding: const EdgeInsets.only(bottom: AppLayoutSpacing.gap),
-              child: SizedBox(
-                height: height,
-                child: DocumentPane(
-                  key: ValueKey(file.id),
-                  topic: topic,
-                  file: file,
-                  state: state,
-                  accent: accent,
-                  onDelete: () => state.deleteFile(file),
-                ),
-              ),
+              child: SizedBox(height: height, child: paneFor(file)),
             ),
         ],
       );
@@ -140,7 +218,6 @@ class TopicView extends StatelessWidget {
       files: shown,
       layoutId: state.layoutFor(topic),
       state: state,
-      accent: accent,
       onDeleteFile: state.deleteFile,
       slotHeight: FileLayouts.primarySlotHeight(
         context,

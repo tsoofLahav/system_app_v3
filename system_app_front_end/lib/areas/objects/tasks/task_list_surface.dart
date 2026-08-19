@@ -976,6 +976,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         onEnter: () => unawaited(_handleEnter(index)),
         onBackspaceAtStart: () => _handleBackspace(index),
         onSecondaryTapDown: (d) => _showTaskMenu(d, index),
+        taskId: id,
         onArrowExitAbove: () => _arrowFromLine(
               _hasTitleLine ? index + 1 : index,
               goingDown: false,

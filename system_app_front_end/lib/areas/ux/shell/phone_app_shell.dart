@@ -5,6 +5,8 @@ import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/glass_surface.dart';
+import '../archive/archive_topic_view.dart';
+import '../bring_file/bring_file_picker_dialog.dart';
 import '../create_topic/add_file_dialog.dart';
 import '../sidebar/app_sidebar.dart';
 import '../../objects/diagram/object_diagram_pane.dart';
@@ -16,6 +18,7 @@ import '../../automations/automation_dialog.dart';
 import '../../files/editor/document_editor_controller.dart';
 import '../../files/editor/document_insert_bar.dart';
 import '../../production_agent/ai_tool_bar.dart';
+import './chrome_anchors.dart';
 import './desktop_app_shell.dart';
 import './app_bottom_bar.dart';
 import './preferences_dialog.dart';
@@ -31,12 +34,22 @@ class PhoneAppShell extends StatefulWidget {
 
 class _PhoneAppShellState extends State<PhoneAppShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  late final Widget _topicView = TopicView(
+    key: const ValueKey('topic-canvas'),
+    state: widget.state,
+  );
 
   AppState get state => widget.state;
 
   String _title() {
     final s = state.strings;
     if (state.isDiagramMode) return s['diagram'];
+    if (state.isArchiveMode) {
+      final topic = state.selectedArchiveTopic;
+      if (topic == null) return s['archive'];
+      if (topic.isMain) return s['main'];
+      return state.topicDisplayName(topic);
+    }
     if (state.isViewMode && state.selectedViewType != null) {
       return state.viewLabel(state.selectedViewType!);
     }
@@ -49,6 +62,7 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
   bool get _showAddFile =>
       !state.isViewMode &&
       !state.isDiagramMode &&
+      !state.isArchiveMode &&
       state.selectedDetail != null &&
       !state.topicDetailStale;
 
@@ -67,17 +81,25 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
     await state.addFile(topic: topic, name: result.name);
   }
 
-  Future<void> _bringFile(BuildContext context) async {}
+  Future<void> _bringFile(BuildContext context) async {
+    await showBringFilePicker(context: context, state: state);
+  }
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: state,
-      builder: (context, _) {
+      child: _topicView,
+      builder: (context, topicView) {
         final diagramMode = state.isDiagramMode;
-        final bottomInset = diagramMode
+        final archiveMode = state.isArchiveMode;
+        final useChromeBar = diagramMode || archiveMode;
+        final bottomInset = useChromeBar
             ? AppBottomBarMetrics.scrollInset
             : MediaQuery.sizeOf(context).height * 0.1;
+        final canvasTopic = archiveMode
+            ? state.selectedArchiveTopic
+            : (state.selectedDetail?.topic ?? state.selectedTopic);
 
         return Scaffold(
           key: _scaffoldKey,
@@ -125,17 +147,10 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
             children: [
               Positioned.fill(
                 child: AppShellCanvas(
-                  topicAccent: (state.selectedDetail?.topic ??
-                              state.selectedTopic) ==
-                          null
+                  topicAccent: canvasTopic == null
                       ? null
-                      : TopicAppearance.accentFor(
-                          state.selectedDetail?.topic ?? state.selectedTopic!,
-                        ),
-                  isMainTopic:
-                      (state.selectedDetail?.topic ?? state.selectedTopic)
-                              ?.isMain ??
-                          true,
+                      : TopicAppearance.accentFor(canvasTopic),
+                  isMainTopic: canvasTopic?.isMain ?? true,
                 ),
               ),
               Positioned.fill(
@@ -153,6 +168,13 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
                                     key: const ValueKey('diagram'),
                                     state: state,
                                   )
+                                : state.isArchiveMode
+                                ? ArchiveTopicView(
+                                    key: ValueKey(
+                                      'archive-${state.selectedArchiveTopic?.id}',
+                                    ),
+                                    state: state,
+                                  )
                                 : state.isViewMode && state.viewPaneReady
                                 ? TaskViewPane(
                                     key: ValueKey(
@@ -160,12 +182,7 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
                                     ),
                                     state: state,
                                   )
-                                : TopicView(
-                                    key: ValueKey(
-                                      'topic-${state.selectedDetail?.topic.id ?? 'none'}',
-                                    ),
-                                    state: state,
-                                  ),
+                                : topicView!,
                           ),
                   ),
                 ),
@@ -180,7 +197,7 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
                     backgroundColor: Colors.transparent,
                   ),
                 ),
-              if (!diagramMode)
+              if (!useChromeBar)
                 ListenableBuilder(
                   listenable: DocumentEditorRegistry.notifier,
                   builder: (context, _) {
@@ -199,7 +216,7 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                child: diagramMode
+                child: useChromeBar
                     ? AppBottomBar(state: state)
                     : SizedBox(
                         height: MediaQuery.sizeOf(context).height,
@@ -257,6 +274,7 @@ class _PhoneBottomToolsSheet extends StatelessWidget {
                   ),
                 ),
                 ListTile(
+                  key: ChromeAnchors.preferencesButton,
                   leading: const AppIcon(AppIcons.preferences, size: 22),
                   title: Text(s['preferences']),
                   onTap: () =>

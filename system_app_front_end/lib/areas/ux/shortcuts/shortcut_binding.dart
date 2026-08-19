@@ -52,15 +52,7 @@ class ShortcutBinding {
     return LogicalKeySet.fromSet(keys.toSet());
   }
 
-  ShortcutActivator toActivator() {
-    return SingleActivator(
-      key,
-      meta: meta,
-      control: control,
-      shift: shift,
-      alt: alt,
-    );
-  }
+  ShortcutActivator toActivator() => BindingShortcutActivator(this);
 
   Map<String, dynamic> toJson() => {
         'keyId': keyId,
@@ -148,13 +140,65 @@ class ShortcutBinding {
   @override
   int get hashCode => Object.hash(keyId, meta, control, shift, alt);
 
-  bool matchesEvent(KeyDownEvent event) {
-    if (event.logicalKey.keyId != keyId) return false;
+  bool matchesEvent(KeyDownEvent event) => matchesHardware(event);
+
+  /// True when this binding is the key that just went down (or is repeating).
+  ///
+  /// `Cmd+Shift+=` is often reported as the `+` key (`add` / numpad add), so
+  /// those count as the same binding when this one is shift+equal.
+  bool matchesHardware(KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
     final keyboard = HardwareKeyboard.instance;
-    return meta == keyboard.isMetaPressed &&
+    final key = event.logicalKey;
+    final modifiersMatch = meta == keyboard.isMetaPressed &&
         control == keyboard.isControlPressed &&
-        shift == keyboard.isShiftPressed &&
         alt == keyboard.isAltPressed;
+    if (!modifiersMatch) return false;
+    if (key.keyId == keyId && shift == keyboard.isShiftPressed) return true;
+    if (!shift) return false;
+    if (keyId == LogicalKeyboardKey.equal.keyId) {
+      return key == LogicalKeyboardKey.add ||
+          key == LogicalKeyboardKey.numpadAdd;
+    }
+    if (keyId == LogicalKeyboardKey.minus.keyId) {
+      final character = event.character;
+      return key == LogicalKeyboardKey.underscore ||
+          key == LogicalKeyboardKey.minus ||
+          key == LogicalKeyboardKey.numpadSubtract ||
+          character == '-' ||
+          character == '_';
+    }
+    return false;
+  }
+}
+
+/// [SingleActivator] misses `Cmd+Shift+-` when the platform reports `_`.
+class BindingShortcutActivator extends ShortcutActivator {
+  const BindingShortcutActivator(this.binding);
+
+  final ShortcutBinding binding;
+
+  @override
+  bool accepts(KeyEvent event, HardwareKeyboard state) =>
+      binding.matchesHardware(event);
+
+  @override
+  String debugDescribeKeys() => binding.displayLabel();
+
+  @override
+  Iterable<LogicalKeyboardKey> get triggers {
+    final keys = <LogicalKeyboardKey>{binding.key};
+    if (!binding.shift) return keys;
+    if (binding.key == LogicalKeyboardKey.equal) {
+      keys.addAll({LogicalKeyboardKey.add, LogicalKeyboardKey.numpadAdd});
+    }
+    if (binding.key == LogicalKeyboardKey.minus) {
+      keys.addAll({
+        LogicalKeyboardKey.underscore,
+        LogicalKeyboardKey.numpadSubtract,
+      });
+    }
+    return keys;
   }
 }
 

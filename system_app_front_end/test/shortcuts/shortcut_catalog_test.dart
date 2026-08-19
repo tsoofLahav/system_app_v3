@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/ux/shortcuts/shortcut_catalog.dart';
 
@@ -16,5 +17,48 @@ void main() {
       );
       seen[label] = action.id;
     }
+  });
+
+  test('agent is labeled Agent and keeps Cmd+Shift+1', () {
+    final agent = kShortcutCatalog
+        .firstWhere((a) => a.id == ShortcutActionIds.aiConsult);
+    expect(agent.labelKey, 'aiAgent');
+    expect(agent.defaultBinding.keyId, LogicalKeyboardKey.digit1.keyId);
+    expect(agent.defaultBinding.meta, isTrue);
+    expect(agent.defaultBinding.shift, isTrue);
+  });
+
+  test('language defaults to Cmd+E', () {
+    final language = kShortcutCatalog
+        .firstWhere((a) => a.id == ShortcutActionIds.toggleLanguage);
+    expect(language.defaultBinding.keyId, LogicalKeyboardKey.keyE.keyId);
+    expect(language.defaultBinding.meta, isTrue);
+    expect(language.defaultBinding.shift, isFalse);
+  });
+
+  test('emoji is not a catalog shortcut', () {
+    expect(
+      kShortcutCatalog.any((a) => a.id.contains('emoji')),
+      isFalse,
+    );
+  });
+
+  test('assign task view is not a text-format action', () {
+    final action = kShortcutCatalog
+        .firstWhere((a) => a.id == ShortcutActionIds.assignTaskView);
+    expect(action.context, ShortcutContextRequirement.none);
+    expect(action.textAction, isNull);
+    expect(action.defaultBinding.keyId, LogicalKeyboardKey.keyJ.keyId);
+  });
+
+  test('cycle files uses [ forward and ] backward', () {
+    final forward = kShortcutCatalog
+        .firstWhere((a) => a.id == ShortcutActionIds.cycleMainFiles);
+    final back = kShortcutCatalog
+        .firstWhere((a) => a.id == ShortcutActionIds.cycleMainFilesBack);
+    expect(forward.defaultBinding.keyId, LogicalKeyboardKey.bracketLeft.keyId);
+    expect(back.defaultBinding.keyId, LogicalKeyboardKey.bracketRight.keyId);
+    expect(forward.context, ShortcutContextRequirement.topicMode);
+    expect(back.context, ShortcutContextRequirement.topicMode);
   });
 }

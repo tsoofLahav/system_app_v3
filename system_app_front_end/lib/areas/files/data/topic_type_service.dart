@@ -17,11 +17,13 @@ class TopicTypeService {
   Future<TopicType> create({
     required int workspaceId,
     required String name,
+    required String nameHe,
   }) async {
     final data =
         await _api.post('/topic-types', {
               'workspace_id': workspaceId,
               'name': name,
+              'name_he': nameHe,
             })
             as Map<String, dynamic>;
     return TopicType.fromJson(data);
