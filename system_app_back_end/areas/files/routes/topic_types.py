@@ -10,6 +10,23 @@ from areas.files.services.template_slots import stamp_template_slots
 topic_types_bp = Blueprint("topic_types", __name__)
 
 
+def _clean_name(value) -> str:
+    return str(value or "").strip()
+
+
+def _name_clash(workspace_id: int, name: str, name_he: str, *, skip_id: int | None = None):
+    query = TopicType.query.filter_by(workspace_id=workspace_id)
+    if skip_id is not None:
+        query = query.filter(TopicType.id != skip_id)
+    for row in query.all():
+        if name and row.name == name:
+            return True
+        he = (row.name_he or "").strip()
+        if name_he and he and he == name_he:
+            return True
+    return False
+
+
 def _workspace_types(workspace_id: int) -> list[TopicType]:
     return (
         TopicType.query.filter_by(workspace_id=workspace_id)
@@ -29,17 +46,15 @@ def list_topic_types():
 @topic_types_bp.route("/topic-types", methods=["POST"])
 def create_topic_type():
     data = request.get_json(silent=True) or {}
-    name = str(data.get("name") or "").strip()
-    if not name:
-        return jsonify({"error": "name is required"}), 400
+    name = _clean_name(data.get("name"))
+    name_he = _clean_name(data.get("name_he"))
+    if not name or not name_he:
+        return jsonify({"error": "english and hebrew names are required"}), 400
     workspace_id = data.get("workspace_id") or default_workspace_id()
     if not workspace_id:
         return jsonify({"error": "workspace_id is required"}), 400
 
-    existing = TopicType.query.filter_by(
-        workspace_id=workspace_id, name=name
-    ).first()
-    if existing:
+    if _name_clash(workspace_id, name, name_he):
         return jsonify({"error": "a type with that name already exists"}), 409
 
     siblings = _workspace_types(workspace_id)
@@ -50,6 +65,7 @@ def create_topic_type():
     row = TopicType(
         workspace_id=workspace_id,
         name=name,
+        name_he=name_he,
         order_index=int(order),
     )
     db.session.add(row)
@@ -62,18 +78,17 @@ def update_topic_type(type_id):
     row = get_or_404(TopicType, type_id)
     data = request.get_json(silent=True) or {}
 
-    if "name" in data:
-        name = str(data.get("name") or "").strip()
-        if not name:
-            return jsonify({"error": "name is required"}), 400
-        clash = TopicType.query.filter(
-            TopicType.workspace_id == row.workspace_id,
-            TopicType.name == name,
-            TopicType.id != row.id,
-        ).first()
-        if clash:
+    if "name" in data or "name_he" in data:
+        name = _clean_name(data["name"]) if "name" in data else row.name
+        name_he = (
+            _clean_name(data["name_he"]) if "name_he" in data else (row.name_he or "")
+        )
+        if not name or not name_he:
+            return jsonify({"error": "english and hebrew names are required"}), 400
+        if _name_clash(row.workspace_id, name, name_he, skip_id=row.id):
             return jsonify({"error": "a type with that name already exists"}), 409
         row.name = name
+        row.name_he = name_he
 
     apply_updates(row, data, {"order_index"})
 

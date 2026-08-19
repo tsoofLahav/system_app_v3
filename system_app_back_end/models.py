@@ -64,6 +64,7 @@ class TopicType(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id"), nullable=False)
     name = db.Column(db.Text, nullable=False)
+    name_he = db.Column(db.Text)
     order_index = db.Column(db.Integer, nullable=False, default=0)
     template_topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"))
 
@@ -72,6 +73,7 @@ class TopicType(db.Model):
             "id": self.id,
             "workspace_id": self.workspace_id,
             "name": self.name,
+            "name_he": self.name_he or "",
             "order_index": self.order_index,
             "template_topic_id": self.template_topic_id,
         }

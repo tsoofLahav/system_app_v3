@@ -101,7 +101,7 @@ Format examples: [`content/production_agent/reference.md`](../../../content/prod
 
 ## Topic types
 
-A type is a row in `topic_types`, not a tag. `topics.topic_type_id` is optional (Home stays untyped). A type may point at a live `template_topic_id`. Creating a topic of that type copies the template's **structure only**: file names, `file_layout`, `order_index`, `template_slot`, and empty objects of the same kind. Changing a topic's type later does not re-apply the template. Duplicate uses `clone_from_topic_id` so it copies that topic, not only the type template.
+A type is a row in `topic_types`, not a tag. Each type has an English `name` and a Hebrew `name_he`; the app shows the one that matches the UI language. `topics.topic_type_id` is optional (Home stays untyped). A type may point at a live `template_topic_id` (Preferences, or right-click a topic of that type). Creating a topic of that type copies the template's **structure only**: file names, `file_layout`, `order_index`, `template_slot`, and empty objects of the same kind. Changing a topic's type later does not re-apply the template. Duplicate uses `clone_from_topic_id` so it copies that topic, not only the type template.
 
 `files.meta.template_slot` is a stable key (`doc`, `plan`, …) stamped from the file name when the topic is set as the template, so automations can still find “the doc file” after a rename. Copies inherit the same key. Hebrew or empty names fall back to `file-{id}`.
 

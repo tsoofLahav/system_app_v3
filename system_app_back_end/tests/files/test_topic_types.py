@@ -21,6 +21,7 @@ def test_topic_type_table_shape():
         "id",
         "workspace_id",
         "name",
+        "name_he",
         "order_index",
         "template_topic_id",
     } <= columns
@@ -53,6 +54,12 @@ def test_type_routes_exist():
     source = inspect.getsource(type_routes)
     assert '"/topic-types"' in source
     assert "stamp_template_slots" in source
+
+
+def test_create_type_requires_english_and_hebrew_names():
+    source = inspect.getsource(type_routes.create_topic_type)
+    assert "name_he" in source
+    assert "english and hebrew names are required" in source
 
 
 def test_bootstrap_does_not_seed_classification_tags():
