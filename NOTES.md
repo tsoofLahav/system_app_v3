@@ -106,6 +106,7 @@ One-time facts, kept for lookup — nothing to act on.
 |------|--------|
 | Migration `004` | Dropped `files.is_essence`; visibility comes from the layout. |
 | Migration `006_object_graph.sql` | Object graph / tags / diagram — applied manually on the Render Postgres DB (`tags.icon`, `links.kind`, `links.anchor`). |
+| Migration `014_object_diagram_position.sql` | `objects.diagram_x` / `diagram_y` — persisted objects-map layout. |
 | Migration `007_table_object.sql` | Adds `table` to the type CHECK, migrates legacy `graph` rows. |
 | Migration `008_agent_pending_reviews.sql` | Pending agent reviews table. |
 | Checkpoint `f5034af` | Commit before the marker-text (v4) work. |

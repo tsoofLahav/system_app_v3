@@ -72,11 +72,13 @@ The `links` table is the workspace **object graph**, keyed by **`objects.id`** f
 
 | Endpoint | Role |
 |----------|------|
-| `GET /objects/graph?workspace_id=` | Info nodes (title, body, topic_id/color, tag_ids) + related info↔info edges for the objects map |
+| `GET /objects/graph?workspace_id=` | Info nodes (title, body, topic_id/color, tag_ids, `diagram_x`/`diagram_y`) + related info↔info edges for the objects map |
+| `PUT /objects/graph/positions` | Batch-write map coordinates `{ workspace_id, positions: [{ object_id, x, y }] }` |
 | `GET/POST /objects/:id/links` | List / create connections (`target_object_id` or description `anchor`) |
 | `GET /files/:id/description-links` | Description links targeting that file |
 | `PUT /objects/:id/tags` | Replace object tags |
 | `PATCH /tags/:id` | Update tag name/color/icon |
+| `PATCH /objects/:id` | `sort_key`, `anchor`, image/table `payload`, and `diagram_x` / `diagram_y` |
 
 Object GET / file object list payloads include `tags[]` and `connections[]` (undirected related + description rows with a `peer` summary). Deleting an object or file removes links where it is source **or** target.
 

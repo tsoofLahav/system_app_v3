@@ -30,6 +30,7 @@ import './services/bootstrap_service.dart';
 import './services/image_service.dart';
 import '../areas/files/data/file_service.dart';
 import '../areas/objects/data/object_service.dart';
+import '../areas/objects/tags/object_tag_filter.dart';
 import './services/tag_service.dart';
 import '../areas/objects/data/task_service.dart';
 import '../areas/files/data/topic_service.dart';
@@ -279,7 +280,10 @@ class AppState extends ChangeNotifier {
   }
 
   /// Object tags are freeform. Types live on `topic_types`, not as tags.
-  List<AppTag> get objectTags => allTags;
+  List<AppTag> get objectTags => objectTagsExcludingTopicTypes(
+        tags: allTags,
+        topicTypes: topicTypes,
+      );
 
   Future<void> initialize() async {
     loading = true;
@@ -556,10 +560,43 @@ class AppState extends ChangeNotifier {
     if (workspaceId == null) return;
     try {
       objectGraph = await _objects.loadGraph(workspaceId: workspaceId!);
+      _pruneDiagramFilter();
     } catch (e) {
       error = e.toString();
     }
     notifyListeners();
+  }
+
+  void _pruneDiagramFilter() {
+    final allowed = {for (final tag in objectTags) tag.id};
+    diagramFilterTagIds.removeWhere((id) => !allowed.contains(id));
+  }
+
+  /// Persist map coordinates. Does not [notifyListeners] — the pane owns layout.
+  Future<void> saveDiagramPositions(Map<int, Offset> positions) async {
+    if (workspaceId == null || positions.isEmpty) return;
+    await _objects.saveDiagramPositions(
+      workspaceId: workspaceId!,
+      positions: [
+        for (final entry in positions.entries)
+          (objectId: entry.key, x: entry.value.dx, y: entry.value.dy),
+      ],
+    );
+    final graph = objectGraph;
+    if (graph == null) return;
+    objectGraph = ObjectGraphData(
+      nodes: [
+        for (final n in graph.nodes)
+          if (positions.containsKey(n.objectId))
+            n.copyWith(
+              diagramX: positions[n.objectId]!.dx,
+              diagramY: positions[n.objectId]!.dy,
+            )
+          else
+            n,
+      ],
+      edges: graph.edges,
+    );
   }
 
   void toggleDiagramFilterTag(int tagId) {

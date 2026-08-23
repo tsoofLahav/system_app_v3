@@ -67,13 +67,13 @@ An info object holds knowledge (`title`, `body`, …). In the file, title and bo
 | `related` | Object ↔ object (stored directed; UI treats undirected) |
 | `description` | Info → marked span in a file (`anchor`: file/block/segment + offsets) |
 
-**Tags.** Freeform workspace tags (`tags.icon` + colour) assign to objects via `entity_type=object`. Topic type tags (`project` / `process` / …) stay for topic classification and are excluded from the object-tag UI.
+**Tags.** Freeform workspace tags (`tags.icon` + colour) assign to objects via `entity_type=object`. Topic types are not tags — leftover classification names (`project` / `process` / …) are excluded from the object-tag UI (map filter and assign-tag dialog).
 
 **UI here:**
 - Create tag via sidebar **+**; assign tags on info embeds (context menu)
 - Info frame shows tag chips only; Add connection via context menu (no links list)
 - Description: document **Connect info…**, hover bubble, double-tap opens the info
-- **Objects map** ([`interactive_graph_view`](https://pub.dev/packages/interactive_graph_view)): info nodes + related edges; pan/zoom; drag to move (session-only layout); double-click expands editable card with ×; tag filter above bottom bar; topic/tag color modes
+- **Objects map** ([`interactive_graph_view`](https://pub.dev/packages/interactive_graph_view)): info nodes + related edges; pan/zoom; drag to move. The package has no layout or persistence — we own `NodeWidget.position`. Coordinates live on the object (`diagram_x` / `diagram_y`); unsaved nodes get a sparse connected layout, then that placement is written back. Double-click expands the card **in place** (same graph point; the node is centered on its position) and temporarily pushes neighbors so edges lengthen and the card does not cover them; close restores the saved layout. Tag filter above the bottom bar lists object tags only (not topic types); topic/tag color modes
 
 In-file editing of the unified info text is presentation (files).
 
@@ -108,14 +108,14 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 - Deleting an embed goes through the object service so the backing row is cleaned up.
 - Any object may link to any object; do not hardcode allowed link pairs.
 - Do not put document caret/mark/menu rules here — that is files.
-- Topic types are not tags. Object-tag UI lists every workspace tag.
+- Topic types are not tags. Object-tag UI excludes type names and leftover classification tags.
 
 ## Shipped vs next
 
 **Shipped (data):** task CRUD/status/order; view membership pane; empty titles; object create/delete with embed insert.
 
-**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder; object tags; related + description links; objects map (`interactive_graph_view`: drag move, double-click expand, session layout, tag filter, color modes).
+**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder; object tags; related + description links; objects map (`interactive_graph_view`: persisted positions, sparse first layout, expand-in-place + neighbor push, object-tag filter, color modes).
 
 **Shipped (presentation, in files):** list-like task embed; info title/body + tag chips (add tag/link via context menu); table embed (+ chart quality); Move Mode; right-click text menu including Connect info; description underlines + hover/double-tap.
 
-**Next (this area):** non-info map nodes; persisted map layout; convert-selection → create Info.
+**Next (this area):** non-info map nodes; convert-selection → create Info.

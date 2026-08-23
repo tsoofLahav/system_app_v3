@@ -35,6 +35,8 @@ class ObjectGraphNode {
     this.informationId,
     this.topicId,
     this.topicColor,
+    this.diagramX,
+    this.diagramY,
   });
 
   final int objectId;
@@ -46,6 +48,8 @@ class ObjectGraphNode {
   final int? topicId;
   final String? topicColor;
   final List<int> tagIds;
+  final double? diagramX;
+  final double? diagramY;
 
   factory ObjectGraphNode.fromJson(Map<String, dynamic> json) {
     return ObjectGraphNode(
@@ -60,10 +64,17 @@ class ObjectGraphNode {
       tagIds: [
         for (final id in (json['tag_ids'] as List? ?? const [])) id as int,
       ],
+      diagramX: _readCoord(json['diagram_x']),
+      diagramY: _readCoord(json['diagram_y']),
     );
   }
 
-  ObjectGraphNode copyWith({String? title, String? body}) {
+  ObjectGraphNode copyWith({
+    String? title,
+    String? body,
+    double? diagramX,
+    double? diagramY,
+  }) {
     return ObjectGraphNode(
       objectId: objectId,
       type: type,
@@ -74,8 +85,15 @@ class ObjectGraphNode {
       topicId: topicId,
       topicColor: topicColor,
       tagIds: tagIds,
+      diagramX: diagramX ?? this.diagramX,
+      diagramY: diagramY ?? this.diagramY,
     );
   }
+}
+
+double? _readCoord(Object? value) {
+  if (value is num) return value.toDouble();
+  return null;
 }
 
 class ObjectGraphEdge {
@@ -156,6 +174,20 @@ class ObjectService {
     final data = await _api.get('/objects/graph?workspace_id=$workspaceId')
         as Map<String, dynamic>;
     return ObjectGraphData.fromJson(data);
+  }
+
+  Future<void> saveDiagramPositions({
+    required int workspaceId,
+    required List<({int objectId, double x, double y})> positions,
+  }) async {
+    if (positions.isEmpty) return;
+    await _api.put('/objects/graph/positions', {
+      'workspace_id': workspaceId,
+      'positions': [
+        for (final p in positions)
+          {'object_id': p.objectId, 'x': p.x, 'y': p.y},
+      ],
+    });
   }
 
   Future<List<Map<String, dynamic>>> listLinks(int objectId) async {

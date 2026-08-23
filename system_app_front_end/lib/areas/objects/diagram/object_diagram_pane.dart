@@ -11,10 +11,13 @@ import '../../ui/app_typography.dart';
 import '../../ux/shell/app_bottom_bar.dart';
 import '../../ux/topic/topic_appearance.dart';
 import '../data/object_service.dart';
+import 'diagram_layout.dart';
 
 /// Workspace objects map: info nodes + related edges via [interactive_graph_view].
 ///
-/// Session-only positions; drag to move; double-click to expand an editable card.
+/// Positions persist on the object (`diagram_x` / `diagram_y`). Double-click
+/// expands in place and temporarily pushes neighbors so the card does not cover
+/// them; close restores the saved layout.
 class ObjectDiagramPane extends StatefulWidget {
   const ObjectDiagramPane({super.key, required this.state});
 
@@ -31,14 +34,12 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
   final _edgesById = <int, ObjectGraphEdge>{};
 
   int? _expandedObjectId;
+  Map<int, Offset>? _positionsBeforeExpand;
   Set<int> _lastNodeIds = {};
   Set<int> _lastEdgeIds = {};
   DiagramColorMode? _lastColorMode;
   var _didInitialFit = false;
 
-  static const _gridCols = 4;
-  static const _gridStepX = 140.0;
-  static const _gridStepY = 64.0;
   static const _filterFloor = AppBottomBarMetrics.scrollInset + 8;
 
   /// Match the app’s neutral canvas (solid stand-in for the canvas gradient).
@@ -106,47 +107,41 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
   }
 
   void _onNodesMoved(Set<int> nodeIds, Offset offset) {
+    if (_expandedObjectId != null) return;
+    final moved = <int, Offset>{};
     for (final id in nodeIds) {
       final current = _positions[id];
       if (current == null) continue;
-      _positions[id] = current + offset;
+      final next = current + offset;
+      _positions[id] = next;
+      moved[id] = next;
       if (_controller.isAttached) {
         _controller.rebuildNode(id);
       }
     }
+    if (moved.isNotEmpty) {
+      unawaited(state.saveDiagramPositions(moved));
+    }
   }
 
-  void _ensurePositions(List<ObjectGraphNode> visibleNodes) {
-    for (final n in visibleNodes) {
-      if (_positions.containsKey(n.objectId)) continue;
-      final nextIndex = _nextFreeGridIndex();
-      final col = nextIndex % _gridCols;
-      final row = nextIndex ~/ _gridCols;
-      final originCol = (_gridCols - 1) / 2;
-      _positions[n.objectId] = Offset(
-        (col - originCol) * _gridStepX,
-        (row - 1) * _gridStepY,
-      );
-    }
-    // Drop layout only for nodes removed from the graph — not when tag-filtered out.
+  void _ensurePositions() {
     final graph = state.objectGraph;
     if (graph == null) return;
+    final newly = DiagramLayout.placeUnplaced(
+      nodes: graph.nodes,
+      edges: graph.edges,
+      positions: _positions,
+    );
     final allGraphIds = {for (final n in graph.nodes) n.objectId};
     _positions.removeWhere((id, _) => !allGraphIds.contains(id));
-  }
-
-  int _nextFreeGridIndex() {
-    final used = <int>{};
-    for (final offset in _positions.values) {
-      final col = (offset.dx / _gridStepX + (_gridCols - 1) / 2).round();
-      final row = (offset.dy / _gridStepY + 1).round();
-      used.add(row * _gridCols + col);
+    if (newly.isNotEmpty && _expandedObjectId == null) {
+      unawaited(
+        state.saveDiagramPositions({
+          for (final id in newly)
+            if (_positions[id] != null) id: _positions[id]!,
+        }),
+      );
     }
-    var index = 0;
-    while (used.contains(index)) {
-      index++;
-    }
-    return index;
   }
 
   void _refreshLookups(
@@ -203,7 +198,7 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
   }
 
   void _syncController(List<ObjectGraphNode> nodes, List<ObjectGraphEdge> edges) {
-    _ensurePositions(nodes);
+    _ensurePositions();
     _refreshLookups(nodes, edges);
     final nodeIds = {for (final n in nodes) n.objectId};
     final edgeIds = {for (final e in edges) e.id};
@@ -246,25 +241,64 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
     return TopicAppearance.colorFromHex(hex);
   }
 
+  Set<int> _connectedIds(int objectId) {
+    return {
+      for (final edge in _visibleEdges)
+        if (edge.sourceId == objectId)
+          edge.targetId
+        else if (edge.targetId == objectId)
+          edge.sourceId,
+    };
+  }
+
+  void _rebuildNodes(Iterable<int> ids) {
+    if (!_controller.isAttached) return;
+    for (final id in ids) {
+      if (_lastNodeIds.contains(id) || _controller.allNodeIds.contains(id)) {
+        _controller.rebuildNode(id);
+      }
+    }
+  }
+
   void _expand(int objectId) {
-    final previous = _expandedObjectId;
-    final next = previous == objectId ? null : objectId;
-    setState(() => _expandedObjectId = next);
+    if (_expandedObjectId == objectId) {
+      _closeExpand();
+      return;
+    }
+    if (_expandedObjectId != null) {
+      _restoreExpandPositions();
+    }
+    _positionsBeforeExpand = Map<int, Offset>.of(_positions);
+    DiagramLayout.pushNeighbors(
+      originId: objectId,
+      positions: _positions,
+      connectedIds: _connectedIds(objectId),
+    );
+    final touched = _positions.keys.toSet();
+    setState(() => _expandedObjectId = objectId);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_controller.isAttached) return;
-      if (previous != null) _controller.rebuildNode(previous);
-      if (next != null) _controller.rebuildNode(next);
+      if (!mounted) return;
+      _rebuildNodes(touched);
     });
+  }
+
+  void _restoreExpandPositions() {
+    final snapshot = _positionsBeforeExpand;
+    if (snapshot == null) return;
+    _positions
+      ..clear()
+      ..addAll(snapshot);
+    _positionsBeforeExpand = null;
   }
 
   void _closeExpand() {
     final previous = _expandedObjectId;
-    setState(() => _expandedObjectId = null);
     if (previous == null) return;
+    _restoreExpandPositions();
+    setState(() => _expandedObjectId = null);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _controller.isAttached) {
-        _controller.rebuildNode(previous);
-      }
+      if (!mounted) return;
+      _rebuildNodes([previous, ..._positions.keys]);
     });
   }
 
@@ -278,6 +312,7 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
         if (_expandedObjectId != null &&
             !_nodesById.containsKey(_expandedObjectId) &&
             !nodes.any((n) => n.objectId == _expandedObjectId)) {
+          _restoreExpandPositions();
           _expandedObjectId = null;
         }
         _syncController(nodes, edges);
@@ -323,7 +358,8 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
                     final accent = _accentFor(node);
                     return NodeWidget.custom(
                       position: position,
-                      isDragEnabled: !expanded,
+                      // Drag during expand would persist the temporary push.
+                      isDragEnabled: _expandedObjectId == null,
                       onDoubleTap: () => _expand(nodeId),
                       style: NodeStyle(
                         borderRadius:

@@ -22,6 +22,7 @@ from areas.objects.services.task_list_order import tasks_for_list
 from areas.objects.services.object_graph import (
     LINK_KINDS,
     OBJECT_LINK_TYPES,
+    apply_diagram_positions,
     build_workspace_graph,
     connection_dicts_for_object,
     tags_for_object,
@@ -64,6 +65,17 @@ def workspace_graph():
     if not workspace_id:
         return jsonify({"error": "workspace_id is required"}), 400
     return jsonify(build_workspace_graph(workspace_id))
+
+
+@objects_bp.route("/objects/graph/positions", methods=["PUT"])
+def save_graph_positions():
+    data = request.get_json(silent=True) or {}
+    workspace_id = data.get("workspace_id") or default_workspace_id()
+    if not workspace_id:
+        return jsonify({"error": "workspace_id is required"}), 400
+    updated = apply_diagram_positions(int(workspace_id), data.get("positions") or [])
+    db.session.commit()
+    return jsonify({"updated": updated})
 
 
 @objects_bp.route("/files/<int:file_id>/objects", methods=["GET"])
@@ -151,6 +163,10 @@ def update_object(object_id):
         embed.sort_key = data["sort_key"]
     if "anchor" in data:
         embed.anchor = data["anchor"]
+    if "diagram_x" in data:
+        embed.diagram_x = None if data["diagram_x"] is None else float(data["diagram_x"])
+    if "diagram_y" in data:
+        embed.diagram_y = None if data["diagram_y"] is None else float(data["diagram_y"])
     if "payload" in data and embed.type in {"image", "table"}:
         payload = data["payload"] or {}
         if embed.type == "table":

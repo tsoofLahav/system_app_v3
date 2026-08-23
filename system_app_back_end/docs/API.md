@@ -91,7 +91,9 @@ Archive list response: `{ "files", "total", "has_more", "heading_texts_by_file_i
 | GET | `/files/<file_id>/objects` | List embeds with resolved task_list tasks / info |
 | POST | `/files/<file_id>/objects` | Create embed + entity + document object node |
 | GET | `/objects/<id>` | Get one embed (expanded) |
-| PATCH | `/objects/<id>` | Update anchor / sort_key |
+| GET | `/objects/graph` | Workspace info map (nodes + related edges, including `diagram_x`/`diagram_y`) |
+| PUT | `/objects/graph/positions` | Batch-save map coordinates |
+| PATCH | `/objects/<id>` | Update anchor / sort_key / diagram_x / diagram_y |
 | DELETE | `/objects/<id>` | Remove object node from body + delete entity |
 | GET | `/objects/<id>/links` | List info object links |
 | POST | `/objects/<id>/links` | Create link from info object |

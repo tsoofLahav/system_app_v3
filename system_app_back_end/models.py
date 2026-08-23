@@ -188,6 +188,8 @@ class ObjectEmbed(db.Model):
     payload = db.Column(JSONB, nullable=False, default=dict)
     anchor = db.Column(JSONB, nullable=False, default=dict)
     sort_key = db.Column(db.Integer, nullable=False, default=0)
+    diagram_x = db.Column(db.Float)
+    diagram_y = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self, *, task_list=None, tasks=None, information=None):
@@ -200,6 +202,8 @@ class ObjectEmbed(db.Model):
             "payload": self.payload if self.payload is not None else {},
             "anchor": self.anchor if self.anchor is not None else {},
             "sort_key": self.sort_key,
+            "diagram_x": self.diagram_x,
+            "diagram_y": self.diagram_y,
             "created_at": _iso(self.created_at),
         }
         if task_list is not None:

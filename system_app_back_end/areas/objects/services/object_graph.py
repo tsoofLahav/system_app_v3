@@ -121,6 +121,8 @@ def build_workspace_graph(workspace_id: int) -> dict:
                 "topic_id": topic.id if topic is not None else None,
                 "topic_color": topic.color if topic is not None else None,
                 "tag_ids": tag_ids_for_object(embed.id),
+                "diagram_x": embed.diagram_x,
+                "diagram_y": embed.diagram_y,
             }
         )
     node_ids = {n["object_id"] for n in nodes}
@@ -152,6 +154,27 @@ def build_workspace_graph(workspace_id: int) -> dict:
             }
         )
     return {"nodes": nodes, "edges": edges}
+
+
+def apply_diagram_positions(workspace_id: int, rows: list) -> int:
+    """Write map coordinates onto objects that belong to [workspace_id]."""
+    embeds = {e.id: e for e in workspace_object_ids(workspace_id)}
+    updated = 0
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        raw_id = row.get("object_id")
+        if raw_id is None:
+            continue
+        embed = embeds.get(int(raw_id))
+        if embed is None:
+            continue
+        if row.get("x") is None or row.get("y") is None:
+            continue
+        embed.diagram_x = float(row["x"])
+        embed.diagram_y = float(row["y"])
+        updated += 1
+    return updated
 
 
 def connection_dicts_for_object(embed: ObjectEmbed) -> list[dict]:
