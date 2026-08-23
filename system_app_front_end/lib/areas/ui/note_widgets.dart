@@ -31,12 +31,14 @@ class NoteCard extends StatelessWidget {
     this.topicAccent,
     this.fileId,
     this.isMainTopic = false,
+    this.showShadow = true,
   });
 
   final Widget child;
   final Color? topicAccent;
   final int? fileId;
   final bool isMainTopic;
+  final bool showShadow;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +47,7 @@ class NoteCard extends StatelessWidget {
             topicAccent!,
             fileId!,
             isMainTopic: isMainTopic,
+            showShadow: showShadow,
           )
         : AppColors.noteDecoration();
 

@@ -57,6 +57,11 @@ class TableEmbedState extends State<TableEmbed>
     _editorKey.currentState?.focusLine(index, fromAbove: fromAbove);
   }
 
+  @override
+  void nudgeInner(AxisDirection direction) {
+    _editorKey.currentState?.nudge(direction);
+  }
+
   bool get _chartOn => TableObjectPayload.chartEnabled(_payload);
 
   bool get _editorBusy =>
@@ -160,13 +165,22 @@ class TableEmbedState extends State<TableEmbed>
       chart['enabled'] = true;
       next['chart'] = chart;
     }
+    final oldRows = TableObjectPayload.rowsOf(_payload);
     _payload = TableObjectPayload.normalize(next);
-    // Defer rebuild one frame so cell focus handoff (add column) finishes
-    // before chart chrome remounts the grid — avoids ghost/double carets.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(() {});
-    });
     _scheduleSave();
+    // Text-only emits must not rebuild the editor — that remounts cells and
+    // drops the IME (language switch, clearing a cell). Chart chrome can wait
+    // until the grid shape changes or the typing session ends.
+    final shapeChanged =
+        oldRows.length != rows.length ||
+        (oldRows.isNotEmpty &&
+            rows.isNotEmpty &&
+            oldRows.first.length != rows.first.length);
+    if (!shapeChanged) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _editorBusy) return;
+      setState(() {});
+    });
   }
 
   /// Add column after the right-clicked / focused cell.
@@ -212,10 +226,7 @@ class TableEmbedState extends State<TableEmbed>
     colors.insert(to, moved);
     chart['colors'] = colors;
     chart['enabled'] = true;
-    _payload = TableObjectPayload.normalize({
-      ..._payload,
-      'chart': chart,
-    });
+    _payload = TableObjectPayload.normalize({..._payload, 'chart': chart});
   }
 
   void _setChartType(String type) {
@@ -225,10 +236,7 @@ class TableEmbedState extends State<TableEmbed>
     chart['chartType'] = type;
     chart['enabled'] = true;
     setState(() {
-      _payload = TableObjectPayload.normalize({
-        ..._payload,
-        'chart': chart,
-      });
+      _payload = TableObjectPayload.normalize({..._payload, 'chart': chart});
     });
     _persistNow();
   }
@@ -244,10 +252,7 @@ class TableEmbedState extends State<TableEmbed>
     chart['colors'] = palette.colorsForCount(cols);
     chart['enabled'] = true;
     setState(() {
-      _payload = TableObjectPayload.normalize({
-        ..._payload,
-        'chart': chart,
-      });
+      _payload = TableObjectPayload.normalize({..._payload, 'chart': chart});
     });
     _persistNow();
   }
@@ -293,9 +298,7 @@ class TableEmbedState extends State<TableEmbed>
     final valueTexts = rows.length > 1
         ? [for (final c in rows[1]) '${c['text'] ?? ''}']
         : <String>[];
-    final values = [
-      for (final t in valueTexts) double.tryParse(t.trim()) ?? 0,
-    ];
+    final values = [for (final t in valueTexts) double.tryParse(t.trim()) ?? 0];
     final colorHexes = List<String>.from(
       (chart?['colors'] as List?)?.map((e) => '$e') ?? const [],
     );
@@ -304,8 +307,8 @@ class TableEmbedState extends State<TableEmbed>
         TopicAppearance.colorFromHex(
           i < colorHexes.length && colorHexes[i].isNotEmpty
               ? colorHexes[i]
-              : AppColorPalettes.defaultChart.hexes[
-                  i % AppColorPalettes.defaultChart.hexes.length],
+              : AppColorPalettes.defaultChart.hexes[i %
+                    AppColorPalettes.defaultChart.hexes.length],
         ),
     ];
 

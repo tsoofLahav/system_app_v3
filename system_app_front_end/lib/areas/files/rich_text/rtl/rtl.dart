@@ -38,12 +38,18 @@ TextSelection collapsedAtLogicalEnd(int offset) {
   );
 }
 
-/// Applies [rtlCaretMotionActions] when [textDirection] is RTL; LTR is a no-op.
+/// Always wraps [child] in [Actions] so LTR↔RTL does not remount the field.
+///
+/// Flip actions apply only when [textDirection] is RTL; LTR is an identity map.
 Widget wrapVisualCaretMotion({
   required TextDirection textDirection,
   required Map<Type, Action<Intent>> actions,
   required Widget child,
 }) {
-  if (textDirection != TextDirection.rtl) return child;
-  return Actions(actions: actions, child: child);
+  return Actions(
+    actions: textDirection == TextDirection.rtl
+        ? actions
+        : const <Type, Action<Intent>>{},
+    child: child,
+  );
 }

@@ -36,7 +36,13 @@ class _AddFileDialog extends StatefulWidget {
 }
 
 class _AddFileDialogState extends State<_AddFileDialog> {
-  final _nameController = TextEditingController(text: 'Document');
+  final _nameController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
@@ -44,10 +50,11 @@ class _AddFileDialogState extends State<_AddFileDialog> {
     super.dispose();
   }
 
+  String get _name => _nameController.text.trim();
+
   void _submit() {
-    final name = _nameController.text.trim();
-    if (name.isEmpty) return;
-    Navigator.pop(context, AddFileResult(name: name));
+    if (_name.isEmpty) return;
+    Navigator.pop(context, AddFileResult(name: _name));
   }
 
   @override
@@ -61,7 +68,10 @@ class _AddFileDialogState extends State<_AddFileDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(s['cancel']),
         ),
-        FilledButton(onPressed: _submit, child: Text(s['create'])),
+        FilledButton(
+          onPressed: _name.isEmpty ? null : _submit,
+          child: Text(s['create']),
+        ),
       ],
       child: AppDialogField(
         label: s['fileName'],

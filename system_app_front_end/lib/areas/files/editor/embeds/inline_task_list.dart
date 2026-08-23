@@ -62,6 +62,11 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget>
   }
 
   @override
+  void nudgeInner(AxisDirection direction) {
+    _surfaceKey.currentState?.nudge(direction);
+  }
+
+  @override
   void beginTaskReorderMode() {
     _surfaceKey.currentState?.setReorderMode(true);
   }

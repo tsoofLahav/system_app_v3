@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:super_editor/super_editor.dart';
 
 import '../../../core/app_state.dart';
+import '../../../core/platform/app_form_factor.dart';
 import '../../objects/data/object_embed.dart';
 import '../../objects/data/table_payload.dart';
 import '../../objects/data/task.dart';
@@ -33,12 +34,12 @@ import './embed_move_bubble.dart';
 import './object_embed_component.dart';
 import './selection_background_phase.dart';
 
-/// Super Editor's overlays, with a caret only for the pane that owns the
-/// cursor.
+/// Super Editor's overlays, with a caret only while this pane has primary
+/// focus (and is the claimed file).
 ///
 /// A pane keeps its selection when it loses focus — the marking is what every
-/// action runs on — so hiding the caret is the only thing that stops each open
-/// file from blinking a cursor of its own.
+/// action runs on — so hiding the caret is the only thing that stops a blinking
+/// cursor after the keyboard closes.
 List<SuperEditorLayerBuilder> documentOverlayBuilders({
   required bool withCaret,
 }) =>
@@ -130,9 +131,11 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   /// the dead document against the shared composer selection (Escape crash).
   var _superEditorEpoch = 0;
 
-  /// This pane is the one the user last clicked or typed in. Only that pane
-  /// paints a caret; the others keep their marking without a second cursor.
-  var _isClaimedPane = false;
+  /// Paint a caret only while this pane is claimed *and* has primary focus.
+  /// A collapsed selection can stay (the marking is what actions run on) —
+  /// the caret is what has to go when the keyboard closes.
+  var _showCaret = false;
+  var _embedFocusGen = 0;
 
   /// Tight constant gap between blocks (Enter creates a new paragraph).
   static const _blockGap = AppSpacing.blockGap;
@@ -193,9 +196,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           _docLayoutKey.currentState as DocumentLayout,
     );
     _doc.addListener(_onDocumentChange);
-    _composer.selectionNotifier.addListener(
-      _caretSession.suppressDocumentSelectionWhileEmbedOwns,
-    );
+    _composer.selectionNotifier.addListener(_onComposerSelection);
     _lastSavedJson = _currentFile.documentJson;
     _trackedObjectIds = _objectIdsInDocument();
     widget.state.addListener(_onAppStateChanged);
@@ -212,6 +213,11 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           markedTextForAgent: _markedTextForAgent,
           applyTextAction: _handleTextMenuAction,
           isFocused: () => _focusNode.hasFocus,
+          canEnterObject: _canEnterObject,
+          canLeaveObject: _canLeaveObject,
+          enterObject: _enterObjectFromPhone,
+          leaveObject: _leaveObjectFromPhone,
+          nudgeObjectCaret: _nudgeObjectCaretFromPhone,
         ),
       );
       unawaited(_loadEmbedsQuietly());
@@ -228,9 +234,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     DocumentEditorRegistry.unregister(widget.file.id);
     widget.state.removeListener(_onAppStateChanged);
     _doc.removeListener(_onDocumentChange);
-    _composer.selectionNotifier.removeListener(
-      _caretSession.suppressDocumentSelectionWhileEmbedOwns,
-    );
+    _composer.selectionNotifier.removeListener(_onComposerSelection);
     _focusNode.removeListener(_onFocusChanged);
     _focusNode.dispose();
     _composer.dispose();
@@ -239,15 +243,98 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   void _onFocusChanged() {
     if (_focusNode.hasFocus) _claimFile();
+    _syncCaretVisibility();
+    _bumpPhoneObjectGate();
+  }
+
+  void _onComposerSelection() {
+    _caretSession.suppressDocumentSelectionWhileEmbedOwns();
+    _bumpPhoneObjectGate();
+  }
+
+  void _bumpPhoneObjectGate() {
+    if (!isPhoneLayout) return;
+    DocumentEditorRegistry.objectGateNotifier.notify();
+  }
+
+  bool _canEnterObject() {
+    if (_caretSession.owner == DocumentCaretOwner.embed) return false;
+    final selection = _composer.selection;
+    if (selection == null || !selection.isCollapsed) return false;
+    return _doc.getNodeById(selection.extent.nodeId) is ObjectEmbedNode;
+  }
+
+  bool _canLeaveObject() =>
+      _caretSession.owner == DocumentCaretOwner.embed &&
+      _caretSession.activeEmbedNodeId != null;
+
+  void _enterObjectFromPhone() {
+    if (!_canEnterObject()) return;
+    final nodeId = _composer.selection!.extent.nodeId;
+    final gateway = _embedCaretRegistry[nodeId];
+    if (gateway == null) return;
+    _caretSession.adoptEmbed(nodeId);
+    runNextFrame(() {
+      _caretSession.adoptEmbed(nodeId);
+      gateway.enterFromAbove();
+      _bumpPhoneObjectGate();
+    });
+  }
+
+  void _leaveObjectFromPhone() {
+    final id = _caretSession.activeEmbedNodeId;
+    if (id == null) return;
+    _exitEmbedObject(id);
+    _bumpPhoneObjectGate();
+  }
+
+  void _nudgeObjectCaretFromPhone(AxisDirection direction) {
+    if (_canLeaveObject()) {
+      final id = _caretSession.activeEmbedNodeId;
+      if (id == null) return;
+      _embedCaretRegistry[id]?.nudgeInner(direction);
+      return;
+    }
+    if (!_canEnterObject()) return;
+    if (direction == AxisDirection.left || direction == AxisDirection.right) {
+      return;
+    }
+    final selection = _composer.selection;
+    if (selection == null) return;
+    final index = _doc.getNodeIndexById(selection.extent.nodeId);
+    if (index < 0) return;
+    final next = direction == AxisDirection.down ? index + 1 : index - 1;
+    if (next < 0 || next >= _doc.nodeCount) return;
+    final node = _doc.getNodeAt(next);
+    if (node == null) return;
+    _editor.execute([
+      ChangeSelectionRequest(
+        DocumentSelection.collapsed(
+          position: DocumentPosition(
+            nodeId: node.id,
+            nodePosition: node.beginningPosition,
+          ),
+        ),
+        SelectionChangeType.placeCaret,
+        SelectionReason.userInteraction,
+      ),
+    ]);
+    _focusNode.requestFocus();
+    _bumpPhoneObjectGate();
   }
 
   /// Caret visibility only — no focus node or editor is replaced here, so this
   /// stays safe mid-keystroke.
   void _onClaimedPaneChanged() {
+    _syncCaretVisibility();
+  }
+
+  void _syncCaretVisibility() {
     if (!mounted) return;
-    final claimed = DocumentEditorRegistry.activeFileId == widget.file.id;
-    if (claimed == _isClaimedPane) return;
-    setState(() => _isClaimedPane = claimed);
+    final show = _focusNode.hasFocus &&
+        DocumentEditorRegistry.activeFileId == widget.file.id;
+    if (show == _showCaret) return;
+    setState(() => _showCaret = show);
   }
 
   void _onDocumentChange(DocumentChangeLog changeLog) {
@@ -353,8 +440,14 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   Future<void> _loadEmbedsQuietly() async {
     await widget.state.loadEmbedsForFile(widget.file.id, notify: false);
     if (!mounted) return;
-    _embedsSnapshot = widget.state.embedsByFileId[widget.file.id];
-    _scheduleEmbedStructureRebuild();
+    final prev = _embedsSnapshot;
+    final next = widget.state.embedsByFileId[widget.file.id];
+    _embedsSnapshot = next;
+    // Task/cell saves refresh the cache. Rebuilding Super Editor for that
+    // kills the IME after the first letter (phone has no keys-down guard).
+    if (next != null && _embedsStructurallyChanged(prev, next)) {
+      _scheduleEmbedStructureRebuild();
+    }
   }
 
   void _tryFocusPendingObject() {
@@ -615,13 +708,20 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     }
 
     final gateway = _embedCaretRegistry[nodeId];
-    if (gateway != null && tryEnter(gateway)) return;
+    if (gateway != null && tryEnter(gateway)) {
+      _bumpPhoneObjectGate();
+      return;
+    }
     // Task-list surface may register one frame later than the embed host.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final late = _embedCaretRegistry[nodeId];
-      if (late != null && tryEnter(late)) return;
+      if (late != null && tryEnter(late)) {
+        _bumpPhoneObjectGate();
+        return;
+      }
       _caretSession.placeOnObjectLine(nodeId);
+      _bumpPhoneObjectGate();
     });
   }
 
@@ -730,14 +830,51 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     // Drop from the tracked set first so [_onDocumentChange] does not
     // double-DELETE after the node is removed.
     _trackedObjectIds = {..._trackedObjectIds}..remove(objectId);
-    await widget.state.deleteObjectEmbed(objectId);
     final nodeId = ObjectEmbedNode.idFor(objectId);
+    final index = _doc.getNodeIndexById(nodeId);
+    String? resumeId;
+    if (index >= 0 && index + 1 < _doc.nodeCount) {
+      resumeId = _doc.getNodeAt(index + 1)?.id;
+    } else if (index > 0) {
+      resumeId = _doc.getNodeAt(index - 1)?.id;
+    }
+    await widget.state.deleteObjectEmbed(objectId);
     if (_doc.getNodeById(nodeId) != null) {
       _editor.execute([DeleteNodeRequest(nodeId: nodeId)]);
     }
     _trackedObjectIds = _objectIdsInDocument();
     _dirty = true;
     await _flushPendingChanges();
+    _caretSession.owner = DocumentCaretOwner.document;
+    _caretSession.activeEmbedNodeId = null;
+    // Embed list notify remounts remaining objects next frame — land the
+    // document caret after that so the keyboard stays a writing session.
+    runNextFrame(() {
+      runNextFrame(() {
+        if (!mounted) return;
+        final id = resumeId;
+        if (id == null || _doc.getNodeById(id) == null) {
+          _bumpPhoneObjectGate();
+          return;
+        }
+        final node = _doc.getNodeById(id);
+        if (node == null) return;
+        _editor.execute([
+          ChangeSelectionRequest(
+            DocumentSelection.collapsed(
+              position: DocumentPosition(
+                nodeId: node.id,
+                nodePosition: node.beginningPosition,
+              ),
+            ),
+            SelectionChangeType.placeCaret,
+            SelectionReason.userInteraction,
+          ),
+        ]);
+        _focusNode.requestFocus();
+        _bumpPhoneObjectGate();
+      });
+    });
   }
 
   Future<void> _onPayloadChanged(
@@ -840,11 +977,23 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   void _onEmbedInnerFocusChanged(String? nodeId) {
     if (nodeId != null) {
+      _embedFocusGen++;
+      final already = _caretSession.owner == DocumentCaretOwner.embed &&
+          _caretSession.activeEmbedNodeId == nodeId;
       _claimFile();
       _caretSession.adoptEmbed(nodeId);
-    } else {
-      _caretSession.embedBlurred();
+      if (!already) _bumpPhoneObjectGate();
+      return;
     }
+    // Field-to-field move inside one object briefly reports no inner focus.
+    // Blurring now closes the IME; wait one frame in case the next field
+    // takes over.
+    final gen = _embedFocusGen;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || gen != _embedFocusGen) return;
+      _caretSession.embedBlurred();
+      _bumpPhoneObjectGate();
+    });
   }
 
   void _exitEmbedObject(String nodeId) {
@@ -1423,7 +1572,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
               selectionStyle: _selectionStyles,
               componentBuilders: _componentBuilders(ambient),
               documentOverlayBuilders:
-                  documentOverlayBuilders(withCaret: _isClaimedPane),
+                  documentOverlayBuilders(withCaret: _showCaret),
               plugins: {
                 _visibleSelectionPlugin,
                 _visualCaretPlugin,

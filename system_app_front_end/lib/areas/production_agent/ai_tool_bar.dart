@@ -85,19 +85,15 @@ class AiToolButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: enabled ? onPressed : null,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(aiToolTapPadding),
-          child: Icon(
-            icon,
-            size: aiToolIconSize,
-            color: enabled ? AppColors.text : AppColors.textHint,
-          ),
-        ),
+    return IconButton(
+      tooltip: tooltip,
+      padding: const EdgeInsets.all(aiToolTapPadding),
+      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+      onPressed: enabled ? onPressed : null,
+      icon: Icon(
+        icon,
+        size: aiToolIconSize,
+        color: enabled ? AppColors.text : AppColors.textHint,
       ),
     );
   }

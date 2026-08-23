@@ -8,9 +8,14 @@ import '../../ux/topic/topic_appearance.dart';
 
 /// Horizontal tag chips for filtering the objects diagram — sits beside the bottom bar.
 class DiagramTagFilterBar extends StatelessWidget {
-  const DiagramTagFilterBar({super.key, required this.state});
+  const DiagramTagFilterBar({
+    super.key,
+    required this.state,
+    this.tightShadow = false,
+  });
 
   final AppState state;
+  final bool tightShadow;
 
   @override
   Widget build(BuildContext context) {
@@ -21,6 +26,7 @@ class DiagramTagFilterBar extends StatelessWidget {
         if (tags.isEmpty) {
           return GlassBarSegment(
             height: 44,
+            tightShadow: tightShadow,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Align(
@@ -36,6 +42,7 @@ class DiagramTagFilterBar extends StatelessWidget {
         return GlassBarSegment(
           height: 44,
           padding: const EdgeInsets.symmetric(horizontal: 8),
+          tightShadow: tightShadow,
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(

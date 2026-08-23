@@ -25,8 +25,8 @@ A bullet, a table row, and an **embed block** count as **one line** of the docum
 | ↑/↓ in document text | Moves through paragraphs and **object blocks** as atomic units |
 | Tab on an object block | Opens the object (first inner field); click also works |
 | Enter on an object block | New paragraph **below** the object (keep writing) |
-| Escape inside an object | SE caret **after** the object (downstream / empty paragraph below) so typing continues under it |
-| ↑/↓ inside an open object | Moves between that object’s lines only (does not leave) |
+| Escape inside an object | SE caret **after** the object (downstream / empty paragraph below) so typing continues under it. Phone: leave icon on the first bottom-bar pill |
+| ↑/↓ inside an open object | Moves between that object’s lines only (does not leave). Coming from below lands at the end of the line (fluent text). Phone: keep the keyboard up across inner fields |
 | Delete a marked object | Object goes, like deleting a marked line |
 
 ## Three principles
@@ -59,13 +59,14 @@ Mechanism ([`embed_caret_bridge.dart`](embed_caret_bridge.dart) + [`document_car
 |-------|---------------------------|
 | Info | one field — first line is title (API/diagrams); rest is body |
 | Task list | list title → each task |
-| Table / chart grid | Physical 2D cells. Product rules (Enter, add-after, reorder): files [`AREA.md` § Tables & charts](../AREA.md#tables--charts). Caret: `hostKeyEvent` owns ←/→ (edge → side cell; RTL flips cols); ↑/↓ first/last line → cell above/below; one `FocusNode` per cell; surgical focus insert on add-column; chart parent rebuild deferred one frame. Document enter/exit still uses row-major `focusLine` |
+| Table / chart grid | Physical 2D cells. Product rules (Enter, add-after, reorder, empty Backspace): files [`AREA.md` § Tables & charts](../AREA.md#tables--charts). Caret: [`table_grid_nav.dart`](../rich_text/table_grid_nav.dart) is the only physical→visual cell move (pad + hardware + edge exit). Hebrew UI flips columns; the phone pad does not. Landing is the visual edge entered from, converted with the destination cell’s first-strong direction (RTL visual-right = logical start). Empty Backspace steps to the previous cell; first cell of an empty row removes the row. One `FocusNode` per cell. Document enter/exit still uses row-major `focusLine` |
 | Image | none — block only |
 
 ### Keystroke handoff
 
 - **Tab / Escape** focus moves use `runNextFrame` (one frame).
 - **Destructive** structure changes (empty Backspace deletes object/row) still use `runAfterKeystroke` so HardwareKeyboard can finish KeyUp.
+- **Phone IME:** Return inserts a newline (iOS ignores `textInputAction` on multiline fields) and empty-field delete is a no-op in the engine. [`FormattedTextField`](../rich_text/formatted_text_field.dart) treats a single IME newline as Enter, and holds an invisible sentinel so a second delete on an empty unit is empty Backspace. Same task / list / table / info rules as desktop.
 - Mid-keystroke remounts (AppState notify, embed list reload, disposing cell `FocusNode`s) cause `KeyDownEvent … already pressed`. Full MUST / MUST NOT checklist: [`NOTES.md` § Editor keyboard safety](../../../../../../NOTES.md#editor-keyboard-safety) and files [`AREA.md`](../AREA.md#keyboard--focus-safety-recurring-bug-class).
 
 ### Object right-click menus

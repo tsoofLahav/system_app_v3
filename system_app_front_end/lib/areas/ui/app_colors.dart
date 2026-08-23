@@ -148,7 +148,7 @@ abstract final class AppColors {
     );
   }
 
-  static BoxDecoration mainNoteDecoration() {
+  static BoxDecoration mainNoteDecoration({bool showShadow = true}) {
     return BoxDecoration(
       gradient: const LinearGradient(
         begin: Alignment.topLeft,
@@ -157,9 +157,11 @@ abstract final class AppColors {
       ),
       borderRadius: BorderRadius.circular(10),
       border: Border.all(color: noteBorder.withValues(alpha: 0.55), width: 0.8),
-      boxShadow: const [
-        BoxShadow(color: noteShadow, blurRadius: 14, offset: Offset(0, 5)),
-      ],
+      boxShadow: showShadow
+          ? const [
+              BoxShadow(color: noteShadow, blurRadius: 14, offset: Offset(0, 5)),
+            ]
+          : null,
     );
   }
 
@@ -168,8 +170,11 @@ abstract final class AppColors {
     Color topicAccent,
     int fileId, {
     bool isMainTopic = false,
+    bool showShadow = true,
   }) {
-    if (isMainTopic) return mainNoteDecoration();
+    if (isMainTopic) {
+      return mainNoteDecoration(showShadow: showShadow);
+    }
     return BoxDecoration(
       gradient: filePaneGradient(topicAccent, fileId),
       borderRadius: BorderRadius.circular(10),
@@ -177,9 +182,11 @@ abstract final class AppColors {
         color: topicPaneBorder(topicAccent, fileId),
         width: filePaneBorderWidth,
       ),
-      boxShadow: const [
-        BoxShadow(color: noteShadow, blurRadius: 14, offset: Offset(0, 5)),
-      ],
+      boxShadow: showShadow
+          ? const [
+              BoxShadow(color: noteShadow, blurRadius: 14, offset: Offset(0, 5)),
+            ]
+          : null,
     );
   }
 
@@ -218,6 +225,44 @@ abstract final class AppColors {
         width: filePaneBorderWidth,
       ),
     );
+  }
+
+  /// Phone header and footer stripes — warm off-white, not paper-bright.
+  static const phoneStripe = Color(0xFFF5F3ED);
+
+  /// Phone middle canvas behind the file card — a step darker so the
+  /// stripes read as a different band.
+  static const phoneCanvas = Color(0xFFE4E2DC);
+
+  /// How strongly the header ombre picks up the topic at its lower edge.
+  static const phoneHeaderOmbreTint = 0.14;
+
+  /// Header only, and never on Home: off-white above, a light topic wash
+  /// only in the lower third.
+  static LinearGradient phoneHeaderOmbre(Color topicAccent) {
+    final lower = Color.alphaBlend(
+      uiAccent(topicAccent).withValues(alpha: phoneHeaderOmbreTint),
+      phoneStripe,
+    );
+    return LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [phoneStripe, phoneStripe, lower],
+      stops: const [0.0, 0.62, 1.0],
+    );
+  }
+
+  /// Off-white stripe, or the header ombre when a non-Home topic is open.
+  /// Views and Home stay solid ([neutral] or [isMainTopic]).
+  static BoxDecoration phoneHeaderDecoration({
+    required Color? topicAccent,
+    required bool isMainTopic,
+    bool neutral = false,
+  }) {
+    if (neutral || topicAccent == null || isMainTopic) {
+      return const BoxDecoration(color: phoneStripe);
+    }
+    return BoxDecoration(gradient: phoneHeaderOmbre(topicAccent));
   }
 
   /// Faint frame for reusable details blocks (title + body unit).

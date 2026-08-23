@@ -4,11 +4,9 @@ import 'package:flutter/services.dart';
 import '../../../core/app_state.dart';
 import '../../../core/l10n/app_strings.dart';
 import '../../../core/platform/app_form_factor.dart';
-import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/dialog_field_style.dart';
-import '../../ui/dialog_metrics.dart';
 import '../../ui/horizontal_carousel.dart';
 import '../../ui/overlay_dialog_shell.dart';
 import '../../ui/overlay_dialog_style.dart';
@@ -17,6 +15,7 @@ import '../arrange/file_arrange_keyboard.dart';
 import '../topic/topic_appearance.dart';
 import './bring_file_catalog.dart';
 import './bring_file_preview.dart';
+import './phone_bring_file_sheet.dart';
 
 /// Search files from other topics. Choosing one visits that file on Home.
 Future<void> showBringFilePicker({
@@ -25,10 +24,7 @@ Future<void> showBringFilePicker({
 }) async {
   final BrowseFileEntry? entry;
   if (isPhoneLayout) {
-    entry = await showAppDialog<BrowseFileEntry>(
-      context: context,
-      builder: (_) => _BringFileListDialog(state: state),
-    );
+    entry = await showPhoneBringFileSheet(context: context, state: state);
   } else {
     entry = await showDialog<BrowseFileEntry>(
       context: context,
@@ -299,119 +295,5 @@ class _BringFilePickerOverlayState extends State<BringFilePickerOverlay> {
           },
         ),
       );
-  }
-}
-
-class _BringFileListDialog extends StatefulWidget {
-  const _BringFileListDialog({required this.state});
-
-  final AppState state;
-
-  @override
-  State<_BringFileListDialog> createState() => _BringFileListDialogState();
-}
-
-class _BringFileListDialogState extends State<_BringFileListDialog> {
-  final _search = TextEditingController();
-  List<BrowseFileEntry> _all = const [];
-  List<BrowseFileEntry> _filtered = const [];
-  var _loading = true;
-
-  AppState get _state => widget.state;
-
-  @override
-  void initState() {
-    super.initState();
-    _search.addListener(_applyFilter);
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    final entries = await _state.loadBringFileCatalog();
-    if (!mounted) return;
-    setState(() {
-      _all = entries;
-      _filtered = entries;
-      _loading = false;
-    });
-  }
-
-  void _applyFilter() {
-    setState(() {
-      _filtered = filterBringFileCatalog(
-        _all,
-        _search.text,
-        topicLabel: _state.topicDisplayName,
-        fileLabel: (file) => _state.fileDisplayName(file.name),
-      );
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = _state.strings;
-    return AppAdaptiveDialogShell(
-      title: Text(s['bringFile']),
-      width: AppDialogMetrics.wideWidth,
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(s['cancel']),
-        ),
-      ],
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: _search,
-            autofocus: true,
-            decoration: DialogFieldStyle.decoration(
-              hintText: s['bringFileSearchHint'],
-            ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 280,
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                : _filtered.isEmpty
-                    ? Center(
-                        child: Text(
-                          s['bringFileEmpty'],
-                          style: AppTypography.metaStyle,
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: _filtered.length,
-                        itemBuilder: (context, index) {
-                          final entry = _filtered[index];
-                          return ListTile(
-                            dense: true,
-                            title: Text(
-                              _state.fileDisplayName(entry.file.name),
-                              style: AppTypography.noteBodyStyle,
-                            ),
-                            subtitle: Text(
-                              s.bringFileFromTopicNamed(
-                                _state.topicDisplayName(entry.topic),
-                              ),
-                              style: AppTypography.metaStyle,
-                            ),
-                            onTap: () => Navigator.pop(context, entry),
-                          );
-                        },
-                      ),
-          ),
-        ],
-      ),
-    );
   }
 }

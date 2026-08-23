@@ -6,7 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:super_editor/super_editor.dart';
 
+import '../../ux/shell/dismiss_focus_on_outside_tap.dart';
 import '../model/object_embed_node.dart';
+import '../rich_text/formatted_text_field.dart';
 import './document_caret_session.dart';
 import './editor_key_handoff.dart';
 
@@ -36,6 +38,9 @@ abstract class EmbedCaretGateway {
   /// Chrome / block-level right-click: freeze the whole embed text as the mark
   /// (not a single line). No-op when the embed has no text field.
   void prepareObjectMenuMark() {}
+
+  /// Phone arrow pad — stay inside this object (edges are no-ops).
+  void nudgeInner(AxisDirection direction) {}
 }
 
 mixin EmbedLineGatewayMixin implements EmbedCaretGateway {
@@ -68,6 +73,9 @@ mixin EmbedLineGatewayMixin implements EmbedCaretGateway {
 
   @override
   void prepareObjectMenuMark() {}
+
+  @override
+  void nudgeInner(AxisDirection direction) {}
 }
 
 /// ↑/↓ within an embed only. At the first/last line, do nothing (Escape leaves).
@@ -94,20 +102,31 @@ void focusFieldLine(
   TextEditingController controller, {
   required bool fromAbove,
 }) {
-  final len = controller.text.length;
-  controller.selection = TextSelection.collapsed(
-    offset: fromAbove ? 0 : len,
-  );
+  _placeInnerCaret(controller, atStart: fromAbove);
   focus.requestFocus();
   // Super Editor may still be releasing the IME this frame (especially right
   // after insert + document reload). Re-claim focus once the tree settles so
-  // Hebrew/Latin typing continues without a manual click.
+  // Hebrew/Latin typing continues without a manual click. iOS also resets
+  // the caret to 0 on a new field — put it back after the handoff.
   WidgetsBinding.instance.addPostFrameCallback((_) {
     if (!focus.canRequestFocus) return;
-    if (!focus.hasFocus) {
-      focus.requestFocus();
-    }
+    if (!focus.hasFocus) focus.requestFocus();
+    _placeInnerCaret(controller, atStart: fromAbove);
   });
+}
+
+void _placeInnerCaret(
+  TextEditingController controller, {
+  required bool atStart,
+}) {
+  final text = controller.text;
+  if (text == imeEmptySentinel) {
+    controller.selection = const TextSelection.collapsed(offset: 1);
+    return;
+  }
+  controller.selection = TextSelection.collapsed(
+    offset: atStart ? 0 : text.length,
+  );
 }
 
 class EmbedCaretRegistry extends ChangeNotifier {
@@ -284,20 +303,22 @@ class EmbedEditScope extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Shortcuts(
-      shortcuts: const {
-        SingleActivator(LogicalKeyboardKey.escape): _ExitObjectIntent(),
-      },
-      child: Actions(
-        actions: {
-          _ExitObjectIntent: CallbackAction<_ExitObjectIntent>(
-            onInvoke: (_) {
-              EmbedCaretScope.maybeOf(context)?.onExitObject(nodeId);
-              return null;
-            },
-          ),
+    return KeepEditorFocus(
+      child: Shortcuts(
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.escape): _ExitObjectIntent(),
         },
-        child: child,
+        child: Actions(
+          actions: {
+            _ExitObjectIntent: CallbackAction<_ExitObjectIntent>(
+              onInvoke: (_) {
+                EmbedCaretScope.maybeOf(context)?.onExitObject(nodeId);
+                return null;
+              },
+            ),
+          },
+          child: child,
+        ),
       ),
     );
   }

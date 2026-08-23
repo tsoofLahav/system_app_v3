@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/l10n/app_strings.dart';
+import '../../core/platform/app_form_factor.dart';
 import '../files/editor/read_only_document_view.dart';
 import '../files/model/agent_text_blocks.dart';
 import '../ui/app_colors.dart';
@@ -97,6 +98,7 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
   String? _activeId;
   double? _bubbleTop;
   var _busy = false;
+  var _phoneShowCurrent = true;
 
   /// Set when the last change is decided: the bubble steps aside and Finish
   /// takes over. Touching any change brings it back so a choice can be flipped.
@@ -365,7 +367,10 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
   Widget build(BuildContext context) {
     final s = widget.strings;
     final size = MediaQuery.sizeOf(context);
-    final inset = AppDialogMetrics.windowInset;
+    final phone = isPhoneLayout;
+    final inset = phone
+        ? const EdgeInsets.symmetric(horizontal: 8, vertical: 12)
+        : AppDialogMetrics.windowInset;
 
     // No text fields live here, so raw key handling is safe (see NOTES.md).
     return CallbackShortcuts(
@@ -385,21 +390,33 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
           insetPadding: inset,
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: 1040,
-              maxHeight: size.height - inset.vertical < 720
+              maxWidth: phone ? double.infinity : 1040,
+              maxHeight: phone
                   ? size.height - inset.vertical
-                  : 720,
+                  : (size.height - inset.vertical < 720
+                      ? size.height - inset.vertical
+                      : 720),
             ),
             child: GlassSurface.styled(
               style: AppGlassStyle.dialog,
               borderRadius: BorderRadius.circular(AppGlassStyle.dialogRadius),
-              padding: AppDialogMetrics.padding,
+              padding: phone
+                  ? const EdgeInsets.fromLTRB(10, 10, 10, 8)
+                  : AppDialogMetrics.padding,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _header(s),
                   const SizedBox(height: AppDialogMetrics.titleGap),
-                  Expanded(child: _panes(s)),
+                  if (phone) ...[
+                    _phoneSideToggle(s),
+                    const SizedBox(height: 8),
+                  ],
+                  Expanded(child: phone ? _phonePane(s) : _panes(s)),
+                  if (phone) ...[
+                    const SizedBox(height: 8),
+                    _phoneHunkBar(s),
+                  ],
                   const SizedBox(height: AppDialogMetrics.actionsGap),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -409,8 +426,6 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
                         child: Text(s['reviewDiscard']),
                       ),
                       const SizedBox(width: 8),
-                      // Everything decided: the button is where the reviewer
-                      // should look next, so it lights up.
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 220),
                         curve: Curves.easeOut,
@@ -442,6 +457,71 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _phoneSideToggle(AppStrings s) {
+    return SegmentedButton<bool>(
+      segments: [
+        ButtonSegment(value: true, label: Text(s['reviewPaneCurrent'])),
+        ButtonSegment(value: false, label: Text(s['reviewPaneSuggested'])),
+      ],
+      selected: {_phoneShowCurrent},
+      onSelectionChanged: (next) {
+        setState(() => _phoneShowCurrent = next.first);
+        WidgetsBinding.instance.addPostFrameCallback((_) => _syncToActive());
+      },
+      style: ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        textStyle: WidgetStatePropertyAll(
+          AppTypography.metaStyle.copyWith(fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
+  Widget _phonePane(AppStrings s) {
+    if (_hunks.isEmpty) {
+      return Center(
+        child: Text(s['reviewNoChanges'], style: AppTypography.metaStyle),
+      );
+    }
+    return _pane(
+      label: '',
+      blocks: _phoneShowCurrent ? _oldBlocks : _newBlocks,
+      controller: _phoneShowCurrent ? _oldScroll : _newScroll,
+      oldSide: _phoneShowCurrent,
+    );
+  }
+
+  Widget _phoneHunkBar(AppStrings s) {
+    if (_hunks.isEmpty || _activeId == null) {
+      return const SizedBox.shrink();
+    }
+    final index = _hunks.indexWhere((h) => h.id == _activeId) + 1;
+    return Row(
+      children: [
+        Text(
+          s.reviewCounter(index, _hunks.length),
+          style: AppTypography.metaStyle,
+        ),
+        const Spacer(),
+        _bubbleButton(
+          tooltip: s['reviewAccept'],
+          icon: AppIcons.check,
+          color: AppColors.primary,
+          selected: _choices[_activeId] == ReviewChoice.accept,
+          onTap: () => _decide(ReviewChoice.accept),
+        ),
+        const SizedBox(width: 8),
+        _bubbleButton(
+          tooltip: s['reviewReject'],
+          icon: AppIcons.close,
+          color: AppColors.textHint,
+          selected: _choices[_activeId] == ReviewChoice.reject,
+          onTap: () => _decide(ReviewChoice.reject),
+        ),
+      ],
     );
   }
 
@@ -526,17 +606,18 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 2, bottom: 4),
-          child: Text(
-            label,
-            style: AppTypography.metaStyle.copyWith(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.text.withValues(alpha: 0.75),
+        if (label.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 4),
+            child: Text(
+              label,
+              style: AppTypography.metaStyle.copyWith(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.text.withValues(alpha: 0.75),
+              ),
             ),
           ),
-        ),
         Expanded(
           child: NoteCard(
             topicAccent: widget.topicAccent,

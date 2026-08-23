@@ -1,5 +1,4 @@
 import '../../files/data/app_file.dart';
-import '../layout/topic_file_slots.dart';
 
 List<AppFile> rotateMainFilesLeft(List<AppFile> main) {
   if (main.length < 2) return List<AppFile>.from(main);
@@ -11,18 +10,23 @@ List<AppFile> rotateMainFilesRight(List<AppFile> main) {
   return [main.last, ...main.sublist(0, main.length - 1)];
 }
 
-/// Next topic file order after cycling the on-screen band one step.
+/// Next topic file order after cycling **every** live file one step.
 ///
-/// [reverse] walks the other way. Hidden files stay after the shown band.
+/// [reverse] walks the other way. Archived files are not in [ordered].
 /// Null when there is nothing to cycle.
-List<AppFile>? cycledShownFileOrder({
+List<AppFile>? cycledTopicFileOrder({
   required List<AppFile> ordered,
-  required String layoutId,
   bool reverse = false,
 }) {
-  final shown = shownFiles(ordered, layoutId);
-  if (shown.length < 2) return null;
-  final rotated =
-      reverse ? rotateMainFilesRight(shown) : rotateMainFilesLeft(shown);
-  return [...rotated, ...hiddenFiles(ordered, layoutId)];
+  if (ordered.length < 2) return null;
+  return reverse ? rotateMainFilesRight(ordered) : rotateMainFilesLeft(ordered);
+}
+
+/// @nodoc Kept for older tests — same as [cycledTopicFileOrder].
+List<AppFile>? cycledShownFileOrder({
+  required List<AppFile> ordered,
+  String? layoutId,
+  bool reverse = false,
+}) {
+  return cycledTopicFileOrder(ordered: ordered, reverse: reverse);
 }

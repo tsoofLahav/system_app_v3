@@ -52,9 +52,12 @@ class DocumentCaretSession {
 
   /// Inner field focused — drop SE selection/focus so two carets/IMEs do not fight.
   void adoptEmbed(String embedNodeId) {
+    final staying = owner == DocumentCaretOwner.embed &&
+        activeEmbedNodeId == embedNodeId;
     owner = DocumentCaretOwner.embed;
     activeEmbedNodeId = embedNodeId;
-    _clearSelection();
+    if (_composer.selection != null) _clearSelection();
+    if (staying) return;
     // Release Super Editor's focus node; otherwise the first keystroke often
     // lands in a half-attached IME (one Latin glyph) and then typing dies.
     if (_editorFocus.hasFocus) {

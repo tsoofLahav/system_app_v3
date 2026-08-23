@@ -14,6 +14,8 @@ Lives in the bottom bar ([`ai_tool_bar.dart`](ai_tool_bar.dart)), in reading ord
 | **Pinned actions** | Up to six saved actions in slot order, each with its icon and its own key (⌘⇧2…⌘⇧7). Pressing one runs it on what is open. Globals always show; a type-specific pin only while a topic of that type is open. |
 | **⋯** | Opens the AI actions dialog ([`ai_actions_dialog.dart`](../automations/ai_actions_dialog.dart)) — the same filter as the bar (globals + the open type), each with pin, edit, run and delete. |
 
+Each icon uses the same 34px tap slot as the other bottom-bar buttons, so the AI pill is not tighter than insert or chrome.
+
 The agent comes first and never moves: it is the one control that is always there, so it must always be in the same place. Everything is disabled when there is no AI context (nothing selected) or a run is already in flight — `AppState.hasAiContext` and `aiRunning` gate them, and `aiRunning` drives the busy state so the user cannot double-fire.
 
 ### Keeping an ask
@@ -63,6 +65,7 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 - A hunk is mapped to the lines it touches ([`review_marks.dart`](review_marks.dart)). One table row, task or list item is one agent-text line, so a change inside an embed tints that row alone; a hunk over the whole fence tints the embed.
 - States: pending (faint op tint), active (stronger tint plus a left rule), accepted (teal with a check), rejected (grey, dimmed, with a cross). Word marks stay for changed text lines.
 - One bubble in the gutter between the panes carries `n / m` and Accept | Reject. Deciding advances it to the next undecided change and scrolls both panes there. Enter accepts, Backspace rejects, Up/Down walk the changes.
+- On phone the same dialog is full-width with a Current / Suggested toggle and Accept | Reject docked at the bottom (no gutter bubble). It is still not dismissible until Finish or Discard.
 - On the last decision the bubble disappears and Finish lights up, so attention moves to the one thing left to do. Clicking any change brings the bubble back to flip that choice.
 - Finish (disabled until all decided) → `POST /files/:id/pending-review/finish` (archive copy + merge apply); Discard → `DELETE /files/:id/pending-review`.
 

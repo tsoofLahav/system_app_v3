@@ -71,7 +71,7 @@ def create_topic():
         icon=data.get("icon"),
         color=data.get("color"),
         order_index=data.get("order_index", 0),
-        file_layout=data.get("file_layout") or "single",
+        file_layout=data.get("file_layout") or "auto",
         topic_type_id=type_row.id if type_row else None,
     )
     db.session.add(topic)

@@ -6,6 +6,7 @@ import '../../files/data/app_file.dart';
 import '../../files/data/topic.dart';
 import './topic_appearance.dart';
 import './topic_header.dart';
+import './phone_topic_view.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
 import '../layout/file_layout_board.dart';
@@ -13,11 +14,10 @@ import '../layout/file_layouts.dart';
 import '../shell/app_bottom_bar.dart';
 import '../widgets/main_pane_loader.dart';
 import '../create_topic/add_file_dialog.dart';
-import '../../files/editor/document_pane.dart';
 
-/// The topic canvas: the files the topic's layout has room for, and nothing
-/// else. On Home, visiting files from other topics sit in that same order.
-/// Files past the last slot are reached by arranging the topic.
+/// The topic canvas. Desktop draws the files the layout has room for.
+/// Phone draws every file in order, one at a time ([PhoneTopicView]).
+/// On Home, visiting files from other topics sit in that same order.
 ///
 /// Listens to [AppState] itself and only rebuilds when the open topic / files /
 /// layout / language change — not on every `notifyListeners` (AI actions,
@@ -134,6 +134,14 @@ class _TopicViewState extends State<TopicView> {
       return const MainPaneLoader();
     }
 
+    if (isPhoneLayout) {
+      return PhoneTopicView(
+        state: state,
+        topic: topic,
+        files: state.orderedFilesFor(topic, detail!.files),
+      );
+    }
+
     final shown = state.shownFilesFor(topic, detail!.files);
     final accent = TopicAppearance.accentFor(topic);
 
@@ -179,40 +187,6 @@ class _TopicViewState extends State<TopicView> {
     List<AppFile> shown,
     EdgeInsets canvasPadding,
   ) {
-    DocumentPane paneFor(AppFile file) {
-      final paneTopic = state.canvasTopicFor(topic, file);
-      return DocumentPane(
-        key: ValueKey(
-          state.isBroughtFileOnCanvas(topic, file.id)
-              ? 'brought-${file.id}'
-              : file.id,
-        ),
-        topic: paneTopic,
-        file: file,
-        state: state,
-        accent: TopicAppearance.accentFor(paneTopic),
-        isBrought: state.isBroughtFileOnCanvas(topic, file.id),
-        onDelete: () => state.deleteFile(file),
-      );
-    }
-
-    // Two files cannot sit side by side on a phone, so there the shape
-    // collapses to one file per row. Which files appear is still the layout's
-    // answer, so a file hidden on desktop stays hidden here.
-    if (isPhoneLayout) {
-      final height = FileLayouts.phoneSlotHeight(context);
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final file in shown)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppLayoutSpacing.gap),
-              child: SizedBox(height: height, child: paneFor(file)),
-            ),
-        ],
-      );
-    }
-
     return FileLayoutBoard(
       topic: topic,
       files: shown,

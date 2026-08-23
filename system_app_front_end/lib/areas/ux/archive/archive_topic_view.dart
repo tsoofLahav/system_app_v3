@@ -8,6 +8,7 @@ import '../../ui/app_typography.dart';
 import '../../ui/confirm_dialog.dart';
 import '../widgets/app_context_menu.dart';
 import '../widgets/main_pane_loader.dart';
+import '../widgets/topic_emoji.dart';
 import './archive_file_grid.dart';
 import './archive_file_preview.dart';
 
@@ -131,10 +132,20 @@ class _ArchiveTopicViewState extends State<ArchiveTopicView> {
       children: [
         Row(
           children: [
+            if (!topic.isMain) ...[
+              TopicEmoji(value: topic.icon, size: 16),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: Text(
-                state.topicDisplayName(topic),
-                style: AppTypography.pageTitleStyle,
+                s.archiveTopicHeadline(state.topicDisplayName(topic)),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.noteTitleStyle.copyWith(
+                  fontSize: 15,
+                  height: 1.2,
+                  color: AppColors.text.withValues(alpha: 0.94),
+                ),
               ),
             ),
             _ArchiveSearchBar(

@@ -1,13 +1,46 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
+import '../../../core/platform/app_form_factor.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/glass_surface.dart';
-import '../../ux/shell/app_bottom_bar.dart';
+
+/// Phone bottom bar talks to the open view pane through this.
+class ViewChromeHost {
+  const ViewChromeHost({
+    required this.onToggleDisplayMode,
+    required this.onAddSection,
+    required this.onStartFrameReorder,
+    required this.frameReorderMode,
+  });
+
+  final VoidCallback onToggleDisplayMode;
+  final VoidCallback onAddSection;
+  final VoidCallback onStartFrameReorder;
+  final bool frameReorderMode;
+}
+
+class ViewChromeRegistry extends ChangeNotifier {
+  ViewChromeRegistry._();
+  static final instance = ViewChromeRegistry._();
+  static ChangeNotifier get notifier => instance;
+  static ViewChromeHost? active;
+
+  static void attach(ViewChromeHost host) {
+    active = host;
+    instance.notifyListeners();
+  }
+
+  static void detach(ViewChromeHost host) {
+    if (active != host) return;
+    active = null;
+    instance.notifyListeners();
+  }
+}
 
 /// Compact floating chrome for the view page — same capsule language as the
-/// bottom bar.
+/// bottom bar. On phone it sits in [PhoneBottomBar], not as a second overlay.
 class ViewChromeMenu extends StatelessWidget {
   const ViewChromeMenu({
     super.key,
@@ -36,8 +69,9 @@ class ViewChromeMenu extends StatelessWidget {
     final bySection = displayMode != ViewDisplayMode.byTopic;
 
     return GlassBarSegment(
-      height: AppBottomBarMetrics.barHeight,
+      height: isPhoneLayout ? 38 : 44,
       padding: _segmentPadding,
+      tightShadow: isPhoneLayout,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

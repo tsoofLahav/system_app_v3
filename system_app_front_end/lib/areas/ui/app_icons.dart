@@ -34,6 +34,10 @@ abstract final class AppIcons {
   static const chevronLeft = LucideIcons.chevronLeft200;
   static const chevronDown = LucideIcons.chevronDown200;
   static const chevronUp = LucideIcons.chevronUp200;
+  static const arrowUp = LucideIcons.arrowUp200;
+  static const arrowDown = LucideIcons.arrowDown200;
+  static const arrowLeft = LucideIcons.arrowLeft200;
+  static const arrowRight = LucideIcons.arrowRight200;
   static const addFile = LucideIcons.filePlus200;
   static const unmarkTasks = LucideIcons.listChecks200;
   static const archiveFiles = LucideIcons.archive200;
@@ -44,6 +48,8 @@ abstract final class AppIcons {
   static const arrange = LucideIcons.layoutPanelTop200;
   static const swap = LucideIcons.arrowLeftRight200;
   static const close = LucideIcons.x200;
+  static const enterObject = LucideIcons.squareArrowDown200;
+  static const leaveObject = LucideIcons.squareArrowUp200;
   static const trash = LucideIcons.trash2200;
   static const search = LucideIcons.search200;
   static const colorWheel = LucideIcons.palette200;
@@ -68,12 +74,16 @@ class AppIcon extends StatelessWidget {
     this.size = 20,
     this.color,
     this.enabled = true,
+    this.textDirection,
   });
 
   final IconData icon;
   final double size;
   final Color? color;
   final bool enabled;
+
+  /// Chrome arrows pass [TextDirection.ltr] so left stays left in Hebrew.
+  final TextDirection? textDirection;
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +95,7 @@ class AppIcon extends StatelessWidget {
           (enabled
               ? AppColors.text.withValues(alpha: 0.82)
               : AppColors.textHint.withValues(alpha: 0.38)),
+      textDirection: textDirection,
     );
   }
 }

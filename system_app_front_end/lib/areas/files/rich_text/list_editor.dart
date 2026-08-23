@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/l10n/app_strings.dart';
 import '../../ui/app_typography.dart';
@@ -61,7 +62,9 @@ class _RichListEditorState extends State<RichListEditor> {
   bool _localStateMatchesNode() {
     if (_controllers.length != widget.node.items.length) return false;
     for (var i = 0; i < _controllers.length; i++) {
-      if (_controllers[i].text != widget.node.items[i].text) return false;
+      if (imeVisibleText(_controllers[i].text) != widget.node.items[i].text) {
+        return false;
+      }
     }
     return true;
   }
@@ -75,6 +78,10 @@ class _RichListEditorState extends State<RichListEditor> {
       return;
     }
     if (_localStateMatchesNode()) return;
+    if (_focusNodes.any((f) => f.hasFocus) ||
+        HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+      return;
+    }
     final focusIdx = _pendingFocusIndex ?? _focusNodes.indexWhere((f) => f.hasFocus);
     _disposeControllers();
     _syncFromNode();
@@ -140,7 +147,7 @@ class _RichListEditorState extends State<RichListEditor> {
           for (var i = 0; i < _controllers.length; i++)
             ListItem(
               id: _itemIds[i],
-              text: _controllers[i].text,
+              text: imeVisibleText(_controllers[i].text),
               indent: _itemIndents[i],
               spans: [
                 for (final s in _controllers[i].spans)
@@ -193,7 +200,7 @@ class _RichListEditorState extends State<RichListEditor> {
   void _handleEnter(int index) {
     widget.onFocus?.call();
     final text = _controllers[index].text;
-    if (text.trim().isEmpty) {
+    if (imeFieldLooksEmpty(text)) {
       widget.onExitList(index);
       return;
     }
@@ -202,7 +209,7 @@ class _RichListEditorState extends State<RichListEditor> {
 
   Future<void> _handleBackspace(int index) async {
     widget.onFocus?.call();
-    if (_controllers[index].text.trim().isEmpty) {
+    if (imeFieldLooksEmpty(_controllers[index].text)) {
       _removeItemAt(index);
     }
   }

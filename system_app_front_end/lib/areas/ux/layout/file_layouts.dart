@@ -25,6 +25,9 @@ class FileLayoutDefinition {
 }
 
 abstract final class FileLayouts {
+  /// Follows file count: 1 → single, 2 → split, 3+ → large left.
+  /// Stored until the user picks a layout in arrange.
+  static const auto = 'auto';
   static const single = 'single';
   static const split = 'split';
   static const heroLeft = 'hero_left';
@@ -66,7 +69,15 @@ abstract final class FileLayouts {
   ];
 
   static FileLayoutDefinition byId(String id) {
+    if (id == auto) return byId(single);
     return all.firstWhere((l) => l.id == id, orElse: () => all.first);
+  }
+
+  /// Persist [auto] when the pick is still the count-based default.
+  static String storedLayoutId(String layoutId, int fileCount) {
+    final resolved = layoutId == auto ? bestForFileCount(fileCount) : layoutId;
+    if (resolved == bestForFileCount(fileCount)) return auto;
+    return resolved;
   }
 
   static bool isAvailable(String id, int fileCount) {
@@ -97,7 +108,8 @@ abstract final class FileLayouts {
     double reservedBelow = 0,
   }) {
     final viewport = MediaQuery.sizeOf(context).height;
-    final available = viewport -
+    final available =
+        viewport -
         canvasPaddingTop -
         canvasPaddingBottom -
         reservedAbove -

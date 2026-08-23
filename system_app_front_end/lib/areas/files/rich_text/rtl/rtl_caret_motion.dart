@@ -5,8 +5,8 @@
 /// and hands them back to the field's own action so Flutter still performs the
 /// move (key repeat, graphemes, shift-extend intact).
 ///
-/// Use via [wrapVisualCaretMotion] in `rtl.dart` — only when the field direction
-/// is RTL.
+/// Use via [wrapVisualCaretMotion] in `rtl.dart`. The wrap is always present
+/// (same tree shape); flip actions apply only when the field is RTL.
 library;
 
 import 'package:flutter/widgets.dart';

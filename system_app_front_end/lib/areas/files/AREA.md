@@ -47,6 +47,8 @@ A pane with `isBrought` is a file **visiting Home** from another topic (UX bring
 
 Archive preview is the same read-only document as AI review: `GET /files/:id/agent-text` (expanded fences) → `parseAgentTextBlocks` → [`ReadOnlyDocumentView`](editor/read_only_document_view.dart) in a tinted `NoteCard`. It does not mount `SuperDocumentEditor`. The archive list itself never downloads `document_json`; cards use id, name, and `archived_at`.
 
+On phone the framed pane ends above the tool bubbles on the light-grey middle; the card keeps its shadow for depth. The bubbles have no lift shadow. Screen structure is locked in UX [`AREA.md` § Phone screen structure](../ux/AREA.md#phone-screen-structure).
+
 ### One scroll owner
 
 Each file pane scrolls its document in a local `CustomScrollView` with `SuperEditor` as a **sliver** (`shrinkWrap: true`). The topic canvas also scrolls; SE always emits a sliver when any ancestor `Scrollable` exists, so it must never sit under `Column` / `Expanded` / box parents.
@@ -191,11 +193,11 @@ A topic shows several files at once, so several Super Editors are mounted at onc
 | Rule | Why |
 |------|-----|
 | Every editor gets `inputRole: 'file-<id>'` | The IME connection is global and shared. Without a role the second file registers as the same input, the two panes fight over the connection, and in debug super_editor throws *duplicate input IDs*. |
-| Only the file claimed in [`DocumentEditorRegistry`](editor/document_editor_controller.dart) draws a caret (`documentOverlayBuilders`) | A pane keeps its selection when it loses focus — the marking is what actions run on — so the caret is the only thing left to hide. Text shortcuts Super Editor does not handle itself (underline, size) go through `applyTextAction` on that claimed controller. |
+| Only the file that is claimed **and** has primary focus draws a caret (`documentOverlayBuilders`) | A pane keeps its selection when it loses focus — the marking is what actions run on — so the caret is the only thing left to hide (including tap-outside, which closes the keyboard). Text shortcuts Super Editor does not handle itself (underline, size) go through `applyTextAction` on that claimed controller. |
 
 Hiding it means swapping Super Editor's cursor layers (desktop caret + the iOS / Android handle layers) for an empty layer of the same count. Two things that look simpler do not work: **removing** a layer leaves it painting, because `ContentLayers` matches overlays by index and never deactivates one past the end of a shorter list; **styling** the caret away fails too, because the blink controller writes its own alpha over the colour, so a transparent caret comes back opaque black.
 
-Claim follows the click, not the focus node, so opening a dialog or the AI bar leaves the cursor where the user put it.
+Claim still follows the click (inserts and AI keep a target file). The caret itself follows primary focus, so tap-outside, a dialog, or another field hides it.
 
 ## There is only one marking
 
@@ -268,7 +270,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Right-click on embed text | Same text menu as paragraphs (`DocumentMark`). Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Tables/charts: see **[Tables & charts](#tables--charts)**. Task lists add **Add to view…** and **Reorder tasks** |
 | Move Mode | Double-click → glass frame on the object + floating glass bubble ([`embed_move_bubble.dart`](editor/embed_move_bubble.dart), no scrim; drag to reposition). Up/down in the bubble nudge the object and **stay in Move Mode**; Done or tap outside the bubble ends it. After move/delete, adjacent paragraphs **coalesce** (blank/`\n`-only stubs dropped, including next to embeds). |
 | Empty object + Backspace | Same fluent rule as an empty list bullet / table row: last empty unit + Backspace **removes the object** (cascade-delete). |
-| Object block + Tab | Opens the object (first inner field). **Escape** lands **after** the object so typing continues below. **Enter** inserts a paragraph below. Arrows do not auto-enter/leave objects. |
+| Object block + Tab | Opens the object (first inner field). **Escape** lands **after** the object so typing continues below. On phone, Tab/Escape are not on the keyboard — the first bottom-bar pill is arrows plus enter/leave. **Enter** inserts a paragraph below. Arrows do not auto-enter/leave objects. Long-press stays Move Mode. |
 | Task Reorder Mode | Owned by `TaskListSurface` (objects): right-click → Reorder tasks → glass per task; **tap outside the list** ends it |
 
 ### Segment id
@@ -282,7 +284,7 @@ Deleting an embed (empty Backspace, or selecting the block / cutting it out of t
 
 ### Object enter / exit
 
-Objects are atomic SE blocks. ↑/↓ move onto the block; **Tab** (or click) opens it; **Escape** places the caret after the object; **Enter** inserts a line below. Inner ↑/↓ stay inside (see [`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md)). Insert bar and **Insert object** shortcuts create an object then put the caret in its first field without a shell-wide notify (so Hebrew/Latin IME keeps working).
+Objects are atomic SE blocks. ↑/↓ move onto the block; **Tab** (or click) opens it; **Escape** places the caret after the object; **Enter** inserts a line below. On phone the first bottom-bar pill is **arrows + enter/leave** (no Tab/Escape keys). Arrows inside an object stay inside; on the block they move to the next/previous block. Inside an object, phone Return and empty delete are the same structure keys as desktop Enter / empty Backspace (`FormattedTextField` maps the IME — iOS will not send those as `KeyEvent`s). Insert, delete, and add-part must keep the writing session (no Super Editor remount on payload refresh). Insert bar and **Insert object** shortcuts create an object then put the caret in its first field without a shell-wide notify (so Hebrew/Latin IME keeps working).
 
 ### In-file behaviour by type (presentation only)
 
@@ -302,8 +304,9 @@ One object type `table` (`payload.rows` + optional `payload.chart`). UI: [`table
 | Shape | N×M grid | Fixed 2 rows (labels / values); max **8** columns |
 | Enter | Cell below; add row on last filled row | Next column; add column on last |
 | Empty Enter | Drop that row; keep table; continue below | (column exit path) |
-| Empty Backspace | Remove empty row; last row removes table | Remove empty column; last removes object |
-| Arrows | Physical 2D; host owns ←/→ at text edge → side cell; RTL flips column order (col 0 on the right) | Same grid rules |
+| Empty Backspace | Empty cell → previous cell (reading order, land at end). First cell of an **empty row** removes that row; last empty row removes the table | Empty cell → previous cell; empty column still removes the column; last removes object |
+| Phone | Same Enter / empty Backspace, via the IME map in `FormattedTextField` (no hardware keys). Moving between cells/tasks keeps the keyboard up (no unfocus gap). Arrow pad order: left, down, up, right — pad icons never mirror. The typing session never remounts a cell on IME language switch or clearing one cell | Same |
+| Arrows | One owner: [`table_grid_nav.dart`](rich_text/table_grid_nav.dart). Physical ←/→ (pad and hardware) move to the cell that is visually left/right. Hebrew **UI** paints col 0 on the right, so physical left is a higher column. In-cell caret is first-strong (`rtl/`), not grid RTL. Landing is the **visual** edge entered from: visual-right of an RTL cell is logical start. From below → end; from above → start. Phone edges stay inside the table | Same grid rules |
 | Tab / Shift+Enter | Next cell / line break in cell | Same |
 | Add row / column | **Immediately after the right-clicked cell** (storage index + 1; in RTL that is visually left of the cell). Anchor is the click, not a drifting “end” | Add **column** only (same anchor rule) |
 | Reorder | Separate **Reorder rows…** / **Reorder columns…**; grab the glass row/column (no handles) | **Reorder columns…** only; series colors move with the column |
@@ -347,9 +350,10 @@ In this area specifically:
 | Keep the open editor mounted; apply remote body/embed updates into it | Rebuild `MaterialApp` or the topic canvas on every `AppState` notify; wrap `DocumentEditor` in `ListenableBuilder(listenable: appState)` |
 | `updateFile` / `updateObjectPayload` / task+info title saves with `notify: false` | `notifyListeners` from a keystroke / `onChanged` path |
 | Debounce embed PATCHes; patch cache **before** `await` | PATCH + `notifyListeners` / full embed reload on every `onChanged` |
-| Super Editor `setState` only when embed **id/type/order** changes; defer with `runAfterKeystroke` if keys are down | Treat every new embeds-list identity as a reason to remount |
+| Super Editor `setState` only when embed **id/type/order** changes; defer with `runAfterKeystroke` if keys are down. Phone IME has no keys-down — payload refresh must not remount | Treat every new embeds-list identity as a reason to remount; remount a `TextField` after the first letter |
 | Keep controllers as SoT while focused; skip `didUpdateWidget` resync if focused or keys down | Dispose cell/task/info focus nodes mid-KeyDown |
 | Tab/Escape → `runNextFrame`; empty-structure Backspace → `runAfterKeystroke` | Sync `unfocus` / delete structure on the KeyDown frame |
+| Tap outside the focused editor (canvas / empty padding) unfocuses and closes the keyboard. Bottom menus and the open object do not. | Leave Super Editor focused when the tap is not on another field |
 | Remount `SuperEditor` (`ValueKey` epoch) when replacing `Editor` after silent reload | Swap `Editor` in place and keep a stale `DocumentImeInputClient` (Escape IME crash) |
 
 Smoke after edits: type fast in paragraph + info + task + table/chart cell; Tab into object, type, Escape, keep typing.

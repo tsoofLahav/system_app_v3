@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/files/data/app_file.dart';
-import 'package:system_app_front_end/areas/ux/layout/file_layouts.dart';
 import 'package:system_app_front_end/areas/ux/shortcuts/main_file_cycle.dart';
 
 AppFile _file(int id) => AppFile(id: id, topicId: 1, name: 'File$id');
@@ -32,35 +31,24 @@ void main() {
     expect(rotated.map((f) => f.id), [3, 1, 2]);
   });
 
-  test('cycledShownFileOrder is null when fewer than two files are shown', () {
-    expect(
-      cycledShownFileOrder(
-        ordered: [_file(1), _file(2), _file(3)],
-        layoutId: FileLayouts.single,
-      ),
-      isNull,
-    );
+  test('cycledTopicFileOrder is null when fewer than two files exist', () {
+    expect(cycledTopicFileOrder(ordered: [_file(1)]), isNull);
   });
 
-  test('cycledShownFileOrder rotates only the on-screen band', () {
-    final next = cycledShownFileOrder(
-      ordered: [_file(1), _file(2), _file(3)],
-      layoutId: FileLayouts.split,
-    );
-    expect(next!.map((f) => f.id), [2, 1, 3]);
-  });
+  test(
+    'cycledTopicFileOrder rotates every file, including those off screen',
+    () {
+      final next = cycledTopicFileOrder(
+        ordered: [_file(1), _file(2), _file(3), _file(4)],
+      );
+      expect(next!.map((f) => f.id), [2, 3, 4, 1]);
+    },
+  );
 
-  test('cycledShownFileOrder reverse walks the other way', () {
-    final files = [_file(1), _file(2), _file(3)];
-    final forward = cycledShownFileOrder(
-      ordered: files,
-      layoutId: FileLayouts.split,
-    );
-    final back = cycledShownFileOrder(
-      ordered: forward!,
-      layoutId: FileLayouts.split,
-      reverse: true,
-    );
-    expect(back!.map((f) => f.id), [1, 2, 3]);
+  test('cycledTopicFileOrder reverse walks the other way', () {
+    final files = [_file(1), _file(2), _file(3), _file(4)];
+    final forward = cycledTopicFileOrder(ordered: files);
+    final back = cycledTopicFileOrder(ordered: forward!, reverse: true);
+    expect(back!.map((f) => f.id), [1, 2, 3, 4]);
   });
 }

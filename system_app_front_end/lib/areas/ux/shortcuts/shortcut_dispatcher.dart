@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
+import '../../files/data/app_file.dart';
 import '../../files/editor/document_editor_controller.dart';
 import '../../files/editor/editor_key_handoff.dart';
 import '../../files/rich_text/block_text_actions.dart';
 import '../../files/rich_text/block_text_focus.dart';
 import '../../objects/views/assign_task_view_dialog.dart';
+import '../../../core/platform/app_form_factor.dart';
 import '../arrange/file_arrange_overlay.dart';
+import '../arrange/phone_file_reorder_sheet.dart';
 import '../bring_file/bring_file_picker_dialog.dart';
 import '../create_topic/add_file_dialog.dart';
 import '../sidebar/sidebar_create_menu.dart';
@@ -62,13 +65,17 @@ Future<void> dispatchShortcutAction(
       return;
     case ShortcutActionIds.openArrange:
       if (!context.mounted) return;
-      await showFileArrangeOverlay(context, state);
+      if (isPhoneLayout) {
+        await showPhoneFileReorderSheet(context: context, state: state);
+      } else {
+        await showFileArrangeOverlay(context, state);
+      }
       return;
     case ShortcutActionIds.cycleMainFiles:
-      await _cycleShownFiles(context, state);
+      await _cycleTopicFiles(context, state);
       return;
     case ShortcutActionIds.cycleMainFilesBack:
-      await _cycleShownFiles(context, state, reverse: true);
+      await _cycleTopicFiles(context, state, reverse: true);
       return;
     case ShortcutActionIds.addTopic:
       await createTopicFromDialog(context, state);
@@ -88,7 +95,8 @@ Future<void> dispatchShortcutAction(
       await state.addFile(topic: topic, name: fileResult.name);
       return;
     case ShortcutActionIds.assignTaskView:
-      final taskId = BlockTextFocusRegistry.activeTaskId ??
+      final taskId =
+          BlockTextFocusRegistry.activeTaskId ??
           DocumentEditorRegistry.active?.focusedTaskId?.call();
       if (taskId == null || !context.mounted) return;
       await showAssignTaskViewDialog(
@@ -162,17 +170,16 @@ Future<void> _dispatchTextAction(ShortcutAction action) async {
   await DocumentEditorRegistry.active?.applyTextAction?.call(textAction);
 }
 
-Future<void> _cycleShownFiles(
+Future<void> _cycleTopicFiles(
   BuildContext context,
   AppState state, {
   bool reverse = false,
 }) async {
   final topic = state.selectedTopic;
-  final detail = state.selectedDetail;
-  if (topic == null || detail == null) return;
-  final next = cycledShownFileOrder(
-    ordered: state.orderedFilesFor(topic, detail.files),
-    layoutId: state.layoutFor(topic),
+  if (topic == null || !_isTopicMode(state)) return;
+  final files = state.selectedDetail?.files ?? const <AppFile>[];
+  final next = cycledTopicFileOrder(
+    ordered: state.orderedFilesFor(topic, files),
     reverse: reverse,
   );
   if (next == null) return;

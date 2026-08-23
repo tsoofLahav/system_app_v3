@@ -38,9 +38,11 @@ import '../areas/objects/data/view_layout.dart';
 import '../areas/objects/data/view_service.dart';
 import '../areas/ux/bring_file/bring_file_catalog.dart';
 import '../areas/ux/bring_file/brought_file_store.dart';
+import '../areas/ux/layout/file_layouts.dart';
 import '../areas/ux/layout/topic_file_slots.dart';
 import '../areas/ux/shortcuts/shortcut_binding.dart';
 import '../areas/ux/shortcuts/shortcut_bindings_store.dart';
+import './platform/app_form_factor.dart';
 import '../areas/ux/topic/topic_appearance.dart';
 import '../areas/ui/app_colors.dart';
 
@@ -126,6 +128,7 @@ class AppState extends ChangeNotifier {
   bool isDiagramMode = false;
   ObjectGraphData? objectGraph;
   final Set<int> diagramFilterTagIds = {};
+
   /// Objects map node tint: topic wash vs first-tag color.
   DiagramColorMode diagramColorMode = DiagramColorMode.byTopic;
   final Map<int, List<Map<String, dynamic>>> descriptionLinksByFileId = {};
@@ -143,10 +146,12 @@ class AppState extends ChangeNotifier {
   /// Order among Home files is [homeCanvasOrderIds], not this list alone.
   List<AppFile> broughtFiles = [];
   final Map<int, Topic> broughtTopics = {};
+
   /// Mixed Home canvas order (visits interleaved with Home files). Empty when
   /// there are no visits.
   List<int> homeCanvasOrderIds = [];
   final BroughtFileStore broughtFileStore = BroughtFileStore();
+
   /// File id whose lookalike pending dialog is currently open (anti double-open).
   int? _pendingReviewDialogFileId;
 
@@ -172,6 +177,9 @@ class AppState extends ChangeNotifier {
         isArchiveMode ||
         isDiagramMode) {
       return false;
+    }
+    if (isPhoneLayout) {
+      return orderedFilesFor(topic, detail.files).any((f) => f.id == fileId);
     }
     return shownFilesFor(topic, detail.files).any((f) => f.id == fileId);
   }
@@ -219,7 +227,7 @@ class AppState extends ChangeNotifier {
     if (binding is! ShortcutBinding) return;
     await shortcutBindings.setBinding(actionId, binding);
     shortcutRebuildListenable.notifyListeners();
-      notifyListeners();
+    notifyListeners();
   }
 
   Future<void> resetShortcut(String actionId) async {
@@ -231,7 +239,7 @@ class AppState extends ChangeNotifier {
   Future<void> resetAllShortcuts() async {
     await shortcutBindings.resetAll();
     shortcutRebuildListenable.notifyListeners();
-      notifyListeners();
+    notifyListeners();
   }
 
   final ChangeNotifier shortcutRebuildListenable = ChangeNotifier();
@@ -242,7 +250,8 @@ class AppState extends ChangeNotifier {
   TextDirection get textDirection => strings.textDirection;
   bool get isRtl => strings.isRtl;
 
-  List<Topic> get activeTopics => allTopics.where((t) => !t.isArchived).toList();
+  List<Topic> get activeTopics =>
+      allTopics.where((t) => !t.isArchived).toList();
 
   List<Topic> get untypedTopics => [
     for (final topic in activeTopics)
@@ -284,12 +293,14 @@ class AppState extends ChangeNotifier {
       final status = await _bootstrap.status();
       workspaceId = status['workspace_id'] as int?;
       await _reloadAll();
+      await _migrateImplicitSingleLayouts();
       await _restoreBroughtFile();
       appReady = true;
       await loadAiActions();
       await loadAutomations();
       if (selectedTopic == null && allTopics.isNotEmpty) {
-        final home = allTopics.where((t) => t.isMain).firstOrNull ?? allTopics.first;
+        final home =
+            allTopics.where((t) => t.isMain).firstOrNull ?? allTopics.first;
         await selectTopic(home);
       }
     } catch (e) {
@@ -326,6 +337,20 @@ class AppState extends ChangeNotifier {
   }
 
   static const _languagePrefsKey = 'app_language';
+  static const _fileLayoutAutoMigrationKey = 'migrated_file_layout_auto_v1';
+
+  /// Old topics stored `single` as the create default. Treat that as [auto]
+  /// once so 2/3+ files pick split / large-left until the user chooses.
+  Future<void> _migrateImplicitSingleLayouts() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_fileLayoutAutoMigrationKey) == true) return;
+    for (final topic in List<Topic>.from(allTopics)) {
+      if (topic.fileLayout == FileLayouts.single || topic.fileLayout.isEmpty) {
+        await updateTopic(topic, fileLayout: FileLayouts.auto);
+      }
+    }
+    await prefs.setBool(_fileLayoutAutoMigrationKey, true);
+  }
 
   Future<void> _persistLanguage(AppLanguage language) async {
     final prefs = await SharedPreferences.getInstance();
@@ -355,7 +380,8 @@ class AppState extends ChangeNotifier {
     isDiagramMode = false;
     selectedViewType = null;
     selectedView = null;
-    final home = allTopics.where((t) => t.isMain).firstOrNull ?? allTopics.firstOrNull;
+    final home =
+        allTopics.where((t) => t.isMain).firstOrNull ?? allTopics.firstOrNull;
     if (home != null) await selectTopic(home);
   }
 
@@ -377,7 +403,7 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       error = e.toString();
     }
-      notifyListeners();
+    notifyListeners();
   }
 
   Future<void> selectView(String viewType) async {
@@ -416,9 +442,7 @@ class AppState extends ChangeNotifier {
       selectedView!.id,
       layoutConfig: layoutConfig,
     );
-    userViews = [
-      for (final v in userViews) v.id == updated.id ? updated : v,
-    ];
+    userViews = [for (final v in userViews) v.id == updated.id ? updated : v];
     selectedView = updated;
   }
 
@@ -482,9 +506,9 @@ class AppState extends ChangeNotifier {
   }
 
   bool _archiveFileMatchesQuery(AppFile file, String query) {
-    return archiveFileSearchLabel(file)
-        .toLowerCase()
-        .contains(query.toLowerCase());
+    return archiveFileSearchLabel(
+      file,
+    ).toLowerCase().contains(query.toLowerCase());
   }
 
   void onArchiveSearchQueryChanged(String query) {
@@ -535,7 +559,7 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       error = e.toString();
     }
-      notifyListeners();
+    notifyListeners();
   }
 
   void toggleDiagramFilterTag(int tagId) {
@@ -550,7 +574,7 @@ class AppState extends ChangeNotifier {
   void setDiagramColorMode(DiagramColorMode mode) {
     if (diagramColorMode == mode) return;
     diagramColorMode = mode;
-      notifyListeners();
+    notifyListeners();
   }
 
   /// Patch info content from the objects map without leaving diagram mode.
@@ -619,10 +643,7 @@ class AppState extends ChangeNotifier {
     ObjectEmbed embed, {
     required int targetObjectId,
   }) async {
-    await _objects.createRelatedLink(
-      embed.id,
-      targetObjectId: targetObjectId,
-    );
+    await _objects.createRelatedLink(embed.id, targetObjectId: targetObjectId);
     await loadEmbedsForFile(embed.fileId);
   }
 
@@ -657,8 +678,8 @@ class AppState extends ChangeNotifier {
   Future<void> loadDescriptionLinksForFile(int fileId) async {
     if (fileId <= 0) return;
     try {
-      descriptionLinksByFileId[fileId] =
-          await _objects.listFileDescriptionLinks(fileId);
+      descriptionLinksByFileId[fileId] = await _objects
+          .listFileDescriptionLinks(fileId);
     } catch (e) {
       error = e.toString();
     }
@@ -680,10 +701,7 @@ class AppState extends ChangeNotifier {
   }
 
   /// Open the topic/file that hosts [objectId] and focus its embed.
-  Future<void> openObjectInFile({
-    required int objectId,
-    int? fileId,
-  }) async {
+  Future<void> openObjectInFile({required int objectId, int? fileId}) async {
     var resolvedFileId = fileId;
     if (resolvedFileId == null || resolvedFileId <= 0) {
       final embed = await _objects.getObject(objectId);
@@ -698,7 +716,7 @@ class AppState extends ChangeNotifier {
     }
     await selectTopic(topic);
     setEditingFileId(resolvedFileId);
-      notifyListeners();
+    notifyListeners();
   }
 
   int? takePendingFocusObjectId() {
@@ -853,8 +871,15 @@ class AppState extends ChangeNotifier {
   String layoutFor(Topic topic) => topic.fileLayout;
 
   Future<void> setLayoutForTopic(Topic topic, String layoutId) async {
-    if (topic.fileLayout == layoutId) return;
-    await updateTopic(topic, fileLayout: layoutId);
+    final fileCount = orderedFilesFor(
+      topic,
+      selectedDetail?.topic.id == topic.id
+          ? selectedDetail!.files
+          : const <AppFile>[],
+    ).length;
+    final stored = FileLayouts.storedLayoutId(layoutId, fileCount);
+    if (topic.fileLayout == stored) return;
+    await updateTopic(topic, fileLayout: stored);
   }
 
   Future<void> createTopic({
@@ -900,9 +925,12 @@ class AppState extends ChangeNotifier {
     allTopics = allTopics.map((t) => t.id == updated.id ? updated : t).toList();
     if (selectedTopic?.id == updated.id) selectedTopic = updated;
     if (selectedDetail?.topic.id == updated.id) {
-      selectedDetail = TopicDetail(topic: updated, files: selectedDetail!.files);
+      selectedDetail = TopicDetail(
+        topic: updated,
+        files: selectedDetail!.files,
+      );
     }
-      notifyListeners();
+    notifyListeners();
   }
 
   Future<void> deleteTopic(Topic topic) async {
@@ -939,7 +967,7 @@ class AppState extends ChangeNotifier {
   Future<void> loadTopicTypes() async {
     if (workspaceId == null) return;
     topicTypes = await _topicTypes.list(workspaceId: workspaceId);
-        notifyListeners();
+    notifyListeners();
   }
 
   Future<TopicType> createTopicType({
@@ -969,18 +997,19 @@ class AppState extends ChangeNotifier {
       for (final row in topicTypes)
         if (row.id == updated.id) updated else row,
     ];
-      notifyListeners();
+    notifyListeners();
   }
 
   Future<void> deleteTopicType(TopicType type) async {
     await _topicTypes.delete(type.id);
     topicTypes = topicTypes.where((t) => t.id != type.id).toList();
-      notifyListeners();
+    notifyListeners();
   }
 
   List<Automation> automationsForType(int typeId) => [
     for (final automation in automations)
-      if (AutomationScope.kindOf(automation.scope) == AutomationScope.topicType &&
+      if (AutomationScope.kindOf(automation.scope) ==
+              AutomationScope.topicType &&
           AutomationScope.typeIdOf(automation.scope) == typeId)
         automation,
   ];
@@ -1060,7 +1089,10 @@ class AppState extends ChangeNotifier {
     // append — the other rows changed too.
     if (barSlot != null) {
       await loadAiActions();
-      return aiActions.firstWhere((a) => a.id == action.id, orElse: () => action);
+      return aiActions.firstWhere(
+        (a) => a.id == action.id,
+        orElse: () => action,
+      );
     }
     aiActions = [...aiActions, action];
     notifyListeners();
@@ -1155,7 +1187,7 @@ class AppState extends ChangeNotifier {
       enabled: enabled,
     );
     automations = [...automations, automation];
-      notifyListeners();
+    notifyListeners();
     return automation;
   }
 
@@ -1165,9 +1197,7 @@ class AppState extends ChangeNotifier {
   ) async {
     if (changes.isEmpty) return;
     final saved = await _automations.update(automation.id, changes);
-    automations = [
-      for (final a in automations) a.id == saved.id ? saved : a,
-    ];
+    automations = [for (final a in automations) a.id == saved.id ? saved : a];
     notifyListeners();
   }
 
@@ -1206,10 +1236,7 @@ class AppState extends ChangeNotifier {
     }
     if (topic.isMain && broughtFiles.isNotEmpty) {
       final canvas = orderedFilesFor(topic, existing);
-      homeCanvasOrderIds = [
-        file.id,
-        for (final placed in canvas) placed.id,
-      ];
+      homeCanvasOrderIds = [file.id, for (final placed in canvas) placed.id];
       await _persistBroughtFileLayout();
     }
     await _refreshTopicFiles(topic);
@@ -1264,7 +1291,8 @@ class AppState extends ChangeNotifier {
     // Prefer the topic already in state. Callers often hand in a snapshot from
     // when a dialog opened; using that here would undo a layout (or rename)
     // that finished just before this refresh.
-    final fresh = allTopics.where((t) => t.id == topic.id).firstOrNull ??
+    final fresh =
+        allTopics.where((t) => t.id == topic.id).firstOrNull ??
         (selectedDetail?.topic.id == topic.id ? selectedDetail!.topic : null) ??
         topic;
     selectedDetail = TopicDetail(topic: fresh, files: files);
@@ -1276,7 +1304,9 @@ class AppState extends ChangeNotifier {
     if (selectedDetail == null) return;
     selectedDetail = TopicDetail(
       topic: selectedDetail!.topic,
-      files: selectedDetail!.files.map((f) => f.id == file.id ? file : f).toList(),
+      files: selectedDetail!.files
+          .map((f) => f.id == file.id ? file : f)
+          .toList(),
     );
   }
 
@@ -1293,8 +1323,8 @@ class AppState extends ChangeNotifier {
     final embeds = await _objects.listForFile(fileId);
     embedsByFileId[fileId] = embeds;
     try {
-      descriptionLinksByFileId[fileId] =
-          await _objects.listFileDescriptionLinks(fileId);
+      descriptionLinksByFileId[fileId] = await _objects
+          .listFileDescriptionLinks(fileId);
     } catch (_) {
       // Older backends without description-links still load embeds.
     }
@@ -1498,8 +1528,10 @@ class AppState extends ChangeNotifier {
     bool notify = true,
   }) async {
     if (selectedView == null) return;
-    viewMemberships =
-        await _views.replaceMemberships(selectedView!.id, memberships);
+    viewMemberships = await _views.replaceMemberships(
+      selectedView!.id,
+      memberships,
+    );
     if (notify) notifyListeners();
   }
 
@@ -1596,12 +1628,7 @@ class AppState extends ChangeNotifier {
     if (embed.informationId == null) return;
     // Patch cache *before* the network round-trip so a remount during drag/drop
     // never re-seeds from stale empty title/body.
-    patchInfoObjectCache(
-      embed,
-      title: title,
-      body: body,
-      spans: spans,
-    );
+    patchInfoObjectCache(embed, title: title, body: body, spans: spans);
     await _api.patch('/information/${embed.informationId}', {
       'title': title,
       'body': body,
@@ -1856,7 +1883,8 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  Future<List<AppFile>> loadBringFilePreviews(List<AppFile> files) async => files;
+  Future<List<AppFile>> loadBringFilePreviews(List<AppFile> files) async =>
+      files;
 
   Future<List<BrowseFileEntry>> loadBringFileCatalog() async {
     final files = await _files.listAllFiles();
@@ -1966,8 +1994,8 @@ class AppState extends ChangeNotifier {
     final homeFiles = home == null
         ? const <AppFile>[]
         : selectedDetail?.topic.id == home.id
-            ? selectedDetail!.files
-            : await _files.listFilesForTopic(home.id);
+        ? selectedDetail!.files
+        : await _files.listFilesForTopic(home.id);
     final visits = [
       for (final fileId in stored.visitIds)
         if (byId[fileId] != null) byId[fileId]!,
@@ -1988,7 +2016,8 @@ class AppState extends ChangeNotifier {
         ? const []
         : [for (final file in canvas) file.id];
     final nextIds = [for (final file in broughtFiles) file.id];
-    final orderChanged = homeCanvasOrderIds.length != stored.order.length ||
+    final orderChanged =
+        homeCanvasOrderIds.length != stored.order.length ||
         !_sameIds(homeCanvasOrderIds, stored.order);
     if (nextIds.length != stored.visitIds.length ||
         !_sameIds(nextIds, stored.visitIds) ||
@@ -2024,11 +2053,7 @@ class AppState extends ChangeNotifier {
       if (name == null || name.isEmpty || known.contains(name)) continue;
       known.add(name);
       extras.add(
-        ViewSectionDef(
-          name: name,
-          flag: m.sectionFlag,
-          orderIndex: order++,
-        ),
+        ViewSectionDef(name: name, flag: m.sectionFlag, orderIndex: order++),
       );
     }
     return [...defined, ...extras];
@@ -2036,8 +2061,8 @@ class AppState extends ChangeNotifier {
 
   /// Legacy helper — section names only.
   List<String> sectionsForViewType(String viewType) => [
-        for (final s in sectionsForSelectedView()) s.name,
-      ];
+    for (final s in sectionsForSelectedView()) s.name,
+  ];
 
   Future<void> setViewDisplayMode(ViewDisplayMode mode) async {
     if (mode == ViewDisplayMode.flat) mode = ViewDisplayMode.bySection;
@@ -2084,8 +2109,7 @@ class AppState extends ChangeNotifier {
   }) async {
     if (selectedView == null) return;
     final sections = [
-      for (final s in sectionsForSelectedView())
-        s.name == oldName ? next : s,
+      for (final s in sectionsForSelectedView()) s.name == oldName ? next : s,
     ];
     await _persistViewLayout(
       ViewLayoutConfig.withSections(selectedView!.layoutConfig, sections),
@@ -2096,18 +2120,18 @@ class AppState extends ChangeNotifier {
       for (final m in viewMemberships)
         {
           'task_id': m.taskId,
-          'section_name':
-              m.sectionName == oldName ? next.name : m.sectionName,
+          'section_name': m.sectionName == oldName ? next.name : m.sectionName,
           'order_index': m.orderIndex,
-          'section_flag':
-              m.sectionName == oldName || m.sectionName == next.name
-                  ? flag
-                  : m.sectionFlag,
+          'section_flag': m.sectionName == oldName || m.sectionName == next.name
+              ? flag
+              : m.sectionFlag,
           'topic_key': m.topicKey,
         },
     ];
-    viewMemberships =
-        await _views.replaceMemberships(selectedView!.id, memberships);
+    viewMemberships = await _views.replaceMemberships(
+      selectedView!.id,
+      memberships,
+    );
     notifyListeners();
   }
 
@@ -2119,7 +2143,9 @@ class AppState extends ChangeNotifier {
     ];
     final removedKey = 'section:$section';
     final order = [
-      for (final key in ViewLayoutConfig.sectionOrder(selectedView!.layoutConfig))
+      for (final key in ViewLayoutConfig.sectionOrder(
+        selectedView!.layoutConfig,
+      ))
         if (key != removedKey) key,
     ];
     var layout = ViewLayoutConfig.withSections(
@@ -2134,13 +2160,14 @@ class AppState extends ChangeNotifier {
           'task_id': m.taskId,
           'section_name': m.sectionName == section ? null : m.sectionName,
           'order_index': m.orderIndex,
-          'section_flag':
-              m.sectionName == section ? null : m.sectionFlag,
+          'section_flag': m.sectionName == section ? null : m.sectionFlag,
           'topic_key': m.topicKey,
         },
     ];
-    viewMemberships =
-        await _views.replaceMemberships(selectedView!.id, memberships);
+    viewMemberships = await _views.replaceMemberships(
+      selectedView!.id,
+      memberships,
+    );
     notifyListeners();
   }
 
@@ -2200,9 +2227,7 @@ class AppState extends ChangeNotifier {
   Future<void> reorderViewSectionKeys(List<String> keys) async {
     if (selectedView == null) return;
     // Keep section defs in sync with the new frame order (metadata preserved).
-    final byName = {
-      for (final s in sectionsForSelectedView()) s.name: s,
-    };
+    final byName = {for (final s in sectionsForSelectedView()) s.name: s};
     final defs = <ViewSectionDef>[];
     for (final key in keys) {
       if (!key.startsWith('section:')) continue;
@@ -2210,7 +2235,9 @@ class AppState extends ChangeNotifier {
       if (name.isEmpty) continue;
       final existing = byName[name];
       defs.add(
-        (existing ?? ViewSectionDef(name: name)).copyWith(orderIndex: defs.length),
+        (existing ?? ViewSectionDef(name: name)).copyWith(
+          orderIndex: defs.length,
+        ),
       );
     }
     var layout = ViewLayoutConfig.withSectionOrder(
@@ -2249,9 +2276,7 @@ class AppState extends ChangeNotifier {
     final trimmed = name.trim();
     if (trimmed.isEmpty || trimmed == view.name) return;
     final updated = await _views.updateView(view.id, name: trimmed);
-    userViews = [
-      for (final v in userViews) v.id == updated.id ? updated : v,
-    ];
+    userViews = [for (final v in userViews) v.id == updated.id ? updated : v];
     if (selectedView?.id == updated.id) {
       selectedView = updated;
     }
@@ -2308,7 +2333,7 @@ class AppState extends ChangeNotifier {
       return result;
     } finally {
       aiRunning = false;
-    notifyListeners();
+      notifyListeners();
     }
   }
 
@@ -2353,7 +2378,8 @@ class AppState extends ChangeNotifier {
       if (change is! Map) continue;
       final fileId = change['file_id'] as int?;
       final newBody =
-          change['new_document_json'] as String? ?? change['new_body'] as String?;
+          change['new_document_json'] as String? ??
+          change['new_body'] as String?;
       if (fileId == null || newBody == null) continue;
       final objectUpdates = change['object_updates'];
       await _files.applyAgentText(
@@ -2424,7 +2450,10 @@ class AppState extends ChangeNotifier {
     required int id,
     required String text,
   }) async {}
-  Future<void> finalizeProcessUpdate(dynamic proposal, dynamic decisions) async {}
+  Future<void> finalizeProcessUpdate(
+    dynamic proposal,
+    dynamic decisions,
+  ) async {}
 }
 
 extension _FirstOrNull<E> on Iterable<E> {

@@ -100,6 +100,9 @@ class AppStrings {
   String unarchiveFileMessage(String name) =>
       this['unarchiveFileBody'].replaceAll('{name}', name);
 
+  String archiveTopicHeadline(String name) =>
+      this['archiveTopicHeadline'].replaceAll('{name}', name);
+
   String compactUndoInFile(String file, String topic) => this['compactUndoInFile']
       .replaceAll('{file}', file)
       .replaceAll('{topic}', topic);
@@ -603,6 +606,12 @@ class AppStrings {
     'tasksActive': 'Active',
     'tasksDone': 'Done',
     'reorderTasks': 'Reorder tasks',
+    'objectEnter': 'Open object',
+    'objectLeave': 'Leave object',
+    'objectArrowUp': 'Up',
+    'objectArrowDown': 'Down',
+    'objectArrowLeft': 'Left',
+    'objectArrowRight': 'Right',
     'moveObject': 'Move object…',
     'shortcutMoveObject': 'Move object',
     'reorderRows': 'Reorder rows…',
@@ -692,6 +701,7 @@ class AppStrings {
     'aiRunning': 'Running…',
     'aiDone': 'Done',
     'archive': 'Archive',
+    'archiveTopicHeadline': '{name} - Archive',
     'automations': 'Automations',
     'dailyRotation': 'Daily rotation',
     'updateAllProcesses': 'Update all processes',
@@ -1194,6 +1204,12 @@ class AppStrings {
     'tasksActive': 'פעיל',
     'tasksDone': 'בוצע',
     'reorderTasks': 'סדר משימות',
+    'objectEnter': 'כניסה לאובייקט',
+    'objectLeave': 'יציאה מהאובייקט',
+    'objectArrowUp': 'למעלה',
+    'objectArrowDown': 'למטה',
+    'objectArrowLeft': 'שמאלה',
+    'objectArrowRight': 'ימינה',
     'moveObject': 'העבר אובייקט…',
     'shortcutMoveObject': 'העבר אובייקט',
     'reorderRows': 'סדר שורות…',
@@ -1283,6 +1299,7 @@ class AppStrings {
     'aiRunning': 'מריץ…',
     'aiDone': 'בוצע',
     'archive': 'ארכיון',
+    'archiveTopicHeadline': '{name} - ארכיון',
     'automations': 'אוטומציות',
     'dailyRotation': 'החלפת מסמך יומי',
     'updateAllProcesses': 'עדכון כל התהליכים',

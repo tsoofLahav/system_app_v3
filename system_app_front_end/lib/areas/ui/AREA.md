@@ -16,11 +16,11 @@ Loudest last:
 
 | Surface | Treatment |
 |---------|-----------|
-| **Canvas** — the window behind everything | Near-white neutral gradient, with the topic's soft top wash painted full-bleed (including behind the sidebar) |
-| **File panes** — the working surfaces | Topic colour at a gentle strength, thin saturated topic border |
+| **Canvas** — the window behind everything | Near-white neutral gradient, with the topic's soft top wash painted full-bleed on desktop (including behind the sidebar). Phone structure is locked in UX: grey middle (`phoneCanvas`); warm off-white header and footer (`phoneStripe`). Header ombre is a light topic wash in the lower third only — not on Home or views. File card has its usual shadow; tool bubbles sit above the footer, with no lift |
+| **File panes** — the working surfaces | Topic colour at a gentle strength, thin saturated topic border, card shadow. Same frames on phone and desktop |
 | **View list frames** — section/topic cards on the view page | Same file-pane treatment (`NoteCard` / `filePaneDecoration`); topic frames use topic colour, section frames use optional section colour |
 | **Sidebar** | Soft glass floating above the canvas — never paints the topic wash itself |
-| **Floating chrome** — bottom bar, insert bar, pills | Glass or solid white with a lift shadow; insert tools stay on the bottom-bar baseline; preferences / automations sit at the start edge |
+| **Floating chrome** — bottom bar, insert bar, pills | Glass or solid white with a lift shadow; insert tools stay on the bottom-bar baseline; preferences / automations sit at the start edge. Phone tools are the same bubbles on the grey middle, above the thin footer stripe, with no lift shadow. AI icons use the same 34px tap slots as the other bars |
 | **Dialogs** | Glass panels over a light scrim |
 | **Context menus** | The topmost layer — cooler frost, tighter rows |
 
@@ -33,6 +33,8 @@ All of them live in [`app_colors.dart`](app_colors.dart). Nothing outside this f
 | Token | Value | Used for |
 |-------|-------|----------|
 | `canvasNeutralTop` / `canvasNeutralBottom` | `#FFFEFE` → `#FAFAF8` | The window gradient |
+| `phoneStripe` | `#F5F3ED` | Phone header and footer stripes (warm off-white) |
+| `phoneCanvas` | `#E4E2DC` | Phone middle behind the file card (a step darker) |
 | `noteTop` / `noteBottom` | `#FCFBF7` → `#F4F2EC` | Untinted cards |
 | `mainNoteTop` / `mainNoteBottom` | `#FFFFFF` | Panes in the main topic |
 | `noteBorder` | `#DCD8CF` | Card edges |
@@ -125,9 +127,9 @@ Changing the document default size or font is a UI change, but it changes how ev
 | Metric | Value | Where |
 |--------|-------|-------|
 | Gap between file panes | 8 | `AppLayoutSpacing.gap` |
-| Bottom bar height | 44 | `AppBottomBarMetrics` |
+| Bottom bar height | 44 desktop / 38 phone | `AppBottomBarMetrics` |
 | Topic header height | 32 | `AppTopicHeaderMetrics` |
-| Sidebar width | 200 default, 150–340 | `AppSidebarMetrics` |
+| Sidebar width | 200 default, 150–340 desktop; phone drawer ~62% width, max 248, full height | `AppSidebarMetrics` |
 | Context menu row height | 28 | `AppContextMenu` |
 
 **Radii**, smallest to largest: `4` marks and chips · `6` menu rows · `8` inner blocks · `10` cards and file panes · `12` menu bubbles · `14` sidebar · `16` floating chrome · `22` dialogs · `999` pills.

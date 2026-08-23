@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
+import '../../../core/platform/app_form_factor.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/confirm_dialog.dart';
@@ -60,8 +61,45 @@ class TaskViewPane extends StatefulWidget {
 class _TaskViewPaneState extends State<TaskViewPane> {
   var _frameReorderMode = false;
   var _taskReorderMode = false;
+  ViewChromeHost? _chromeHost;
 
   AppState get state => widget.state;
+
+  @override
+  void initState() {
+    super.initState();
+    _publishChrome();
+  }
+
+  @override
+  void dispose() {
+    final host = _chromeHost;
+    if (host != null) ViewChromeRegistry.detach(host);
+    super.dispose();
+  }
+
+  void _publishChrome() {
+    final host = ViewChromeHost(
+      onToggleDisplayMode: _toggleDisplayMode,
+      onAddSection: () => unawaited(_addSection()),
+      onStartFrameReorder: _startFrameReorder,
+      frameReorderMode: _frameReorderMode,
+    );
+    _chromeHost = host;
+    ViewChromeRegistry.attach(host);
+  }
+
+  void _toggleDisplayMode() {
+    setState(() {
+      _frameReorderMode = false;
+      _taskReorderMode = false;
+    });
+    _publishChrome();
+    final next = state.viewDisplayMode == ViewDisplayMode.byTopic
+        ? ViewDisplayMode.bySection
+        : ViewDisplayMode.byTopic;
+    unawaited(state.setViewDisplayMode(next));
+  }
 
   List<Task> get _remoteTasks {
     final withOrder = <({Task task, int order})>[];
@@ -462,6 +500,7 @@ class _TaskViewPaneState extends State<TaskViewPane> {
   void _exitFrameReorder() {
     if (!_frameReorderMode) return;
     setState(() => _frameReorderMode = false);
+    _publishChrome();
   }
 
   void _startFrameReorder() {
@@ -469,6 +508,7 @@ class _TaskViewPaneState extends State<TaskViewPane> {
       _taskReorderMode = false;
       _frameReorderMode = true;
     });
+    _publishChrome();
   }
 
   void _moveFrame(List<_ViewFrame> frames, String fromKey, String toKey) {
@@ -537,8 +577,9 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                   AppSpacing.canvasPadding.top,
                   AppSpacing.canvasPadding.right,
                   AppSpacing.canvasPadding.bottom +
-                      AppBottomBarMetrics.scrollInset +
-                      52,
+                      (isPhoneLayout
+                          ? 52
+                          : AppBottomBarMetrics.scrollInset + 52),
                 ),
                 children: [
                   // Frame reorder exits on empty canvas (title / space around
@@ -574,31 +615,22 @@ class _TaskViewPaneState extends State<TaskViewPane> {
             // outside its icons still fall through to ListView below when the
             // bar doesn't fill width; center chrome stays tappable to *start*
             // reorder without acting as the exit control.
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: AppBottomBarMetrics.scrollInset + 4,
-              child: Center(
-                child: ViewChromeMenu(
-                  state: state,
-                  displayMode: state.viewDisplayMode,
-                  frameReorderMode: _frameReorderMode,
-                  onToggleDisplayMode: () {
-                    setState(() {
-                      _frameReorderMode = false;
-                      _taskReorderMode = false;
-                    });
-                    final next =
-                        state.viewDisplayMode == ViewDisplayMode.byTopic
-                            ? ViewDisplayMode.bySection
-                            : ViewDisplayMode.byTopic;
-                    unawaited(state.setViewDisplayMode(next));
-                  },
-                  onAddSection: () => unawaited(_addSection()),
-                  onStartFrameReorder: _startFrameReorder,
+            if (!isPhoneLayout)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: AppBottomBarMetrics.scrollInset + 4,
+                child: Center(
+                  child: ViewChromeMenu(
+                    state: state,
+                    displayMode: state.viewDisplayMode,
+                    frameReorderMode: _frameReorderMode,
+                    onToggleDisplayMode: _toggleDisplayMode,
+                    onAddSection: () => unawaited(_addSection()),
+                    onStartFrameReorder: _startFrameReorder,
+                  ),
                 ),
               ),
-            ),
           ],
         );
       },

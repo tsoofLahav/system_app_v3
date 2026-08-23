@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../core/app_state.dart';
 import '../../files/editor/drag_mode_frame.dart';
 import '../../files/editor/editor_key_handoff.dart';
+import '../../files/editor/embed_caret_bridge.dart';
 import '../../files/rich_text/block_text_actions.dart';
 import '../../files/rich_text/document_context_menu.dart';
 import '../../files/rich_text/formatted_text_field.dart';
@@ -133,20 +134,29 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     if (lineCount <= 0) return;
     final i = index.clamp(0, lineCount - 1);
     if (_hasTitleLine && i == 0) {
-      final len = _titleController.text.length;
-      _titleController.selection = TextSelection.collapsed(
-        offset: fromAbove ? 0 : len,
-      );
-      _titleFocus.requestFocus();
+      focusFieldLine(_titleFocus, _titleController, fromAbove: fromAbove);
       return;
     }
     final taskIndex = _hasTitleLine ? i - 1 : i;
     if (taskIndex < 0 || taskIndex >= _focusNodes.length) return;
-    final len = _controllers[taskIndex].text.length;
-    _controllers[taskIndex].selection = TextSelection.collapsed(
-      offset: fromAbove ? 0 : len,
+    focusFieldLine(
+      _focusNodes[taskIndex],
+      _controllers[taskIndex],
+      fromAbove: fromAbove,
     );
-    _focusNodes[taskIndex].requestFocus();
+  }
+
+  void nudge(AxisDirection direction) {
+    final titleLine = _hasTitleLine && _titleFocus.hasFocus;
+    final taskIndex = _focusNodes.indexWhere((f) => f.hasFocus);
+    final line = titleLine
+        ? 0
+        : (taskIndex >= 0 ? taskIndex + (_hasTitleLine ? 1 : 0) : -1);
+    if (line < 0) return;
+    if (direction == AxisDirection.left || direction == AxisDirection.right) {
+      return;
+    }
+    _arrowFromLine(line, goingDown: direction == AxisDirection.down);
   }
 
   void _arrowFromLine(int lineIndex, {required bool goingDown}) {
@@ -181,7 +191,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   @override
   void didUpdateWidget(TaskListSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_persisting) return;
+    if (_persisting || _pendingFocusIndex != null) return;
     if (!_titleFocus.hasFocus &&
         oldWidget.bridge.listTitle != _bridge.listTitle) {
       _titleController.text = _bridge.listTitle;
@@ -260,12 +270,12 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         (remote ??
                 Task(
                   id: id,
-                  title: _controllers[i].text,
+                  title: imeVisibleText(_controllers[i].text),
                   status: _done[i] ? 'done' : 'active',
                   listOrderIndex: i,
                 ))
             .copyWith(
-          title: _controllers[i].text,
+          title: imeVisibleText(_controllers[i].text),
           status: _done[i] ? 'done' : 'active',
           listOrderIndex: i,
         ),
@@ -409,7 +419,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final id = _taskIds[index]!;
     final task = _taskById(id);
     if (task == null) return;
-    final title = _controllers[index].text;
+    final title = imeVisibleText(_controllers[index].text);
     if (task.title == title) return;
     try {
       await _bridge.updateTitle(task, title);
@@ -421,7 +431,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     if (_persisting) return;
     if (index < 0 || index >= _taskIds.length) return;
     if (_taskIds[index] != null) return;
-    final title = _controllers[index].text;
+    final title = imeVisibleText(_controllers[index].text);
     if (title.trim().isEmpty) return;
     _persisting = true;
     try {
@@ -447,7 +457,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     if (!mounted) return;
     if (index < 0 || index >= _controllers.length) return;
     final text = _controllers[index].text;
-    if (text.trim().isEmpty) {
+    if (imeFieldLooksEmpty(text)) {
       final emptyId = _taskIds[index];
       // No sync unfocus mid-Enter — document handoff waits for KeyUp.
       widget.onExitBelow?.call(emptyId);
@@ -458,11 +468,11 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
   Future<void> _handleBackspace(int index) async {
     widget.onFocus?.call();
-    if (_controllers[index].text.trim().isEmpty) {
+    if (imeFieldLooksEmpty(_controllers[index].text)) {
       if (_controllers.length <= 1) {
         if (widget.climbToListTitleOnLastBackspace &&
             _bridge.showListTitle &&
-            _titleController.text.trim().isNotEmpty) {
+            !imeFieldLooksEmpty(_titleController.text)) {
           _titleFocus.requestFocus();
           final len = _titleController.text.length;
           _titleController.selection =
@@ -1017,9 +1027,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
             onChanged: (_) => _scheduleTitleSave(),
             onEnter: _onTitleEnter,
             onBackspaceAtStart: () async {
-              if (_titleController.text.trim().isNotEmpty) return;
+              if (!imeFieldLooksEmpty(_titleController.text)) return;
               if (_controllers.length == 1 &&
-                  _controllers.first.text.trim().isEmpty &&
+                  imeFieldLooksEmpty(_controllers.first.text) &&
                   widget.onDeleteObject != null) {
                 widget.onDeleteObject!();
               }

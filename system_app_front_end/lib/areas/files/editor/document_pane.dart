@@ -23,6 +23,8 @@ class DocumentPane extends StatefulWidget {
     this.accent,
     required this.onDelete,
     this.isBrought = false,
+    this.autoOpenPendingReview = true,
+    this.framed = true,
   });
 
   final Topic topic;
@@ -33,6 +35,12 @@ class DocumentPane extends StatefulWidget {
 
   /// Visiting Home from another topic — dismiss from the file menu.
   final bool isBrought;
+
+  /// Phone carousel mounts neighbors without opening their pending dialog.
+  final bool autoOpenPendingReview;
+
+  /// File card frame. Phone and desktop use the same framed look.
+  final bool framed;
 
   @override
   State<DocumentPane> createState() => _DocumentPaneState();
@@ -65,6 +73,11 @@ class _DocumentPaneState extends State<DocumentPane> {
       });
       return;
     }
+    if (!oldWidget.autoOpenPendingReview && widget.autoOpenPendingReview) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_maybeOpenPendingReview());
+      });
+    }
     // A rename from elsewhere (agent, another device) belongs on screen, but
     // never on top of what the user is in the middle of typing.
     if (!_titleFocus.hasFocus && _titleController.text != _shownName) {
@@ -77,7 +90,7 @@ class _DocumentPaneState extends State<DocumentPane> {
   }
 
   Future<void> _maybeOpenPendingReview() async {
-    if (!mounted) return;
+    if (!mounted || !widget.autoOpenPendingReview) return;
     await openPendingReviewForFile(context, widget.state, widget.file.id);
   }
 
@@ -170,15 +183,10 @@ class _DocumentPaneState extends State<DocumentPane> {
                 .firstOrNull ??
             widget.file;
 
-    return NoteCard(
-      topicAccent: widget.accent,
-      fileId: file.id,
-      isMainTopic: widget.topic.isMain,
-      child: Padding(
-        padding: AppSpacing.notePadding,
-        child: Column(
+    final body = Padding(
+      padding: AppSpacing.notePadding,
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               children: [
@@ -201,10 +209,9 @@ class _DocumentPaneState extends State<DocumentPane> {
               ],
             ),
             const SizedBox(height: AppSpacing.xs),
-            // Pane height is fixed by the topic layout. Super Editor owns
-            // scrolling inside this slot (do not wrap in SingleChildScrollView —
-            // SE emits a sliver when it finds an ancestor scrollable).
-            Flexible(
+            // Pane height is fixed by the topic layout (or the phone page).
+            // Super Editor owns scrolling inside this slot.
+            Expanded(
               child: DocumentEditor(
                 file: file,
                 state: widget.state,
@@ -212,7 +219,23 @@ class _DocumentPaneState extends State<DocumentPane> {
             ),
           ],
         ),
-      ),
+    );
+
+    if (!widget.framed) {
+      if (widget.isBrought && widget.accent != null) {
+        return ColoredBox(
+          color: AppColors.uiAccent(widget.accent!).withValues(alpha: 0.06),
+          child: body,
+        );
+      }
+      return body;
+    }
+
+    return NoteCard(
+      topicAccent: widget.accent,
+      fileId: file.id,
+      isMainTopic: widget.topic.isMain,
+      child: body,
     );
   }
 }

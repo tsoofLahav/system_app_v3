@@ -119,6 +119,7 @@ class GlassSurface extends StatelessWidget {
     this.padding,
     this.elevation = 0,
     this.opaqueChrome = false,
+    this.boxShadow,
   });
 
   factory GlassSurface.styled({
@@ -129,6 +130,7 @@ class GlassSurface extends StatelessWidget {
     BoxBorder? border,
     bool? showTopHighlight,
     double? elevation,
+    List<BoxShadow>? boxShadow,
   }) {
     return GlassSurface(
       borderRadius: borderRadius,
@@ -140,6 +142,7 @@ class GlassSurface extends StatelessWidget {
       padding: padding,
       elevation: elevation ?? style.elevation,
       opaqueChrome: style.opaqueChrome,
+      boxShadow: boxShadow,
       child: child,
     );
   }
@@ -155,6 +158,7 @@ class GlassSurface extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final double elevation;
   final bool opaqueChrome;
+  final List<BoxShadow>? boxShadow;
 
   static List<BoxShadow> get _opaqueChromeShadow => [
         BoxShadow(
@@ -168,6 +172,9 @@ class GlassSurface extends StatelessWidget {
           offset: const Offset(0, 2),
         ),
       ];
+
+  /// Phone pills: no lift. Any blur fills the gap between bars.
+  static const List<BoxShadow> _opaqueChromeShadowNone = [];
 
   @override
   Widget build(BuildContext context) {
@@ -189,6 +196,7 @@ class GlassSurface extends StatelessWidget {
       return _OpaqueChromeShell(
         borderRadius: radius,
         border: effectiveBorder,
+        boxShadow: boxShadow,
         child: content,
       );
     }
@@ -291,11 +299,13 @@ class _OpaqueChromeShell extends StatelessWidget {
     required this.borderRadius,
     required this.child,
     this.border,
+    this.boxShadow,
   });
 
   final BorderRadius borderRadius;
   final Widget child;
   final BoxBorder? border;
+  final List<BoxShadow>? boxShadow;
 
   @override
   Widget build(BuildContext context) {
@@ -305,7 +315,7 @@ class _OpaqueChromeShell extends StatelessWidget {
         borderRadius: borderRadius,
         color: Colors.white,
         border: effectiveBorder,
-        boxShadow: GlassSurface._opaqueChromeShadow,
+        boxShadow: boxShadow ?? GlassSurface._opaqueChromeShadow,
       ),
       child: ClipRRect(
         borderRadius: borderRadius,
@@ -355,6 +365,7 @@ class GlassBarSegment extends StatelessWidget {
     this.padding = const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
     this.label,
     this.labelOnBorder = false,
+    this.tightShadow = false,
   });
 
   final Widget child;
@@ -366,6 +377,9 @@ class GlassBarSegment extends StatelessWidget {
   /// When true, [label] sits on the top outline (for the AI segment).
   final bool labelOnBorder;
 
+  /// Phone: keep the lift without a haze that fills the gap between pills.
+  final bool tightShadow;
+
   @override
   Widget build(BuildContext context) {
     final resolvedStyle = style ?? AppGlassStyle.opaqueChrome;
@@ -373,6 +387,7 @@ class GlassBarSegment extends StatelessWidget {
       style: resolvedStyle,
       borderRadius: BorderRadius.circular(AppGlassStyle.pillRadius),
       padding: padding,
+      boxShadow: tightShadow ? GlassSurface._opaqueChromeShadowNone : null,
       child: height != null
           ? SizedBox(height: height, child: child)
           : child,

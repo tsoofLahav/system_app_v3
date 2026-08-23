@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
+import '../../../core/platform/app_form_factor.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/glass_surface.dart';
 import './document_editor_controller.dart';
@@ -29,8 +30,9 @@ class DocumentInsertBar extends StatelessWidget {
 
         final s = state.strings;
         final segment = GlassBarSegment(
-          height: AppBottomBarMetrics.barHeight,
+          height: AppBottomBarMetrics.segmentHeight(phone: isPhoneLayout),
           padding: const EdgeInsets.symmetric(horizontal: 4),
+          tightShadow: isPhoneLayout,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

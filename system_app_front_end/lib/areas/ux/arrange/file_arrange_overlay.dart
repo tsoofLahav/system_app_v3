@@ -10,6 +10,7 @@ import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
 import '../layout/file_layouts.dart';
+import '../layout/topic_file_slots.dart';
 import '../../ui/glass_surface.dart';
 import '../../ui/overlay_dialog_shell.dart';
 import '../../ui/overlay_dialog_style.dart';
@@ -60,8 +61,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   late HorizontalCarouselController _carousel;
   late FileArrangeDraft _draft;
   ArrangeFocusZone _focusZone = ArrangeFocusZone.shown;
-  ArrangeBottomFocus _bottomFocus =
-      const ArrangeBottomFocus.layout(0);
+  ArrangeBottomFocus _bottomFocus = const ArrangeBottomFocus.layout(0);
   bool _saving = false;
   bool _tapCandidate = false;
   Offset? _tapDownPosition;
@@ -72,9 +72,13 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   void initState() {
     super.initState();
     final detail = widget.state.selectedDetail!;
+    final ordered = widget.state.orderedFilesFor(widget.topic, detail.files);
     _draft = FileArrangeDraft(
-      ordered: widget.state.orderedFilesFor(widget.topic, detail.files),
-      layoutId: widget.state.layoutFor(widget.topic),
+      ordered: ordered,
+      layoutId: effectiveLayoutId(
+        widget.state.layoutFor(widget.topic),
+        ordered.length,
+      ),
     );
     _scrollController = ScrollController();
     _metrics = const HorizontalCarouselMetrics(
@@ -204,16 +208,14 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
         _moveFocusDown();
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowLeft:
-        _handleHorizontal(spatialHorizontalDelta(
-          isRtl: widget.state.isRtl,
-          isLeftArrow: true,
-        ));
+        _handleHorizontal(
+          spatialHorizontalDelta(isRtl: widget.state.isRtl, isLeftArrow: true),
+        );
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowRight:
-        _handleHorizontal(spatialHorizontalDelta(
-          isRtl: widget.state.isRtl,
-          isLeftArrow: false,
-        ));
+        _handleHorizontal(
+          spatialHorizontalDelta(isRtl: widget.state.isRtl, isLeftArrow: false),
+        );
         return KeyEventResult.handled;
       case LogicalKeyboardKey.space:
         _transferBetweenSections();
@@ -241,7 +243,9 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
         borderRadius: borderRadius,
         border: focused
             ? Border.all(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.85),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.85),
                 width: 1.5,
               )
             : null,
@@ -283,7 +287,8 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
     await widget.state.setLayoutForTopic(widget.topic, _draft.layoutId);
     // Prefer the topic state just wrote — the overlay still holds the snapshot
     // from when it opened, whose layout is the old one.
-    final topic = widget.state.allTopics
+    final topic =
+        widget.state.allTopics
             .where((t) => t.id == widget.topic.id)
             .firstOrNull ??
         widget.topic;
@@ -294,7 +299,9 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
     if (!mounted) return;
     if (error != null) {
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
     Navigator.of(context).pop(true);
@@ -361,79 +368,79 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
         child: SizedBox(
           width: _overlayWidth,
           child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  s['arrangeFiles'],
-                  style: AppTypography.metaStyle.copyWith(
-                    color: AppColors.text.withValues(alpha: 0.78),
-                    fontSize: 11,
-                    letterSpacing: 0.2,
-                  ),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                s['arrangeFiles'],
+                style: AppTypography.metaStyle.copyWith(
+                  color: AppColors.text.withValues(alpha: 0.78),
+                  fontSize: 11,
+                  letterSpacing: 0.2,
                 ),
-                const SizedBox(height: 10),
-                _zoneChrome(
-                  focused: _focusZone == ArrangeFocusZone.shown,
-                  child: SizedBox(
-                    height: _mainPreviewHeight,
-                    child: _draft.shown.isEmpty
-                        ? Center(
-                            child: Text(
-                              s['noFilesYet'],
-                              style: AppTypography.noteBodyStyle.copyWith(
-                                color: AppColors.noteHint,
-                              ),
+              ),
+              const SizedBox(height: 10),
+              _zoneChrome(
+                focused: _focusZone == ArrangeFocusZone.shown,
+                child: SizedBox(
+                  height: _mainPreviewHeight,
+                  child: _draft.shown.isEmpty
+                      ? Center(
+                          child: Text(
+                            s['noFilesYet'],
+                            style: AppTypography.noteBodyStyle.copyWith(
+                              color: AppColors.noteHint,
                             ),
-                          )
-                        : ArrangeLayoutPreview(
-                            key: ValueKey(
-                              '${_draft.layoutId}:${_draft.shown.map((f) => f.id).join(',')}',
-                            ),
-                            files: _draft.shown,
-                            layoutId: _draft.layoutId,
-                            topicFor: _topicFor,
-                            accentFor: _accentFor,
-                            fileNameFor: (file) =>
-                                widget.state.fileDisplayName(file.name),
-                            onFileTap: _onShownFileTap,
-                            onFileSecondaryTap: _onShownFileSecondaryTap,
-                            previewsByFileId: _previewsByFileId,
-                            previewsLoaded: _previewsLoaded,
-                            strings: s,
                           ),
+                        )
+                      : ArrangeLayoutPreview(
+                          key: ValueKey(
+                            '${_draft.layoutId}:${_draft.shown.map((f) => f.id).join(',')}',
+                          ),
+                          files: _draft.shown,
+                          layoutId: _draft.layoutId,
+                          topicFor: _topicFor,
+                          accentFor: _accentFor,
+                          fileNameFor: (file) =>
+                              widget.state.fileDisplayName(file.name),
+                          onFileTap: _onShownFileTap,
+                          onFileSecondaryTap: _onShownFileSecondaryTap,
+                          previewsByFileId: _previewsByFileId,
+                          previewsLoaded: _previewsLoaded,
+                          strings: s,
+                        ),
+                ),
+              ),
+              if (hasHidden) ...[
+                const SizedBox(height: 10),
+                Tooltip(
+                  message: s['arrangeTapHiddenHint'],
+                  child: Text(
+                    s['arrangeOffScreen'],
+                    style: AppTypography.metaStyle.copyWith(
+                      color: AppColors.textHint,
+                      fontSize: 10,
+                    ),
                   ),
                 ),
-                if (hasHidden) ...[
-                  const SizedBox(height: 10),
-                  Tooltip(
-                    message: s['arrangeTapHiddenHint'],
-                    child: Text(
-                      s['arrangeOffScreen'],
-                      style: AppTypography.metaStyle.copyWith(
-                        color: AppColors.textHint,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  _zoneChrome(
-                    focused: _focusZone == ArrangeFocusZone.hidden,
-                    child: SizedBox(
-                      height: _carouselHeight,
-                      child: _buildHiddenCarousel(s),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 14),
+                const SizedBox(height: 6),
                 _zoneChrome(
-                  focused: _focusZone == ArrangeFocusZone.layouts,
-                  borderRadius: BorderRadius.circular(10),
-                  child: _buildBottomBars(s),
+                  focused: _focusZone == ArrangeFocusZone.hidden,
+                  child: SizedBox(
+                    height: _carouselHeight,
+                    child: _buildHiddenCarousel(s),
+                  ),
                 ),
               ],
-            ),
+              const SizedBox(height: 14),
+              _zoneChrome(
+                focused: _focusZone == ArrangeFocusZone.layouts,
+                borderRadius: BorderRadius.circular(10),
+                child: _buildBottomBars(s),
+              ),
+            ],
           ),
         ),
+      ),
     );
   }
 
@@ -494,7 +501,8 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
                         fileName: widget.state.fileDisplayName(file.name),
                         accent: _accentFor(file),
                         preview:
-                            _previewsByFileId[file.id] ?? OverlayFilePreviewData.empty,
+                            _previewsByFileId[file.id] ??
+                            OverlayFilePreviewData.empty,
                         previewsLoaded: _previewsLoaded,
                         strings: s,
                         padding: const EdgeInsets.all(12),
@@ -528,14 +536,15 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
                 Builder(
                   builder: (context) {
                     final layout = FileLayouts.all[i];
-                    final enabled =
-                        FileLayouts.isAvailable(
-                          layout.id,
-                          _draft.ordered.length,
-                        );
+                    final enabled = FileLayouts.isAvailable(
+                      layout.id,
+                      _draft.ordered.length,
+                    );
                     final enabledIndex = enabledIds.indexOf(layout.id);
-                    final keyboardFocused = _focusZone == ArrangeFocusZone.layouts &&
-                        _bottomFocus.target == ArrangeBottomFocusTarget.layout &&
+                    final keyboardFocused =
+                        _focusZone == ArrangeFocusZone.layouts &&
+                        _bottomFocus.target ==
+                            ArrangeBottomFocusTarget.layout &&
                         _bottomFocus.layoutIndex == enabledIndex;
                     return LayoutPickerTile(
                       layoutId: layout.id,
@@ -550,8 +559,9 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
                           ? () {
                               setState(() {
                                 _draft.setLayoutId(layout.id);
-                                _bottomFocus =
-                                    ArrangeBottomFocus.layout(enabledIndex);
+                                _bottomFocus = ArrangeBottomFocus.layout(
+                                  enabledIndex,
+                                );
                                 _focusZone = ArrangeFocusZone.layouts;
                               });
                             }
@@ -573,14 +583,18 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
               _ChromeIconButton(
                 tooltip: s['cancel'],
                 icon: AppIcons.close,
-                focused: _focusZone == ArrangeFocusZone.layouts &&
+                focused:
+                    _focusZone == ArrangeFocusZone.layouts &&
                     _bottomFocus.target == ArrangeBottomFocusTarget.cancel,
-                onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+                onPressed: _saving
+                    ? null
+                    : () => Navigator.of(context).pop(false),
               ),
               _ChromeIconButton(
                 tooltip: s['arrangeDone'],
                 icon: AppIcons.check,
-                focused: _focusZone == ArrangeFocusZone.layouts &&
+                focused:
+                    _focusZone == ArrangeFocusZone.layouts &&
                     _bottomFocus.target == ArrangeBottomFocusTarget.done,
                 onPressed: _saving ? null : _save,
                 emphasized: true,

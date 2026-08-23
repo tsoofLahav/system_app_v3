@@ -4,6 +4,7 @@ import '../../../core/app_state.dart';
 import '../../../core/platform/app_form_factor.dart';
 import '../shortcuts/app_shortcuts.dart';
 import './desktop_app_shell.dart';
+import './dismiss_focus_on_outside_tap.dart';
 import './phone_app_shell.dart';
 
 class AppShell extends StatelessWidget {
@@ -19,7 +20,9 @@ class AppShell extends StatelessWidget {
 
     return AppShortcutsScope(
       state: state,
-      child: _AutomationNoticeHost(state: state, child: body),
+      child: DismissFocusOnOutsideTap(
+        child: _AutomationNoticeHost(state: state, child: body),
+      ),
     );
   }
 }

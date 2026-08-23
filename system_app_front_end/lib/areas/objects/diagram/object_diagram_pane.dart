@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:interactive_graph_view/interactive_graph_view.dart';
 
 import '../../../core/app_state.dart';
+import '../../../core/platform/app_form_factor.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
@@ -286,7 +287,12 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
           fit: StackFit.expand,
           children: [
             Padding(
-              padding: EdgeInsets.fromLTRB(8, 40, 8, _filterFloor + 8),
+              padding: EdgeInsets.fromLTRB(
+                8,
+                40,
+                8,
+                (isPhoneLayout ? 8.0 : _filterFloor) + 8,
+              ),
               child: Theme(
                 data: theme.copyWith(
                   extensions: [

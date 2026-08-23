@@ -20,6 +20,8 @@ Do not rebuild `MaterialApp` / the topic canvas on every `AppState` notify, and 
 
 This class of bug also comes back after embed/save/focus changes inside a file (payload patches remounting Super Editor while typing).
 
+**2026-08-23 — Phone IME:** iOS has no `physicalKeysPressed` while typing. A payload-only embed refresh (`_loadEmbedsQuietly` → Super Editor `setState`) or remounting a `TextField` (conditional parent around the field) drops focus after the first letter. Insert / delete / add-task / add-cell must keep the same `FocusNode`s and only rebuild Super Editor when embed **id/type** changes. Table cells: `wrapVisualCaretMotion` always keeps an `Actions` parent; `TableEmbed` must not `setState` on text-only emits. Grid ←/→ is [`table_grid_nav.dart`](system_app_front_end/lib/areas/files/rich_text/table_grid_nav.dart) (physical pad → visual cell). The object-pad icons never mirror.
+
 ### MUST NOT
 
 1. Rebuild `MaterialApp`, `AppShell`, or the topic canvas on every `notifyListeners`, or wrap `DocumentEditor` / `SuperDocumentEditor` in `ListenableBuilder(listenable: appState)`.
@@ -74,6 +76,7 @@ Detail and fluent-text rules: files [`AREA.md`](system_app_front_end/lib/areas/f
 ## Layout and visibility
 
 - **2026-07-27** — **The layout decides which files are on screen.** A topic stores `file_layout`, a file stores `order_index`, and that is all: the layout's slots reach a certain way down the order and everything past them is off screen, reachable only by arranging. There is no flag on a file saying it matters — that would be a second source of truth for the same question. Rules in the UX [`AREA.md`](system_app_front_end/lib/areas/ux/AREA.md).
+- **2026-08-23** — Default layout is `auto` (1 → single, 2 → split, 3+ → large left) until the user picks something in arrange. Cycle-files (⌘[ ⌘]) rotates every live file in the topic, not only the on-screen band, and does not need a file focused. New file name starts empty.
 - **2026-07-27** — A new file is added **first** in its topic, so it is always visible.
 - **2026-07-27** — The topic colour wash is painted **full-window** by `AppShellCanvas`, behind the glass sidebar and the bottom bar. Chrome always floats above the room.
 - **2026-07-27** — **Files wear their topic's colour**, at a strength fixed per file id (`AppColors.fileTintStrength`) so a pane keeps its shade through reordering, restarts, and other devices. Never derive the shade from position or content. The full cross-app style spec is the UI [`AREA.md`](system_app_front_end/lib/areas/ui/AREA.md) — colours, type, spacing, glass, controls, dialogs — and no `Color(0x…)` or font size belongs outside `areas/ui/`.

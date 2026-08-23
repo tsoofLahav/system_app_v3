@@ -25,6 +25,8 @@ abstract final class AppSidebarMetrics {
   static const outerStart = 10.0;
   static const outerEnd = 8.0;
   static const outerVertical = 10.0;
+  static const phoneWidthFraction = 0.62;
+  static const phoneMaxWidth = 248.0;
 
   static double contentInset(double panelWidth) =>
       outerStart + panelWidth + outerEnd;
@@ -125,7 +127,14 @@ class _AppSidebarState extends State<AppSidebar> {
                           color: AppColors.noteBorder.withValues(alpha: 0.5),
                           width: AppColors.filePaneBorderWidth,
                         ),
-                  child: Column(
+                  child: Padding(
+                    padding: widget.isPhone
+                        ? EdgeInsets.only(
+                            top: MediaQuery.viewPaddingOf(context).top,
+                            bottom: MediaQuery.viewPaddingOf(context).bottom,
+                          )
+                        : EdgeInsets.zero,
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                   const SizedBox(height: 12),
@@ -223,10 +232,11 @@ class _AppSidebarState extends State<AppSidebar> {
                     ),
                   ),
                   ],
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
           if (!widget.isPhone)
             PositionedDirectional(
               top: 0,
@@ -429,8 +439,8 @@ class _ArchiveSection extends StatefulWidget {
 
 class _ArchiveSectionState extends State<_ArchiveSection> {
   bool expanded = false;
-  final Set<int> _collapsedTypeIds = {};
-  var _othersExpanded = true;
+  final Set<int> _expandedTypeIds = {};
+  var _othersExpanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -475,10 +485,10 @@ class _ArchiveSectionState extends State<_ArchiveSection> {
             if (index.topicsOfType(type.id).isNotEmpty)
               _ArchiveTopicGroup(
                 title: widget.state.topicTypeDisplayName(type),
-                expanded: !_collapsedTypeIds.contains(type.id),
+                expanded: _expandedTypeIds.contains(type.id),
                 onToggle: () => setState(() {
-                  if (!_collapsedTypeIds.add(type.id)) {
-                    _collapsedTypeIds.remove(type.id);
+                  if (!_expandedTypeIds.add(type.id)) {
+                    _expandedTypeIds.remove(type.id);
                   }
                 }),
                 entries: index.topicsOfType(type.id),

@@ -41,6 +41,40 @@ void main() {
     });
   });
 
+  group('auto layout follows file count until the user picks', () {
+    test('1 file is single, 2 is split, 3+ is large left', () {
+      expect(effectiveLayoutId(FileLayouts.auto, 1), FileLayouts.single);
+      expect(effectiveLayoutId(FileLayouts.auto, 2), FileLayouts.split);
+      expect(effectiveLayoutId(FileLayouts.auto, 3), FileLayouts.heroLeft);
+      expect(effectiveLayoutId(FileLayouts.auto, 8), FileLayouts.heroLeft);
+    });
+
+    test('an explicit pick is kept when it still fits', () {
+      expect(effectiveLayoutId(FileLayouts.grid, 4), FileLayouts.grid);
+      expect(effectiveLayoutId(FileLayouts.single, 5), FileLayouts.single);
+    });
+
+    test('storing the count default writes auto', () {
+      expect(
+        FileLayouts.storedLayoutId(FileLayouts.single, 1),
+        FileLayouts.auto,
+      );
+      expect(
+        FileLayouts.storedLayoutId(FileLayouts.split, 2),
+        FileLayouts.auto,
+      );
+      expect(
+        FileLayouts.storedLayoutId(FileLayouts.heroLeft, 4),
+        FileLayouts.auto,
+      );
+      expect(FileLayouts.storedLayoutId(FileLayouts.grid, 4), FileLayouts.grid);
+      expect(
+        FileLayouts.storedLayoutId(FileLayouts.single, 3),
+        FileLayouts.single,
+      );
+    });
+  });
+
   group('splitting a topic by its layout', () {
     final files = [_file(1), _file(2), _file(3), _file(4)];
 

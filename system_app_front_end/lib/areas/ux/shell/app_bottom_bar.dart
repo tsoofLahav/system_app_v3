@@ -9,6 +9,7 @@ import '../../ui/app_typography.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/glass_surface.dart';
 import '../arrange/file_arrange_overlay.dart';
+import '../arrange/phone_file_reorder_sheet.dart';
 import '../../production_agent/ai_tool_bar.dart';
 import '../../automations/automation_dialog.dart';
 import '../../files/editor/document_editor_controller.dart';
@@ -16,12 +17,25 @@ import '../../files/editor/document_insert_bar.dart';
 import '../../objects/diagram/diagram_graph_config_dialog.dart';
 import '../../objects/diagram/diagram_tag_filter_bar.dart';
 import './chrome_anchors.dart';
+import './dismiss_focus_on_outside_tap.dart';
 import './preferences_dialog.dart';
+import '../../objects/views/view_chrome_menu.dart';
 
 abstract final class AppBottomBarMetrics {
   static const barHeight = 44.0;
   static const floatMargin = 12.0;
   static const scrollInset = 72.0;
+
+  static const phoneSegmentHeight = 38.0;
+  static const phoneFloatMargin = 5.0;
+  static const phoneFooterStripe = 3.0;
+  static const phoneSegmentGap = 14.0;
+
+  /// Phone tools row, above the footer stripe — not overlapping it.
+  static const phoneBarHeight = phoneFloatMargin * 2 + phoneSegmentHeight;
+
+  static double segmentHeight({required bool phone}) =>
+      phone ? phoneSegmentHeight : barHeight;
 }
 
 abstract final class AppTopicHeaderMetrics {
@@ -56,12 +70,11 @@ class AppBottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     // Rebuild for both app state and editor focus, so the insert segment
     // appears in the centered group when a document is active.
-    return ListenableBuilder(
-      listenable: Listenable.merge([
-        state,
-        DocumentEditorRegistry.notifier,
-      ]),
-      builder: (context, _) => _buildBar(context),
+    return KeepEditorFocus(
+      child: ListenableBuilder(
+        listenable: Listenable.merge([state, DocumentEditorRegistry.notifier]),
+        builder: (context, _) => _buildBar(context),
+      ),
     );
   }
 
@@ -125,27 +138,21 @@ class AppBottomBar extends StatelessWidget {
             buttonKey: ChromeAnchors.preferencesButton,
             tooltip: s['preferences'],
             icon: AppIcons.preferences,
-            onPressed: () => showPreferencesDialog(
-              context: context,
-              state: state,
-            ),
+            onPressed: () =>
+                showPreferencesDialog(context: context, state: state),
           ),
           _BarIconButton(
             tooltip: s['automations'],
             icon: AppIcons.automations,
-            onPressed: () => showAutomationDialog(
-              context: context,
-              state: state,
-            ),
+            onPressed: () =>
+                showAutomationDialog(context: context, state: state),
           ),
           if (state.isDiagramMode)
             _BarIconButton(
               tooltip: s['diagramGraphConfig'],
               icon: AppIcons.diagramGraphConfig,
-              onPressed: () => showDiagramGraphConfigDialog(
-                context: context,
-                state: state,
-              ),
+              onPressed: () =>
+                  showDiagramGraphConfigDialog(context: context, state: state),
             ),
           if (_showArrange)
             _BarIconButton(
@@ -169,11 +176,7 @@ class AppBottomBar extends StatelessWidget {
     );
   }
 
-  List<Widget> _centerSegments(
-    BuildContext context,
-    AppStrings s,
-    bool canAi,
-  ) {
+  List<Widget> _centerSegments(BuildContext context, AppStrings s, bool canAi) {
     return [
       if (_showArchiveDelete && state.archiveDeleteMode) ...[
         GlassBarSegment(
@@ -251,6 +254,326 @@ class AppBottomBar extends StatelessWidget {
   }
 }
 
+/// Phone topic tools: the same parts as the desktop bar, in one horizontally
+/// scrolling row. File-carousel swipes and this strip are separate hit targets.
+class PhoneBottomBar extends StatelessWidget {
+  const PhoneBottomBar({super.key, required this.state});
+
+  final AppState state;
+
+  static bool showInsert(AppState state) =>
+      !state.isArchiveMode &&
+      !state.isViewMode &&
+      !state.isDiagramMode &&
+      DocumentEditorRegistry.active != null;
+
+  static bool showAi(AppState state) => state.canUseAiTools || state.aiRunning;
+
+  static bool showArrange(AppState state) =>
+      !state.isArchiveMode &&
+      !state.isViewMode &&
+      !state.isDiagramMode &&
+      state.selectedDetail != null;
+
+  static bool showArchiveDeleteConfirm(AppState state) =>
+      state.isArchiveMode &&
+      state.archiveDeleteMode &&
+      state.archiveDeleteSelection.isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    return KeepEditorFocus(
+      child: ListenableBuilder(
+        listenable: Listenable.merge([
+          state,
+          DocumentEditorRegistry.notifier,
+          DocumentEditorRegistry.objectGateNotifier,
+          ViewChromeRegistry.notifier,
+        ]),
+        builder: (context, _) => _buildBar(context),
+      ),
+    );
+  }
+
+  Widget _buildBar(BuildContext context) {
+    final s = state.strings;
+    final viewChrome = ViewChromeRegistry.active;
+    final objectPad = _objectPad(s);
+    final parts = <Widget>[
+      ?objectPad,
+      _chromeSegment(context, s),
+      if (state.isDiagramMode)
+        DiagramTagFilterBar(state: state, tightShadow: true),
+      if (state.isViewMode && viewChrome != null)
+        ViewChromeMenu(
+          state: state,
+          displayMode: state.viewDisplayMode,
+          frameReorderMode: viewChrome.frameReorderMode,
+          onToggleDisplayMode: viewChrome.onToggleDisplayMode,
+          onAddSection: viewChrome.onAddSection,
+          onStartFrameReorder: viewChrome.onStartFrameReorder,
+        ),
+      if (showInsert(state)) DocumentInsertBar(state: state, embedded: true),
+      if (showArchiveDeleteConfirm(state)) _archiveConfirmSegment(context, s),
+      if (showAi(state)) _aiSegment(s),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        12,
+        AppBottomBarMetrics.phoneFloatMargin,
+        12,
+        AppBottomBarMetrics.phoneFloatMargin,
+      ),
+      child: SingleChildScrollView(
+        primary: false,
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < parts.length; i++) ...[
+              if (i > 0)
+                const SizedBox(width: AppBottomBarMetrics.phoneSegmentGap),
+              parts[i],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chromeSegment(BuildContext context, AppStrings s) {
+    return GlassBarSegment(
+      height: AppBottomBarMetrics.phoneSegmentHeight,
+      padding: _segmentPadding,
+      tightShadow: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _BarIconButton(
+            buttonKey: ChromeAnchors.preferencesButton,
+            tooltip: s['preferences'],
+            icon: AppIcons.preferences,
+            onPressed: () =>
+                showPreferencesDialog(context: context, state: state),
+          ),
+          _BarIconButton(
+            tooltip: s['automations'],
+            icon: AppIcons.automations,
+            onPressed: () =>
+                showAutomationDialog(context: context, state: state),
+          ),
+          if (state.isDiagramMode)
+            _BarIconButton(
+              tooltip: s['diagramGraphConfig'],
+              icon: AppIcons.diagramGraphConfig,
+              onPressed: () =>
+                  showDiagramGraphConfigDialog(context: context, state: state),
+            ),
+          if (showArrange(state))
+            _BarIconButton(
+              tooltip: s['arrangeFiles'],
+              icon: AppIcons.arrange,
+              onPressed: () =>
+                  showPhoneFileReorderSheet(context: context, state: state),
+            ),
+          if (state.isArchiveMode && state.archiveTotalCount > 0)
+            _BarIconButton(
+              tooltip: state.archiveDeleteMode
+                  ? (state.archiveDeleteSelection.isEmpty
+                        ? s['archiveDeleteDone']
+                        : s['archiveDeleteConfirm'])
+                  : s['archiveDeleteSelect'],
+              icon: AppIcons.trash,
+              active: state.archiveDeleteMode,
+              onPressed: () => _handleArchiveDelete(context),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _archiveConfirmSegment(BuildContext context, AppStrings s) {
+    return GlassBarSegment(
+      height: AppBottomBarMetrics.phoneSegmentHeight,
+      padding: _segmentPadding,
+      tightShadow: true,
+      child: TextButton(
+        onPressed: () => _confirmArchiveDelete(context),
+        child: Text(
+          s['archiveDeleteConfirm'],
+          style: AppTypography.metaStyle.copyWith(fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
+  Widget _aiSegment(AppStrings s) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (state.canUseAiTools)
+          GlassBarSegment(
+            style: AppGlassStyle.aiAccent,
+            height: AppBottomBarMetrics.phoneSegmentHeight,
+            padding: _segmentPadding,
+            label: 'AI',
+            labelOnBorder: true,
+            tightShadow: true,
+            child: AiToolBar(state: state, compact: true),
+          ),
+        if (state.aiRunning) ...[
+          if (state.canUseAiTools)
+            const SizedBox(width: AppBottomBarMetrics.phoneSegmentGap),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.aiCyan.withValues(alpha: 0.85),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(s['aiRunning'], style: AppTypography.metaStyle),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget? _objectPad(AppStrings s) {
+    final editor = DocumentEditorRegistry.active;
+    if (editor == null) return null;
+    final leave = editor.canLeaveObject?.call() ?? false;
+    final enter = editor.canEnterObject?.call() ?? false;
+    if (!leave && !enter) return null;
+    return GlassBarSegment(
+      height: AppBottomBarMetrics.phoneSegmentHeight,
+      padding: _segmentPadding,
+      tightShadow: true,
+      child: ObjectArrowPad(
+        leftTooltip: s['objectArrowLeft'],
+        downTooltip: s['objectArrowDown'],
+        upTooltip: s['objectArrowUp'],
+        rightTooltip: s['objectArrowRight'],
+        enterLeaveTooltip: leave ? s['objectLeave'] : s['objectEnter'],
+        leave: leave,
+        onNudge: (direction) => editor.nudgeObjectCaret?.call(direction),
+        onEnterOrLeave: () {
+          if (leave) {
+            editor.leaveObject?.call();
+          } else {
+            editor.enterObject?.call();
+          }
+        },
+      ),
+    );
+  }
+
+  Future<void> _handleArchiveDelete(BuildContext context) async {
+    if (!state.archiveDeleteMode) {
+      state.toggleArchiveDeleteMode();
+      return;
+    }
+    if (state.archiveDeleteSelection.isEmpty) {
+      state.toggleArchiveDeleteMode();
+      return;
+    }
+    await _confirmArchiveDelete(context);
+  }
+
+  Future<void> _confirmArchiveDelete(BuildContext context) async {
+    final s = state.strings;
+    final count = state.archiveDeleteSelection.length;
+    final ok = await showAppConfirmDialog(
+      context: context,
+      title: s['archiveDeleteTitle'],
+      message: s.archiveDeleteBody(count),
+      confirmLabel: s['delete'],
+      cancelLabel: s['cancel'],
+      destructive: true,
+    );
+    if (!ok || !context.mounted) return;
+    await state.deleteSelectedArchiveFiles();
+  }
+}
+
+/// Phone object-pad arrows. Physical left/right — never mirrors with the app UI.
+///
+/// The icons only *draw* a direction. Hebrew still means left is left.
+class ObjectArrowPad extends StatelessWidget {
+  const ObjectArrowPad({
+    super.key,
+    required this.leftTooltip,
+    required this.downTooltip,
+    required this.upTooltip,
+    required this.rightTooltip,
+    required this.enterLeaveTooltip,
+    required this.leave,
+    required this.onNudge,
+    required this.onEnterOrLeave,
+  });
+
+  static const padKey = Key('object-arrow-pad');
+
+  final String leftTooltip;
+  final String downTooltip;
+  final String upTooltip;
+  final String rightTooltip;
+  final String enterLeaveTooltip;
+  final bool leave;
+  final ValueChanged<AxisDirection> onNudge;
+  final VoidCallback onEnterOrLeave;
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Row(
+        key: padKey,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _BarIconButton(
+            tooltip: leftTooltip,
+            icon: AppIcons.arrowLeft,
+            textDirection: TextDirection.ltr,
+            onPressed: () => onNudge(AxisDirection.left),
+          ),
+          _BarIconButton(
+            tooltip: downTooltip,
+            icon: AppIcons.arrowDown,
+            textDirection: TextDirection.ltr,
+            onPressed: () => onNudge(AxisDirection.down),
+          ),
+          _BarIconButton(
+            tooltip: upTooltip,
+            icon: AppIcons.arrowUp,
+            textDirection: TextDirection.ltr,
+            onPressed: () => onNudge(AxisDirection.up),
+          ),
+          _BarIconButton(
+            tooltip: rightTooltip,
+            icon: AppIcons.arrowRight,
+            textDirection: TextDirection.ltr,
+            onPressed: () => onNudge(AxisDirection.right),
+          ),
+          _BarIconButton(
+            tooltip: enterLeaveTooltip,
+            icon: leave ? AppIcons.leaveObject : AppIcons.enterObject,
+            textDirection: TextDirection.ltr,
+            active: leave,
+            onPressed: onEnterOrLeave,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _BarIconButton extends StatelessWidget {
   const _BarIconButton({
     required this.tooltip,
@@ -258,6 +581,7 @@ class _BarIconButton extends StatelessWidget {
     required this.onPressed,
     this.active = false,
     this.buttonKey,
+    this.textDirection,
   });
 
   final String tooltip;
@@ -265,6 +589,7 @@ class _BarIconButton extends StatelessWidget {
   final VoidCallback onPressed;
   final bool active;
   final Key? buttonKey;
+  final TextDirection? textDirection;
 
   @override
   Widget build(BuildContext context) {
@@ -277,6 +602,7 @@ class _BarIconButton extends StatelessWidget {
       icon: AppIcon(
         icon,
         size: _iconSize,
+        textDirection: textDirection,
         color: active
             ? AppColors.primary.withValues(alpha: 0.88)
             : AppColors.text.withValues(alpha: 0.72),

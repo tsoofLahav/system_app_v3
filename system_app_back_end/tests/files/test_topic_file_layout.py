@@ -13,13 +13,13 @@ import inspect
 from areas.files.routes import topics as topics_routes
 from models import File, Topic
 
-LAYOUT_IDS = {"single", "split", "hero_left", "hero_right", "row", "grid"}
+LAYOUT_IDS = {"auto", "single", "split", "hero_left", "hero_right", "row", "grid"}
 
 
 def test_topic_stores_its_file_layout():
     column = Topic.__table__.columns["file_layout"]
     assert not column.nullable
-    assert column.default.arg == "single"
+    assert column.default.arg == "auto"
 
 
 def test_topic_serializes_its_file_layout():

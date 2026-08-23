@@ -47,7 +47,7 @@ Flutter moves the caret through the **string**. In RTL that makes ← walk the w
 
 **Do not** reimplement arrows in a `onKeyEvent` handler.
 
-Applied only when the field’s resolved direction is RTL (`wrapVisualCaretMotion`).
+`wrapVisualCaretMotion` always wraps the field in `Actions` (same tree shape so an IME language switch does not remount the `TextField`). Flip actions apply only when the field’s resolved direction is RTL.
 
 **Not flipped:** Cmd+arrow / Home / End (they share intents; flipping would break Home/End). Documented as a known gap in the files [`AREA.md`](../../AREA.md).
 
@@ -71,7 +71,7 @@ Use `collapsedAtLogicalEnd(offset)` so affinity stays upstream at ends.
 
 - [ ] `textDirection: resolveFieldTextDirection(text, ambient)`
 - [ ] `textAlign: TextAlign.start` (follows direction)
-- [ ] `wrapVisualCaretMotion(...)` when RTL
+- [ ] `wrapVisualCaretMotion(...)` always (identity actions when LTR)
 - [ ] Primary pointer down stores global position; `onTap` may call `emptySpaceCaretOffset`
 - [ ] Cross-part arrow edge uses the **resolved** field direction, not only ambient locale
 
@@ -102,7 +102,10 @@ flutter test \
   test/rtl_paragraph_text_direction_test.dart \
   test/rtl_empty_space_caret_test.dart \
   test/rtl_super_editor_direction_test.dart \
-  test/document_text_flow_test.dart
+  test/document_text_flow_test.dart \
+  test/files/table_grid_nav_test.dart \
+  test/files/table_cell_session_test.dart \
+  test/ux/object_arrow_pad_test.dart
 ```
 
 Manual (Hebrew UI):
@@ -121,3 +124,4 @@ Manual (Hebrew UI):
 | Continuous document / segments | [`../../AREA.md`](../../AREA.md) |
 | Spans / mark / menus | [`../RICH_TEXT.md`](../RICH_TEXT.md) |
 | Graph/table reading direction | Embed widgets use ambient `Directionality` for column mirroring — separate from this text-caret solution |
+| Table grid ←/→ | [`../table_grid_nav.dart`](../table_grid_nav.dart) — physical pad/hardware arrows → visual cell. Grid RTL = app `Directionality` (col 0 on the right in Hebrew). Landing uses the destination cell’s first-strong direction so visual-right is logical start in RTL. Phone object-pad icons never mirror (UX chrome). |

@@ -1,3 +1,5 @@
+import 'package:flutter/painting.dart';
+
 import '../../../shared/utils/frame_safe_notifier.dart';
 
 class DocumentEditorController {
@@ -10,6 +12,11 @@ class DocumentEditorController {
     this.markedTextForAgent,
     this.applyTextAction,
     this.isFocused,
+    this.canEnterObject,
+    this.canLeaveObject,
+    this.enterObject,
+    this.leaveObject,
+    this.nudgeObjectCaret,
   });
 
   final int fileId;
@@ -28,6 +35,15 @@ class DocumentEditorController {
 
   /// True while this file's Super Editor focus node owns the keyboard.
   final bool Function()? isFocused;
+
+  /// Phone: Tab/Escape have no keys. The bottom bar offers these instead.
+  final bool Function()? canEnterObject;
+  final bool Function()? canLeaveObject;
+  final VoidCallback? enterObject;
+  final VoidCallback? leaveObject;
+
+  /// Phone: move inside the open object, or to the next block when on it.
+  final void Function(AxisDirection direction)? nudgeObjectCaret;
 }
 
 /// Tracks every open file editor. Inserts go to the **last claimed** file —
@@ -39,6 +55,9 @@ class DocumentEditorRegistry {
   /// on the spot — the insert bar and both shells listen to it, and they are
   /// being unmounted in the same frame.
   static final FrameSafeNotifier notifier = FrameSafeNotifier();
+
+  /// Phone object enter/leave pill — caret moved onto or off an object.
+  static final FrameSafeNotifier objectGateNotifier = FrameSafeNotifier();
 
   static final Map<int, DocumentEditorController> _byFile = {};
 

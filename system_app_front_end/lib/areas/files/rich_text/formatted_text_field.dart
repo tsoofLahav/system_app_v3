@@ -130,6 +130,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   Offset? _pendingTapGlobal;
   // Built once: the overrides are stateless, so they can outlive a rebuild.
   final _rtlMotionActions = rtlCaretMotionActions();
+  bool _mutatingImeSentinel = false;
+  bool _structureEnterArmed = true;
 
   @override
   void initState() {
@@ -145,6 +147,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     widget.controller.addListener(_syncFlowFromLocalSelection);
     widget.controller.addListener(_syncParagraphDirection);
     widget.controller.addListener(_noteSelectionForMenu);
+    widget.controller.addListener(_pinSentinelCaretIfNeeded);
     _detectedDirection = detectParagraphTextDirection(widget.controller.text);
     WidgetsBinding.instance.addPostFrameCallback((_) => _ensureKeyHandlerChained());
   }
@@ -152,7 +155,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   /// RTL solution: keep [TextField.textDirection] on the first strong character
   /// (see `rtl/RTL.md`).
   void _syncParagraphDirection() {
-    final next = detectParagraphTextDirection(widget.controller.text);
+    final next = detectParagraphTextDirection(
+      imeVisibleText(widget.controller.text),
+    );
     if (next == _detectedDirection) return;
     setState(() => _detectedDirection = next);
   }
@@ -228,10 +233,12 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       oldWidget.controller.removeListener(_syncFlowFromLocalSelection);
       oldWidget.controller.removeListener(_syncParagraphDirection);
       oldWidget.controller.removeListener(_noteSelectionForMenu);
+      oldWidget.controller.removeListener(_pinSentinelCaretIfNeeded);
       widget.controller.addListener(_normalizeSelectionIfNeeded);
       widget.controller.addListener(_syncFlowFromLocalSelection);
       widget.controller.addListener(_syncParagraphDirection);
       widget.controller.addListener(_noteSelectionForMenu);
+      widget.controller.addListener(_pinSentinelCaretIfNeeded);
       _detectedDirection = detectParagraphTextDirection(widget.controller.text);
       final previousId = _registeredSegmentId;
       if (previousId != null) _flow?.unregister(previousId, oldWidget.controller);
@@ -267,7 +274,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     widget.controller.removeListener(_syncFlowFromLocalSelection);
     widget.controller.removeListener(_syncParagraphDirection);
     widget.controller.removeListener(_noteSelectionForMenu);
+    widget.controller.removeListener(_pinSentinelCaretIfNeeded);
     _focusNode.removeListener(_onFocusChanged);
+    _stripEmptyImeSentinel(rebuild: false);
     BlockTextFocusRegistry.unregister(widget.controller);
     if (_ownsFocus) _focusNode.dispose();
     super.dispose();
@@ -311,12 +320,14 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       // File pane owns scrolling — keep the caret in view without letting each
       // EditableText scroll as its own surface.
       _ensureVisibleInFilePane();
+      _ensureEmptyImeSentinel();
     } else {
       if ((BlockTextFocusRegistry.isInMenuSession ||
               BlockTextFocusRegistry.isInEmojiPickerSession) &&
           BlockTextFocusRegistry.activeController == widget.controller) {
         return;
       }
+      _stripEmptyImeSentinel();
       BlockTextFocusRegistry.unregister(widget.controller);
     }
   }
@@ -335,11 +346,102 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   }
 
   void _notifyChanged() {
+    if (_mutatingImeSentinel) return;
     final controller = widget.controller;
+    if (controller.text == imeEmptySentinel) {
+      widget.onChanged?.call('');
+      return;
+    }
     if (controller is SpanTextEditingController) {
       controller.ensureSpansMatchText();
     }
-    widget.onChanged?.call(controller.text);
+    widget.onChanged?.call(imeVisibleText(controller.text));
+  }
+
+  bool get _handlesStructureEnter =>
+      widget.onEnter != null || widget.hostKeyEvent != null;
+
+  bool get _usesEmptyImeSentinel => widget.onBackspaceAtStart != null;
+
+  void _ensureEmptyImeSentinel() {
+    if (!_usesEmptyImeSentinel) return;
+    if (!_focusNode.hasFocus) return;
+    if (!imeFieldLooksEmpty(widget.controller.text)) return;
+    if (widget.controller.text == imeEmptySentinel) {
+      _pinEmptyImeCaret();
+      return;
+    }
+    _mutatingImeSentinel = true;
+    widget.controller.value = const TextEditingValue(
+      text: imeEmptySentinel,
+      selection: TextSelection.collapsed(offset: 1),
+    );
+    _mutatingImeSentinel = false;
+    if (mounted) setState(() {});
+  }
+
+  void _stripEmptyImeSentinel({bool rebuild = true}) {
+    if (widget.controller.text != imeEmptySentinel) return;
+    _mutatingImeSentinel = true;
+    widget.controller.value = const TextEditingValue(
+      text: '',
+      selection: TextSelection.collapsed(offset: 0),
+    );
+    _mutatingImeSentinel = false;
+    if (rebuild && mounted) setState(() {});
+  }
+
+  void _pinSentinelCaretIfNeeded() {
+    if (_mutatingImeSentinel) return;
+    if (widget.controller.text != imeEmptySentinel) return;
+    _pinEmptyImeCaret();
+  }
+
+  void _pinEmptyImeCaret() {
+    final selection = widget.controller.selection;
+    if (selection.isValid &&
+        selection.isCollapsed &&
+        selection.baseOffset == 1) {
+      return;
+    }
+    _mutatingImeSentinel = true;
+    widget.controller.selection = const TextSelection.collapsed(offset: 1);
+    _mutatingImeSentinel = false;
+  }
+
+  /// Phone IME Return inserts a newline instead of a KeyEvent. Same for
+  /// [onSubmitted] when the field is treated as single-line.
+  void _invokeStructureEnter() {
+    if (!_handlesStructureEnter) return;
+    if (!_structureEnterArmed) return;
+    _structureEnterArmed = false;
+    scheduleMicrotask(() => _structureEnterArmed = true);
+    _stripEmptyImeSentinel();
+    if (widget.onEnter != null) {
+      widget.onEnter!();
+      return;
+    }
+    final host = widget.hostKeyEvent;
+    if (host == null) return;
+    host(
+      _focusNode,
+      KeyDownEvent(
+        physicalKey: PhysicalKeyboardKey.enter,
+        logicalKey: LogicalKeyboardKey.enter,
+        timeStamp: Duration.zero,
+      ),
+    );
+  }
+
+  void _invokeEmptyBackspace() {
+    final callback = widget.onBackspaceAtStart;
+    if (callback == null) return;
+    _stripEmptyImeSentinel();
+    unawaited(callback());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_focusNode.hasFocus) return;
+      _ensureEmptyImeSentinel();
+    });
   }
 
   void _normalizeSelectionIfNeeded() {
@@ -457,8 +559,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
 
     if (event.logicalKey == LogicalKeyboardKey.enter &&
         !HardwareKeyboard.instance.isShiftPressed &&
-        widget.onEnter != null) {
-      widget.onEnter!();
+        _handlesStructureEnter) {
+      _invokeStructureEnter();
       return KeyEventResult.handled;
     }
 
@@ -471,9 +573,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     }
 
     if (event.logicalKey == LogicalKeyboardKey.backspace &&
-        _shouldInvokeBackspaceAtStart() &&
-        widget.onBackspaceAtStart != null) {
-      unawaited(widget.onBackspaceAtStart!());
+        widget.onBackspaceAtStart != null &&
+        (imeFieldLooksEmpty(widget.controller.text) ||
+            _shouldInvokeBackspaceAtStart())) {
+      _invokeEmptyBackspace();
       return KeyEventResult.handled;
     }
 
@@ -929,6 +1032,13 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   Widget build(BuildContext context) {
     final style = widget.style;
     final formatters = <TextInputFormatter>[
+      if (_handlesStructureEnter || _usesEmptyImeSentinel)
+        _ImeStructureKeyFormatter(
+          wantEnter: _handlesStructureEnter,
+          holdEmptySentinel: _usesEmptyImeSentinel && _focusNode.hasFocus,
+          onEnter: _invokeStructureEnter,
+          onEmptyBackspace: _invokeEmptyBackspace,
+        ),
       if (widget.stripNewlines) _StripNewlinesFormatter(),
     ];
 
@@ -1017,17 +1127,26 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                   decoration: InputDecoration(
                     isDense: true,
                     border: InputBorder.none,
-                    hintText: widget.hintText,
+                    hintText: (_usesEmptyImeSentinel &&
+                            widget.controller.text == imeEmptySentinel)
+                        ? null
+                        : widget.hintText,
                     hintStyle: style.copyWith(
                       color: style.color?.withValues(alpha: 0.35),
                     ),
                     contentPadding: EdgeInsets.zero,
                   ),
-                  textInputAction: widget.onEnter != null
-                      ? TextInputAction.none
+                  textInputAction: _handlesStructureEnter
+                      ? TextInputAction.newline
                       : widget.textInputAction,
                   onChanged: (_) => _notifyChanged(),
-                  onSubmitted: widget.onSubmitted,
+                  onSubmitted: (value) {
+                    if (_handlesStructureEnter) {
+                      _invokeStructureEnter();
+                      return;
+                    }
+                    widget.onSubmitted?.call(value);
+                  },
                   onTap: () {
                     _onFocusChanged();
                     _handleTap();
@@ -1046,6 +1165,25 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                   child: _withCrossSegmentHighlight(field),
                 ),
               );
+              if (_usesEmptyImeSentinel && widget.hintText != null) {
+                final showHint = imeFieldLooksEmpty(widget.controller.text);
+                body = Stack(
+                  children: [
+                    body,
+                    IgnorePointer(
+                      child: Opacity(
+                        opacity: showHint ? 1 : 0,
+                        child: Text(
+                          widget.hintText!,
+                          style: style.copyWith(
+                            color: style.color?.withValues(alpha: 0.35),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }
 
               if (widget.descriptionRanges.isNotEmpty) {
                 body = _DescriptionUnderlineOverlay(
@@ -1463,6 +1601,97 @@ class _UnderlinePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _UnderlinePainter oldDelegate) =>
       !FrozenSelectionPainter.rectsEqual(rects, oldDelegate.rects);
+}
+
+class _ImeStructureKeyFormatter extends TextInputFormatter {
+  _ImeStructureKeyFormatter({
+    required this.wantEnter,
+    required this.holdEmptySentinel,
+    required this.onEnter,
+    required this.onEmptyBackspace,
+  });
+
+  final bool wantEnter;
+  final bool holdEmptySentinel;
+  final VoidCallback onEnter;
+  final VoidCallback onEmptyBackspace;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (wantEnter && imeInsertedSingleNewline(oldValue.text, newValue.text)) {
+      scheduleMicrotask(onEnter);
+      if (holdEmptySentinel && imeFieldLooksEmpty(oldValue.text)) {
+        return const TextEditingValue(
+          text: imeEmptySentinel,
+          selection: TextSelection.collapsed(offset: 1),
+        );
+      }
+      return TextEditingValue(
+        text: imeVisibleText(oldValue.text),
+        selection: oldValue.selection,
+        composing: TextRange.empty,
+      );
+    }
+
+    if (holdEmptySentinel &&
+        imeDeletedEmptySentinel(oldValue.text, newValue.text)) {
+      scheduleMicrotask(onEmptyBackspace);
+      return const TextEditingValue(
+        text: '',
+        selection: TextSelection.collapsed(offset: 0),
+      );
+    }
+
+    if (oldValue.text == imeEmptySentinel &&
+        newValue.text.startsWith(imeEmptySentinel) &&
+        newValue.text.length > 1) {
+      final typed = newValue.text.replaceFirst(imeEmptySentinel, '');
+      final caret = (newValue.selection.baseOffset - 1).clamp(0, typed.length);
+      return TextEditingValue(
+        text: typed,
+        selection: TextSelection.collapsed(offset: caret),
+        composing: TextRange.empty,
+      );
+    }
+
+    if (holdEmptySentinel && newValue.text.isEmpty) {
+      return const TextEditingValue(
+        text: imeEmptySentinel,
+        selection: TextSelection.collapsed(offset: 1),
+      );
+    }
+
+    return newValue;
+  }
+}
+
+/// Invisible placeholder so the iOS IME will deliver a delete on an empty
+/// object field (otherwise `deleteBackward` is a no-op).
+const imeEmptySentinel = '\u200B';
+
+String imeVisibleText(String text) => text.replaceAll(imeEmptySentinel, '');
+
+bool imeFieldLooksEmpty(String text) => imeVisibleText(text).isEmpty;
+
+@visibleForTesting
+bool imeInsertedSingleNewline(String previous, String next) {
+  if (!next.contains('\n')) return false;
+  final previousVisible = imeVisibleText(previous);
+  for (var i = 0; i < next.length; i++) {
+    if (next.codeUnitAt(i) != 0x0A) continue;
+    if (imeVisibleText(next.replaceRange(i, i + 1, '')) == previousVisible) {
+      return true;
+    }
+  }
+  return false;
+}
+
+@visibleForTesting
+bool imeDeletedEmptySentinel(String previous, String next) {
+  return previous == imeEmptySentinel && next.isEmpty;
 }
 
 class _StripNewlinesFormatter extends TextInputFormatter {

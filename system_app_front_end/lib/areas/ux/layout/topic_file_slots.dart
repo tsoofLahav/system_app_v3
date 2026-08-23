@@ -17,7 +17,10 @@ import './file_layouts.dart';
 /// A stored layout that needs more files than exist falls back to the best fit,
 /// and is left stored as it is — adding the files back restores it.
 String effectiveLayoutId(String layoutId, int fileCount) {
-  if (FileLayouts.isAvailable(layoutId, fileCount)) return layoutId;
+  final stored = layoutId == FileLayouts.auto || layoutId.isEmpty
+      ? FileLayouts.bestForFileCount(fileCount)
+      : layoutId;
+  if (FileLayouts.isAvailable(stored, fileCount)) return stored;
   return FileLayouts.bestForFileCount(fileCount);
 }
 
