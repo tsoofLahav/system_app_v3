@@ -70,7 +70,7 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 | `find_file` | By `file_id`, or name (+ optional topic); hits include the topic name |
 | `find_object` | By `object_id`, or type/name (+ optional topic); hits include file + topic name |
 | `open_file` | Returns `name` + `topic`, `document_plain` (agent text), `document_lines` (1-based), + `object_extras`. Archived readable. |
-| `create_object` | Create embed + pointer (`task_list` \| `info` \| `table` \| `graph` \| `image`); returns `object_id` |
+| `create_object` | Create embed + pointer (`task_list` \| `info` \| `table` \| `graph` \| `image`); returns `object_id`. **Image:** `body` is the generation prompt; the tool writes PNG bytes to the upload folder and stores `payload.url` — an empty image object is a missing prompt, not a later patch |
 | `reference` | On-demand examples from `content/production_agent/reference.md` (`agent_text` / `tools` / `all`) |
 | `patch_file` | **Partial edits** with `op` add / remove / replace on `document_lines`; typical outcome **review** |
 | `rewrite_file` | Full new agent text for a true whole-file rewrite; typical outcome **apply** when run allows |
@@ -91,7 +91,7 @@ Each write tool ends in the same apply path (`patch_file` / `rewrite_file`):
 4. Reject archived files
 5. On `direct_apply` (and Accept via API): `commit_agent_file_apply` — promote legacy embeds → file version → `document_json` → `object_updates` → purge unreferenced embeds
 
-`create_object` allocates a real embed id and inserts the pointer (shared with `POST /files/:id/objects`); fill content afterward with `patch_file`.
+`create_object` allocates a real embed id and inserts the pointer (shared with `POST /files/:id/objects`); fill content afterward with `patch_file`. **Image is the exception:** `body` is sent to `generate_image`, bytes are stored via [`shared/routes/upload.py`](../../shared/routes/upload.py) (`store_image_bytes`), and `payload.url` is set on create. An empty image already in the file (the "Add image" slot) is filled instead of adding a second embed. Patching a made-up url onto `[IMAGE]` is not how a picture is created.
 
 ## Apply modes
 

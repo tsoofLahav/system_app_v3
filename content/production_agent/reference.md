@@ -88,8 +88,10 @@ First line = title; rest = body. `open_file` may also return `object_extras` wit
 ### Image embed
 
 ```text
-[IMAGE id="5" caption="Screenshot" url="/uploads/shot.png"]
+[IMAGE id="5" caption="Screenshot" url="/images/shot.png"]
 ```
+
+The `url` is an uploaded path written by `create_object` after it generates the picture. Do not invent one, and do not leave an `[IMAGE]` with no url — that is an empty slot.
 
 ### Chart table (graph sugar)
 
@@ -172,7 +174,11 @@ Load one file. Returns `name` + `topic` (so you can confirm where you landed), `
 { "file_id": 12, "type": "task_list", "title": "Week", "body": "", "after_line": 0 }
 ```
 
-Creates the embed + pointer; returns `object_id`. Then `open_file` + `patch_file` to fill rows/tasks. `after_line` `0` = end of file.
+```json
+{ "file_id": 12, "type": "image", "title": "Garden", "body": "watercolor of a small vegetable garden in late summer", "after_line": 0 }
+```
+
+Creates the embed + pointer; returns `object_id`. Then `open_file` + `patch_file` to fill rows/tasks. For `image`, `body` is the picture to generate (required) and `title` is the caption — the tool stores the file. `after_line` `0` = end of file.
 
 ### `reference`
 

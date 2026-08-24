@@ -36,6 +36,30 @@ def _safe_stored_name(original_name: str, mimetype: str | None) -> str:
     return f"{name}_{uuid.uuid4().hex[:8]}{ext}"
 
 
+def _upload_folder() -> str:
+    try:
+        return current_app.config["UPLOAD_FOLDER"]
+    except RuntimeError:
+        from config import UPLOAD_FOLDER
+
+        return UPLOAD_FOLDER
+
+
+def store_image_bytes(
+    data: bytes,
+    original_name: str = "generated.png",
+    mimetype: str | None = "image/png",
+) -> str:
+    """Write image bytes to the upload folder. Returns ``/images/<filename>``."""
+    upload_folder = _upload_folder()
+    os.makedirs(upload_folder, exist_ok=True)
+    filename = _safe_stored_name(original_name, mimetype)
+    dest = os.path.join(upload_folder, filename)
+    with open(dest, "wb") as handle:
+        handle.write(data)
+    return f"/images/{filename}"
+
+
 @upload_bp.route("/upload-image", methods=["POST"])
 def upload_image():
     if "image" not in request.files:
@@ -48,17 +72,17 @@ def upload_image():
     if not allowed_file(file.filename):
         return jsonify({"error": "File type not allowed"}), 400
 
-    upload_folder = current_app.config["UPLOAD_FOLDER"]
     try:
-        os.makedirs(upload_folder, exist_ok=True)
-        filename = _safe_stored_name(file.filename, file.mimetype)
-        dest = os.path.join(upload_folder, filename)
-        file.save(dest)
+        image_path = store_image_bytes(
+            file.read(),
+            original_name=file.filename,
+            mimetype=file.mimetype,
+        )
     except OSError as exc:
-        logger.exception("Failed to save uploaded image to %s", upload_folder)
+        logger.exception("Failed to save uploaded image")
         return jsonify({"error": f"Could not save image: {exc}"}), 500
 
-    image_path = f"/images/{filename}"
+    filename = image_path.rsplit("/", 1)[-1]
     return jsonify(
         {
             "filename": filename,

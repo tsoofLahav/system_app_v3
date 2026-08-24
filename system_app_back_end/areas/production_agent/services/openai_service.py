@@ -1,7 +1,8 @@
 """OpenAI client helpers for the production agent.
 
 The agent runner uses the **Responses API** with a per-flow Conversation.
-`chat_text` / `chat_json` / `generate_image` remain for non-agent callers.
+`chat_text` / `chat_json` remain for non-agent callers.
+`generate_image` is used by agent `create_object` (type=image).
 """
 
 from __future__ import annotations

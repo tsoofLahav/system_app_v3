@@ -188,6 +188,160 @@ def test_create_object_direct(mock_session, _mock_load, mock_create):
     assert kwargs["block_index"] is None
 
 
+@patch("areas.production_agent.services.create_object_tool.store_image_bytes")
+@patch("areas.production_agent.services.create_object_tool.generate_image")
+@patch("areas.production_agent.services.create_object_tool.create_embed_in_file")
+@patch("areas.production_agent.services.create_object_tool.load_objects_by_id", return_value={})
+@patch("areas.production_agent.services.create_object_tool.db.session")
+def test_create_object_image_generates_and_stores(
+    mock_session, _mock_load, mock_create, mock_generate, mock_store
+):
+    file_row = MagicMock()
+    file_row.id = 12
+    file_row.archived_at = None
+    file_row.document_json = wrap_editor_text("Hello")
+    mock_session.get.return_value = file_row
+
+    embed = MagicMock()
+    embed.id = 44
+    mock_create.return_value = embed
+    mock_generate.return_value = b"png-bytes"
+    mock_store.return_value = "/images/generated_abc.png"
+
+    with patch(
+        "areas.production_agent.services.create_object_tool.file_allowed",
+        return_value=True,
+    ), patch(
+        "areas.production_agent.services.create_object_tool._empty_image_embed",
+        return_value=None,
+    ):
+        result = create_object(
+            file_id=12,
+            type_="image",
+            scope={"workspace_id": 1},
+            write_mode="direct_apply",
+            title="Garden",
+            body="watercolor vegetable garden",
+        )
+
+    assert result["applied"] is True
+    assert result["object_id"] == 44
+    assert result["url"] == "/images/generated_abc.png"
+    mock_generate.assert_called_once_with("watercolor vegetable garden")
+    mock_store.assert_called_once_with(b"png-bytes", original_name="generated.png")
+    kwargs = mock_create.call_args.kwargs
+    assert kwargs["payload"] == {
+        "url": "/images/generated_abc.png",
+        "caption": "Garden",
+    }
+
+
+@patch("areas.production_agent.services.create_object_tool.generate_image")
+@patch("areas.production_agent.services.create_object_tool.create_embed_in_file")
+@patch("areas.production_agent.services.create_object_tool.db.session")
+def test_create_object_image_requires_a_description(
+    mock_session, mock_create, mock_generate
+):
+    file_row = MagicMock()
+    file_row.id = 12
+    file_row.archived_at = None
+    mock_session.get.return_value = file_row
+
+    with patch(
+        "areas.production_agent.services.create_object_tool.file_allowed",
+        return_value=True,
+    ):
+        result = create_object(
+            file_id=12,
+            type_="image",
+            scope={"workspace_id": 1},
+            write_mode="direct_apply",
+            title="",
+            body="",
+        )
+
+    assert "error" in result
+    mock_create.assert_not_called()
+    mock_generate.assert_not_called()
+
+
+@patch("areas.production_agent.services.create_object_tool.store_image_bytes")
+@patch("areas.production_agent.services.create_object_tool.generate_image")
+@patch("areas.production_agent.services.create_object_tool.create_embed_in_file")
+@patch("areas.production_agent.services.create_object_tool.load_objects_by_id", return_value={})
+@patch("areas.production_agent.services.create_object_tool.db.session")
+def test_create_object_image_uses_title_when_body_empty(
+    mock_session, _mock_load, mock_create, mock_generate, mock_store
+):
+    file_row = MagicMock()
+    file_row.id = 12
+    file_row.archived_at = None
+    file_row.document_json = wrap_editor_text("Hello")
+    mock_session.get.return_value = file_row
+    embed = MagicMock()
+    embed.id = 45
+    mock_create.return_value = embed
+    mock_generate.return_value = b"png"
+    mock_store.return_value = "/images/x.png"
+
+    with patch(
+        "areas.production_agent.services.create_object_tool.file_allowed",
+        return_value=True,
+    ), patch(
+        "areas.production_agent.services.create_object_tool._empty_image_embed",
+        return_value=None,
+    ):
+        create_object(
+            file_id=12,
+            type_="image",
+            scope={"workspace_id": 1},
+            write_mode="direct_apply",
+            title="a red bicycle",
+            body="",
+        )
+
+    mock_generate.assert_called_once_with("a red bicycle")
+
+
+@patch("areas.production_agent.services.create_object_tool.store_image_bytes")
+@patch("areas.production_agent.services.create_object_tool.generate_image")
+@patch("areas.production_agent.services.create_object_tool.create_embed_in_file")
+@patch("areas.production_agent.services.create_object_tool.db.session")
+def test_create_object_image_fills_empty_slot(
+    mock_session, mock_create, mock_generate, mock_store
+):
+    file_row = MagicMock()
+    file_row.id = 12
+    file_row.archived_at = None
+    mock_session.get.return_value = file_row
+    existing = MagicMock()
+    existing.id = 7
+    existing.payload = {}
+    mock_generate.return_value = b"png"
+    mock_store.return_value = "/images/filled.png"
+
+    with patch(
+        "areas.production_agent.services.create_object_tool.file_allowed",
+        return_value=True,
+    ), patch(
+        "areas.production_agent.services.create_object_tool._empty_image_embed",
+        return_value=existing,
+    ):
+        result = create_object(
+            file_id=12,
+            type_="image",
+            scope={"workspace_id": 1},
+            write_mode="direct_apply",
+            title="",
+            body="a lighthouse at dusk",
+        )
+
+    assert result["object_id"] == 7
+    assert result["filled_existing"] is True
+    assert existing.payload["url"] == "/images/filled.png"
+    mock_create.assert_not_called()
+
+
 @patch("areas.production_agent.services.create_object_tool.create_embed_in_file")
 @patch("areas.production_agent.services.create_object_tool.db.session")
 def test_create_object_rejects_archived(mock_session, mock_create):

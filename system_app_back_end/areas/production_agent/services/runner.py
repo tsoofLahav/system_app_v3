@@ -163,9 +163,12 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "description": (
             "Create a new embed in a file and insert its pointer. "
             "Types: task_list | info | table | graph | image. "
-            "Returns object_id — then open_file and patch_file to fill content. "
+            "Returns object_id — then open_file and patch_file to fill content "
+            "(except image: body is the picture to generate; the tool stores "
+            "the file — never invent a url). "
             "after_line: 0 = append at end; else insert after that open_file line. "
-            "title/body optional seeds (\"\" if unused)."
+            "title/body optional seeds (\"\" if unused). "
+            "For image, title is the caption and body must describe the picture."
         ),
         "strict": True,
         "parameters": {

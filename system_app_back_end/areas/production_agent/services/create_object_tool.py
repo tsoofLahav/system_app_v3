@@ -4,14 +4,59 @@ from __future__ import annotations
 
 from typing import Any
 
-from models import File, db
+from models import File, ObjectEmbed, db
 from areas.files.services.document_agent_text import load_objects_by_id
-from areas.objects.services.create_embed import create_embed_in_file
+from areas.objects.services.create_embed import (
+    create_embed_in_file,
+    normalize_create_type,
+)
 from areas.production_agent.services.browse_tools import (
     block_index_after_agent_line,
     file_allowed,
 )
+from areas.production_agent.services.openai_service import generate_image
 from areas.production_agent.services.write_tools import WriteMode, resolve_write_mode
+from shared.routes.upload import store_image_bytes
+
+
+def _empty_image_embed(file_id: int) -> ObjectEmbed | None:
+    """An image object in this file that still has no uploaded url."""
+    embeds = ObjectEmbed.query.filter_by(file_id=file_id, type="image").all()
+    for embed in embeds:
+        payload = embed.payload or {}
+        if not str(payload.get("url") or payload.get("path") or "").strip():
+            return embed
+    return None
+
+
+def _create_result(
+    *,
+    file_id: int,
+    object_id: int,
+    type_: str,
+    write_mode: WriteMode,
+    payload: dict[str, Any] | None = None,
+    filled_existing: bool = False,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "tool": "create_object",
+        "file_id": file_id,
+        "object_id": object_id,
+        "type": type_ if type_ != "graph" else "graph",
+        "write_mode": write_mode,
+    }
+    if payload and payload.get("url"):
+        result["url"] = payload["url"]
+        if payload.get("caption"):
+            result["caption"] = payload["caption"]
+    if filled_existing:
+        result["filled_existing"] = True
+    if write_mode == "notify_only":
+        return {**result, "applied": False}
+    if write_mode == "review":
+        # Still flushed in-session so later open_file/patch see the id; run may roll back.
+        return {**result, "applied": False}
+    return {**result, "applied": True}
 
 
 def create_object(
@@ -41,30 +86,56 @@ def create_object(
             int(after_line),
         )
 
+    api_type, _is_chart = normalize_create_type(type_)
+    payload: dict[str, Any] | None = None
+    if api_type == "image":
+        picture = (body or title or "").strip()
+        if not picture:
+            return {
+                "error": "image needs a description in body (the picture to generate)",
+                "tool": "create_object",
+            }
+        try:
+            png = generate_image(picture)
+            url = store_image_bytes(png, original_name="generated.png")
+        except Exception as err:
+            return {
+                "error": f"could not generate image: {err}",
+                "tool": "create_object",
+            }
+        payload = {"url": url, "caption": (title or "").strip()}
+        existing = _empty_image_embed(file.id)
+        if existing is not None:
+            existing.payload = payload
+            db.session.flush()
+            return _create_result(
+                file_id=file.id,
+                object_id=existing.id,
+                type_="image",
+                write_mode=write_mode,
+                payload=payload,
+                filled_existing=True,
+            )
+
     try:
         embed = create_embed_in_file(
             file,
             type_=type_,
             title=title or "",
             body=body or "",
+            payload=payload,
             block_index=block_index,
         )
     except ValueError as err:
         return {"error": str(err), "tool": "create_object"}
 
-    result: dict[str, Any] = {
-        "tool": "create_object",
-        "file_id": file.id,
-        "object_id": embed.id,
-        "type": type_ if type_ != "graph" else "graph",
-        "write_mode": write_mode,
-    }
-    if write_mode == "notify_only":
-        return {**result, "applied": False}
-    if write_mode == "review":
-        # Still flushed in-session so later open_file/patch see the id; run may roll back.
-        return {**result, "applied": False}
-    return {**result, "applied": True}
+    return _create_result(
+        file_id=file.id,
+        object_id=embed.id,
+        type_=type_,
+        write_mode=write_mode,
+        payload=payload,
+    )
 
 
 def create_object_write_mode(run_apply_mode: str) -> WriteMode:

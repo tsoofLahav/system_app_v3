@@ -14,7 +14,7 @@ Objects live in the `objects` table and appear inside a file through an `embed` 
 |------|-----------------|-----------------|
 | `task_list` | `task_lists` + `tasks` | Ordering, done/active, views |
 | `info` | `information_pieces` | Linkable into the object graph (links map) |
-| `image` | `objects.payload` | Uploaded asset reference + caption |
+| `image` | `objects.payload` | Uploaded asset reference + caption. Agent `create_object` generates the picture and stores `/images/…`; the insert bar still creates an empty slot for the user to pick a file |
 | `table` | `objects.payload` | Grid (`payload.rows`); optional **chart** quality (`payload.chart`) — pointer `[TABLE id]` or `[GRAPH id]` when chart is on |
 
 Migration `007_table_object.sql` moves legacy `type=graph` rows into `table` + `chart`.
