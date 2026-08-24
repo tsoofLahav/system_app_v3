@@ -51,6 +51,7 @@ There is no black and no pure grey. Warm charcoal on warm off-white is what keep
 |-------|-------|---------|
 | `primary` | `#37899E` | The app's own accent: selections, key actions, menu highlight |
 | `primaryLight` | `#51A0B0` | Softer variant |
+| `descriptionLink` | `#2A6B7C` | Darker primary: connected (description-linked) text and its thin underline |
 | `primaryBright` | `#58C4D8` | Fills on active controls and toggles |
 | `aiCyan` | `#00D4FF` | AI, and only AI — the one place the app is allowed to glow |
 | `destructive` | `#B45309` | Delete and discard. Amber-brown, never red |

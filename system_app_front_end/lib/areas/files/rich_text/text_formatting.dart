@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../ui/app_colors.dart';
 import './format_range.dart';
 
 /// Plain text + optional span runs → [TextSpan] tree for display/editing.
@@ -19,13 +20,17 @@ class TextSpanBuilder {
       final start = span['start'] as int;
       final end = span['end'] as int;
       if (start > cursor) {
-        children.add(TextSpan(text: text.substring(cursor, start), style: baseStyle));
+        children.add(
+          TextSpan(text: text.substring(cursor, start), style: baseStyle),
+        );
       }
       if (end > start && end <= text.length) {
-        children.add(TextSpan(
-          text: text.substring(start, end),
-          style: _styleForSpan(baseStyle, span),
-        ));
+        children.add(
+          TextSpan(
+            text: text.substring(start, end),
+            style: _styleForSpan(baseStyle, span),
+          ),
+        );
         cursor = end;
       }
     }
@@ -37,8 +42,12 @@ class TextSpanBuilder {
 
   static TextStyle _styleForSpan(TextStyle base, Map<String, dynamic> span) {
     var style = base;
-    if (span['bold'] == true) style = style.copyWith(fontWeight: FontWeight.w600);
-    if (span['italic'] == true) style = style.copyWith(fontStyle: FontStyle.italic);
+    if (span['bold'] == true) {
+      style = style.copyWith(fontWeight: FontWeight.w600);
+    }
+    if (span['italic'] == true) {
+      style = style.copyWith(fontStyle: FontStyle.italic);
+    }
     if (span['underline'] == true) {
       style = style.copyWith(decoration: TextDecoration.underline);
     }
@@ -48,10 +57,16 @@ class TextSpanBuilder {
     if (color is String && color.startsWith('#')) {
       final hex = color.substring(1);
       if (hex.length == 6) {
-        style = style.copyWith(
-          color: Color(int.parse('FF$hex', radix: 16)),
-        );
+        style = style.copyWith(color: Color(int.parse('FF$hex', radix: 16)));
       }
+    }
+    if (span['descriptionLink'] == true) {
+      style = style.copyWith(
+        color: AppColors.descriptionLink,
+        decoration: TextDecoration.underline,
+        decorationColor: AppColors.descriptionLink,
+        decorationThickness: 1.0,
+      );
     }
     return style;
   }
@@ -173,6 +188,7 @@ bool _spanHasStyle(Map<String, dynamic> span) {
   return span['bold'] == true ||
       span['italic'] == true ||
       span['underline'] == true ||
+      span['descriptionLink'] == true ||
       span['size'] is num ||
       (span['color'] is String && (span['color'] as String).isNotEmpty);
 }
@@ -199,11 +215,7 @@ List<Map<String, dynamic>> remapSpansForTextEdit(
   }
 
   final removedStyle = diff.removedLength > 0
-      ? _uniformMarkInRange(
-          oldMarks,
-          diff.replaceStart,
-          diff.removedLength,
-        )
+      ? _uniformMarkInRange(oldMarks, diff.replaceStart, diff.removedLength)
       : const <String, dynamic>{};
 
   for (var k = 0; k < diff.insertedLength; k++) {
@@ -226,8 +238,7 @@ List<Map<String, dynamic>> remapSpansForTextEdit(
 List<Map<String, dynamic>> _marksForText(
   String text,
   List<Map<String, dynamic>> spans,
-) =>
-    _marksForLength(text.length, spans);
+) => _marksForLength(text.length, spans);
 
 List<Map<String, dynamic>> _marksForLength(
   int textLength,
@@ -254,6 +265,7 @@ Map<String, dynamic> _markFromSpan(Map<String, dynamic> span) {
   if (span['bold'] == true) mark['bold'] = true;
   if (span['italic'] == true) mark['italic'] = true;
   if (span['underline'] == true) mark['underline'] = true;
+  if (span['descriptionLink'] == true) mark['descriptionLink'] = true;
   if (span['size'] is num) mark['size'] = span['size'];
   if (span['color'] is String) mark['color'] = span['color'];
   return mark;
@@ -293,8 +305,37 @@ bool _marksEqual(Map<String, dynamic> a, Map<String, dynamic> b) {
   return a['bold'] == b['bold'] &&
       a['italic'] == b['italic'] &&
       a['underline'] == b['underline'] &&
+      a['descriptionLink'] == b['descriptionLink'] &&
       a['size'] == b['size'] &&
       a['color'] == b['color'];
+}
+
+/// Paint-only overlay of [linkColorHex] on [ranges]. Does not mutate [spans].
+List<Map<String, dynamic>> paintSpansWithLinkColor(
+  List<Map<String, dynamic>> spans,
+  Iterable<({int start, int end})> ranges,
+  int textLength,
+  String linkColorHex,
+) {
+  if (textLength <= 0 || linkColorHex.isEmpty) return spans;
+  var any = false;
+  for (final range in ranges) {
+    if (range.end > range.start) {
+      any = true;
+      break;
+    }
+  }
+  if (!any) return spans;
+  final marks = _marksForLength(textLength, spans);
+  for (final range in ranges) {
+    final start = range.start.clamp(0, textLength);
+    final end = range.end.clamp(0, textLength);
+    for (var i = start; i < end; i++) {
+      marks[i]['color'] = linkColorHex;
+      marks[i]['descriptionLink'] = true;
+    }
+  }
+  return _spansFromMarks(marks, textLength);
 }
 
 List<Map<String, dynamic>> _spansFromMarks(
@@ -342,11 +383,7 @@ List<Map<String, dynamic>> shiftSpansForEdit(
     final spanEnd = span['end'] as int;
 
     if (spanEnd < start || spanStart >= removeEnd) {
-      next.add({
-        ...span,
-        'start': spanStart + delta,
-        'end': spanEnd + delta,
-      });
+      next.add({...span, 'start': spanStart + delta, 'end': spanEnd + delta});
       continue;
     }
 
@@ -356,11 +393,7 @@ List<Map<String, dynamic>> shiftSpansForEdit(
       next.add({...span, 'start': spanStart, 'end': beforeEnd});
     }
     if (spanEnd > removeEnd) {
-      next.add({
-        ...span,
-        'start': afterStart + delta,
-        'end': spanEnd + delta,
-      });
+      next.add({...span, 'start': afterStart + delta, 'end': spanEnd + delta});
     }
   }
 
@@ -381,7 +414,9 @@ class TextEditDiff {
 
 TextEditDiff textEditDiff(String oldText, String newText) {
   var prefix = 0;
-  final maxPrefix = oldText.length < newText.length ? oldText.length : newText.length;
+  final maxPrefix = oldText.length < newText.length
+      ? oldText.length
+      : newText.length;
   while (prefix < maxPrefix && oldText[prefix] == newText[prefix]) {
     prefix++;
   }
@@ -410,7 +445,9 @@ List<Map<String, dynamic>> applyStyleToRange(
   bool merge = false,
 }) {
   if (end <= start) return spans;
-  final styleKeys = style.keys.where((k) => k != 'start' && k != 'end').toList();
+  final styleKeys = style.keys
+      .where((k) => k != 'start' && k != 'end')
+      .toList();
   if (styleKeys.isEmpty) return spans;
 
   final patched = <Map<String, dynamic>>[];
@@ -541,7 +578,8 @@ List<Map<String, dynamic>> coalesceSpans(List<Map<String, dynamic>> spans) {
       continue;
     }
     final prev = merged.last;
-    if (_sameStyle(prev, span) && (prev['end'] as int) == (span['start'] as int)) {
+    if (_sameStyle(prev, span) &&
+        (prev['end'] as int) == (span['start'] as int)) {
       prev['end'] = span['end'];
     } else {
       merged.add(span);
@@ -554,6 +592,7 @@ bool _sameStyle(Map<String, dynamic> a, Map<String, dynamic> b) {
   return a['bold'] == b['bold'] &&
       a['italic'] == b['italic'] &&
       a['underline'] == b['underline'] &&
+      a['descriptionLink'] == b['descriptionLink'] &&
       a['size'] == b['size'] &&
       a['color'] == b['color'];
 }
@@ -581,10 +620,5 @@ Map<String, dynamic> applyTextFormatToContent({
     action: action,
     baseFontSize: baseFontSize,
   );
-  return {
-    ...content,
-    'text': text,
-    'spans': nextSpans,
-    'compose_style': null,
-  };
+  return {...content, 'text': text, 'spans': nextSpans, 'compose_style': null};
 }

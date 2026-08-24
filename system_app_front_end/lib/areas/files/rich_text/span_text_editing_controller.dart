@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../ui/app_colors.dart';
 import './format_range.dart';
 import './text_formatting.dart';
 
@@ -16,10 +17,27 @@ class SpanTextEditingController extends TextEditingController {
   }
 
   List<Map<String, dynamic>> _spans;
+  List<({int start, int end})> _descriptionPaintRanges = const [];
   late String _previousText;
   bool _suppressSpanUpdates = false;
 
   List<Map<String, dynamic>> get spans => _spans;
+
+  /// Persisted spans with description-link colour applied for painting only.
+  List<Map<String, dynamic>> get displaySpans => paintSpansWithLinkColor(
+    _spans,
+    _descriptionPaintRanges,
+    text.length,
+    AppColors.colorToHex(AppColors.descriptionLink),
+  );
+
+  void setDescriptionPaintRanges(List<({int start, int end})> ranges) {
+    if (_samePaintRanges(_descriptionPaintRanges, ranges)) return;
+    _descriptionPaintRanges = List<({int start, int end})>.from(ranges);
+    try {
+      notifyListeners();
+    } catch (_) {}
+  }
 
   set spans(List<Map<String, dynamic>> value) {
     _spans = value.map(Map<String, dynamic>.from).toList();
@@ -69,7 +87,7 @@ class SpanTextEditingController extends TextEditingController {
     return TextSpanBuilder.build(
       text: text,
       baseStyle: style ?? const TextStyle(),
-      spans: _spans,
+      spans: displaySpans,
     );
   }
 
@@ -115,4 +133,16 @@ class SpanTextEditingController extends TextEditingController {
       notifyListeners();
     } catch (_) {}
   }
+}
+
+bool _samePaintRanges(
+  List<({int start, int end})> a,
+  List<({int start, int end})> b,
+) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i].start != b[i].start || a[i].end != b[i].end) return false;
+  }
+  return true;
 }

@@ -69,6 +69,8 @@ Text colour: the context menu offers **Choose color** → `showAppColorDialog` (
 
 Toggle semantics: bold/italic/underline flip independently per character in the range.
 
+Description-link colour (`AppColors.descriptionLink`) is paint-only: `SpanTextEditingController.setDescriptionPaintRanges` / `displaySpans`. Never write it into persisted `spans`.
+
 ## Regression checklist
 
 Before merging any rich-text PR:

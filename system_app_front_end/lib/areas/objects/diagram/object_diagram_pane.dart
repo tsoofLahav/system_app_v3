@@ -41,6 +41,7 @@ class ObjectDiagramPane extends StatefulWidget {
 class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
   final _positions = <int, Offset>{};
   final _graphKey = GlobalKey<GraphViewState<int, int>>();
+
   /// Created only after the first layout, with those IDs — mounting
   /// [GraphView] on an empty controller left chips at the origin while
   /// edges later used the real coordinates.
@@ -111,8 +112,7 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
     return GraphViewportController<int, int>(
       initialNodeIds: nodeIds,
       initialEdgeIds: edgeIds,
-      onNodesMoved: (ids, offset) =>
-          _onNodesMoved(Set<int>.from(ids), offset),
+      onNodesMoved: (ids, offset) => _onNodesMoved(Set<int>.from(ids), offset),
     );
   }
 
@@ -125,7 +125,10 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
         nodes: nodes,
         edges: graph.edges,
       );
-      nodes = [for (final n in nodes) if (connected.contains(n.objectId)) n];
+      nodes = [
+        for (final n in nodes)
+          if (connected.contains(n.objectId)) n,
+      ];
     }
     final filter = state.diagramFilterTagIds;
     if (filter.isEmpty) return nodes;
@@ -152,7 +155,8 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
       if (card == null || !mounted) return;
       card.descriptionLinks = [
         for (final l in links)
-          if ('${l['kind'] ?? ''}' == 'description' && l['source_id'] == objectId)
+          if ('${l['kind'] ?? ''}' == 'description' &&
+              l['source_id'] == objectId)
             Map<String, dynamic>.from(l),
       ];
       setState(() {});
@@ -160,24 +164,31 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
   }
 
   void _jumpToCard(int objectId) {
-    if (!_open.any((c) => c.objectId == objectId)) {
-      _expand(objectId);
-    }
-    final controller = _controller;
-    if (controller != null && controller.isAttached) {
-      unawaited(
-        controller.showNodesOnScreen(
-          {objectId},
-          padding: const EdgeInsets.all(48),
-        ),
-      );
-    }
+    unawaited(_jumpToCardAsync(objectId));
   }
 
-  Future<void> _showNodeContextMenu(
-    ObjectGraphNode node,
-    Offset global,
-  ) async {
+  Future<void> _jumpToCardAsync(int objectId) async {
+    await _panObjectToCenter(objectId);
+    if (!mounted) return;
+    if (_open.any((c) => c.objectId == objectId)) return;
+    _expand(objectId);
+  }
+
+  Future<void> _panObjectToCenter(int objectId) async {
+    final origin =
+        _open.where((c) => c.objectId == objectId).firstOrNull?.origin ??
+        _positions[objectId];
+    if (origin == null) return;
+    final transform = _transform;
+    if (transform == null) return;
+    await transform.animateTo(
+      targetPosition: origin,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  Future<void> _showNodeContextMenu(ObjectGraphNode node, Offset global) async {
     final value = await AppContextMenu.show(
       context: context,
       globalPosition: global,
@@ -343,7 +354,10 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
     });
   }
 
-  void _syncController(List<ObjectGraphNode> nodes, List<ObjectGraphEdge> edges) {
+  void _syncController(
+    List<ObjectGraphNode> nodes,
+    List<ObjectGraphEdge> edges,
+  ) {
     _ensurePositions();
     _refreshLookups(nodes, edges);
     final nodeIds = {for (final n in nodes) n.objectId};
@@ -528,11 +542,9 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
     _scheduleRebuildGraph();
     final nodeIds = {for (final n in _visibleNodes) n.objectId};
     if (nodeIds.isEmpty) return;
-    _scheduleControllerSync(
-      nodeIds,
-      {for (final e in _visibleEdges) e.id},
-      fitView: true,
-    );
+    _scheduleControllerSync(nodeIds, {
+      for (final e in _visibleEdges) e.id,
+    }, fitView: true);
   }
 
   void _onOpenCardChanged(int objectId, String title, String body) {
@@ -573,9 +585,7 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
         },
         child: GestureDetector(
           onLongPressStart: isPhoneLayout
-              ? (d) => unawaited(
-                    _showNodeContextMenu(node, d.globalPosition),
-                  )
+              ? (d) => unawaited(_showNodeContextMenu(node, d.globalPosition))
               : null,
           child: Material(
             color: Colors.transparent,
@@ -596,11 +606,11 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
                   onSave: node.informationId == null
                       ? null
                       : (title, body) => state.updateInfoFromDiagram(
-                            informationId: node.informationId!,
-                            objectId: node.objectId,
-                            title: title,
-                            body: body,
-                          ),
+                          informationId: node.informationId!,
+                          objectId: node.objectId,
+                          title: title,
+                          body: body,
+                        ),
                 ),
                 Positioned(
                   top: 2,
@@ -657,88 +667,96 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
                   fit: StackFit.expand,
                   children: [
                     if (_controller != null)
-                    GraphView<int, int>(
-                  key: _graphKey,
-                  viewportController: _controller!,
-                  // false = parent rebuilds (filter chrome, etc.) do not tear
-                  // down every node mid-drag / mid-pan.
-                  rebuildAllChildrenOnWidgetUpdate: false,
-                  interactionConfig: _interaction,
-                  style: const GraphStyle(backgroundColor: _graphBackground),
-                  nodeBuilder: (context, nodeId) {
-                    final node = _nodesById[nodeId];
-                    final position = _positions[nodeId];
-                    if (node == null || position == null) {
-                      // Keep a real slot so edges can anchor. Never collapse
-                      // missing coords onto Offset.zero — that stacked every
-                      // chip on the first object while edges kept real ends.
-                      return NodeWidget.basic(
-                        position: position ?? Offset(
-                          (nodeId % 8) * DiagramLayout.spacingX,
-                          (nodeId % 5) * DiagramLayout.spacingY,
+                      GraphView<int, int>(
+                        key: _graphKey,
+                        viewportController: _controller!,
+                        // false = parent rebuilds (filter chrome, etc.) do not tear
+                        // down every node mid-drag / mid-pan.
+                        rebuildAllChildrenOnWidgetUpdate: false,
+                        interactionConfig: _interaction,
+                        style: const GraphStyle(
+                          backgroundColor: _graphBackground,
                         ),
-                        text: '…',
-                        isDragEnabled: false,
-                      );
-                    }
-                    final expanded = _open.any((c) => c.objectId == nodeId);
-                    final accent = _accentFor(node);
-                    return NodeWidget.custom(
-                      key: ValueKey('info-node-$nodeId'),
-                      position: position,
-                      isDragEnabled: true,
-                      onDoubleTap: expanded ? null : () => _expand(nodeId),
-                      style: const NodeStyle(
-                        borderRadius: Radius.circular(8),
-                        clipBehavior: Clip.antiAlias,
-                        contentConstraints: BoxConstraints(
-                          maxWidth: DiagramLayout.closedMaxWidth,
-                          minWidth: 40,
-                        ),
-                      ),
-                      background: _NodeChrome(
-                        accent: accent,
-                        expanded: false,
-                      ),
-                      content: Listener(
-                        onPointerDown: (event) {
-                          if (_isSecondaryPointer(event)) {
-                            unawaited(
-                              _showNodeContextMenu(node, event.position),
+                        nodeBuilder: (context, nodeId) {
+                          final node = _nodesById[nodeId];
+                          final position = _positions[nodeId];
+                          if (node == null || position == null) {
+                            // Keep a real slot so edges can anchor. Never collapse
+                            // missing coords onto Offset.zero — that stacked every
+                            // chip on the first object while edges kept real ends.
+                            return NodeWidget.basic(
+                              position:
+                                  position ??
+                                  Offset(
+                                    (nodeId % 8) * DiagramLayout.spacingX,
+                                    (nodeId % 5) * DiagramLayout.spacingY,
+                                  ),
+                              text: '…',
+                              isDragEnabled: false,
                             );
                           }
+                          final expanded = _open.any(
+                            (c) => c.objectId == nodeId,
+                          );
+                          final accent = _accentFor(node);
+                          return NodeWidget.custom(
+                            key: ValueKey('info-node-$nodeId'),
+                            position: position,
+                            isDragEnabled: true,
+                            onDoubleTap: expanded
+                                ? null
+                                : () => _expand(nodeId),
+                            style: const NodeStyle(
+                              borderRadius: Radius.circular(8),
+                              clipBehavior: Clip.antiAlias,
+                              contentConstraints: BoxConstraints(
+                                maxWidth: DiagramLayout.closedMaxWidth,
+                                minWidth: 40,
+                              ),
+                            ),
+                            background: _NodeChrome(
+                              accent: accent,
+                              expanded: false,
+                            ),
+                            content: Listener(
+                              onPointerDown: (event) {
+                                if (_isSecondaryPointer(event)) {
+                                  unawaited(
+                                    _showNodeContextMenu(node, event.position),
+                                  );
+                                }
+                              },
+                              child: GestureDetector(
+                                onLongPressStart: isPhoneLayout
+                                    ? (d) => unawaited(
+                                        _showNodeContextMenu(
+                                          node,
+                                          d.globalPosition,
+                                        ),
+                                      )
+                                    : null,
+                                child: _InfoNodeCard(title: node.title),
+                              ),
+                            ),
+                          );
                         },
-                        child: GestureDetector(
-                          onLongPressStart: isPhoneLayout
-                              ? (d) => unawaited(
-                                    _showNodeContextMenu(
-                                      node,
-                                      d.globalPosition,
-                                    ),
-                                  )
-                              : null,
-                          child: _InfoNodeCard(title: node.title),
-                        ),
+                        edgeBuilder: (context, edgeId) {
+                          final edge = _edgesById[edgeId];
+                          if (edge == null) {
+                            return const EdgeWidget(
+                              startNodeId: -1,
+                              endNodeId: -1,
+                              text: null,
+                            );
+                          }
+                          return EdgeWidget(
+                            startNodeId: edge.sourceId,
+                            endNodeId: edge.targetId,
+                            text: null,
+                            style: _edgeStyle,
+                          );
+                        },
                       ),
-                    );
-                  },
-                  edgeBuilder: (context, edgeId) {
-                    final edge = _edgesById[edgeId];
-                    if (edge == null) {
-                      return const EdgeWidget(
-                        startNodeId: -1,
-                        endNodeId: -1,
-                        text: null,
-                      );
-                    }
-                    return EdgeWidget(
-                      startNodeId: edge.sourceId,
-                      endNodeId: edge.targetId,
-                      text: null,
-                      style: _edgeStyle,
-                    );
-                  },
-                    ),
                     ..._buildOpenOverlays(),
                     if (state.objectGraph != null &&
                         state.objectGraph!.nodes.isNotEmpty)
@@ -755,7 +773,10 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
                       PositionedDirectional(
                         top: 4,
                         end: 4,
-                        child: _CloseAllHit(onCloseAll: _closeAll, label: state.strings['diagramCloseAll']),
+                        child: _CloseAllHit(
+                          onCloseAll: _closeAll,
+                          label: state.strings['diagramCloseAll'],
+                        ),
                       ),
                   ],
                 ),
@@ -970,7 +991,10 @@ class _ArrangeHit extends StatelessWidget {
             children: [
               const AppIcon(AppIcons.arrange, size: 14),
               const SizedBox(width: 6),
-              Text(label, style: AppTypography.metaStyle.copyWith(fontSize: 11)),
+              Text(
+                label,
+                style: AppTypography.metaStyle.copyWith(fontSize: 11),
+              ),
             ],
           ),
         ),
@@ -1004,15 +1028,15 @@ class _ExpandedInfoCard extends StatefulWidget {
 }
 
 class _ExpandedInfoCardState extends State<_ExpandedInfoCard> {
-  late final TextEditingController _title;
-  late final TextEditingController _body;
+  late final _LinkedMapTextController _title;
+  late final _LinkedMapTextController _body;
   Timer? _saveTimer;
 
   @override
   void initState() {
     super.initState();
-    _title = TextEditingController(text: widget.node.title);
-    _body = TextEditingController(text: widget.node.body);
+    _title = _LinkedMapTextController(text: widget.node.title);
+    _body = _LinkedMapTextController(text: widget.node.body);
   }
 
   @override
@@ -1094,11 +1118,12 @@ class _ExpandedInfoCardState extends State<_ExpandedInfoCard> {
   }
 
   Widget _linkedMapField({
-    required TextEditingController controller,
+    required _LinkedMapTextController controller,
     required TextStyle style,
     required List<_MapDescriptionSpan> spans,
     required int? maxLines,
   }) {
+    controller.ranges = spans;
     final field = TextField(
       controller: controller,
       autofocus: false,
@@ -1141,6 +1166,56 @@ class _MapDescriptionSpan {
   final int targetId;
 }
 
+class _LinkedMapTextController extends TextEditingController {
+  _LinkedMapTextController({super.text});
+
+  List<_MapDescriptionSpan> ranges = const [];
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final base = style ?? const TextStyle();
+    final t = text;
+    if (ranges.isEmpty || t.isEmpty) {
+      return super.buildTextSpan(
+        context: context,
+        style: style,
+        withComposing: withComposing,
+      );
+    }
+    final children = <InlineSpan>[];
+    var cursor = 0;
+    final sorted = [...ranges]..sort((a, b) => a.start.compareTo(b.start));
+    for (final range in sorted) {
+      final start = range.start.clamp(0, t.length);
+      final end = range.end.clamp(0, t.length);
+      if (end <= start || start < cursor) continue;
+      if (start > cursor) {
+        children.add(TextSpan(text: t.substring(cursor, start), style: base));
+      }
+      children.add(
+        TextSpan(
+          text: t.substring(start, end),
+          style: base.copyWith(
+            color: AppColors.descriptionLink,
+            decoration: TextDecoration.underline,
+            decorationColor: AppColors.descriptionLink,
+            decorationThickness: 1.0,
+          ),
+        ),
+      );
+      cursor = end;
+    }
+    if (cursor < t.length) {
+      children.add(TextSpan(text: t.substring(cursor), style: base));
+    }
+    return TextSpan(style: base, children: children);
+  }
+}
+
 int? _readInt(dynamic value) {
   if (value is int) return value;
   if (value is num) return value.toInt();
@@ -1161,12 +1236,15 @@ List<_MapDescriptionSpan> _descriptionSpansForField({
     if (anchor is! Map) continue;
     final start = _readInt(anchor['start']) ?? 0;
     final end = _readInt(anchor['end']) ?? 0;
-    final targetId = _readInt(link['target_id']) ??
+    final targetId =
+        _readInt(link['target_id']) ??
         _readInt(link['peer'] is Map ? (link['peer'] as Map)['id'] : null);
     if (targetId == null || end <= start) continue;
     if (nl < 0) {
       if (titleField) {
-        out.add(_MapDescriptionSpan(start: start, end: end, targetId: targetId));
+        out.add(
+          _MapDescriptionSpan(start: start, end: end, targetId: targetId),
+        );
       }
       continue;
     }
@@ -1232,39 +1310,11 @@ class _LinkedSpanLayer extends StatelessWidget {
               }
             }
           },
-          child: IgnorePointer(
-            child: CustomPaint(
-              painter: _LinkedSpanPainter(
-                boxes: [for (final b in boxes) b.$1],
-              ),
-            ),
-          ),
+          child: const SizedBox.expand(),
         );
       },
     );
   }
-}
-
-class _LinkedSpanPainter extends CustomPainter {
-  const _LinkedSpanPainter({required this.boxes});
-
-  final List<Rect> boxes;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.text.withValues(alpha: 0.55)
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
-    for (final box in boxes) {
-      final y = box.bottom - 1;
-      canvas.drawLine(Offset(box.left, y), Offset(box.right, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _LinkedSpanPainter oldDelegate) =>
-      oldDelegate.boxes != boxes;
 }
 
 extension _FirstOrNull<E> on Iterable<E> {

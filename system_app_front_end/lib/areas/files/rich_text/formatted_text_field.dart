@@ -154,7 +154,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     widget.controller.addListener(_noteSelectionForMenu);
     widget.controller.addListener(_pinSentinelCaretIfNeeded);
     _detectedDirection = detectParagraphTextDirection(widget.controller.text);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureKeyHandlerChained());
+    _syncDescriptionPaint();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _ensureKeyHandlerChained(),
+    );
   }
 
   /// RTL solution: keep [TextField.textDirection] on the first strong character
@@ -187,7 +190,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   void _attachToFlow(DocumentTextFlow? flow) {
     final segmentId = widget.segmentId;
     final base = widget.documentBaseOffset;
-    final changed = flow != _flow ||
+    final changed =
+        flow != _flow ||
         segmentId != _registeredSegmentId ||
         base != _registeredBaseOffset;
     if (!changed) return;
@@ -246,7 +250,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       widget.controller.addListener(_pinSentinelCaretIfNeeded);
       _detectedDirection = detectParagraphTextDirection(widget.controller.text);
       final previousId = _registeredSegmentId;
-      if (previousId != null) _flow?.unregister(previousId, oldWidget.controller);
+      if (previousId != null)
+        _flow?.unregister(previousId, oldWidget.controller);
       _registeredSegmentId = null;
       _registeredBaseOffset = null;
     }
@@ -265,7 +270,19 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       _focusNode.addListener(_onFocusChanged);
     }
     _attachToFlow(_flow);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureKeyHandlerChained());
+    _syncDescriptionPaint();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _ensureKeyHandlerChained(),
+    );
+  }
+
+  void _syncDescriptionPaint() {
+    final controller = widget.controller;
+    if (controller is! SpanTextEditingController) return;
+    controller.setDescriptionPaintRanges([
+      for (final range in widget.descriptionRanges)
+        (start: range.start, end: range.end),
+    ]);
   }
 
   @override
@@ -274,7 +291,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       _focusNode.onKeyEvent = _editableKeyHandler;
     }
     final registeredId = _registeredSegmentId;
-    if (registeredId != null) _flow?.unregister(registeredId, widget.controller);
+    if (registeredId != null)
+      _flow?.unregister(registeredId, widget.controller);
     widget.controller.removeListener(_normalizeSelectionIfNeeded);
     widget.controller.removeListener(_syncFlowFromLocalSelection);
     widget.controller.removeListener(_syncParagraphDirection);
@@ -453,7 +471,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   void _normalizeSelectionIfNeeded() {
     if (_normalizingSelection) return;
     final controller = widget.controller;
-    final normalized = normalizeTextSelection(controller.text, controller.selection);
+    final normalized = normalizeTextSelection(
+      controller.text,
+      controller.selection,
+    );
     if (normalized == controller.selection) return;
     _normalizingSelection = true;
     controller.selection = normalized;
@@ -532,19 +553,22 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     final isMeta = HardwareKeyboard.instance.isMetaPressed;
-    if (isMeta && !HardwareKeyboard.instance.isShiftPressed &&
+    if (isMeta &&
+        !HardwareKeyboard.instance.isShiftPressed &&
         event.logicalKey == LogicalKeyboardKey.keyC) {
       _copySelection();
       return KeyEventResult.handled;
     }
 
-    if (isMeta && !HardwareKeyboard.instance.isShiftPressed &&
+    if (isMeta &&
+        !HardwareKeyboard.instance.isShiftPressed &&
         event.logicalKey == LogicalKeyboardKey.keyX) {
       _cutSelection();
       return KeyEventResult.handled;
     }
 
-    if (isMeta && !HardwareKeyboard.instance.isShiftPressed &&
+    if (isMeta &&
+        !HardwareKeyboard.instance.isShiftPressed &&
         event.logicalKey == LogicalKeyboardKey.keyA) {
       widget.onSelectAll?.call();
       final flow = _flow;
@@ -595,8 +619,12 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     if (text.isEmpty) return false;
     final selection = widget.controller.selection;
     if (!selection.isValid || selection.isCollapsed) return false;
-    final start = selection.start < selection.end ? selection.start : selection.end;
-    final end = selection.start < selection.end ? selection.end : selection.start;
+    final start = selection.start < selection.end
+        ? selection.start
+        : selection.end;
+    final end = selection.start < selection.end
+        ? selection.end
+        : selection.start;
     return start == 0 && end == text.length;
   }
 
@@ -726,7 +754,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     // Lone field outside a document flow: FormatRange is the only frozen target.
     final frozenRange = BlockTextFocusRegistry.frozenFormatRange;
     if (frozenRange == null || !frozenRange.isValid) return null;
-    if (BlockTextFocusRegistry.activeController != widget.controller) return null;
+    if (BlockTextFocusRegistry.activeController != widget.controller)
+      return null;
     return frozenRange.selection;
   }
 
@@ -861,9 +890,11 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     final segmentId = _registeredSegmentId;
 
     final key = event.logicalKey;
-    final isHorizontal = key == LogicalKeyboardKey.arrowLeft ||
+    final isHorizontal =
+        key == LogicalKeyboardKey.arrowLeft ||
         key == LogicalKeyboardKey.arrowRight;
-    final isVertical = key == LogicalKeyboardKey.arrowUp ||
+    final isVertical =
+        key == LogicalKeyboardKey.arrowUp ||
         key == LogicalKeyboardKey.arrowDown;
     if (!isHorizontal && !isVertical) return false;
 
@@ -1000,23 +1031,30 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   int _caretColumn(int caret) {
     final editable = _renderEditable();
     if (editable == null) return caret;
-    final lineStart = editable.getLineAtOffset(TextPosition(offset: caret)).start;
+    final lineStart = editable
+        .getLineAtOffset(TextPosition(offset: caret))
+        .start;
     return caret - lineStart;
   }
 
   bool _caretOnFirstLine(int caret) {
     final editable = _renderEditable();
     if (editable == null) return true;
-    final caretRect = editable.getLocalRectForCaret(TextPosition(offset: caret));
-    final firstRect =
-        editable.getLocalRectForCaret(const TextPosition(offset: 0));
+    final caretRect = editable.getLocalRectForCaret(
+      TextPosition(offset: caret),
+    );
+    final firstRect = editable.getLocalRectForCaret(
+      const TextPosition(offset: 0),
+    );
     return (caretRect.top - firstRect.top).abs() < 0.5;
   }
 
   bool _caretOnLastLine(int caret) {
     final editable = _renderEditable();
     if (editable == null) return true;
-    final caretRect = editable.getLocalRectForCaret(TextPosition(offset: caret));
+    final caretRect = editable.getLocalRectForCaret(
+      TextPosition(offset: caret),
+    );
     final lastRect = editable.getLocalRectForCaret(
       TextPosition(offset: widget.controller.text.length),
     );
@@ -1034,9 +1072,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   /// Callers decide whether the field must also be empty.
   bool _shouldInvokeBackspaceAtStart() {
     final selection = widget.controller.selection;
-    return selection.isValid &&
-        selection.isCollapsed &&
-        selection.start == 0;
+    return selection.isValid && selection.isCollapsed && selection.start == 0;
   }
 
   @override
@@ -1109,7 +1145,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
             builder: (context, _) {
               final inMenu = BlockTextFocusRegistry.isInMenuSession;
               final theme = Theme.of(context);
-              final selectionColor = theme.textSelectionTheme.selectionColor ??
+              final selectionColor =
+                  theme.textSelectionTheme.selectionColor ??
                   theme.colorScheme.primary.withValues(alpha: 0.3);
               // Overlay paints the mark (menu) or a multi-part selection — never
               // stack that on top of the field's own selection wash.
@@ -1120,8 +1157,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
               final textDirection = _resolvedTextDirection(context);
               final field = TextSelectionTheme(
                 data: TextSelectionThemeData(
-                  selectionColor:
-                      hideNativeSelection ? Colors.transparent : selectionColor,
+                  selectionColor: hideNativeSelection
+                      ? Colors.transparent
+                      : selectionColor,
                   cursorColor: style.color,
                 ),
                 child: TextField(
@@ -1139,7 +1177,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                   decoration: InputDecoration(
                     isDense: true,
                     border: InputBorder.none,
-                    hintText: (_usesEmptyImeSentinel &&
+                    hintText:
+                        (_usesEmptyImeSentinel &&
                             widget.controller.text == imeEmptySentinel)
                         ? null
                         : widget.hintText,
@@ -1194,15 +1233,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                       ),
                     ),
                   ],
-                );
-              }
-
-              if (widget.descriptionRanges.isNotEmpty) {
-                body = _DescriptionUnderlineOverlay(
-                  ranges: widget.descriptionRanges,
-                  text: widget.controller.text,
-                  style: style,
-                  child: body,
                 );
               }
 
@@ -1462,7 +1492,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         if (range == null) return inner!;
 
         final theme = Theme.of(context);
-        final selectionColor = theme.textSelectionTheme.selectionColor ??
+        final selectionColor =
+            theme.textSelectionTheme.selectionColor ??
             theme.colorScheme.primary.withValues(alpha: 0.3);
 
         return _FrozenSelectionOverlay(
@@ -1489,7 +1520,8 @@ class _FrozenSelectionOverlay extends StatefulWidget {
   final Widget child;
 
   @override
-  State<_FrozenSelectionOverlay> createState() => _FrozenSelectionOverlayState();
+  State<_FrozenSelectionOverlay> createState() =>
+      _FrozenSelectionOverlayState();
 }
 
 class _FrozenSelectionOverlayState extends State<_FrozenSelectionOverlay> {
@@ -1503,7 +1535,9 @@ class _FrozenSelectionOverlayState extends State<_FrozenSelectionOverlay> {
 
   @override
   void dispose() {
-    BlockTextFocusRegistry.menuSessionListenable.removeListener(_scheduleMeasure);
+    BlockTextFocusRegistry.menuSessionListenable.removeListener(
+      _scheduleMeasure,
+    );
     super.dispose();
   }
 
@@ -1567,102 +1601,6 @@ RenderEditable? _findRenderEditable(RenderObject root) {
     found ??= _findRenderEditable(child);
   });
   return found;
-}
-
-class _DescriptionUnderlineOverlay extends StatefulWidget {
-  const _DescriptionUnderlineOverlay({
-    required this.ranges,
-    required this.text,
-    required this.style,
-    required this.child,
-  });
-
-  final List<DescriptionTextRange> ranges;
-  final String text;
-  final TextStyle style;
-  final Widget child;
-
-  @override
-  State<_DescriptionUnderlineOverlay> createState() =>
-      _DescriptionUnderlineOverlayState();
-}
-
-class _DescriptionUnderlineOverlayState
-    extends State<_DescriptionUnderlineOverlay> {
-  List<Rect> _rects = const [];
-
-  @override
-  void didUpdateWidget(covariant _DescriptionUnderlineOverlay oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.ranges != widget.ranges || oldWidget.text != widget.text) {
-      _scheduleMeasure();
-    }
-  }
-
-  void _scheduleMeasure() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _measure();
-    });
-  }
-
-  void _measure() {
-    final host = context.findRenderObject() as RenderBox?;
-    final editable = host == null ? null : _findRenderEditable(host);
-    if (editable == null || host == null || !host.hasSize) {
-      if (_rects.isNotEmpty) setState(() => _rects = const []);
-      return;
-    }
-    final transform = editable.getTransformTo(host);
-    final next = <Rect>[];
-    for (final range in widget.ranges) {
-      final start = range.start.clamp(0, widget.text.length);
-      final end = range.end.clamp(0, widget.text.length);
-      if (end <= start) continue;
-      final boxes = editable.getBoxesForSelection(
-        TextSelection(baseOffset: start, extentOffset: end),
-      );
-      for (final box in boxes) {
-        final rect = MatrixUtils.transformRect(transform, box.toRect());
-        next.add(Rect.fromLTWH(rect.left, rect.bottom - 2, rect.width, 2));
-      }
-    }
-    if (!FrozenSelectionPainter.rectsEqual(_rects, next)) {
-      setState(() => _rects = next);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    _scheduleMeasure();
-    return CustomPaint(
-      foregroundPainter: _UnderlinePainter(rects: _rects),
-      child: widget.child,
-    );
-  }
-}
-
-class _UnderlinePainter extends CustomPainter {
-  _UnderlinePainter({required this.rects});
-
-  final List<Rect> rects;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF3B82C4).withValues(alpha: 0.85)
-      ..style = PaintingStyle.fill;
-    for (final rect in rects) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(1)),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _UnderlinePainter oldDelegate) =>
-      !FrozenSelectionPainter.rectsEqual(rects, oldDelegate.rects);
 }
 
 class _ImeStructureKeyFormatter extends TextInputFormatter {

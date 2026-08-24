@@ -35,6 +35,9 @@ abstract final class AppColors {
   static const primary = Color(0xFF37899E);
   static const primaryLight = Color(0xFF51A0B0);
 
+  /// Darker teal for description-linked text (glyphs + 1px underline).
+  static const descriptionLink = Color(0xFF2A6B7C);
+
   /// Brighter teal fill for segmented toggles and active controls.
   static const primaryBright = Color(0xFF58C4D8);
 
@@ -159,7 +162,11 @@ abstract final class AppColors {
       border: Border.all(color: noteBorder.withValues(alpha: 0.55), width: 0.8),
       boxShadow: showShadow
           ? const [
-              BoxShadow(color: noteShadow, blurRadius: 14, offset: Offset(0, 5)),
+              BoxShadow(
+                color: noteShadow,
+                blurRadius: 14,
+                offset: Offset(0, 5),
+              ),
             ]
           : null,
     );
@@ -184,7 +191,11 @@ abstract final class AppColors {
       ),
       boxShadow: showShadow
           ? const [
-              BoxShadow(color: noteShadow, blurRadius: 14, offset: Offset(0, 5)),
+              BoxShadow(
+                color: noteShadow,
+                blurRadius: 14,
+                offset: Offset(0, 5),
+              ),
             ]
           : null,
     );

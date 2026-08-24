@@ -93,7 +93,7 @@ class _InfoTextController extends SpanTextEditingController {
       return TextSpanBuilder.build(
         text: t,
         baseStyle: titleStyle,
-        spans: spans,
+        spans: displaySpans,
       );
     }
 
@@ -101,7 +101,7 @@ class _InfoTextController extends SpanTextEditingController {
     final bodyPart = t.substring(nl + 1);
     final titleSpans = <Map<String, dynamic>>[];
     final bodySpans = <Map<String, dynamic>>[];
-    for (final s in spans) {
+    for (final s in displaySpans) {
       final start = s['start'] as int;
       final end = s['end'] as int;
       if (end > 0 && start < nl) {
@@ -228,11 +228,7 @@ class InfoEmbedState extends State<InfoEmbed>
   (String, String, List<Map<String, dynamic>>) _splitForApi() {
     final combined = _controller.text;
     final parts = splitInfoText(combined);
-    return (
-      parts.$1,
-      parts.$2,
-      infoSpansToBody(_controller.spans, combined),
-    );
+    return (parts.$1, parts.$2, infoSpansToBody(_controller.spans, combined));
   }
 
   @override
@@ -344,8 +340,9 @@ class InfoEmbedState extends State<InfoEmbed>
     widget.onFocus?.call();
     final text = _controller.text;
     final sel = _controller.selection;
-    final offset =
-        sel.isValid ? sel.baseOffset.clamp(0, text.length) : text.length;
+    final offset = sel.isValid
+        ? sel.baseOffset.clamp(0, text.length)
+        : text.length;
 
     final next = text.replaceRange(offset, offset, '\n');
     _controller.value = TextEditingValue(
@@ -417,10 +414,8 @@ class InfoEmbedState extends State<InfoEmbed>
                 fileId: widget.embed.fileId,
                 segmentId: infoTextSegmentId(widget.blockId),
               ),
-              onDescriptionActivate: (range) => openDescriptionTarget(
-                state: widget.state,
-                link: range.link,
-              ),
+              onDescriptionActivate: (range) =>
+                  openDescriptionTarget(state: widget.state, link: range.link),
               onArrowExitAbove: () => navigateEmbedLine(
                 lineIndex: 0,
                 lineCount: lineCount,
@@ -553,10 +548,8 @@ class _ImageEmbedState extends State<ImageEmbed> {
             child: Image.network(
               resolved,
               fit: BoxFit.contain,
-              errorBuilder: (_, error, stackTrace) => Text(
-                'Image unavailable',
-                style: AppTypography.metaStyle,
-              ),
+              errorBuilder: (_, error, stackTrace) =>
+                  Text('Image unavailable', style: AppTypography.metaStyle),
             ),
           )
         else
@@ -573,10 +566,8 @@ class _ImageEmbedState extends State<ImageEmbed> {
             isDense: true,
             border: InputBorder.none,
           ),
-          onSubmitted: (value) => widget.onPayloadChanged({
-            ..._payload,
-            'caption': value,
-          }),
+          onSubmitted: (value) =>
+              widget.onPayloadChanged({..._payload, 'caption': value}),
           onEditingComplete: () => widget.onPayloadChanged({
             ..._payload,
             'caption': _captionController.text,
