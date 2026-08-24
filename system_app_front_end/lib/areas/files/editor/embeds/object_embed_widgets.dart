@@ -7,13 +7,13 @@ import '../../../../config/api_config.dart';
 import '../../../../core/app_state.dart';
 import '../../../objects/data/object_embed.dart';
 import '../../../objects/links/add_connection_dialog.dart';
-import '../../../objects/tags/assign_object_tags_dialog.dart';
 import '../../../ux/topic/topic_appearance.dart';
 import '../document_text_flow.dart';
 import '../editor_key_handoff.dart';
 import '../embed_caret_bridge.dart';
 import '../../rich_text/block_text_actions.dart';
 import '../../rich_text/block_text_focus.dart';
+import '../../rich_text/connect_info.dart';
 import '../../rich_text/document_context_menu.dart';
 import '../../rich_text/formatted_text_field.dart';
 import '../../rich_text/span_text_editing_controller.dart';
@@ -356,17 +356,19 @@ class InfoEmbedState extends State<InfoEmbed>
   }
 
   Future<void> _showTextMenu(TapDownDetails details) async {
-    await DocumentContextMenu.showInfoMenu(
+    await DocumentContextMenu.showInfoFieldMenu(
       context: context,
       globalPosition: details.globalPosition,
       strings: widget.state.strings,
       onAction: (action) async {
-        if (action == 'info:add_tag') {
-          await _assignTags();
-          return;
-        }
-        if (action == 'info:add_connection') {
-          await _addConnection();
+        if (action == 'text:connect_info') {
+          await connectInfoFromMark(
+            context: context,
+            state: widget.state,
+            host: widget.embed,
+            segmentId: infoTextSegmentId(widget.blockId),
+          );
+          if (mounted) setState(() {});
           return;
         }
         await runBlockTextAction(action);
@@ -384,15 +386,6 @@ class InfoEmbedState extends State<InfoEmbed>
     await widget.state.addRelatedObjectLink(
       widget.embed,
       targetObjectId: pick.objectId,
-    );
-    widget.onRefresh();
-  }
-
-  Future<void> _assignTags() async {
-    await showAssignObjectTagsDialog(
-      context: context,
-      state: widget.state,
-      embed: widget.embed,
     );
     widget.onRefresh();
   }
@@ -419,6 +412,15 @@ class InfoEmbedState extends State<InfoEmbed>
               onEnter: _onEnter,
               onBackspaceAtStart: _onBackspaceAtStart,
               onSecondaryTapDown: _showTextMenu,
+              descriptionRanges: descriptionRangesForSegment(
+                state: widget.state,
+                fileId: widget.embed.fileId,
+                segmentId: infoTextSegmentId(widget.blockId),
+              ),
+              onDescriptionActivate: (range) => openDescriptionTarget(
+                state: widget.state,
+                link: range.link,
+              ),
               onArrowExitAbove: () => navigateEmbedLine(
                 lineIndex: 0,
                 lineCount: lineCount,

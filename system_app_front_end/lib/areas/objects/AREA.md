@@ -64,16 +64,18 @@ An info object holds knowledge (`title`, `body`, …). In the file, title and bo
 
 | Kind | Meaning |
 |------|---------|
-| `related` | Object ↔ object (stored directed; UI treats undirected) |
-| `description` | Info → marked span in a file (`anchor`: file/block/segment + offsets) |
+| `related` | **info ↔ info** only (stored directed; UI treats undirected) |
+| `description` | Marked text inside **any object** → an info (`anchor`: `{ segment_id, start, end }` on the **host**) |
+
+Creating a description from text **inside an info** also upserts related between those two infos so the objects map gets an edge. Task/table spans stay file-only (underline + bubble). Deleting one kind does not delete the other.
 
 **Tags.** Freeform workspace tags (`tags.icon` + colour) assign to objects via `entity_type=object`. Topic types are not tags — leftover classification names (`project` / `process` / …) are excluded from the object-tag UI (map filter and assign-tag dialog).
 
 **UI here:**
-- Create tag via sidebar **+**; assign tags on info embeds (context menu)
-- Info frame shows tag chips only; Add connection via context menu or ⌘L (no links list)
-- Description: document **Connect info…**, hover bubble, double-tap opens the info
-- **Objects map** ([`interactive_graph_view`](https://pub.dev/packages/interactive_graph_view)): info nodes + related edges; pan/zoom; drag to move — the same while cards are open. The package has no layout or persistence — we own `NodeWidget.position`. Coordinates live on the object (`diagram_x` / `diagram_y`); unsaved nodes get a connected layout (layers along links, then spring forces) so related objects sit near each other. **Arrange by links** (map chip, or Graph configuration) throws every saved spot away and writes that connected layout; a later drag is saved until Arrange is pressed again. The stored point is the **center of the circle that fits the card**. Double-click a chip opens a content-tight card on that same center (several may be open); every other closed node moves out along its ray by `R_open − R_closed`. The open card is a pane overlay that follows the chip — not a larger graph node. Close with × (that card) or **Close all**. Isolated objects stay off the map unless Graph configuration shows them. Tag filter above the bottom bar lists object tags only (not topic types); topic/tag color modes
+- Create tag via sidebar **+**; assign tags on info **chrome** (block caret / object menu)
+- Info **field**: formatting + **Connect info…** (description). Info **chrome**: Add tag + **Add connection…** (related, infos only). ⌘L still adds a related connection while the caret is in an info.
+- Description: right-click marked text / caret line in an object field → Connect info… → underline, hover bubble, click/tap opens the target info in its file
+- **Objects map** ([`interactive_graph_view`](https://pub.dev/packages/interactive_graph_view)): info nodes + related edges; pan/zoom; drag to move — the same while cards are open. The package has no layout or persistence — we own `NodeWidget.position`. Coordinates live on the object (`diagram_x` / `diagram_y`); unsaved nodes get a connected layout (layers along links, then spring forces) so related objects sit near each other. **Arrange by links** (map chip, or Graph configuration) throws every saved spot away and writes that connected layout; a later drag is saved until Arrange is pressed again. The stored point is the **center of the circle that fits the card**. Double-click a chip opens a content-tight card on that same center (several may be open); every other closed node moves out along its ray by `R_open − R_closed`. The open card is a pane overlay that follows the chip — not a larger graph node. Close with × (that card) or **Close all**. Isolated objects stay off the map unless Graph configuration shows them. Tag filter above the bottom bar lists object tags only (not topic types); topic/tag color modes. Right-click a chip or open card: **Add connection…** (related, infos only) and **Go to source**. Linked spans on an open card jump to the target info’s **card** (not the file). Cards stay editable.
 
 In-file editing of the unified info text is presentation (files).
 
@@ -106,7 +108,7 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 - Ordering is explicit and persisted.
 - Creating an object must also place its embed block (API), or it is invisible in the file.
 - Deleting an embed goes through the object service so the backing row is cleaned up.
-- Any object may link to any object; do not hardcode allowed link pairs.
+- Related links are info ↔ info only. Description links are host object → info.
 - Do not put document caret/mark/menu rules here — that is files.
 - Topic types are not tags. Object-tag UI excludes type names and leftover classification tags.
 
@@ -114,8 +116,8 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 
 **Shipped (data):** task CRUD/status/order; view membership pane; empty titles; object create/delete with embed insert.
 
-**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder; object tags; related + description links; objects map (`interactive_graph_view`: persisted positions, connected-first layout, Arrange by links to forget saved spots, hide unconnected by default, several open cards with ΔR ray push, pan/zoom/drag while open, close with × or Close all, object-tag filter, color modes).
+**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder; object tags; related info↔info links; objects map (`interactive_graph_view`: persisted positions, connected-first layout, Arrange by links to forget saved spots, hide unconnected by default, several open cards with ΔR ray push, pan/zoom/drag while open, close with × or Close all, object-tag filter, color modes). Map right-click: Add connection / Go to source. Open-card description spans jump to the target card.
 
-**Shipped (presentation, in files):** list-like task embed; info title/body + tag chips (add tag/link via context menu); table embed (+ chart quality); Move Mode; right-click text menu including Connect info; description underlines + hover/double-tap.
+**Shipped (presentation, in files):** list-like task embed; info title/body + tag chips (field: Connect info; chrome: add tag / related connection); table embed (+ chart quality); Move Mode; description underlines + hover bubble + click/tap to open the info in its file.
 
 **Next (this area):** non-info map nodes; convert-selection → create Info.

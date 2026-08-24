@@ -48,6 +48,9 @@ class RichTableEditor extends StatefulWidget {
     this.extraMenuEntries = const [],
     this.onExtraMenuAction,
     this.onReorderColumn,
+    this.onConnectInfo,
+    this.descriptionRangesForCell,
+    this.onDescriptionActivate,
   });
 
   final TableNode node;
@@ -73,6 +76,11 @@ class RichTableEditor extends StatefulWidget {
 
   /// Chart host: permute series colors when a column is dragged.
   final void Function(int from, int to)? onReorderColumn;
+
+  final Future<void> Function()? onConnectInfo;
+  final List<DescriptionTextRange> Function(int row, int column)?
+      descriptionRangesForCell;
+  final ValueChanged<DescriptionTextRange>? onDescriptionActivate;
 
   @override
   State<RichTableEditor> createState() => RichTableEditorState();
@@ -753,7 +761,12 @@ class RichTableEditorState extends State<RichTableEditor> {
       includeReorderRows: !_isChart,
       includeReorderColumns: true,
       extraEntries: widget.extraMenuEntries,
+      includeConnectInfo: widget.onConnectInfo != null,
       onAction: (action) async {
+        if (action == 'text:connect_info') {
+          await widget.onConnectInfo?.call();
+          return;
+        }
         if (action == 'table:add_column') {
           _addColumnOrCap(anchorCol, focusRow: anchorRow);
           return;
@@ -901,6 +914,11 @@ class RichTableEditorState extends State<RichTableEditor> {
                                 _onEmptyCellBackspace(r, c);
                               },
                               onSecondaryTapDown: (d) => _showMenu(d, r, c),
+                              descriptionRanges:
+                                  widget.descriptionRangesForCell?.call(r, c) ??
+                                      const [],
+                              onDescriptionActivate:
+                                  widget.onDescriptionActivate,
                               onArrowExitAbove: () => _moveOnGrid(
                                 r,
                                 c,

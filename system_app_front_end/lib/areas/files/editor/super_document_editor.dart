@@ -1163,7 +1163,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
     switch (type) {
       case 'info':
-        await DocumentContextMenu.showInfoMenu(
+        await DocumentContextMenu.showInfoChromeMenu(
           context: context,
           globalPosition: globalPosition,
           strings: strings,
@@ -1241,6 +1241,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
             context: context,
             globalPosition: globalPosition,
             strings: strings,
+            includeConnectInfo: false,
             onAction: (action) async {
               if (action == 'table:add_column') {
                 // Prefer the live grid (after current/last cell); payload

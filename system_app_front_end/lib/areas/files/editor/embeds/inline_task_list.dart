@@ -118,6 +118,7 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget>
       listTitleSegmentId: taskListTitleSegmentId(widget.blockId),
       taskSegmentId: (index) => taskItemSegmentId(widget.blockId, index),
       documentBaseOffset: widget.documentBaseOffset,
+      hostEmbed: widget.embed,
       climbToListTitleOnLastBackspace: true,
       // Arrows stay inside the list; Escape (EmbedEditScope) leaves to SE.
       onArrowExitAbove: () {},

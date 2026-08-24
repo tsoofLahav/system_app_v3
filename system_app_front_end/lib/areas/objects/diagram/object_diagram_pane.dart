@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:interactive_graph_view/interactive_graph_view.dart';
 
@@ -12,7 +13,10 @@ import '../../ui/app_typography.dart';
 import '../../ui/glass_surface.dart';
 import '../../ux/shell/app_bottom_bar.dart';
 import '../../ux/topic/topic_appearance.dart';
+import '../../ux/widgets/app_context_menu.dart';
+import '../data/object_embed.dart';
 import '../data/object_service.dart';
+import '../links/add_connection_dialog.dart';
 import 'diagram_layout.dart';
 
 /// Workspace objects map: info nodes + related edges via [interactive_graph_view].
@@ -140,6 +144,80 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
         if (ids.contains(e.sourceId) && ids.contains(e.targetId)) e,
     ];
   }
+
+  Future<void> _loadCardDescriptionLinks(int objectId) async {
+    try {
+      final links = await state.listObjectLinks(objectId);
+      final card = _open.where((c) => c.objectId == objectId).firstOrNull;
+      if (card == null || !mounted) return;
+      card.descriptionLinks = [
+        for (final l in links)
+          if ('${l['kind'] ?? ''}' == 'description' && l['source_id'] == objectId)
+            Map<String, dynamic>.from(l),
+      ];
+      setState(() {});
+    } catch (_) {}
+  }
+
+  void _jumpToCard(int objectId) {
+    if (!_open.any((c) => c.objectId == objectId)) {
+      _expand(objectId);
+    }
+    final controller = _controller;
+    if (controller != null && controller.isAttached) {
+      unawaited(
+        controller.showNodesOnScreen(
+          {objectId},
+          padding: const EdgeInsets.all(48),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showNodeContextMenu(
+    ObjectGraphNode node,
+    Offset global,
+  ) async {
+    final value = await AppContextMenu.show(
+      context: context,
+      globalPosition: global,
+      isRtl: state.strings.isRtl,
+      entries: [
+        AppContextMenuItem(
+          value: 'add_connection',
+          label: state.strings['addConnection'],
+        ),
+        AppContextMenuItem(
+          value: 'go_to_source',
+          label: state.strings['goToSource'],
+        ),
+      ],
+    );
+    if (!mounted || value == null) return;
+    if (value == 'go_to_source') {
+      await state.openObjectInFile(
+        objectId: node.objectId,
+        fileId: node.fileId,
+      );
+      return;
+    }
+    if (value != 'add_connection') return;
+    final source = ObjectEmbed(
+      id: node.objectId,
+      fileId: node.fileId,
+      type: node.type,
+    );
+    final pick = await showAddConnectionDialog(
+      context: context,
+      state: state,
+      source: source,
+    );
+    if (pick == null || !mounted) return;
+    await state.addRelatedObjectLink(source, targetObjectId: pick.objectId);
+  }
+
+  bool _isSecondaryPointer(PointerDownEvent event) =>
+      (event.buttons & kSecondaryMouseButton) != 0;
 
   void _onNodesMoved(Set<int> nodeIds, Offset offset) {
     final moved = <int, Offset>{};
@@ -380,6 +458,7 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
     );
     _relayoutForOpens();
     setState(() {});
+    unawaited(_loadCardDescriptionLinks(objectId));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _open.isEmpty) return;
       _syncCameraListener();
@@ -487,35 +566,51 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
       width: size.width,
       child: Listener(
         behavior: HitTestBehavior.opaque,
-        child: Material(
-          color: Colors.transparent,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: _NodeChrome(accent: accent, expanded: true),
-              ),
-              _ExpandedInfoCard(
-                key: ValueKey('diagram-expand-${node.objectId}'),
-                node: node,
-                width: size.width,
-                accent: accent,
-                onChanged: (title, body) =>
-                    _onOpenCardChanged(card.objectId, title, body),
-                onSave: node.informationId == null
-                    ? null
-                    : (title, body) => state.updateInfoFromDiagram(
-                          informationId: node.informationId!,
-                          objectId: node.objectId,
-                          title: title,
-                          body: body,
-                        ),
-              ),
-              Positioned(
-                top: 2,
-                right: 2,
-                child: _DiagramCloseHit(onClose: () => _closeOne(card.objectId)),
-              ),
-            ],
+        onPointerDown: (event) {
+          if (_isSecondaryPointer(event)) {
+            unawaited(_showNodeContextMenu(node, event.position));
+          }
+        },
+        child: GestureDetector(
+          onLongPressStart: isPhoneLayout
+              ? (d) => unawaited(
+                    _showNodeContextMenu(node, d.globalPosition),
+                  )
+              : null,
+          child: Material(
+            color: Colors.transparent,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: _NodeChrome(accent: accent, expanded: true),
+                ),
+                _ExpandedInfoCard(
+                  key: ValueKey('diagram-expand-${node.objectId}'),
+                  node: node,
+                  width: size.width,
+                  accent: accent,
+                  descriptionLinks: card.descriptionLinks,
+                  onJumpTo: _jumpToCard,
+                  onChanged: (title, body) =>
+                      _onOpenCardChanged(card.objectId, title, body),
+                  onSave: node.informationId == null
+                      ? null
+                      : (title, body) => state.updateInfoFromDiagram(
+                            informationId: node.informationId!,
+                            objectId: node.objectId,
+                            title: title,
+                            body: body,
+                          ),
+                ),
+                Positioned(
+                  top: 2,
+                  right: 2,
+                  child: _DiagramCloseHit(
+                    onClose: () => _closeOne(card.objectId),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -605,7 +700,26 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
                         accent: accent,
                         expanded: false,
                       ),
-                      content: _InfoNodeCard(title: node.title),
+                      content: Listener(
+                        onPointerDown: (event) {
+                          if (_isSecondaryPointer(event)) {
+                            unawaited(
+                              _showNodeContextMenu(node, event.position),
+                            );
+                          }
+                        },
+                        child: GestureDetector(
+                          onLongPressStart: isPhoneLayout
+                              ? (d) => unawaited(
+                                    _showNodeContextMenu(
+                                      node,
+                                      d.globalPosition,
+                                    ),
+                                  )
+                              : null,
+                          child: _InfoNodeCard(title: node.title),
+                        ),
+                      ),
                     );
                   },
                   edgeBuilder: (context, edgeId) {
@@ -680,6 +794,7 @@ class _OpenDiagramCard {
   Offset origin;
   String title;
   String body;
+  List<Map<String, dynamic>> descriptionLinks = const [];
 
   double deltaRadius(TextDirection textDirection) {
     final closed = DiagramLayout.measureClosedChip(
@@ -872,6 +987,8 @@ class _ExpandedInfoCard extends StatefulWidget {
     required this.onChanged,
     required this.onSave,
     this.accent,
+    this.descriptionLinks = const [],
+    this.onJumpTo,
   });
 
   final ObjectGraphNode node;
@@ -879,6 +996,8 @@ class _ExpandedInfoCard extends StatefulWidget {
   final void Function(String title, String body) onChanged;
   final Future<void> Function(String title, String body)? onSave;
   final Color? accent;
+  final List<Map<String, dynamic>> descriptionLinks;
+  final ValueChanged<int>? onJumpTo;
 
   @override
   State<_ExpandedInfoCard> createState() => _ExpandedInfoCardState();
@@ -903,6 +1022,9 @@ class _ExpandedInfoCardState extends State<_ExpandedInfoCard> {
       _title.text = widget.node.title;
       _body.text = widget.node.body;
     }
+    if (oldWidget.descriptionLinks != widget.descriptionLinks) {
+      setState(() {});
+    }
   }
 
   @override
@@ -925,6 +1047,20 @@ class _ExpandedInfoCardState extends State<_ExpandedInfoCard> {
 
   @override
   Widget build(BuildContext context) {
+    final titleStyle = AppTypography.noteTitleStyle.copyWith(fontSize: 13);
+    final bodyStyle = AppTypography.noteBodyStyle.copyWith(fontSize: 12);
+    final titleSpans = _descriptionSpansForField(
+      links: widget.descriptionLinks,
+      title: _title.text,
+      body: _body.text,
+      titleField: true,
+    );
+    final bodySpans = _descriptionSpansForField(
+      links: widget.descriptionLinks,
+      title: _title.text,
+      body: _body.text,
+      titleField: false,
+    );
     return Material(
       color: Colors.transparent,
       child: SizedBox(
@@ -937,32 +1073,18 @@ class _ExpandedInfoCardState extends State<_ExpandedInfoCard> {
             children: [
               Padding(
                 padding: const EdgeInsets.only(right: 22),
-                child: TextField(
+                child: _linkedMapField(
                   controller: _title,
-                  autofocus: false,
-                  style: AppTypography.noteTitleStyle.copyWith(
-                    fontSize: 13,
-                  ),
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                  onChanged: (_) => _onChanged(),
+                  style: titleStyle,
+                  spans: titleSpans,
+                  maxLines: 1,
                 ),
               ),
-              TextField(
+              _linkedMapField(
                 controller: _body,
-                autofocus: false,
-                style: AppTypography.noteBodyStyle.copyWith(fontSize: 12),
+                style: bodyStyle,
+                spans: bodySpans,
                 maxLines: null,
-                minLines: 1,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                ),
-                onChanged: (_) => _onChanged(),
               ),
             ],
           ),
@@ -970,6 +1092,179 @@ class _ExpandedInfoCardState extends State<_ExpandedInfoCard> {
       ),
     );
   }
+
+  Widget _linkedMapField({
+    required TextEditingController controller,
+    required TextStyle style,
+    required List<_MapDescriptionSpan> spans,
+    required int? maxLines,
+  }) {
+    final field = TextField(
+      controller: controller,
+      autofocus: false,
+      style: style,
+      maxLines: maxLines,
+      minLines: 1,
+      decoration: const InputDecoration(
+        isDense: true,
+        border: InputBorder.none,
+        contentPadding: EdgeInsets.zero,
+      ),
+      onChanged: (_) => _onChanged(),
+    );
+    if (spans.isEmpty || widget.onJumpTo == null) return field;
+    return Stack(
+      children: [
+        field,
+        Positioned.fill(
+          child: _LinkedSpanLayer(
+            text: controller.text,
+            style: style,
+            spans: spans,
+            onJump: widget.onJumpTo!,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MapDescriptionSpan {
+  const _MapDescriptionSpan({
+    required this.start,
+    required this.end,
+    required this.targetId,
+  });
+
+  final int start;
+  final int end;
+  final int targetId;
+}
+
+int? _readInt(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse('$value');
+}
+
+List<_MapDescriptionSpan> _descriptionSpansForField({
+  required List<Map<String, dynamic>> links,
+  required String title,
+  required String body,
+  required bool titleField,
+}) {
+  final combined = body.isEmpty ? title : '$title\n$body';
+  final nl = combined.indexOf('\n');
+  final out = <_MapDescriptionSpan>[];
+  for (final link in links) {
+    final anchor = link['anchor'];
+    if (anchor is! Map) continue;
+    final start = _readInt(anchor['start']) ?? 0;
+    final end = _readInt(anchor['end']) ?? 0;
+    final targetId = _readInt(link['target_id']) ??
+        _readInt(link['peer'] is Map ? (link['peer'] as Map)['id'] : null);
+    if (targetId == null || end <= start) continue;
+    if (nl < 0) {
+      if (titleField) {
+        out.add(_MapDescriptionSpan(start: start, end: end, targetId: targetId));
+      }
+      continue;
+    }
+    if (titleField) {
+      if (start >= nl) continue;
+      final from = start.clamp(0, nl);
+      final to = end.clamp(0, nl);
+      if (from < to) {
+        out.add(_MapDescriptionSpan(start: from, end: to, targetId: targetId));
+      }
+    } else {
+      final from = (start - (nl + 1)).clamp(0, body.length);
+      final to = (end - (nl + 1)).clamp(0, body.length);
+      if (from < to) {
+        out.add(_MapDescriptionSpan(start: from, end: to, targetId: targetId));
+      }
+    }
+  }
+  return out;
+}
+
+class _LinkedSpanLayer extends StatelessWidget {
+  const _LinkedSpanLayer({
+    required this.text,
+    required this.style,
+    required this.spans,
+    required this.onJump,
+  });
+
+  final String text;
+  final TextStyle style;
+  final List<_MapDescriptionSpan> spans;
+  final ValueChanged<int> onJump;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: style),
+          textDirection: Directionality.of(context),
+          maxLines: null,
+        )..layout(maxWidth: constraints.maxWidth);
+        final boxes = <(Rect, int)>[];
+        for (final span in spans) {
+          final start = span.start.clamp(0, text.length);
+          final end = span.end.clamp(0, text.length);
+          if (end <= start) continue;
+          for (final box in painter.getBoxesForSelection(
+            TextSelection(baseOffset: start, extentOffset: end),
+          )) {
+            boxes.add((box.toRect(), span.targetId));
+          }
+        }
+        return Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (event) {
+            if ((event.buttons & kPrimaryButton) == 0) return;
+            for (final (rect, targetId) in boxes) {
+              if (rect.inflate(2).contains(event.localPosition)) {
+                onJump(targetId);
+                return;
+              }
+            }
+          },
+          child: IgnorePointer(
+            child: CustomPaint(
+              painter: _LinkedSpanPainter(
+                boxes: [for (final b in boxes) b.$1],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LinkedSpanPainter extends CustomPainter {
+  const _LinkedSpanPainter({required this.boxes});
+
+  final List<Rect> boxes;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppColors.text.withValues(alpha: 0.55)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    for (final box in boxes) {
+      final y = box.bottom - 1;
+      canvas.drawLine(Offset(box.left, y), Offset(box.right, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LinkedSpanPainter oldDelegate) =>
+      oldDelegate.boxes != boxes;
 }
 
 extension _FirstOrNull<E> on Iterable<E> {

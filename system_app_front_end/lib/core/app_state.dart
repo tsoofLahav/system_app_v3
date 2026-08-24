@@ -721,6 +721,7 @@ class AppState extends ChangeNotifier {
   }) async {
     await _objects.createRelatedLink(embed.id, targetObjectId: targetObjectId);
     await loadEmbedsForFile(embed.fileId);
+    await loadObjectGraph();
   }
 
   Future<void> removeObjectLink(ObjectEmbed embed, int linkId) async {
@@ -729,26 +730,45 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> createDescriptionLink({
-    required int infoObjectId,
+    required int hostObjectId,
+    required int targetObjectId,
     required Map<String, dynamic> anchor,
     String? label,
+    bool alsoRelated = false,
   }) async {
     await _objects.createDescriptionLink(
-      infoObjectId,
+      hostObjectId,
+      targetObjectId: targetObjectId,
       anchor: anchor,
       label: label,
     );
+    if (alsoRelated) {
+      await _objects.createRelatedLink(
+        hostObjectId,
+        targetObjectId: targetObjectId,
+      );
+    }
     final fileId = anchor['file_id'] as int?;
     if (fileId != null) {
       await loadDescriptionLinksForFile(fileId);
     }
-    final infoFileId = embedsByFileId.entries
-        .where((e) => e.value.any((o) => o.id == infoObjectId))
+    final hostFileId = embedsByFileId.entries
+        .where((e) => e.value.any((o) => o.id == hostObjectId))
         .map((e) => e.key)
         .firstOrNull;
-    if (infoFileId != null) {
-      await loadEmbedsForFile(infoFileId);
+    if (hostFileId != null && hostFileId != fileId) {
+      await loadDescriptionLinksForFile(hostFileId);
     }
+    if (hostFileId != null) {
+      await loadEmbedsForFile(hostFileId);
+    }
+    if (alsoRelated) {
+      await loadObjectGraph();
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> listObjectLinks(int objectId) {
+    return _objects.listLinks(objectId);
   }
 
   Future<void> loadDescriptionLinksForFile(int fileId) async {

@@ -8,6 +8,7 @@ import '../../files/editor/drag_mode_frame.dart';
 import '../../files/editor/editor_key_handoff.dart';
 import '../../files/editor/embed_caret_bridge.dart';
 import '../../files/rich_text/block_text_actions.dart';
+import '../../files/rich_text/connect_info.dart';
 import '../../files/rich_text/document_context_menu.dart';
 import '../../files/rich_text/formatted_text_field.dart';
 import '../../files/rich_text/span_text_editing_controller.dart';
@@ -15,6 +16,7 @@ import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/glass_surface.dart';
 import '../../ux/widgets/app_context_menu.dart';
+import '../data/object_embed.dart';
 import '../data/task.dart';
 import '../views/assign_task_view_dialog.dart';
 import './task_drag_data.dart';
@@ -54,6 +56,7 @@ class TaskListSurface extends StatefulWidget {
     this.includeAssignView = true,
     this.onArrowExitAbove,
     this.onArrowExitBelow,
+    this.hostEmbed,
   });
 
   final AppState state;
@@ -83,6 +86,9 @@ class TaskListSurface extends StatefulWidget {
 
   /// ↓ on the last line of the list — leave the embed downward.
   final VoidCallback? onArrowExitBelow;
+
+  /// In-file host object this list belongs to — Connect info stores spans here.
+  final ObjectEmbed? hostEmbed;
 
   @override
   State<TaskListSurface> createState() => TaskListSurfaceState();
@@ -785,6 +791,28 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     }
   }
 
+  List<DescriptionTextRange> _descriptionRanges(String? segmentId) {
+    final host = widget.hostEmbed;
+    if (host == null || segmentId == null) return const [];
+    return descriptionRangesForSegment(
+      state: widget.state,
+      fileId: host.fileId,
+      segmentId: segmentId,
+    );
+  }
+
+  Future<void> _connectInfo({String? segmentId}) async {
+    final host = widget.hostEmbed;
+    if (host == null) return;
+    await connectInfoFromMark(
+      context: context,
+      state: widget.state,
+      host: host,
+      segmentId: segmentId,
+    );
+    if (mounted) setState(() {});
+  }
+
   Future<void> _showTaskMenu(TapDownDetails details, int index) async {
     final id = index >= 0 && index < _taskIds.length ? _taskIds[index] : null;
     final task = id == null ? null : _taskById(id);
@@ -798,7 +826,12 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       strings: widget.state.strings,
       extraEntries: extras,
       includeAssignView: widget.includeAssignView,
+      includeConnectInfo: widget.hostEmbed != null,
       onAction: (action) async {
+        if (action == 'text:connect_info') {
+          await _connectInfo(segmentId: widget.taskSegmentId?.call(index));
+          return;
+        }
         if (action == 'tasks:reorder_mode') {
           _setReorderMode(true);
           return;
@@ -1013,6 +1046,13 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         onBackspaceAtStart: () => _handleBackspace(index),
         onSecondaryTapDown: (d) => _showTaskMenu(d, index),
         taskId: id,
+        descriptionRanges: _descriptionRanges(widget.taskSegmentId?.call(index)),
+        onDescriptionActivate: widget.hostEmbed == null
+            ? null
+            : (range) => openDescriptionTarget(
+                  state: widget.state,
+                  link: range.link,
+                ),
         onArrowExitAbove: () => _arrowFromLine(
               _hasTitleLine ? index + 1 : index,
               goingDown: false,
@@ -1065,7 +1105,12 @@ class TaskListSurfaceState extends State<TaskListSurface> {
                 globalPosition: d.globalPosition,
                 strings: widget.state.strings,
                 includeAssignView: false,
+                includeConnectInfo: widget.hostEmbed != null,
                 onAction: (action) async {
+                  if (action == 'text:connect_info') {
+                    await _connectInfo(segmentId: widget.listTitleSegmentId);
+                    return;
+                  }
                   if (action == 'tasks:reorder_mode') {
                     _setReorderMode(true);
                     return;
@@ -1074,6 +1119,13 @@ class TaskListSurfaceState extends State<TaskListSurface> {
                 },
               ),
             ),
+            descriptionRanges: _descriptionRanges(widget.listTitleSegmentId),
+            onDescriptionActivate: widget.hostEmbed == null
+                ? null
+                : (range) => openDescriptionTarget(
+                      state: widget.state,
+                      link: range.link,
+                    ),
             onArrowExitAbove: () =>
                 _arrowFromLine(0, goingDown: false),
             onArrowExitBelow: () =>

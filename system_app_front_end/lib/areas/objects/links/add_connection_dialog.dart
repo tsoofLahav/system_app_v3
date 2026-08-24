@@ -23,10 +23,15 @@ Future<ConnectionPick?> showAddConnectionDialog({
   required BuildContext context,
   required AppState state,
   required ObjectEmbed source,
+  bool infoOnly = true,
 }) {
   return showAppDialog<ConnectionPick>(
     context: context,
-    builder: (_) => _AddConnectionDialog(state: state, source: source),
+    builder: (_) => _AddConnectionDialog(
+      state: state,
+      source: source,
+      infoOnly: infoOnly,
+    ),
   );
 }
 
@@ -34,10 +39,12 @@ class _AddConnectionDialog extends StatefulWidget {
   const _AddConnectionDialog({
     required this.state,
     required this.source,
+    this.infoOnly = true,
   });
 
   final AppState state;
   final ObjectEmbed source;
+  final bool infoOnly;
 
   @override
   State<_AddConnectionDialog> createState() => _AddConnectionDialogState();
@@ -62,6 +69,7 @@ class _AddConnectionDialogState extends State<_AddConnectionDialog> {
     if (graph != null) {
       for (final n in graph.nodes) {
         if (seen.contains(n.objectId)) continue;
+        if (widget.infoOnly && n.type != 'info') continue;
         seen.add(n.objectId);
         options.add(
           ConnectionPick(
@@ -76,6 +84,7 @@ class _AddConnectionDialogState extends State<_AddConnectionDialog> {
     for (final embeds in widget.state.embedsByFileId.values) {
       for (final e in embeds) {
         if (seen.contains(e.id)) continue;
+        if (widget.infoOnly && e.type != 'info') continue;
         seen.add(e.id);
         final title = e.type == 'info'
             ? (e.information?['title'] as String? ?? '').trim()
@@ -119,7 +128,10 @@ class _AddConnectionDialogState extends State<_AddConnectionDialog> {
               child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
             )
           : _options.isEmpty
-              ? Text(s['noObjectsToConnect'], style: AppTypography.noteBodyStyle)
+              ? Text(
+                  widget.infoOnly ? s['noInfoObjects'] : s['noObjectsToConnect'],
+                  style: AppTypography.noteBodyStyle,
+                )
               : DialogChoiceList(
                   itemCount: _options.length,
                   onActivate: (i) => Navigator.pop(context, _options[i]),
@@ -144,10 +156,14 @@ class _AddConnectionDialogState extends State<_AddConnectionDialog> {
 Future<ObjectGraphNode?> showPickInfoObjectDialog({
   required BuildContext context,
   required AppState state,
+  Set<int> excludeObjectIds = const {},
 }) async {
   await state.loadObjectGraph();
   if (!context.mounted) return null;
-  final nodes = state.objectGraph?.nodes ?? const <ObjectGraphNode>[];
+  final nodes = [
+    for (final n in state.objectGraph?.nodes ?? const <ObjectGraphNode>[])
+      if (!excludeObjectIds.contains(n.objectId)) n,
+  ];
   return showAppDialog<ObjectGraphNode>(
     context: context,
     builder: (_) => AppAdaptiveDialogShell(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:system_app_front_end/areas/files/editor/description_anchor.dart';
 import 'package:system_app_front_end/areas/files/editor/document_mark.dart';
 import 'package:system_app_front_end/areas/files/editor/document_text_flow.dart';
 import 'package:system_app_front_end/areas/files/rich_text/span_text_editing_controller.dart';
@@ -146,6 +147,41 @@ void main() {
 
       expect(mark.text, 'two');
       expect(mark.spansParts, isFalse);
+    });
+  });
+
+  group('description anchor from mark', () {
+    test('uses the marked offsets and segment id', () {
+      final built = _build({'b1#infoText': 'hello world'});
+      built.flow.collapseTo(const DocumentTextPosition('b1#infoText', 6));
+      built.flow.extendTo(const DocumentTextPosition('b1#infoText', 11));
+
+      final mark = DocumentMark.resolve(built.flow);
+      final anchor = descriptionAnchorFromMark(mark, fileId: 4);
+
+      expect(anchor, {
+        'segment_id': 'b1#infoText',
+        'start': 6,
+        'end': 11,
+        'file_id': 4,
+      });
+    });
+
+    test('falls back to the caret line when nothing is marked', () {
+      final built = _build({'b1#t0': 'first line\nsecond line'});
+      built.flow.collapseTo(const DocumentTextPosition('b1#t0', 14));
+
+      final mark = DocumentMark.resolve(built.flow);
+      final anchor = descriptionAnchorFromMark(
+        mark,
+        segmentId: 'ignored',
+        fileId: 9,
+      );
+
+      expect(anchor?['segment_id'], 'b1#t0');
+      expect(anchor?['start'], 11);
+      expect(anchor?['end'], 22);
+      expect(anchor?['file_id'], 9);
     });
   });
 }

@@ -25,6 +25,12 @@ from areas.objects.services.object_graph import (
     apply_diagram_positions,
     build_workspace_graph,
     connection_dicts_for_object,
+    description_links_hosted_in_file,
+    ensure_related_info_link,
+    find_related_link,
+    info_peer_dict,
+    normalize_description_anchor,
+    related_requires_info,
     tags_for_object,
 )
 
@@ -92,27 +98,11 @@ def list_objects(file_id):
 @objects_bp.route("/files/<int:file_id>/description-links", methods=["GET"])
 def list_file_description_links(file_id):
     get_or_404(File, file_id)
-    rows = Link.query.filter_by(
-        kind="description",
-        target_type="file",
-        target_id=file_id,
-    ).all()
     out = []
-    for link in rows:
+    for link in description_links_hosted_in_file(file_id):
         data = link.to_dict()
-        peer = db.session.get(ObjectEmbed, link.source_id)
-        info = (
-            db.session.get(InformationPiece, peer.information_id)
-            if peer is not None and peer.information_id
-            else None
-        )
-        data["peer"] = {
-            "type": "info",
-            "id": link.source_id,
-            "title": (info.title if info else "") or "Info",
-            "body": (info.body if info else "") or "",
-            "file_id": peer.file_id if peer else None,
-        }
+        target = db.session.get(ObjectEmbed, link.target_id)
+        data["peer"] = info_peer_dict(target, link.target_id)
         out.append(data)
     return jsonify(out)
 
@@ -206,34 +196,52 @@ def create_object_link(object_id):
         return jsonify({"error": "workspace_id required"}), 400
 
     if kind == "description":
-        if embed.type != "info":
-            return jsonify({"error": "description links require an info source"}), 400
-        anchor = data.get("anchor")
-        if not isinstance(anchor, dict) or not anchor.get("file_id"):
-            return jsonify({"error": "anchor.file_id required for description"}), 400
-        file_id = int(anchor["file_id"])
-        get_or_404(File, file_id)
+        target_object_id = data.get("target_object_id") or data.get("target_id")
+        if target_object_id is None:
+            return jsonify({"error": "target_object_id required"}), 400
+        target = get_or_404(ObjectEmbed, int(target_object_id))
+        if target.type != "info":
+            return jsonify({"error": "description links require an info target"}), 400
+        if target.id == embed.id:
+            return jsonify({"error": "cannot link an object to itself"}), 400
+        try:
+            anchor = normalize_description_anchor(data.get("anchor"))
+        except ValueError as err:
+            return jsonify({"error": str(err)}), 400
+        if "file_id" not in anchor:
+            anchor["file_id"] = embed.file_id
         link = Link(
             workspace_id=workspace_id,
-            source_type="info",
+            source_type=embed.type,
             source_id=embed.id,
-            target_type="file",
-            target_id=file_id,
+            target_type="info",
+            target_id=target.id,
             kind="description",
             anchor=anchor,
             label=data.get("label"),
         )
         db.session.add(link)
+        # Info text → info also draws a map edge. Other hosts stay file-only.
+        if embed.type == "info":
+            ensure_related_info_link(
+                workspace_id, embed, target, label=data.get("label")
+            )
         db.session.commit()
         return jsonify(link.to_dict()), 201
 
-    # related: target is another object
+    # related: info ↔ info only
     target_object_id = data.get("target_object_id") or data.get("target_id")
     if target_object_id is None:
         return jsonify({"error": "target_object_id required"}), 400
     target = get_or_404(ObjectEmbed, int(target_object_id))
     if target.id == embed.id:
         return jsonify({"error": "cannot link an object to itself"}), 400
+    if not related_requires_info(embed.type, target.type):
+        return jsonify({"error": "related links require info endpoints"}), 400
+
+    existing = find_related_link(workspace_id, embed.id, target.id)
+    if existing is not None:
+        return jsonify(existing.to_dict())
 
     link = Link(
         workspace_id=workspace_id,
@@ -260,7 +268,7 @@ def delete_object_link(object_id, link_id):
         or (link.target_type in OBJECT_LINK_TYPES and link.target_id == object_id)
         or (
             (link.kind or "related") == "description"
-            and link.source_type == "info"
+            and link.source_type in OBJECT_LINK_TYPES
             and link.source_id == object_id
         )
     )

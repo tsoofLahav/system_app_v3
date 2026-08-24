@@ -255,7 +255,7 @@ class ObjectEmbedComponent extends StatelessWidget {
         return TableEmbed(
           embed: embed,
           blockId: blockId,
-          strings: state.strings,
+          state: state,
           onPayloadChanged: (p) => onPayloadChanged(embed.id, p),
           onFocus: () => onInnerFocusChanged(blockId),
           onDeleteObject: () => onDelete(embed.id),

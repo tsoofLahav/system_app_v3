@@ -125,7 +125,7 @@ class DocumentContextMenu {
       strings: strings,
       onAction: onAction,
       entries: [
-        ...buildTextEntries(strings, includeConnectInfo: true),
+        ...buildTextEntries(strings, includeConnectInfo: false),
         const AppContextMenuDivider(),
         AppContextMenuItem(
           value: isOrdered ? 'list:style:bullet' : 'list:style:numbered',
@@ -167,6 +167,7 @@ class DocumentContextMenu {
     bool includeAddRow = true,
     bool includeReorderRows = true,
     bool includeReorderColumns = true,
+    bool includeConnectInfo = true,
   }) {
     return _showMenu(
       context: context,
@@ -174,7 +175,7 @@ class DocumentContextMenu {
       strings: strings,
       onAction: onAction,
       entries: [
-        ...buildTextEntries(strings, includeConnectInfo: true),
+        ...buildTextEntries(strings, includeConnectInfo: includeConnectInfo),
         const AppContextMenuDivider(),
         if (includeAddRow)
           AppContextMenuItem(
@@ -226,8 +227,24 @@ class DocumentContextMenu {
     );
   }
 
-  /// Info embed menu: text actions + Add tag / Add connection.
-  static Future<void> showInfoMenu({
+  /// Info field: formatting + Connect info.
+  static Future<void> showInfoFieldMenu({
+    required BuildContext context,
+    required Offset globalPosition,
+    required AppStrings strings,
+    required DocumentMenuHandler onAction,
+  }) {
+    return showTextMenu(
+      context: context,
+      globalPosition: globalPosition,
+      strings: strings,
+      onAction: onAction,
+      includeConnectInfo: true,
+    );
+  }
+
+  /// Info chrome (block caret): Add tag + Add connection (related).
+  static Future<void> showInfoChromeMenu({
     required BuildContext context,
     required Offset globalPosition,
     required AppStrings strings,
@@ -239,8 +256,6 @@ class DocumentContextMenu {
       strings: strings,
       onAction: onAction,
       entries: [
-        ...buildTextEntries(strings),
-        const AppContextMenuDivider(),
         AppContextMenuItem(
           value: 'info:add_tag',
           label: strings['addTag'],
@@ -253,6 +268,21 @@ class DocumentContextMenu {
     );
   }
 
+  /// Info embed menu: text actions + Add tag / Add connection.
+  static Future<void> showInfoMenu({
+    required BuildContext context,
+    required Offset globalPosition,
+    required AppStrings strings,
+    required DocumentMenuHandler onAction,
+  }) {
+    return showInfoChromeMenu(
+      context: context,
+      globalPosition: globalPosition,
+      strings: strings,
+      onAction: onAction,
+    );
+  }
+
   /// Task list menu: text actions, assign to views, Reorder Mode.
   static Future<void> showTaskListMenu({
     required BuildContext context,
@@ -261,6 +291,7 @@ class DocumentContextMenu {
     required DocumentMenuHandler onAction,
     List<AppContextMenuEntry> extraEntries = const [],
     bool includeAssignView = true,
+    bool includeConnectInfo = false,
   }) {
     return _showMenu(
       context: context,
@@ -268,7 +299,7 @@ class DocumentContextMenu {
       strings: strings,
       onAction: onAction,
       entries: [
-        ...buildTextEntries(strings),
+        ...buildTextEntries(strings, includeConnectInfo: includeConnectInfo),
         const AppContextMenuDivider(),
         if (includeAssignView)
           AppContextMenuItem(

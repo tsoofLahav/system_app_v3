@@ -215,11 +215,13 @@ class ObjectService {
 
   Future<Map<String, dynamic>> createDescriptionLink(
     int objectId, {
+    required int targetObjectId,
     required Map<String, dynamic> anchor,
     String? label,
   }) async {
     return await _api.post('/objects/$objectId/links', {
           'kind': 'description',
+          'target_object_id': targetObjectId,
           'anchor': anchor,
           if (label != null) 'label': label,
         })

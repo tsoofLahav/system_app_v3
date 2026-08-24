@@ -3,15 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/app_state.dart';
 import '../../../../core/l10n/app_strings.dart';
 import '../../../objects/data/object_embed.dart';
 import '../../../objects/data/table_payload.dart';
 import '../../../ui/app_color_palettes.dart';
 import '../../../ux/topic/topic_appearance.dart';
 import '../../model/document_model.dart';
+import '../../rich_text/connect_info.dart';
 import '../../rich_text/document_context_menu.dart';
 import '../../rich_text/rich_table_editor.dart';
 import '../document_secondary_tap.dart';
+import '../document_text_flow.dart';
 import '../embed_caret_bridge.dart';
 import './table_chart.dart';
 
@@ -21,7 +24,7 @@ class TableEmbed extends StatefulWidget {
     super.key,
     required this.embed,
     required this.blockId,
-    required this.strings,
+    required this.state,
     required this.onPayloadChanged,
     this.onFocus,
     this.onDeleteObject,
@@ -29,7 +32,8 @@ class TableEmbed extends StatefulWidget {
 
   final ObjectEmbed embed;
   final String blockId;
-  final AppStrings strings;
+  final AppState state;
+  AppStrings get strings => state.strings;
   final ValueChanged<Map<String, dynamic>> onPayloadChanged;
   final VoidCallback? onFocus;
   final VoidCallback? onDeleteObject;
@@ -340,6 +344,23 @@ class TableEmbedState extends State<TableEmbed>
               ? DocumentContextMenu.buildChartEntries(widget.strings)
               : const [],
           onExtraMenuAction: chartOn ? _onChartMenuAction : null,
+          onConnectInfo: () async {
+            await connectInfoFromMark(
+              context: context,
+              state: widget.state,
+              host: widget.embed,
+            );
+            if (mounted) setState(() {});
+          },
+          descriptionRangesForCell: (r, c) => descriptionRangesForSegment(
+            state: widget.state,
+            fileId: widget.embed.fileId,
+            segmentId: tableCellSegmentId(widget.blockId, r, c),
+          ),
+          onDescriptionActivate: (range) => openDescriptionTarget(
+            state: widget.state,
+            link: range.link,
+          ),
         ),
       ],
     );

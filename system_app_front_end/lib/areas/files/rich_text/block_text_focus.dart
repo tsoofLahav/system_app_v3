@@ -108,6 +108,7 @@ class BlockTextFocusRegistry {
             controller: controller,
             start: sel.start,
             end: sel.end,
+            segmentId: activeFlow?.focusedSegmentId,
             onChanged: onChanged ?? _recentTarget?.onChanged,
           ),
         ]);
@@ -128,6 +129,7 @@ class BlockTextFocusRegistry {
               controller: controller,
               start: start,
               end: end,
+              segmentId: activeFlow?.focusedSegmentId,
               onChanged: onChanged ?? _recentTarget?.onChanged,
             ),
           ]);

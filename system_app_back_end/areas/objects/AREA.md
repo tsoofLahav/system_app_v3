@@ -63,19 +63,24 @@ The `links` table is the workspace **object graph**, keyed by **`objects.id`** f
 
 | Column | Meaning |
 |--------|---------|
-| `source_type`, `source_id` | One endpoint (`info` / `task_list` / … or `file` for description targets) |
-| `target_type`, `target_id` | The other endpoint |
+| `source_type`, `source_id` | Host object (`info` / `task_list` / `table` / …). Related: one info. |
+| `target_type`, `target_id` | Related: the other info. Description: the connected info. |
 | `kind` | `related` (default) or `description` |
-| `anchor` | JSON for description spans: `{ file_id, block_id, segment_id, start, end }` |
+| `anchor` | Description span on the **host**: `{ segment_id, start, end }` (`file_id` optional) |
 
-**Related** edges connect objects. **Description** edges attach an info object to a marked span in a file (`target_type=file`).
+| Kind | Shape | How it is created |
+|------|-------|-------------------|
+| **Related** | **info ↔ info** only | Object chrome or map node → Add connection |
+| **Description** | **Any object’s marked text → an info** | Field menu → Connect info… Stored on the host. Many spans per host are allowed. Self-links are rejected. |
+
+If the marked text lives **inside an info**, creating the description **also upserts related** between those two infos so the objects map gets an edge. Text inside a task or table does not draw a map edge. Deleting one kind does **not** delete the other.
 
 | Endpoint | Role |
 |----------|------|
-| `GET /objects/graph?workspace_id=` | Info nodes (title, body, topic_id/color, tag_ids, `diagram_x`/`diagram_y`) + related info↔info edges for the objects map |
+| `GET /objects/graph?workspace_id=` | Info nodes (title, body, topic_id/color, tag_ids, `diagram_x`/`diagram_y`) + related info↔info edges for the objects map (description edges skipped) |
 | `PUT /objects/graph/positions` | Batch-write map coordinates `{ workspace_id, positions: [{ object_id, x, y }] }` |
-| `GET/POST /objects/:id/links` | List / create connections (`target_object_id` or description `anchor`) |
-| `GET /files/:id/description-links` | Description links targeting that file |
+| `GET/POST /objects/:id/links` | List / create connections. Related: `target_object_id` (info). Description: `target_object_id` (info) + `anchor` on **this** host |
+| `GET /files/:id/description-links` | Description links whose **source object lives in that file** (peer = target info) |
 | `PUT /objects/:id/tags` | Replace object tags |
 | `PATCH /tags/:id` | Update tag name/color/icon |
 | `PATCH /objects/:id` | `sort_key`, `anchor`, image/table `payload`, and `diagram_x` / `diagram_y` |
@@ -123,4 +128,4 @@ Deleting anything that contains objects must cascade, or the database keeps orph
 - Ordering is explicit (`list_order_index`), never implied by id.
 - Creating an object via `POST /files/:id/objects` must also insert its embed block — an object with no block is invisible.
 - Never delete a container without its cascade.
-- Any object may link to any object; do not hardcode allowed link pairs.
+- Related links are info ↔ info only. Description links are host object → info (any host type).

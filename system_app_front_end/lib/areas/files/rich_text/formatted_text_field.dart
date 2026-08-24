@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../../../shared/utils/platform_text.dart';
+import '../../objects/links/info_description_bubble.dart';
 import '../editor/document_secondary_tap.dart';
 import '../editor/document_text_flow.dart';
 import './block_text_focus.dart';
@@ -54,6 +55,7 @@ class FormattedTextField extends StatefulWidget {
     this.descriptionRanges = const [],
     this.onDescriptionHover,
     this.onDescriptionDoubleTap,
+    this.onDescriptionActivate,
     this.onArrowExitAbove,
     this.onArrowExitBelow,
     this.onArrowExitLeft,
@@ -112,6 +114,7 @@ class FormattedTextField extends StatefulWidget {
   final List<DescriptionTextRange> descriptionRanges;
   final ValueChanged<DescriptionTextRange?>? onDescriptionHover;
   final ValueChanged<DescriptionTextRange>? onDescriptionDoubleTap;
+  final ValueChanged<DescriptionTextRange>? onDescriptionActivate;
 
   @override
   State<FormattedTextField> createState() => _FormattedTextFieldState();
@@ -132,6 +135,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   final _rtlMotionActions = rtlCaretMotionActions();
   bool _mutatingImeSentinel = false;
   bool _structureEnterArmed = true;
+  OverlayEntry? _descriptionBubble;
+  DescriptionTextRange? _hoveredDescription;
 
   @override
   void initState() {
@@ -278,6 +283,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     _focusNode.removeListener(_onFocusChanged);
     _stripEmptyImeSentinel(rebuild: false);
     BlockTextFocusRegistry.unregister(widget.controller);
+    _hideDescriptionBubble();
     if (_ownsFocus) _focusNode.dispose();
     super.dispose();
   }
@@ -786,6 +792,11 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
           }
         }
       }
+      final hostBox = context.findRenderObject();
+      if (hostBox is RenderBox) {
+        final hit = _descriptionAt(hostBox.globalToLocal(tapGlobal));
+        if (hit != null) _activateDescription(hit);
+      }
     }
 
     if (flow == null || segmentId == null) return;
@@ -1079,15 +1090,16 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
             : (event) => _handleDescriptionHover(event.localPosition),
         onExit: widget.descriptionRanges.isEmpty
             ? null
-            : (_) => widget.onDescriptionHover?.call(null),
+            : (_) {
+                widget.onDescriptionHover?.call(null);
+                _hideDescriptionBubble();
+              },
         child: GestureDetector(
           onDoubleTapDown: widget.descriptionRanges.isEmpty
               ? null
               : (details) {
                   final hit = _descriptionAt(details.localPosition);
-                  if (hit != null) {
-                    widget.onDescriptionDoubleTap?.call(hit);
-                  }
+                  if (hit != null) _activateDescription(hit);
                 },
           child: AnimatedBuilder(
             animation: Listenable.merge([
@@ -1227,7 +1239,57 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   }
 
   void _handleDescriptionHover(Offset local) {
-    widget.onDescriptionHover?.call(_descriptionAt(local));
+    final hit = _descriptionAt(local);
+    widget.onDescriptionHover?.call(hit);
+    _syncDescriptionBubble(hit, local);
+  }
+
+  void _activateDescription(DescriptionTextRange hit) {
+    _hideDescriptionBubble();
+    widget.onDescriptionActivate?.call(hit);
+    widget.onDescriptionDoubleTap?.call(hit);
+  }
+
+  void _syncDescriptionBubble(DescriptionTextRange? hit, Offset local) {
+    if (hit == null) {
+      _hideDescriptionBubble();
+      return;
+    }
+    if (_hoveredDescription != null &&
+        identical(_hoveredDescription!.link, hit.link) &&
+        _hoveredDescription!.start == hit.start &&
+        _hoveredDescription!.end == hit.end) {
+      return;
+    }
+    _hoveredDescription = hit;
+    _hideDescriptionBubble(clearHover: false);
+    final peer = hit.link['peer'];
+    final title = peer is Map ? '${peer['title'] ?? ''}' : '';
+    final body = peer is Map ? '${peer['body'] ?? ''}' : '';
+    if (title.isEmpty && body.isEmpty) return;
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final origin = box.localToGlobal(local);
+    _descriptionBubble = OverlayEntry(
+      builder: (ctx) {
+        return Positioned(
+          left: origin.dx,
+          top: origin.dy + 18,
+          child: IgnorePointer(
+            child: InfoDescriptionBubble(title: title, body: body),
+          ),
+        );
+      },
+    );
+    overlay.insert(_descriptionBubble!);
+  }
+
+  void _hideDescriptionBubble({bool clearHover = true}) {
+    _descriptionBubble?.remove();
+    _descriptionBubble = null;
+    if (clearHover) _hoveredDescription = null;
   }
 
   /// ↑/↓/←/→ at a visual edge when this field is not in a flow (embed under
