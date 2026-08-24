@@ -18,6 +18,7 @@ class LineDecoration {
     this.mark,
     this.markColor,
     this.opacity = 1,
+    this.strikethrough = false,
     this.anchorKey,
     this.onTap,
     this.spanFor,
@@ -34,6 +35,7 @@ class LineDecoration {
   final IconData? mark;
   final Color? markColor;
   final double opacity;
+  final bool strikethrough;
 
   /// Attach to reach this element with `Scrollable.ensureVisible` or measure it.
   final GlobalKey? anchorKey;
@@ -47,6 +49,7 @@ class LineDecoration {
       barColor == null &&
       mark == null &&
       opacity == 1 &&
+      !strikethrough &&
       anchorKey == null &&
       onTap == null;
 }
@@ -127,11 +130,15 @@ class ReadOnlyDocumentView extends StatelessWidget {
   }
 
   Widget _text(String text, TextStyle style, int lineStart, int lineEnd) {
-    final span = decorate(lineStart, lineEnd).spanFor;
+    final d = decorate(lineStart, lineEnd);
+    final resolved = d.strikethrough
+        ? style.copyWith(decoration: TextDecoration.lineThrough)
+        : style;
+    final span = d.spanFor;
     if (span == null) {
-      return Text(text.isEmpty ? ' ' : text, style: style);
+      return Text(text.isEmpty ? ' ' : text, style: resolved);
     }
-    return Text.rich(span(text), style: style);
+    return Text.rich(span(text), style: resolved);
   }
 
   /// Wrap one element in its decoration: tint, active rule, decided glyph.

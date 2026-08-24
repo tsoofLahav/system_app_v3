@@ -61,9 +61,9 @@ Pending also opens when the **file** mounts ([`document_pane.dart`](../files/edi
 
 Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's tint: **Current** on the left, **Suggested** on the right, both showing the whole file.
 
-- Panes render real blocks — headings, lists, tables, tasks, graphs — never marker text. Agent text is parsed by [`agent_text_blocks.dart`](../files/model/agent_text_blocks.dart) and drawn by [`read_only_document_view.dart`](../files/editor/read_only_document_view.dart).
-- A hunk is mapped to the lines it touches ([`review_marks.dart`](review_marks.dart)). One table row, task or list item is one agent-text line, so a change inside an embed tints that row alone; a hunk over the whole fence tints the embed.
-- States: pending (faint op tint), active (stronger tint plus a left rule), accepted (teal with a check), rejected (grey, dimmed, with a cross). Word marks stay for changed text lines.
+- Panes render the shared read-only file ([`file_preview.dart`](../files/editor/file_preview.dart)) — headings, lists, tables, tasks, graphs — never marker text. Agent text is parsed by [`agent_text_blocks.dart`](../files/model/agent_text_blocks.dart).
+- A hunk is mapped to the lines it touches ([`review_marks.dart`](review_marks.dart)). One table row, task or list item is one agent-text line, so a change inside an embed tints that row alone. Consecutive adds are one hunk per line.
+- States: pending (faint op tint), active (stronger tint plus a left rule), accepted (teal with a check), rejected (grey, dimmed, with a cross **and strikethrough on Suggested only** — Current stays unmarked because that is the line that remains). Word marks stay for changed text lines.
 - One bubble in the gutter between the panes carries `n / m` and Accept | Reject. Deciding advances it to the next undecided change and scrolls both panes there. Enter accepts, Backspace rejects, Up/Down walk the changes.
 - On phone the same dialog is full-width with a Current / Suggested toggle and Accept | Reject docked at the bottom (no gutter bubble). It is still not dismissible until Finish or Discard.
 - On the last decision the bubble disappears and Finish lights up, so attention moves to the one thing left to do. Clicking any change brings the bubble back to flip that choice.
@@ -90,7 +90,7 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 
 - Never apply a review proposal without Finish (or Discard) on the lookalike dialog.
 - Never hardcode a silent consult `apply_mode` — the dialog chooses and sends it.
-- Never show raw JSON to the user — agent-text hunks only.
+- Never show raw JSON or marker/editor text to the user — visual [`FilePreview`](../files/editor/file_preview.dart) only.
 - Refresh the open topic after Finish so the editor and Archive list update.
 - Pass `hints.selected_text` from the active mark so “delete this line” can resolve correctly.
 

@@ -1,7 +1,10 @@
 """Unit tests for pending review merge / hunks."""
 
+from datetime import datetime
+
 from areas.production_agent.services.pending_reviews import (
     _coalesce_opcodes,
+    archive_copy_name,
     build_hunks,
     merge_agent_text,
 )
@@ -131,3 +134,40 @@ def test_merge_mixed_accept_reject():
     assert "b" in lines
     assert "B" not in lines
     assert "d" in lines
+
+
+def test_three_added_lines_are_three_hunks():
+    old = "a\n"
+    new = "a\none\ntwo\nthree\n"
+    hunks = build_hunks(old, new)
+    assert [h["op"] for h in hunks] == ["add", "add", "add"]
+    assert [h["new_lines"] for h in hunks] == [["one"], ["two"], ["three"]]
+
+
+def test_accept_two_added_lines_reject_one():
+    old = "a\n"
+    new = "a\none\ntwo\nthree\n"
+    hunks = build_hunks(old, new)
+    decisions = [
+        {
+            "hunk_id": h["id"],
+            "choice": "reject" if h["new_lines"] == ["two"] else "accept",
+        }
+        for h in hunks
+    ]
+    text, err = merge_agent_text(old, new, decisions)
+    assert err is None
+    assert text.splitlines() == ["a", "one", "three"]
+
+
+def test_archive_copy_name_is_file_and_created_date():
+    assert (
+        archive_copy_name("Daily", datetime(2026, 3, 12, 15, 4, 0))
+        == "Daily 2026-03-12"
+    )
+
+
+def test_archive_copy_name_falls_back_to_today():
+    name = archive_copy_name("Plan", None)
+    assert name.startswith("Plan ")
+    assert len(name) == len("Plan YYYY-MM-DD")

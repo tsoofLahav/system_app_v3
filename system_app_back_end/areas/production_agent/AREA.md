@@ -19,7 +19,7 @@ The agent's standing instructions are a real document it is allowed to read:
 
 Bootstrap seeds the DB row on first launch. The runner never reads the markdown file at request time — only the DB. Deploying the backend refreshes the prompt over the internal DB link (no laptop → external Postgres needed).
 
-That file is **for the model**: short standing instructions in four parts — app structure, tools, agent text, input. It describes **what exists and how the tools behave**, and leaves the implementation to the model; a capable model given an accurate map is more flexible than one walked through steps. Add a line only when it states a fact the model cannot discover (a schema rule, a system constraint), not to coach judgement or guard against one past mistake.
+That file is **for the model**: short standing instructions in five parts — app structure, tools, agent text, writing, input. It describes **what exists and how the tools behave**, and leaves the implementation to the model; a capable model given an accurate map is more flexible than one walked through steps. Add a line only when it states a fact the model cannot discover (a schema rule, a system constraint), not to coach judgement or guard against one past mistake — except **writing**: a strong model otherwise overwrites the user's voice, and that judgement is not discoverable from the tools.
 
 **Scope and hints are context, never a target.** They say where the user is standing (open topic, `focused_file_id`, `selected_text`); the prompt says what to do and where. The prompt carries this in two plain descriptions rather than rules: the hints bullet notes that "this line / file / topic" means the ones in the hints, and app structure says every file is readable and editable and that the browse tools are what find the topic a piece of writing belongs in. Told only the first, the agent hunts for a line it was handed; told only the second, it writes into whatever file is already open, which once put a nutrition note in the open file instead of the right topic's log. Bulky fence/tool **examples** live in [`content/production_agent/reference.md`](../../../content/production_agent/reference.md) and are loaded on demand via the `reference` tool (`agent_text` | `tools` | `all`). Maintainer notes stay in this `AREA.md`. Scenario-specific jobs belong in topic/automation prompts later — not in generic tool descriptions.
 
@@ -111,9 +111,9 @@ Table `agent_pending_reviews` (one open row per `file_id`; newest run replaces).
 | POST | `/files/:id/pending-review/finish` | Per-hunk decisions → archive deep-copy of old file → apply merged agent text → delete pending |
 | DELETE | `/files/:id/pending-review` | Discard |
 
-Finish archives as `"{name} (before AI · {local date})"` with deep-copied embeds, then `apply_agent_text` on the live file. `create_object` proposals are not queued for line-merge pending (direct_apply only this pass).
+Finish archives as `"{name} {created_at date}"` (the live file's creation date, `YYYY-MM-DD`) with deep-copied embeds, then `apply_agent_text` on the live file. `create_object` proposals are not queued for line-merge pending (direct_apply only this pass).
 
-Hunks come from agent-text `SequenceMatcher`, with **adjacent delete+insert coalesced into replace** so an edit never applies as “keep old + insert new”. Merge walks the same normalized opcodes: add inserts, remove deletes, change replaces.
+Hunks come from agent-text `SequenceMatcher`, with **adjacent delete+insert coalesced into replace** so an edit never applies as “keep old + insert new”, then **split to one line each** so the reviewer decides per line. Merge walks the same normalized opcodes: add inserts, remove deletes, change replaces.
 
 Service: [`services/pending_reviews.py`](services/pending_reviews.py).
 

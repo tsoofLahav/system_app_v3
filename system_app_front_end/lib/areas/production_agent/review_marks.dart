@@ -92,15 +92,21 @@ LineDecoration decorationForChange({
         onTap: onTap,
         spanFor: spanFor,
       ),
-    ChangeState.rejected => LineDecoration(
-        tint: AppColors.textHint.withValues(alpha: 0.08),
-        mark: AppIcons.close,
-        markColor: AppColors.textHint,
-        opacity: 0.45,
-        anchorKey: anchorKey,
-        onTap: onTap,
-        spanFor: spanFor,
-      ),
+    ChangeState.rejected => oldSide
+        ? LineDecoration(
+            anchorKey: anchorKey,
+            onTap: onTap,
+          )
+        : LineDecoration(
+            tint: AppColors.textHint.withValues(alpha: 0.08),
+            mark: AppIcons.close,
+            markColor: AppColors.textHint,
+            opacity: 0.45,
+            strikethrough: true,
+            anchorKey: anchorKey,
+            onTap: onTap,
+            spanFor: spanFor,
+          ),
   };
 }
 

@@ -62,13 +62,42 @@ def _coalesce_opcodes(opcodes: list[_Opcode]) -> list[_Opcode]:
     return out
 
 
+def _split_opcodes_to_lines(opcodes: list[_Opcode]) -> list[_Opcode]:
+    """One opcode per changed line so the reviewer decides each line alone."""
+    out: list[_Opcode] = []
+    for tag, i1, i2, j1, j2 in opcodes:
+        if tag == "equal":
+            out.append((tag, i1, i2, j1, j2))
+            continue
+        if tag == "insert":
+            for j in range(j1, j2):
+                out.append(("insert", i1, i2, j, j + 1))
+            continue
+        if tag == "delete":
+            for i in range(i1, i2):
+                out.append(("delete", i, i + 1, j1, j2))
+            continue
+        old_n = i2 - i1
+        new_n = j2 - j1
+        paired = min(old_n, new_n)
+        for k in range(paired):
+            out.append(("replace", i1 + k, i1 + k + 1, j1 + k, j1 + k + 1))
+        cursor_j = j1 + paired
+        for i in range(i1 + paired, i2):
+            out.append(("delete", i, i + 1, cursor_j, cursor_j))
+        cursor_i = i1 + paired
+        for j in range(j1 + paired, j2):
+            out.append(("insert", cursor_i, cursor_i, j, j + 1))
+    return out
+
+
 def normalized_opcodes(old_text: str, new_text: str) -> list[_Opcode]:
     old_lines = (old_text or "").splitlines()
     new_lines = (new_text or "").splitlines()
     raw = list(
         SequenceMatcher(a=old_lines, b=new_lines, autojunk=False).get_opcodes()
     )
-    return _coalesce_opcodes(raw)
+    return _split_opcodes_to_lines(_coalesce_opcodes(raw))
 
 
 def build_hunks(old_text: str, new_text: str) -> list[dict[str, Any]]:
@@ -102,7 +131,7 @@ def merge_agent_text(
     """Return (chosen_text, error). Every hunk must appear in decisions.
 
     Walks the same normalized opcodes as ``build_hunks`` so Accept on a change
-    replaces (never keeps old + inserts new).
+    replaces (never keeps old + inserts new). Opcodes are one line each.
     """
     old_lines = (old_text or "").splitlines()
     new_lines = (new_text or "").splitlines()
@@ -266,6 +295,12 @@ def _clone_embed_to_file(src: ObjectEmbed, dest_file_id: int) -> ObjectEmbed:
     return clone
 
 
+def archive_copy_name(file_name: str, created_at: datetime | None) -> str:
+    """Archived pre-AI copy: live file name plus its creation date."""
+    created = created_at or datetime.utcnow()
+    return f"{file_name} {created.strftime('%Y-%m-%d')}"
+
+
 def archive_copy_of_document(
     *,
     live_file: File,
@@ -324,9 +359,7 @@ def finish_pending(
     if err or chosen is None:
         return {"error": err or "merge failed"}
 
-    name = archive_name or (
-        f"{live.name} (before AI · {datetime.utcnow().strftime('%Y-%m-%d')})"
-    )
+    name = archive_name or archive_copy_name(live.name, live.created_at)
     archive_copy_of_document(
         live_file=live,
         old_document_json=pending.old_document_json or live.document_json or "",
