@@ -6,6 +6,7 @@ import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/dialog_field_style.dart';
+import '../../ux/dialogs/dialog_choice_list.dart';
 import '../data/app_view.dart';
 
 var _assignTaskViewDialogOpen = false;
@@ -60,6 +61,15 @@ class _AssignTaskViewDialogState extends State<_AssignTaskViewDialog> {
     });
   }
 
+  List<AppView?> get _choices => [null, ...widget.state.userViews];
+
+  int get _initialIndex {
+    final id = _selectedViewId;
+    if (id == null) return 0;
+    final i = widget.state.userViews.indexWhere((v) => v.id == id);
+    return i < 0 ? 0 : i + 1;
+  }
+
   Future<void> _select(AppView? view) async {
     final nextId = view?.id;
     if (nextId == _selectedViewId) return;
@@ -71,6 +81,10 @@ class _AssignTaskViewDialogState extends State<_AssignTaskViewDialog> {
       if (!mounted) return;
       setState(() => _selectedViewId = previous);
     }
+  }
+
+  String _label(AppView? view) {
+    return view?.name ?? widget.state.strings['noView'];
   }
 
   @override
@@ -106,56 +120,42 @@ class _AssignTaskViewDialogState extends State<_AssignTaskViewDialog> {
                 if (views.isEmpty)
                   Text(s['noViewsYet'], style: AppTypography.noteBodyStyle)
                 else
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 280),
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: [
-                        _ViewChoiceTile(
-                          label: s['noView'],
-                          selected: _selectedViewId == null,
-                          onTap: () => _select(null),
+                  DialogChoiceList(
+                    itemCount: _choices.length,
+                    initialIndex: _initialIndex,
+                    maxHeight: 280,
+                    onTap: (i) => _select(_choices[i]),
+                    onActivate: (i) async {
+                      await _select(_choices[i]);
+                      if (context.mounted) Navigator.pop(context);
+                    },
+                    itemBuilder: (context, i, _) {
+                      final view = _choices[i];
+                      final selected = view?.id == _selectedViewId;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _label(view),
+                                style: AppTypography.noteBodyStyle,
+                              ),
+                            ),
+                            selected
+                                ? AppIcon(
+                                    AppIcons.check,
+                                    size: 18,
+                                    color: AppColors.primary,
+                                  )
+                                : const SizedBox(width: 18),
+                          ],
                         ),
-                        for (final view in views)
-                          _ViewChoiceTile(
-                            label: view.name,
-                            selected: _selectedViewId == view.id,
-                            onTap: () => _select(view),
-                          ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
               ],
             ),
-    );
-  }
-}
-
-class _ViewChoiceTile extends StatelessWidget {
-  const _ViewChoiceTile({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      title: Text(label, style: AppTypography.noteBodyStyle),
-      trailing: selected
-          ? AppIcon(
-              AppIcons.check,
-              size: 18,
-              color: AppColors.primary,
-            )
-          : const SizedBox(width: 18),
-      onTap: onTap,
     );
   }
 }

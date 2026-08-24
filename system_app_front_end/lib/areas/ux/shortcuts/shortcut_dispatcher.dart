@@ -4,9 +4,12 @@ import '../../../core/app_state.dart';
 import '../../files/data/app_file.dart';
 import '../../files/editor/document_editor_controller.dart';
 import '../../files/editor/editor_key_handoff.dart';
+import '../../files/editor/embeds/object_embed_widgets.dart';
 import '../../files/rich_text/block_text_actions.dart';
 import '../../files/rich_text/block_text_focus.dart';
+import '../../objects/tasks/task_list_surface.dart';
 import '../../objects/views/assign_task_view_dialog.dart';
+import '../../objects/views/view_chrome_menu.dart';
 import '../../../core/platform/app_form_factor.dart';
 import '../arrange/file_arrange_overlay.dart';
 import '../arrange/phone_file_reorder_sheet.dart';
@@ -122,6 +125,19 @@ Future<void> dispatchShortcutAction(
         if (!context.mounted) return;
         state.toggleLanguage();
       });
+      return;
+    case ShortcutActionIds.addConnection:
+      await InfoEmbedState.keyboardFocus?.addConnectionFromShortcut();
+      return;
+    case ShortcutActionIds.toggleReorderMode:
+      final list = TaskListSurfaceState.keyboardFocus;
+      if (list != null) {
+        list.toggleReorderMode();
+        return;
+      }
+      if (state.isViewMode) {
+        ViewChromeRegistry.active?.onStartFrameReorder();
+      }
       return;
     default:
       return;

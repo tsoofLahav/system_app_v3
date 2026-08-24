@@ -89,6 +89,9 @@ class TaskListSurface extends StatefulWidget {
 }
 
 class TaskListSurfaceState extends State<TaskListSurface> {
+  /// List whose field currently owns the caret — for the reorder-mode shortcut.
+  static TaskListSurfaceState? keyboardFocus;
+
   late SpanTextEditingController _titleController;
   late final FocusNode _titleFocus;
   Timer? _titleSaveTimer;
@@ -114,6 +117,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   bool get reorderMode => _reorderMode;
 
   void setReorderMode(bool value) => _setReorderMode(value);
+
+  void toggleReorderMode() => _setReorderMode(!_reorderMode);
 
   bool get _hasTitleLine =>
       _bridge.showListTitle && !widget.compactMode && !_reorderMode;
@@ -179,6 +184,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   void initState() {
     super.initState();
     _titleFocus = FocusNode();
+    _titleFocus.addListener(_onFieldFocus);
     _titleController = SpanTextEditingController(text: _bridge.listTitle);
     _syncFromTasks(_displayTasks);
     if (_taskIds.isEmpty || _taskIds.every((id) => id == null)) {
@@ -245,7 +251,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   void _syncFromTasks(List<Task> tasks) {
     if (tasks.isEmpty) {
       _controllers.add(SpanTextEditingController(text: ''));
-      _focusNodes.add(FocusNode());
+      _focusNodes.add(_createRowFocus());
       _taskIds.add(null);
       _done.add(false);
       _saveTimers.add(null);
@@ -253,7 +259,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     }
     for (final task in tasks) {
       _controllers.add(SpanTextEditingController(text: task.title));
-      _focusNodes.add(FocusNode());
+      _focusNodes.add(_createRowFocus());
       _taskIds.add(task.id);
       _done.add(task.isDone);
       _saveTimers.add(null);
@@ -310,15 +316,38 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
   @override
   void dispose() {
+    if (identical(keyboardFocus, this)) keyboardFocus = null;
     _titleSaveTimer?.cancel();
     unawaited(_flushTitleHeader().catchError((_) {}));
     for (final timer in _saveTimers) {
       timer?.cancel();
     }
+    _titleFocus.removeListener(_onFieldFocus);
     _titleFocus.dispose();
     _titleController.dispose();
     _disposeRows();
     super.dispose();
+  }
+
+  bool get _anyFieldFocused =>
+      _titleFocus.hasFocus || _focusNodes.any((f) => f.hasFocus);
+
+  void _onFieldFocus() {
+    if (_anyFieldFocused) {
+      keyboardFocus = this;
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_anyFieldFocused) return;
+      if (identical(keyboardFocus, this)) keyboardFocus = null;
+    });
+  }
+
+  FocusNode _createRowFocus() {
+    final node = FocusNode();
+    node.addListener(_onFieldFocus);
+    return node;
   }
 
   void _scheduleTitleSave() {
@@ -379,7 +408,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       setState(() {
         if (_taskIds.isEmpty) {
           _controllers.add(SpanTextEditingController(text: ''));
-          _focusNodes.add(FocusNode());
+          _focusNodes.add(_createRowFocus());
           _taskIds.add(created.id);
           _done.add(false);
           _saveTimers.add(null);
@@ -516,7 +545,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     _persisting = true;
     setState(() {
       _controllers.insert(newIndex, SpanTextEditingController(text: ''));
-      _focusNodes.insert(newIndex, FocusNode());
+      _focusNodes.insert(newIndex, _createRowFocus());
       _taskIds.insert(newIndex, null);
       _done.insert(newIndex, asDone);
       _saveTimers.insert(newIndex, null);
@@ -868,9 +897,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       decoration: _done[index] ? TextDecoration.lineThrough : null,
       color: _done[index] ? AppColors.textHint : null,
     );
-    final titleText = _controllers[index].text.trim().isEmpty
-        ? widget.state.strings['newTaskHint']
-        : _controllers[index].text;
+    final titleText = _controllers[index].text.trim();
     final mark = TaskMark(
       done: _done[index],
       compact: true,
@@ -975,7 +1002,6 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         segmentId: widget.taskSegmentId?.call(index),
         documentBaseOffset: widget.documentBaseOffset,
         style: titleStyle,
-        hintText: widget.state.strings['newTaskHint'],
         maxLines: null,
         minLines: 1,
         textAlignVertical: TextAlignVertical.center,
@@ -1018,7 +1044,6 @@ class TaskListSurfaceState extends State<TaskListSurface> {
             segmentId: widget.listTitleSegmentId,
             documentBaseOffset: widget.documentBaseOffset,
             style: AppTypography.noteTitleStyle,
-            hintText: s['taskListTitleHint'],
             // Multi-line field (one visual line) — avoids single-line vertical
             // caret intents that mark the whole title; newlines still stripped.
             maxLines: null,

@@ -7,6 +7,7 @@ import '../../../core/models/tag.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
+import '../../ux/dialogs/dialog_choice_list.dart';
 import '../../ux/topic/topic_appearance.dart';
 import '../data/object_embed.dart';
 
@@ -70,35 +71,41 @@ class _AssignObjectTagsDialogState extends State<_AssignObjectTagsDialog> {
       ],
       child: tags.isEmpty
           ? Text(s['noTagsYet'], style: AppTypography.noteBodyStyle)
-          : ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 320),
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final tag in tags)
-                    ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Text(
+          : DialogChoiceList(
+              itemCount: tags.length,
+              maxHeight: 320,
+              onActivate: (i) => unawaited(_toggle(tags[i])),
+              itemBuilder: (context, i, _) {
+                final tag = tags[i];
+                final on = _selected.contains(tag.id);
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      Text(
                         tag.icon?.isNotEmpty == true
                             ? tag.icon!
                             : TopicAppearance.defaultEmoji,
                         style: const TextStyle(fontSize: 18),
                       ),
-                      title: Text(tag.name, style: AppTypography.noteBodyStyle),
-                      trailing: Icon(
-                        _selected.contains(tag.id)
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          tag.name,
+                          style: AppTypography.noteBodyStyle,
+                        ),
+                      ),
+                      Icon(
+                        on
                             ? Icons.check_box_rounded
                             : Icons.check_box_outline_blank_rounded,
-                        color: _selected.contains(tag.id)
-                            ? AppColors.primary
-                            : AppColors.textHint,
+                        color: on ? AppColors.primary : AppColors.textHint,
                         size: 22,
                       ),
-                      onTap: () => unawaited(_toggle(tag)),
-                    ),
-                ],
-              ),
+                    ],
+                  ),
+                );
+              },
             ),
     );
   }

@@ -16,8 +16,8 @@ void main() {
       expect(TableObjectPayload.pointerObjectType(p), 'graph');
       final rows = TableObjectPayload.rowsOf(p);
       expect(rows, hasLength(2));
-      expect(rows[0][0]['text'], 'A');
-      expect(rows[1][1]['text'], '2');
+      expect(rows[0][0]['text'], '');
+      expect(rows[1][1]['text'], '');
     });
 
     test('normalize maps legacy labels/values', () {

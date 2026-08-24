@@ -205,25 +205,30 @@ Shortcuts are user-rebindable. [`shortcuts/`](shortcuts/) owns the catalog of av
 | [`shortcuts/shortcut_dispatcher.dart`](shortcuts/shortcut_dispatcher.dart) | Keystroke → action |
 | [`shortcuts/main_file_cycle.dart`](shortcuts/main_file_cycle.dart) | Rotate every live file in the topic (not only the on-screen band) |
 
-| Catalog | Does |
-|---------|------|
-| Go home | Opens Home |
-| Bring file | Search overlay of files from other topics; choosing one **visits** it on Home in the layout (same document, still owned by its topic). Repeat to visit more. Arrange and cycle include those visits. |
-| Arrange | File arrange overlay (topic page) |
-| Cycle files | ⌘[ and ⌘] rotate **every live file in the topic** in a circle (not only the layout’s slots; not archived). Topic-level chrome — applies immediately, even with no caret. Do not wait for KeyUp / `runAfterKeystroke` |
-| Add file / topic / view | The same dialogs as the chrome |
-| Assign task view | Assign dialog when a task has the caret |
-| Agent / slot keys | Agent prompt (⌘⇧1), or the saved action in that bar seat |
-| Text (bold, italic, underline, cut/copy/paste, size) | Embed fields via `runBlockTextAction`; Super Editor via `DocumentEditorController.applyTextAction`. Super Editor still handles ⌘B / ⌘I / ⌘C / ⌘V / ⌘X itself when it has focus |
-| Insert object | Active file via `DocumentEditorRegistry` |
-| Layout toggle | View page: sections ↔ topics |
-| Language | English ↔ Hebrew (⌘E; after the keystroke, so the editor is not remounted mid-KeyDown) |
-
 **Insert object** (not “blocks”): catalog category `objects` inserts into the **active** file via `DocumentEditorRegistry` — info, task list, table, graph (chart table), image. After insert, the caret enters the new object (first inner field); images with no field keep the block caret. The bullet list stays on the insert bar only (document structure, not an object); a paragraph has no button anywhere — it is what typing already does.
 
-Default keys match the English name’s letter (`D`etails, `T`ask, `T`able, `G`raph, `I`mage). When two objects share a letter, keep that letter and vary the modifiers (task = ⌘⇧T, table = ⌘⌥T). **Move object** is ⌘⌥M (⌘⇧M is layout toggle).
+Heavy-use defaults are **two keys** (⌘ + letter) so they stay in muscle memory. Letters still follow the English name (`D`etails, `T`ask, `G`raph). The OS already owns some of those letters for text (⌘A select-all, ⌘C/V/X clipboard, ⌘Z undo, ⌘B/I/U format) and a few window actions (⌘W close, ⌘M minimize, ⌘Q quit, ⌘H hide — Home already uses ⌘H). Flutter intercepts catalog keys while this window is focused, so ⌘N / ⌘T / ⌘F / ⌘G / ⌘D / ⌘L / ⌘R / ⌘O do **not** leak to Finder or Chrome; they are safe here because this is a desktop document window, not a browser. **Keep the extra modifier only where the 2-key letter is already a text or window key:** table ⌘⌥T (task took ⌘T), image ⌘⇧I (italic took ⌘I), add view ⌘⇧W (close window), layout toggle ⌘⇧M (minimize). Preferences can rebind any of them.
+
+| Catalog | Default | Does |
+|---------|---------|------|
+| Go home | ⌘H | Opens Home |
+| Bring file | ⌘K | Search overlay of files from other topics; choosing one **visits** it on Home in the layout (same document, still owned by its topic). Repeat to visit more. Arrange and cycle include those visits. |
+| Arrange | ⌘R | File arrange overlay (topic page) |
+| Cycle files | ⌘[ ⌘] | Rotate **every live file in the topic** in a circle (not only the layout’s slots; not archived). Applies immediately — do not wait for KeyUp / `runAfterKeystroke` |
+| Add file / topic | ⌘F / ⌘N | The same dialogs as the chrome |
+| Add view | ⌘⇧W | Same as the sidebar + |
+| Assign task view | ⌘J | Assign dialog when a task has the caret |
+| Reorder mode | ⌘O | Task-list caret: toggle task reorder. View page with no task caret: frame reorder |
+| Add connection | ⌘L | Opens the connect-to picker when the caret is in an info object. Arrows / Enter / Escape run the list |
+| Agent / slot keys | ⌘⇧1… | Agent prompt, or the saved action in that bar seat |
+| Text (bold, italic, underline, cut/copy/paste, size) | ⌘B/I/U/X/C/V, ⌘⇧+/− | Embed fields via `runBlockTextAction`; Super Editor via `DocumentEditorController.applyTextAction`. Super Editor still handles ⌘B / ⌘I / ⌘C / ⌘V / ⌘X itself when it has focus |
+| Insert object | ⌘D info, ⌘T task, ⌘⌥T table, ⌘G graph, ⌘⇧I image | Active file via `DocumentEditorRegistry` |
+| Layout toggle | ⌘⇧M | View page: sections ↔ topics |
+| Language | ⌘E | English ↔ Hebrew (after the keystroke, so the editor is not remounted mid-KeyDown) |
 
 **AI keys belong to the seat, not the action.** ⌘⇧1 is the agent; ⌘⇧2…⌘⇧7 fire whatever saved action sits in bar slots 1–6, and do nothing while a seat is empty. Moving an action to another seat moves its key with it, so there is no shortcut to pick when creating one. Rebinding a seat works like any other action and now survives a restart — `ShortcutBindingsStore.restore()` runs during `AppState.initialize()`.
+
+List dialogs (connect, choose view, tags, move-file topic) are walked with **↑/↓, Enter, Escape** via [`dialogs/dialog_choice_list.dart`](dialogs/dialog_choice_list.dart). Form dialogs keep autofocus + Enter to submit. Confirmations accept Enter for the confirm answer.
 
 ## Rules
 

@@ -43,9 +43,9 @@ files (presentation) ──thin overlay──► objects (data + type logic)
 | In-file embed | [`tasks/file_task_list_bridge.dart`](tasks/file_task_list_bridge.dart) → list order / move APIs |
 | View frame | [`views/view_frame_task_list_bridge.dart`](views/view_frame_task_list_bridge.dart) → membership rewrite + `createTaskInView` |
 
-**Drag + Reorder Mode.** Payload in [`tasks/task_drag_data.dart`](tasks/task_drag_data.dart). Glass chips, no handles. Same surface for files and view frames. Cross-frame drops in a view update membership section/topic then refresh.
+**Drag + Reorder Mode.** Payload in [`tasks/task_drag_data.dart`](tasks/task_drag_data.dart). Glass chips, no handles. Same surface for files and view frames. Cross-frame drops in a view update membership section/topic then refresh. ⌘O toggles it while a task list has the caret.
 
-**Empty titles.** Created with `title: ""` and hint (`newTaskHint`) — never the literal “New task”. Enter on empty exits / unfocuses; Backspace on empty removes the row. In a file, the last empty task + empty title + Backspace deletes the whole task-list object (`onDeleteObject`); views keep a seed row.
+**Empty titles.** Created with `title: ""` — the field stays blank, no placeholder. Enter on empty exits / unfocuses; Backspace on empty removes the row. In a file, the last empty task + empty title + Backspace deletes the whole task-list object (`onDeleteObject`); views keep a seed row.
 
 **Views.** A user-made list a task can appear in without being copied. **A task belongs to at most one view** — choosing a view replaces any previous one (`setTaskView`). Create from the sidebar **+**; rename via right-click → Edit on a view. Assign from a task’s right-click **Choose view…** (files and views) or the shortcut. UI: [`views/assign_task_view_dialog.dart`](views/assign_task_view_dialog.dart).
 
@@ -60,7 +60,7 @@ task ──┬── shown inline in its file (home list)
 
 ## Info and the object graph
 
-An info object holds knowledge (`title`, `body`, …). In the file, title and body edit as **one text field** (first line → `title`, rest → `body`); diagrams and the API still see separate fields. Graph edges are keyed by **`objects.id`**. Removing an info from a file (any path) must delete the object row — the map is every info in the workspace, so orphans stay visible until cascade-deleted (see backend objects `AREA.md` deletion).
+An info object holds knowledge (`title`, `body`, …). In the file, title and body edit as **one text field** (first line → `title`, rest → `body`) with no placeholder explaining that; diagrams and the API still see separate fields. Graph edges are keyed by **`objects.id`**. Removing an info from a file (any path) must delete the object row — the map is every info in the workspace, so orphans stay visible until cascade-deleted (see backend objects `AREA.md` deletion).
 
 | Kind | Meaning |
 |------|---------|
@@ -71,7 +71,7 @@ An info object holds knowledge (`title`, `body`, …). In the file, title and bo
 
 **UI here:**
 - Create tag via sidebar **+**; assign tags on info embeds (context menu)
-- Info frame shows tag chips only; Add connection via context menu (no links list)
+- Info frame shows tag chips only; Add connection via context menu or ⌘L (no links list)
 - Description: document **Connect info…**, hover bubble, double-tap opens the info
 - **Objects map** ([`interactive_graph_view`](https://pub.dev/packages/interactive_graph_view)): info nodes + related edges; pan/zoom; drag to move — the same while cards are open. The package has no layout or persistence — we own `NodeWidget.position`. Coordinates live on the object (`diagram_x` / `diagram_y`); unsaved nodes get a connected layout (layers along links, then spring forces) so related objects sit near each other. **Arrange by links** (map chip, or Graph configuration) throws every saved spot away and writes that connected layout; a later drag is saved until Arrange is pressed again. The stored point is the **center of the circle that fits the card**. Double-click a chip opens a content-tight card on that same center (several may be open); every other closed node moves out along its ray by `R_open − R_closed`. The open card is a pane overlay that follows the chip — not a larger graph node. Close with × (that card) or **Close all**. Isolated objects stay off the map unless Graph configuration shows them. Tag filter above the bottom bar lists object tags only (not topic types); topic/tag color modes
 

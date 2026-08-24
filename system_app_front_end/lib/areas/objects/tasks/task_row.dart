@@ -116,7 +116,6 @@ class _TaskRowState extends State<TaskRow> {
               controller: _controller,
               focusNode: _focusNode,
               style: titleStyle,
-              hintText: widget.state.strings['newTaskHint'],
               maxLines: null,
               minLines: 1,
               textAlignVertical: TextAlignVertical.center,

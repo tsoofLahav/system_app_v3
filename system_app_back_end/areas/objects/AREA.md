@@ -89,7 +89,7 @@ Object GET / file object list payloads include `tags[]` and `connections[]` (und
 | `image` | `{ "url", "path", "width", "caption" }` |
 | `table` | `{ "rows": [[{ "text" }], …], "chart"?: { "enabled", "chartType", "colors" } }` |
 
-Chart tables use the same `table` type; agent text still expands them as `[GRAPH id chartType=…]` with two TSV rows (+ optional colors). Normalize helpers: [`services/table_payload.py`](services/table_payload.py). Spec: production agent system prompt.
+Chart tables use the same `table` type; agent text still expands them as `[GRAPH id chartType=…]` with two TSV rows (+ optional colors). New charts start with empty cells. Normalize helpers: [`services/table_payload.py`](services/table_payload.py). Spec: production agent system prompt.
 
 **Naming:** “object graph” = info **links map** (`GET /objects/graph`). “Chart table” / `[GRAPH]` pointer = visualization quality on a table object.
 

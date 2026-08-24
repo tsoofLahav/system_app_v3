@@ -6,6 +6,7 @@ import '../topic/topic_appearance.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_typography.dart';
 import '../widgets/topic_emoji.dart';
+import './dialog_choice_list.dart';
 
 Future<Topic?> showMoveFileTopicDialog({
   required BuildContext context,
@@ -51,32 +52,37 @@ class MoveFileTopicDialog extends StatelessWidget {
               s['moveFileNoOtherTopics'],
               style: AppTypography.noteBodyStyle,
             )
-          : ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 360, maxWidth: 360),
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: targets.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 4),
-                itemBuilder: (context, index) {
-                  final topic = targets[index];
-                  final accent = TopicAppearance.colorFromHex(topic.color);
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                    leading: TopicEmoji(value: topic.icon, size: 20),
-                    title: Text(
-                      state.topicDisplayName(topic),
-                      style: AppTypography.noteBodyStyle,
+          : DialogChoiceList(
+              itemCount: targets.length,
+              maxHeight: 360,
+              onActivate: (i) => Navigator.pop(context, targets[i]),
+              itemBuilder: (context, index, _) {
+                final topic = targets[index];
+                final accent = TopicAppearance.colorFromHex(topic.color);
+                return Container(
+                  margin: const EdgeInsets.symmetric(vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: accent.withValues(alpha: 0.35),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      side: BorderSide(
-                        color: accent.withValues(alpha: 0.35),
+                  ),
+                  child: Row(
+                    children: [
+                      TopicEmoji(value: topic.icon, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          state.topicDisplayName(topic),
+                          style: AppTypography.noteBodyStyle,
+                        ),
                       ),
-                    ),
-                    onTap: () => Navigator.pop(context, topic),
-                  );
-                },
-              ),
+                    ],
+                  ),
+                );
+              },
             ),
     );
   }

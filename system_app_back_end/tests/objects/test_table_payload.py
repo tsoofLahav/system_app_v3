@@ -28,6 +28,8 @@ def test_empty_chart_defaults():
     payload = empty_chart_table_payload()
     assert chart_enabled(payload)
     assert len(payload["rows"]) == 2
+    assert payload["rows"][0][0]["text"] == ""
+    assert payload["rows"][1][1]["text"] == ""
 
 
 def test_plain_rows_not_chart():

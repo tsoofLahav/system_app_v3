@@ -659,9 +659,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     if (type == 'graph') {
       // Graph is a table with chart quality (pointer still [GRAPH id]).
       apiType = 'table';
-      payload = TableObjectPayload.emptyChart(
-        hebrewLabels: widget.state.isRtl,
-      );
+      payload = TableObjectPayload.emptyChart();
     } else if (type == 'image') {
       payload = {'url': '', 'caption': ''};
     } else if (type == 'table') {

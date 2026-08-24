@@ -61,4 +61,23 @@ void main() {
     expect(forward.context, ShortcutContextRequirement.topicMode);
     expect(back.context, ShortcutContextRequirement.topicMode);
   });
+
+  test('heavy-use navigation defaults are two keys', () {
+    void expectCmd(String id, LogicalKeyboardKey key) {
+      final action = shortcutActionById(id)!;
+      expect(action.defaultBinding.keyId, key.keyId);
+      expect(action.defaultBinding.meta, isTrue);
+      expect(action.defaultBinding.shift, isFalse);
+      expect(action.defaultBinding.alt, isFalse);
+    }
+
+    expectCmd(ShortcutActionIds.openArrange, LogicalKeyboardKey.keyR);
+    expectCmd(ShortcutActionIds.addFile, LogicalKeyboardKey.keyF);
+    expectCmd(ShortcutActionIds.addTopic, LogicalKeyboardKey.keyN);
+    expectCmd(ShortcutActionIds.insertInfo, LogicalKeyboardKey.keyD);
+    expectCmd(ShortcutActionIds.insertTaskList, LogicalKeyboardKey.keyT);
+    expectCmd(ShortcutActionIds.insertGraph, LogicalKeyboardKey.keyG);
+    expectCmd(ShortcutActionIds.addConnection, LogicalKeyboardKey.keyL);
+    expectCmd(ShortcutActionIds.toggleReorderMode, LogicalKeyboardKey.keyO);
+  });
 }

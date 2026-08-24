@@ -185,7 +185,7 @@ The preferences dialog is the **reference** glass dialog. Every other dialog use
 | Hover bubble | `../ux/widgets/details_hover_bubble.dart` | Radius 10, blur 18, white 82%, max 320×240 |
 | Native popup menu | Avoid — use `AppContextMenu` | — |
 
-Route every dialog through [`adaptive_dialog.dart`](adaptive_dialog.dart). Fields inside dialogs use the helpers in [`dialog_field_style.dart`](dialog_field_style.dart):
+Route every dialog through [`adaptive_dialog.dart`](adaptive_dialog.dart). List pickers are keyboard-walked (↑/↓, Enter, Escape) by UX [`dialog_choice_list.dart`](../ux/dialogs/dialog_choice_list.dart). Form fields autofocus and submit on Enter; confirmations accept Enter for the confirm answer. Fields inside dialogs use the helpers in [`dialog_field_style.dart`](dialog_field_style.dart):
 
 | Helper | Rule |
 |--------|------|

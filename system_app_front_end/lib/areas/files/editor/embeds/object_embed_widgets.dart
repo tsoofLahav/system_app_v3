@@ -172,6 +172,9 @@ class InfoEmbed extends StatefulWidget {
 class InfoEmbedState extends State<InfoEmbed>
     with EmbedLineGatewayMixin
     implements EmbedCaretGateway {
+  /// Info field that currently owns the caret — for the add-connection shortcut.
+  static InfoEmbedState? keyboardFocus;
+
   late _InfoTextController _controller;
   late final FocusNode _focus;
   Timer? _saveTimer;
@@ -236,9 +239,20 @@ class InfoEmbedState extends State<InfoEmbed>
   void initState() {
     super.initState();
     _focus = FocusNode();
+    _focus.addListener(_onKeyboardFocus);
     _controller = _InfoTextController();
     _seedFromEmbed();
   }
+
+  void _onKeyboardFocus() {
+    if (_focus.hasFocus) {
+      keyboardFocus = this;
+      return;
+    }
+    if (identical(keyboardFocus, this)) keyboardFocus = null;
+  }
+
+  Future<void> addConnectionFromShortcut() => _addConnection();
 
   @override
   void didChangeDependencies() {
@@ -269,6 +283,8 @@ class InfoEmbedState extends State<InfoEmbed>
 
   @override
   void dispose() {
+    if (identical(keyboardFocus, this)) keyboardFocus = null;
+    _focus.removeListener(_onKeyboardFocus);
     _registry?.unregister(nodeId);
     _registry = null;
     _saveTimer?.cancel();
@@ -383,7 +399,6 @@ class InfoEmbedState extends State<InfoEmbed>
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.state.strings;
     final tags = widget.embed.tags;
     return DecoratedBox(
       decoration: AppColors.detailsBlockDecoration(),
@@ -398,7 +413,6 @@ class InfoEmbedState extends State<InfoEmbed>
               segmentId: infoTextSegmentId(widget.blockId),
               documentBaseOffset: widget.documentBaseOffset,
               style: AppTypography.noteBodyStyle,
-              hintText: s['detailsTitleHint'],
               maxLines: null,
               minLines: 1,
               onChanged: (_) => _scheduleSave(),
@@ -554,7 +568,6 @@ class _ImageEmbedState extends State<ImageEmbed> {
           controller: _captionController,
           style: AppTypography.metaStyle,
           decoration: const InputDecoration(
-            hintText: 'Caption',
             isDense: true,
             border: InputBorder.none,
           ),

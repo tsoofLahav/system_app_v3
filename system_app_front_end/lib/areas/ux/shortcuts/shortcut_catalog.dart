@@ -81,6 +81,8 @@ abstract final class ShortcutActionIds {
   static const insertTaskList = 'insert_task_list';
   static const toggleLayoutMode = 'toggle_layout_mode';
   static const toggleLanguage = 'toggle_language';
+  static const addConnection = 'add_connection';
+  static const toggleReorderMode = 'toggle_reorder_mode';
 }
 
 final _aiActionSlotRe = RegExp(r'^ai_action_(\d+)$');
@@ -127,7 +129,7 @@ final List<ShortcutAction> kShortcutCatalog = [
     id: ShortcutActionIds.openArrange,
     category: ShortcutCategory.navigation,
     labelKey: 'shortcutOpenArrange',
-    defaultBinding: _m(LogicalKeyboardKey.keyA, shift: true),
+    defaultBinding: _m(LogicalKeyboardKey.keyR),
     context: ShortcutContextRequirement.topicMode,
   ),
   ShortcutAction(
@@ -148,14 +150,14 @@ final List<ShortcutAction> kShortcutCatalog = [
     id: ShortcutActionIds.addFile,
     category: ShortcutCategory.navigation,
     labelKey: 'shortcutAddFile',
-    defaultBinding: _m(LogicalKeyboardKey.keyF, shift: true),
+    defaultBinding: _m(LogicalKeyboardKey.keyF),
     context: ShortcutContextRequirement.topicMode,
   ),
   ShortcutAction(
     id: ShortcutActionIds.addTopic,
     category: ShortcutCategory.navigation,
     labelKey: 'shortcutAddTopic',
-    defaultBinding: _m(LogicalKeyboardKey.keyN, shift: true),
+    defaultBinding: _m(LogicalKeyboardKey.keyN),
   ),
   ShortcutAction(
     id: ShortcutActionIds.addView,
@@ -249,12 +251,12 @@ final List<ShortcutAction> kShortcutCatalog = [
     textAction: 'text:size_down',
   ),
   // Letter matches the English object name. Task + Table both want T —
-  // Table uses ⌥ instead of ⇧ so the key stays T.
+  // Table keeps ⌥ so the key stays T without stealing italic / new-tab.
   ShortcutAction(
     id: ShortcutActionIds.insertInfo,
     category: ShortcutCategory.objects,
     labelKey: 'addDetails',
-    defaultBinding: _m(LogicalKeyboardKey.keyD, shift: true),
+    defaultBinding: _m(LogicalKeyboardKey.keyD),
     context: ShortcutContextRequirement.insertObject,
     insertType: 'info',
   ),
@@ -262,7 +264,7 @@ final List<ShortcutAction> kShortcutCatalog = [
     id: ShortcutActionIds.insertTaskList,
     category: ShortcutCategory.objects,
     labelKey: 'addTaskList',
-    defaultBinding: _m(LogicalKeyboardKey.keyT, shift: true),
+    defaultBinding: _m(LogicalKeyboardKey.keyT),
     context: ShortcutContextRequirement.insertObject,
     insertType: 'task_list',
   ),
@@ -278,7 +280,7 @@ final List<ShortcutAction> kShortcutCatalog = [
     id: ShortcutActionIds.insertGraph,
     category: ShortcutCategory.objects,
     labelKey: 'addGraph',
-    defaultBinding: _m(LogicalKeyboardKey.keyG, shift: true),
+    defaultBinding: _m(LogicalKeyboardKey.keyG),
     context: ShortcutContextRequirement.insertObject,
     insertType: 'graph',
   ),
@@ -302,6 +304,18 @@ final List<ShortcutAction> kShortcutCatalog = [
     category: ShortcutCategory.navigation,
     labelKey: 'shortcutToggleLanguage',
     defaultBinding: _m(LogicalKeyboardKey.keyE),
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.addConnection,
+    category: ShortcutCategory.objects,
+    labelKey: 'shortcutAddConnection',
+    defaultBinding: _m(LogicalKeyboardKey.keyL),
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.toggleReorderMode,
+    category: ShortcutCategory.navigation,
+    labelKey: 'shortcutReorderMode',
+    defaultBinding: _m(LogicalKeyboardKey.keyO),
   ),
 ];
 

@@ -65,7 +65,6 @@ void main() {
             controller: controller,
             focusNode: focus,
             style: const TextStyle(fontSize: 14),
-            hintText: 'New task...',
             maxLines: null,
             onEnter: () {},
             onBackspaceAtStart: () async {},
@@ -96,7 +95,6 @@ void main() {
           body: FormattedTextField(
             controller: controller,
             style: const TextStyle(fontSize: 14),
-            hintText: 'New task...',
             maxLines: null,
             onEnter: () {},
             onBackspaceAtStart: () async => backs++,

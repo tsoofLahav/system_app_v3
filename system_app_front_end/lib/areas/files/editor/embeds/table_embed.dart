@@ -331,7 +331,6 @@ class TableEmbedState extends State<TableEmbed>
           strings: widget.strings,
           mode: chartOn ? TableEditorMode.chartSeries : TableEditorMode.grid,
           maxColumns: chartOn ? AppColorPalettes.seriesLimit : null,
-          cellHint: chartOn ? widget.strings['graphAddVariable'] : null,
           onChanged: _onRowsChanged,
           onFocus: widget.onFocus,
           onExitTable: _onExitTable,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import './adaptive_dialog.dart';
 import './app_colors.dart';
@@ -20,27 +21,38 @@ Future<bool> showAppConfirmDialog({
 }) async {
   final answer = await showAppDialog<bool>(
     context: context,
-    builder: (ctx) => AppAdaptiveDialogShell(
-      title: Text(title),
-      width: AppDialogMetrics.maxWidth,
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: Text(cancelLabel),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          style: destructive
-              ? TextButton.styleFrom(foregroundColor: AppColors.destructive)
-              : null,
-          child: Text(confirmLabel),
-        ),
-      ],
-      child: Text(
-        message,
-        style: AppTypography.noteBodyStyle.copyWith(
-          fontSize: 12,
-          color: AppColors.text.withValues(alpha: 0.9),
+    builder: (ctx) => CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter): () =>
+            Navigator.pop(ctx, true),
+        const SingleActivator(LogicalKeyboardKey.numpadEnter): () =>
+            Navigator.pop(ctx, true),
+      },
+      child: Focus(
+        autofocus: true,
+        child: AppAdaptiveDialogShell(
+          title: Text(title),
+          width: AppDialogMetrics.maxWidth,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(cancelLabel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: destructive
+                  ? TextButton.styleFrom(foregroundColor: AppColors.destructive)
+                  : null,
+              child: Text(confirmLabel),
+            ),
+          ],
+          child: Text(
+            message,
+            style: AppTypography.noteBodyStyle.copyWith(
+              fontSize: 12,
+              color: AppColors.text.withValues(alpha: 0.9),
+            ),
+          ),
         ),
       ),
     ),

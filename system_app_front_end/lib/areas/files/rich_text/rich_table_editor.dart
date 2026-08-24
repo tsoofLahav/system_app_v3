@@ -45,7 +45,6 @@ class RichTableEditor extends StatefulWidget {
     this.documentBaseOffset = 0,
     this.mode = TableEditorMode.grid,
     this.maxColumns,
-    this.cellHint,
     this.extraMenuEntries = const [],
     this.onExtraMenuAction,
     this.onReorderColumn,
@@ -67,9 +66,6 @@ class RichTableEditor extends StatefulWidget {
 
   /// Cap for [TableEditorMode.chartSeries] (defaults to series palette limit).
   final int? maxColumns;
-
-  /// Hint for the first cell (e.g. graph variable hint).
-  final String? cellHint;
 
   /// Extra rows on the cell menu (e.g. chart type / palette).
   final List<AppContextMenuEntry> extraMenuEntries;
@@ -898,9 +894,6 @@ class RichTableEditorState extends State<RichTableEditor> {
                               ),
                               documentBaseOffset: widget.documentBaseOffset,
                               style: AppTypography.documentParagraphStyle,
-                              hintText: r == 0 && c == 0
-                                  ? (widget.cellHint ?? 'Cell')
-                                  : null,
                               maxLines: null,
                               minLines: 1,
                               onChanged: (_) => _emit(),

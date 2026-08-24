@@ -291,14 +291,14 @@ Objects are atomic SE blocks. ↑/↓ move onto the block; **Tab** (or click) op
 
 | Type | In the document |
 |------|-----------------|
-| Task list | Active then Done; Enter adds in the same zone; **insert lands on the list header** (then tasks); Escape leaves to SE block; right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title + hint |
-| Info | One field; first line = title (diagrams/API `title`); Enter adds lines; Escape leaves to SE block; right-click → text + Add tag / Add connection |
+| Task list | Active then Done; Enter adds in the same zone; **insert lands on the list header** (then tasks); Escape leaves to SE block; right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title stays blank |
+| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); Enter adds lines; Escape leaves to SE block; right-click → text + Add tag / Add connection (⌘L) |
 | Table / chart | See **[Tables & charts](#tables--charts)** |
 | Image | Display + caption; resize handles deferred |
 
 ### Tables & charts
 
-One object type `table` (`payload.rows` + optional `payload.chart`). UI: [`table_embed.dart`](editor/embeds/table_embed.dart) + [`RichTableEditor`](rich_text/rich_table_editor.dart); reorder chrome in [`table_reorder_surface.dart`](rich_text/table_reorder_surface.dart). `[GRAPH id]` is sugar for chart-on. Insert labels **A/B** or **א/ב** from UI language.
+One object type `table` (`payload.rows` + optional `payload.chart`). UI: [`table_embed.dart`](editor/embeds/table_embed.dart) + [`RichTableEditor`](rich_text/rich_table_editor.dart); reorder chrome in [`table_reorder_surface.dart`](rich_text/table_reorder_surface.dart). `[GRAPH id]` is sugar for chart-on. Insert starts with empty cells — no placeholder labels.
 
 | | Plain table | Chart table |
 |--|-------------|-------------|

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/app_state.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_typography.dart';
+import '../../ux/dialogs/dialog_choice_list.dart';
 import '../data/object_embed.dart';
 import '../data/object_service.dart';
 
@@ -119,24 +120,22 @@ class _AddConnectionDialogState extends State<_AddConnectionDialog> {
             )
           : _options.isEmpty
               ? Text(s['noObjectsToConnect'], style: AppTypography.noteBodyStyle)
-              : ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 360),
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: [
-                      for (final o in _options)
-                        ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(o.title, style: AppTypography.noteBodyStyle),
-                          subtitle: Text(
-                            o.type,
-                            style: AppTypography.metaStyle,
-                          ),
-                          onTap: () => Navigator.pop(context, o),
-                        ),
-                    ],
-                  ),
+              : DialogChoiceList(
+                  itemCount: _options.length,
+                  onActivate: (i) => Navigator.pop(context, _options[i]),
+                  itemBuilder: (context, i, _) {
+                    final o = _options[i];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(o.title, style: AppTypography.noteBodyStyle),
+                          Text(o.type, style: AppTypography.metaStyle),
+                        ],
+                      ),
+                    );
+                  },
                 ),
     );
   }
@@ -164,20 +163,18 @@ Future<ObjectGraphNode?> showPickInfoObjectDialog({
               state.strings['noInfoObjects'],
               style: AppTypography.noteBodyStyle,
             )
-          : ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 360),
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final n in nodes)
-                    ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(n.title, style: AppTypography.noteBodyStyle),
-                      onTap: () => Navigator.pop(context, n),
-                    ),
-                ],
-              ),
+          : DialogChoiceList(
+              itemCount: nodes.length,
+              onActivate: (i) => Navigator.pop(context, nodes[i]),
+              itemBuilder: (context, i, _) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    nodes[i].title,
+                    style: AppTypography.noteBodyStyle,
+                  ),
+                );
+              },
             ),
     ),
   );
