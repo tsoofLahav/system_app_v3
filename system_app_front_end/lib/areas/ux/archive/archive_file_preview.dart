@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
 import '../../files/data/app_file.dart';
-import '../../files/editor/read_only_document_view.dart';
-import '../../files/model/agent_text_blocks.dart';
+import '../../files/editor/file_preview.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
@@ -64,9 +63,7 @@ class ArchiveFilePreview extends StatelessWidget {
               child: agentText == null
                   ? const MainPaneLoader(compact: true)
                   : SingleChildScrollView(
-                      child: ReadOnlyDocumentView(
-                        blocks: parseAgentTextBlocks(agentText),
-                      ),
+                      child: FilePreview(agentText: agentText),
                     ),
             ),
           ],

@@ -70,7 +70,7 @@ Arranging is a **mode**: the user opens it from the bottom bar (desktop) or the 
 
 | Band | What it holds | Actions |
 |------|---------------|---------|
-| Shown | The layout, previewed | Tap a file to make it first, right-click to take it off screen, left/right to cycle |
+| Shown | The layout, previewed as the shared read-only file | Tap a file to make it first, right-click to take it off screen, left/right to cycle |
 | Not on screen | The hidden files, in a strip | Tap to bring one back into the last slot |
 | Layouts | The pickable shapes | Click or left/right; layouts needing more files than the topic has are disabled |
 
@@ -80,7 +80,7 @@ On commit it writes one `order_index` per file and one `file_layout` on the topi
 
 ### Bring file (Home visit)
 
-Home can **project** one or more files that still belong to other topics. ⌘K (or the phone Bring control) opens a searchable overlay: first word matches the topic, the rest the file name. Desktop rolls the matches sideways; phone is a **bottom sheet of names** with each row wearing the topic colour ([`bring_file/phone_bring_file_sheet.dart`](bring_file/phone_bring_file_sheet.dart)). Choosing a file does not move it — `topic_id` stays put. Visits join Home’s order (newest first until rearranged). On desktop the layout’s slot count decides what is on screen; on phone every file in that order is in the swipe row. Arrange and cycle-files reorder the mixed list: visiting files keep their source `order_index`; the mixed order is stored locally. Each visiting pane is editable and wears its source topic’s colour. The file ⋯ menu has **Dismiss brought file**; that ends that visit only. Visits are stored locally until dismissed (including after restart).
+Home can **project** one or more files that still belong to other topics. ⌘K (or the phone Bring control) opens a searchable overlay: first word matches the topic, the rest the file name. Desktop rolls the matches sideways, each card showing the shared read-only file (not marker text); phone is a **bottom sheet of names** with each row wearing the topic colour ([`bring_file/phone_bring_file_sheet.dart`](bring_file/phone_bring_file_sheet.dart)). Choosing a file does not move it — `topic_id` stays put. Visits join Home’s order (newest first until rearranged). On desktop the layout’s slot count decides what is on screen; on phone every file in that order is in the swipe row. Arrange and cycle-files reorder the mixed list: visiting files keep their source `order_index`; the mixed order is stored locally. Each visiting pane is editable and wears its source topic’s colour. The file ⋯ menu has **Dismiss brought file**; that ends that visit only. Visits are stored locally until dismissed (including after restart).
 
 ### Phone screen structure
 
@@ -142,7 +142,7 @@ Opening a topic under **Archive** replaces the main pane with [`archive/archive_
 | Piece | Does |
 |-------|------|
 | Search pill | Filters already-loaded cards immediately; after a short pause the server searches names and heading lines |
-| Preview | Spotlight of the selected file: agent-text via `GET /files/:id/agent-text`, drawn with [`ReadOnlyDocumentView`](../files/editor/read_only_document_view.dart) inside a topic-tinted `NoteCard`. No `SuperDocumentEditor` |
+| Preview | Spotlight of the selected file: the shared read-only file ([`FilePreview`](../files/editor/file_preview.dart)) from `GET /files/:id/agent-text`. No `SuperDocumentEditor`, no marker text |
 | Grid | Pages of 24 cards ([`archive_file_grid.dart`](archive/archive_file_grid.dart)), also topic-tinted; scroll near the bottom loads more |
 | File ⋯ / right-click | Unarchive (file returns first in its topic) or delete |
 | Bottom-bar trash | Delete mode: multi-select cards, then confirm a real cascade delete |
@@ -233,6 +233,7 @@ Default keys match the English name’s letter (`D`etails, `T`ask, `T`able, `G`r
 - Navigation never mutates content. Opening, browsing, and arranging are separate from editing.
 - Every menu action is also reachable without the menu where it makes sense (shortcut or inline control).
 - Overlay modes (arrange, bring file, previews) must be cancellable without saving.
+- File previews on arrange, bring-file, archive, and the AI diff are the shared read-only file — never marker/editor text.
 - Use `core/platform/app_form_factor.dart` to branch desktop vs phone; do not check screen width inline.
 - Visual constants come from [UI](../ui/AREA.md) — this area decides *what appears*, not what it looks like.
 - Which files are on screen is derived from the layout and the order. Never add a field to a file to answer it.

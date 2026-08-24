@@ -557,6 +557,16 @@ class AppState extends ChangeNotifier {
 
   String? archiveAgentTextFor(int fileId) => archiveAgentTextByFileId[fileId];
 
+  /// Expanded agent text for the shared read-only file preview. Never marker text.
+  Future<String> loadPreviewAgentText(int fileId) async {
+    try {
+      return await _files.agentTextForFile(fileId);
+    } catch (e) {
+      error = e.toString();
+      return '';
+    }
+  }
+
   Future<void> openDiagram() async {
     isDiagramMode = true;
     isViewMode = false;
@@ -877,13 +887,8 @@ class AppState extends ChangeNotifier {
 
   Future<void> _loadArchivePreviewForFile(AppFile file) async {
     if (archiveAgentTextByFileId.containsKey(file.id)) return;
-    try {
-      final text = await _files.agentTextForFile(file.id);
-      archiveAgentTextByFileId[file.id] = text;
-    } catch (e) {
-      error = e.toString();
-      archiveAgentTextByFileId[file.id] = '';
-    }
+    final text = await loadPreviewAgentText(file.id);
+    archiveAgentTextByFileId[file.id] = text;
     if (selectedArchiveFile?.id == file.id) notifyListeners();
   }
 

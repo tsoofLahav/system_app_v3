@@ -21,7 +21,8 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | [`model/document_text_codec.dart`](model/document_text_codec.dart) | Marker parse/serialize helpers |
 | [`model/document_buffer.dart`](model/document_buffer.dart) | Marker-range helpers (tests / legacy ops) |
 | [`model/agent_text_blocks.dart`](model/agent_text_blocks.dart) | Agent text → display blocks, each keyed to its line |
-| [`editor/read_only_document_view.dart`](editor/read_only_document_view.dart) | Draws those blocks read-only (AI diff review and archive preview) |
+| [`editor/read_only_document_view.dart`](editor/read_only_document_view.dart) | Paints those blocks (headings, lists, embeds) with no editing |
+| [`editor/file_preview.dart`](editor/file_preview.dart) | Shared read-only file: agent text in, visual document out. Used by the AI diff, archive, arrange overlay, and bring-file cards |
 | [`editor/DOCUMENT_TEXT.md`](editor/DOCUMENT_TEXT.md) | Marker-text dialect (SoT vs agent expand) |
 | [`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md) | Fluent-text principles for embeds |
 | [`editor/embeds/`](editor/embeds/) | In-file presentation of objects (task list, info, image, graph, table) |
@@ -45,7 +46,7 @@ The header of a pane ([`editor/document_pane.dart`](editor/document_pane.dart)) 
 
 A pane with `isBrought` is a file **visiting Home** from another topic (UX bring-file). It occupies a layout slot like any other file and can be rearranged with them. Edits save to that file; the ⋯ menu can dismiss that visit without archiving or deleting it.
 
-Archive preview is the same read-only document as AI review: `GET /files/:id/agent-text` (expanded fences) → `parseAgentTextBlocks` → [`ReadOnlyDocumentView`](editor/read_only_document_view.dart) in a tinted `NoteCard`. It does not mount `SuperDocumentEditor`. The archive list itself never downloads `document_json`; cards use id, name, and `archived_at`.
+The user never sees marker/editor text. Every read-only surface uses the same preview: `GET /files/:id/agent-text` (or already-expanded agent text) → `parseAgentTextBlocks` → [`FilePreview`](editor/file_preview.dart) → [`ReadOnlyDocumentView`](editor/read_only_document_view.dart). That is the AI diff, archive spotlight, arrange overlay cards, and bring-file cards. None of them mount `SuperDocumentEditor`, and none of them paint `document_json`. The archive list itself never downloads `document_json`; cards use id, name, and `archived_at`.
 
 On phone the framed pane ends above the tool bubbles on the light-grey middle; the card keeps its shadow for depth. The bubbles have no lift shadow. Screen structure is locked in UX [`AREA.md` § Phone screen structure](../ux/AREA.md#phone-screen-structure).
 
@@ -323,7 +324,7 @@ Type logic beyond presentation (views, links, cascades) → [objects](../objects
 | **Editor text (SoT)** | v4 marker body + header; pointer-only embeds | DB, Super Editor bridge, move/cut/paste |
 | **Agent text** | Same structure with objects expanded to fences | Production agent tools, diffs |
 
-The app edits and persists **editor text**. Agent text is produced on demand and shown in AI diff review only. Spec: [`editor/DOCUMENT_TEXT.md`](editor/DOCUMENT_TEXT.md).
+The app edits and persists **editor text**. Agent text is produced on demand. The user sees it only as a visual document through [`FilePreview`](editor/file_preview.dart) — never as raw fences or `%%system_app_document` headers. Spec: [`editor/DOCUMENT_TEXT.md`](editor/DOCUMENT_TEXT.md).
 
 Agent text is parsed twice: [`document_agent_text.py`](../../../../system_app_back_end/areas/files/services/document_agent_text.py) writes, [`model/agent_text_blocks.dart`](model/agent_text_blocks.dart) only displays. The Python side leads — when the fence format changes, change it there first and follow here, or the review dialog shows markers again.
 
@@ -361,6 +362,7 @@ Smoke after edits: type fast in paragraph + info + task + table/chart cell; Tab 
 ## Rules
 
 - Never store agent-expanded text in `document_json`; SoT is marker/pointer editor text.
+- Never show marker/editor text to the user. Read-only surfaces go through [`FilePreview`](editor/file_preview.dart).
 - Never rebuild the whole editor on a keystroke; save silently and keep focus. Follow [Keyboard / focus safety](#keyboard--focus-safety-recurring-bug-class).
 - An empty list item, table row, or trailing object unit (empty final task / info line / graph column) plus Enter exits that structure **without destroying it**.
 - An empty object (empty info, last empty task, last empty graph column) plus Backspace **removes the object** and coalesces surrounding text — no leftover blank paragraph.

@@ -5,7 +5,6 @@ import '../../files/data/app_file.dart';
 import '../../files/data/topic.dart';
 import '../layout/file_layouts.dart';
 import '../../ui/overlay_file_preview_card.dart';
-import '../bring_file/bring_file_preview.dart';
 
 /// Layout-shaped arrangement of compact preview cards for the arrange overlay.
 class ArrangeLayoutPreview extends StatelessWidget {
@@ -18,8 +17,7 @@ class ArrangeLayoutPreview extends StatelessWidget {
     required this.fileNameFor,
     required this.onFileTap,
     this.onFileSecondaryTap,
-    required this.previewsByFileId,
-    required this.previewsLoaded,
+    required this.previewFor,
     required this.strings,
   });
 
@@ -30,8 +28,7 @@ class ArrangeLayoutPreview extends StatelessWidget {
   final String Function(AppFile file) fileNameFor;
   final void Function(AppFile file) onFileTap;
   final void Function(AppFile file)? onFileSecondaryTap;
-  final Map<int, OverlayFilePreviewData> previewsByFileId;
-  final bool previewsLoaded;
+  final Widget Function(AppFile file) previewFor;
   final AppStrings strings;
 
   @override
@@ -48,9 +45,7 @@ class ArrangeLayoutPreview extends StatelessWidget {
                 topic: topicFor(files[i]),
                 fileName: fileNameFor(files[i]),
                 accent: accentFor(files[i]),
-                preview: previewsByFileId[files[i].id] ??
-                    OverlayFilePreviewData.fromFile(files[i]),
-                previewsLoaded: previewsLoaded,
+                preview: previewFor(files[i]),
                 strings: strings,
                 padding: const EdgeInsets.all(12),
                 titleFontSize: 13,

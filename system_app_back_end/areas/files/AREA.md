@@ -112,7 +112,7 @@ A type is a row in `topic_types`, not a tag. Each type has an English `name` and
 
 Leaving the document out of that response is a data-loss bug, not a display one: each editor opens empty, and the first keystroke saves that emptiness over the stored document. `tests/files/test_file_routes_document.py` guards it.
 
-`include_document=False` is for callers that only want names — currently the agent's file listing, so a tool call does not pour every document into the prompt, and the archive page list (`GET /topics/:id/archive/files`), which loads bodies only for the selected preview via `GET /files/:id/agent-text`.
+`include_document=False` is for callers that only want names — currently the agent's file listing, so a tool call does not pour every document into the prompt, and the archive page list (`GET /topics/:id/archive/files`), which loads bodies only for the selected preview via `GET /files/:id/agent-text`. That same agent-text endpoint is what the frontend paints as the read-only file (archive, arrange, bring-file, AI review). Marker `document_json` is storage, not a display format.
 
 ## Rules
 

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/l10n/app_strings.dart';
 import '../../core/platform/app_form_factor.dart';
+import '../files/editor/file_preview.dart';
 import '../files/editor/read_only_document_view.dart';
 import '../files/model/agent_text_blocks.dart';
 import '../ui/app_colors.dart';
@@ -625,7 +626,7 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
             child: SingleChildScrollView(
               controller: controller,
               padding: AppSpacing.notePadding,
-              child: ReadOnlyDocumentView(
+              child: FilePreview(
                 blocks: blocks,
                 decorate: (start, end) =>
                     _decorate(start, end, oldSide: oldSide),

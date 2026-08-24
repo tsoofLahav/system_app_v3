@@ -17,7 +17,7 @@ import '../../ui/overlay_dialog_style.dart';
 import '../../ui/overlay_file_preview_card.dart';
 import '../../ui/horizontal_carousel.dart';
 import '../widgets/layout_picker_tile.dart';
-import '../bring_file/bring_file_preview.dart';
+import '../../files/editor/file_preview.dart';
 import './arrange_layout_preview.dart';
 import './file_arrange_draft.dart';
 import './file_arrange_keyboard.dart';
@@ -65,8 +65,6 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   bool _saving = false;
   bool _tapCandidate = false;
   Offset? _tapDownPosition;
-  Map<int, OverlayFilePreviewData> _previewsByFileId = {};
-  bool _previewsLoaded = false;
 
   @override
   void initState() {
@@ -91,7 +89,6 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
       onChanged: () => setState(() {}),
     );
     _syncLayoutFocusIndex();
-    _loadPreviews();
   }
 
   @override
@@ -254,16 +251,12 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
     );
   }
 
-  Future<void> _loadPreviews() async {
-    final files = [..._draft.ordered];
-    final previews = <int, OverlayFilePreviewData>{
-      for (final file in files) file.id: OverlayFilePreviewData.fromFile(file),
-    };
-    if (!mounted) return;
-    setState(() {
-      _previewsByFileId = previews;
-      _previewsLoaded = true;
-    });
+  Widget _filePreview(AppFile file) {
+    return FilePreviewLoader(
+      key: ValueKey('file-preview-${file.id}'),
+      fileId: file.id,
+      loadAgentText: widget.state.loadPreviewAgentText,
+    );
   }
 
   double get _overlayWidth {
@@ -404,8 +397,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
                               widget.state.fileDisplayName(file.name),
                           onFileTap: _onShownFileTap,
                           onFileSecondaryTap: _onShownFileSecondaryTap,
-                          previewsByFileId: _previewsByFileId,
-                          previewsLoaded: _previewsLoaded,
+                          previewFor: _filePreview,
                           strings: s,
                         ),
                 ),
@@ -500,10 +492,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
                         topic: _topicFor(file),
                         fileName: widget.state.fileDisplayName(file.name),
                         accent: _accentFor(file),
-                        preview:
-                            _previewsByFileId[file.id] ??
-                            OverlayFilePreviewData.empty,
-                        previewsLoaded: _previewsLoaded,
+                        preview: _filePreview(file),
                         strings: s,
                         padding: const EdgeInsets.all(12),
                         titleFontSize: 13,

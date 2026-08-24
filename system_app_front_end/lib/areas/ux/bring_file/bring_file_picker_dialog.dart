@@ -13,8 +13,8 @@ import '../../ui/overlay_dialog_style.dart';
 import '../../ui/overlay_file_preview_card.dart';
 import '../arrange/file_arrange_keyboard.dart';
 import '../topic/topic_appearance.dart';
+import '../../files/editor/file_preview.dart';
 import './bring_file_catalog.dart';
-import './bring_file_preview.dart';
 import './phone_bring_file_sheet.dart';
 
 /// Search files from other topics. Choosing one visits that file on Home.
@@ -282,8 +282,11 @@ class _BringFilePickerOverlayState extends State<BringFilePickerOverlay> {
                       fileName: _state.fileDisplayName(entry.file.name),
                       accent: accent,
                       topicLabel: _state.topicDisplayName(entry.topic),
-                      preview: OverlayFilePreviewData.fromFile(entry.file),
-                      previewsLoaded: true,
+                      preview: FilePreviewLoader(
+                        key: ValueKey('bring-preview-${entry.file.id}'),
+                        fileId: entry.file.id,
+                        loadAgentText: _state.loadPreviewAgentText,
+                      ),
                       strings: s,
                       emphasized: emphasis > 0.7,
                       onTap: () => _choose(entry),
