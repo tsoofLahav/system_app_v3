@@ -132,6 +132,10 @@ class AppState extends ChangeNotifier {
 
   /// Objects map node tint: topic wash vs first-tag color.
   DiagramColorMode diagramColorMode = DiagramColorMode.byTopic;
+
+  /// Isolated info objects stay off the map until the user opts in.
+  var diagramShowUnconnected = false;
+  var diagramLayoutEpoch = 0;
   final Map<int, List<Map<String, dynamic>>> descriptionLinksByFileId = {};
   int? pendingFocusObjectId;
 
@@ -291,6 +295,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       await _loadLanguage();
+      await _loadDiagramPrefs();
       await shortcutBindings.restore();
       shortcutRebuildListenable.notifyListeners();
       await _bootstrap.bootstrap();
@@ -342,6 +347,7 @@ class AppState extends ChangeNotifier {
 
   static const _languagePrefsKey = 'app_language';
   static const _fileLayoutAutoMigrationKey = 'migrated_file_layout_auto_v1';
+  static const _diagramShowUnconnectedKey = 'diagram_show_unconnected';
 
   /// Old topics stored `single` as the create default. Treat that as [auto]
   /// once so 2/3+ files pick split / large-left until the user chooses.
@@ -364,6 +370,11 @@ class AppState extends ChangeNotifier {
   Future<void> _loadLanguage() async {
     final prefs = await SharedPreferences.getInstance();
     _language = AppLanguage.fromStorage(prefs.getString(_languagePrefsKey));
+  }
+
+  Future<void> _loadDiagramPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    diagramShowUnconnected = prefs.getBool(_diagramShowUnconnectedKey) ?? false;
   }
 
   String topicDisplayName(Topic topic) => strings.displayTopicName(topic.name);
@@ -612,6 +623,24 @@ class AppState extends ChangeNotifier {
     if (diagramColorMode == mode) return;
     diagramColorMode = mode;
     notifyListeners();
+  }
+
+  void setDiagramShowUnconnected(bool value) {
+    if (diagramShowUnconnected == value) return;
+    diagramShowUnconnected = value;
+    notifyListeners();
+    unawaited(_persistDiagramShowUnconnected(value));
+  }
+
+  /// Ask the objects map to throw away saved spots and arrange from the links.
+  void requestDiagramRelayout() {
+    diagramLayoutEpoch += 1;
+    notifyListeners();
+  }
+
+  Future<void> _persistDiagramShowUnconnected(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_diagramShowUnconnectedKey, value);
   }
 
   /// Patch info content from the objects map without leaving diagram mode.

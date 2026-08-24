@@ -7,8 +7,10 @@ import '../data/object_service.dart';
 /// Default map placement and temporary expand-push.
 ///
 /// [interactive_graph_view] has no layout or persistence — we own coordinates
-/// via [NodeWidget.position]. Saved `diagram_x` / `diagram_y` stay put; only
-/// nodes without a stored point get a sparse first placement.
+/// via [NodeWidget.position]. Saved `diagram_x` / `diagram_y` stay put until
+/// the user asks to arrange; only nodes without a stored point (or a full
+/// [layoutAll]) get a connected layout (BFS layers, then Fruchterman–Reingold
+/// springs) so related objects sit near each other.
 class DiagramLayout {
   DiagramLayout._();
 
@@ -16,8 +18,141 @@ class DiagramLayout {
   static const spacingX = 280.0;
   static const spacingY = 200.0;
 
-  /// Center-to-center room for the ~280×180 expanded card plus a gap.
-  static const expandClearance = 260.0;
+  static const closedMaxWidth = 96.0;
+  static const openMaxWidth = 260.0;
+
+  /// Circumradius of the rectangle that traps the card (center = node coordinate).
+  static double circumradius(Size size) {
+    return Offset(size.width / 2, size.height / 2).distance;
+  }
+
+  static Size measureClosedChip(String title, {TextDirection textDirection = TextDirection.ltr}) {
+    final label = title.isEmpty ? 'Info' : title;
+    final fontSize = _closedFontSize(label);
+    final painter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: TextStyle(
+          fontSize: fontSize,
+          height: 1.15,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      maxLines: 2,
+      ellipsis: '…',
+      textDirection: textDirection,
+    )..layout(maxWidth: closedMaxWidth - 12);
+    return Size(
+      (painter.width + 12).clamp(40.0, closedMaxWidth),
+      painter.height + 8,
+    );
+  }
+
+  static Size measureOpenCard(
+    String title,
+    String body, {
+    TextDirection textDirection = TextDirection.ltr,
+  }) {
+    const padH = 16.0;
+    const padV = 16.0;
+    const closeW = 28.0;
+    const gap = 4.0;
+    final innerMax = openMaxWidth - padH;
+    final titlePainter = TextPainter(
+      text: TextSpan(
+        text: title.isEmpty ? ' ' : title,
+        style: const TextStyle(
+          fontSize: 13,
+          height: 1.3,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      textDirection: textDirection,
+    )..layout(maxWidth: innerMax - closeW);
+    final bodyPainter = TextPainter(
+      text: TextSpan(
+        text: body.isEmpty ? ' ' : body,
+        style: const TextStyle(fontSize: 12, height: 1.35),
+      ),
+      textDirection: textDirection,
+    )..layout(maxWidth: innerMax);
+    final innerW = math.max(titlePainter.width + closeW, bodyPainter.width);
+    return Size(
+      (innerW + padH).clamp(80.0, openMaxWidth),
+      padV + titlePainter.height + gap + math.max(bodyPainter.height, 16),
+    );
+  }
+
+  static double _closedFontSize(String label) {
+    final len = label.length;
+    if (len <= 12) return 11;
+    if (len <= 18) return 10;
+    if (len <= 28) return 9;
+    return 8;
+  }
+
+  /// Lengthen every ray from [origin] by [deltaRadius]. The opened node stays put.
+  ///
+  /// Applies from [base] (pre-expand positions) so repeated size updates stay exact.
+  static void lengthenRays({
+    required Offset origin,
+    required int originId,
+    required Map<int, Offset> base,
+    required Map<int, Offset> positions,
+    required double deltaRadius,
+  }) {
+    var slot = 0;
+    for (final id in base.keys) {
+      if (id == originId) {
+        positions[id] = origin;
+        continue;
+      }
+      final start = base[id]!;
+      final delta = start - origin;
+      final dist = delta.distance;
+      if (dist < 1) {
+        final angle = slot * 2.399963;
+        positions[id] = origin + Offset(
+          math.cos(angle) * deltaRadius,
+          math.sin(angle) * deltaRadius,
+        );
+        slot += 1;
+        continue;
+      }
+      positions[id] = origin + delta / dist * (dist + deltaRadius);
+      slot += 1;
+    }
+  }
+
+  /// Compose several open cards: each keeps [origin], everyone else is pushed
+  /// by that card's ΔR. Recomputed from [base] so closing one card is exact.
+  static void applyOpenPushes({
+    required Map<int, Offset> base,
+    required Map<int, Offset> positions,
+    required List<({int originId, Offset origin, double deltaRadius})> opens,
+  }) {
+    positions
+      ..clear()
+      ..addAll(base);
+    if (opens.isEmpty) return;
+    for (final open in opens) {
+      positions[open.originId] = open.origin;
+    }
+    var stepBase = Map<int, Offset>.of(positions);
+    for (final open in opens) {
+      lengthenRays(
+        origin: open.origin,
+        originId: open.originId,
+        base: stepBase,
+        positions: positions,
+        deltaRadius: open.deltaRadius,
+      );
+      for (final pinned in opens) {
+        positions[pinned.originId] = pinned.origin;
+      }
+      stepBase = Map<int, Offset>.of(positions);
+    }
+  }
 
   static Offset? savedOffset(ObjectGraphNode node) {
     final x = node.diagramX;
@@ -26,18 +161,55 @@ class DiagramLayout {
     return Offset(x, y);
   }
 
+  /// Object ids that have at least one related edge to another node in [nodes].
+  static Set<int> connectedObjectIds({
+    required Iterable<ObjectGraphNode> nodes,
+    required Iterable<ObjectGraphEdge> edges,
+  }) {
+    final ids = {for (final n in nodes) n.objectId};
+    final connected = <int>{};
+    for (final edge in edges) {
+      if (!ids.contains(edge.sourceId) || !ids.contains(edge.targetId)) {
+        continue;
+      }
+      if (edge.sourceId == edge.targetId) continue;
+      connected.add(edge.sourceId);
+      connected.add(edge.targetId);
+    }
+    return connected;
+  }
+
+  /// True when 2+ points sit on top of each other (a bad persist, not a layout).
+  static bool isCollapsed(Iterable<Offset> points) {
+    final list = points.toList();
+    if (list.length < 2) return false;
+    final first = list.first;
+    return list.every((point) => (point - first).distance < 24);
+  }
+
   /// Fill [positions] for ids that are not yet placed. Returns newly assigned ids.
+  ///
+  /// Saved `diagram_x` / `diagram_y` win unless [ignoreSaved] — used when the
+  /// user asks to arrange the whole map from the links again.
   static Set<int> placeUnplaced({
     required List<ObjectGraphNode> nodes,
     required List<ObjectGraphEdge> edges,
     required Map<int, Offset> positions,
+    bool ignoreSaved = false,
   }) {
     final newly = <int>{};
-    for (final node in nodes) {
-      if (positions.containsKey(node.objectId)) continue;
-      final saved = savedOffset(node);
-      if (saved != null) {
-        positions[node.objectId] = saved;
+    if (ignoreSaved) {
+      positions.clear();
+    } else {
+      for (final node in nodes) {
+        if (positions.containsKey(node.objectId)) continue;
+        final saved = savedOffset(node);
+        if (saved != null) {
+          positions[node.objectId] = saved;
+        }
+      }
+      if (isCollapsed(positions.values)) {
+        positions.clear();
       }
     }
 
@@ -81,44 +253,29 @@ class DiagramLayout {
     for (var i = 0; i < components.length; i++) {
       final component = components[i];
       final cell = origin + Offset(
-        (i % cols) * spacingX,
-        (i ~/ cols) * spacingY,
+        (i % cols) * spacingX * 2.2,
+        (i ~/ cols) * spacingY * 1.8,
       );
-      _placeComponent(component, cell, positions);
+      _seedComponent(component, cell, positions, adj);
       newly.addAll(component);
     }
 
-    _relaxUnplaced(newly, positions, adj);
+    _forceDirected(newly, positions, adj);
     return newly;
   }
 
-  /// Radial push so an expanded card does not cover neighbors. Mutates [positions].
-  static void pushNeighbors({
-    required int originId,
+  /// Throw away saved spots and lay every node out from the links.
+  static Set<int> layoutAll({
+    required List<ObjectGraphNode> nodes,
+    required List<ObjectGraphEdge> edges,
     required Map<int, Offset> positions,
-    Set<int> connectedIds = const {},
-    double clearance = expandClearance,
   }) {
-    final origin = positions[originId];
-    if (origin == null) return;
-    var slot = 0;
-    for (final id in positions.keys.toList()) {
-      if (id == originId) continue;
-      final current = positions[id]!;
-      final need = connectedIds.contains(id) ? clearance + 40 : clearance;
-      var delta = current - origin;
-      var dist = delta.distance;
-      if (dist < 1) {
-        final angle = slot * 2.399963;
-        positions[id] = origin + Offset(math.cos(angle) * need, math.sin(angle) * need);
-        slot += 1;
-        continue;
-      }
-      if (dist < need) {
-        positions[id] = origin + delta * (need / dist);
-      }
-      slot += 1;
-    }
+    return placeUnplaced(
+      nodes: nodes,
+      edges: edges,
+      positions: positions,
+      ignoreSaved: true,
+    );
   }
 
   static Offset _freeSpotNear(Offset anchor, Iterable<Offset> taken) {
@@ -158,22 +315,111 @@ class DiagramLayout {
     return Offset(maxX + spacingX * 1.6, minY);
   }
 
-  static void _placeComponent(
+  static void _seedComponent(
     List<int> ids,
     Offset origin,
     Map<int, Offset> positions,
+    Map<int, List<int>> adj,
   ) {
     if (ids.length == 1) {
       positions[ids.first] = origin;
       return;
     }
-    final radius = math.max(spacingX, ids.length * spacingX / (2 * math.pi));
-    for (var i = 0; i < ids.length; i++) {
-      final angle = (2 * math.pi * i / ids.length) - math.pi / 2;
-      positions[ids[i]] = origin + Offset(
-        math.cos(angle) * radius,
-        math.sin(angle) * radius,
-      );
+    var root = ids.first;
+    var bestDegree = -1;
+    for (final id in ids) {
+      final degree = (adj[id] ?? const <int>[]).where(ids.contains).length;
+      if (degree > bestDegree) {
+        bestDegree = degree;
+        root = id;
+      }
+    }
+    final layers = <List<int>>[];
+    final seen = {root};
+    var frontier = [root];
+    while (frontier.isNotEmpty) {
+      layers.add(List<int>.from(frontier));
+      final next = <int>[];
+      for (final id in frontier) {
+        for (final n in adj[id] ?? const <int>[]) {
+          if (!ids.contains(n) || !seen.add(n)) continue;
+          next.add(n);
+        }
+      }
+      next.sort();
+      frontier = next;
+    }
+    for (final id in ids) {
+      if (seen.add(id)) layers.add([id]);
+    }
+    const layerGap = spacingX;
+    const rowGap = spacingY * 0.7;
+    for (var li = 0; li < layers.length; li++) {
+      final layer = layers[li];
+      final y0 = -(layer.length - 1) * rowGap / 2;
+      for (var i = 0; i < layer.length; i++) {
+        positions[layer[i]] = origin + Offset(li * layerGap, y0 + i * rowGap);
+      }
+    }
+  }
+
+  /// Fruchterman–Reingold-style springs: pull related nodes together, push
+  /// everything else apart so edges stay short and crossings stay rare.
+  static void _forceDirected(
+    Set<int> movable,
+    Map<int, Offset> positions,
+    Map<int, List<int>> adj,
+  ) {
+    if (movable.length < 2) return;
+    const ideal = 240.0;
+    var cool = ideal;
+    final ids = movable.toList();
+    for (var iter = 0; iter < 36; iter++) {
+      final disp = {for (final id in ids) id: Offset.zero};
+      for (var i = 0; i < ids.length; i++) {
+        for (var j = i + 1; j < ids.length; j++) {
+          final a = ids[i];
+          final b = ids[j];
+          final delta = positions[a]! - positions[b]!;
+          var dist = delta.distance;
+          if (dist < 1) dist = 1;
+          final force = delta / dist * (ideal * ideal / dist);
+          disp[a] = disp[a]! + force;
+          disp[b] = disp[b]! - force;
+        }
+      }
+      for (final id in ids) {
+        for (final other in positions.entries) {
+          if (movable.contains(other.key)) continue;
+          final delta = positions[id]! - other.value;
+          var dist = delta.distance;
+          if (dist < 1) dist = 1;
+          if (dist > ideal * 3) continue;
+          disp[id] = disp[id]! + delta / dist * (ideal * ideal / dist);
+        }
+      }
+      for (final id in ids) {
+        for (final n in adj[id] ?? const <int>[]) {
+          if (n <= id && movable.contains(n)) continue;
+          final other = positions[n];
+          if (other == null) continue;
+          final delta = other - positions[id]!;
+          var dist = delta.distance;
+          if (dist < 1) dist = 1;
+          final force = delta / dist * (dist * dist / ideal) * 0.55;
+          disp[id] = disp[id]! + force;
+          if (movable.contains(n)) {
+            disp[n] = disp[n]! - force;
+          }
+        }
+      }
+      for (final id in ids) {
+        final d = disp[id]!;
+        final len = d.distance;
+        if (len < 0.05) continue;
+        positions[id] = positions[id]! + d / len * math.min(len, cool);
+      }
+      cool *= 0.91;
     }
   }
 
@@ -197,43 +443,5 @@ class DiagramLayout {
       out.add(group);
     }
     return out;
-  }
-
-  static void _relaxUnplaced(
-    Set<int> movable,
-    Map<int, Offset> positions,
-    Map<int, List<int>> adj,
-  ) {
-    if (movable.isEmpty) return;
-    const minDist = 180.0;
-    for (var iter = 0; iter < 18; iter++) {
-      for (final id in movable) {
-        final current = positions[id];
-        if (current == null) continue;
-        var force = Offset.zero;
-        for (final other in positions.entries) {
-          if (other.key == id) continue;
-          final delta = current - other.value;
-          final dist = delta.distance;
-          if (dist < 1) {
-            force += Offset(8, iter.toDouble());
-            continue;
-          }
-          if (dist < minDist) {
-            force += delta / dist * (minDist - dist) * 0.35;
-          }
-        }
-        for (final n in adj[id] ?? const <int>[]) {
-          final other = positions[n];
-          if (other == null) continue;
-          final delta = other - current;
-          final dist = delta.distance;
-          if (dist > spacingX) {
-            force += delta / dist * (dist - spacingX) * 0.08;
-          }
-        }
-        positions[id] = current + force;
-      }
-    }
   }
 }

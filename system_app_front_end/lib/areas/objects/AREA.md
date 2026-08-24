@@ -73,7 +73,7 @@ An info object holds knowledge (`title`, `body`, …). In the file, title and bo
 - Create tag via sidebar **+**; assign tags on info embeds (context menu)
 - Info frame shows tag chips only; Add connection via context menu (no links list)
 - Description: document **Connect info…**, hover bubble, double-tap opens the info
-- **Objects map** ([`interactive_graph_view`](https://pub.dev/packages/interactive_graph_view)): info nodes + related edges; pan/zoom; drag to move. The package has no layout or persistence — we own `NodeWidget.position`. Coordinates live on the object (`diagram_x` / `diagram_y`); unsaved nodes get a sparse connected layout, then that placement is written back. Double-click expands the card **in place** (same graph point; the node is centered on its position) and temporarily pushes neighbors so edges lengthen and the card does not cover them; close restores the saved layout. Tag filter above the bottom bar lists object tags only (not topic types); topic/tag color modes
+- **Objects map** ([`interactive_graph_view`](https://pub.dev/packages/interactive_graph_view)): info nodes + related edges; pan/zoom; drag to move — the same while cards are open. The package has no layout or persistence — we own `NodeWidget.position`. Coordinates live on the object (`diagram_x` / `diagram_y`); unsaved nodes get a connected layout (layers along links, then spring forces) so related objects sit near each other. **Arrange by links** (map chip, or Graph configuration) throws every saved spot away and writes that connected layout; a later drag is saved until Arrange is pressed again. The stored point is the **center of the circle that fits the card**. Double-click a chip opens a content-tight card on that same center (several may be open); every other closed node moves out along its ray by `R_open − R_closed`. The open card is a pane overlay that follows the chip — not a larger graph node. Close with × (that card) or **Close all**. Isolated objects stay off the map unless Graph configuration shows them. Tag filter above the bottom bar lists object tags only (not topic types); topic/tag color modes
 
 In-file editing of the unified info text is presentation (files).
 
@@ -114,7 +114,7 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 
 **Shipped (data):** task CRUD/status/order; view membership pane; empty titles; object create/delete with embed insert.
 
-**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder; object tags; related + description links; objects map (`interactive_graph_view`: persisted positions, sparse first layout, expand-in-place + neighbor push, object-tag filter, color modes).
+**Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder; object tags; related + description links; objects map (`interactive_graph_view`: persisted positions, connected-first layout, Arrange by links to forget saved spots, hide unconnected by default, several open cards with ΔR ray push, pan/zoom/drag while open, close with × or Close all, object-tag filter, color modes).
 
 **Shipped (presentation, in files):** list-like task embed; info title/body + tag chips (add tag/link via context menu); table embed (+ chart quality); Move Mode; right-click text menu including Connect info; description underlines + hover/double-tap.
 

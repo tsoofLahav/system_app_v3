@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:interactive_graph_view/interactive_graph_view.dart';
@@ -8,6 +9,7 @@ import '../../../core/platform/app_form_factor.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
+import '../../ui/glass_surface.dart';
 import '../../ux/shell/app_bottom_bar.dart';
 import '../../ux/topic/topic_appearance.dart';
 import '../data/object_service.dart';
@@ -16,8 +18,13 @@ import 'diagram_layout.dart';
 /// Workspace objects map: info nodes + related edges via [interactive_graph_view].
 ///
 /// Positions persist on the object (`diagram_x` / `diagram_y`). Double-click
-/// expands in place and temporarily pushes neighbors so the card does not cover
-/// them; close restores the saved layout.
+/// opens a card in place (several may be open). Each open card keeps its
+/// circle-center; closed nodes move out along rays by `R_open − R_closed`.
+/// Pan, zoom, and drag work the same while cards are open. Close with ×
+/// (one card) or **Close all**. **Arrange by links** throws away saved spots
+/// and writes the connected layout; a later drag is saved until Arrange
+/// again. Isolated objects stay off the map unless Graph configuration
+/// shows them.
 class ObjectDiagramPane extends StatefulWidget {
   const ObjectDiagramPane({super.key, required this.state});
 
@@ -29,16 +36,26 @@ class ObjectDiagramPane extends StatefulWidget {
 
 class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
   final _positions = <int, Offset>{};
-  late final GraphViewportController<int, int> _controller;
+  final _graphKey = GlobalKey<GraphViewState<int, int>>();
+  /// Created only after the first layout, with those IDs — mounting
+  /// [GraphView] on an empty controller left chips at the origin while
+  /// edges later used the real coordinates.
+  GraphViewportController<int, int>? _controller;
+  GraphViewportTransform? _camera;
+  var _rebuildScheduled = false;
   final _nodesById = <int, ObjectGraphNode>{};
   final _edgesById = <int, ObjectGraphEdge>{};
 
-  int? _expandedObjectId;
-  Map<int, Offset>? _positionsBeforeExpand;
+  /// Rest layout (what we persist). [_positions] is the displayed map, which
+  /// includes temporary open-card push.
+  final _basePositions = <int, Offset>{};
+  final _open = <_OpenDiagramCard>[];
   Set<int> _lastNodeIds = {};
   Set<int> _lastEdgeIds = {};
   DiagramColorMode? _lastColorMode;
   var _didInitialFit = false;
+  var _appliedLayoutEpoch = 0;
+  var _arrangeScheduled = false;
 
   static const _filterFloor = AppBottomBarMetrics.scrollInset + 8;
 
@@ -70,14 +87,6 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
   @override
   void initState() {
     super.initState();
-    // Stable controller for the pane lifetime — never recreate (remounting
-    // GraphView mid-load was dropping all but one node).
-    _controller = GraphViewportController<int, int>(
-      initialNodeIds: const [],
-      initialEdgeIds: const [],
-      onNodesMoved: (ids, offset) =>
-          _onNodesMoved(Set<int>.from(ids), offset),
-    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (state.objectGraph == null) {
         state.loadObjectGraph();
@@ -85,13 +94,39 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
     });
   }
 
+  @override
+  void dispose() {
+    _camera?.removeListener(_onCamera);
+    super.dispose();
+  }
+
+  GraphViewportController<int, int> _createController(
+    Set<int> nodeIds,
+    Set<int> edgeIds,
+  ) {
+    return GraphViewportController<int, int>(
+      initialNodeIds: nodeIds,
+      initialEdgeIds: edgeIds,
+      onNodesMoved: (ids, offset) =>
+          _onNodesMoved(Set<int>.from(ids), offset),
+    );
+  }
+
   List<ObjectGraphNode> get _visibleNodes {
     final graph = state.objectGraph;
     if (graph == null) return const [];
+    var nodes = graph.nodes;
+    if (!state.diagramShowUnconnected) {
+      final connected = DiagramLayout.connectedObjectIds(
+        nodes: nodes,
+        edges: graph.edges,
+      );
+      nodes = [for (final n in nodes) if (connected.contains(n.objectId)) n];
+    }
     final filter = state.diagramFilterTagIds;
-    if (filter.isEmpty) return graph.nodes;
+    if (filter.isEmpty) return nodes;
     return [
-      for (final n in graph.nodes)
+      for (final n in nodes)
         if (n.tagIds.any(filter.contains)) n,
     ];
   }
@@ -107,16 +142,20 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
   }
 
   void _onNodesMoved(Set<int> nodeIds, Offset offset) {
-    if (_expandedObjectId != null) return;
     final moved = <int, Offset>{};
     for (final id in nodeIds) {
       final current = _positions[id];
       if (current == null) continue;
       final next = current + offset;
       _positions[id] = next;
-      moved[id] = next;
-      if (_controller.isAttached) {
-        _controller.rebuildNode(id);
+      _basePositions[id] = (_basePositions[id] ?? current) + offset;
+      for (final card in _open) {
+        if (card.objectId == id) card.origin += offset;
+      }
+      moved[id] = _basePositions[id]!;
+      final controller = _controller;
+      if (controller != null && controller.isAttached) {
+        controller.rebuildNode(id);
       }
     }
     if (moved.isNotEmpty) {
@@ -127,20 +166,33 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
   void _ensurePositions() {
     final graph = state.objectGraph;
     if (graph == null) return;
+    final rest = _open.isEmpty ? _positions : _basePositions;
     final newly = DiagramLayout.placeUnplaced(
       nodes: graph.nodes,
       edges: graph.edges,
-      positions: _positions,
+      positions: rest,
     );
     final allGraphIds = {for (final n in graph.nodes) n.objectId};
     _positions.removeWhere((id, _) => !allGraphIds.contains(id));
-    if (newly.isNotEmpty && _expandedObjectId == null) {
+    _basePositions.removeWhere((id, _) => !allGraphIds.contains(id));
+    if (_open.isEmpty) {
+      _basePositions
+        ..clear()
+        ..addAll(_positions);
+    } else if (newly.isNotEmpty) {
+      _relayoutForOpens();
+    }
+    if (newly.isNotEmpty) {
       unawaited(
         state.saveDiagramPositions({
           for (final id in newly)
-            if (_positions[id] != null) id: _positions[id]!,
+            if (_basePositions[id] != null) id: _basePositions[id]!,
         }),
       );
+      if (newly.length > 1 && _open.isEmpty) {
+        _didInitialFit = false;
+      }
+      _scheduleRebuildGraph();
     }
   }
 
@@ -164,7 +216,8 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
   }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (!_controller.isAttached) {
+      final controller = _controller;
+      if (controller == null || !controller.isAttached) {
         if (attempt < 12) {
           _scheduleControllerSync(
             nodeIds,
@@ -175,13 +228,14 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
         }
         return;
       }
-      _controller.setNodes(nodeIds);
-      _controller.setEdges(edgeIds);
+      controller.setNodes(nodeIds);
+      controller.setEdges(edgeIds);
+      _applyGraphWidgets(controller);
       // Only the first non-empty load — later fits fight pan/drag and feel stuck.
       if (fitView && !_didInitialFit && nodeIds.isNotEmpty) {
         _didInitialFit = true;
         unawaited(
-          _controller.showNodesOnScreen(
+          controller.showNodesOnScreen(
             nodeIds,
             padding: const EdgeInsets.all(48),
           ),
@@ -190,11 +244,25 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
     });
   }
 
-  void _rebuildVisibleNodes() {
-    if (!_controller.isAttached) return;
-    for (final id in _lastNodeIds) {
-      _controller.rebuildNode(id);
+  void _applyGraphWidgets(GraphViewportController<int, int> controller) {
+    for (final id in controller.allNodeIds) {
+      controller.rebuildNode(id);
     }
+    for (final id in controller.allEdgeIds) {
+      controller.rebuildEdge(id);
+    }
+  }
+
+  void _scheduleRebuildGraph() {
+    if (_rebuildScheduled) return;
+    _rebuildScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _rebuildScheduled = false;
+      if (!mounted) return;
+      final controller = _controller;
+      if (controller == null || !controller.isAttached) return;
+      _applyGraphWidgets(controller);
+    });
   }
 
   void _syncController(List<ObjectGraphNode> nodes, List<ObjectGraphEdge> edges) {
@@ -202,6 +270,18 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
     _refreshLookups(nodes, edges);
     final nodeIds = {for (final n in nodes) n.objectId};
     final edgeIds = {for (final e in edges) e.id};
+    final colorChanged = _lastColorMode != state.diagramColorMode;
+    _lastColorMode = state.diagramColorMode;
+
+    if (_controller == null) {
+      if (nodeIds.isEmpty) return;
+      _controller = _createController(nodeIds, edgeIds);
+      _lastNodeIds = nodeIds;
+      _lastEdgeIds = edgeIds;
+      _scheduleControllerSync(nodeIds, edgeIds, fitView: true);
+      return;
+    }
+
     final changed =
         nodeIds.length != _lastNodeIds.length ||
         edgeIds.length != _lastEdgeIds.length ||
@@ -209,19 +289,16 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
         !_lastNodeIds.containsAll(nodeIds) ||
         !edgeIds.containsAll(_lastEdgeIds) ||
         !_lastEdgeIds.containsAll(edgeIds);
-    final colorChanged = _lastColorMode != state.diagramColorMode;
-    _lastColorMode = state.diagramColorMode;
 
     if (changed) {
       final fitView = !_didInitialFit && nodeIds.isNotEmpty;
       _lastNodeIds = nodeIds;
       _lastEdgeIds = edgeIds;
       _scheduleControllerSync(nodeIds, edgeIds, fitView: fitView);
+    } else if (!_didInitialFit && nodeIds.isNotEmpty) {
+      _scheduleControllerSync(nodeIds, edgeIds, fitView: true);
     } else if (colorChanged) {
-      // Accents live in node builders — refresh without remounting the graph.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _rebuildVisibleNodes();
-      });
+      _scheduleRebuildGraph();
     }
   }
 
@@ -241,65 +318,208 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
     return TopicAppearance.colorFromHex(hex);
   }
 
-  Set<int> _connectedIds(int objectId) {
-    return {
-      for (final edge in _visibleEdges)
-        if (edge.sourceId == objectId)
-          edge.targetId
-        else if (edge.targetId == objectId)
-          edge.sourceId,
-    };
+  TextDirection get _textDirection => state.strings.textDirection;
+
+  GraphViewportTransform? get _transform =>
+      _graphKey.currentState?.viewportTransform;
+
+  void _syncCameraListener() {
+    final next = _graphKey.currentState?.viewportTransform;
+    if (identical(next, _camera)) return;
+    _camera?.removeListener(_onCamera);
+    _camera = next;
+    _camera?.addListener(_onCamera);
   }
 
-  void _rebuildNodes(Iterable<int> ids) {
-    if (!_controller.isAttached) return;
-    for (final id in ids) {
-      if (_lastNodeIds.contains(id) || _controller.allNodeIds.contains(id)) {
-        _controller.rebuildNode(id);
-      }
+  void _onCamera() {
+    if (!mounted || _open.isEmpty) return;
+    setState(() {});
+  }
+
+  void _rebuildGraph() => _scheduleRebuildGraph();
+
+  void _relayoutForOpens() {
+    if (_open.isEmpty) {
+      _positions
+        ..clear()
+        ..addAll(_basePositions);
+    } else {
+      DiagramLayout.applyOpenPushes(
+        base: _basePositions,
+        positions: _positions,
+        opens: [
+          for (final card in _open)
+            (
+              originId: card.objectId,
+              origin: card.origin,
+              deltaRadius: card.deltaRadius(_textDirection),
+            ),
+        ],
+      );
     }
+    _rebuildGraph();
   }
 
   void _expand(int objectId) {
-    if (_expandedObjectId == objectId) {
-      _closeExpand();
-      return;
+    if (_open.any((c) => c.objectId == objectId)) return;
+    final origin = _positions[objectId];
+    if (origin == null) return;
+    if (_open.isEmpty) {
+      _basePositions
+        ..clear()
+        ..addAll(_positions);
     }
-    if (_expandedObjectId != null) {
-      _restoreExpandPositions();
-    }
-    _positionsBeforeExpand = Map<int, Offset>.of(_positions);
-    DiagramLayout.pushNeighbors(
-      originId: objectId,
-      positions: _positions,
-      connectedIds: _connectedIds(objectId),
+    final node = _nodesById[objectId];
+    _open.add(
+      _OpenDiagramCard(
+        objectId: objectId,
+        origin: origin,
+        title: node?.title ?? '',
+        body: node?.body ?? '',
+      ),
     );
-    final touched = _positions.keys.toSet();
-    setState(() => _expandedObjectId = objectId);
+    _relayoutForOpens();
+    setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _rebuildNodes(touched);
+      if (!mounted || _open.isEmpty) return;
+      _syncCameraListener();
+      setState(() {});
     });
   }
 
-  void _restoreExpandPositions() {
-    final snapshot = _positionsBeforeExpand;
-    if (snapshot == null) return;
-    _positions
-      ..clear()
-      ..addAll(snapshot);
-    _positionsBeforeExpand = null;
+  void _closeOne(int objectId) {
+    final before = _open.length;
+    _open.removeWhere((c) => c.objectId == objectId);
+    if (_open.length == before) return;
+    _finishClose();
   }
 
-  void _closeExpand() {
-    final previous = _expandedObjectId;
-    if (previous == null) return;
-    _restoreExpandPositions();
-    setState(() => _expandedObjectId = null);
+  void _closeAll() {
+    if (_open.isEmpty) return;
+    _open.clear();
+    _finishClose();
+  }
+
+  void _finishClose() {
+    _relayoutForOpens();
+    if (_open.isEmpty && DiagramLayout.isCollapsed(_positions.values)) {
+      _positions.clear();
+      _basePositions.clear();
+      _ensurePositions();
+    }
+    setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _rebuildNodes([previous, ..._positions.keys]);
+      if (mounted) _rebuildGraph();
     });
+  }
+
+  void _consumeArrangeRequest() {
+    if (state.diagramLayoutEpoch <= _appliedLayoutEpoch) return;
+    if (_arrangeScheduled) return;
+    _arrangeScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _arrangeScheduled = false;
+      if (!mounted) return;
+      if (state.diagramLayoutEpoch <= _appliedLayoutEpoch) return;
+      _appliedLayoutEpoch = state.diagramLayoutEpoch;
+      _arrangeByConnections();
+    });
+  }
+
+  /// Throw away saved spots and lay every node out from the links.
+  void _arrangeByConnections() {
+    final graph = state.objectGraph;
+    if (graph == null || graph.nodes.isEmpty) return;
+    _appliedLayoutEpoch = math.max(
+      _appliedLayoutEpoch,
+      state.diagramLayoutEpoch,
+    );
+    _open.clear();
+    _positions.clear();
+    _basePositions.clear();
+    DiagramLayout.layoutAll(
+      nodes: graph.nodes,
+      edges: graph.edges,
+      positions: _positions,
+    );
+    _basePositions.addAll(_positions);
+    unawaited(state.saveDiagramPositions(Map<int, Offset>.from(_positions)));
+    _didInitialFit = false;
+    setState(() {});
+    _scheduleRebuildGraph();
+    final nodeIds = {for (final n in _visibleNodes) n.objectId};
+    if (nodeIds.isEmpty) return;
+    _scheduleControllerSync(
+      nodeIds,
+      {for (final e in _visibleEdges) e.id},
+      fitView: true,
+    );
+  }
+
+  void _onOpenCardChanged(int objectId, String title, String body) {
+    final card = _open.where((c) => c.objectId == objectId).firstOrNull;
+    if (card == null) return;
+    card.title = title;
+    card.body = body;
+    _relayoutForOpens();
+    setState(() {});
+  }
+
+  List<Widget> _buildOpenOverlays() {
+    final transform = _transform;
+    if (transform == null || !transform.hasViewportSize) {
+      return const [];
+    }
+    return [
+      for (final card in _open)
+        _buildOpenOverlay(card, transform.toScreenSpacePosition(card.origin)),
+    ];
+  }
+
+  Widget _buildOpenOverlay(_OpenDiagramCard card, Offset center) {
+    final node = _nodesById[card.objectId];
+    if (node == null) return const SizedBox.shrink();
+    final size = card.openSize(_textDirection);
+    final accent = _accentFor(node);
+    return Positioned(
+      left: center.dx - size.width / 2,
+      top: center.dy - size.height / 2,
+      width: size.width,
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        child: Material(
+          color: Colors.transparent,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: _NodeChrome(accent: accent, expanded: true),
+              ),
+              _ExpandedInfoCard(
+                key: ValueKey('diagram-expand-${node.objectId}'),
+                node: node,
+                width: size.width,
+                accent: accent,
+                onChanged: (title, body) =>
+                    _onOpenCardChanged(card.objectId, title, body),
+                onSave: node.informationId == null
+                    ? null
+                    : (title, body) => state.updateInfoFromDiagram(
+                          informationId: node.informationId!,
+                          objectId: node.objectId,
+                          title: title,
+                          body: body,
+                        ),
+              ),
+              Positioned(
+                top: 2,
+                right: 2,
+                child: _DiagramCloseHit(onClose: () => _closeOne(card.objectId)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -309,13 +529,16 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
       builder: (context, _) {
         final nodes = _visibleNodes;
         final edges = _visibleEdges;
-        if (_expandedObjectId != null &&
-            !_nodesById.containsKey(_expandedObjectId) &&
-            !nodes.any((n) => n.objectId == _expandedObjectId)) {
-          _restoreExpandPositions();
-          _expandedObjectId = null;
+        final visibleIds = {for (final n in nodes) n.objectId};
+        if (_open.any((c) => !visibleIds.contains(c.objectId))) {
+          _open.removeWhere((c) => !visibleIds.contains(c.objectId));
+          _relayoutForOpens();
         }
+        _consumeArrangeRequest();
         _syncController(nodes, edges);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _syncCameraListener();
+        });
 
         final theme = Theme.of(context);
         return Stack(
@@ -335,8 +558,13 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
                     const GraphStyle(backgroundColor: _graphBackground),
                   ],
                 ),
-                child: GraphView<int, int>(
-                  viewportController: _controller,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (_controller != null)
+                    GraphView<int, int>(
+                  key: _graphKey,
+                  viewportController: _controller!,
                   // false = parent rebuilds (filter chrome, etc.) do not tear
                   // down every node mid-drag / mid-pan.
                   rebuildAllChildrenOnWidgetUpdate: false,
@@ -346,51 +574,38 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
                     final node = _nodesById[nodeId];
                     final position = _positions[nodeId];
                     if (node == null || position == null) {
-                      // Keep a real slot so edges can anchor; avoid empty
-                      // zero-size widgets that vanish from the quad tree.
+                      // Keep a real slot so edges can anchor. Never collapse
+                      // missing coords onto Offset.zero — that stacked every
+                      // chip on the first object while edges kept real ends.
                       return NodeWidget.basic(
-                        position: position ?? Offset.zero,
+                        position: position ?? Offset(
+                          (nodeId % 8) * DiagramLayout.spacingX,
+                          (nodeId % 5) * DiagramLayout.spacingY,
+                        ),
                         text: '…',
                         isDragEnabled: false,
                       );
                     }
-                    final expanded = nodeId == _expandedObjectId;
+                    final expanded = _open.any((c) => c.objectId == nodeId);
                     final accent = _accentFor(node);
                     return NodeWidget.custom(
+                      key: ValueKey('info-node-$nodeId'),
                       position: position,
-                      // Drag during expand would persist the temporary push.
-                      isDragEnabled: _expandedObjectId == null,
-                      onDoubleTap: () => _expand(nodeId),
-                      style: NodeStyle(
-                        borderRadius:
-                            Radius.circular(expanded ? 12 : 8),
+                      isDragEnabled: true,
+                      onDoubleTap: expanded ? null : () => _expand(nodeId),
+                      style: const NodeStyle(
+                        borderRadius: Radius.circular(8),
                         clipBehavior: Clip.antiAlias,
                         contentConstraints: BoxConstraints(
-                          maxWidth: expanded ? 280 : 96,
-                          minWidth: expanded ? 200 : 40,
+                          maxWidth: DiagramLayout.closedMaxWidth,
+                          minWidth: 40,
                         ),
                       ),
                       background: _NodeChrome(
                         accent: accent,
-                        expanded: expanded,
+                        expanded: false,
                       ),
-                      content: expanded
-                          ? _ExpandedInfoCard(
-                              key: ValueKey('diagram-expand-$nodeId'),
-                              node: node,
-                              accent: accent,
-                              onClose: _closeExpand,
-                              onSave: node.informationId == null
-                                  ? null
-                                  : (title, body) =>
-                                      state.updateInfoFromDiagram(
-                                        informationId: node.informationId!,
-                                        objectId: node.objectId,
-                                        title: title,
-                                        body: body,
-                                      ),
-                            )
-                          : _InfoNodeCard(title: node.title),
+                      content: _InfoNodeCard(title: node.title),
                     );
                   },
                   edgeBuilder: (context, edgeId) {
@@ -409,13 +624,38 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
                       style: _edgeStyle,
                     );
                   },
+                    ),
+                    ..._buildOpenOverlays(),
+                    if (state.objectGraph != null &&
+                        state.objectGraph!.nodes.isNotEmpty)
+                      PositionedDirectional(
+                        top: 4,
+                        start: 4,
+                        child: _ArrangeHit(
+                          onArrange: _arrangeByConnections,
+                          label: state.strings['diagramArrange'],
+                          hint: state.strings['diagramArrangeHint'],
+                        ),
+                      ),
+                    if (_open.isNotEmpty)
+                      PositionedDirectional(
+                        top: 4,
+                        end: 4,
+                        child: _CloseAllHit(onCloseAll: _closeAll, label: state.strings['diagramCloseAll']),
+                      ),
+                  ],
                 ),
               ),
             ),
             if (nodes.isEmpty)
               Center(
                 child: Text(
-                  state.strings['diagramEmpty'],
+                  state.objectGraph != null &&
+                          state.objectGraph!.nodes.isNotEmpty &&
+                          !state.diagramShowUnconnected
+                      ? state.strings['diagramEmptyUnconnected']
+                      : state.strings['diagramEmpty'],
+                  textAlign: TextAlign.center,
                   style: AppTypography.noteBodyStyle.copyWith(
                     color: AppColors.textHint,
                   ),
@@ -424,6 +664,44 @@ class _ObjectDiagramPaneState extends State<ObjectDiagramPane> {
           ],
         );
       },
+    );
+  }
+}
+
+class _OpenDiagramCard {
+  _OpenDiagramCard({
+    required this.objectId,
+    required this.origin,
+    required this.title,
+    required this.body,
+  });
+
+  final int objectId;
+  Offset origin;
+  String title;
+  String body;
+
+  double deltaRadius(TextDirection textDirection) {
+    final closed = DiagramLayout.measureClosedChip(
+      title,
+      textDirection: textDirection,
+    );
+    final open = DiagramLayout.measureOpenCard(
+      title,
+      body,
+      textDirection: textDirection,
+    );
+    return math.max(
+      0.0,
+      DiagramLayout.circumradius(open) - DiagramLayout.circumradius(closed),
+    );
+  }
+
+  Size openSize(TextDirection textDirection) {
+    return DiagramLayout.measureOpenCard(
+      title,
+      body,
+      textDirection: textDirection,
     );
   }
 }
@@ -499,17 +777,106 @@ class _InfoNodeCard extends StatelessWidget {
   }
 }
 
+/// Overlay close — [Listener] beats the graph gesture arena that ate IconButton.
+class _DiagramCloseHit extends StatelessWidget {
+  const _DiagramCloseHit({required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) => onClose(),
+      child: Tooltip(
+        message: MaterialLocalizations.of(context).closeButtonTooltip,
+        child: const SizedBox(
+          width: 28,
+          height: 28,
+          child: Center(child: AppIcon(AppIcons.close, size: 16)),
+        ),
+      ),
+    );
+  }
+}
+
+class _CloseAllHit extends StatelessWidget {
+  const _CloseAllHit({required this.onCloseAll, required this.label});
+
+  final VoidCallback onCloseAll;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) => onCloseAll(),
+      child: GlassBarSegment(
+        height: 32,
+        tightShadow: true,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const AppIcon(AppIcons.close, size: 14),
+            const SizedBox(width: 6),
+            Text(label, style: AppTypography.metaStyle.copyWith(fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ArrangeHit extends StatelessWidget {
+  const _ArrangeHit({
+    required this.onArrange,
+    required this.label,
+    required this.hint,
+  });
+
+  final VoidCallback onArrange;
+  final String label;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) => onArrange(),
+      child: Tooltip(
+        message: hint,
+        child: GlassBarSegment(
+          height: 32,
+          tightShadow: true,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const AppIcon(AppIcons.arrange, size: 14),
+              const SizedBox(width: 6),
+              Text(label, style: AppTypography.metaStyle.copyWith(fontSize: 11)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ExpandedInfoCard extends StatefulWidget {
   const _ExpandedInfoCard({
     super.key,
     required this.node,
-    required this.onClose,
+    required this.width,
+    required this.onChanged,
     required this.onSave,
     this.accent,
   });
 
   final ObjectGraphNode node;
-  final VoidCallback onClose;
+  final double width;
+  final void Function(String title, String body) onChanged;
   final Future<void> Function(String title, String body)? onSave;
   final Color? accent;
 
@@ -546,7 +913,8 @@ class _ExpandedInfoCardState extends State<_ExpandedInfoCard> {
     super.dispose();
   }
 
-  void _scheduleSave() {
+  void _onChanged() {
+    widget.onChanged(_title.text, _body.text);
     final save = widget.onSave;
     if (save == null) return;
     _saveTimer?.cancel();
@@ -560,55 +928,41 @@ class _ExpandedInfoCardState extends State<_ExpandedInfoCard> {
     return Material(
       color: Colors.transparent,
       child: SizedBox(
-        width: 280,
+        width: widget.width,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 6, 6, 10),
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _title,
-                      style: AppTypography.noteTitleStyle.copyWith(
-                        fontSize: 13,
-                      ),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      onChanged: (_) => _scheduleSave(),
-                    ),
+              Padding(
+                padding: const EdgeInsets.only(right: 22),
+                child: TextField(
+                  controller: _title,
+                  autofocus: false,
+                  style: AppTypography.noteTitleStyle.copyWith(
+                    fontSize: 13,
                   ),
-                  IconButton(
-                    tooltip: MaterialLocalizations.of(context)
-                        .closeButtonTooltip,
-                    onPressed: widget.onClose,
-                    visualDensity: VisualDensity.compact,
-                    iconSize: 16,
-                    padding: const EdgeInsets.all(4),
-                    constraints: const BoxConstraints(
-                      minWidth: 28,
-                      minHeight: 28,
-                    ),
-                    icon: const AppIcon(AppIcons.close, size: 16),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
                   ),
-                ],
+                  onChanged: (_) => _onChanged(),
+                ),
               ),
               TextField(
                 controller: _body,
+                autofocus: false,
                 style: AppTypography.noteBodyStyle.copyWith(fontSize: 12),
-                maxLines: 6,
-                minLines: 3,
+                maxLines: null,
+                minLines: 1,
                 decoration: const InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
                 ),
-                onChanged: (_) => _scheduleSave(),
+                onChanged: (_) => _onChanged(),
               ),
             ],
           ),

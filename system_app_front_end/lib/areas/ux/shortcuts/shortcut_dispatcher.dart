@@ -183,8 +183,7 @@ Future<void> _cycleTopicFiles(
     reverse: reverse,
   );
   if (next == null) return;
-  runAfterKeystroke(() {
-    if (!context.mounted) return;
-    state.reorderTopicFiles(topic, ordered: next);
-  });
+  // Chrome, not a text action. Waiting for KeyUp (`runAfterKeystroke`) stalls
+  // up to 500ms when no field is focused — Cmd stays "pressed" with no IME.
+  await state.reorderTopicFiles(topic, ordered: next);
 }

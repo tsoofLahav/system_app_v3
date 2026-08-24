@@ -132,7 +132,7 @@ Do not wrap `MaterialApp` or the topic canvas in `Consumer<AppState>` / a shell 
 |---------|-------|-----------|
 | Topic | Sidebar topic | [`topic/topic_view.dart`](topic/topic_view.dart) — files laid out |
 | Task view | Sidebar view | [`../objects/views/task_view_pane.dart`](../objects/views/task_view_pane.dart) — grid of list frames |
-| Objects map | Sidebar **Objects map** (below topics) | [`../objects/diagram/object_diagram_pane.dart`](../objects/diagram/object_diagram_pane.dart) — `interactive_graph_view` canvas; drag move, double-click expand; tag filter, color modes |
+| Objects map | Sidebar **Objects map** (below topics) | [`../objects/diagram/object_diagram_pane.dart`](../objects/diagram/object_diagram_pane.dart) — `interactive_graph_view` canvas; pan/zoom/drag always; double-click chip to open (several at once); × or Close all; Arrange by links (clears saved spots); hide unconnected unless configured; tag filter, color modes |
 | Archive | Sidebar archive | [`archive/`](archive/) — paginated grid, search, read-only preview |
 
 ### Archive
@@ -210,7 +210,7 @@ Shortcuts are user-rebindable. [`shortcuts/`](shortcuts/) owns the catalog of av
 | Go home | Opens Home |
 | Bring file | Search overlay of files from other topics; choosing one **visits** it on Home in the layout (same document, still owned by its topic). Repeat to visit more. Arrange and cycle include those visits. |
 | Arrange | File arrange overlay (topic page) |
-| Cycle files | ⌘[ and ⌘] rotate **every live file in the topic** in a circle (not only the layout’s slots; not archived). Topic-level, not a text shortcut — works without a file focused |
+| Cycle files | ⌘[ and ⌘] rotate **every live file in the topic** in a circle (not only the layout’s slots; not archived). Topic-level chrome — applies immediately, even with no caret. Do not wait for KeyUp / `runAfterKeystroke` |
 | Add file / topic / view | The same dialogs as the chrome |
 | Assign task view | Assign dialog when a task has the caret |
 | Agent / slot keys | Agent prompt (⌘⇧1), or the saved action in that bar seat |

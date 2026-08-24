@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/app_state.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_segmented_toggle.dart';
+import '../../ui/app_typography.dart';
 import '../../ui/dialog_field_style.dart';
 import '../data/object_service.dart';
 
@@ -35,20 +36,57 @@ class DiagramGraphConfigDialog extends StatelessWidget {
               child: Text(s['ok']),
             ),
           ],
-          child: AppDialogChoiceField<DiagramColorMode>(
-            label: s['diagramGraphColors'],
-            options: [
-              AppSegmentedOption(
-                value: DiagramColorMode.byTopic,
-                label: s['diagramColorByTopic'],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppDialogChoiceField<DiagramColorMode>(
+                label: s['diagramGraphColors'],
+                options: [
+                  AppSegmentedOption(
+                    value: DiagramColorMode.byTopic,
+                    label: s['diagramColorByTopic'],
+                  ),
+                  AppSegmentedOption(
+                    value: DiagramColorMode.byTag,
+                    label: s['diagramColorByTag'],
+                  ),
+                ],
+                selected: state.diagramColorMode,
+                onSelected: state.setDiagramColorMode,
               ),
-              AppSegmentedOption(
-                value: DiagramColorMode.byTag,
-                label: s['diagramColorByTag'],
+              const SizedBox(height: DialogFieldStyle.fieldGap),
+              AppDialogChoiceField<bool>(
+                label: s['diagramUnconnected'],
+                options: [
+                  AppSegmentedOption(
+                    value: false,
+                    label: s['diagramUnconnectedHide'],
+                  ),
+                  AppSegmentedOption(
+                    value: true,
+                    label: s['diagramUnconnectedShow'],
+                  ),
+                ],
+                selected: state.diagramShowUnconnected,
+                onSelected: state.setDiagramShowUnconnected,
+              ),
+              const SizedBox(height: DialogFieldStyle.fieldGap),
+              Text(
+                s['diagramArrangeHint'],
+                style: AppTypography.metaStyle,
+              ),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton(
+                  onPressed: () {
+                    state.requestDiagramRelayout();
+                    Navigator.pop(context);
+                  },
+                  child: Text(s['diagramArrangeNow']),
+                ),
               ),
             ],
-            selected: state.diagramColorMode,
-            onSelected: state.setDiagramColorMode,
           ),
         );
       },
