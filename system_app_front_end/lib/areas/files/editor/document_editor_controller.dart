@@ -1,6 +1,7 @@
 import 'package:flutter/painting.dart';
 
 import '../../../shared/utils/frame_safe_notifier.dart';
+import '../rich_text/block_text_focus.dart';
 
 class DocumentEditorController {
   DocumentEditorController({
@@ -105,5 +106,11 @@ class DocumentEditorRegistry {
     if (raw == null || raw.isEmpty) return null;
     if (raw.length <= maxChars) return raw;
     return raw.substring(0, maxChars);
+  }
+
+  /// Freeze embed marks and read `selected_text` before a dialog steals focus.
+  static String? captureMarkedTextForAgent({int maxChars = 400}) {
+    BlockTextFocusRegistry.capturePendingMark();
+    return activeMarkedTextForAgent(maxChars: maxChars);
   }
 }

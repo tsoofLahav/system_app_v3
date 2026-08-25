@@ -58,5 +58,6 @@ Do not repeat what the file already says, unless the ask is to restructure that 
 The first message is the user `prompt`, plus `scope` and optional `hints`.
 
 - **`prompt`** — the ask. It decides what to do and where it happens.
-- **`scope`** and **`hints`** — where the user is standing right now: the open topic, its files, `focused_file_id`, and `selected_text` (the caret line or marked span). When the prompt says "this line", "this file", "this topic", it means the ones in the hints.
+- **`scope`** and **`hints`** — where the user is standing right now: the open topic, its files, `focused_file_id`, and `selected_text` (the marked span, or the caret line when unmarked). When the prompt says "this file" or "this topic", it means the ones in the hints. When it says "this", "this line", or "the marked text", it means `selected_text`.
+- When `selected_text` is present, an image of “this” (or any ask about the mark) uses **that string** as `create_object` image `body`. `open_file` is still how you place the picture; do not illustrate or rewrite from the rest of the file unless the prompt asks for the whole file.
 - **`hints.today`, `hints.weekday`, `hints.now`** — the real current date and time. Any date you write comes from these; you have no other clock, so never infer one.

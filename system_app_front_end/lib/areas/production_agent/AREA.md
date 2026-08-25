@@ -32,9 +32,11 @@ The frontend sends preferred context (not a hard tool allow-list — tools may b
 selected topic  → scope.topic_ids
 selected topic's files → scope.file_ids
 active editor file → hints.focused_file_id   (tiny pointer; not the file body)
-caret line / mark → hints.selected_text      (tiny; marked span, or caret line when unmarked)
+caret line / mark → hints.selected_text      (tiny; captured **before** the prompt dialog steals focus — marked span, or caret line when unmarked)
 local clock → hints.today / weekday / now    ([`agent_time_hints.dart`](agent_time_hints.dart))
 ```
+
+When `selected_text` is present, “this” / the marked text (including an image of it) means that string, not a summary of `open_file`.
 
 The clock hints are not optional: without them the model dates a line from memory. Send the **local** day — the backend can only fall back to UTC, which is the wrong date late in the evening.
 

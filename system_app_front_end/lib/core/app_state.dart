@@ -1387,7 +1387,10 @@ class AppState extends ChangeNotifier {
 
   /// Runs a saved action on what is open right now — the same scope and hints
   /// the agent dialog sends.
-  Future<Map<String, dynamic>> runAiAction(AiAction action) async {
+  Future<Map<String, dynamic>> runAiAction(
+    AiAction action, {
+    String? selectedText,
+  }) async {
     aiRunning = true;
     notifyListeners();
     try {
@@ -1395,7 +1398,7 @@ class AppState extends ChangeNotifier {
       final result = await _aiActions.run(
         action.id,
         scope: agentRunScope(),
-        hints: agentRunHints(),
+        hints: agentRunHints(selectedText: selectedText),
       );
       final changes = result['proposed_changes'];
       if (changes is List &&
@@ -2661,16 +2664,23 @@ class AppState extends ChangeNotifier {
 
   /// Pointers into what is open: the clock, the file being edited, the mark.
   ///
-  /// Call after flushing the editor — `selected_text` reads the live mark.
-  Map<String, dynamic> agentRunHints() => {
-    ...agentTimeHints(),
-    'focused_file_id': ?DocumentEditorRegistry.activeFileId,
-    'selected_text': ?DocumentEditorRegistry.activeMarkedTextForAgent(),
-  };
+  /// [selectedText] is the mark captured **before** a dialog stole focus.
+  /// Call after flushing the editor when reading the live mark instead.
+  Map<String, dynamic> agentRunHints({String? selectedText}) {
+    final mark =
+        (selectedText ?? DocumentEditorRegistry.activeMarkedTextForAgent())
+            ?.trim();
+    return {
+      ...agentTimeHints(),
+      'focused_file_id': ?DocumentEditorRegistry.activeFileId,
+      if (mark != null && mark.isNotEmpty) 'selected_text': mark,
+    };
+  }
 
   Future<Map<String, dynamic>?> runAgentPrompt(
     String prompt, {
     String? applyMode,
+    String? selectedText,
   }) async {
     if (workspaceId == null) return null;
     aiRunning = true;
@@ -2683,7 +2693,7 @@ class AppState extends ChangeNotifier {
         prompt: prompt,
         workspaceId: workspaceId!,
         scope: agentRunScope(),
-        hints: agentRunHints(),
+        hints: agentRunHints(selectedText: selectedText),
         applyMode: applyMode,
       );
       return result;

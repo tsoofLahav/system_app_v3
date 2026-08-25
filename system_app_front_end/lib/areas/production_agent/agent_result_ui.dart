@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
+import '../files/editor/document_editor_controller.dart';
 import '../production_agent/ai_action.dart';
 import './agent_message_snackbar.dart';
 import './compact_undo_toast.dart';
@@ -18,7 +19,8 @@ Future<void> runSavedAgentAction(
   AiAction action,
 ) async {
   try {
-    final result = await state.runAiAction(action);
+    final selectedText = DocumentEditorRegistry.captureMarkedTextForAgent();
+    final result = await state.runAiAction(action, selectedText: selectedText);
     if (!context.mounted) return;
     await presentAgentRunResult(context, state, result);
   } catch (e) {

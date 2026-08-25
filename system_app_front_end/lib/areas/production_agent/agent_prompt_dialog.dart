@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
 import '../../core/l10n/app_strings.dart';
+import '../files/editor/document_editor_controller.dart';
 import '../ui/action_icon_picker.dart';
 import '../ui/action_icons.dart';
 import '../ui/adaptive_dialog.dart';
@@ -51,6 +52,9 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
     return;
   }
 
+  // Capture before the dialog steals focus and collapses the mark.
+  final selectedText = DocumentEditorRegistry.captureMarkedTextForAgent();
+
   final request = await showAppDialog<AgentPromptRequest>(
     context: context,
     builder: (ctx) => AgentPromptDialog(state: state),
@@ -79,6 +83,7 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
     final result = await state.runAgentPrompt(
       request.prompt,
       applyMode: request.applyMode,
+      selectedText: selectedText,
     );
     if (!context.mounted || result == null) return;
     await presentAgentRunResult(context, state, result);

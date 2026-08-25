@@ -237,7 +237,7 @@ Everything an action needs is on the mark, so no action re-derives ranges:
 
 ### Freezing
 
-Opening the right-click menu can move focus and collapse a selection, so the mark is captured on secondary pointer-down (`capturePendingMark`) and **frozen** for the life of the menu (`openMenuSession`). While a menu is open, `resolveMark()` returns the frozen mark, so the target cannot shift under the user between opening the menu and choosing an item.
+Opening the right-click menu can move focus and collapse a selection, so the mark is captured on secondary pointer-down (`capturePendingMark`) and **frozen** for the life of the menu (`openMenuSession`). While a menu is open, `resolveMark()` returns the frozen mark, so the target cannot shift under the user between opening the menu and choosing an item. The agent prompt and saved AI actions capture the same way **before** the dialog or run steals focus (`DocumentEditorRegistry.captureMarkedTextForAgent`), so `hints.selected_text` is the mark the user had, not an empty selection.
 
 The frozen mark is also what gets highlighted, on **every part it covers**, so the user can see the exact extent an action will apply to before choosing it. While that overlay is up, the field's native selection paint is hidden — there is never a second wash (user selection + line-at-caret) at the same time.
 
