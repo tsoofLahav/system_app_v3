@@ -18,6 +18,7 @@ import '../document_text_flow.dart';
 import '../edit_conflict.dart';
 import '../editor_key_handoff.dart';
 import '../embed_caret_bridge.dart';
+import './object_look.dart';
 import './table_chart.dart';
 
 /// Table object embed — [RichTableEditor] (+ optional chart chrome).
@@ -374,6 +375,10 @@ class TableEmbedState extends State<TableEmbed>
   }
 
   Future<void> _onChartMenuAction(String action) async {
+    if (action.startsWith('look:')) {
+      _setLook(action.substring('look:'.length));
+      return;
+    }
     if (action.startsWith('chart:type:')) {
       _setChartType(action.substring('chart:type:'.length));
       return;
@@ -383,12 +388,23 @@ class TableEmbedState extends State<TableEmbed>
     }
   }
 
+  void _setLook(String look) {
+    if (!ObjectLook.tableLooks.contains(look)) return;
+    setState(() {
+      _payload = TableObjectPayload.normalize(
+        ObjectLook.withLook(_payload, look),
+      );
+    });
+    _persistNow();
+  }
+
   Future<void> _showChartMenu(TapDownDetails details) async {
     DocumentSecondaryTap.markEmbedHandled();
     await DocumentContextMenu.showChartMenu(
       context: context,
       globalPosition: details.globalPosition,
       strings: widget.strings,
+      look: ObjectLook.tableOf(_payload),
       onAction: (action) async {
         if (action == 'table:reorder_columns') {
           beginTableReorderColumns();
@@ -452,10 +468,11 @@ class TableEmbedState extends State<TableEmbed>
           onExitTable: _onExitTable,
           onDeleteTable: widget.onDeleteObject,
           onReorderColumn: chartOn ? _onReorderColumn : null,
+          look: ObjectLook.tableOf(_payload),
           extraMenuEntries: chartOn
               ? DocumentContextMenu.buildChartEntries(widget.strings)
               : const [],
-          onExtraMenuAction: chartOn ? _onChartMenuAction : null,
+          onExtraMenuAction: _onChartMenuAction,
           onConnectInfo: () async {
             await connectInfoFromMark(
               context: context,

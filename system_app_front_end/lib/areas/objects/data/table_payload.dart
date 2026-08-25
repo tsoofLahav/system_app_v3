@@ -72,6 +72,10 @@ class TableObjectPayload {
           columnCount: rows.isEmpty ? 2 : (rows.first as List).length,
         );
       }
+      final look = raw['look'];
+      if (look is String && look.trim().isNotEmpty) {
+        out['look'] = look.trim();
+      }
       return out;
     }
 
@@ -91,7 +95,7 @@ class TableObjectPayload {
         ? <String>[]
         : [...colors, ...List.filled(n, '')].take(n).toList();
 
-    return {
+    final out = <String, dynamic>{
       'rows': [
         [
           for (final t in lab) {'text': t},
@@ -106,6 +110,11 @@ class TableObjectPayload {
         'colors': cols,
       },
     };
+    final look = raw['look'];
+    if (look is String && look.trim().isNotEmpty) {
+      out['look'] = look.trim();
+    }
+    return out;
   }
 
   static List<List<Map<String, dynamic>>> rowsOf(Map<String, dynamic> payload) {

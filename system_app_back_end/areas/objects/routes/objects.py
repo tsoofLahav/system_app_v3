@@ -157,7 +157,7 @@ def update_object(object_id):
         embed.diagram_x = None if data["diagram_x"] is None else float(data["diagram_x"])
     if "diagram_y" in data:
         embed.diagram_y = None if data["diagram_y"] is None else float(data["diagram_y"])
-    if "payload" in data and embed.type in {"image", "table"}:
+    if "payload" in data and embed.type in {"image", "table", "info"}:
         payload = data["payload"] or {}
         if embed.type == "table":
             from areas.objects.services.table_payload import normalize_table_payload

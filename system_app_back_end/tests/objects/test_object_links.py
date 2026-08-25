@@ -67,6 +67,11 @@ def test_info_host_description_also_writes_related():
     assert "ensure_related_info_link" in source
 
 
+def test_patch_allows_info_payload():
+    source = inspect.getsource(object_routes.update_object)
+    assert 'embed.type in {"image", "table", "info"}' in source
+
+
 def test_file_description_links_use_host_file():
     source = inspect.getsource(object_routes.list_file_description_links)
     assert 'target_type="file"' not in source

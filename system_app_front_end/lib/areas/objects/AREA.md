@@ -11,9 +11,9 @@ This area owns **data, services, and type logic**. How an object is *presented i
 | Type | Special quality (this area) | In-file presentation (files) |
 |------|-----------------------------|------------------------------|
 | `task_list` | Tasks as rows; order; done/active; **views** | List-like embed ([`../files/editor/embeds/inline_task_list.dart`](../files/editor/embeds/inline_task_list.dart)) |
-| `info` | Knowledge piece; **links / object graph** | One-text embed; first line = title ([`../files/editor/embeds/object_embed_widgets.dart`](../files/editor/embeds/object_embed_widgets.dart)) |
-| `image` | Asset + caption payload; `width` 0–1 of the pane | Image embed (same file); right-click size menu |
-| `table` | Grid (`payload.rows`); optional **chart** quality | [`../files/editor/embeds/table_embed.dart`](../files/editor/embeds/table_embed.dart) (`RichTableEditor` + chart chrome) |
+| `info` | Knowledge piece; **links / object graph**; optional `payload.look` | One-text embed; first line = title ([`../files/editor/embeds/object_embed_widgets.dart`](../files/editor/embeds/object_embed_widgets.dart)); chrome **Look** |
+| `image` | Asset + caption payload; `width` 0–1 of the pane; optional `payload.look` | Image embed (same file); right-click size + **Look** |
+| `table` | Grid (`payload.rows`); optional **chart** quality; optional `payload.look` | [`../files/editor/embeds/table_embed.dart`](../files/editor/embeds/table_embed.dart) (`RichTableEditor` + chart chrome); chrome **Look** |
 
 Payload helpers: [`data/table_payload.dart`](data/table_payload.dart). Insert “graph” creates a table with `chart.enabled`.
 
@@ -85,8 +85,11 @@ In-file editing of the unified info text is presentation (files).
 
 | Type | Data |
 |------|------|
-| `image` | Payload: url/path/caption; `width` is 0–1 of the file pane |
-| `table` | Payload: `rows` + optional `chart` (`enabled`, `chartType`, `colors[]`) — see [`data/table_payload.dart`](data/table_payload.dart) |
+| `image` | Payload: url/path/caption; `width` is 0–1 of the file pane; optional `look` (`none` / `frame` / `greyscale` / `frame_greyscale`) |
+| `table` | Payload: `rows` + optional `chart` (`enabled`, `chartType`, `colors[]`) + optional `look` (`grid` / `open` / `lined`) — see [`data/table_payload.dart`](data/table_payload.dart) |
+| `info` | Title/body on `information_pieces`; optional `objects.payload.look` (`card` / `plain` / `ruled`) so the card chrome can persist |
+
+Each object remembers its own look (chrome right-click **Look**). Omitted `look` is today’s default. Task lists have no look picker. Table normalize must keep `look`.
 
 Graph/table cells and info title/body live on the object row, not in marker text. Concurrent user + agent edits are resolved in files ([`../files/editor/edit_conflict.dart`](../files/editor/edit_conflict.dart)): inbound wins unless the embed is dirty, then the user chooses.
 

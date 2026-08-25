@@ -35,6 +35,7 @@ import './editor_key_handoff.dart';
 import './embed_caret_bridge.dart';
 import './embed_move_bubble.dart';
 import './embeds/image_display_size.dart';
+import './embeds/object_look.dart';
 import './cmd_click_link_handler.dart';
 import './file_editor_keyboard_actions.dart';
 import './object_embed_component.dart';
@@ -1390,9 +1391,14 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           context: context,
           globalPosition: globalPosition,
           strings: strings,
+          look: ObjectLook.infoOf(embed.payload),
           onAction: (action) async {
             if (action == 'object:move_mode') {
               _toggleMoveModeForNode(node.id);
+              return;
+            }
+            if (action.startsWith('look:')) {
+              await _applyObjectLook(embed, action);
               return;
             }
             if (action == 'info:add_tag') {
@@ -1457,9 +1463,14 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
             context: context,
             globalPosition: globalPosition,
             strings: strings,
+            look: ObjectLook.tableOf(embed.payload),
             onAction: (action) async {
               if (action == 'object:move_mode') {
                 _toggleMoveModeForNode(node.id);
+                return;
+              }
+              if (action.startsWith('look:')) {
+                await _applyObjectLook(embed, action);
                 return;
               }
               if (action == 'table:reorder_columns') {
@@ -1478,9 +1489,14 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
             strings: strings,
             includeConnectInfo: false,
             includeMoveObject: true,
+            tableLook: ObjectLook.tableOf(embed.payload),
             onAction: (action) async {
               if (action == 'object:move_mode') {
                 _toggleMoveModeForNode(node.id);
+                return;
+              }
+              if (action.startsWith('look:')) {
+                await _applyObjectLook(embed, action);
                 return;
               }
               if (action == 'table:add_column') {
@@ -1525,9 +1541,14 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           globalPosition: globalPosition,
           strings: strings,
           scale: ImageDisplaySize.scaleOf(embed.payload),
+          look: ObjectLook.imageOf(embed.payload),
           onAction: (action) async {
             if (action == 'object:move_mode') {
               _toggleMoveModeForNode(node.id);
+              return;
+            }
+            if (action.startsWith('look:')) {
+              await _applyObjectLook(embed, action);
               return;
             }
             final next = ImageDisplaySize.apply(action, embed.payload);
@@ -1614,6 +1635,18 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       TableObjectPayload.normalize(next),
     );
     await _loadEmbedsQuietly();
+  }
+
+  Future<void> _applyObjectLook(ObjectEmbed embed, String action) async {
+    if (!action.startsWith('look:')) return;
+    final look = action.substring('look:'.length);
+    final kind = embed.type == 'graph' ? 'table' : embed.type;
+    if (!ObjectLook.looksFor(kind).contains(look)) return;
+    final next = kind == 'table'
+        ? TableObjectPayload.normalize(ObjectLook.withLook(embed.payload, look))
+        : ObjectLook.withLook(embed.payload, look);
+    await _onPayloadChanged(embed.id, next);
+    if (mounted) setState(() {});
   }
 
   Future<void> _applyChartMenuToEmbed(

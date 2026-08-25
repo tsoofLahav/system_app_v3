@@ -263,8 +263,8 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Embed | Widget | Flow role |
 |-------|--------|-----------|
 | Task list | [`embeds/inline_task_list.dart`](editor/embeds/inline_task_list.dart) | Thin host: document segments + Move Mode; rows via objects [`TaskListSurface`](../objects/tasks/task_list_surface.dart) |
-| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); tag chips; **field** right-click → formatting + **Connect info…**; **chrome** (block caret) → Add tag / Add connection (related) |
-| Image | same | Atomic unit; caption field |
+| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); tag chips; **field** right-click → formatting + **Connect info…**; **chrome** (block caret) → **Look** / Add tag / Add connection (related) |
+| Image | same | Atomic unit; caption field; chrome **Look** + size |
 | Table (+ chart) | [`embeds/table_embed.dart`](editor/embeds/table_embed.dart) | `RichTableEditor` + optional chart; behaviour in **[Tables & charts](#tables--charts)** |
 | Host | [`embed_block_host.dart`](editor/embed_block_host.dart) | Move Mode; optional atomic `#embed` segment |
 | Drag chrome | [`drag_mode_frame.dart`](editor/drag_mode_frame.dart) | Shared gentle glass frame for Move / Reorder modes |
@@ -276,7 +276,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Between blocks only | Never inside a list item or table cell |
 | Create at the caret | Inserts go to the **last-claimed** file. Mid-paragraph / mid-heading **splits** at the caret (`before \| new \| after`); caret at the start inserts before that block; at the end, after it. List / table / embed carets insert after the containing block. |
 | Marker buffer is source of truth | Position is top-level parts in buffer text (view = `blocks[]`); the object row holds data, not placement |
-| Right-click on embed text | Same text menu as paragraphs (`DocumentMark`) plus **Connect info…** on object fields (info / task / table) and **Make link**. Connected spans and URL `link` spans paint in `AppColors.descriptionLink` (dark teal glyphs + 1px underline). Description-link colour is paint-only; URL `link` is stored on the field span. Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Tables/charts: see **[Tables & charts](#tables--charts)**. Task lists add **Add to view…** and **Reorder tasks**. Info **chrome** (not a field) is Add tag / Add connection / **Move object**. Super Editor body paragraphs do not offer Connect info. |
+| Right-click on embed text | Same text menu as paragraphs (`DocumentMark`) plus **Connect info…** on object fields (info / task / table) and **Make link**. Connected spans and URL `link` spans paint in `AppColors.descriptionLink` (dark teal glyphs + 1px underline). Description-link colour is paint-only; URL `link` is stored on the field span. Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Tables/charts: see **[Tables & charts](#tables--charts)**. Task lists add **Add to view…** and **Reorder tasks**. Info **chrome** (not a field) is **Look** / Add tag / Add connection / **Move object**. Image and table/graph chrome also have **Look** (per object, `payload.look`). Super Editor body paragraphs do not offer Connect info. |
 | Move Mode | Object chrome menu **Move object**, or **⌘⇧O** when the caret / last-interacted embed is an object → glass frame on the object + floating glass bubble ([`embed_move_bubble.dart`](editor/embed_move_bubble.dart), no scrim; drag to reposition). Double-click selects a word in inner fields, like body text. Up/down in the bubble nudge the object and **stay in Move Mode**; Done or tap outside the bubble ends it. After move/delete, adjacent paragraphs **coalesce** (blank/`\n`-only stubs dropped, including next to embeds). |
 | Empty object + Backspace | Same fluent rule as an empty list bullet / table row: last empty unit + Backspace **removes the object** (cascade-delete). |
 | Object block + Shift+Enter | Opens the object (first inner field). **Shift+Enter** inside lands **after** the object so typing continues below. On phone, those keys are not on the keyboard — the first bottom-bar pill is arrows plus enter/leave. **Enter** inserts a paragraph below. Arrows do not auto-enter/leave objects. Phone long-press / secondary tap opens the object chrome menu (Move Mode lives there). |
@@ -300,9 +300,9 @@ Objects are atomic SE blocks. ↑/↓ move onto the block; **Shift+Enter** (or c
 | Type | In the document |
 |------|-----------------|
 | Task list | Active then Done; Enter adds in the same zone; **insert lands on the list header** (then tasks); Shift+Enter leaves to SE block; right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title stays blank |
-| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); Enter adds lines; Shift+Enter leaves to SE block; field right-click → text + Connect info; chrome → Add tag / Add connection (⌘L while in the info; otherwise ⌘L inserts a list) |
+| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); Enter adds lines; Shift+Enter leaves to SE block; field right-click → text + Connect info; chrome → **Look** / Add tag / Add connection (⌘L while in the info; otherwise ⌘L inserts a list) |
 | Table / chart | See **[Tables & charts](#tables--charts)** |
-| Image | Display + caption; right-click **Make smaller / larger** (steps of 10% of the pane) or **Tiny / Quarter / Half / Full size**. Width is `payload.width` 0–1 of the file pane; aspect ratio stays (`BoxFit.contain`) |
+| Image | Display + caption; chrome **Look** (`none` / `frame` / `greyscale` / `frame_greyscale`); right-click **Make smaller / larger** (steps of 10% of the pane) or **Tiny / Quarter / Half / Full size**. Width is `payload.width` 0–1 of the file pane; aspect ratio stays (`BoxFit.contain`) |
 
 ### Tables & charts
 
@@ -321,7 +321,7 @@ One object type `table` (`payload.rows` + optional `payload.chart`). UI: [`table
 | Add row / column | **Immediately after the right-clicked cell** (storage index + 1; in RTL that is visually left of the cell). Anchor is the click, not a drifting “end” | Add **column** only (same anchor rule) |
 | Reorder | Separate **Reorder rows…** / **Reorder columns…**; grab the glass row/column (no handles) | **Reorder columns…** only; series colors move with the column |
 | Exit reorder | Tap outside / Escape / Done | Same |
-| Right-click | Text + Connect info + add/reorder; block caret is add/reorder only | Chart chrome **or** cell → type + palette ([`AppColorPalettes`](../ui/app_color_palettes.dart)); columns reorder; cells still get Connect info |
+| Right-click | Text + Connect info + add/reorder + **Look**; block caret is add/reorder + **Look** | Chart chrome **or** cell → type + palette ([`AppColorPalettes`](../ui/app_color_palettes.dart)) + **Look**; columns reorder; cells still get Connect info |
 
 Type logic beyond presentation (views, links, cascades) → [objects](../objects/AREA.md).
 

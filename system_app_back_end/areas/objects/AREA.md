@@ -86,7 +86,7 @@ Task title description links travel with the task row (`description_links` on ta
 | `GET /files/:id/description-links` | Description links whose **source object or task** lives in that file (peer = target info) |
 | `PUT /objects/:id/tags` | Replace object tags |
 | `PATCH /tags/:id` | Update tag name/color/icon |
-| `PATCH /objects/:id` | `sort_key`, `anchor`, image/table `payload`, and `diagram_x` / `diagram_y` |
+| `PATCH /objects/:id` | `sort_key`, `anchor`, image/table/**info** `payload` (info uses this for `look`), and `diagram_x` / `diagram_y` |
 
 Object GET / file object list payloads include `tags[]` and `connections[]` (undirected related + description rows with a `peer` summary). Deleting an object or file removes links where it is source **or** target.
 
@@ -94,8 +94,11 @@ Object GET / file object list payloads include `tags[]` and `connections[]` (und
 
 | Type | Typical payload |
 |------|-----------------|
-| `image` | `{ "url", "path", "width", "caption" }` — `width` is 0–1 of the file pane (full = `1`); the picture keeps its aspect ratio |
-| `table` | `{ "rows": [[{ "text" }], …], "chart"?: { "enabled", "chartType", "colors" } }` |
+| `image` | `{ "url", "path", "width", "caption", "look"? }` — `width` is 0–1 of the file pane (full = `1`); the picture keeps its aspect ratio. `look`: `none` (default) / `frame` / `greyscale` / `frame_greyscale` |
+| `table` | `{ "rows": [[{ "text" }], …], "chart"?: { "enabled", "chartType", "colors" }, "look"? }` — `look`: `grid` (default) / `open` / `lined`. Normalize keeps `look`. |
+| `info` | Title/body on `information_pieces`. Optional `objects.payload.look`: `card` (default) / `plain` / `ruled` |
+
+Omitted `look` means the current (default) chrome. No migration. Task lists have no look.
 
 Chart tables use the same `table` type; agent text still expands them as `[GRAPH id chartType=…]` with two TSV rows (+ optional colors). New charts start with empty cells. Normalize helpers: [`services/table_payload.py`](services/table_payload.py). Spec: production agent system prompt.
 

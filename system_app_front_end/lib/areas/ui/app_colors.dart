@@ -280,7 +280,7 @@ abstract final class AppColors {
   static BoxDecoration detailsBlockDecoration() {
     return BoxDecoration(
       color: noteTop.withValues(alpha: 0.42),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(6),
       border: Border.all(
         color: noteBorder.withValues(alpha: 0.56),
         width: 0.85,

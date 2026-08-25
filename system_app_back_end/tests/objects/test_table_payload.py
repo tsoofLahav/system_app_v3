@@ -37,3 +37,20 @@ def test_plain_rows_not_chart():
         {"rows": [[{"text": "H1"}, {"text": "H2"}]]}
     )
     assert not chart_enabled(payload)
+
+
+def test_normalize_keeps_look():
+    payload = normalize_table_payload(
+        {
+            "look": "lined",
+            "rows": [[{"text": "H1"}, {"text": "H2"}]],
+        }
+    )
+    assert payload["look"] == "lined"
+    assert not chart_enabled(payload)
+
+    legacy = normalize_table_payload(
+        {"look": "open", "labels": ["A"], "values": ["1"]}
+    )
+    assert legacy["look"] == "open"
+    assert chart_enabled(legacy)

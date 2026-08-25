@@ -45,5 +45,26 @@ void main() {
       expect(TableObjectPayload.chartEnabled(p), isFalse);
       expect(TableObjectPayload.pointerObjectType(p), 'table');
     });
+
+    test('normalize keeps look on rows and legacy graph', () {
+      final rows = TableObjectPayload.normalize({
+        'look': 'lined',
+        'rows': [
+          [
+            {'text': 'H'},
+          ],
+        ],
+      });
+      expect(rows['look'], 'lined');
+      expect(TableObjectPayload.chartEnabled(rows), isFalse);
+
+      final legacy = TableObjectPayload.normalize({
+        'look': 'open',
+        'labels': ['X'],
+        'values': ['1'],
+      });
+      expect(legacy['look'], 'open');
+      expect(TableObjectPayload.chartEnabled(legacy), isTrue);
+    });
   });
 }

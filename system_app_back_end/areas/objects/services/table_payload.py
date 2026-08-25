@@ -49,6 +49,9 @@ def normalize_table_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
         chart = raw.get("chart")
         if isinstance(chart, dict):
             out["chart"] = _normalize_chart(chart, column_count=len(rows[0]) if rows else 2)
+        look = raw.get("look")
+        if isinstance(look, str) and look.strip():
+            out["look"] = look.strip()
         return out
 
     labels = [str(x) for x in (raw.get("labels") or [])]
@@ -64,7 +67,7 @@ def normalize_table_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
     values = (values + [""] * n)[:n]
     colors = (colors + [""] * n)[:n] if colors else []
 
-    return {
+    out: dict[str, Any] = {
         "rows": [
             [_cell(t) for t in labels],
             [_cell(t) for t in values],
@@ -75,6 +78,10 @@ def normalize_table_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
             "colors": colors,
         },
     }
+    look = raw.get("look")
+    if isinstance(look, str) and look.strip():
+        out["look"] = look.strip()
+    return out
 
 
 def _normalize_rows(rows: list) -> list[list[dict[str, Any]]]:

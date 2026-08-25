@@ -7,6 +7,7 @@ import '../../ui/app_typography.dart';
 import '../editor/document_text_flow.dart';
 import '../editor/editor_key_handoff.dart';
 import '../editor/embed_caret_bridge.dart';
+import '../editor/embeds/object_look.dart';
 import '../model/document_model.dart';
 import '../../ux/widgets/app_context_menu.dart';
 import './block_text_actions.dart';
@@ -45,6 +46,7 @@ class RichTableEditor extends StatefulWidget {
     this.documentBaseOffset = 0,
     this.mode = TableEditorMode.grid,
     this.maxColumns,
+    this.look = ObjectLook.tableGrid,
     this.extraMenuEntries = const [],
     this.onExtraMenuAction,
     this.onReorderColumn,
@@ -69,6 +71,9 @@ class RichTableEditor extends StatefulWidget {
 
   /// Cap for [TableEditorMode.chartSeries] (defaults to series palette limit).
   final int? maxColumns;
+
+  /// `payload.look` — grid / open / lined.
+  final String look;
 
   /// Extra rows on the cell menu (e.g. chart type / palette).
   final List<AppContextMenuEntry> extraMenuEntries;
@@ -767,6 +772,7 @@ class RichTableEditorState extends State<RichTableEditor> {
       includeReorderColumns: true,
       extraEntries: widget.extraMenuEntries,
       includeConnectInfo: widget.onConnectInfo != null,
+      tableLook: widget.look,
       onAction: (action) async {
         if (action == 'text:connect_info') {
           await widget.onConnectInfo?.call();
@@ -791,8 +797,9 @@ class RichTableEditorState extends State<RichTableEditor> {
         final extra = widget.onExtraMenuAction;
         if (extra != null &&
             (action.startsWith('chart:') ||
+                action.startsWith('look:') ||
                 widget.extraMenuEntries.isNotEmpty)) {
-          if (action.startsWith('chart:')) {
+          if (action.startsWith('chart:') || action.startsWith('look:')) {
             await extra(action);
             return;
           }
@@ -856,42 +863,36 @@ class RichTableEditorState extends State<RichTableEditor> {
   }
 
   Widget _buildEditGrid(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final borderColor = Color.alphaBlend(
-      scheme.outline.withValues(alpha: 0.55),
-      scheme.surface,
-    );
+    final borderColor = tableLookBorderColor();
+    final look = widget.look;
+    final showVertical = tableLookHasVerticalRules(look);
+    final outer = tableLookHasOuterBox(look);
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: borderColor, width: 1),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var r = 0; r < _controllers.length; r++)
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var c = 0; c < _controllers[r].length; c++) ...[
-                    if (c > 0)
-                      VerticalDivider(
-                        width: 1,
-                        thickness: 1,
-                        color: borderColor,
-                      ),
-                    Expanded(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: r < _controllers.length - 1
-                                ? BorderSide(color: borderColor, width: 1)
-                                : BorderSide.none,
-                          ),
+    final grid = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var r = 0; r < _controllers.length; r++)
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var c = 0; c < _controllers[r].length; c++) ...[
+                  if (c > 0 && showVertical)
+                    VerticalDivider(
+                      width: 1,
+                      thickness: 1,
+                      color: borderColor,
+                    ),
+                  Expanded(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: r < _controllers.length - 1
+                              ? BorderSide(color: borderColor, width: 0.85)
+                              : BorderSide.none,
                         ),
-                        child: ConstrainedBox(
+                      ),
+                      child: ConstrainedBox(
                           constraints: const BoxConstraints(
                             minHeight: _minCellHeight,
                           ),
@@ -958,7 +959,14 @@ class RichTableEditorState extends State<RichTableEditor> {
               ),
             ),
         ],
+      );
+    if (!outer) return grid;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: borderColor, width: 0.85),
+        borderRadius: BorderRadius.circular(3),
       ),
+      child: grid,
     );
   }
 }

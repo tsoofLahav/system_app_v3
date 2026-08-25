@@ -25,6 +25,7 @@ import '../../rich_text/text_formatting.dart';
 import '../../../ui/app_colors.dart';
 import '../../../ui/app_typography.dart';
 import './image_display_size.dart';
+import './object_look.dart';
 
 /// Compose API `title` + `body` into one editable string (first line = title).
 String composeInfoText(String title, String body) {
@@ -535,11 +536,11 @@ class InfoEmbedState extends State<InfoEmbed>
   @override
   Widget build(BuildContext context) {
     final tags = widget.embed.tags;
-    return DecoratedBox(
-      decoration: AppColors.detailsBlockDecoration(),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-        child: Column(
+    final look = ObjectLook.infoOf(widget.embed.payload);
+    final decoration = infoLookDecoration(look);
+    final body = Padding(
+      padding: infoLookPadding(look),
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             FormattedTextField(
@@ -603,8 +604,9 @@ class InfoEmbedState extends State<InfoEmbed>
             ],
           ],
         ),
-      ),
     );
+    if (decoration == null) return body;
+    return DecoratedBox(decoration: decoration, child: body);
   }
 }
 
@@ -629,7 +631,17 @@ class _ImageEmbedState extends State<ImageEmbed> {
   var _uploading = false;
   late double _scale;
 
-  Map<String, dynamic> get _payload => widget.embed.payload ?? const {};
+  Map<String, dynamic> get _payload {
+    final list = widget.state.embedsByFileId[widget.embed.fileId];
+    if (list != null) {
+      for (final embed in list) {
+        if (embed.id == widget.embed.id) {
+          return embed.payload ?? const {};
+        }
+      }
+    }
+    return widget.embed.payload ?? const {};
+  }
 
   @override
   void initState() {
@@ -690,7 +702,15 @@ class _ImageEmbedState extends State<ImageEmbed> {
       globalPosition: details.globalPosition,
       strings: widget.state.strings,
       scale: _scale,
+      look: ObjectLook.imageOf(_payload),
       onAction: (action) async {
+        if (action.startsWith('look:')) {
+          final look = action.substring('look:'.length);
+          if (!ObjectLook.imageLooks.contains(look)) return;
+          widget.onPayloadChanged(ObjectLook.withLook(_payload, look));
+          if (mounted) setState(() {});
+          return;
+        }
         final next = ImageDisplaySize.apply(action, {
           ..._payload,
           'width': _scale,
@@ -719,23 +739,41 @@ class _ImageEmbedState extends State<ImageEmbed> {
             LayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.maxWidth * _scale;
-                return Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: SizedBox(
-                    width: width,
-                    child: ClipRRect(
+                final look = ObjectLook.imageOf(_payload);
+                Widget picture = Image.network(
+                  resolved,
+                  width: width,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, error, stackTrace) => Text(
+                    'Image unavailable',
+                    style: AppTypography.metaStyle,
+                  ),
+                );
+                if (ObjectLook.imageIsGreyscale(look)) {
+                  picture = ColorFiltered(
+                    colorFilter: ObjectLook.greyscaleFilter,
+                    child: picture,
+                  );
+                }
+                picture = ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: picture,
+                );
+                if (ObjectLook.imageHasFrame(look)) {
+                  picture = DecoratedBox(
+                    decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(6),
-                      child: Image.network(
-                        resolved,
-                        width: width,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, error, stackTrace) => Text(
-                          'Image unavailable',
-                          style: AppTypography.metaStyle,
-                        ),
+                      border: Border.all(
+                        color: AppColors.noteBorder,
+                        width: 0.85,
                       ),
                     ),
-                  ),
+                    child: picture,
+                  );
+                }
+                return Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: SizedBox(width: width, child: picture),
                 );
               },
             )

@@ -7,6 +7,7 @@ import '../../ui/color_dialog.dart';
 import '../../ux/widgets/app_context_menu.dart';
 import '../editor/document_secondary_tap.dart';
 import '../editor/embeds/image_display_size.dart';
+import '../editor/embeds/object_look.dart';
 import './block_text_focus.dart';
 
 typedef DocumentMenuHandler = Future<void> Function(String action);
@@ -66,6 +67,25 @@ class DocumentContextMenu {
     ],
   ];
 
+  /// Per-object chrome Look submenu (info / table / image).
+  static AppContextMenuSubmenu lookSubmenu(
+    AppStrings strings, {
+    required String kind,
+    required String current,
+  }) {
+    return AppContextMenuSubmenu(
+      label: strings['look'],
+      children: [
+        for (final look in ObjectLook.looksFor(kind))
+          AppContextMenuItem(
+            value: 'look:$look',
+            label: strings[ObjectLook.labelKey(kind, look)],
+            checked: look == current,
+          ),
+      ],
+    );
+  }
+
   /// Image block: nudge a little, or jump to a named fraction of the pane.
   static List<AppContextMenuEntry> buildImageEntries(
     AppStrings strings, {
@@ -112,6 +132,7 @@ class DocumentContextMenu {
     required AppStrings strings,
     required DocumentMenuHandler onAction,
     double scale = ImageDisplaySize.full,
+    String look = ObjectLook.imageNone,
   }) {
     return _showMenu(
       context: context,
@@ -123,6 +144,8 @@ class DocumentContextMenu {
           value: 'object:move_mode',
           label: strings['moveObject'],
         ),
+        const AppContextMenuDivider(),
+        lookSubmenu(strings, kind: 'image', current: look),
         const AppContextMenuDivider(),
         ...buildImageEntries(strings, scale: scale),
       ],
@@ -247,6 +270,7 @@ class DocumentContextMenu {
     bool includeReorderColumns = true,
     bool includeConnectInfo = true,
     bool includeMoveObject = false,
+    String? tableLook,
   }) {
     return _showMenu(
       context: context,
@@ -282,6 +306,10 @@ class DocumentContextMenu {
             value: 'table:reorder_columns',
             label: strings['reorderColumns'],
           ),
+        if (tableLook != null) ...[
+          const AppContextMenuDivider(),
+          lookSubmenu(strings, kind: 'table', current: tableLook),
+        ],
         if (extraEntries.isNotEmpty) ...[
           const AppContextMenuDivider(),
           ...extraEntries,
@@ -296,6 +324,7 @@ class DocumentContextMenu {
     required Offset globalPosition,
     required AppStrings strings,
     required DocumentMenuHandler onAction,
+    String look = ObjectLook.tableGrid,
   }) {
     return _showMenu(
       context: context,
@@ -307,6 +336,8 @@ class DocumentContextMenu {
           value: 'object:move_mode',
           label: strings['moveObject'],
         ),
+        const AppContextMenuDivider(),
+        lookSubmenu(strings, kind: 'table', current: look),
         const AppContextMenuDivider(),
         AppContextMenuItem(
           value: 'table:reorder_columns',
@@ -340,6 +371,7 @@ class DocumentContextMenu {
     required Offset globalPosition,
     required AppStrings strings,
     required DocumentMenuHandler onAction,
+    String look = ObjectLook.infoCard,
   }) {
     return _showMenu(
       context: context,
@@ -351,6 +383,8 @@ class DocumentContextMenu {
           value: 'object:move_mode',
           label: strings['moveObject'],
         ),
+        const AppContextMenuDivider(),
+        lookSubmenu(strings, kind: 'info', current: look),
         const AppContextMenuDivider(),
         AppContextMenuItem(
           value: 'info:add_tag',
