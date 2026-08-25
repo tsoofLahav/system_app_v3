@@ -585,8 +585,6 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
         onPickFile: _pickTopicFile,
         onEditSnippet: _editFillSnippet,
         aiActions: state.aiActions,
-        canMoveUp: index > 0,
-        canMoveDown: index < _steps.length - 1,
       ),
     );
     if (popped == null || !mounted) return;
@@ -600,23 +598,6 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
       return;
     }
     _replaceStep(index, popped.step);
-    if (popped.op == 'up') {
-      setState(() {
-        final next = [..._steps];
-        final taken = next.removeAt(index);
-        next.insert(index - 1, taken);
-        _steps = next;
-      });
-      await _openStepEditor(index - 1);
-    } else if (popped.op == 'down') {
-      setState(() {
-        final next = [..._steps];
-        final taken = next.removeAt(index);
-        next.insert(index + 1, taken);
-        _steps = next;
-      });
-      await _openStepEditor(index + 1);
-    }
   }
 
   String _whenCaption() {
@@ -806,25 +787,51 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
           child: Row(
             children: [
               Expanded(
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _steps.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 6),
-                  itemBuilder: (context, index) {
-                    final step = _steps[index];
-                    return _StepFrame(
-                      icon: _stepFrameIcon(step),
-                      name: _stepFrameName(step),
-                      deleteTooltip: s['delete'],
-                      onTap: () => _openStepEditor(index),
-                      onDelete: () => setState(() {
-                        _steps = [
-                          for (var i = 0; i < _steps.length; i++)
-                            if (i != index) _steps[i],
-                        ];
-                      }),
-                    );
-                  },
+                child: Material(
+                  color: Colors.transparent,
+                  child: ReorderableListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: EdgeInsets.zero,
+                    buildDefaultDragHandles: false,
+                    itemCount: _steps.length,
+                    proxyDecorator: (child, index, animation) {
+                      return Material(
+                        color: AppColors.noteTop.withValues(alpha: 0.94),
+                        borderRadius: BorderRadius.circular(10),
+                        child: child,
+                      );
+                    },
+                    onReorder: (oldIndex, newIndex) {
+                      setState(() {
+                        if (newIndex > oldIndex) newIndex -= 1;
+                        final next = [..._steps];
+                        next.insert(newIndex, next.removeAt(oldIndex));
+                        _steps = next;
+                      });
+                    },
+                    itemBuilder: (context, index) {
+                      final step = _steps[index];
+                      return ReorderableDelayedDragStartListener(
+                        key: ObjectKey(step),
+                        index: index,
+                        child: Padding(
+                          padding: const EdgeInsetsDirectional.only(end: 6),
+                          child: _StepFrame(
+                            icon: _stepFrameIcon(step),
+                            name: _stepFrameName(step),
+                            deleteTooltip: s['delete'],
+                            onTap: () => _openStepEditor(index),
+                            onDelete: () => setState(() {
+                              _steps = [
+                                for (var i = 0; i < _steps.length; i++)
+                                  if (i != index) _steps[i],
+                              ];
+                            }),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
               const SizedBox(width: 4),
@@ -1059,8 +1066,6 @@ class _StepEditDialog extends StatefulWidget {
     required this.onPickFile,
     required this.onEditSnippet,
     required this.aiActions,
-    required this.canMoveUp,
-    required this.canMoveDown,
   });
 
   final AppStrings strings;
@@ -1076,10 +1081,8 @@ class _StepEditDialog extends StatefulWidget {
   final Future<int?> Function(int? currentId) onPickAction;
   final Future<int?> Function(int? currentId) onPickFile;
   final Future<Map<String, dynamic>?> Function(Map<String, dynamic> step)
-      onEditSnippet;
+  onEditSnippet;
   final List<AiAction> aiActions;
-  final bool canMoveUp;
-  final bool canMoveDown;
 
   @override
   State<_StepEditDialog> createState() => _StepEditDialogState();
@@ -1126,16 +1129,6 @@ class _StepEditDialogState extends State<_StepEditDialog> {
         children: [
           Row(
             children: [
-              IconButton(
-                tooltip: s['moveStepUp'],
-                onPressed: widget.canMoveUp ? () => _pop('up') : null,
-                icon: const AppIcon(AppIcons.chevronUp, size: 16),
-              ),
-              IconButton(
-                tooltip: s['moveStepDown'],
-                onPressed: widget.canMoveDown ? () => _pop('down') : null,
-                icon: const AppIcon(AppIcons.chevronDown, size: 16),
-              ),
               const Spacer(),
               IconButton(
                 tooltip: s['delete'],
@@ -1287,7 +1280,8 @@ class _StepEditDialogState extends State<_StepEditDialog> {
     final useSlot =
         widget.scopeKind == AutomationScope.topicType && slots.isNotEmpty;
     final useFile =
-        widget.scopeKind == AutomationScope.topic && widget.topicFiles.isNotEmpty;
+        widget.scopeKind == AutomationScope.topic &&
+        widget.topicFiles.isNotEmpty;
     final days = _step['older_than_days'];
     final slot = _step['template_slot'] as String?;
     final fileId = _firstFileId(_step);
