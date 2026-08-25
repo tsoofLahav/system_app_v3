@@ -18,6 +18,7 @@ def test_load_prompt_file_is_short_standing_instructions():
     assert "## Agent text" in text
     assert "## Input" in text
     assert "list" in text
+    assert "list_archived" in text
     assert "find_file" in text
     assert "find_object" in text
     assert "create_object" in text
@@ -43,6 +44,7 @@ def test_prompt_treats_scope_and_hints_as_context_only():
 
 def test_default_tool_allowlist():
     assert "list" in DEFAULT_TOOL_ALLOWLIST
+    assert "list_archived" in DEFAULT_TOOL_ALLOWLIST
     assert "create_object" in DEFAULT_TOOL_ALLOWLIST
     assert "create_file" in DEFAULT_TOOL_ALLOWLIST
     assert "search" not in DEFAULT_TOOL_ALLOWLIST
@@ -60,6 +62,7 @@ def test_reference_sections():
     tools = load_reference_section("tools")
     assert "patch_file" in tools
     assert "find_file" in tools
+    assert "list_archived" in tools
     assert "create_object" in tools
     assert "create_file" in tools
     assert "search_tasks" not in tools

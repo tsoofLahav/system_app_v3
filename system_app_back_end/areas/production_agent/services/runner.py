@@ -30,6 +30,7 @@ from areas.production_agent.services.browse_tools import (
     file_allowed,
     find_file,
     find_object,
+    list_archived_files,
     list_entities,
 )
 from areas.production_agent.services.create_file_tool import create_file
@@ -71,7 +72,8 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "type": "function",
         "name": "list",
         "description": (
-            "Browse the workspace. kind: topics | files | objects. "
+            "Browse the live workspace. kind: topics | files | objects. "
+            "files are live only (use list_archived for archived files). "
             "files/objects come back grouped under their topic "
             "(topics[].topic = topic name, topics[].topic_type = type name, "
             "topics[].files[]; objects also carry their file name). "
@@ -93,6 +95,28 @@ TOOL_DEFS: list[dict[str, Any]] = [
                 },
             },
             "required": ["kind", "topic_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "list_archived",
+        "description": (
+            "Browse archived files, grouped under their topic. "
+            "Live files are on list kind=files. "
+            "topic_id: 0 = all topics; else only that topic. "
+            "open_file can still read an archived file by id; writes stay rejected."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "topic_id": {
+                    "type": "integer",
+                    "description": "0 = all topics; else filter",
+                },
+            },
+            "required": ["topic_id"],
             "additionalProperties": False,
         },
     },
@@ -332,6 +356,11 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
             kind=str(args.get("kind") or ""),
             topic_id=topic_id,
         )
+    if name == "list_archived":
+        if not workspace_id:
+            return {"error": "workspace_id missing from run"}
+        topic_id = _optional_id(args.get("topic_id"))
+        return list_archived_files(workspace_id, topic_id=topic_id)
     if name == "find_file":
         if not workspace_id:
             return {"error": "workspace_id missing from run"}

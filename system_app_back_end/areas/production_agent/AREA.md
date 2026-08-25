@@ -37,7 +37,7 @@ Reasoning models take `reasoning.effort` (env `OPENAI_REASONING_EFFORT`, default
 |-------|----------|
 | **instructions** | `agent_configs.system_prompt` + operational suffix (attached on each Responses turn) |
 | **First user input** | `prompt` + client `scope` (open topic/files as context) + optional tiny `hints` — **no file bodies** |
-| **Tools** | `list`, `find_file`, `find_object`, `open_file`, `create_file`, `create_object`, `reference`, `patch_file`, `rewrite_file` |
+| **Tools** | `list`, `list_archived`, `find_file`, `find_object`, `open_file`, `create_file`, `create_object`, `reference`, `patch_file`, `rewrite_file` |
 | **Follow-up input** | Tool results only (`function_call_output` items) |
 
 Tools authorize by **workspace membership** (run `workspace_id`), not the FE allow-list. Client `scope` / `hints` are preferred context (`focused_file_id`, open topic). Archived files stay read-only on writes.
@@ -66,7 +66,8 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 
 | Tool | Behavior |
 |------|----------|
-| `list` | Topics, or files / objects **grouped by topic** (optional `topic_id`) |
+| `list` | Topics, or **live** files / objects **grouped by topic** (optional `topic_id`) |
+| `list_archived` | Archived files grouped by topic (optional `topic_id`). `find_file` / `open_file` can still hit an archived file by id or name; writes stay read-only |
 | `find_file` | By `file_id`, or name (+ optional topic); hits include the topic name and type |
 | `find_object` | By `object_id`, or type/name (+ optional topic); hits include file + topic name and type |
 | `open_file` | Returns `name` + `topic` + `topic_type`, `document_plain` (agent text), `document_lines` (1-based), + `object_extras`. Archived readable. |
@@ -76,7 +77,7 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 | `patch_file` | **Partial edits** with `op` add / remove / replace on `document_lines`; typical outcome **review** |
 | `rewrite_file` | Full new agent text for a true whole-file rewrite; typical outcome **apply** when run allows |
 
-**Everything the agent browses is keyed by topic name, never by a bare `topic_id`.** A file name on its own ("log", "plan") does not say what it is about, so `list files` / `list objects` return `topics: [{topic_id, topic, topic_type, files: […]}]` and every `find_*` hit repeats its topic name and type. Choosing a topic is the first decision the agent makes; leaving it to guess from file names put a nutrition note in the wrong topic.
+**Everything the agent browses is keyed by topic name, never by a bare `topic_id`.** A file name on its own ("log", "plan") does not say what it is about, so `list files` / `list objects` / `list_archived` return `topics: [{topic_id, topic, topic_type, files: […]}]` and every `find_*` hit repeats its topic name and type. Choosing a topic is the first decision the agent makes; leaving it to guess from file names put a nutrition note in the wrong topic.
 
 Browse helpers: [`services/browse_tools.py`](services/browse_tools.py). Create file: [`services/create_file_tool.py`](services/create_file_tool.py) + [`areas/files/services/file_ops.py`](../files/services/file_ops.py). Create object: [`services/create_object_tool.py`](services/create_object_tool.py) + shared [`areas/objects/services/create_embed.py`](../objects/services/create_embed.py). `open_file` payload: [`services/open_file_tool.py`](services/open_file_tool.py). Writes: [`services/write_tools.py`](services/write_tools.py).
 

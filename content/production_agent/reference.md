@@ -117,7 +117,7 @@ Row 1 = labels, row 2 = values, optional row 3 = colors. Same `\t` cell separato
 { "kind": "files", "topic_id": 0 }
 ```
 
-`kind`: `topics` | `files` | `objects`. `topic_id` `0` = whole workspace.
+`kind`: `topics` | `files` | `objects`. `topic_id` `0` = whole workspace. `files` are **live only** — archived files are on `list_archived`.
 
 `files` and `objects` come back **grouped by topic**, so you can see which topic each file belongs to:
 
@@ -147,6 +147,14 @@ Row 1 = labels, row 2 = values, optional row 3 = colors. Same `\t` cell separato
   ]
 }
 ```
+
+### `list_archived`
+
+```json
+{ "topic_id": 0 }
+```
+
+Same grouping as `list` `kind=files`, but only archived files. `topic_id` `0` = whole workspace. `find_file` / `open_file` can still hit an archived file by id or name; writes stay rejected.
 
 `topics` returns `{ id, name, topic_type, archived, file_count }`. Match the subject of the ask to a topic name (and its type) first; only then pick a file inside it.
 

@@ -7,6 +7,7 @@ from areas.production_agent.services.browse_tools import (
     block_index_after_agent_line,
     file_allowed,
     find_file,
+    list_archived_files,
     list_entities,
 )
 from areas.production_agent.services.create_object_tool import create_object
@@ -80,6 +81,84 @@ def test_list_files_grouped_under_topic_names():
     assert by_name["vision"] == []
     assert by_name["nutrition"] == [{"id": 7, "name": "daily log", "archived": False}]
     assert by_name["fitness"][0]["name"] == "week plan"
+
+
+def test_list_files_omits_archived_rows():
+    rows = FILES + [_file(99, "old log", 2, archived=True)]
+    with patch(f"{BROWSE}._topic_rows", return_value=TOPICS), patch(
+        f"{BROWSE}._workspace_files_query", _files_query(rows)
+    ):
+        result = list_entities(1, kind="files")
+
+    by_name = {g["topic"]: g["files"] for g in result["topics"]}
+    assert [f["name"] for f in by_name["nutrition"]] == ["daily log"]
+
+
+def test_list_files_queries_live_only():
+    query = MagicMock()
+    query.all.return_value = FILES
+    with patch(f"{BROWSE}._topic_rows", return_value=TOPICS), patch(
+        f"{BROWSE}._workspace_files_query", return_value=query
+    ) as mock_files:
+        list_entities(1, kind="files")
+    mock_files.assert_called_once_with(1, topic_id=None, include_archived=False)
+
+
+def test_list_archived_groups_archived_files():
+    archived = [_file(99, "old log", 2, archived=True)]
+    with patch(f"{BROWSE}._topic_rows", return_value=TOPICS), patch(
+        f"{BROWSE}._workspace_files_query", _files_query(archived)
+    ):
+        result = list_archived_files(1)
+
+    assert result["kind"] == "archived_files"
+    assert [(g["topic"], [f["name"] for f in g["files"]]) for g in result["topics"]] == [
+        ("nutrition", ["old log"]),
+    ]
+    assert result["topics"][0]["files"][0]["archived"] is True
+
+
+def test_list_archived_filters_by_topic():
+    archived = [
+        _file(99, "old log", 2, archived=True),
+        _file(100, "old plan", 3, archived=True),
+    ]
+    topic = MagicMock()
+    topic.workspace_id = 1
+    with patch(f"{BROWSE}._topic_rows", return_value=TOPICS), patch(
+        f"{BROWSE}.db.session.get", return_value=topic
+    ), patch(
+        f"{BROWSE}._workspace_files_query", _files_query(archived)
+    ) as mock_files:
+        result = list_archived_files(1, topic_id=3)
+
+    mock_files.assert_called_once_with(1, topic_id=3, archived_only=True)
+    assert [g["topic"] for g in result["topics"]] == ["fitness"]
+    assert result["topics"][0]["files"][0]["name"] == "old plan"
+
+
+def test_list_archived_rejects_unknown_topic():
+    with patch(f"{BROWSE}.db.session.get", return_value=None):
+        result = list_archived_files(1, topic_id=99)
+    assert result == {"error": "topic not found"}
+
+
+def test_list_archived_skips_topics_with_no_archived_files():
+    with patch(f"{BROWSE}._topic_rows", return_value=TOPICS), patch(
+        f"{BROWSE}._workspace_files_query", _files_query([])
+    ):
+        result = list_archived_files(1)
+    assert result["topics"] == []
+
+
+def test_runner_wires_list_archived():
+    from areas.production_agent.services.runner import TOOL_DEFS, _dispatch_tool
+    import inspect
+
+    assert any(t["name"] == "list_archived" for t in TOOL_DEFS)
+    source = inspect.getsource(_dispatch_tool)
+    assert 'name == "list_archived"' in source
+    assert "list_archived_files" in source
 
 
 def test_list_files_skips_empty_archived_topic():

@@ -17,6 +17,7 @@ DEFAULT_CONFIG_NAME = "default"
 LEGACY_DEFAULT_MODELS = frozenset({"gpt-4o-mini", "gpt-4o"})
 DEFAULT_TOOL_ALLOWLIST = [
     "list",
+    "list_archived",
     "find_file",
     "find_object",
     "open_file",
