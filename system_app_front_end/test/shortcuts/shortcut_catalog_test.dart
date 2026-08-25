@@ -19,13 +19,13 @@ void main() {
     }
   });
 
-  test('agent is labeled Agent and keeps Cmd+Shift+1', () {
+  test('agent is labeled Agent and keeps Cmd+1', () {
     final agent = kShortcutCatalog
         .firstWhere((a) => a.id == ShortcutActionIds.aiConsult);
     expect(agent.labelKey, 'aiAgent');
     expect(agent.defaultBinding.keyId, LogicalKeyboardKey.digit1.keyId);
     expect(agent.defaultBinding.meta, isTrue);
-    expect(agent.defaultBinding.shift, isTrue);
+    expect(agent.defaultBinding.shift, isFalse);
   });
 
   test('language defaults to Cmd+E', () {

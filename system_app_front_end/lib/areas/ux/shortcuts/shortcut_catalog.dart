@@ -88,8 +88,8 @@ abstract final class ShortcutActionIds {
 
 final _aiActionSlotRe = RegExp(r'^ai_action_(\d+)$');
 
-/// Cmd+Shift+2 .. Cmd+Shift+7 — the digit is the slot plus one, because
-/// Cmd+Shift+1 belongs to the agent button that is always on the bar.
+/// Cmd+2 .. Cmd+7 — the digit is the slot plus one, because
+/// Cmd+1 belongs to the agent button that is always on the bar.
 const _aiActionSlotKeys = [
   LogicalKeyboardKey.digit2,
   LogicalKeyboardKey.digit3,
@@ -176,7 +176,7 @@ final List<ShortcutAction> kShortcutCatalog = [
     id: ShortcutActionIds.aiConsult,
     category: ShortcutCategory.ai,
     labelKey: 'aiAgent',
-    defaultBinding: _m(LogicalKeyboardKey.digit1, shift: true),
+    defaultBinding: _m(LogicalKeyboardKey.digit1),
     context: ShortcutContextRequirement.aiContext,
   ),
   for (var slot = 1; slot <= _aiActionSlotKeys.length; slot++)
@@ -184,7 +184,7 @@ final List<ShortcutAction> kShortcutCatalog = [
       id: ShortcutActionIds.aiActionSlot(slot),
       category: ShortcutCategory.ai,
       labelKey: 'aiActionSlot$slot',
-      defaultBinding: _m(_aiActionSlotKeys[slot - 1], shift: true),
+      defaultBinding: _m(_aiActionSlotKeys[slot - 1]),
       context: ShortcutContextRequirement.aiContext,
     ),
   ShortcutAction(

@@ -276,7 +276,7 @@ void main() {
           isNull);
     });
 
-    test('the six slots default to Cmd+Shift+2 through 7', () {
+    test('the six slots default to Cmd+2 through 7', () {
       final slotActions = kShortcutCatalog
           .where((a) => ShortcutActionIds.slotOfAiAction(a.id) != null)
           .toList();
@@ -294,16 +294,16 @@ void main() {
         final binding = slotActions[slot - 1].defaultBinding;
         expect(binding.keyId, digits[slot - 1].keyId);
         expect(binding.meta, isTrue);
-        expect(binding.shift, isTrue);
+        expect(binding.shift, isFalse);
       }
     });
 
-    test('agent keeps Cmd+Shift+1 — it is always on the bar', () {
+    test('agent keeps Cmd+1 — it is always on the bar', () {
       final agent = kShortcutCatalog
           .firstWhere((a) => a.id == ShortcutActionIds.aiConsult);
       expect(agent.defaultBinding.keyId, LogicalKeyboardKey.digit1.keyId);
       expect(agent.defaultBinding.meta, isTrue);
-      expect(agent.defaultBinding.shift, isTrue);
+      expect(agent.defaultBinding.shift, isFalse);
     });
 
     test('no two catalog actions want the same keys', () {

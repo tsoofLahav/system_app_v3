@@ -11,7 +11,7 @@ Lives in the bottom bar ([`ai_tool_bar.dart`](ai_tool_bar.dart)), in reading ord
 | Control | Behavior |
 |---------|----------|
 | **Agent button** | Opens the prompt dialog ([`agent_prompt_dialog.dart`](agent_prompt_dialog.dart)) for a one-off request, with **Review changes (diff)** vs **Apply directly** (opens on apply directly — a one-off ask is lighter with the undo toast than with a diff). An action is also born here. |
-| **Pinned actions** | Up to six saved actions in slot order, each with its icon and its own key (⌘⇧2…⌘⇧7). Pressing one runs it on what is open. An action shows when its scope matches the open topic, **or** (on Home) when any visiting file’s source topic or that topic’s type matches (union). Globals always show. A scoped bar pin simply hides when out of scope; slots stay unique per workspace. |
+| **Pinned actions** | Up to six saved actions in slot order, each with its icon and its own key (⌘2…⌘7). Pressing one runs it on what is open. An action shows when its scope matches the open topic, **or** (on Home) when any visiting file’s source topic or that topic’s type matches (union). Globals always show. A scoped bar pin simply hides when out of scope; slots stay unique per workspace. |
 | **⋯** | Opens the AI actions dialog ([`ai_actions_dialog.dart`](../automations/ai_actions_dialog.dart)) — the same filter as the bar, each with pin, edit, run and delete. |
 
 Each icon uses the same 34px tap slot as the other bottom-bar buttons, so the AI pill is not tighter than insert or chrome.
