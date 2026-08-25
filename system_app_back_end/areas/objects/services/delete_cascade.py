@@ -20,6 +20,7 @@ from areas.files.services.document_v3 import remove_object_embeds
 from areas.objects.services.object_graph import (
     delete_links_for_file,
     delete_links_for_object,
+    delete_links_for_task,
 )
 
 
@@ -32,6 +33,7 @@ def delete_task_cascade(task_id: int) -> None:
     ViewTaskMembership.query.filter_by(task_id=task.id).delete(
         synchronize_session=False
     )
+    delete_links_for_task(task.id)
     db.session.delete(task)
     db.session.flush()
 
@@ -56,6 +58,7 @@ def delete_task_list_cascade(task_list_id: int) -> None:
         ViewTaskMembership.query.filter_by(task_id=task.id).delete(
             synchronize_session=False
         )
+        delete_links_for_task(task.id)
         db.session.delete(task)
     task_list = db.session.get(TaskList, task_list_id)
     if task_list:

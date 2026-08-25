@@ -30,6 +30,7 @@ class Task {
     this.isAutomationTrigger = false,
     this.pendingCompanionCount = 0,
     this.hasPendingCompanionFlow = false,
+    this.descriptionLinks = const [],
   });
 
   final int id;
@@ -59,6 +60,7 @@ class Task {
   final bool isAutomationTrigger;
   final int pendingCompanionCount;
   final bool hasPendingCompanionFlow;
+  final List<Map<String, dynamic>> descriptionLinks;
 
   bool get isDone => status == 'done';
 
@@ -115,6 +117,7 @@ class Task {
     bool? isAutomationTrigger,
     int? pendingCompanionCount,
     bool? hasPendingCompanionFlow,
+    List<Map<String, dynamic>>? descriptionLinks,
     bool clearSection = false,
     bool clearSectionFlag = false,
     bool clearDetailsBlock = false,
@@ -152,6 +155,7 @@ class Task {
           pendingCompanionCount ?? this.pendingCompanionCount,
       hasPendingCompanionFlow:
           hasPendingCompanionFlow ?? this.hasPendingCompanionFlow,
+      descriptionLinks: descriptionLinks ?? this.descriptionLinks,
     );
   }
 
@@ -189,6 +193,7 @@ class Task {
       pendingCompanionCount: json['pending_companion_count'] as int? ?? 0,
       hasPendingCompanionFlow:
           json['has_pending_companion_flow'] as bool? ?? false,
+      descriptionLinks: _mapsFromJson(json['description_links']),
     );
   }
 
@@ -201,4 +206,12 @@ class Task {
     if (dueDate != null) 'due_date': dueDate,
     if (archivedAt != null) 'archived_at': archivedAt,
   };
+}
+
+List<Map<String, dynamic>> _mapsFromJson(dynamic raw) {
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map) Map<String, dynamic>.from(item),
+  ];
 }

@@ -65,9 +65,11 @@ An info object holds knowledge (`title`, `body`, …). In the file, title and bo
 | Kind | Meaning |
 |------|---------|
 | `related` | **info ↔ info** only (stored directed; UI treats undirected) |
-| `description` | Marked text inside **any object** → an info (`anchor`: `{ segment_id, start, end }` on the **host**) |
+| `description` | Marked text → an info (`anchor`: `{ segment_id, start, end }` on the **host**). **Task titles** store the link on the task (`source_type=task`) so the file and views paint the same underline. Other objects store it on the host object. |
 
-Creating a description from text **inside an info** also upserts related between those two infos so the objects map gets an edge. Task/table spans stay file-only (underline + bubble). Deleting one kind does not delete the other.
+Creating a description from text **inside an info** also upserts related between those two infos so the objects map gets an edge. Task/table spans stay off the map (underline + bubble). Deleting one kind does not delete the other.
+
+Connect info on a task row works in the file **and** in a view (same `TaskListSurface`). List **title** Connect info still uses the host task-list object.
 
 **Tags.** Freeform workspace tags (`tags.icon` + colour) assign to objects via `entity_type=object`. Topic types are not tags — leftover classification names (`project` / `process` / …) are excluded from the object-tag UI (map filter and assign-tag dialog).
 
@@ -110,7 +112,7 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 - Ordering is explicit and persisted.
 - Creating an object must also place its embed block (API), or it is invisible in the file.
 - Deleting an embed goes through the object service so the backing row is cleaned up.
-- Related links are info ↔ info only. Description links are host object → info.
+- Related links are info ↔ info only. Description links are host object → info, or **task → info** for a title span.
 - Do not put document caret/mark/menu rules here — that is files.
 - Topic types are not tags. Object-tag UI excludes type names and leftover classification tags.
 
@@ -120,6 +122,6 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 
 **Shipped (behaviour):** Active/Done zones; optimistic drag reorder in list embed and view pane; independent list vs view order; view grid (sections/topics), section edit, frame reorder; object tags; related info↔info links; objects map (`interactive_graph_view`: persisted positions, connected-first layout, Arrange by links to forget saved spots, hide unconnected by default, several open cards with ΔR ray push, pan/zoom/drag while open, close with × or Close all, object-tag filter, color modes). Map right-click: Add connection / Go to source. Open-card description spans pan to the target chip at the current zoom, then open it.
 
-**Shipped (presentation, in files):** list-like task embed; info title/body + tag chips (field: Connect info; chrome: add tag / related connection); table embed (+ chart quality); Move Mode; description underlines + hover bubble + click/tap to open the info in its file.
+**Shipped (presentation, in files):** list-like task embed; info title/body + tag chips (field: Connect info; chrome: add tag / related connection); table embed (+ chart quality); Move Mode; description underlines + hover bubble + click/tap to open the info in its file. Task-title description links also show in views.
 
 **Next (this area):** non-info map nodes; convert-selection → create Info.

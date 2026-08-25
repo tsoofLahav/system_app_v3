@@ -72,3 +72,40 @@ def test_file_description_links_use_host_file():
     assert 'target_type="file"' not in source
     assert "description_links_hosted_in_file" in source
     assert "info_peer_dict" in source
+
+
+def test_task_payload_includes_description_links():
+    from models import Task
+
+    dumped = inspect.getsource(Task.to_dict)
+    assert "description_links" in dumped
+    assert "description_link_dicts_for_task" in dumped
+
+
+def test_task_description_link_create_path():
+    from areas.objects.routes import tasks as task_routes
+
+    source = inspect.getsource(task_routes.create_task_description_link)
+    assert "TASK_LINK_TYPE" in source
+    assert "description links require an info target" in source
+    assert "normalize_description_anchor" in source
+    assert 'source_type=TASK_LINK_TYPE' in source
+    assert "task links must be kind=description" in source
+
+
+def test_file_description_links_include_task_hosts():
+    from areas.objects.services import object_graph
+
+    source = inspect.getsource(object_graph.description_links_hosted_in_file)
+    assert "TASK_LINK_TYPE" in source
+    assert "task_list_id" in source
+
+
+def test_delete_task_drops_task_links():
+    from areas.objects.services import delete_cascade
+
+    source = inspect.getsource(delete_cascade.delete_task_cascade)
+    assert "delete_links_for_task" in source
+    list_source = inspect.getsource(delete_cascade.delete_task_list_cascade)
+    assert "delete_links_for_task" in list_source
+

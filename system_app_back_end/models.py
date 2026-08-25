@@ -146,6 +146,8 @@ class Task(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
+        from areas.objects.services.object_graph import description_link_dicts_for_task
+
         return {
             "id": self.id,
             "task_list_id": self.task_list_id,
@@ -155,6 +157,7 @@ class Task(db.Model):
             "list_order_index": self.list_order_index,
             "archived_at": _iso(self.archived_at),
             "created_at": _iso(self.created_at),
+            "description_links": description_link_dicts_for_task(self.id),
         }
 
 

@@ -34,4 +34,24 @@ void main() {
     });
     expect(task.isImportant, isTrue);
   });
+
+  test('Task parses description_links from the payload', () {
+    final task = Task.fromJson({
+      'id': 3,
+      'title': 'Call Alex',
+      'status': 'active',
+      'description_links': [
+        {
+          'id': 11,
+          'kind': 'description',
+          'source_type': 'task',
+          'source_id': 3,
+          'anchor': {'segment_id': 'task:3', 'start': 0, 'end': 4},
+        },
+      ],
+    });
+    expect(task.descriptionLinks, hasLength(1));
+    expect(task.descriptionLinks.first['id'], 11);
+    expect(task.copyWith(title: 'Call').descriptionLinks, hasLength(1));
+  });
 }

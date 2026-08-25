@@ -70,4 +70,19 @@ class TaskService {
         }) as List<dynamic>)
         .cast<Map<String, dynamic>>();
   }
+
+  Future<Map<String, dynamic>> createDescriptionLink(
+    int taskId, {
+    required int targetObjectId,
+    required Map<String, dynamic> anchor,
+    String? label,
+  }) async {
+    return await _api.post('/tasks/$taskId/links', {
+          'kind': 'description',
+          'target_object_id': targetObjectId,
+          'anchor': anchor,
+          if (label != null) 'label': label,
+        })
+        as Map<String, dynamic>;
+  }
 }

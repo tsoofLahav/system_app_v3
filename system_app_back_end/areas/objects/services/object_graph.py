@@ -4,11 +4,24 @@ from __future__ import annotations
 
 from sqlalchemy import and_, or_
 
-from models import EntityTag, File, InformationPiece, Link, ObjectEmbed, Tag, Topic, db
+from models import (
+    EntityTag,
+    File,
+    InformationPiece,
+    Link,
+    ObjectEmbed,
+    Tag,
+    Task,
+    Topic,
+    View,
+    ViewTaskMembership,
+    db,
+)
 
 
 LINK_KINDS = {"related", "description"}
 OBJECT_LINK_TYPES = {"task_list", "info", "image", "table"}
+TASK_LINK_TYPE = "task"
 
 
 def related_requires_info(source_type: str, target_type: str) -> bool:
@@ -80,20 +93,89 @@ def ensure_related_info_link(
 
 
 def description_links_hosted_in_file(file_id: int) -> list[Link]:
-    """Description rows whose source (host) object lives in this file."""
-    host_ids = [
-        row.id for row in ObjectEmbed.query.filter_by(file_id=file_id).all()
+    """Description rows whose host object or task lives in this file."""
+    hosts = ObjectEmbed.query.filter_by(file_id=file_id).all()
+    host_ids = [row.id for row in hosts]
+    list_ids = [
+        row.task_list_id for row in hosts if row.type == "task_list" and row.task_list_id
     ]
-    if not host_ids:
-        return []
-    return (
+    links: list[Link] = []
+    if host_ids:
+        links.extend(
+            Link.query.filter(
+                Link.kind == "description",
+                Link.source_type.in_(tuple(OBJECT_LINK_TYPES)),
+                Link.source_id.in_(host_ids),
+                Link.target_type == "info",
+            ).all()
+        )
+    if list_ids:
+        task_ids = [
+            t.id
+            for t in Task.query.filter(Task.task_list_id.in_(list_ids)).all()
+        ]
+        if task_ids:
+            links.extend(
+                Link.query.filter(
+                    Link.kind == "description",
+                    Link.source_type == TASK_LINK_TYPE,
+                    Link.source_id.in_(task_ids),
+                    Link.target_type == "info",
+                ).all()
+            )
+    return links
+
+
+def description_link_dicts_for_task(task_id: int) -> list[dict]:
+    rows = (
         Link.query.filter(
             Link.kind == "description",
-            Link.source_type.in_(tuple(OBJECT_LINK_TYPES)),
-            Link.source_id.in_(host_ids),
+            Link.source_type == TASK_LINK_TYPE,
+            Link.source_id == int(task_id),
             Link.target_type == "info",
         ).all()
     )
+    out = []
+    for link in rows:
+        data = link.to_dict()
+        target = db.session.get(ObjectEmbed, link.target_id)
+        data["peer"] = info_peer_dict(target, link.target_id)
+        out.append(data)
+    return out
+
+
+def delete_links_for_task(task_id: int) -> None:
+    Link.query.filter_by(
+        source_type=TASK_LINK_TYPE, source_id=int(task_id)
+    ).delete(synchronize_session=False)
+
+
+def workspace_id_for_task(task: Task) -> int | None:
+    if task.task_list_id:
+        embed = ObjectEmbed.query.filter_by(
+            type="task_list", task_list_id=task.task_list_id
+        ).first()
+        if embed is not None:
+            file = db.session.get(File, embed.file_id)
+            if file is not None:
+                topic = db.session.get(Topic, file.topic_id)
+                if topic is not None:
+                    return topic.workspace_id
+    membership = ViewTaskMembership.query.filter_by(task_id=task.id).first()
+    if membership is not None:
+        view = db.session.get(View, membership.view_id)
+        if view is not None:
+            return view.workspace_id
+    return None
+
+
+def file_id_for_task(task: Task) -> int | None:
+    if not task.task_list_id:
+        return None
+    embed = ObjectEmbed.query.filter_by(
+        type="task_list", task_list_id=task.task_list_id
+    ).first()
+    return embed.file_id if embed is not None else None
 
 
 def info_peer_dict(embed: ObjectEmbed | None, object_id: int) -> dict:

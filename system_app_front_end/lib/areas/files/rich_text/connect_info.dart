@@ -13,16 +13,11 @@ int? _asInt(dynamic value) {
   return int.tryParse('$value');
 }
 
-List<DescriptionTextRange> descriptionRangesForSegment({
-  required AppState state,
-  required int fileId,
-  required String segmentId,
-}) {
+List<DescriptionTextRange> descriptionRangesFromLinks(
+  List<Map<String, dynamic>> links,
+) {
   return [
-    for (final link in state.descriptionLinksForSegment(
-      fileId: fileId,
-      segmentId: segmentId,
-    ))
+    for (final link in links)
       if (link['anchor'] is Map)
         DescriptionTextRange(
           start: _asInt((link['anchor'] as Map)['start']) ?? 0,
@@ -30,6 +25,19 @@ List<DescriptionTextRange> descriptionRangesForSegment({
           link: link,
         ),
   ].where((r) => r.end > r.start).toList();
+}
+
+List<DescriptionTextRange> descriptionRangesForSegment({
+  required AppState state,
+  required int fileId,
+  required String segmentId,
+}) {
+  return descriptionRangesFromLinks(
+    state.descriptionLinksForSegment(
+      fileId: fileId,
+      segmentId: segmentId,
+    ),
+  );
 }
 
 int? descriptionTargetObjectId(Map<String, dynamic> link) {
@@ -90,6 +98,35 @@ Future<void> connectInfoFromMark({
     targetObjectId: pick.objectId,
     anchor: anchor,
     alsoRelated: host.type == 'info' && !objectHasRelatedTo(host, pick.objectId),
+  );
+}
+
+Future<void> connectInfoFromTask({
+  required BuildContext context,
+  required AppState state,
+  required int taskId,
+  String? segmentId,
+  int? fileId,
+}) async {
+  final mark = BlockTextFocusRegistry.resolveMark();
+  final anchor = descriptionAnchorFromMark(
+    mark,
+    segmentId: segmentId ?? 'task:$taskId',
+    fileId: fileId,
+  );
+  if (anchor == null) return;
+  if (!context.mounted) return;
+
+  final pick = await showPickInfoObjectDialog(
+    context: context,
+    state: state,
+  );
+  if (pick == null) return;
+
+  await state.createTaskDescriptionLink(
+    taskId: taskId,
+    targetObjectId: pick.objectId,
+    anchor: anchor,
   );
 }
 

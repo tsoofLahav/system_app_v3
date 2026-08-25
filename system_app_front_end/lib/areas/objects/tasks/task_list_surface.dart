@@ -87,7 +87,7 @@ class TaskListSurface extends StatefulWidget {
   /// ↓ on the last line of the list — leave the embed downward.
   final VoidCallback? onArrowExitBelow;
 
-  /// In-file host object this list belongs to — Connect info stores spans here.
+  /// In-file host object — list title Connect info still stores on this object.
   final ObjectEmbed? hostEmbed;
 
   @override
@@ -801,6 +801,26 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     );
   }
 
+  List<DescriptionTextRange> _taskDescriptionRanges(int index) {
+    final id = index >= 0 && index < _taskIds.length ? _taskIds[index] : null;
+    final task = id == null ? null : _taskById(id);
+    final fromTask = descriptionRangesFromLinks(task?.descriptionLinks ?? const []);
+    final seen = {for (final r in fromTask) r.link['id']};
+    return [
+      ...fromTask,
+      for (final r in _descriptionRanges(widget.taskSegmentId?.call(index)))
+        if (!seen.contains(r.link['id'])) r,
+    ];
+  }
+
+  String? _taskSegmentId(int index) {
+    final fromHost = widget.taskSegmentId?.call(index);
+    if (fromHost != null && fromHost.isNotEmpty) return fromHost;
+    final id = index >= 0 && index < _taskIds.length ? _taskIds[index] : null;
+    if (id == null) return null;
+    return 'task:$id';
+  }
+
   Future<void> _connectInfo({String? segmentId}) async {
     final host = widget.hostEmbed;
     if (host == null) return;
@@ -809,6 +829,19 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       state: widget.state,
       host: host,
       segmentId: segmentId,
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _connectTaskInfo(int index) async {
+    final id = index >= 0 && index < _taskIds.length ? _taskIds[index] : null;
+    if (id == null) return;
+    await connectInfoFromTask(
+      context: context,
+      state: widget.state,
+      taskId: id,
+      segmentId: _taskSegmentId(index),
+      fileId: widget.hostEmbed?.fileId,
     );
     if (mounted) setState(() {});
   }
@@ -826,10 +859,10 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       strings: widget.state.strings,
       extraEntries: extras,
       includeAssignView: widget.includeAssignView,
-      includeConnectInfo: widget.hostEmbed != null,
+      includeConnectInfo: true,
       onAction: (action) async {
         if (action == 'text:connect_info') {
-          await _connectInfo(segmentId: widget.taskSegmentId?.call(index));
+          await _connectTaskInfo(index);
           return;
         }
         if (action == 'tasks:reorder_mode') {
@@ -1032,7 +1065,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       title: FormattedTextField(
         controller: _controllers[index],
         focusNode: _focusNodes[index],
-        segmentId: widget.taskSegmentId?.call(index),
+        segmentId: _taskSegmentId(index),
         documentBaseOffset: widget.documentBaseOffset,
         style: titleStyle,
         maxLines: null,
@@ -1046,13 +1079,11 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         onBackspaceAtStart: () => _handleBackspace(index),
         onSecondaryTapDown: (d) => _showTaskMenu(d, index),
         taskId: id,
-        descriptionRanges: _descriptionRanges(widget.taskSegmentId?.call(index)),
-        onDescriptionActivate: widget.hostEmbed == null
-            ? null
-            : (range) => openDescriptionTarget(
-                  state: widget.state,
-                  link: range.link,
-                ),
+        descriptionRanges: _taskDescriptionRanges(index),
+        onDescriptionActivate: (range) => openDescriptionTarget(
+          state: widget.state,
+          link: range.link,
+        ),
         onArrowExitAbove: () => _arrowFromLine(
               _hasTitleLine ? index + 1 : index,
               goingDown: false,

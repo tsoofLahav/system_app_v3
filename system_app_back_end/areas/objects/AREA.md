@@ -63,7 +63,7 @@ The `links` table is the workspace **object graph**, keyed by **`objects.id`** f
 
 | Column | Meaning |
 |--------|---------|
-| `source_type`, `source_id` | Host object (`info` / `task_list` / `table` / …). Related: one info. |
+| `source_type`, `source_id` | Host: an object (`info` / `task_list` / `table` / …) or a **task** (`source_type='task'`, `source_id=tasks.id`). Related: one info. |
 | `target_type`, `target_id` | Related: the other info. Description: the connected info. |
 | `kind` | `related` (default) or `description` |
 | `anchor` | Description span on the **host**: `{ segment_id, start, end }` (`file_id` optional) |
@@ -71,16 +71,19 @@ The `links` table is the workspace **object graph**, keyed by **`objects.id`** f
 | Kind | Shape | How it is created |
 |------|-------|-------------------|
 | **Related** | **info ↔ info** only | Object chrome or map node → Add connection |
-| **Description** | **Any object’s marked text → an info** | Field menu → Connect info… Stored on the host. Many spans per host are allowed. Self-links are rejected. |
+| **Description** | **Marked text → an info** | Field menu → Connect info… On a **task title**, stored on the task (`source_type=task`) so the same underline shows in the file and in views. On other objects, stored on the host object. Many spans per host are allowed. Self-links are rejected. |
 
 If the marked text lives **inside an info**, creating the description **also upserts related** between those two infos so the objects map gets an edge. Text inside a task or table does not draw a map edge. Deleting one kind does **not** delete the other.
+
+Task title description links travel with the task row (`description_links` on task payloads and view memberships). `GET /files/:id/description-links` also returns task-hosted links whose home list lives in that file, so in-file underlines keep working. Older `task_list` + segment links still paint in the file only; new Connect info on a task uses the task id. `delete_task_cascade` drops those rows.
 
 | Endpoint | Role |
 |----------|------|
 | `GET /objects/graph?workspace_id=` | Info nodes (title, body, topic_id/color, tag_ids, `diagram_x`/`diagram_y`) + related info↔info edges for the objects map (description edges skipped) |
 | `PUT /objects/graph/positions` | Batch-write map coordinates `{ workspace_id, positions: [{ object_id, x, y }] }` |
 | `GET/POST /objects/:id/links` | List / create connections. Related: `target_object_id` (info). Description: `target_object_id` (info) + `anchor` on **this** host |
-| `GET /files/:id/description-links` | Description links whose **source object lives in that file** (peer = target info) |
+| `POST /tasks/:id/links` | Description only: `target_object_id` (info) + `anchor` on **this** task title. `DELETE /tasks/:id/links/:link_id` |
+| `GET /files/:id/description-links` | Description links whose **source object or task** lives in that file (peer = target info) |
 | `PUT /objects/:id/tags` | Replace object tags |
 | `PATCH /tags/:id` | Update tag name/color/icon |
 | `PATCH /objects/:id` | `sort_key`, `anchor`, image/table `payload`, and `diagram_x` / `diagram_y` |
@@ -113,7 +116,7 @@ Deleting anything that contains objects must cascade, or the database keeps orph
 | [`routes/objects.py`](routes/objects.py) | Create/update/delete embeds; links; graph; object tags; insert embed blocks |
 | [`services/object_graph.py`](services/object_graph.py) | Links-map build, connection dicts, link/tag helpers |
 | [`services/table_payload.py`](services/table_payload.py) | Normalize table/chart payloads (incl. legacy graph shape) |
-| [`routes/tasks.py`](routes/tasks.py) | Task CRUD, status, due date |
+| [`routes/tasks.py`](routes/tasks.py) | Task CRUD, status, due date, task description links |
 | [`routes/task_lists.py`](routes/task_lists.py) | Task list contents and reorder |
 | [`routes/information.py`](routes/information.py) | Info pieces |
 | [`routes/views.py`](routes/views.py) | Views and memberships |
@@ -128,4 +131,4 @@ Deleting anything that contains objects must cascade, or the database keeps orph
 - Ordering is explicit (`list_order_index`), never implied by id.
 - Creating an object via `POST /files/:id/objects` must also insert its embed block — an object with no block is invisible.
 - Never delete a container without its cascade.
-- Related links are info ↔ info only. Description links are host object → info (any host type).
+- Related links are info ↔ info only. Description links are host object → info (any host type), or **task → info** for a title span.

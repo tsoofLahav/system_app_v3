@@ -805,6 +805,25 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<void> createTaskDescriptionLink({
+    required int taskId,
+    required int targetObjectId,
+    required Map<String, dynamic> anchor,
+    String? label,
+  }) async {
+    await _tasks.createDescriptionLink(
+      taskId,
+      targetObjectId: targetObjectId,
+      anchor: anchor,
+      label: label,
+    );
+    final fileId = anchor['file_id'] as int?;
+    if (fileId != null) {
+      await loadDescriptionLinksForFile(fileId);
+    }
+    await refreshOpenTaskSurfaces(notify: true);
+  }
+
   Future<List<Map<String, dynamic>>> listObjectLinks(int objectId) {
     return _objects.listLinks(objectId);
   }
