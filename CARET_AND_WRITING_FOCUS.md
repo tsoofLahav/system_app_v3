@@ -25,6 +25,8 @@ A file is **one continuous piece of text**. Paragraphs, lists, tables, and objec
 
 A blank line the user typed is text and is saved. Move and delete must not leave empty paragraphs the user did not make.
 
+A tap **on glyphs** in a table cell, task, or info stays with Flutter. Only empty padding **beside** the line jumps to the logical end — extra cell/row padding below ink does not.
+
 ---
 
 ## 2. Two surfaces, one writing session

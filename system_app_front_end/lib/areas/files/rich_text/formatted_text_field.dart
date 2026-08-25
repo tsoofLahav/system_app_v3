@@ -829,8 +829,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   /// Shift+click extends the document selection into this part; a plain click
   /// drops a selection that was covering several parts.
   ///
-  /// RTL solution (`rtl/RTL.md`): empty-padding taps → logical line end in this
-  /// same `onTap` turn; glyph taps keep Flutter's hit-test.
+  /// RTL solution (`rtl/RTL.md`): padding beside the line → logical end in this
+  /// same `onTap` turn; glyph taps and tall-cell padding keep Flutter.
   void _handleTap() {
     final flow = _flow;
     final segmentId = _registeredSegmentId;

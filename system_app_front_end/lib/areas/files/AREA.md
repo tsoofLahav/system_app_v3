@@ -186,7 +186,7 @@ Embed-internal fields may still register with `DocumentTextFlow` when nested; th
 | Up/Down inside a table | Moves **by column**, and leaves the table from the edge rows |
 | Shift+arrows | Selection grows past part boundaries |
 | Shift+click, drag | Marks across paragraphs, bullets, and cells at once |
-| Click in empty space below / between parts | Structure: caret at the **logical end** of the last part above. Empty files fill the viewport so that area is tappable. (In-field empty padding → [RTL solution](rich_text/rtl/RTL.md).) |
+| Click in empty space below / between parts | Structure: caret at the **logical end** of the last part above. Empty files fill the viewport so that area is tappable. In-field: glyph taps stay with Flutter; padding beside the line slot → logical end ([RTL solution](rich_text/rtl/RTL.md)). |
 | Cmd+A | Selects the entire file, every part |
 | Copy / cut | Joins the marked parts with newlines |
 | Backspace / typing | Replaces the whole marked range |

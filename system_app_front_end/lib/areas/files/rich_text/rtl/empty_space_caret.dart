@@ -1,12 +1,17 @@
 /// Empty-padding caret correction — part of the [RTL solution](RTL.md).
 ///
-/// Taps **on glyphs** stay with Flutter. Taps in empty padding beside/below
-/// painted text use the logical line end ([RenderEditable.getLineAtOffset]).
-/// Apply in `onTap` before paint — never post-frame.
+/// Taps **on glyphs** (few px slop) stay with Flutter. Empty `boxes` stay with
+/// Flutter. Taps in empty padding **beside the line slot** use the logical line
+/// end ([RenderEditable.getLineAtOffset]). Extra cell/row padding above or
+/// below ink is not a line-end jump. Apply in `onTap` before paint — never
+/// post-frame.
 library;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
+
+/// Hit slop around glyph ink so a tap on a letter in a tall cell stays Flutter.
+const double _kEmptySpaceGlyphSlop = 4;
 
 /// Caret offset for a tap in empty padding, or null when the tap is on glyphs.
 int? emptySpaceCaretOffset({
@@ -44,18 +49,17 @@ int? emptySpaceCaretOffsetFromBoxes({
   int Function(Offset probeOnGlyphs)? logicalLineEndAt,
 }) {
   if (textLength <= 0) return 0;
-  if (boxes.isEmpty) return textLength;
+  if (boxes.isEmpty) return null;
 
-  var lastBottom = boxes.first.bottom;
   for (final box in boxes) {
-    if (box.bottom > lastBottom) lastBottom = box.bottom;
+    if (box.inflate(_kEmptySpaceGlyphSlop).contains(local)) return null;
   }
-
-  if (local.dy > lastBottom + 0.5) return textLength;
 
   final onLine = [
     for (final box in boxes)
-      if (local.dy >= box.top - 0.5 && local.dy <= box.bottom + 0.5) box,
+      if (local.dy >= box.top - _kEmptySpaceGlyphSlop &&
+          local.dy <= box.bottom + _kEmptySpaceGlyphSlop)
+        box,
   ];
   if (onLine.isEmpty) return null;
 

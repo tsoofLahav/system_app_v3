@@ -4,14 +4,26 @@ import 'package:system_app_front_end/areas/files/rich_text/rtl/rtl.dart';
 
 void main() {
   group('emptySpaceCaretOffsetFromBoxes', () {
-    test('below the last line → logical end of text', () {
+    test('empty boxes → null (Flutter keeps the hit-test)', () {
       expect(
         emptySpaceCaretOffsetFromBoxes(
-          boxes: const [Rect.fromLTRB(40, 0, 120, 20)],
-          local: const Offset(80, 40),
+          boxes: const [],
+          local: const Offset(40, 18),
           textLength: 10,
         ),
-        10,
+        isNull,
+      );
+    });
+
+    test('center of a short line in a tall cell → null', () {
+      // Glyphs near the top of a 36px cell; tap is the cell center, below ink.
+      expect(
+        emptySpaceCaretOffsetFromBoxes(
+          boxes: const [Rect.fromLTRB(8, 2, 80, 16)],
+          local: const Offset(44, 18),
+          textLength: 8,
+        ),
+        isNull,
       );
     });
 

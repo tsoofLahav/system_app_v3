@@ -59,8 +59,9 @@ Full-width fields leave empty space beside glyphs (especially RTL). Flutter’s 
 
 | Tap target | Who places the caret |
 |------------|----------------------|
-| On painted glyphs | Flutter (`getPositionForPoint`) |
-| Empty padding beside / below glyphs | Logical line end via `getLineAtOffset` (probe glyph **center** only to learn which line) |
+| On painted glyphs (few px slop), or empty `boxes` | Flutter (`getPositionForPoint`) |
+| Empty padding **beside** the line slot | Logical line end via `getLineAtOffset` (probe glyph **center** only to learn which line) |
+| Extra cell/row padding above/below ink (tall cells, centered tasks) | Flutter — do not treat ink-bottom as the line |
 | Empty space under the whole file (outside every field) | `DocumentTextFlow` → logical end of last part |
 
 Correction runs in `FormattedTextField.onTap` **in the same event turn** (before paint). Never post-frame — that flashes wrong → right.
@@ -116,6 +117,7 @@ Manual (Hebrew UI):
 4. Click empty space beside the line → caret at logical end (resume writing)  
 5. Click below the paragraph / empty file → caret at end of last line  
 6. Click on a Hebrew letter mid-word → caret stays where Flutter put it on the glyph  
+7. Click mid-word in a table cell / task / info (including tall-cell padding below ink) → caret stays on the word, not the line end  
 
 ## Related
 
