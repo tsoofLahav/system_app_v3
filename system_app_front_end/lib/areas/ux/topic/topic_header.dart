@@ -55,7 +55,7 @@ class TopicHeader extends StatelessWidget {
               ],
               Expanded(
                 child: Text(
-                  state.topicDisplayName(topic),
+                  state.topicHeadline(topic),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.noteTitleStyle.copyWith(

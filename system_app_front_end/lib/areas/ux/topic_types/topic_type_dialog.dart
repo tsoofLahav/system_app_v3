@@ -62,6 +62,24 @@ Future<void> showTopicTypeDialog({
   );
 }
 
+/// Open the type's template and close Preferences plus every type dialog.
+Future<void> openTypeTemplateAndDismiss({
+  required BuildContext context,
+  required AppState state,
+  required TopicType type,
+}) async {
+  try {
+    await state.openTypeTemplate(type);
+    if (!context.mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  } on ApiException catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(error.message)));
+  }
+}
+
 void showTopicTypeConfigHint(BuildContext context, AppState state) {
   final box =
       ChromeAnchors.preferencesButton.currentContext?.findRenderObject()
@@ -198,6 +216,14 @@ class _TopicTypesListDialogState extends State<_TopicTypesListDialog> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _openTemplate(TopicType type) {
+    return openTypeTemplateAndDismiss(
+      context: context,
+      state: state,
+      type: type,
+    );
+  }
+
   Future<void> _delete(TopicType type) async {
     final s = state.strings;
     final confirmed = await showAppConfirmDialog(
@@ -220,6 +246,26 @@ class _TopicTypesListDialogState extends State<_TopicTypesListDialog> {
         ),
       );
     }
+  }
+
+  Widget _rowActions(TopicType type, {Widget? leading}) {
+    final s = state.strings;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ?leading,
+        IconButton(
+          tooltip: s['editTemplate'],
+          icon: const AppIcon(AppIcons.edit, size: 16),
+          onPressed: () => _openTemplate(type),
+        ),
+        IconButton(
+          tooltip: s['delete'],
+          icon: const AppIcon(AppIcons.trash, size: 16),
+          onPressed: () => _delete(type),
+        ),
+      ],
+    );
   }
 
   @override
@@ -283,24 +329,15 @@ class _TopicTypesListDialogState extends State<_TopicTypesListDialog> {
                             dense: true,
                             title: Text(state.topicTypeDisplayName(type)),
                             onTap: () => _open(type),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ReorderableDragStartListener(
-                                  index: index,
-                                  child: const Padding(
-                                    padding: EdgeInsetsDirectional.only(
-                                      end: 4,
-                                    ),
-                                    child: AppIcon(AppIcons.menu, size: 16),
-                                  ),
+                            trailing: _rowActions(
+                              type,
+                              leading: ReorderableDragStartListener(
+                                index: index,
+                                child: const Padding(
+                                  padding: EdgeInsetsDirectional.only(end: 4),
+                                  child: AppIcon(AppIcons.menu, size: 16),
                                 ),
-                                IconButton(
-                                  tooltip: s['delete'],
-                                  icon: const AppIcon(AppIcons.trash, size: 16),
-                                  onPressed: () => _delete(type),
-                                ),
-                              ],
+                              ),
                             ),
                           ),
                         );
@@ -315,11 +352,7 @@ class _TopicTypesListDialogState extends State<_TopicTypesListDialog> {
                         dense: true,
                         title: Text(state.topicTypeDisplayName(type)),
                         onTap: () => _open(type),
-                        trailing: IconButton(
-                          tooltip: s['delete'],
-                          icon: const AppIcon(AppIcons.trash, size: 16),
-                          onPressed: () => _delete(type),
-                        ),
+                        trailing: _rowActions(type),
                       );
                     },
                   ),
@@ -412,16 +445,11 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
   Future<void> _openTemplate() async {
     final type = _type;
     if (type == null) return;
-    try {
-      await state.openTypeTemplate(type);
-      if (!mounted) return;
-      Navigator.pop(context);
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-    }
+    await openTypeTemplateAndDismiss(
+      context: context,
+      state: state,
+      type: type,
+    );
   }
 
   Future<void> _addExistingAction() async {

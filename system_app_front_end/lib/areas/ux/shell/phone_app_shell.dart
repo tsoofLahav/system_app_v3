@@ -13,6 +13,7 @@ import '../../objects/diagram/object_diagram_pane.dart';
 import '../../objects/views/task_view_pane.dart';
 import '../topic/topic_appearance.dart';
 import '../topic/topic_view.dart';
+import '../topic_types/type_template_edit_bar.dart';
 import '../widgets/main_pane_loader.dart';
 import './app_bottom_bar.dart';
 
@@ -48,7 +49,7 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
     final topic = state.selectedTopic ?? state.selectedDetail?.topic;
     if (topic == null) return 'system_app';
     if (topic.isMain) return s['main'];
-    return topic.name;
+    return state.topicHeadline(topic);
   }
 
   bool get _showAddFile =>
@@ -101,54 +102,52 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
           child: Scaffold(
             key: _scaffoldKey,
             backgroundColor: AppColors.phoneStripe,
-          drawer: Drawer(
-            width: (MediaQuery.sizeOf(context).width *
-                    AppSidebarMetrics.phoneWidthFraction)
-                .clamp(200.0, AppSidebarMetrics.phoneMaxWidth),
-            backgroundColor: Colors.transparent,
-            child: AppSidebar(
-              state: state,
-              isPhone: true,
+            drawer: Drawer(
+              width:
+                  (MediaQuery.sizeOf(context).width *
+                          AppSidebarMetrics.phoneWidthFraction)
+                      .clamp(200.0, AppSidebarMetrics.phoneMaxWidth),
+              backgroundColor: Colors.transparent,
+              child: AppSidebar(state: state, isPhone: true),
             ),
-          ),
-          appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            foregroundColor: AppColors.text,
-            surfaceTintColor: Colors.transparent,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            flexibleSpace: DecoratedBox(
-              decoration: AppColors.phoneHeaderDecoration(
-                topicAccent: accent,
-                isMainTopic: isMain,
-                neutral: state.isViewMode || state.isDiagramMode,
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              foregroundColor: AppColors.text,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              flexibleSpace: DecoratedBox(
+                decoration: AppColors.phoneHeaderDecoration(
+                  topicAccent: accent,
+                  isMainTopic: isMain,
+                  neutral: state.isViewMode || state.isDiagramMode,
+                ),
+                child: const SizedBox.expand(),
               ),
-              child: const SizedBox.expand(),
+              title: Text(
+                _title(),
+                style: AppTypography.noteTitleStyle.copyWith(fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
+              leading: IconButton(
+                icon: const AppIcon(AppIcons.menu, size: 22),
+                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+              ),
+              actions: [
+                if (_showBringFile)
+                  IconButton(
+                    tooltip: state.strings['bringFile'],
+                    icon: const AppIcon(AppIcons.bringFile, size: 22),
+                    onPressed: () => _bringFile(context),
+                  ),
+                if (_showAddFile)
+                  IconButton(
+                    tooltip: state.strings['addFile'],
+                    icon: const AppIcon(AppIcons.add, size: 22),
+                    onPressed: () => _addFile(context),
+                  ),
+              ],
             ),
-            title: Text(
-              _title(),
-              style: AppTypography.noteTitleStyle.copyWith(fontSize: 16),
-              overflow: TextOverflow.ellipsis,
-            ),
-            leading: IconButton(
-              icon: const AppIcon(AppIcons.menu, size: 22),
-              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-            ),
-            actions: [
-              if (_showBringFile)
-                IconButton(
-                  tooltip: state.strings['bringFile'],
-                  icon: const AppIcon(AppIcons.bringFile, size: 22),
-                  onPressed: () => _bringFile(context),
-                ),
-              if (_showAddFile)
-                IconButton(
-                  tooltip: state.strings['addFile'],
-                  icon: const AppIcon(AppIcons.add, size: 22),
-                  onPressed: () => _addFile(context),
-                ),
-            ],
-          ),
             body: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -175,8 +174,7 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
                                           ),
                                           state: state,
                                         )
-                                      : state.isViewMode &&
-                                          state.viewPaneReady
+                                      : state.isViewMode && state.viewPaneReady
                                       ? TaskViewPane(
                                           key: ValueKey(
                                             'view-${state.selectedViewType}',
@@ -196,6 +194,16 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
                               backgroundColor: Colors.transparent,
                             ),
                           ),
+                        if (state.isEditingTypeTemplate)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: AppBottomBarMetrics.phoneBarHeight,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [TypeTemplateEditBar(state: state)],
+                            ),
+                          ),
                         Positioned(
                           left: 0,
                           right: 0,
@@ -207,7 +215,8 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
                   ),
                 ),
                 SizedBox(
-                  height: MediaQuery.viewPaddingOf(context).bottom +
+                  height:
+                      MediaQuery.viewPaddingOf(context).bottom +
                       AppBottomBarMetrics.phoneFooterStripe,
                   child: const ColoredBox(color: AppColors.phoneStripe),
                 ),

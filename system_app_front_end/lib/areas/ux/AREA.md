@@ -172,7 +172,7 @@ Tapping outside the focused editor (canvas, empty padding — not another field)
 - Open the **Objects map** (info object graph) — listed after topics
 - Reach the archive
 - Create a topic, view, tag, or **topic type** from the centered sidebar **+** — a context-menu bubble lists the choices; each opens its own create dialog (tags are filtered on the objects map, not listed as a sidebar section). Creating a type does not open the type editor; a short hint points at Preferences.
-- Topic types are user-defined. The sidebar has one section per type, plus Main (Home) and Others (untyped non-Home topics). Configure types from Preferences; **Reorder** in that list shows drag handles. Topics and views have no handles until **sidebar reorder mode** (⌘O when no task has the caret, or Preferences → Reorder). Right-click a view to rename or delete it (tasks stay in their files). A type's template is a hidden topic edited from Preferences.
+- Topic types are user-defined. The sidebar has one section per type, plus Main (Home) and Others (untyped non-Home topics). Configure types from Preferences; **Reorder** in that list shows drag handles; a **pencil** next to trash opens that type's template and closes Preferences. Topics and views have no handles until **sidebar reorder mode** (⌘O when no task has the caret, or Preferences → Reorder). Right-click a view to rename or delete it (tasks stay in their files). A type's template is a hidden topic: headline **Template for {type}**, with a glass Save (keep edits, Home) / Cancel (restore the enter snapshot) bar.
 
 The sidebar is navigation only. It never edits content.
 

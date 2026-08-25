@@ -54,6 +54,13 @@ class TopicDetail {
   final List<AppFile> files;
 }
 
+class _TypeTemplateEdit {
+  _TypeTemplateEdit({required this.topicId, required this.files});
+
+  final int topicId;
+  final Map<int, Map<String, dynamic>> files;
+}
+
 enum ViewDisplayMode { bySection, byTopic, flat }
 
 class AppState extends ChangeNotifier {
@@ -106,6 +113,7 @@ class AppState extends ChangeNotifier {
 
   bool isViewMode = false;
   bool viewPaneReady = false;
+
   /// Drag handles on sidebar topics and views — off until ⌘O or Preferences.
   bool sidebarReorderMode = false;
   String? selectedViewType;
@@ -149,6 +157,7 @@ class AppState extends ChangeNotifier {
   bool archiveDeleteMode = false;
   final Set<int> archiveDeleteSelection = {};
   Map<String, dynamic>? pendingAgentReview;
+  _TypeTemplateEdit? _typeTemplateEdit;
 
   /// Files visiting Home — still belong to their source topics, not Home.
   /// Order among Home files is [homeCanvasOrderIds], not this list alone.
@@ -259,9 +268,9 @@ class AppState extends ChangeNotifier {
   bool get isRtl => strings.isRtl;
 
   List<Topic> get activeTopics => [
-        for (final topic in allTopics)
-          if (!topic.isArchived && !topic.isTemplate) topic,
-      ];
+    for (final topic in allTopics)
+      if (!topic.isArchived && !topic.isTemplate) topic,
+  ];
 
   List<Topic> get untypedTopics => [
     for (final topic in activeTopics)
@@ -314,10 +323,8 @@ class AppState extends ChangeNotifier {
   }
 
   /// Object tags are freeform. Types live on `topic_types`, not as tags.
-  List<AppTag> get objectTags => objectTagsExcludingTopicTypes(
-        tags: allTags,
-        topicTypes: topicTypes,
-      );
+  List<AppTag> get objectTags =>
+      objectTagsExcludingTopicTypes(tags: allTags, topicTypes: topicTypes);
 
   Future<void> initialize() async {
     loading = true;
@@ -415,6 +422,30 @@ class AppState extends ChangeNotifier {
   }
 
   String topicDisplayName(Topic topic) => strings.displayTopicName(topic.name);
+
+  /// Header / phone title. A type template is "Template for {type}", not the
+  /// internal topic name.
+  String topicHeadline(Topic topic) {
+    if (!topic.isTemplate) return topicDisplayName(topic);
+    final type = typeForTemplateTopic(topic);
+    if (type == null) return strings['template'];
+    return strings.templateForType(topicTypeDisplayName(type));
+  }
+
+  TopicType? typeForTemplateTopic(Topic topic) {
+    if (!topic.isTemplate) return null;
+    for (final type in topicTypes) {
+      if (type.templateTopicId == topic.id) return type;
+    }
+    return null;
+  }
+
+  /// Opened from Preferences / the types list — Save and Cancel sit on a glass bar.
+  bool get isEditingTypeTemplate {
+    final id = selectedTopic?.id;
+    return id != null && _typeTemplateEdit?.topicId == id;
+  }
+
   String fileDisplayName(String name) => strings.fileNameLabel(name);
 
   String viewLabel(String type) {
@@ -439,6 +470,9 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> selectTopic(Topic topic) async {
+    if (_typeTemplateEdit != null && topic.id != _typeTemplateEdit!.topicId) {
+      _typeTemplateEdit = null;
+    }
     isViewMode = false;
     isArchiveMode = false;
     isDiagramMode = false;
@@ -1199,6 +1233,58 @@ class AppState extends ChangeNotifier {
       ];
     }
     await selectTopic(topic);
+    _typeTemplateEdit = _TypeTemplateEdit(
+      topicId: topic.id,
+      files: await _snapshotTypeTemplateFiles(topic.id),
+    );
+    notifyListeners();
+  }
+
+  Future<void> saveTypeTemplateEdit() async {
+    await DocumentEditorRegistry.flushActive();
+    _typeTemplateEdit = null;
+    await goHome();
+  }
+
+  Future<void> cancelTypeTemplateEdit() async {
+    await DocumentEditorRegistry.flushActive();
+    final session = _typeTemplateEdit;
+    if (session != null) {
+      await _restoreTypeTemplateFiles(session);
+      _typeTemplateEdit = null;
+    }
+    await goHome();
+  }
+
+  Future<Map<int, Map<String, dynamic>>> _snapshotTypeTemplateFiles(
+    int topicId,
+  ) async {
+    final files = await filesForTopic(topicId);
+    final snaps = <int, Map<String, dynamic>>{};
+    for (final file in files) {
+      final snap = await snapshotFileForAutomation(file.id);
+      snap['name'] = file.name;
+      snap['order_index'] = file.orderIndex;
+      snaps[file.id] = snap;
+    }
+    return snaps;
+  }
+
+  Future<void> _restoreTypeTemplateFiles(_TypeTemplateEdit session) async {
+    final live = await filesForTopic(session.topicId);
+    for (final file in live) {
+      final snap = session.files[file.id];
+      if (snap == null) {
+        await _files.deleteFile(file.id);
+        embedsByFileId.remove(file.id);
+        continue;
+      }
+      final restored = await applyFileSnippet(file.id, snap);
+      await updateFile(restored, {
+        'name': snap['name'],
+        'order_index': snap['order_index'],
+      }, notify: false);
+    }
   }
 
   Future<void> reorderTopicTypes(List<TopicType> ordered) async {

@@ -106,6 +106,9 @@ class AppStrings {
   String archiveTopicHeadline(String name) =>
       this['archiveTopicHeadline'].replaceAll('{name}', name);
 
+  String templateForType(String name) =>
+      this['templateForType'].replaceAll('{name}', name);
+
   String compactUndoInFile(String file, String topic) => this['compactUndoInFile']
       .replaceAll('{file}', file)
       .replaceAll('{topic}', topic);
@@ -508,6 +511,7 @@ class AppStrings {
     'untyped': 'None',
     'template': 'Template',
     'editTemplate': 'Edit template',
+    'templateForType': 'Template for {name}',
     'templateFiles': 'Files copied into new topics',
     'noTemplateFiles': 'No files yet. Open the template to add some.',
     'typeAiActions': 'AI actions',
@@ -1150,6 +1154,7 @@ class AppStrings {
     'untyped': 'ללא',
     'template': 'תבנית',
     'editTemplate': 'עריכת תבנית',
+    'templateForType': 'תבנית עבור {name}',
     'templateFiles': 'קבצים שמועתקים לנושאים חדשים',
     'noTemplateFiles': 'אין עדיין קבצים. פתחו את התבנית כדי להוסיף.',
     'typeAiActions': 'פעולות AI',

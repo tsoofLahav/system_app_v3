@@ -9,6 +9,7 @@ import '../../objects/diagram/object_diagram_pane.dart';
 import '../../objects/views/task_view_pane.dart';
 import '../topic/topic_appearance.dart';
 import '../topic/topic_view.dart';
+import '../topic_types/type_template_edit_bar.dart';
 import '../widgets/main_pane_loader.dart';
 import './app_bottom_bar.dart';
 
@@ -100,6 +101,16 @@ class _DesktopAppShellState extends State<DesktopAppShell> {
                             backgroundColor: Colors.transparent,
                           ),
                         ),
+                      if (state.isEditingTypeTemplate)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: AppBottomBarMetrics.scrollInset,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [TypeTemplateEditBar(state: state)],
+                          ),
+                        ),
                       Positioned(
                         left: 0,
                         right: 0,
@@ -136,11 +147,7 @@ class _DesktopAppShellState extends State<DesktopAppShell> {
 /// The topic wash is painted here, edge to edge, so it continues behind the
 /// sidebar. Sidebar glass and the bottom bar sit above it in the shell stack.
 class AppShellCanvas extends StatelessWidget {
-  const AppShellCanvas({
-    super.key,
-    this.topicAccent,
-    this.isMainTopic = true,
-  });
+  const AppShellCanvas({super.key, this.topicAccent, this.isMainTopic = true});
 
   final Color? topicAccent;
   final bool isMainTopic;
@@ -151,9 +158,7 @@ class AppShellCanvas extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: AppColors.neutralCanvasGradient,
-          ),
+          decoration: BoxDecoration(gradient: AppColors.neutralCanvasGradient),
         ),
         if (topicAccent != null)
           Positioned(

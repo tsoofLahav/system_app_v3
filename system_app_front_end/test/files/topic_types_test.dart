@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/files/data/topic.dart';
 import 'package:system_app_front_end/areas/files/data/topic_type.dart';
 import 'package:system_app_front_end/areas/files/data/app_file.dart';
+import 'package:system_app_front_end/core/l10n/app_strings.dart';
 
 void main() {
   test('a topic type carries its template pointer', () {
@@ -56,5 +57,10 @@ void main() {
       'meta': {'template_slot': 'doc'},
     });
     expect(file.templateSlot, 'doc');
+  });
+
+  test('the template headline names the type', () {
+    expect(AppStrings.en.templateForType('Daily'), 'Template for Daily');
+    expect(AppStrings.he.templateForType('יומי'), 'תבנית עבור יומי');
   });
 }
