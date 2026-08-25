@@ -40,7 +40,7 @@ class DocumentEditorController {
   /// True while this file's Super Editor focus node owns the keyboard.
   final bool Function()? isFocused;
 
-  /// Phone: Tab/Escape have no keys. The bottom bar offers these instead.
+  /// Phone: Shift+Enter has no key. The bottom bar offers these instead.
   final bool Function()? canEnterObject;
   final bool Function()? canLeaveObject;
   final VoidCallback? enterObject;

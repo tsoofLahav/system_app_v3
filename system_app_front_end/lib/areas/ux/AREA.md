@@ -163,7 +163,7 @@ Right-click a **section** frame to edit name, important flag, and section color.
 
 Phone uses its own shell — see [Phone screen structure](#phone-screen-structure). The two rolls are independent. A pending AI review opens as a full-width dialog with Current / Suggested toggle ([`lookalike_review_dialog.dart`](../production_agent/lookalike_review_dialog.dart)); it is not dismissible until Finish or Discard.
 
-Tapping outside the focused editor (canvas, empty padding — not another field) unfocuses it, hides the caret, and closes the keyboard, on phone and desktop ([`shell/dismiss_focus_on_outside_tap.dart`](shell/dismiss_focus_on_outside_tap.dart)). The **bottom menu** is excluded: insert and other bar tools must stay usable while typing. An open object is also excluded so a tap on its frame does not kill the field. On phone, the first pill is arrows plus enter/leave (Tab / Escape have no keys). Those arrows never mirror in Hebrew.
+Tapping outside the focused editor (canvas, empty padding — not another field) unfocuses it, hides the caret, and closes the keyboard, on phone and desktop ([`shell/dismiss_focus_on_outside_tap.dart`](shell/dismiss_focus_on_outside_tap.dart)). The **bottom menu** is excluded: insert and other bar tools must stay usable while typing. An open object is also excluded so a tap on its frame does not kill the field. On phone, the first pill is arrows plus enter/leave (Shift+Enter has no key). Those arrows never mirror in Hebrew.
 
 ## What the sidebar allows
 
@@ -236,7 +236,7 @@ List dialogs (connect, choose view, tags, move-file topic, topic type, and the n
 
 - Section changes swap the main pane only. Never rebuild or hide the sidebar and bottom bar on desktop.
 - On desktop, preferences and automations sit at the **start** of the bottom bar (left in English, right in Hebrew). Document insert tools and AI stay in the remaining center, on the same baseline — not above the bar.
-- On phone, those same parts sit in **one** horizontally scrolling row of bubbles. Swiping that strip is independent of swiping between files. When the caret is on or in an object, the **first** pill is arrows (left, down, up, right) plus enter/leave (Tab / Escape have no keys). The pad is locked LTR: left stays left and right stays right in Hebrew — the icons only *draw* a physical direction and never mirror. Table cells still flip with the Hebrew UI (visual left is a higher column). Do not change the locked [phone screen structure](#phone-screen-structure). There is no drag-up sheet.
+- On phone, those same parts sit in **one** horizontally scrolling row of bubbles. Swiping that strip is independent of swiping between files. When the caret is on or in an object, the **first** pill is arrows (left, down, up, right) plus enter/leave (Shift+Enter has no key). The pad is locked LTR: left stays left and right stays right in Hebrew — the icons only *draw* a physical direction and never mirror. Table cells still flip with the Hebrew UI (visual left is a higher column). Do not change the locked [phone screen structure](#phone-screen-structure). There is no drag-up sheet.
 - Navigation never mutates content. Opening, browsing, and arranging are separate from editing.
 - Every menu action is also reachable without the menu where it makes sense (shortcut or inline control).
 - Overlay modes (arrange, bring file, previews) must be cancellable without saving.

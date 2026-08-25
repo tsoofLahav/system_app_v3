@@ -400,7 +400,7 @@ class TableEmbedState extends State<TableEmbed>
   }
 
   void _onExitTable(int _) {
-    // Escape leaves via EmbedEditScope; empty Enter exits via host Escape path.
+    // Shift+Enter leaves via EmbedEditScope; empty Enter exits via host leave path.
   }
 
   @override

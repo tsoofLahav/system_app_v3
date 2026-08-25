@@ -787,7 +787,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     final nodeId = ObjectEmbedNode.idFor(embed.id);
     _embedsSnapshot = widget.state.embedsByFileId[widget.file.id];
     _reloadFromStored(updated.documentJson);
-    // After remount, put the caret *inside* the object (Tab-equivalent).
+    // After remount, put the caret *inside* the object (enter-equivalent).
     // Images have no inner field — fall back to the block caret (after it).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;

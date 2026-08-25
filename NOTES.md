@@ -37,14 +37,14 @@ This class of bug also comes back after embed/save/focus changes inside a file (
 2. **Debounce** embed field PATCHes (info / table / tasks already do ~400ms) — never hit the network on every character without a timer.
 3. **Patch cache before await** on embed writes so a remount cannot re-seed empty content mid-flight.
 4. On `AppState` embed-list changes, rebuild Super Editor only for **structural** changes (id / type / order). Payload-only list replacements must not `setState` the editor. If a structural rebuild is required and keys are down, use `runAfterKeystroke` ([`editor_key_handoff.dart`](system_app_front_end/lib/areas/files/editor/editor_key_handoff.dart)).
-5. **Tab / Escape** focus handoff → `runNextFrame`. **Destructive** deletes (empty Backspace removing a row/object) → `runAfterKeystroke`.
+5. **Shift+Enter** focus handoff → `runNextFrame`. **Destructive** deletes (empty Backspace removing a row/object) → `runAfterKeystroke`.
 6. Keep stable embed identities (`embed:<objectId>`, `GlobalKey` where State must survive parent rebuilds).
 7. Registries bump through [`FrameSafeNotifier`](system_app_front_end/lib/shared/utils/frame_safe_notifier.dart), which notifies immediately when the tree is free and waits for the end of the frame when it is not. Waiting always is not an option: post-frame callbacks do not schedule a frame, so a bump made while idle would never arrive.
 
 ### After you change editor code — smoke-check
 
 - Type quickly in: paragraph, info body, task title, table cell, chart-table cell.
-- Tab into an object, type, Escape out, type in the paragraph below.
+- Shift+Enter into an object, type, Shift+Enter out, type in the paragraph below.
 - If the assertion appears: **full restart** the app (hot reload can leave keys stuck); then fix the remount/notify path — do not ignore it.
 
 Detail and fluent-text rules: files [`AREA.md`](system_app_front_end/lib/areas/files/AREA.md) · [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md).
@@ -68,7 +68,7 @@ Detail and fluent-text rules: files [`AREA.md`](system_app_front_end/lib/areas/f
 
 - **2026-07-31** — **Files vs objects split:** in-file embed widgets live under [`files/editor/embeds/`](system_app_front_end/lib/areas/files/editor/embeds/) (presentation, flow, menus, Move Mode). Objects owns data + special qualities — **tasks/views**, **info links**, payloads (e.g. `tasks.status`). Thin overlay: embeds call object services/controls; they do not own those fields. See both [`AREA.md`](system_app_front_end/lib/areas/files/AREA.md) files.
 - **2026-07-27** — **Objects in a file** are top-level embed blocks. The document owns position; the object owns data. Move Mode is the object chrome menu and **⌘⇧O** (double-click selects a word in inner fields). Enter on an empty final task / info line / graph column exits below without destroying the object.
-- **2026-08-10** — **Atomic object blocks:** SE caret treats embeds as one block. **Tab**/click opens; **Escape** returns to the block; **Enter** inserts a line below. Tab/Escape use `runNextFrame`; destructive deletes still use `runAfterKeystroke`. Info is one text field (first line = title). No arrow auto-enter/exit. Rules: [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md).
+- **2026-08-10** — **Atomic object blocks:** SE caret treats embeds as one block. **Shift+Enter**/click opens; **Shift+Enter** returns to the block; **Enter** inserts a line below. Shift+Enter uses `runNextFrame`; destructive deletes still use `runAfterKeystroke`. Info is one text field (first line = title). No arrow auto-enter/exit. Rules: [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md).
 - **2026-08-11** — **Tables + charts:** one object type `table` (`payload.rows` + optional `payload.chart`). `[GRAPH id]` is sugar for chart-on tables. Shared UI: [`table_embed.dart`](system_app_front_end/lib/areas/files/editor/embeds/table_embed.dart) + [`RichTableEditor`](system_app_front_end/lib/areas/files/rich_text/rich_table_editor.dart).
 
 ---

@@ -9,6 +9,7 @@ import '../../../shared/utils/platform_text.dart';
 import '../../objects/links/info_description_bubble.dart';
 import '../editor/document_secondary_tap.dart';
 import '../editor/document_text_flow.dart';
+import '../editor/embed_exit_scope.dart';
 import './block_text_focus.dart';
 import './format_range.dart';
 import './frozen_selection_painter.dart';
@@ -551,6 +552,16 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
           : KeyEventResult.ignored;
     }
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if ((event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
+        HardwareKeyboard.instance.isShiftPressed) {
+      final exit = EmbedExitScope.maybeOf(context);
+      if (exit != null) {
+        exit.onExit(exit.nodeId);
+        return KeyEventResult.handled;
+      }
+    }
 
     final isMeta = HardwareKeyboard.instance.isMetaPressed;
     if (isMeta &&

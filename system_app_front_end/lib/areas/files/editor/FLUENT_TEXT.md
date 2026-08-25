@@ -23,9 +23,10 @@ A bullet, a table row, and an **embed block** count as **one line** of the docum
 | Situation | Behavior |
 |-----------|----------|
 | ↑/↓ in document text | Moves through paragraphs and **object blocks** as atomic units |
-| Tab on an object block | Opens the object (first inner field); click also works |
+| Tab on an object block | (does not open — Shift+Enter does) |
+| Shift+Enter on an object block | Opens the object (first inner field); click also works |
 | Enter on an object block | New paragraph **below** the object (keep writing) |
-| Escape inside an object | SE caret **after** the object (downstream / empty paragraph below) so typing continues under it. Phone: leave icon on the first bottom-bar pill |
+| Shift+Enter inside an object | SE caret **after** the object (downstream / empty paragraph below) so typing continues under it. Phone: leave icon on the first bottom-bar pill |
 | ↑/↓ inside an open object | Moves between that object’s lines only (does not leave). Coming from below lands at the end of the line (fluent text). Phone: keep the keyboard up across inner fields |
 | Delete a marked object | Object goes, like deleting a marked line |
 
@@ -48,14 +49,14 @@ Objects are **one Super Editor block**. The document caret never auto-enters via
 Mechanism ([`embed_caret_bridge.dart`](embed_caret_bridge.dart) + [`document_caret_session.dart`](document_caret_session.dart)):
 
 1. SE selection on `ObjectEmbedNode` = “on this object” (block wash).
-2. **Tab** (keyboard + macOS `insertTab:`) → open object ([`runNextFrame`](editor_key_handoff.dart)). Clicking a field also opens it.
+2. **Shift+Enter** → open object ([`runNextFrame`](editor_key_handoff.dart)). Clicking a field also opens it.
 3. **Enter** on the block → normal SE newline below the object.
-4. **Escape** → unfocus the embed field, place SE caret on a **TextNode after** the embed (insert empty paragraph if needed), then `requestFocus` on the next frame so SuperIme opens only against a live node.
+4. **Shift+Enter** inside → unfocus the embed field, place SE caret on a **TextNode after** the embed (insert empty paragraph if needed), then `requestFocus` on the next frame so SuperIme opens only against a live node.
 5. While an inner field is focused, SE selection and SE focus stay cleared (`adoptEmbed` unfocuses the editor; `openImeOnNonPrimaryFocusGain: false`). Insert must not `notifyListeners` mid-handoff or the IME dies after one character.
 6. Silent document reload that **replaces** `Editor` must remount `SuperEditor` (`ValueKey` epoch). SE recreates `DocumentImeInputClient` on `editContext` change without disposing the old client; the orphan keeps the dead `Document` while the shared composer selection points at new node ids → `selectUpstreamPosition` null-check crash on Escape/IME open.
-6. Inner ↑/↓ only move between embed lines; edges do not leave the object.
+7. Inner ↑/↓ only move between embed lines; edges do not leave the object.
 
-| Embed | Inner lines (after Tab) |
+| Embed | Inner lines (after Shift+Enter) |
 |-------|---------------------------|
 | Info | one field — first line is title (API/diagrams); rest is body |
 | Task list | list title → each task |
@@ -64,7 +65,7 @@ Mechanism ([`embed_caret_bridge.dart`](embed_caret_bridge.dart) + [`document_car
 
 ### Keystroke handoff
 
-- **Tab / Escape** focus moves use `runNextFrame` (one frame).
+- **Shift+Enter** focus moves use `runNextFrame` (one frame).
 - **Destructive** structure changes (empty Backspace deletes object/row) still use `runAfterKeystroke` so HardwareKeyboard can finish KeyUp.
 - **Phone IME:** Return inserts a newline (iOS ignores `textInputAction` on multiline fields) and empty-field delete is a no-op in the engine. [`FormattedTextField`](../rich_text/formatted_text_field.dart) treats a single IME newline as Enter, and holds an invisible sentinel so a second delete on an empty unit is empty Backspace. Same task / list / table / info rules as desktop.
 - Mid-keystroke remounts (AppState notify, embed list reload, disposing cell `FocusNode`s) cause `KeyDownEvent … already pressed`. Full MUST / MUST NOT checklist: [`NOTES.md` § Editor keyboard safety](../../../../../../NOTES.md#editor-keyboard-safety) and files [`AREA.md`](../AREA.md#keyboard--focus-safety-recurring-bug-class).

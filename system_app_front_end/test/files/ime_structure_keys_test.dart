@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:system_app_front_end/areas/files/editor/embed_exit_scope.dart';
 import 'package:system_app_front_end/areas/files/rich_text/formatted_text_field.dart';
 import 'package:system_app_front_end/areas/ui/app_icons.dart';
 
@@ -145,5 +147,39 @@ void main() {
     await tester.pump();
 
     expect(backs, 1);
+  });
+
+  testWidgets('Shift+Enter inside an object leaves instead of inserting a newline',
+      (tester) async {
+    var left = 0;
+    final controller = TextEditingController(text: 'hello');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EmbedExitScope(
+            nodeId: 'embed:1',
+            onExit: (_) => left++,
+            child: FormattedTextField(
+              controller: controller,
+              style: const TextStyle(fontSize: 14),
+              maxLines: null,
+              onEnter: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+
+    expect(left, 1);
+    expect(controller.text, 'hello');
   });
 }

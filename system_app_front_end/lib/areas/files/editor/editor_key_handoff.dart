@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-/// One frame later — default for Tab / Escape focus handoffs.
+/// One frame later — default for Shift+Enter object enter/leave handoffs.
 ///
 /// Prefer this over [runAfterKeystroke] when the key does not delete structure
 /// mid-KeyDown. Waiting for keys to clear can stall up to 500ms.
@@ -17,7 +17,7 @@ void runNextFrame(VoidCallback action) {
 /// deletes a structure, etc.): the field dies before the matching KeyUp is
 /// delivered cleanly.
 ///
-/// Use for destructive structure changes. For Tab/Escape focus handoff, use
+/// Use for destructive structure changes. For Shift+Enter focus handoff, use
 /// [runNextFrame] instead.
 ///
 /// See [`FLUENT_TEXT.md`](FLUENT_TEXT.md) § "Keystroke handoff".

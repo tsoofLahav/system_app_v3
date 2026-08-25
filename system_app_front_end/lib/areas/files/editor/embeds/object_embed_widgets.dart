@@ -480,7 +480,7 @@ class InfoEmbedState extends State<InfoEmbed>
     }
   }
 
-  /// Enter inserts a newline (first line stays the title). Leave with Escape.
+  /// Enter inserts a newline (first line stays the title). Leave with Shift+Enter.
   void _onEnter() {
     widget.onFocus?.call();
     final text = _controller.text;

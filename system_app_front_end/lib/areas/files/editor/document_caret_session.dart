@@ -13,9 +13,9 @@ enum DocumentCaretOwner {
 
 /// Enter/exit for atomic object blocks.
 ///
-/// Default: SE caret sits on the embed as one block. Tab opens the object;
-/// Escape places the SE caret **after** the object. Enter inserts a line under
-/// the object (normal SE behavior).
+/// Default: SE caret sits on the embed as one block. Shift+Enter opens the
+/// object; Shift+Enter again places the SE caret **after** the object. Enter
+/// inserts a line under the object (normal SE behavior).
 class DocumentCaretSession {
   DocumentCaretSession({
     required Editor editor,
@@ -34,7 +34,7 @@ class DocumentCaretSession {
 
   DocumentCaretOwner owner = DocumentCaretOwner.document;
 
-  /// Embed node id while an inner field owns the caret (for Escape → block).
+  /// Embed node id while an inner field owns the caret (for Shift+Enter → block).
   String? activeEmbedNodeId;
 
   /// Always the editor's live document so insert/select and IME serialize agree.
@@ -112,7 +112,7 @@ class DocumentCaretSession {
       primary.unfocus();
     }
 
-    // Next frame — Escape handoff; avoid runAfterKeystroke's keys-clear wait.
+    // Next frame — Shift+Enter handoff; avoid runAfterKeystroke's keys-clear wait.
     runNextFrame(() {
       if (_liveDoc.getNodeById(id) == null) {
         owner = DocumentCaretOwner.document;
