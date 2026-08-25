@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../core/l10n/app_strings.dart';
 import '../../ui/app_color_palettes.dart';
 import '../../ui/app_typography.dart';
+import '../editor/document_editor_controller.dart';
 import '../editor/document_text_flow.dart';
 import '../editor/editor_key_handoff.dart';
 import '../editor/embed_caret_bridge.dart';
@@ -84,7 +85,7 @@ class RichTableEditor extends StatefulWidget {
 
   final Future<void> Function()? onConnectInfo;
   final List<DescriptionTextRange> Function(int row, int column)?
-      descriptionRangesForCell;
+  descriptionRangesForCell;
   final ValueChanged<DescriptionTextRange>? onDescriptionActivate;
 
   @override
@@ -123,6 +124,15 @@ class RichTableEditorState extends State<RichTableEditor> {
   void _exitReorder() {
     if (_reorderKind == null) return;
     setState(() => _reorderKind = null);
+    final cell = _lastCell;
+    runNextFrame(() {
+      if (!mounted) return;
+      if (cell != null) {
+        _focusCell(cell.$1, cell.$2);
+      } else {
+        DocumentEditorRegistry.restoreActiveWritingFocus();
+      }
+    });
   }
 
   @override
@@ -878,11 +888,7 @@ class RichTableEditorState extends State<RichTableEditor> {
               children: [
                 for (var c = 0; c < _controllers[r].length; c++) ...[
                   if (c > 0 && showVertical)
-                    VerticalDivider(
-                      width: 1,
-                      thickness: 1,
-                      color: borderColor,
-                    ),
+                    VerticalDivider(width: 1, thickness: 1, color: borderColor),
                   Expanded(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
@@ -893,73 +899,68 @@ class RichTableEditorState extends State<RichTableEditor> {
                         ),
                       ),
                       child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            minHeight: _minCellHeight,
+                        constraints: const BoxConstraints(
+                          minHeight: _minCellHeight,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
+                          child: FormattedTextField(
+                            controller: _controllers[r][c],
+                            focusNode: _focusAt(r, c),
+                            hostKeyEvent: (node, event) =>
+                                _onCellKey(node, event, r, c),
+                            segmentId: tableCellSegmentId(widget.node.id, r, c),
+                            documentBaseOffset: widget.documentBaseOffset,
+                            style: AppTypography.documentParagraphStyle,
+                            maxLines: null,
+                            minLines: 1,
+                            onChanged: (_) => _emit(),
+                            onBackspaceAtStart: () async {
+                              _onEmptyCellBackspace(r, c);
+                            },
+                            onSecondaryTapDown: (d) => _showMenu(d, r, c),
+                            descriptionRanges:
+                                widget.descriptionRangesForCell?.call(r, c) ??
+                                const [],
+                            onDescriptionActivate: widget.onDescriptionActivate,
+                            onArrowExitAbove: () => _moveOnGrid(
+                              r,
+                              c,
+                              AxisDirection.up,
+                              stayInside: false,
                             ),
-                            child: FormattedTextField(
-                              controller: _controllers[r][c],
-                              focusNode: _focusAt(r, c),
-                              hostKeyEvent: (node, event) =>
-                                  _onCellKey(node, event, r, c),
-                              segmentId: tableCellSegmentId(
-                                widget.node.id,
-                                r,
-                                c,
-                              ),
-                              documentBaseOffset: widget.documentBaseOffset,
-                              style: AppTypography.documentParagraphStyle,
-                              maxLines: null,
-                              minLines: 1,
-                              onChanged: (_) => _emit(),
-                              onBackspaceAtStart: () async {
-                                _onEmptyCellBackspace(r, c);
-                              },
-                              onSecondaryTapDown: (d) => _showMenu(d, r, c),
-                              descriptionRanges:
-                                  widget.descriptionRangesForCell?.call(r, c) ??
-                                      const [],
-                              onDescriptionActivate:
-                                  widget.onDescriptionActivate,
-                              onArrowExitAbove: () => _moveOnGrid(
-                                r,
-                                c,
-                                AxisDirection.up,
-                                stayInside: false,
-                              ),
-                              onArrowExitBelow: () => _moveOnGrid(
-                                r,
-                                c,
-                                AxisDirection.down,
-                                stayInside: false,
-                              ),
-                              onArrowExitLeft: () => _moveOnGrid(
-                                r,
-                                c,
-                                AxisDirection.left,
-                                stayInside: true,
-                              ),
-                              onArrowExitRight: () => _moveOnGrid(
-                                r,
-                                c,
-                                AxisDirection.right,
-                                stayInside: true,
-                              ),
+                            onArrowExitBelow: () => _moveOnGrid(
+                              r,
+                              c,
+                              AxisDirection.down,
+                              stayInside: false,
+                            ),
+                            onArrowExitLeft: () => _moveOnGrid(
+                              r,
+                              c,
+                              AxisDirection.left,
+                              stayInside: true,
+                            ),
+                            onArrowExitRight: () => _moveOnGrid(
+                              r,
+                              c,
+                              AxisDirection.right,
+                              stayInside: true,
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ],
-              ),
+              ],
             ),
-        ],
-      );
+          ),
+      ],
+    );
     if (!outer) return grid;
     return DecoratedBox(
       decoration: BoxDecoration(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
 import '../../files/data/app_file.dart';
+import '../../files/editor/document_editor_controller.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
@@ -22,6 +23,7 @@ Future<void> showPhoneFileReorderSheet({
     backgroundColor: Colors.transparent,
     builder: (_) => _PhoneFileReorderSheet(state: state),
   );
+  DocumentEditorRegistry.restoreActiveWritingFocus();
 }
 
 class _PhoneFileReorderSheet extends StatefulWidget {

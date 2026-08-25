@@ -1,6 +1,7 @@
 import 'package:flutter/painting.dart';
 
 import '../../../shared/utils/frame_safe_notifier.dart';
+import './editor_key_handoff.dart';
 import '../rich_text/block_text_focus.dart';
 
 class DocumentEditorController {
@@ -13,6 +14,7 @@ class DocumentEditorController {
     this.markedTextForAgent,
     this.applyTextAction,
     this.toggleMoveMode,
+    this.restoreWritingFocus,
     this.isFocused,
     this.canEnterObject,
     this.canLeaveObject,
@@ -37,6 +39,9 @@ class DocumentEditorController {
 
   /// Toggle object Move Mode for the caret / last-interacted embed.
   final VoidCallback? toggleMoveMode;
+
+  /// Put the keyboard back after chrome (arrange, reorder, Move Mode) stole it.
+  final VoidCallback? restoreWritingFocus;
 
   /// True while this file's Super Editor focus node owns the keyboard.
   final bool Function()? isFocused;
@@ -85,6 +90,14 @@ class DocumentEditorRegistry {
     if (identical(active, controller)) return;
     active = controller;
     notifier.notify();
+  }
+
+  /// After a dialog or mode that stole the keyboard — next frame, not KeyUp wait.
+  static void restoreActiveWritingFocus() {
+    runNextFrame(() {
+      final target = active ?? (_byFile.isEmpty ? null : _byFile.values.first);
+      target?.restoreWritingFocus?.call();
+    });
   }
 
   static void unregister(int fileId) {

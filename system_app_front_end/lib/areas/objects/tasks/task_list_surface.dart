@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/app_state.dart';
+import '../../files/editor/document_editor_controller.dart';
 import '../../files/editor/drag_mode_frame.dart';
 import '../../files/editor/editor_key_handoff.dart';
 import '../../files/editor/embed_caret_bridge.dart';
@@ -26,11 +27,12 @@ import './task_zones.dart';
 
 /// Drop of a task that belongs to the same drag group but not this surface
 /// (e.g. another view frame).
-typedef TaskListForeignDrop = void Function({
-  required TaskDragPayload payload,
-  required bool targetDone,
-  required int indexInZone,
-});
+typedef TaskListForeignDrop =
+    void Function({
+      required TaskDragPayload payload,
+      required bool targetDone,
+      required int indexInZone,
+    });
 
 /// Local-row task list engine shared by in-file embeds and view frames.
 ///
@@ -78,6 +80,7 @@ class TaskListSurface extends StatefulWidget {
   final TaskListForeignDrop? onForeignDrop;
   final ValueChanged<bool>? onReorderModeChanged;
   final bool climbToListTitleOnLastBackspace;
+
   /// When false, the host supplies its own Choose view entry (view frames).
   final bool includeAssignView;
 
@@ -110,6 +113,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   var _ensuringSeed = false;
   var _persisting = false;
   var _reorderMode = false;
+  int? _reorderResumeIndex;
   List<Task>? _optimistic;
 
   TaskListBridge get _bridge => widget.bridge;
@@ -226,8 +230,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     _syncFromTasks(_displayTasks);
     if (focusIdx >= 0 && focusIdx < _focusNodes.length) {
       _pendingFocusIndex = focusIdx;
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _applyPendingFocus());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
     }
   }
 
@@ -287,10 +290,10 @@ class TaskListSurfaceState extends State<TaskListSurface> {
                   listOrderIndex: i,
                 ))
             .copyWith(
-          title: imeVisibleText(_controllers[i].text),
-          status: _done[i] ? 'done' : 'active',
-          listOrderIndex: i,
-        ),
+              title: imeVisibleText(_controllers[i].text),
+              status: _done[i] ? 'done' : 'active',
+              listOrderIndex: i,
+            ),
       );
     }
     return out;
@@ -399,8 +402,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     _pendingFocusIndex = null;
     _focusNodes[idx].requestFocus();
     final controller = _controllers[idx];
-    controller.selection =
-        TextSelection.collapsed(offset: controller.text.length);
+    controller.selection = TextSelection.collapsed(
+      offset: controller.text.length,
+    );
   }
 
   Future<void> _ensureSeedTask() async {
@@ -428,8 +432,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       // header when present ([_hasTitleLine]).
       if (!_hasTitleLine) {
         _pendingFocusIndex = 0;
-        WidgetsBinding.instance
-            .addPostFrameCallback((_) => _applyPendingFocus());
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _applyPendingFocus(),
+        );
       }
     } finally {
       _ensuringSeed = false;
@@ -510,8 +515,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
             !imeFieldLooksEmpty(_titleController.text)) {
           _titleFocus.requestFocus();
           final len = _titleController.text.length;
-          _titleController.selection =
-              TextSelection.collapsed(offset: len);
+          _titleController.selection = TextSelection.collapsed(offset: len);
           return;
         }
         // Last empty task + empty/absent title: delete the object from the
@@ -609,12 +613,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     try {
       if (id != null) {
         await _bridge.delete(
-          known ??
-              Task(
-                id: id,
-                title: '',
-                status: 'active',
-              ),
+          known ?? Task(id: id, title: '', status: 'active'),
         );
       }
       if (!mounted) return;
@@ -626,8 +625,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final focusPrev = index > 0 ? index - 1 : 0;
     if (focusPrev < _focusNodes.length) {
       _pendingFocusIndex = focusPrev;
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _applyPendingFocus());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
     }
   }
 
@@ -647,8 +645,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     await _persistMove(
       task: task,
       targetDone: targetDone,
-      insertIndexInZone:
-          targetDone ? zones.done.length : zones.active.length,
+      insertIndexInZone: targetDone ? zones.done.length : zones.active.length,
       snapshot: zones,
     );
   }
@@ -666,8 +663,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
     setState(() {
       _optimistic = [
-        for (final t in next.all)
-          t.copyWith(title: titles[t.id] ?? t.title),
+        for (final t in next.all) t.copyWith(title: titles[t.id] ?? t.title),
       ];
       _disposeRows();
       _syncFromTasks(_optimistic!);
@@ -682,8 +678,10 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       final idx = _taskIds.indexOf(focusId);
       if (idx >= 0) {
         _pendingFocusIndex = idx;
-        WidgetsBinding.instance
-            .addPostFrameCallback((_) => _applyPendingFocus());
+        _reorderResumeIndex = idx;
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _applyPendingFocus(),
+        );
       }
     }
   }
@@ -771,12 +769,14 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     _applyOptimistic(next);
     final task = payload.task;
     if (payload.sourceDone != targetDone) {
-      unawaited(_persistMove(
-        task: task,
-        targetDone: targetDone,
-        insertIndexInZone: indexInZone,
-        snapshot: zones,
-      ));
+      unawaited(
+        _persistMove(
+          task: task,
+          targetDone: targetDone,
+          insertIndexInZone: indexInZone,
+          snapshot: zones,
+        ),
+      );
     } else {
       unawaited(_persistReorder(next, zones));
     }
@@ -784,10 +784,22 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
   void _setReorderMode(bool value) {
     if (_reorderMode == value) return;
+    if (value) {
+      final fi = _focusNodes.indexWhere((f) => f.hasFocus);
+      _reorderResumeIndex = fi >= 0 ? fi : _reorderResumeIndex;
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
     setState(() => _reorderMode = value);
     widget.onReorderModeChanged?.call(value);
-    if (value) {
-      FocusManager.instance.primaryFocus?.unfocus();
+    if (!value) {
+      final idx = _reorderResumeIndex;
+      _reorderResumeIndex = null;
+      if (idx != null && idx >= 0 && idx < _focusNodes.length) {
+        _pendingFocusIndex = idx;
+        runNextFrame(_applyPendingFocus);
+      } else {
+        DocumentEditorRegistry.restoreActiveWritingFocus();
+      }
     }
   }
 
@@ -804,7 +816,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   List<DescriptionTextRange> _taskDescriptionRanges(int index) {
     final id = index >= 0 && index < _taskIds.length ? _taskIds[index] : null;
     final task = id == null ? null : _taskById(id);
-    final fromTask = descriptionRangesFromLinks(task?.descriptionLinks ?? const []);
+    final fromTask = descriptionRangesFromLinks(
+      task?.descriptionLinks ?? const [],
+    );
     final seen = {for (final r in fromTask) r.link['id']};
     return [
       ...fromTask,
@@ -909,10 +923,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     );
   }
 
-  Widget _dropGap({
-    required bool targetDone,
-    required int indexInZone,
-  }) {
+  Widget _dropGap({required bool targetDone, required int indexInZone}) {
     if (!_reorderMode) return const SizedBox(height: 2);
     return DragTarget<TaskDragPayload>(
       onWillAcceptWithDetails: (d) => _bridge.acceptsDrag(d.data),
@@ -939,19 +950,13 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     );
   }
 
-  Widget _taskChrome({
-    required Widget mark,
-    required Widget title,
-  }) {
+  Widget _taskChrome({required Widget mark, required Widget title}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: mark,
-          ),
+          Padding(padding: const EdgeInsets.only(top: 2), child: mark),
           Expanded(child: title),
         ],
       ),
@@ -964,11 +969,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       color: _done[index] ? AppColors.textHint : null,
     );
     final titleText = _controllers[index].text.trim();
-    final mark = TaskMark(
-      done: _done[index],
-      compact: true,
-      onToggle: () {},
-    );
+    final mark = TaskMark(done: _done[index], compact: true, onToggle: () {});
     final maxChipWidth = MediaQuery.sizeOf(context).width * 0.72;
     final body = Row(
       mainAxisSize: MainAxisSize.min,
@@ -983,10 +984,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       ],
     );
     final chip = glass ? DragModeFrame.chip(child: body) : body;
-    return Align(
-      alignment: AlignmentDirectional.centerStart,
-      child: chip,
-    );
+    return Align(alignment: AlignmentDirectional.centerStart, child: chip);
   }
 
   Widget _taskRow(int index) {
@@ -1080,18 +1078,12 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         onSecondaryTapDown: (d) => _showTaskMenu(d, index),
         taskId: id,
         descriptionRanges: _taskDescriptionRanges(index),
-        onDescriptionActivate: (range) => openDescriptionTarget(
-          state: widget.state,
-          link: range.link,
-        ),
-        onArrowExitAbove: () => _arrowFromLine(
-              _hasTitleLine ? index + 1 : index,
-              goingDown: false,
-            ),
-        onArrowExitBelow: () => _arrowFromLine(
-              _hasTitleLine ? index + 1 : index,
-              goingDown: true,
-            ),
+        onDescriptionActivate: (range) =>
+            openDescriptionTarget(state: widget.state, link: range.link),
+        onArrowExitAbove: () =>
+            _arrowFromLine(_hasTitleLine ? index + 1 : index, goingDown: false),
+        onArrowExitBelow: () =>
+            _arrowFromLine(_hasTitleLine ? index + 1 : index, goingDown: true),
       ),
     );
   }
@@ -1105,8 +1097,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final compact = widget.compactMode;
 
     final list = Column(
-      crossAxisAlignment:
-          compact || _reorderMode ? CrossAxisAlignment.start : CrossAxisAlignment.stretch,
+      crossAxisAlignment: compact || _reorderMode
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.stretch,
       children: [
         if (_bridge.showListTitle && !compact && !_reorderMode)
           FormattedTextField(
@@ -1154,13 +1147,11 @@ class TaskListSurfaceState extends State<TaskListSurface> {
             onDescriptionActivate: widget.hostEmbed == null
                 ? null
                 : (range) => openDescriptionTarget(
-                      state: widget.state,
-                      link: range.link,
-                    ),
-            onArrowExitAbove: () =>
-                _arrowFromLine(0, goingDown: false),
-            onArrowExitBelow: () =>
-                _arrowFromLine(0, goingDown: true),
+                    state: widget.state,
+                    link: range.link,
+                  ),
+            onArrowExitAbove: () => _arrowFromLine(0, goingDown: false),
+            onArrowExitBelow: () => _arrowFromLine(0, goingDown: true),
           ),
         if (_bridge.showListTitle && !compact && !_reorderMode)
           const SizedBox(height: 4),
@@ -1177,9 +1168,6 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
     if (!_reorderMode) return list;
 
-    return TapRegion(
-      onTapOutside: (_) => _setReorderMode(false),
-      child: list,
-    );
+    return TapRegion(onTapOutside: (_) => _setReorderMode(false), child: list);
   }
 }

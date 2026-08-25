@@ -5,6 +5,7 @@ import '../../../core/app_state.dart';
 import '../../../core/l10n/app_strings.dart';
 import '../../files/data/app_file.dart';
 import '../../files/data/topic.dart';
+import '../../files/editor/document_editor_controller.dart';
 import '../topic/topic_appearance.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
@@ -31,7 +32,10 @@ Future<bool?> showFileArrangeOverlay(BuildContext context, AppState state) {
     barrierColor: OverlayDialogStyle.barrierColor,
     barrierDismissible: true,
     builder: (_) => FileArrangeOverlay(state: state, topic: topic),
-  );
+  ).then((result) {
+    DocumentEditorRegistry.restoreActiveWritingFocus();
+    return result;
+  });
 }
 
 class FileArrangeOverlay extends StatefulWidget {

@@ -51,14 +51,13 @@ import './super_editor_mark.dart';
 /// cursor after the keyboard closes.
 List<SuperEditorLayerBuilder> documentOverlayBuilders({
   required bool withCaret,
-}) =>
-    [
-      for (final builder in defaultSuperEditorDocumentOverlayBuilders)
-        if (_drawsCursor(builder))
-          _PaneCaretLayerBuilder(builder, visible: withCaret)
-        else
-          builder,
-    ];
+}) => [
+  for (final builder in defaultSuperEditorDocumentOverlayBuilders)
+    if (_drawsCursor(builder))
+      _PaneCaretLayerBuilder(builder, visible: withCaret)
+    else
+      builder,
+];
 
 /// The default overlays that put a cursor on screen: the desktop caret, and the
 /// iOS / Android handle layers, which draw the caret on their platform.
@@ -84,10 +83,9 @@ class _PaneCaretLayerBuilder implements SuperEditorLayerBuilder {
   ContentLayerWidget build(
     BuildContext context,
     SuperEditorContext editContext,
-  ) =>
-      visible
-          ? builder.build(context, editContext)
-          : const ContentLayerProxyWidget(child: SizedBox.shrink());
+  ) => visible
+      ? builder.build(context, editContext)
+      : const ContentLayerProxyWidget(child: SizedBox.shrink());
 }
 
 /// File editor surface backed by Super Editor + v4 marker-text persistence.
@@ -223,6 +221,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           markedTextForAgent: _markedTextForAgent,
           applyTextAction: _handleTextMenuAction,
           toggleMoveMode: _toggleMoveModeFromShortcut,
+          restoreWritingFocus: _restoreWritingFocus,
           isFocused: () => _focusNode.hasFocus,
           canEnterObject: _canEnterObject,
           canLeaveObject: _canLeaveObject,
@@ -344,7 +343,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   void _syncCaretVisibility() {
     if (!mounted) return;
-    final show = _focusNode.hasFocus &&
+    final show =
+        _focusNode.hasFocus &&
         DocumentEditorRegistry.activeFileId == widget.file.id;
     if (show == _showCaret) return;
     setState(() => _showCaret = show);
@@ -576,11 +576,9 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       _dirty = false;
       return;
     }
-    await widget.state.updateFile(
-      _currentFile,
-      {'document_json': json},
-      notify: false,
-    );
+    await widget.state.updateFile(_currentFile, {
+      'document_json': json,
+    }, notify: false);
     _lastSavedJson = json;
     _dirty = false;
   }
@@ -631,10 +629,9 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       final selectedNode = selectedNodes[i];
       late final dynamic nodeSelection;
       if (i == 0) {
-        final baseSelectionPosition =
-            selectedNode.id == selection.base.nodeId
-                ? selection.base.nodePosition
-                : selection.extent.nodePosition;
+        final baseSelectionPosition = selectedNode.id == selection.base.nodeId
+            ? selection.base.nodePosition
+            : selection.extent.nodePosition;
         final extentSelectionPosition = selectedNodes.length > 1
             ? selectedNode.endPosition
             : selection.extent.nodePosition;
@@ -715,10 +712,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       _editor.execute([
         InsertNodeAtIndexRequest(
           nodeIndex: seInsertIndex,
-          newNode: ListItemNode.unordered(
-            id: id,
-            text: AttributedText(),
-          ),
+          newNode: ListItemNode.unordered(id: id, text: AttributedText()),
         ),
         ChangeSelectionRequest(
           DocumentSelection.collapsed(
@@ -788,10 +782,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _editor.execute([
       for (final node in nodes.reversed) DeleteNodeRequest(nodeId: node.id),
       for (var i = 0; i < items.length; i++)
-        InsertNodeAtIndexRequest(
-          nodeIndex: firstIndex + i,
-          newNode: items[i],
-        ),
+        InsertNodeAtIndexRequest(nodeIndex: firstIndex + i, newNode: items[i]),
       ChangeSelectionRequest(
         DocumentSelection.collapsed(
           position: DocumentPosition(
@@ -822,10 +813,12 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     final sel = _composer.selection;
     if (sel == null) return;
     final current = _doc.getNodeById(sel.extent.nodeId);
-    var index = current == null ? _doc.nodeCount : _doc.getNodeIndexById(current.id);
+    var index = current == null
+        ? _doc.nodeCount
+        : _doc.getNodeIndexById(current.id);
     if (index < 0) index = _doc.nodeCount;
-    final replaceEmpty = current is TextNode &&
-        current.text.toPlainText().trim().isEmpty;
+    final replaceEmpty =
+        current is TextNode && current.text.toPlainText().trim().isEmpty;
     if (!replaceEmpty) {
       final pos = sel.extent.nodePosition;
       if (pos is TextNodePosition && pos.offset > 0) {
@@ -834,12 +827,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     }
     final last = items.last;
     _editor.execute([
-      if (replaceEmpty && current != null) DeleteNodeRequest(nodeId: current.id),
+      if (replaceEmpty && current != null)
+        DeleteNodeRequest(nodeId: current.id),
       for (var i = 0; i < items.length; i++)
-        InsertNodeAtIndexRequest(
-          nodeIndex: index + i,
-          newNode: items[i],
-        ),
+        InsertNodeAtIndexRequest(nodeIndex: index + i, newNode: items[i]),
       ChangeSelectionRequest(
         DocumentSelection.collapsed(
           position: DocumentPosition(
@@ -881,8 +872,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
     // Silent reload — a shell-wide notify mid-handoff remounts fields and
     // desyncs the IME after the first character.
-    final updated =
-        await widget.state.reloadFile(widget.file.id, notify: false);
+    final updated = await widget.state.reloadFile(
+      widget.file.id,
+      notify: false,
+    );
     final nodeId = ObjectEmbedNode.idFor(embed.id);
     _embedsSnapshot = widget.state.embedsByFileId[widget.file.id];
     _reloadFromStored(updated.documentJson);
@@ -937,11 +930,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       isHistoryEnabled: true,
     );
     _doc = next;
-    _caretSession.bind(
-      editor: _editor,
-      document: _doc,
-      composer: _composer,
-    );
+    _caretSession.bind(editor: _editor, document: _doc, composer: _composer);
     _docOps = CommonEditorOperations(
       editor: _editor,
       document: _doc,
@@ -1144,8 +1133,41 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   void _endMoveMode() {
     if (_moveModeNodeId == null) return;
+    final movedId = _moveModeNodeId!;
     setState(() => _moveModeNodeId = null);
     _removeMoveBubble();
+    runNextFrame(() {
+      if (!mounted) return;
+      DocumentEditorRegistry.claim(widget.file.id);
+      final node = _doc.getNodeById(movedId);
+      if (node != null) {
+        _editor.execute([
+          ChangeSelectionRequest(
+            DocumentSelection.collapsed(
+              position: DocumentPosition(
+                nodeId: node.id,
+                nodePosition: node.beginningPosition,
+              ),
+            ),
+            SelectionChangeType.placeCaret,
+            SelectionReason.userInteraction,
+          ),
+        ]);
+      }
+      _focusNode.requestFocus();
+    });
+  }
+
+  void _restoreWritingFocus() {
+    DocumentEditorRegistry.claim(widget.file.id);
+    final embedFocus = BlockTextFocusRegistry.activeFocusNode;
+    if (embedFocus != null &&
+        embedFocus.canRequestFocus &&
+        embedFocus.context != null) {
+      embedFocus.requestFocus();
+      return;
+    }
+    _focusNode.requestFocus();
   }
 
   void _nudgeMoveEmbed({required bool up}) {
@@ -1209,7 +1231,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   void _onEmbedInnerFocusChanged(String? nodeId) {
     if (nodeId != null) {
       _embedFocusGen++;
-      final already = _caretSession.owner == DocumentCaretOwner.embed &&
+      final already =
+          _caretSession.owner == DocumentCaretOwner.embed &&
           _caretSession.activeEmbedNodeId == nodeId;
       _claimFile();
       _caretSession.adoptEmbed(nodeId);
@@ -1270,9 +1293,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         ),
         StyleRule(
           const BlockSelector('paragraph').first(),
-          (doc, node) => {
-            Styles.padding: const CascadingPadding.only(top: 0),
-          },
+          (doc, node) => {Styles.padding: const CascadingPadding.only(top: 0)},
         ),
         StyleRule(
           const BlockSelector('listItem'),
@@ -1318,9 +1339,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     );
   }
 
-  SelectionStyles get _selectionStyles => SelectionStyles(
-        selectionColor: _selectionFill,
-      );
+  SelectionStyles get _selectionStyles =>
+      SelectionStyles(selectionColor: _selectionFill);
 
   /// Node under a global pointer — safe when Super Editor is a sliver.
   DocumentNode? _nodeAtGlobalOffset(Offset global) {
@@ -1328,7 +1348,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     if (layout == null) return null;
     try {
       final local = layout.getDocumentOffsetFromAncestorOffset(global);
-      final pos = layout.getDocumentPositionNearestToOffset(local) ??
+      final pos =
+          layout.getDocumentPositionNearestToOffset(local) ??
           layout.getDocumentPositionAtOffset(local);
       if (pos == null) return null;
       return _doc.getNodeById(pos.nodeId);
@@ -1615,10 +1636,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     ];
     await widget.state.updateObjectPayload(
       embed.id,
-      TableObjectPayload.normalize({
-        ...payload,
-        'rows': nextRows,
-      }),
+      TableObjectPayload.normalize({...payload, 'rows': nextRows}),
     );
     await _loadEmbedsQuietly();
   }
@@ -1640,7 +1658,11 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
             ],
           ]
         : [
-            for (final row in rows) [...row, {'text': ''}],
+            for (final row in rows)
+              [
+                ...row,
+                {'text': ''},
+              ],
           ];
     final next = Map<String, dynamic>.from(payload)..['rows'] = nextRows;
     if (chartOn) {
@@ -1678,10 +1700,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _applyChartMenuToEmbed(
-    ObjectEmbed embed,
-    String action,
-  ) async {
+  Future<void> _applyChartMenuToEmbed(ObjectEmbed embed, String action) async {
     final payload = Map<String, dynamic>.from(
       TableObjectPayload.normalize(embed.payload),
     );
@@ -1708,8 +1727,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   Future<void> _handleTextMenuAction(String action) async {
-    final expandsLine = action != 'text:paste' &&
-        !action.startsWith('text:emoji:');
+    final expandsLine =
+        action != 'text:paste' && !action.startsWith('text:emoji:');
     if (expandsLine) _expandCollapsedToCaretLine();
 
     switch (action) {
@@ -1728,15 +1747,13 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       case 'text:color:clear':
         _clearColorAttribution();
       case 'text:cut':
-        if (_composer.selection != null &&
-            !_composer.selection!.isCollapsed) {
+        if (_composer.selection != null && !_composer.selection!.isCollapsed) {
           final text = _plainTextInDocumentSelection(_composer.selection!);
           if (text.isNotEmpty) await setClipboardText(text);
           _docOps.deleteSelection(TextAffinity.downstream);
         }
       case 'text:copy':
-        if (_composer.selection != null &&
-            !_composer.selection!.isCollapsed) {
+        if (_composer.selection != null && !_composer.selection!.isCollapsed) {
           final text = _plainTextInDocumentSelection(_composer.selection!);
           if (text.isNotEmpty) await setClipboardText(text);
         }
@@ -1871,8 +1888,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         ),
       );
     }
-    final base =
-        AppTypography.documentParagraphStyle.fontSize ?? 12.5;
+    final base = AppTypography.documentParagraphStyle.fontSize ?? 12.5;
     // Bump relative to the size already on the text — not always base±delta.
     final current = _fontSizeAt(sel.extent) ?? base;
     final next = (current + delta).clamp(10.0, 28.0);
@@ -1930,8 +1946,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       lo--;
     }
     var hi = start;
-    while (hi + 1 < _doc.nodeCount &&
-        _doc.getNodeAt(hi + 1) is ListItemNode) {
+    while (hi + 1 < _doc.nodeCount && _doc.getNodeAt(hi + 1) is ListItemNode) {
       hi++;
     }
     final requests = <EditRequest>[];
@@ -1945,24 +1960,24 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   List<ComponentBuilder> _componentBuilders(TextDirection ambient) => [
-        ObjectEmbedComponentBuilder(
-          state: widget.state,
-          lookup: _lookup,
-          onRefresh: _loadEmbedsQuietly,
-          onPayloadChanged: _onPayloadChanged,
-          onDelete: _deleteObject,
-          onClaimFile: _claimFile,
-          onInnerFocusChanged: _onEmbedInnerFocusChanged,
-          moveModeNodeId: _moveModeNodeId,
-          onMoveToIndex: _moveEmbedToIndex,
-          canMergeImageWithNext: _canMergeImageWithNext,
-          onMergeImageWithNext: _mergeImageWithNext,
-        ),
-        const LegacyTableFenceComponentBuilder(),
-        ...ambientAwareTextBuilders(ambient),
-        const HorizontalRuleComponentBuilder(),
-        // Intentionally omit TaskComponentBuilder + ImageComponentBuilder.
-      ];
+    ObjectEmbedComponentBuilder(
+      state: widget.state,
+      lookup: _lookup,
+      onRefresh: _loadEmbedsQuietly,
+      onPayloadChanged: _onPayloadChanged,
+      onDelete: _deleteObject,
+      onClaimFile: _claimFile,
+      onInnerFocusChanged: _onEmbedInnerFocusChanged,
+      moveModeNodeId: _moveModeNodeId,
+      onMoveToIndex: _moveEmbedToIndex,
+      canMergeImageWithNext: _canMergeImageWithNext,
+      onMergeImageWithNext: _mergeImageWithNext,
+    ),
+    const LegacyTableFenceComponentBuilder(),
+    ...ambientAwareTextBuilders(ambient),
+    const HorizontalRuleComponentBuilder(),
+    // Intentionally omit TaskComponentBuilder + ImageComponentBuilder.
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -1980,7 +1995,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         behavior: HitTestBehavior.translucent,
         child: CustomScrollView(
           slivers: [
-              SuperEditor(
+            SuperEditor(
               key: ValueKey<int>(_superEditorEpoch),
               editor: _editor,
               focusNode: _focusNode,
@@ -1995,8 +2010,9 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
               componentBuilders: _componentBuilders(ambient),
               keyboardActions: kFileEditorImeKeyboardActions,
               contentTapDelegateFactories: [cmdClickLinkTapHandlerFactory],
-              documentOverlayBuilders:
-                  documentOverlayBuilders(withCaret: _showCaret),
+              documentOverlayBuilders: documentOverlayBuilders(
+                withCaret: _showCaret,
+              ),
               plugins: {
                 _visibleSelectionPlugin,
                 _visualCaretPlugin,
