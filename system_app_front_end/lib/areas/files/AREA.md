@@ -17,7 +17,7 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | [`editor/super_document_editor.dart`](editor/super_document_editor.dart) | File editor host (`SuperEditor` + save/insert/Move Mode) |
 | [`editor/super_editor_mark.dart`](editor/super_editor_mark.dart) | Super Editor twin of `DocumentMark`: marked span, else caret line |
 | [`editor/file_editor_keyboard_actions.dart`](editor/file_editor_keyboard_actions.dart) | Super Editor IME keys minus Cmd+B / Cmd+I (catalog owns those) |
-| [`editor/cmd_click_link_handler.dart`](editor/cmd_click_link_handler.dart) | ⌘-click (Ctrl-click) opens a persisted web link |
+| [`editor/cmd_click_link_handler.dart`](editor/cmd_click_link_handler.dart) | Click / tap (or ⌘-click) opens a persisted web link |
 | [`editor/edit_conflict.dart`](editor/edit_conflict.dart) | User vs agent: take inbound unless dirty, then ask |
 | [`editor/embed_move_bubble.dart`](editor/embed_move_bubble.dart) | Floating glass Move Mode controls (outside the file) |
 | [`model/marker_super_editor_bridge.dart`](model/marker_super_editor_bridge.dart) | Marker text ↔ Super Editor document |
@@ -43,7 +43,7 @@ A type's template is a hidden `is_template` topic (`template_topic_id`). Prefere
 
 **One marking.** Super Editor body actions (right-click, format, cut/copy, Make link, AI `selected_text`) use the same rule as embed fields: if anything is marked, use that span; if not, use the **line at the caret**. [`caretLineSelection`](editor/super_editor_mark.dart) expands a collapsed caret before those actions. Object blocks stay whole-object (chrome menu), not a text line. Catalog **⌘B / ⌘I / ⌘U** toggle once — Super Editor’s own Cmd+B / Cmd+I are stripped so they cannot double-toggle.
 
-**Web links.** Right-click **Make link** (no shortcut; ⌘K is bring-file) finds `http(s)://` or `www.` in the mark-or-caret-line and paints it like a description link. v4 still has no general span encoding; **links only** round-trip as CommonMark `[text](url)` in paragraph/list lines. ⌘-click (Ctrl-click) opens the URL. Object-field links store `link` on existing payload spans.
+**Web links.** Right-click **Make link** (no shortcut; ⌘K is bring-file) finds `http(s)://` or `www.` in the mark-or-caret-line and paints it like a description link. v4 still has no general span encoding; **links only** round-trip as CommonMark `[text](url)` in paragraph/list lines. Click / tap opens the URL (⌘-click still works). Object-field links store `link` on existing payload spans and open the same way.
 
 ### The name in the header
 

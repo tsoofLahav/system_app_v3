@@ -5,8 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:super_editor/super_editor.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Opens a web link on ⌘-click (Ctrl-click on non-Apple). Super Editor's
-/// default launch handler only fires in interaction mode, which we do not use.
+/// Opens a persisted web link on tap (⌘-click / Ctrl-click still works).
+/// Super Editor's default launch handler only fires in interaction mode,
+/// which we do not use.
 SuperEditorContentTapDelegateFactory cmdClickLinkTapHandlerFactory =
     (SuperEditorContext editContext) =>
         CmdClickLinkTapHandler(editContext.document);
@@ -29,13 +30,8 @@ class CmdClickLinkTapHandler extends ContentTapDelegate {
     super.dispose();
   }
 
-  bool get _modifierHeld =>
-      HardwareKeyboard.instance.isMetaPressed ||
-      HardwareKeyboard.instance.isControlPressed;
-
   @override
   MouseCursor? mouseCursorForContentHover(DocumentPosition hoverPosition) {
-    if (!_modifierHeld) return null;
     return linkUriAt(document, hoverPosition) != null
         ? SystemMouseCursors.click
         : null;
@@ -43,7 +39,6 @@ class CmdClickLinkTapHandler extends ContentTapDelegate {
 
   @override
   TapHandlingInstruction onTap(DocumentTapDetails details) {
-    if (!_modifierHeld) return TapHandlingInstruction.continueHandling;
     final tapPosition = details.documentLayout
         .getDocumentPositionNearestToOffset(details.layoutOffset);
     if (tapPosition == null) {

@@ -10,6 +10,16 @@ void main() {
     expect(firstUrlIn('no url here'), isNull);
   });
 
+  test('urlAtSpanOffset reads link on the covering span', () {
+    const spans = [
+      {'start': 4, 'end': 23, 'link': 'https://example.com'},
+    ];
+    expect(urlAtSpanOffset(spans, 4), 'https://example.com');
+    expect(urlAtSpanOffset(spans, 10), 'https://example.com');
+    expect(urlAtSpanOffset(spans, 23), isNull);
+    expect(urlAtSpanOffset(spans, 0), isNull);
+  });
+
   test('make-link writes link on the URL span only', () {
     const text = 'see https://example.com please';
     final spans = applyFormatActionToRange(

@@ -15,6 +15,7 @@ import './format_range.dart';
 import './frozen_selection_painter.dart';
 import './rtl/rtl.dart';
 import './span_text_editing_controller.dart';
+import './text_links.dart';
 
 /// Text field that registers for block context-menu clipboard/format actions.
 class DescriptionTextRange {
@@ -834,8 +835,13 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       }
       final hostBox = context.findRenderObject();
       if (hostBox is RenderBox) {
-        final hit = _descriptionAt(hostBox.globalToLocal(tapGlobal));
-        if (hit != null) _activateDescription(hit);
+        final local = hostBox.globalToLocal(tapGlobal);
+        final hit = _descriptionAt(local);
+        if (hit != null) {
+          _activateDescription(hit);
+        } else {
+          _openWebLinkAt(local);
+        }
       }
     }
 
@@ -1262,6 +1268,21 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         ),
       ),
     );
+  }
+
+  void _openWebLinkAt(Offset local) {
+    final host = context.findRenderObject();
+    if (host == null) return;
+    final editable = _findRenderEditable(host);
+    if (editable == null) return;
+    final controller = widget.controller;
+    if (controller is! SpanTextEditingController) return;
+    final position = editable.getPositionForPoint(
+      editable.localToGlobal(local),
+    );
+    final url = urlAtSpanOffset(controller.spans, position.offset);
+    if (url == null) return;
+    unawaited(openWebLink(url));
   }
 
   DescriptionTextRange? _descriptionAt(Offset local) {
