@@ -75,11 +75,11 @@ Each object type keeps its own menu (not the plain paragraph menu):
 
 | Object | Menu |
 |--------|------|
-| Info | Text + **Add tag** / **Add connection** |
-| Task list | Text + **Choose view…** / **Reorder tasks** |
-| Table | Text + **Add row/column after** + **Reorder rows…** / **Reorder columns…** (+ Connect info when wired) |
-| Chart table | **Reorder columns…** + chart type + palette (on chart chrome **and** cells); block caret → chart menu |
-| Image | **Make smaller / larger** + **Tiny / Quarter / Half / Full size** |
+| Info | Text + **Add tag** / **Add connection** / **Move object** |
+| Task list | Text + **Choose view…** / **Reorder tasks** / **Move object** |
+| Table | Text + **Add row/column after** + **Reorder rows…** / **Reorder columns…** (+ Connect info when wired). Chrome includes **Move object**; cell menus do not. |
+| Chart table | **Reorder columns…** + chart type + palette (on chart chrome **and** cells); block caret → chart menu + **Move object** |
+| Image | **Move object** + **Make smaller / larger** + **Tiny / Quarter / Half / Full size** |
 
 Embed fields mark [`DocumentSecondaryTap`](document_secondary_tap.dart) so Super Editor’s translucent secondary-tap handler does not open a second menu. Right-click on an object block (SE caret on the embed) resolves the node under the pointer and opens that object’s menu.
 
@@ -89,4 +89,4 @@ The file owns placement; the object owns content. Embed node ids are stable (`em
 
 ## Move Mode
 
-Double-click an embed to enter Move Mode (glass frame on the object). A floating glass bubble in the app [Overlay](embed_move_bubble.dart) (no scrim) has up / down / Done — drag the bubble to keep the document visible. Arrow presses keep the mode open; Done or tap outside the bubble ends it. Save writes pointer order back to marker text.
+Enter from the object chrome menu (**Move object**) or **⌘⇧O** when the caret or last-interacted embed is an object (glass frame on the object). Double-click selects a word in inner fields. A floating glass bubble in the app [Overlay](embed_move_bubble.dart) (no scrim) has up / down / Done — drag the bubble to keep the document visible. Arrow presses keep the mode open; Done or tap outside the bubble ends it. Save writes pointer order back to marker text.

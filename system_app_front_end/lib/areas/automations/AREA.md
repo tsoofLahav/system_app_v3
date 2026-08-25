@@ -12,7 +12,7 @@ An automation is a **scope**, a **trigger**, and an ordered **series of steps**.
 
 | Field | UI |
 |-------|-----|
-| Name | Shown in the automations list |
+| Name | English and Hebrew, both required; the list follows the UI language |
 | Scope | All topics / one topic / a topic type (loaded from `topic_types`) |
 | Schedule | Once a day / week / month. Weekly and monthly use a calendar next to a matching 24-hour numbered dial (typed hour and minute under the dial); daily is the clock alone |
 | Enabled | Switch on the **end** of each automations-list row (after edit, run, delete) — off means it never fires automatically |

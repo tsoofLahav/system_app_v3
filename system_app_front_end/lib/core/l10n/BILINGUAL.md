@@ -10,8 +10,8 @@ Follow this whenever you add labels, rows with controls, or dialogs.
 | Database / API | English keys only | `process_refresh`, `weekly`, `Daily` |
 | On-screen UI | Translated via `AppStrings` | `עדכון כל התהליכים` |
 
-- User-written content (topic names, **topic type names**, task titles, notes) stays as typed — never auto-translated.
-- Built-in catalog items (view types, file names, automation definitions) map English keys → localized labels in [`app_strings.dart`](app_strings.dart).
+- User-written content (topic names, **topic type names**, **AI-action titles**, **automation titles**, task titles, notes) stays as typed — never auto-translated. Topic types, saved AI actions, and automations store English `name` plus Hebrew `name_he`; the app shows the one that matches the UI language (`AppState.topicTypeDisplayName` / `aiActionDisplayName` / `automationDisplayName`).
+- Built-in catalog items (view types, file names, automation **step** definitions) map English keys → localized labels in [`app_strings.dart`](app_strings.dart).
 
 ### Adding a new built-in catalog item
 

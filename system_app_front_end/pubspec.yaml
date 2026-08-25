@@ -44,6 +44,7 @@ dependencies:
   # 0.3.0-dev.51+ needs Flutter TextInputStyle (newer than 3.41); pin below that.
   super_editor: 0.3.0-dev.50
   interactive_graph_view: ^0.3.1
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:

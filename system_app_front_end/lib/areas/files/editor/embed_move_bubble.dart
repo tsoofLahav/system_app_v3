@@ -47,7 +47,7 @@ class _EmbedMoveBubbleState extends State<EmbedMoveBubble> {
   void initState() {
     super.initState();
     _offset = widget.anchorGlobal;
-    // Opening Move Mode is a double-click on the object — that pointer-up
+    // Opening Move Mode is a menu click or shortcut — that pointer-up
     // would otherwise count as "outside" and dismiss the bubble immediately.
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;

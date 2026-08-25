@@ -19,6 +19,7 @@ class AutomationService {
   Future<Automation> create({
     required int workspaceId,
     required String name,
+    required String nameHe,
     required Map<String, dynamic> trigger,
     required Map<String, dynamic> scope,
     required List<Map<String, dynamic>> steps,
@@ -30,6 +31,7 @@ class AutomationService {
         await _api.post('/automations', {
               'workspace_id': workspaceId,
               'name': name,
+              'name_he': nameHe,
               'trigger': trigger,
               'scope': scope,
               'steps': steps,

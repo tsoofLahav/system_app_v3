@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
+import '../../core/l10n/app_strings.dart';
 import '../ui/action_icon_picker.dart';
 import '../ui/action_icons.dart';
 import '../ui/adaptive_dialog.dart';
@@ -47,11 +48,14 @@ class _AiActionEditDialog extends StatefulWidget {
 
 class _AiActionEditDialogState extends State<_AiActionEditDialog> {
   late final TextEditingController _name;
+  late final TextEditingController _nameHe;
   late final TextEditingController _prompt;
   late String _applyMode;
   late String _iconKey;
   late bool _onBar;
+  late _ActionScopeKind _scopeKind;
   int? _topicTypeId;
+  int? _topicId;
   var _saving = false;
 
   bool get _isCreate => widget.action == null;
@@ -61,26 +65,48 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
     super.initState();
     final existing = widget.action;
     _name = TextEditingController(text: existing?.name ?? '');
+    _nameHe = TextEditingController(text: existing?.nameHe ?? '');
     _prompt = TextEditingController(text: existing?.prompt ?? '');
     _applyMode = existing?.applyMode ?? defaultConsultApplyMode;
     _iconKey = (existing == null || existing.icon.isEmpty)
         ? defaultActionIconKey
         : existing.icon;
     _onBar = existing?.isOnBar ?? false;
-    _topicTypeId = existing?.topicTypeId ?? widget.initialTopicTypeId;
+    if (existing != null) {
+      if (existing.topicId != null) {
+        _scopeKind = _ActionScopeKind.topic;
+        _topicId = existing.topicId;
+        _topicTypeId = existing.topicTypeId;
+      } else if (existing.topicTypeId != null) {
+        _scopeKind = _ActionScopeKind.type;
+        _topicTypeId = existing.topicTypeId;
+      } else {
+        _scopeKind = _ActionScopeKind.all;
+      }
+    } else if (widget.initialTopicTypeId != null) {
+      _scopeKind = _ActionScopeKind.type;
+      _topicTypeId = widget.initialTopicTypeId;
+    } else {
+      _scopeKind = _ActionScopeKind.topic;
+      _topicId = widget.state.selectedTopic?.id;
+    }
     _name.addListener(() => setState(() {}));
+    _nameHe.addListener(() => setState(() {}));
     _prompt.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
     _name.dispose();
+    _nameHe.dispose();
     _prompt.dispose();
     super.dispose();
   }
 
   bool get _canSave =>
-      _name.text.trim().isNotEmpty && _prompt.text.trim().isNotEmpty;
+      _name.text.trim().isNotEmpty &&
+      _nameHe.text.trim().isNotEmpty &&
+      _prompt.text.trim().isNotEmpty;
 
   bool get _barIsFull => widget.state.firstFreeAiBarSlot == null;
 
@@ -91,20 +117,25 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
       if (_isCreate) {
         saved = await widget.state.createAiAction(
           name: _name.text.trim(),
+          nameHe: _nameHe.text.trim(),
           prompt: _prompt.text.trim(),
           applyMode: _applyMode,
           icon: _iconKey,
           barSlot: _onBar ? widget.state.firstFreeAiBarSlot : null,
-          topicTypeId: _topicTypeId,
+          topicTypeId: _scopeKind == _ActionScopeKind.type ? _topicTypeId : null,
+          topicId: _scopeKind == _ActionScopeKind.topic ? _topicId : null,
         );
       } else {
         final existing = widget.action!;
         await widget.state.updateAiAction(existing, {
           'name': _name.text.trim(),
+          'name_he': _nameHe.text.trim(),
           'prompt': _prompt.text.trim(),
           'apply_mode': _applyMode,
           'icon': _iconKey,
-          'topic_type_id': _topicTypeId,
+          'topic_id': _scopeKind == _ActionScopeKind.topic ? _topicId : null,
+          'topic_type_id':
+              _scopeKind == _ActionScopeKind.type ? _topicTypeId : null,
           if (_onBar != existing.isOnBar)
             'bar_slot': _onBar ? widget.state.firstFreeAiBarSlot : null,
         });
@@ -131,7 +162,7 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
       title: Text(
         _isCreate
             ? s['createAiAction']
-            : s.editActionTitle(widget.action!.name),
+            : s.editActionTitle(widget.state.aiActionDisplayName(widget.action!)),
       ),
       actions: [
         TextButton(
@@ -148,10 +179,20 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AppDialogField(
-            label: s['actionName'],
+            label: s['nameEnglish'],
             child: TextField(
               controller: _name,
               autofocus: true,
+              textInputAction: TextInputAction.next,
+              decoration: DialogFieldStyle.decoration(),
+            ),
+          ),
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          AppDialogField(
+            label: s['nameHebrew'],
+            child: TextField(
+              controller: _nameHe,
+              textDirection: TextDirection.rtl,
               textInputAction: TextInputAction.next,
               decoration: DialogFieldStyle.decoration(),
             ),
@@ -192,15 +233,13 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
             onChanged: (key) => setState(() => _iconKey = key),
           ),
           const SizedBox(height: DialogFieldStyle.fieldGap),
-          if (widget.state.topicTypes.isNotEmpty)
-            AppDialogPickerField(
+          AppDialogPickerField(
               label: s['actionAppliesTo'],
               preview: const AppIcon(AppIcons.bringFile, size: 16),
-              valueLabel: _typeLabel(),
-              onTap: _pickType,
+              valueLabel: _scopeLabel(),
+              onTap: _pickScope,
             ),
-          if (widget.state.topicTypes.isNotEmpty)
-            const SizedBox(height: DialogFieldStyle.fieldGap),
+          const SizedBox(height: DialogFieldStyle.fieldGap),
           AppDialogField(
             label: s['actionPlace'],
             hint: _barIsFull && !_onBar ? s['aiBarFull'] : s['actionPlaceHint'],
@@ -222,38 +261,94 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
     );
   }
 
-  String _typeLabel() {
+  String _scopeLabel() {
     final s = widget.state.strings;
-    if (_topicTypeId == null) return s['actionAppliesEveryTopic'];
-    final type = widget.state.topicTypeById(_topicTypeId);
-    return type == null
-        ? s['actionAppliesEveryTopic']
-        : widget.state.topicTypeDisplayName(type);
+    switch (_scopeKind) {
+      case _ActionScopeKind.all:
+        return s['actionAppliesEveryTopic'];
+      case _ActionScopeKind.type:
+        final type = widget.state.topicTypeById(_topicTypeId);
+        return type == null
+            ? s['scopeTopicType']
+            : widget.state.topicTypeDisplayName(type);
+      case _ActionScopeKind.topic:
+        final topic = widget.state.allTopics
+            .where((t) => t.id == _topicId)
+            .firstOrNull;
+        if (topic == null) return s['actionAppliesThisTopic'];
+        return widget.state.topicDisplayName(topic);
+    }
   }
 
-  Future<void> _pickType() async {
+  Future<void> _pickScope() async {
     final s = widget.state.strings;
-    final rows = <({int? id, String label})>[
-      (id: null, label: s['actionAppliesEveryTopic']),
+    final rows = <_ScopeChoice>[
+      const _ScopeChoice(
+        kind: _ActionScopeKind.all,
+        labelKey: 'actionAppliesEveryTopic',
+      ),
       for (final type in widget.state.topicTypes)
-        (id: type.id, label: widget.state.topicTypeDisplayName(type)),
+        _ScopeChoice(
+          kind: _ActionScopeKind.type,
+          typeId: type.id,
+          label: widget.state.topicTypeDisplayName(type),
+        ),
+      for (final topic in widget.state.activeTopics)
+          _ScopeChoice(
+            kind: _ActionScopeKind.topic,
+            topicId: topic.id,
+            label: widget.state.topicDisplayName(topic),
+          ),
     ];
     var initial = 0;
     for (var i = 0; i < rows.length; i++) {
-      if (rows[i].id == _topicTypeId) {
+      if (rows[i].matches(_scopeKind, _topicId, _topicTypeId)) {
         initial = i;
         break;
       }
     }
-    final picked = await showAppChoiceDialog<({int? id, String label})>(
+    final picked = await showAppChoiceDialog<_ScopeChoice>(
       context: context,
       title: s['actionAppliesTo'],
       cancelLabel: s['cancel'],
       items: rows,
       initialIndex: initial,
-      itemBuilder: (context, row, _) => DialogChoiceText(row.label),
+      itemBuilder: (context, row, _) => DialogChoiceText(row.title(s)),
     );
     if (picked == null || !mounted) return;
-    setState(() => _topicTypeId = picked.id);
+    setState(() {
+      _scopeKind = picked.kind;
+      _topicId = picked.topicId;
+      _topicTypeId = picked.typeId;
+    });
   }
 }
+
+enum _ActionScopeKind { all, type, topic }
+
+class _ScopeChoice {
+  const _ScopeChoice({
+    required this.kind,
+    this.typeId,
+    this.topicId,
+    this.label,
+    this.labelKey,
+  });
+
+  final _ActionScopeKind kind;
+  final int? typeId;
+  final int? topicId;
+  final String? label;
+  final String? labelKey;
+
+  bool matches(_ActionScopeKind kind, int? topicId, int? typeId) {
+    if (this.kind != kind) return false;
+    if (kind == _ActionScopeKind.topic) return this.topicId == topicId;
+    if (kind == _ActionScopeKind.type) return this.typeId == typeId;
+    return true;
+  }
+
+  String title(AppStrings strings) =>
+      label ?? (labelKey != null ? strings[labelKey!] : '');
+}
+

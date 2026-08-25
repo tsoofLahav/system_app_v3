@@ -11,8 +11,8 @@ Lives in the bottom bar ([`ai_tool_bar.dart`](ai_tool_bar.dart)), in reading ord
 | Control | Behavior |
 |---------|----------|
 | **Agent button** | Opens the prompt dialog ([`agent_prompt_dialog.dart`](agent_prompt_dialog.dart)) for a one-off request, with **Review changes (diff)** vs **Apply directly** (opens on apply directly — a one-off ask is lighter with the undo toast than with a diff). An action is also born here. |
-| **Pinned actions** | Up to six saved actions in slot order, each with its icon and its own key (⌘⇧2…⌘⇧7). Pressing one runs it on what is open. Globals always show; a type-specific pin only while a topic of that type is open. |
-| **⋯** | Opens the AI actions dialog ([`ai_actions_dialog.dart`](../automations/ai_actions_dialog.dart)) — the same filter as the bar (globals + the open type), each with pin, edit, run and delete. |
+| **Pinned actions** | Up to six saved actions in slot order, each with its icon and its own key (⌘⇧2…⌘⇧7). Pressing one runs it on what is open. An action shows when its scope matches the open topic, **or** (on Home) when any visiting file’s source topic or that topic’s type matches (union). Globals always show. A scoped bar pin simply hides when out of scope; slots stay unique per workspace. |
+| **⋯** | Opens the AI actions dialog ([`ai_actions_dialog.dart`](../automations/ai_actions_dialog.dart)) — the same filter as the bar, each with pin, edit, run and delete. |
 
 Each icon uses the same 34px tap slot as the other bottom-bar buttons, so the AI pill is not tighter than insert or chrome.
 
@@ -20,7 +20,7 @@ The agent comes first and never moves: it is the one control that is always ther
 
 ### Keeping an ask
 
-The prompt dialog opens small. **Save as action…** grows it into a name, an icon grid and a seat choice, and the footer becomes Cancel / Save and run / Save — naming and placing something is only interesting once the user has decided to keep it. Saving writes an `ai_actions` row ([`ai_action.dart`](ai_action.dart)); it is not an automation.
+The prompt dialog opens small. **Save as action…** grows it into English and Hebrew names, an icon grid and a seat choice, and the footer becomes Cancel / Save and run / Save — naming and placing something is only interesting once the user has decided to keep it. Saving writes an `ai_actions` row ([`ai_action.dart`](ai_action.dart)) scoped to the current topic by default; it is not an automation.
 
 A saved action runs through `runSavedAgentAction` and ends the same way a typed prompt does — review dialog, undo toast, or summary.
 
@@ -32,7 +32,7 @@ The frontend sends preferred context (not a hard tool allow-list — tools may b
 selected topic  → scope.topic_ids
 selected topic's files → scope.file_ids
 active editor file → hints.focused_file_id   (tiny pointer; not the file body)
-caret line / mark → hints.selected_text      (tiny; selection or caret line only)
+caret line / mark → hints.selected_text      (tiny; marked span, or caret line when unmarked)
 local clock → hints.today / weekday / now    ([`agent_time_hints.dart`](agent_time_hints.dart))
 ```
 
@@ -73,8 +73,8 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 |------|------|
 | [`ai_tool_bar.dart`](ai_tool_bar.dart) | Pinned action buttons, ⋯ menu, agent button |
 | [`agent_prompt_dialog.dart`](agent_prompt_dialog.dart) | Prompt + apply toggle + save-as-action, run orchestration |
-| [`ai_action.dart`](ai_action.dart) / [`ai_action_service.dart`](ai_action_service.dart) | Saved-action model and `/ai-actions`. Optional `topicTypeId` (null = every topic) |
-| [`ai_action_edit_dialog.dart`](ai_action_edit_dialog.dart) | Rewrite a saved action, including which type it belongs to |
+| [`ai_action.dart`](ai_action.dart) / [`ai_action_service.dart`](ai_action_service.dart) | Saved-action model and `/ai-actions`. English `name` + Hebrew `name_he`. Scope: `topicId` xor `topicTypeId` xor neither (all) |
+| [`ai_action_edit_dialog.dart`](ai_action_edit_dialog.dart) | Create/rewrite: both names, All / type / topic picker (create defaults to the current topic) |
 | [`agent_result_ui.dart`](agent_result_ui.dart) | Result → dialog or snackbar; runs a saved action |
 | [`pending_review_ui.dart`](pending_review_ui.dart) | Shared open-pending helper (anti double-open) |
 | [`pending_review_service.dart`](pending_review_service.dart) | GET/DELETE/finish pending |
@@ -92,7 +92,7 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 - Never hardcode a silent consult `apply_mode` — the dialog chooses and sends it.
 - Never show raw JSON or marker/editor text to the user — visual [`FilePreview`](../files/editor/file_preview.dart) only.
 - Refresh the open topic after Finish so the editor and Archive list update.
-- Pass `hints.selected_text` from the active mark so “delete this line” can resolve correctly.
+- Pass `hints.selected_text` from the active mark so “delete this line” can resolve correctly (marked span, or the caret line when unmarked).
 
 ## Not done yet
 

@@ -46,7 +46,7 @@ class AiToolBar extends StatelessWidget {
         for (final action in pinned)
           AiToolButton(
             tooltip: _tooltip(
-              action.name,
+              state.aiActionDisplayName(action),
               ShortcutActionIds.aiActionSlot(action.barSlot!),
             ),
             icon: actionIcon(action.icon),

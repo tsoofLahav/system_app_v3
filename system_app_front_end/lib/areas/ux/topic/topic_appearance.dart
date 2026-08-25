@@ -63,6 +63,22 @@ class TopicAppearance {
     return defaultEmoji;
   }
 
+  /// Origin line for a brought file: `{type} - {topic}{emoji}`, or just
+  /// `{topic}{emoji}` when the source topic has no type. An empty icon does
+  /// not inject the default pin.
+  static String broughtOriginLabel({
+    required String topicName,
+    String? icon,
+    String? typeDisplay,
+  }) {
+    final rawIcon = (icon ?? '').trim();
+    final emoji = rawIcon.isEmpty ? '' : emojiFromId(rawIcon);
+    final topicBit = emoji.isEmpty ? topicName : '$topicName$emoji';
+    final type = typeDisplay?.trim() ?? '';
+    if (type.isEmpty) return topicBit;
+    return '$type - $topicBit';
+  }
+
   static bool _looksLikeEmoji(String value) {
     if (value.contains(RegExp(r'^[a-z0-9_]+$'))) return false;
     return true;

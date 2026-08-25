@@ -36,7 +36,24 @@ void main() {
       expect(action.isOnBar, isFalse);
       expect(action.icon, '');
       expect(action.topicTypeId, isNull);
+      expect(action.topicId, isNull);
+      expect(action.nameHe, isEmpty);
       expect(action.visibleOnTopicType(3), isTrue);
+    });
+
+    test('hebrew name and topic scope survive JSON', () {
+      final action = AiAction.fromJson({
+        'id': 8,
+        'workspace_id': 1,
+        'name': 'Tidy',
+        'name_he': 'סידור',
+        'prompt': 'tidy it',
+        'topic_id': 4,
+      });
+      expect(action.nameHe, 'סידור');
+      expect(action.topicId, 4);
+      expect(action.topicTypeId, isNull);
+      expect(action.isGlobal, isFalse);
     });
 
     test('a typed action is extra, not instead of globals', () {
@@ -51,6 +68,65 @@ void main() {
       expect(action.visibleOnTopicType(9), isFalse);
       expect(action.visibleOnTopicType(null), isFalse);
     });
+
+    test('visibility is open topic, type, or a visiting file on Home', () {
+      final global = AiAction.fromJson({
+        'id': 1,
+        'workspace_id': 1,
+        'name': 'Everywhere',
+        'prompt': 'go',
+      });
+      final typed = AiAction.fromJson({
+        'id': 2,
+        'workspace_id': 1,
+        'name': 'Process',
+        'prompt': 'go',
+        'topic_type_id': 9,
+      });
+      final topical = AiAction.fromJson({
+        'id': 3,
+        'workspace_id': 1,
+        'name': 'This one',
+        'prompt': 'go',
+        'topic_id': 4,
+      });
+
+      bool shown(
+        AiAction action, {
+        int? openTopicId,
+        int? openTypeId,
+        Set<int> visitingTopicIds = const {},
+        Set<int> visitingTypeIds = const {},
+      }) =>
+          action.visibleIn(
+            openTopicId: openTopicId,
+            openTypeId: openTypeId,
+            visitingTopicIds: visitingTopicIds,
+            visitingTypeIds: visitingTypeIds,
+          );
+
+      expect(shown(global, openTopicId: 1), isTrue);
+      expect(shown(typed, openTopicId: 2, openTypeId: 9), isTrue);
+      expect(shown(typed, openTopicId: 2, openTypeId: 3), isFalse);
+      expect(
+        shown(
+          typed,
+          openTopicId: 1,
+          visitingTypeIds: {9},
+        ),
+        isTrue,
+      );
+      expect(shown(topical, openTopicId: 4), isTrue);
+      expect(shown(topical, openTopicId: 1), isFalse);
+      expect(
+        shown(
+          topical,
+          openTopicId: 1,
+          visitingTopicIds: {4},
+        ),
+        isTrue,
+      );
+    });
   });
 
   group('an automation is a scope, a trigger, and steps', () {
@@ -59,6 +135,7 @@ void main() {
         'id': 2,
         'workspace_id': 1,
         'name': 'Sunday reset',
+        'name_he': 'איפוס ראשון',
         'trigger': {'type': 'schedule'},
         'scope': {'kind': 'topic', 'topic_id': 3},
         'steps': [
@@ -68,6 +145,7 @@ void main() {
         'schedule': 'weekly sun 06:00',
       });
 
+      expect(automation.nameHe, 'איפוס ראשון');
       expect(automation.steps.length, 2);
       expect(automation.steps.first['kind'], StepKinds.unmarkTasks);
       expect(AutomationScope.targetTopicId(automation.scope), 3);

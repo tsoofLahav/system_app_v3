@@ -15,6 +15,9 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | Folder | Role |
 |--------|------|
 | [`editor/super_document_editor.dart`](editor/super_document_editor.dart) | File editor host (`SuperEditor` + save/insert/Move Mode) |
+| [`editor/super_editor_mark.dart`](editor/super_editor_mark.dart) | Super Editor twin of `DocumentMark`: marked span, else caret line |
+| [`editor/file_editor_keyboard_actions.dart`](editor/file_editor_keyboard_actions.dart) | Super Editor IME keys minus Cmd+B / Cmd+I (catalog owns those) |
+| [`editor/cmd_click_link_handler.dart`](editor/cmd_click_link_handler.dart) | ⌘-click (Ctrl-click) opens a persisted web link |
 | [`editor/edit_conflict.dart`](editor/edit_conflict.dart) | User vs agent: take inbound unless dirty, then ask |
 | [`editor/embed_move_bubble.dart`](editor/embed_move_bubble.dart) | Floating glass Move Mode controls (outside the file) |
 | [`model/marker_super_editor_bridge.dart`](model/marker_super_editor_bridge.dart) | Marker text ↔ Super Editor document |
@@ -32,11 +35,15 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | [`rich_text/rtl/`](rich_text/rtl/RTL.md) | **RTL solution** — Hebrew/BiDi direction helpers |
 | [`data/`](data/) | File, topic, and topic-type models + API services. `files.meta.template_slot` is the stable key automations use |
 
-A type's template is `template_topic_id` on that type. Set it from Preferences or by right-clicking a topic of that type. Drag types in Preferences to reorder sidebar sections. New topics copy structure only (backend). **Duplicate** copies the topic in full (live files, object content, in-topic links, tags, icon, colour). Creating a type asks for an English name and a Hebrew name; the sidebar follows the app language.
+A type's template is `template_topic_id` on that type. Set it from Preferences or by right-clicking a topic of that type. In Manage types, **Reorder** shows drag handles so sidebar sections can move. New topics copy structure only (backend). **Duplicate** copies the topic in full (live files, object content, in-topic links, tags, icon, colour). Creating a type asks for an English name and a Hebrew name; the sidebar follows the app language.
 
 ### Document vs Super Editor (one sync rule)
 
 **Persisted SoT** = marker text (`%%system_app_document v4\n` + body). **Session SoT** = Super Editor `MutableDocument` (undo via SE history). Save = bridge serialize → debounced `PATCH document_json`. Embed node ids are stable (`embed:<objectId>`). Object **payloads** stay in the objects area.
+
+**One marking.** Super Editor body actions (right-click, format, cut/copy, Make link, AI `selected_text`) use the same rule as embed fields: if anything is marked, use that span; if not, use the **line at the caret**. [`caretLineSelection`](editor/super_editor_mark.dart) expands a collapsed caret before those actions. Object blocks stay whole-object (chrome menu), not a text line. Catalog **⌘B / ⌘I / ⌘U** toggle once — Super Editor’s own Cmd+B / Cmd+I are stripped so they cannot double-toggle.
+
+**Web links.** Right-click **Make link** (no shortcut; ⌘K is bring-file) finds `http(s)://` or `www.` in the mark-or-caret-line and paints it like a description link. v4 still has no general span encoding; **links only** round-trip as CommonMark `[text](url)` in paragraph/list lines. ⌘-click (Ctrl-click) opens the URL. Object-field links store `link` on existing payload spans.
 
 ### The name in the header
 
@@ -269,10 +276,10 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Between blocks only | Never inside a list item or table cell |
 | Create at the caret | Inserts go to the **last-claimed** file. Mid-paragraph / mid-heading **splits** at the caret (`before \| new \| after`); caret at the start inserts before that block; at the end, after it. List / table / embed carets insert after the containing block. |
 | Marker buffer is source of truth | Position is top-level parts in buffer text (view = `blocks[]`); the object row holds data, not placement |
-| Right-click on embed text | Same text menu as paragraphs (`DocumentMark`) plus **Connect info…** on object fields (info / task / table). Connected spans paint in `AppColors.descriptionLink` (dark teal glyphs + 1px underline); that colour is paint-only and is not stored in spans. Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Tables/charts: see **[Tables & charts](#tables--charts)**. Task lists add **Add to view…** and **Reorder tasks**. Info **chrome** (not a field) is Add tag / Add connection only. Super Editor body paragraphs do not offer Connect info. |
-| Move Mode | Double-click → glass frame on the object + floating glass bubble ([`embed_move_bubble.dart`](editor/embed_move_bubble.dart), no scrim; drag to reposition). Up/down in the bubble nudge the object and **stay in Move Mode**; Done or tap outside the bubble ends it. After move/delete, adjacent paragraphs **coalesce** (blank/`\n`-only stubs dropped, including next to embeds). |
+| Right-click on embed text | Same text menu as paragraphs (`DocumentMark`) plus **Connect info…** on object fields (info / task / table) and **Make link**. Connected spans and URL `link` spans paint in `AppColors.descriptionLink` (dark teal glyphs + 1px underline). Description-link colour is paint-only; URL `link` is stored on the field span. Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Tables/charts: see **[Tables & charts](#tables--charts)**. Task lists add **Add to view…** and **Reorder tasks**. Info **chrome** (not a field) is Add tag / Add connection / **Move object**. Super Editor body paragraphs do not offer Connect info. |
+| Move Mode | Object chrome menu **Move object**, or **⌘⇧O** when the caret / last-interacted embed is an object → glass frame on the object + floating glass bubble ([`embed_move_bubble.dart`](editor/embed_move_bubble.dart), no scrim; drag to reposition). Double-click selects a word in inner fields, like body text. Up/down in the bubble nudge the object and **stay in Move Mode**; Done or tap outside the bubble ends it. After move/delete, adjacent paragraphs **coalesce** (blank/`\n`-only stubs dropped, including next to embeds). |
 | Empty object + Backspace | Same fluent rule as an empty list bullet / table row: last empty unit + Backspace **removes the object** (cascade-delete). |
-| Object block + Tab | Opens the object (first inner field). **Escape** lands **after** the object so typing continues below. On phone, Tab/Escape are not on the keyboard — the first bottom-bar pill is arrows plus enter/leave. **Enter** inserts a paragraph below. Arrows do not auto-enter/leave objects. Long-press stays Move Mode. |
+| Object block + Tab | Opens the object (first inner field). **Escape** lands **after** the object so typing continues below. On phone, Tab/Escape are not on the keyboard — the first bottom-bar pill is arrows plus enter/leave. **Enter** inserts a paragraph below. Arrows do not auto-enter/leave objects. Phone long-press / secondary tap opens the object chrome menu (Move Mode lives there). |
 | Task Reorder Mode | Owned by `TaskListSurface` (objects): right-click → Reorder tasks → glass per task; **tap outside the list** ends it |
 
 ### Segment id

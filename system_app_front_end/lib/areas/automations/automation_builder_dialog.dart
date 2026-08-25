@@ -61,6 +61,7 @@ class _AutomationBuilderDialog extends StatefulWidget {
 
 class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   late final TextEditingController _name;
+  late final TextEditingController _nameHe;
   late String _scopeKind;
   int? _topicId;
   int? _topicTypeId;
@@ -80,7 +81,9 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     super.initState();
     final existing = widget.automation;
     _name = TextEditingController(text: existing?.name ?? '');
+    _nameHe = TextEditingController(text: existing?.nameHe ?? '');
     _name.addListener(() => setState(() {}));
+    _nameHe.addListener(() => setState(() {}));
     final scope = existing?.scope ?? widget.initialScope ?? _defaultScope();
     _scopeKind = AutomationScope.kindOf(scope);
     _topicId = scope['topic_id'] as int? ?? state.selectedTopic?.id;
@@ -105,6 +108,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   @override
   void dispose() {
     _name.dispose();
+    _nameHe.dispose();
     super.dispose();
   }
 
@@ -120,7 +124,11 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   }
 
   bool get _canSave {
-    if (_name.text.trim().isEmpty || _steps.isEmpty) return false;
+    if (_name.text.trim().isEmpty ||
+        _nameHe.text.trim().isEmpty ||
+        _steps.isEmpty) {
+      return false;
+    }
     if (_scopeKind == AutomationScope.topic && _topicId == null) return false;
     if (_scopeKind == AutomationScope.topicType && _topicTypeId == null) {
       return false;
@@ -213,6 +221,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
       if (_isEdit) {
         await state.updateAutomation(widget.automation!, {
           'name': _name.text.trim(),
+          'name_he': _nameHe.text.trim(),
           'scope': _scope(),
           'trigger': {'type': 'schedule'},
           'steps': _steps,
@@ -222,6 +231,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
       } else {
         await state.createAutomation(
           name: _name.text.trim(),
+          nameHe: _nameHe.text.trim(),
           scope: _scope(),
           trigger: const {'type': 'schedule'},
           steps: _steps,
@@ -369,7 +379,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
       final id = step['action_id'] as int?;
       if (id != null) {
         for (final action in state.aiActions) {
-          if (action.id == id) return action.name;
+          if (action.id == id) return state.aiActionDisplayName(action);
         }
       }
     }
@@ -510,7 +520,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   String _actionLabel(int? id) {
     if (id == null) return s['pickAiAction'];
     for (final action in state.aiActions) {
-      if (action.id == id) return action.name;
+      if (action.id == id) return state.aiActionDisplayName(action);
     }
     return s['pickAiAction'];
   }
@@ -534,7 +544,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
                 dense: true,
                 selected: action.id == currentId,
                 leading: AppIcon(actionIcon(action.icon), size: 18),
-                title: Text(action.name),
+                title: Text(state.aiActionDisplayName(action)),
                 subtitle: Text(
                   action.prompt,
                   maxLines: 1,
@@ -671,9 +681,18 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AppDialogField(
-          label: s['automationName'],
+          label: s['nameEnglish'],
           child: TextField(
             controller: _name,
+            decoration: DialogFieldStyle.decoration(),
+          ),
+        ),
+        const SizedBox(height: DialogFieldStyle.fieldGap),
+        AppDialogField(
+          label: s['nameHebrew'],
+          child: TextField(
+            controller: _nameHe,
+            textDirection: TextDirection.rtl,
             decoration: DialogFieldStyle.decoration(),
           ),
         ),

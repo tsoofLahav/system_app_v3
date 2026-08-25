@@ -80,7 +80,7 @@ On commit it writes one `order_index` per file and one `file_layout` on the topi
 
 ### Bring file (Home visit)
 
-Home can **project** one or more files that still belong to other topics. ⌘K (or the phone Bring control) opens a searchable overlay: first word matches the topic, the rest the file name. Desktop rolls the matches sideways, each card showing the shared read-only file (not marker text); phone is a **bottom sheet of names** with each row wearing the topic colour ([`bring_file/phone_bring_file_sheet.dart`](bring_file/phone_bring_file_sheet.dart)). Choosing a file does not move it — `topic_id` stays put. Visits join Home’s order (newest first until rearranged). On desktop the layout’s slot count decides what is on screen; on phone every file in that order is in the swipe row. Arrange and cycle-files reorder the mixed list: visiting files keep their source `order_index`; the mixed order is stored locally. Each visiting pane is editable and wears its source topic’s colour. The file ⋯ menu has **Dismiss brought file**; that ends that visit only. Visits are stored locally until dismissed (including after restart).
+Home can **project** one or more files that still belong to other topics. ⌘K (or the phone Bring control) opens a searchable overlay: first word matches the topic, the rest the file name. Each card (and each phone row) shows an origin line **above** the file name: `{type} - {topic}{emoji}` when the source topic has a type, otherwise `{topic}{emoji}` (`AppState.broughtFileOriginLabel`). Desktop rolls the matches sideways, each card showing the shared read-only file (not marker text); phone is a **bottom sheet of names** with each row wearing the topic colour ([`bring_file/phone_bring_file_sheet.dart`](bring_file/phone_bring_file_sheet.dart)). Choosing a file does not move it — `topic_id` stays put. Visits join Home’s order (newest first until rearranged). On desktop the layout’s slot count decides what is on screen; on phone every file in that order is in the swipe row. Arrange and cycle-files reorder the mixed list: visiting files keep their source `order_index`; the mixed order is stored locally. Each visiting pane is editable and wears its source topic’s colour, with the same origin line above the title. The file ⋯ menu has **Dismiss brought file**; that ends that visit only. Visits are stored locally until dismissed (including after restart).
 
 ### Phone screen structure
 
@@ -172,7 +172,7 @@ Tapping outside the focused editor (canvas, empty padding — not another field)
 - Open the **Objects map** (info object graph) — listed after topics
 - Reach the archive
 - Create a topic, view, tag, or **topic type** from the centered sidebar **+** — a context-menu bubble lists the choices; each opens its own create dialog (tags are filtered on the objects map, not listed as a sidebar section). Creating a type does not open the type editor; a short hint points at Preferences.
-- Topic types are user-defined. The sidebar has one section per type, plus Main (Home) and Others (untyped non-Home topics). Configure types from Preferences; drag to reorder types there. Drag the handle on a topic to reorder it inside its type, and on a view to reorder the views list. Right-click a view to rename or delete it (tasks stay in their files). Right-click a typed topic to make it that type's template.
+- Topic types are user-defined. The sidebar has one section per type, plus Main (Home) and Others (untyped non-Home topics). Configure types from Preferences; **Reorder** in that list shows drag handles. Topics and views have no handles until **sidebar reorder mode** (⌘O when no task has the caret, or Preferences → Reorder). Right-click a view to rename or delete it (tasks stay in their files). Right-click a typed topic to make it that type's template.
 
 The sidebar is navigation only. It never edits content.
 
@@ -190,7 +190,7 @@ The sidebar is navigation only. It never edits content.
 | View chrome | Floating capsule on the view page | Sections/topics, add section, reorder frames |
 | AI actions | Bottom bar | Pinned actions, the actions menu, and the agent prompt — see [production agent](../production_agent/AREA.md) |
 | Automations | Bottom bar | Manage rules — see [automations](../automations/AREA.md) |
-| Preferences | Bottom bar | App settings, shortcut bindings, topic types |
+| Preferences | Bottom bar | App settings, shortcut bindings, topic types, sidebar reorder |
 
 Context menus are built on [`widgets/app_context_menu.dart`](widgets/app_context_menu.dart) so they behave and look consistent.
 
@@ -219,10 +219,11 @@ Heavy-use defaults are **two keys** (⌘ + letter) so they stay in muscle memory
 | Add file / topic | ⌘F / ⌘N | The same dialogs as the chrome |
 | Add view | ⌘⇧W | Same as the sidebar + |
 | Assign task view | ⌘J | Assign dialog when a task has the caret |
-| Reorder mode | ⌘O | Task-list caret: toggle task reorder. View page with no task caret: frame reorder |
+| Reorder mode | ⌘O | Task-list caret: toggle task reorder. Otherwise: sidebar topics and views (handles appear until you press it again). View frames: the Reorder control on the view chrome |
+| Move object | ⌘⇧O | Toggle Move Mode for the caret / last-interacted embed. Also on every object chrome menu. Rebindable in Preferences. |
 | Add connection / list | ⌘L | Inserts a bullet list at the caret. In an info, opens the connect-to picker |
 | Agent / slot keys | ⌘⇧1… | Agent prompt, or the saved action in that bar seat |
-| Text (bold, italic, underline, cut/copy/paste, size) | ⌘B/I/U/X/C/V, ⌘⇧+/− | Embed fields via `runBlockTextAction`; Super Editor via `DocumentEditorController.applyTextAction`. Super Editor handles ⌘V itself when it has document focus (catalog skip — otherwise paste doubles). Copy/cut of lists include `-` / `1.` prefixes |
+| Text (bold, italic, underline, Make link, cut/copy/paste, size) | ⌘B/I/U/X/C/V, ⌘⇧+/− | Mark, else the caret line. Embed fields via `runBlockTextAction`; Super Editor via `DocumentEditorController.applyTextAction`. Super Editor’s own Cmd+B / Cmd+I are stripped so catalog toggles once. Super Editor handles ⌘V itself when it has document focus (catalog skip — otherwise paste doubles). Copy/cut of lists include `-` / `1.` prefixes. **Make link** is menu-only (⌘K is bring-file, ⌘L is connect-info); ⌘-click opens a persisted URL. |
 | Insert object | ⌘D info, ⌘T task, ⌘⌥T table, ⌘G graph, ⌘⇧I image, ⌘L list | Active file via `DocumentEditorRegistry`. ⌘L is a list unless the caret is in an info (connection) |
 | Layout toggle | ⌘⇧M | View page: sections ↔ topics |
 | Language | ⌘E | English ↔ Hebrew (after the keystroke, so the editor is not remounted mid-KeyDown) |

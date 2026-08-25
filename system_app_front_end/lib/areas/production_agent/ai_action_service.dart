@@ -17,21 +17,25 @@ class AiActionService {
   Future<AiAction> create({
     required int workspaceId,
     required String name,
+    required String nameHe,
     required String prompt,
     required String applyMode,
     String icon = '',
     int? barSlot,
     int? topicTypeId,
+    int? topicId,
   }) async {
     final data =
         await _api.post('/ai-actions', {
               'workspace_id': workspaceId,
               'name': name,
+              'name_he': nameHe,
               'prompt': prompt,
               'apply_mode': applyMode,
               'icon': icon,
               'bar_slot': ?barSlot,
               'topic_type_id': ?topicTypeId,
+              'topic_id': ?topicId,
             })
             as Map<String, dynamic>;
     return AiAction.fromJson(data);

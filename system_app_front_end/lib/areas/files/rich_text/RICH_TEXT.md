@@ -63,13 +63,15 @@ Formatting always affects an existing character range. Newly typed characters ar
 
 ### 7. Per-property format actions
 
-Each menu action (`text:bold`, `text:italic`, `text:underline`, `text:size_up`, `text:size_down`, `text:color:…`) mutates **one** style attribute per character in the format range via `applyActionToMark` inside `applyFormatActionToRange`. Never merge the selection with `styleForRange` and apply one style over the whole range — that leaks bold onto regular text when only size changes.
+Each menu action (`text:bold`, `text:italic`, `text:underline`, `text:make_link`, `text:size_up`, `text:size_down`, `text:color:…`) mutates **one** style attribute per character in the format range via `applyActionToMark` inside `applyFormatActionToRange` (Make link writes `link` only on the URL span). Never merge the selection with `styleForRange` and apply one style over the whole range — that leaks bold onto regular text when only size changes.
 
 Text colour: the context menu offers **Choose color** → `showAppColorDialog` (menu session stays open so the mark stays frozen) → `text:color:#RRGGBB`, plus **Clear color**. No hardcoded red/blue/green menu rows.
 
 Toggle semantics: bold/italic/underline flip independently per character in the range.
 
-Description-link colour (`AppColors.descriptionLink`) is paint-only: `SpanTextEditingController.setDescriptionPaintRanges` / `displaySpans`. Never write it into persisted `spans`.
+**Make link** finds `http(s)://` or `www.` in the mark (else caret line) and stores `link` on that span. No URL → no-op. Super Editor body links persist as markdown; embed-field links persist on object payload spans.
+
+Description-link colour (`AppColors.descriptionLink`) is paint-only for connected info: `SpanTextEditingController.setDescriptionPaintRanges` / `displaySpans`. Never write it into persisted `spans`. URL `link` is stored and paints the same teal underline.
 
 ## Regression checklist
 
@@ -93,6 +95,7 @@ Before merging any rich-text PR:
 | `../editor/document_text_flow.dart` | Document-wide caret/selection across parts |
 | `format_range.dart` | Range fallback for a lone field with no document flow |
 | `text_formatting.dart` | Pure span math + `TextSpan` rendering |
+| `text_links.dart` | Detect `http(s)` / `www.` for Make link |
 | `span_text_editing_controller.dart` | `TextEditingController` + spans + `handleTextChange` |
 | `block_text_focus.dart` | Active field + frozen menu range + menu actions |
 | `formatted_text_field.dart` | `TextField` wrapper, focus registration, `_FrozenSelectionOverlay`; wires the [RTL solution](rtl/RTL.md) |
@@ -107,7 +110,7 @@ Before merging any rich-text PR:
 Block content fields:
 
 - `text` — plain string
-- `spans` — `[{start, end, bold?, italic?, underline?, size?}]` (half-open ranges)
+- `spans` — `[{start, end, bold?, italic?, underline?, size?, color?, link?}]` (half-open ranges). `link` is a web URL; description-link paint is not stored.
 - `compose_style`, `parchment`, `text_style` — legacy; cleared on save
 
 ## Tests

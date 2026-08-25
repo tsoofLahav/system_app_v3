@@ -108,7 +108,7 @@ class _BringFilePickerOverlayState extends State<BringFilePickerOverlay> {
       _filtered = filterBringFileCatalog(
         _all,
         _searchController.text,
-        topicLabel: _state.topicDisplayName,
+        topicLabel: _state.broughtFileOriginLabel,
         fileLabel: (file) => _state.fileDisplayName(file.name),
       );
     });
@@ -281,7 +281,7 @@ class _BringFilePickerOverlayState extends State<BringFilePickerOverlay> {
                       topic: entry.topic,
                       fileName: _state.fileDisplayName(entry.file.name),
                       accent: accent,
-                      topicLabel: _state.topicDisplayName(entry.topic),
+                      topicLabel: _state.broughtFileOriginLabel(entry.topic),
                       preview: FilePreviewLoader(
                         key: ValueKey('bring-preview-${entry.file.id}'),
                         fileId: entry.file.id,

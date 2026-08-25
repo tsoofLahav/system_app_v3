@@ -28,6 +28,30 @@ void main() {
       expect(out, isNot(contains('[/INFO]')));
     });
 
+    test('round-trips markdown links on paragraphs and leaves pointers alone', () {
+      final stored = '${DocumentTextCodec.header}\n'
+          'See [docs](https://example.com) please\n\n'
+          '[INFO id="42"]';
+      final doc = markerTextToMutableDocument(stored);
+      expect(doc.getNodeAt(0), isA<ParagraphNode>());
+      final para = doc.getNodeAt(0) as ParagraphNode;
+      expect(para.text.toPlainText(), 'See docs please');
+      final linkSpans = para.text
+          .getAttributionSpansByFilter((a) => a is LinkAttribution)
+          .toList();
+      expect(linkSpans, hasLength(1));
+      expect(
+        (linkSpans.first.attribution as LinkAttribution).plainTextUri,
+        'https://example.com',
+      );
+      expect(doc.getNodeAt(1), isA<ObjectEmbedNode>());
+
+      final out = mutableDocumentToMarkerText(doc);
+      expect(out, contains('[docs](https://example.com)'));
+      expect(out, contains('[INFO id="42"]'));
+      expect(out, isNot(contains('[INFO](http')));
+    });
+
     test('round-trips bullet list fence via ListItemNodes', () {
       final stored = '''
 ${DocumentTextCodec.header}

@@ -184,6 +184,7 @@ class _TopicTypesListDialog extends StatefulWidget {
 
 class _TopicTypesListDialogState extends State<_TopicTypesListDialog> {
   AppState get state => widget.state;
+  var _reordering = false;
 
   Future<void> _create() async {
     await createTopicTypeFromDialog(
@@ -225,67 +226,108 @@ class _TopicTypesListDialogState extends State<_TopicTypesListDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final s = state.strings;
-    final types = state.topicTypes;
+    return ListenableBuilder(
+      listenable: state,
+      builder: (context, _) {
+        final s = state.strings;
+        final types = state.topicTypes;
 
-    return AppAdaptiveDialogShell(
-      title: Text(s['topicTypes']),
-      width: AppDialogMetrics.wideWidth,
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(s['close']),
-        ),
-        FilledButton(onPressed: _create, child: Text(s['newTopicType'])),
-      ],
-      child: SizedBox(
-        height: 260,
-        child: types.isEmpty
-            ? Center(
-                child: Text(
-                  s['noTopicTypes'],
-                  textAlign: TextAlign.center,
-                  style: AppTypography.metaStyle,
-                ),
-              )
-            : ReorderableListView.builder(
-                itemCount: types.length,
-                buildDefaultDragHandles: false,
-                proxyDecorator: (child, index, animation) => child,
-                onReorder: (oldIndex, newIndex) {
-                  if (newIndex > oldIndex) newIndex -= 1;
-                  final next = List<TopicType>.from(types);
-                  next.insert(newIndex, next.removeAt(oldIndex));
-                  state.reorderTopicTypes(next);
-                },
-                itemBuilder: (context, index) {
-                  final type = types[index];
-                  return ListTile(
-                    key: ValueKey(type.id),
-                    dense: true,
-                    title: Text(state.topicTypeDisplayName(type)),
-                    onTap: () => _open(type),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ReorderableDragStartListener(
-                          index: index,
-                          child: const Padding(
-                            padding: EdgeInsetsDirectional.only(end: 4),
-                            child: AppIcon(AppIcons.menu, size: 16),
+        return AppAdaptiveDialogShell(
+          title: Text(s['topicTypes']),
+          width: AppDialogMetrics.wideWidth,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(s['close']),
+            ),
+            if (types.length >= 2)
+              TextButton(
+                onPressed: () => setState(() => _reordering = !_reordering),
+                child: Text(_reordering ? s['arrangeDone'] : s['reorderTypes']),
+              ),
+            FilledButton(onPressed: _create, child: Text(s['newTopicType'])),
+          ],
+          child: SizedBox(
+            height: 260,
+            child: types.isEmpty
+                ? Center(
+                    child: Text(
+                      s['noTopicTypes'],
+                      textAlign: TextAlign.center,
+                      style: AppTypography.metaStyle,
+                    ),
+                  )
+                : _reordering
+                ? Material(
+                    color: Colors.transparent,
+                    child: ReorderableListView.builder(
+                      itemCount: types.length,
+                      buildDefaultDragHandles: false,
+                      proxyDecorator: (child, index, animation) {
+                        return Material(
+                          color: AppColors.noteTop.withValues(alpha: 0.94),
+                          borderRadius: BorderRadius.circular(8),
+                          child: child,
+                        );
+                      },
+                      onReorder: (oldIndex, newIndex) {
+                        if (newIndex > oldIndex) newIndex -= 1;
+                        final next = List<TopicType>.from(types);
+                        next.insert(newIndex, next.removeAt(oldIndex));
+                        state.reorderTopicTypes(next);
+                      },
+                      itemBuilder: (context, index) {
+                        final type = types[index];
+                        return Material(
+                          key: ValueKey(type.id),
+                          color: Colors.transparent,
+                          child: ListTile(
+                            dense: true,
+                            title: Text(state.topicTypeDisplayName(type)),
+                            onTap: () => _open(type),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ReorderableDragStartListener(
+                                  index: index,
+                                  child: const Padding(
+                                    padding: EdgeInsetsDirectional.only(
+                                      end: 4,
+                                    ),
+                                    child: AppIcon(AppIcons.menu, size: 16),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: s['delete'],
+                                  icon: const AppIcon(AppIcons.trash, size: 16),
+                                  onPressed: () => _delete(type),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        IconButton(
+                        );
+                      },
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: types.length,
+                    itemBuilder: (context, index) {
+                      final type = types[index];
+                      return ListTile(
+                        dense: true,
+                        title: Text(state.topicTypeDisplayName(type)),
+                        onTap: () => _open(type),
+                        trailing: IconButton(
                           tooltip: s['delete'],
                           icon: const AppIcon(AppIcons.trash, size: 16),
                           onPressed: () => _delete(type),
                         ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-      ),
+                      );
+                    },
+                  ),
+          ),
+        );
+      },
     );
   }
 }
@@ -434,7 +476,8 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
       title: s['addExistingAction'],
       cancelLabel: s['cancel'],
       items: globals,
-      itemBuilder: (context, action, _) => DialogChoiceText(action.name),
+      itemBuilder: (context, action, _) =>
+          DialogChoiceText(state.aiActionDisplayName(action)),
     );
     if (picked == null || !mounted) return;
     await state.updateAiAction(picked, {'topic_type_id': type.id});
@@ -583,7 +626,7 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
                     ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
-                      title: Text(action.name),
+                      title: Text(state.aiActionDisplayName(action)),
                       onTap: () async {
                         await showAiActionEditDialog(
                           context: context,
@@ -625,7 +668,7 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
                     ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
-                      title: Text(automation.name),
+                      title: Text(state.automationDisplayName(automation)),
                       onTap: () => _editAutomation(automation),
                     ),
                 Align(

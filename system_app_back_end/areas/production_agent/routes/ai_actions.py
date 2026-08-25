@@ -7,7 +7,7 @@ like a typed prompt.
 
 from flask import Blueprint, jsonify, request
 
-from models import AiAction, TopicType, db
+from models import AiAction, Topic, TopicType, db
 from shared.bootstrap import default_workspace_id
 from shared.helpers import apply_updates, get_or_404
 from shared.run_config import DEFAULT_MANUAL_APPLY_MODE
@@ -18,6 +18,46 @@ from areas.production_agent.services.action_bar import (
 from areas.production_agent.services.runner import run_agent
 
 ai_actions_bp = Blueprint("ai_actions", __name__)
+
+
+def _clean_name(value) -> str:
+    return str(value or "").strip()
+
+
+def _topic_in_workspace(topic_id, workspace_id: int) -> Topic | None:
+    if topic_id in (None, ""):
+        return None
+    row = db.session.get(Topic, int(topic_id))
+    if row is None or int(row.workspace_id) != int(workspace_id):
+        return None
+    return row
+
+
+def _apply_scope(row: AiAction, data: dict, workspace_id: int) -> str | None:
+    """topic_id xor topic_type_id xor neither (all). Topic wins if both sent."""
+    has_topic = "topic_id" in data
+    has_type = "topic_type_id" in data
+    if not has_topic and not has_type:
+        return None
+    topic_raw = data.get("topic_id") if has_topic else None
+    type_raw = data.get("topic_type_id") if has_type else None
+    if has_topic and topic_raw not in (None, ""):
+        topic = _topic_in_workspace(topic_raw, workspace_id)
+        if topic is None:
+            return "topic not found"
+        row.topic_id = topic.id
+        row.topic_type_id = None
+        return None
+    if has_type and type_raw not in (None, ""):
+        type_row = _topic_type_in_workspace(type_raw, workspace_id)
+        if type_row is None:
+            return "topic type not found"
+        row.topic_type_id = type_row.id
+        row.topic_id = None
+        return None
+    row.topic_id = None
+    row.topic_type_id = None
+    return None
 
 
 def _topic_type_in_workspace(type_id, workspace_id: int) -> TopicType | None:
@@ -91,27 +131,24 @@ def reorder_ai_action_bar():
 @ai_actions_bp.route("/ai-actions", methods=["POST"])
 def create_ai_action():
     data = request.get_json(silent=True) or {}
-    if not data.get("name"):
-        return jsonify({"error": "name is required"}), 400
+    name = _clean_name(data.get("name"))
+    name_he = _clean_name(data.get("name_he"))
+    if not name or not name_he:
+        return jsonify({"error": "name and name_he are required"}), 400
     workspace_id = data.get("workspace_id") or default_workspace_id()
     if not workspace_id:
         return jsonify({"error": "workspace_id is required"}), 400
     row = AiAction(
         workspace_id=workspace_id,
-        name=data["name"],
+        name=name,
+        name_he=name_he,
         prompt=data.get("prompt") or "",
         apply_mode=data.get("apply_mode") or DEFAULT_MANUAL_APPLY_MODE,
         icon=data.get("icon") or "",
     )
-    if "topic_type_id" in data:
-        raw = data.get("topic_type_id")
-        if raw not in (None, ""):
-            type_row = _topic_type_in_workspace(raw, workspace_id)
-            if type_row is None:
-                return jsonify({"error": "topic type not found"}), 400
-            row.topic_type_id = type_row.id
-        else:
-            row.topic_type_id = None
+    scope_error = _apply_scope(row, data, workspace_id)
+    if scope_error:
+        return jsonify({"error": scope_error}), 400
     db.session.add(row)
     db.session.flush()
 
@@ -144,17 +181,22 @@ def update_ai_action(action_id):
             return jsonify({"error": str(error)}), 400
         _write_slots(row.workspace_id, slots)
 
-    if "topic_type_id" in data:
-        raw = data.get("topic_type_id")
-        if raw in (None, ""):
-            row.topic_type_id = None
-        else:
-            type_row = _topic_type_in_workspace(raw, row.workspace_id)
-            if type_row is None:
-                return jsonify({"error": "topic type not found"}), 400
-            row.topic_type_id = type_row.id
+    if "topic_id" in data or "topic_type_id" in data:
+        scope_error = _apply_scope(row, data, row.workspace_id)
+        if scope_error:
+            return jsonify({"error": scope_error}), 400
 
-    apply_updates(row, data, {"name", "prompt", "apply_mode", "icon"})
+    if "name" in data or "name_he" in data:
+        name = _clean_name(data["name"]) if "name" in data else (row.name or "")
+        name_he = (
+            _clean_name(data["name_he"]) if "name_he" in data else (row.name_he or "")
+        )
+        if not name or not name_he:
+            return jsonify({"error": "name and name_he are required"}), 400
+        row.name = name
+        row.name_he = name_he
+
+    apply_updates(row, data, {"prompt", "apply_mode", "icon"})
     db.session.commit()
     return jsonify(row.to_dict())
 

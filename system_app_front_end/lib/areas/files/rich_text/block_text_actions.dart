@@ -17,6 +17,7 @@ Future<void> runBlockTextAction(String action) async {
     case 'text:underline':
     case 'text:size_up':
     case 'text:size_down':
+    case 'text:make_link':
       BlockTextFocusRegistry.applyTextFormat(action);
   }
 }

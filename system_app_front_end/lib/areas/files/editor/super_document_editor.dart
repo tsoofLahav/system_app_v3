@@ -18,13 +18,13 @@ import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
 import '../data/app_file.dart';
 import '../model/document_text_codec.dart';
-import '../model/line_range.dart';
 import '../model/marker_super_editor_bridge.dart';
 import '../model/object_embed_node.dart';
 import '../rich_text/block_text_actions.dart';
 import '../rich_text/block_text_focus.dart';
 import '../rich_text/document_context_menu.dart';
 import '../rich_text/rtl/rtl.dart';
+import '../rich_text/text_links.dart';
 import '../../../shared/utils/platform_text.dart';
 import './document_caret_session.dart';
 import './document_editor_controller.dart';
@@ -34,8 +34,11 @@ import './editor_key_handoff.dart';
 import './embed_caret_bridge.dart';
 import './embed_move_bubble.dart';
 import './embeds/image_display_size.dart';
+import './cmd_click_link_handler.dart';
+import './file_editor_keyboard_actions.dart';
 import './object_embed_component.dart';
 import './selection_background_phase.dart';
+import './super_editor_mark.dart';
 
 /// Super Editor's overlays, with a caret only while this pane has primary
 /// focus (and is the claimed file).
@@ -216,6 +219,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           focusedTaskId: _focusedTaskId,
           markedTextForAgent: _markedTextForAgent,
           applyTextAction: _handleTextMenuAction,
+          toggleMoveMode: _toggleMoveModeFromShortcut,
           isFocused: () => _focusNode.hasFocus,
           canEnterObject: _canEnterObject,
           canLeaveObject: _canLeaveObject,
@@ -596,7 +600,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     return tasks.isEmpty ? null : tasks.first.id;
   }
 
-  /// Selection or caret line/paragraph for `hints.selected_text`.
+  /// Marked span, or the caret line when unmarked — `hints.selected_text`.
   String? _markedTextForAgent() {
     final embedMark = BlockTextFocusRegistry.resolveMark();
     if (embedMark.isValid) {
@@ -604,28 +608,13 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       if (text.isNotEmpty) return text;
     }
 
-    final sel = _composer.selection;
+    final sel = caretLineSelection(_doc, _composer.selection);
     if (sel == null) return null;
-
     if (!sel.isCollapsed) {
       final text = _plainTextInDocumentSelection(sel).trim();
       return text.isEmpty ? null : text;
     }
-
     final node = _doc.getNodeById(sel.extent.nodeId);
-    if (node is TextNode) {
-      final plain = node.text.toPlainText();
-      if (plain.isEmpty) return null;
-      final offset = sel.extent.nodePosition is TextNodePosition
-          ? (sel.extent.nodePosition as TextNodePosition).offset
-          : 0;
-      final range = LineRange.resolve(
-        plain,
-        TextSelection.collapsed(offset: offset.clamp(0, plain.length)),
-      );
-      final line = plain.substring(range.start, range.end).trim();
-      return line.isEmpty ? null : line;
-    }
     if (node is ObjectEmbedNode) {
       return DocumentTextCodec.pointerLine(node.objectId, node.objectType);
     }
@@ -1126,7 +1115,20 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     final para = AppTypography.documentParagraphStyle;
     return Stylesheet(
       documentPadding: EdgeInsets.zero,
-      inlineTextStyler: defaultInlineTextStyler,
+      inlineTextStyler: (attributions, existing) {
+        var style = defaultInlineTextStyler(attributions, existing);
+        for (final attribution in attributions) {
+          if (attribution is LinkAttribution) {
+            style = style.copyWith(
+              color: AppColors.descriptionLink,
+              decoration: TextDecoration.underline,
+              decorationColor: AppColors.descriptionLink,
+              decorationThickness: 1,
+            );
+          }
+        }
+        return style;
+      },
       rules: [
         StyleRule(
           BlockSelector.all,
@@ -1241,6 +1243,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
     _focusNode.requestFocus();
     if (!mounted) return;
+    _expandCollapsedToCaretLine();
 
     if (node is ListItemNode) {
       final listNode = node;
@@ -1290,6 +1293,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           globalPosition: globalPosition,
           strings: strings,
           onAction: (action) async {
+            if (action == 'object:move_mode') {
+              _toggleMoveModeForNode(node.id);
+              return;
+            }
             if (action == 'info:add_tag') {
               await showAssignObjectTagsDialog(
                 context: context,
@@ -1324,6 +1331,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           strings: strings,
           includeAssignView: taskId != null,
           onAction: (action) async {
+            if (action == 'object:move_mode') {
+              _toggleMoveModeForNode(node.id);
+              return;
+            }
             if (action == 'tasks:assign_view' && taskId != null) {
               await showAssignTaskViewDialog(
                 context: context,
@@ -1349,6 +1360,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
             globalPosition: globalPosition,
             strings: strings,
             onAction: (action) async {
+              if (action == 'object:move_mode') {
+                _toggleMoveModeForNode(node.id);
+                return;
+              }
               if (action == 'table:reorder_columns') {
                 final gateway = _embedCaretRegistry[node.id];
                 gateway?.enterFromAbove();
@@ -1364,7 +1379,12 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
             globalPosition: globalPosition,
             strings: strings,
             includeConnectInfo: false,
+            includeMoveObject: true,
             onAction: (action) async {
+              if (action == 'object:move_mode') {
+                _toggleMoveModeForNode(node.id);
+                return;
+              }
               if (action == 'table:add_column') {
                 // Prefer the live grid (after current/last cell); payload
                 // fallback only if the embed host is not registered yet.
@@ -1408,6 +1428,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           strings: strings,
           scale: ImageDisplaySize.scaleOf(embed.payload),
           onAction: (action) async {
+            if (action == 'object:move_mode') {
+              _toggleMoveModeForNode(node.id);
+              return;
+            }
             final next = ImageDisplaySize.apply(action, embed.payload);
             if (next == null) return;
             await _onPayloadChanged(embed.id, next);
@@ -1524,6 +1548,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   Future<void> _handleTextMenuAction(String action) async {
+    final expandsLine = action != 'text:paste' &&
+        !action.startsWith('text:emoji:');
+    if (expandsLine) _expandCollapsedToCaretLine();
+
     switch (action) {
       case 'text:bold':
         _docOps.toggleAttributionsOnSelection({boldAttribution});
@@ -1531,6 +1559,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         _docOps.toggleAttributionsOnSelection({italicsAttribution});
       case 'text:underline':
         _docOps.toggleAttributionsOnSelection({underlineAttribution});
+      case 'text:make_link':
+        _makeLinkOnSelection();
       case 'text:size_up':
         _applyFontSizeDelta(1.5);
       case 'text:size_down':
@@ -1564,6 +1594,99 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           final hex = action.substring('text:color:'.length);
           _applyColorAttribution(AppColors.colorFromHex(hex));
         }
+    }
+  }
+
+  /// Marked text stays marked. A collapsed caret becomes the line it sits on.
+  void _expandCollapsedToCaretLine() {
+    final next = caretLineSelection(_doc, _composer.selection);
+    final current = _composer.selection;
+    if (next == null || current == null) return;
+    if (next == current) return;
+    _editor.execute([
+      ChangeSelectionRequest(
+        next,
+        SelectionChangeType.expandSelection,
+        SelectionReason.userInteraction,
+      ),
+    ]);
+  }
+
+  void _toggleMoveModeFromShortcut() {
+    if (_moveModeNodeId != null) {
+      _endMoveMode();
+      return;
+    }
+    String? nodeId = _caretSession.activeEmbedNodeId;
+    if (nodeId == null) {
+      final sel = _composer.selection;
+      if (sel != null) {
+        final node = _doc.getNodeById(sel.extent.nodeId);
+        if (node is ObjectEmbedNode) nodeId = node.id;
+      }
+    }
+    if (nodeId == null) return;
+    _toggleMoveModeForNode(nodeId);
+  }
+
+  void _toggleMoveModeForNode(String nodeId) {
+    if (_moveModeNodeId == nodeId) {
+      _endMoveMode();
+      return;
+    }
+    _onMoveModeChanged(nodeId);
+  }
+
+  void _makeLinkOnSelection() {
+    final sel = _composer.selection;
+    if (sel == null || sel.isCollapsed) return;
+    final nodes = _doc.getNodesInside(sel.base, sel.extent);
+    for (final node in nodes) {
+      if (node is! TextNode) continue;
+      final plain = node.text.toPlainText();
+      if (plain.isEmpty) continue;
+      int start;
+      int end;
+      if (sel.base.nodeId == node.id && sel.extent.nodeId == node.id) {
+        final a = (sel.base.nodePosition as TextNodePosition).offset;
+        final b = (sel.extent.nodePosition as TextNodePosition).offset;
+        start = a < b ? a : b;
+        end = a < b ? b : a;
+      } else if (sel.base.nodeId == node.id) {
+        final offset = (sel.base.nodePosition as TextNodePosition).offset;
+        start = offset;
+        end = plain.length;
+      } else if (sel.extent.nodeId == node.id) {
+        start = 0;
+        end = (sel.extent.nodePosition as TextNodePosition).offset;
+      } else {
+        start = 0;
+        end = plain.length;
+      }
+      start = start.clamp(0, plain.length);
+      end = end.clamp(0, plain.length);
+      if (end <= start) continue;
+      final slice = plain.substring(start, end);
+      final hit = firstUrlIn(slice);
+      if (hit == null) continue;
+      final uri = Uri.tryParse(hit.url);
+      if (uri == null) continue;
+      _editor.execute([
+        AddTextAttributionsRequest(
+          documentRange: DocumentSelection(
+            base: DocumentPosition(
+              nodeId: node.id,
+              nodePosition: TextNodePosition(offset: start + hit.start),
+            ),
+            extent: DocumentPosition(
+              nodeId: node.id,
+              nodePosition: TextNodePosition(offset: start + hit.end),
+            ),
+          ),
+          attributions: {LinkAttribution.fromUri(uri)},
+        ),
+      ]);
+      return;
     }
   }
 
@@ -1669,7 +1792,6 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           onClaimFile: _claimFile,
           onInnerFocusChanged: _onEmbedInnerFocusChanged,
           moveModeNodeId: _moveModeNodeId,
-          onMoveModeChanged: _onMoveModeChanged,
           onMoveToIndex: _moveEmbedToIndex,
         ),
         const LegacyTableFenceComponentBuilder(),
@@ -1694,7 +1816,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         behavior: HitTestBehavior.translucent,
         child: CustomScrollView(
           slivers: [
-            SuperEditor(
+              SuperEditor(
               key: ValueKey<int>(_superEditorEpoch),
               editor: _editor,
               focusNode: _focusNode,
@@ -1707,6 +1829,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
               stylesheet: _stylesheet,
               selectionStyle: _selectionStyles,
               componentBuilders: _componentBuilders(ambient),
+              keyboardActions: kFileEditorImeKeyboardActions,
+              contentTapDelegateFactories: [cmdClickLinkTapHandlerFactory],
               documentOverlayBuilders:
                   documentOverlayBuilders(withCaret: _showCaret),
               plugins: {

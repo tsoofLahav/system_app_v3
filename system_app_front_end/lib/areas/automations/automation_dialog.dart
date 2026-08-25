@@ -62,7 +62,7 @@ class _AutomationDialogState extends State<_AutomationDialog> {
     final confirmed = await showAppConfirmDialog(
       context: context,
       title: s['delete'],
-      message: s.deleteAutomationMessage(automation.name),
+      message: s.deleteAutomationMessage(state.automationDisplayName(automation)),
       confirmLabel: s['delete'],
       cancelLabel: s['cancel'],
       destructive: true,
@@ -125,7 +125,7 @@ class _AutomationDialogState extends State<_AutomationDialog> {
                       return ListTile(
                         dense: true,
                         onTap: () => _edit(item),
-                        title: Text(item.name),
+                        title: Text(state.automationDisplayName(item)),
                         subtitle: Text(
                           _subtitle(item),
                           maxLines: 2,

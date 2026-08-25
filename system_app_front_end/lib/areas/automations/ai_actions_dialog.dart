@@ -72,7 +72,7 @@ class _AiActionsDialogState extends State<_AiActionsDialog> {
     final confirmed = await showAppConfirmDialog(
       context: context,
       title: s['delete'],
-      message: s.deleteActionMessage(action.name),
+      message: s.deleteActionMessage(state.aiActionDisplayName(action)),
       confirmLabel: s['delete'],
       cancelLabel: s['cancel'],
       destructive: true,
@@ -120,7 +120,7 @@ class _AiActionsDialogState extends State<_AiActionsDialog> {
                     dense: true,
                     onTap: () => _edit(action),
                     leading: AppIcon(actionIcon(action.icon), size: 18),
-                    title: Text(action.name),
+                    title: Text(state.aiActionDisplayName(action)),
                     subtitle: Text(
                       action.prompt,
                       maxLines: 2,

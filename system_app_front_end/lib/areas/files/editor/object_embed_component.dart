@@ -23,7 +23,6 @@ typedef ObjectPayloadChanged = void Function(
   Map<String, dynamic> payload,
 );
 typedef EmbedMoveRequested = void Function(String nodeId, int targetIndex);
-typedef EmbedMoveModeChanged = void Function(String? nodeId);
 
 /// Builds [ObjectEmbedComponent]s for [ObjectEmbedNode]s.
 class ObjectEmbedComponentBuilder implements ComponentBuilder {
@@ -36,7 +35,6 @@ class ObjectEmbedComponentBuilder implements ComponentBuilder {
     required this.onClaimFile,
     required this.onInnerFocusChanged,
     required this.moveModeNodeId,
-    required this.onMoveModeChanged,
     required this.onMoveToIndex,
   });
 
@@ -50,7 +48,6 @@ class ObjectEmbedComponentBuilder implements ComponentBuilder {
   /// Embed node id when an inner field is focused; `null` when it leaves.
   final ValueChanged<String?> onInnerFocusChanged;
   final String? moveModeNodeId;
-  final EmbedMoveModeChanged onMoveModeChanged;
   final EmbedMoveRequested onMoveToIndex;
 
   @override
@@ -86,8 +83,6 @@ class ObjectEmbedComponentBuilder implements ComponentBuilder {
       onClaimFile: onClaimFile,
       onInnerFocusChanged: onInnerFocusChanged,
       moveMode: moveModeNodeId == componentViewModel.nodeId,
-      onMoveModeChanged: (active) =>
-          onMoveModeChanged(active ? componentViewModel.nodeId : null),
       onMoveToIndex: onMoveToIndex,
     );
   }
@@ -161,7 +156,6 @@ class ObjectEmbedComponent extends StatelessWidget {
     required this.onClaimFile,
     required this.onInnerFocusChanged,
     required this.moveMode,
-    required this.onMoveModeChanged,
     required this.onMoveToIndex,
   });
 
@@ -176,7 +170,6 @@ class ObjectEmbedComponent extends StatelessWidget {
   final VoidCallback onClaimFile;
   final ValueChanged<String?> onInnerFocusChanged;
   final bool moveMode;
-  final ValueChanged<bool> onMoveModeChanged;
   final EmbedMoveRequested onMoveToIndex;
 
   @override
@@ -200,7 +193,6 @@ class ObjectEmbedComponent extends StatelessWidget {
           _SeEmbedMoveHost(
             nodeId: viewModel.nodeId,
             moveMode: moveMode,
-            onMoveModeChanged: onMoveModeChanged,
             onInteract: onClaimFile,
             onInnerFocusChanged: onInnerFocusChanged,
             child: EmbedEditScope(nodeId: viewModel.nodeId, child: child),
@@ -365,7 +357,8 @@ class _MissingEmbed extends StatelessWidget {
   }
 }
 
-/// Double-click Move Mode chrome for Super Editor embeds.
+/// Chrome for Super Editor embeds. Inner fields own double-click (word
+/// select). Move Mode is the object menu and the Move-object shortcut.
 ///
 /// Watches descendant focus so any inner [TextField] clears the document caret
 /// (avoids the double-caret: SE block caret + field caret).
@@ -373,7 +366,6 @@ class _SeEmbedMoveHost extends StatefulWidget {
   const _SeEmbedMoveHost({
     required this.nodeId,
     required this.moveMode,
-    required this.onMoveModeChanged,
     required this.onInteract,
     required this.onInnerFocusChanged,
     required this.child,
@@ -381,7 +373,6 @@ class _SeEmbedMoveHost extends StatefulWidget {
 
   final String nodeId;
   final bool moveMode;
-  final ValueChanged<bool> onMoveModeChanged;
   final VoidCallback onInteract;
   final ValueChanged<String?> onInnerFocusChanged;
   final Widget child;
@@ -397,23 +388,17 @@ class _SeEmbedMoveHostState extends State<_SeEmbedMoveHost> {
     if (widget.moveMode) {
       body = DragModeFrame(child: body);
     }
-    body = Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onFocusChange: (focused) {
-        widget.onInnerFocusChanged(focused ? widget.nodeId : null);
-      },
-      child: body,
-    );
-    return GestureDetector(
+    return Listener(
       behavior: HitTestBehavior.translucent,
-      // Don't select-on-tap here — that races TextField focus and recreates
-      // the double caret. Double-click is Move Mode only.
-      onDoubleTap: () {
-        widget.onInteract();
-        widget.onMoveModeChanged(!widget.moveMode);
-      },
-      child: body,
+      onPointerDown: (_) => widget.onInteract(),
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (focused) {
+          widget.onInnerFocusChanged(focused ? widget.nodeId : null);
+        },
+        child: body,
+      ),
     );
   }
 }

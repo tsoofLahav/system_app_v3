@@ -373,7 +373,7 @@ class _ViewSection extends StatelessWidget {
           padding: const EdgeInsetsDirectional.fromSTEB(8, 4, 8, 2),
           child: Text(s['views'], style: AppTypography.sidebarSectionStyle),
         ),
-        if (views.length < 2)
+        if (views.length < 2 || !state.sidebarReorderMode)
           for (final view in views)
             _ViewTile(
               key: ValueKey(view.id),
@@ -389,7 +389,9 @@ class _ViewSection extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             buildDefaultDragHandles: false,
-            proxyDecorator: (child, index, animation) => child,
+            proxyDecorator: (child, index, animation) {
+              return Material(color: Colors.transparent, child: child);
+            },
             itemCount: views.length,
             onReorder: _onReorder,
             itemBuilder: (context, index) {
@@ -691,7 +693,7 @@ class _TopicSectionState extends State<_TopicSection> {
           ),
         ),
         if (expanded)
-          widget.topics.length < 2
+          widget.topics.length < 2 || !widget.state.sidebarReorderMode
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -702,7 +704,9 @@ class _TopicSectionState extends State<_TopicSection> {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   buildDefaultDragHandles: false,
-                  proxyDecorator: (child, index, animation) => child,
+                  proxyDecorator: (child, index, animation) {
+              return Material(color: Colors.transparent, child: child);
+            },
                   itemCount: widget.topics.length,
                   onReorder: (oldIndex, newIndex) {
                     if (newIndex > oldIndex) newIndex -= 1;

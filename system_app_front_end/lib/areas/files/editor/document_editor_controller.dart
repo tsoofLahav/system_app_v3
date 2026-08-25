@@ -11,6 +11,7 @@ class DocumentEditorController {
     this.focusedTaskId,
     this.markedTextForAgent,
     this.applyTextAction,
+    this.toggleMoveMode,
     this.isFocused,
     this.canEnterObject,
     this.canLeaveObject,
@@ -27,11 +28,14 @@ class DocumentEditorController {
   /// Task under the caret in this file, if any (for view-assign shortcut).
   final int? Function()? focusedTaskId;
 
-  /// Selection, or caret line/paragraph when nothing is marked — for agent hints.
+  /// Selection, or caret line when nothing is marked — for agent hints.
   final String? Function()? markedTextForAgent;
 
   /// Bold / italic / clipboard / emoji when the document caret has focus.
   final Future<void> Function(String action)? applyTextAction;
+
+  /// Toggle object Move Mode for the caret / last-interacted embed.
+  final VoidCallback? toggleMoveMode;
 
   /// True while this file's Super Editor focus node owns the keyboard.
   final bool Function()? isFocused;
@@ -95,6 +99,7 @@ class DocumentEditorRegistry {
   }
 
   /// Tiny pointer for `hints.selected_text` — never a full file body.
+  /// Marked span, or the caret line when nothing is marked.
   static String? activeMarkedTextForAgent({int maxChars = 400}) {
     final raw = active?.markedTextForAgent?.call()?.trim();
     if (raw == null || raw.isEmpty) return null;

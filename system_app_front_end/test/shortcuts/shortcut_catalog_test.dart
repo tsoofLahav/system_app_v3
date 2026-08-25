@@ -80,4 +80,11 @@ void main() {
     expectCmd(ShortcutActionIds.addConnection, LogicalKeyboardKey.keyL);
     expectCmd(ShortcutActionIds.toggleReorderMode, LogicalKeyboardKey.keyO);
   });
+
+  test('move object defaults to Cmd+Shift+O', () {
+    final action = shortcutActionById(ShortcutActionIds.toggleEmbedMoveMode)!;
+    expect(action.defaultBinding.keyId, LogicalKeyboardKey.keyO.keyId);
+    expect(action.defaultBinding.meta, isTrue);
+    expect(action.defaultBinding.shift, isTrue);
+  });
 }

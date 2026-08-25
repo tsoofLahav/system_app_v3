@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../ui/app_colors.dart';
 import './format_range.dart';
+import './text_links.dart';
 
 /// Plain text + optional span runs → [TextSpan] tree for display/editing.
 class TextSpanBuilder {
@@ -60,7 +61,8 @@ class TextSpanBuilder {
         style = style.copyWith(color: Color(int.parse('FF$hex', radix: 16)));
       }
     }
-    if (span['descriptionLink'] == true) {
+    if (span['descriptionLink'] == true ||
+        (span['link'] is String && (span['link'] as String).isNotEmpty)) {
       style = style.copyWith(
         color: AppColors.descriptionLink,
         decoration: TextDecoration.underline,
@@ -189,6 +191,7 @@ bool _spanHasStyle(Map<String, dynamic> span) {
       span['italic'] == true ||
       span['underline'] == true ||
       span['descriptionLink'] == true ||
+      (span['link'] is String && (span['link'] as String).isNotEmpty) ||
       span['size'] is num ||
       (span['color'] is String && (span['color'] as String).isNotEmpty);
 }
@@ -266,6 +269,9 @@ Map<String, dynamic> _markFromSpan(Map<String, dynamic> span) {
   if (span['italic'] == true) mark['italic'] = true;
   if (span['underline'] == true) mark['underline'] = true;
   if (span['descriptionLink'] == true) mark['descriptionLink'] = true;
+  if (span['link'] is String && (span['link'] as String).isNotEmpty) {
+    mark['link'] = span['link'];
+  }
   if (span['size'] is num) mark['size'] = span['size'];
   if (span['color'] is String) mark['color'] = span['color'];
   return mark;
@@ -306,6 +312,7 @@ bool _marksEqual(Map<String, dynamic> a, Map<String, dynamic> b) {
       a['italic'] == b['italic'] &&
       a['underline'] == b['underline'] &&
       a['descriptionLink'] == b['descriptionLink'] &&
+      a['link'] == b['link'] &&
       a['size'] == b['size'] &&
       a['color'] == b['color'];
 }
@@ -534,12 +541,27 @@ List<Map<String, dynamic>> applyFormatActionToRange(
   required int textLength,
   required String action,
   required double baseFontSize,
+  String? sourceText,
 }) {
   if (end <= start) return spans;
 
   final clampedStart = start.clamp(0, textLength);
   final clampedEnd = end.clamp(0, textLength);
   if (clampedEnd <= clampedStart) return spans;
+
+  if (action == 'text:make_link') {
+    final text = sourceText ?? '';
+    if (text.isEmpty || clampedEnd > text.length) return spans;
+    final hit = firstUrlIn(text.substring(clampedStart, clampedEnd));
+    if (hit == null) return spans;
+    final absStart = clampedStart + hit.start;
+    final absEnd = clampedStart + hit.end;
+    final marks = _marksForLength(textLength, spans);
+    for (var i = absStart; i < absEnd && i < marks.length; i++) {
+      marks[i]['link'] = hit.url;
+    }
+    return _spansFromMarks(marks, textLength);
+  }
 
   final marks = _marksForLength(textLength, spans);
   for (var i = clampedStart; i < clampedEnd; i++) {
@@ -593,6 +615,7 @@ bool _sameStyle(Map<String, dynamic> a, Map<String, dynamic> b) {
       a['italic'] == b['italic'] &&
       a['underline'] == b['underline'] &&
       a['descriptionLink'] == b['descriptionLink'] &&
+      a['link'] == b['link'] &&
       a['size'] == b['size'] &&
       a['color'] == b['color'];
 }
@@ -619,6 +642,7 @@ Map<String, dynamic> applyTextFormatToContent({
     textLength: text.length,
     action: action,
     baseFontSize: baseFontSize,
+    sourceText: text,
   );
   return {...content, 'text': text, 'spans': nextSpans, 'compose_style': null};
 }

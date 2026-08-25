@@ -180,10 +180,12 @@ class EmbedCaretPlugin extends SuperEditorPlugin {
   @override
   List<SuperEditorKeyboardAction> get keyboardActions => [_onTab, _onEnter];
 
-  /// Halts SE double-tap word-select while an embed owns the caret (and on
-  /// object blocks for Move Mode) — otherwise SE selects, we clear via
+  /// Halts SE double-tap word-select while an embed owns the caret, and on
+  /// chrome / non-text hits of an object block — otherwise SE tries to select
+  /// the embed node, we clear via
   /// [DocumentCaretSession.suppressDocumentSelectionWhileEmbedOwns], then
-  /// Super Editor null-checks `selectionNotifier.value!` and crashes.
+  /// Super Editor null-checks `selectionNotifier.value!` and crashes. Inner
+  /// fields keep Flutter word-select.
   @override
   List<ContentTapDelegate> get contentTapHandlers => [_tapDelegate];
 

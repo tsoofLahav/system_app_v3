@@ -343,8 +343,10 @@ class ViewTaskMembership(db.Model):
 class AiAction(db.Model):
     """A prompt on a button. Not an automation — see `Automation` below.
 
-    It still runs on whatever is open. `topic_type_id` only decides whether the
-    button is offered: null = every topic; set = that type plus the globals.
+    It still runs on whatever is open. Scope only decides whether the button
+    is offered: both ids null = every topic; `topic_type_id` = that type;
+    `topic_id` = that topic. Visiting files on Home also surface matching
+    actions.
     """
 
     __tablename__ = "ai_actions"
@@ -352,12 +354,14 @@ class AiAction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id"), nullable=False)
     name = db.Column(db.Text, nullable=False)
+    name_he = db.Column(db.Text)
     prompt = db.Column(db.Text, nullable=False, default="")
     apply_mode = db.Column(db.Text, nullable=False, default=DEFAULT_MANUAL_APPLY_MODE)
     icon = db.Column(db.Text, nullable=False, default="")
     # 1..6 = a seat on the AI bar (unique per workspace), NULL = actions menu.
     bar_slot = db.Column(db.Integer)
     topic_type_id = db.Column(db.Integer, db.ForeignKey("topic_types.id"))
+    topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -368,11 +372,13 @@ class AiAction(db.Model):
             "id": self.id,
             "workspace_id": self.workspace_id,
             "name": self.name,
+            "name_he": self.name_he or "",
             "prompt": self.prompt or "",
             "apply_mode": self.apply_mode,
             "icon": self.icon or "",
             "bar_slot": self.bar_slot,
             "topic_type_id": self.topic_type_id,
+            "topic_id": self.topic_id,
             "created_at": _iso(self.created_at),
             "updated_at": _iso(self.updated_at),
         }
@@ -391,6 +397,7 @@ class Automation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id"), nullable=False)
     name = db.Column(db.Text, nullable=False)
+    name_he = db.Column(db.Text)
     trigger = db.Column(JSONB, nullable=False, default=dict)
     scope = db.Column(JSONB, nullable=False, default=dict)
     steps = db.Column(JSONB, nullable=False, default=list)
@@ -409,6 +416,7 @@ class Automation(db.Model):
             "id": self.id,
             "workspace_id": self.workspace_id,
             "name": self.name,
+            "name_he": self.name_he or "",
             "trigger": self.trigger if self.trigger is not None else {},
             "scope": self.scope if self.scope is not None else {},
             "steps": self.steps if self.steps is not None else [],

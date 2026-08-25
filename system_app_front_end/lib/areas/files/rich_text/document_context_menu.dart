@@ -25,6 +25,10 @@ class DocumentContextMenu {
       label: strings['underline'] ?? 'Underline',
     ),
     AppContextMenuItem(
+      value: 'text:make_link',
+      label: strings['makeLink'] ?? 'Make link',
+    ),
+    AppContextMenuItem(
       value: 'text:size_up',
       label: strings['sizeUp'] ?? 'Size up',
     ),
@@ -106,7 +110,14 @@ class DocumentContextMenu {
       globalPosition: globalPosition,
       strings: strings,
       onAction: onAction,
-      entries: buildImageEntries(strings, scale: scale),
+      entries: [
+        AppContextMenuItem(
+          value: 'object:move_mode',
+          label: strings['moveObject'],
+        ),
+        const AppContextMenuDivider(),
+        ...buildImageEntries(strings, scale: scale),
+      ],
     );
   }
 
@@ -225,6 +236,7 @@ class DocumentContextMenu {
     bool includeReorderRows = true,
     bool includeReorderColumns = true,
     bool includeConnectInfo = true,
+    bool includeMoveObject = false,
   }) {
     return _showMenu(
       context: context,
@@ -232,6 +244,13 @@ class DocumentContextMenu {
       strings: strings,
       onAction: onAction,
       entries: [
+        if (includeMoveObject) ...[
+          AppContextMenuItem(
+            value: 'object:move_mode',
+            label: strings['moveObject'],
+          ),
+          const AppContextMenuDivider(),
+        ],
         ...buildTextEntries(strings, includeConnectInfo: includeConnectInfo),
         const AppContextMenuDivider(),
         if (includeAddRow)
@@ -275,6 +294,11 @@ class DocumentContextMenu {
       onAction: onAction,
       entries: [
         AppContextMenuItem(
+          value: 'object:move_mode',
+          label: strings['moveObject'],
+        ),
+        const AppContextMenuDivider(),
+        AppContextMenuItem(
           value: 'table:reorder_columns',
           label: strings['reorderColumns'],
         ),
@@ -313,6 +337,11 @@ class DocumentContextMenu {
       strings: strings,
       onAction: onAction,
       entries: [
+        AppContextMenuItem(
+          value: 'object:move_mode',
+          label: strings['moveObject'],
+        ),
+        const AppContextMenuDivider(),
         AppContextMenuItem(
           value: 'info:add_tag',
           label: strings['addTag'],
@@ -356,6 +385,11 @@ class DocumentContextMenu {
       strings: strings,
       onAction: onAction,
       entries: [
+        AppContextMenuItem(
+          value: 'object:move_mode',
+          label: strings['moveObject'],
+        ),
+        const AppContextMenuDivider(),
         ...buildTextEntries(strings, includeConnectInfo: includeConnectInfo),
         const AppContextMenuDivider(),
         if (includeAssignView)

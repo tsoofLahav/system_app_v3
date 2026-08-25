@@ -72,6 +72,28 @@ class PreferencesDialog extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: DialogFieldStyle.fieldGap),
+              AppDialogField(
+                label: s['reorderSidebar'],
+                hint: s['reorderSidebarHint'],
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: FilledButton(
+                    onPressed: () {
+                      final turningOn = !state.sidebarReorderMode;
+                      state.toggleSidebarReorderMode();
+                      if (turningOn && context.mounted) {
+                        Navigator.pop(context);
+                      }
+                    },
+                    child: Text(
+                      state.sidebarReorderMode
+                          ? s['doneReorderSidebar']
+                          : s['startReorderSidebar'],
+                    ),
+                  ),
+                ),
+              ),
               if (!isPhoneLayout) ...[
                 const SizedBox(height: DialogFieldStyle.fieldGap),
                 AppDialogField(

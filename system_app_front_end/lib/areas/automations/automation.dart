@@ -8,6 +8,7 @@ class Automation {
     required this.id,
     required this.workspaceId,
     required this.name,
+    this.nameHe = '',
     this.trigger = const {},
     this.scope = const {},
     this.steps = const [],
@@ -21,6 +22,7 @@ class Automation {
   final int id;
   final int workspaceId;
   final String name;
+  final String nameHe;
 
   /// `{"type": "schedule"}` today; event types arrive with phase two.
   final Map<String, dynamic> trigger;
@@ -47,6 +49,7 @@ class Automation {
       id: json['id'] as int,
       workspaceId: json['workspace_id'] as int,
       name: json['name'] as String,
+      nameHe: json['name_he'] as String? ?? '',
       trigger: trigger is Map ? Map<String, dynamic>.from(trigger) : const {},
       scope: scope is Map ? Map<String, dynamic>.from(scope) : const {},
       steps: steps is List

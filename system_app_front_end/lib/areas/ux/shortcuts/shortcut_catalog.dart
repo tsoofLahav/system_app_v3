@@ -83,6 +83,7 @@ abstract final class ShortcutActionIds {
   static const toggleLanguage = 'toggle_language';
   static const addConnection = 'add_connection';
   static const toggleReorderMode = 'toggle_reorder_mode';
+  static const toggleEmbedMoveMode = 'toggle_embed_move_mode';
 }
 
 final _aiActionSlotRe = RegExp(r'^ai_action_(\d+)$');
@@ -316,6 +317,12 @@ final List<ShortcutAction> kShortcutCatalog = [
     category: ShortcutCategory.navigation,
     labelKey: 'shortcutReorderMode',
     defaultBinding: _m(LogicalKeyboardKey.keyO),
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.toggleEmbedMoveMode,
+    category: ShortcutCategory.objects,
+    labelKey: 'shortcutMoveObject',
+    defaultBinding: _m(LogicalKeyboardKey.keyO, shift: true),
   ),
 ];
 

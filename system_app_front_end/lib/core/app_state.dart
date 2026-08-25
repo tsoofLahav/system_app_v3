@@ -106,6 +106,8 @@ class AppState extends ChangeNotifier {
 
   bool isViewMode = false;
   bool viewPaneReady = false;
+  /// Drag handles on sidebar topics and views — off until ⌘O or Preferences.
+  bool sidebarReorderMode = false;
   String? selectedViewType;
   AppView? selectedView;
   List<ViewMembership> viewMemberships = [];
@@ -284,6 +286,31 @@ class AppState extends ChangeNotifier {
     return strings.topicTypeLabel(type.name);
   }
 
+  String aiActionDisplayName(AiAction action) {
+    if (language == AppLanguage.he && action.nameHe.trim().isNotEmpty) {
+      return action.nameHe.trim();
+    }
+    return action.name;
+  }
+
+  String automationDisplayName(Automation automation) {
+    if (language == AppLanguage.he && automation.nameHe.trim().isNotEmpty) {
+      return automation.nameHe.trim();
+    }
+    return automation.name;
+  }
+
+  /// Origin line for a brought file: `{type} - {topic}{emoji}`, or just
+  /// `{topic}{emoji}` when the source topic has no type.
+  String broughtFileOriginLabel(Topic topic) {
+    final type = topicTypeById(topic.topicTypeId);
+    return TopicAppearance.broughtOriginLabel(
+      topicName: topicDisplayName(topic),
+      icon: topic.icon,
+      typeDisplay: type == null ? null : topicTypeDisplayName(type),
+    );
+  }
+
   /// Object tags are freeform. Types live on `topic_types`, not as tags.
   List<AppTag> get objectTags => objectTagsExcludingTopicTypes(
         tags: allTags,
@@ -344,6 +371,11 @@ class AppState extends ChangeNotifier {
 
   Future<void> toggleLanguage() async {
     setLanguage(_language == AppLanguage.en ? AppLanguage.he : AppLanguage.en);
+  }
+
+  void toggleSidebarReorderMode() {
+    sidebarReorderMode = !sidebarReorderMode;
+    notifyListeners();
   }
 
   static const _languagePrefsKey = 'app_language';
@@ -1132,15 +1164,15 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> reorderTopicTypes(List<TopicType> ordered) async {
-    await Future.wait([
-      for (var i = 0; i < ordered.length; i++)
-        _topicTypes.update(ordered[i].id, {'order_index': i}),
-    ]);
     topicTypes = [
       for (var i = 0; i < ordered.length; i++)
         ordered[i].copyWith(orderIndex: i),
     ];
     notifyListeners();
+    await Future.wait([
+      for (var i = 0; i < ordered.length; i++)
+        _topicTypes.update(ordered[i].id, {'order_index': i}),
+    ]);
   }
 
   void _sortTopicTypes() {
@@ -1173,21 +1205,50 @@ class AppState extends ChangeNotifier {
 
   /// Actions with a seat on the AI bar, in slot order, for what is open.
   List<AiAction> get barAiActions {
-    final typeId = selectedTopic?.topicTypeId;
+    final visits = _aiActionVisitIds;
     final pinned = [
       for (final action in aiActions)
-        if (action.isOnBar && action.visibleOnTopicType(typeId)) action,
+        if (action.isOnBar &&
+            action.visibleIn(
+              openTopicId: selectedTopic?.id,
+              openTypeId: selectedTopic?.topicTypeId,
+              visitingTopicIds: visits.topicIds,
+              visitingTypeIds: visits.typeIds,
+            ))
+          action,
     ]..sort((a, b) => a.barSlot!.compareTo(b.barSlot!));
     return pinned;
   }
 
-  /// Globals plus actions for the open topic's type (Home / untyped: globals).
+  /// Globals plus actions matching the open topic, its type, or a visiting file.
   List<AiAction> get visibleAiActions {
-    final typeId = selectedTopic?.topicTypeId;
+    final visits = _aiActionVisitIds;
     return [
       for (final action in aiActions)
-        if (action.visibleOnTopicType(typeId)) action,
+        if (action.visibleIn(
+          openTopicId: selectedTopic?.id,
+          openTypeId: selectedTopic?.topicTypeId,
+          visitingTopicIds: visits.topicIds,
+          visitingTypeIds: visits.typeIds,
+        ))
+          action,
     ];
+  }
+
+  ({Set<int> topicIds, Set<int> typeIds}) get _aiActionVisitIds {
+    final open = selectedTopic;
+    if (open == null || !open.isMain) {
+      return (topicIds: <int>{}, typeIds: <int>{});
+    }
+    final topicIds = <int>{};
+    final typeIds = <int>{};
+    for (final file in broughtFiles) {
+      final source = canvasTopicFor(open, file);
+      topicIds.add(source.id);
+      final typeId = source.topicTypeId;
+      if (typeId != null) typeIds.add(typeId);
+    }
+    return (topicIds: topicIds, typeIds: typeIds);
   }
 
   AiAction? aiActionInSlot(int slot) {
@@ -1217,11 +1278,13 @@ class AppState extends ChangeNotifier {
 
   Future<AiAction> createAiAction({
     required String name,
+    required String nameHe,
     required String prompt,
     required String applyMode,
     String icon = '',
     int? barSlot,
     int? topicTypeId,
+    int? topicId,
   }) async {
     if (workspaceId == null) {
       throw StateError('workspace not ready');
@@ -1229,11 +1292,13 @@ class AppState extends ChangeNotifier {
     final action = await _aiActions.create(
       workspaceId: workspaceId!,
       name: name,
+      nameHe: nameHe,
       prompt: prompt,
       applyMode: applyMode,
       icon: icon,
       barSlot: barSlot,
       topicTypeId: topicTypeId,
+      topicId: topicId,
     );
     // A new pin takes its slot from whoever had it, so reload rather than
     // append — the other rows changed too.
@@ -1316,6 +1381,7 @@ class AppState extends ChangeNotifier {
 
   Future<Automation> createAutomation({
     required String name,
+    required String nameHe,
     required Map<String, dynamic> scope,
     required Map<String, dynamic> trigger,
     required List<Map<String, dynamic>> steps,
@@ -1329,6 +1395,7 @@ class AppState extends ChangeNotifier {
     final automation = await _automations.create(
       workspaceId: workspaceId!,
       name: name,
+      nameHe: nameHe,
       scope: scope,
       trigger: trigger,
       steps: steps,

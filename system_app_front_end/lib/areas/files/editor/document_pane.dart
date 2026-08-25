@@ -192,6 +192,15 @@ class _DocumentPaneState extends State<DocumentPane> {
       child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (widget.isBrought) ...[
+              Text(
+                widget.state.broughtFileOriginLabel(widget.topic),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.metaStyle,
+              ),
+              const SizedBox(height: 4),
+            ],
             Row(
               children: [
                 Expanded(

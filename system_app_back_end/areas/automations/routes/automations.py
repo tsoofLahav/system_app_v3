@@ -29,8 +29,10 @@ def list_automations():
 @automations_bp.route("/automations", methods=["POST"])
 def create_automation():
     data = request.get_json(silent=True) or {}
-    if not data.get("name"):
-        return jsonify({"error": "name is required"}), 400
+    name = str(data.get("name") or "").strip()
+    name_he = str(data.get("name_he") or "").strip()
+    if not name or not name_he:
+        return jsonify({"error": "name and name_he are required"}), 400
     workspace_id = data.get("workspace_id") or default_workspace_id()
     if not workspace_id:
         return jsonify({"error": "workspace_id is required"}), 400
@@ -41,7 +43,8 @@ def create_automation():
 
     row = Automation(
         workspace_id=workspace_id,
-        name=data["name"],
+        name=name,
+        name_he=name_he,
         trigger=data.get("trigger") or {},
         scope=data.get("scope") or {},
         steps=steps,
@@ -73,6 +76,7 @@ def update_automation(automation_id):
         data,
         {
             "name",
+            "name_he",
             "trigger",
             "scope",
             "steps",
@@ -84,6 +88,13 @@ def update_automation(automation_id):
         },
         datetime_fields={"last_run_at", "next_run_at"},
     )
+    if "name" in data or "name_he" in data:
+        name = (row.name or "").strip()
+        name_he = (row.name_he or "").strip()
+        if not name or not name_he:
+            return jsonify({"error": "name and name_he are required"}), 400
+        row.name = name
+        row.name_he = name_he
     db.session.commit()
     return jsonify(row.to_dict())
 

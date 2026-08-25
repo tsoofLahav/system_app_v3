@@ -127,6 +127,7 @@ class SpanTextEditingController extends TextEditingController {
       textLength: text.length,
       action: action,
       baseFontSize: baseFontSize,
+      sourceText: text,
     );
     _previousText = text;
     try {

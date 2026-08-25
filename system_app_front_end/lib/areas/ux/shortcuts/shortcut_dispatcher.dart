@@ -9,7 +9,6 @@ import '../../files/rich_text/block_text_actions.dart';
 import '../../files/rich_text/block_text_focus.dart';
 import '../../objects/tasks/task_list_surface.dart';
 import '../../objects/views/assign_task_view_dialog.dart';
-import '../../objects/views/view_chrome_menu.dart';
 import '../../../core/platform/app_form_factor.dart';
 import '../arrange/file_arrange_overlay.dart';
 import '../arrange/phone_file_reorder_sheet.dart';
@@ -140,9 +139,10 @@ Future<void> dispatchShortcutAction(
         list.toggleReorderMode();
         return;
       }
-      if (state.isViewMode) {
-        ViewChromeRegistry.active?.onStartFrameReorder();
-      }
+      state.toggleSidebarReorderMode();
+      return;
+    case ShortcutActionIds.toggleEmbedMoveMode:
+      DocumentEditorRegistry.active?.toggleMoveMode?.call();
       return;
     default:
       return;

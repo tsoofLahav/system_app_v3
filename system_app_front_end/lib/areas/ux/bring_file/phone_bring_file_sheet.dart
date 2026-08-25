@@ -66,7 +66,7 @@ class _PhoneBringFileSheetState extends State<_PhoneBringFileSheet> {
       _filtered = filterBringFileCatalog(
         _all,
         _search.text,
-        topicLabel: _state.topicDisplayName,
+        topicLabel: _state.broughtFileOriginLabel,
         fileLabel: (file) => _state.fileDisplayName(file.name),
       );
     });
@@ -132,9 +132,7 @@ class _PhoneBringFileSheetState extends State<_PhoneBringFileSheet> {
                           final entry = _filtered[index];
                           return PhoneTintedNameTile(
                             title: _state.fileDisplayName(entry.file.name),
-                            subtitle: s.bringFileFromTopicNamed(
-                              _state.topicDisplayName(entry.topic),
-                            ),
+                            kicker: _state.broughtFileOriginLabel(entry.topic),
                             fileId: entry.file.id,
                             accent: TopicAppearance.accentFor(entry.topic),
                             isMainTopic: entry.topic.isMain,

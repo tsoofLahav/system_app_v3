@@ -22,6 +22,7 @@ class AgentPromptRequest {
     required this.applyMode,
     required this.outcome,
     this.name = '',
+    this.nameHe = '',
     this.iconKey = defaultActionIconKey,
     this.barSlot,
   });
@@ -30,6 +31,7 @@ class AgentPromptRequest {
   final String applyMode;
   final AgentPromptOutcome outcome;
   final String name;
+  final String nameHe;
   final String iconKey;
 
   /// 1..6 to give the action a seat on the AI bar, null to leave it in the menu.
@@ -59,10 +61,12 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
     if (request.saves) {
       await state.createAiAction(
         name: request.name,
+        nameHe: request.nameHe,
         prompt: request.prompt,
         applyMode: request.applyMode,
         icon: request.iconKey,
         barSlot: request.barSlot,
+        topicId: state.selectedTopic?.id,
       );
       if (!context.mounted) return;
       if (!request.runs) {
@@ -103,6 +107,7 @@ class AgentPromptDialog extends StatefulWidget {
 class _AgentPromptDialogState extends State<AgentPromptDialog> {
   final _prompt = TextEditingController();
   final _name = TextEditingController();
+  final _nameHe = TextEditingController();
   var _applyMode = 'direct_apply';
   var _saving = false;
   var _iconKey = defaultActionIconKey;
@@ -113,6 +118,7 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
     super.initState();
     _prompt.addListener(_onTextChanged);
     _name.addListener(_onTextChanged);
+    _nameHe.addListener(_onTextChanged);
     _barSlot = widget.state.firstFreeAiBarSlot;
   }
 
@@ -120,19 +126,24 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
   void dispose() {
     _prompt.dispose();
     _name.dispose();
+    _nameHe.dispose();
     super.dispose();
   }
 
   void _onTextChanged() => setState(() {});
 
   bool get _canRun => _prompt.text.trim().isNotEmpty;
-  bool get _canSave => _canRun && _name.text.trim().isNotEmpty;
+  bool get _canSave =>
+      _canRun &&
+      _name.text.trim().isNotEmpty &&
+      _nameHe.text.trim().isNotEmpty;
 
   AgentPromptRequest _request(AgentPromptOutcome outcome) => AgentPromptRequest(
     prompt: _prompt.text.trim(),
     applyMode: _applyMode,
     outcome: outcome,
     name: _name.text.trim(),
+    nameHe: _nameHe.text.trim(),
     iconKey: _iconKey,
     barSlot: _barSlot,
   );
@@ -151,7 +162,9 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
   String? _placeHint(AppStrings s) {
     if (_barSlot == null) return s['actionPlaceHint'];
     final taken = widget.state.aiActionInSlot(_barSlot!);
-    return taken == null ? s['actionPlaceHint'] : s.actionReplaces(taken.name);
+    return taken == null
+        ? s['actionPlaceHint']
+        : s.actionReplaces(widget.state.aiActionDisplayName(taken));
   }
 
   @override
@@ -219,11 +232,20 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
           if (_saving) ...[
             const SizedBox(height: DialogFieldStyle.fieldGap),
             AppDialogField(
-              label: s['actionName'],
-              hint: s['actionNameHint'],
+              label: s['nameEnglish'],
               child: TextField(
                 controller: _name,
                 maxLines: 1,
+                decoration: DialogFieldStyle.decoration(),
+              ),
+            ),
+            const SizedBox(height: DialogFieldStyle.fieldGap),
+            AppDialogField(
+              label: s['nameHebrew'],
+              child: TextField(
+                controller: _nameHe,
+                maxLines: 1,
+                textDirection: TextDirection.rtl,
                 decoration: DialogFieldStyle.decoration(),
               ),
             ),

@@ -9,6 +9,7 @@ class PhoneTintedNameTile extends StatelessWidget {
     super.key,
     required this.title,
     required this.fileId,
+    this.kicker,
     this.subtitle,
     this.accent,
     this.isMainTopic = false,
@@ -18,6 +19,7 @@ class PhoneTintedNameTile extends StatelessWidget {
 
   final String title;
   final int fileId;
+  final String? kicker;
   final String? subtitle;
   final Color? accent;
   final bool isMainTopic;
@@ -51,6 +53,15 @@ class PhoneTintedNameTile extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (kicker != null && kicker!.trim().isNotEmpty) ...[
+                          Text(
+                            kicker!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.metaStyle,
+                          ),
+                          const SizedBox(height: 2),
+                        ],
                         Text(
                           title,
                           maxLines: 1,
