@@ -1359,20 +1359,42 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   SelectionStyles get _selectionStyles =>
       SelectionStyles(selectionColor: _selectionFill);
 
-  /// Node under a global pointer — safe when Super Editor is a sliver.
-  DocumentNode? _nodeAtGlobalOffset(Offset global) {
+  /// Position under a global pointer — safe when Super Editor is a sliver.
+  DocumentPosition? _positionAtGlobalOffset(Offset global) {
     final layout = _docLayoutKey.currentState as DocumentLayout?;
     if (layout == null) return null;
     try {
       final local = layout.getDocumentOffsetFromAncestorOffset(global);
-      final pos =
-          layout.getDocumentPositionNearestToOffset(local) ??
+      return layout.getDocumentPositionNearestToOffset(local) ??
           layout.getDocumentPositionAtOffset(local);
-      if (pos == null) return null;
-      return _doc.getNodeById(pos.nodeId);
     } catch (_) {
       return null;
     }
+  }
+
+  /// Node under a global pointer — safe when Super Editor is a sliver.
+  DocumentNode? _nodeAtGlobalOffset(Offset global) {
+    final pos = _positionAtGlobalOffset(global);
+    if (pos == null) return null;
+    return _doc.getNodeById(pos.nodeId);
+  }
+
+  /// Right-click aims at the pointer. An existing mark is kept only when the
+  /// click is inside it.
+  void _aimCaretAtPointer(Offset global) {
+    final pos = _positionAtGlobalOffset(global);
+    if (pos == null) return;
+    final sel = _composer.selection;
+    if (sel != null && !sel.isCollapsed && sel.containsPosition(_doc, pos)) {
+      return;
+    }
+    _editor.execute([
+      ChangeSelectionRequest(
+        DocumentSelection.collapsed(position: pos),
+        SelectionChangeType.placeCaret,
+        SelectionReason.userInteraction,
+      ),
+    ]);
   }
 
   Future<void> _onSecondaryTap(TapDownDetails details) async {
@@ -1403,6 +1425,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
     _focusNode.requestFocus();
     if (!mounted) return;
+    _aimCaretAtPointer(details.globalPosition);
     _expandCollapsedToCaretLine();
 
     if (node is ListItemNode) {

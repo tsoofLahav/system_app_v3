@@ -241,7 +241,7 @@ Opening the right-click menu can move focus and collapse a selection, so the mar
 
 The frozen mark is also what gets highlighted, on **every part it covers**, so the user can see the exact extent an action will apply to before choosing it. While that overlay is up, the field's native selection paint is hidden — there is never a second wash (user selection + line-at-caret) at the same time.
 
-Right-clicking *outside* an existing marking clears it first, so the action targets the line pointed at rather than a marking elsewhere in the file.
+Right-clicking *outside* an existing marking places the caret at the pointer first, then expands to that line, so the action targets the line pointed at rather than a marking elsewhere in the file. Right-clicking inside a marking keeps that marking.
 
 ### Deliberate limits
 

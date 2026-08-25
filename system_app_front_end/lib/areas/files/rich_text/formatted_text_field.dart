@@ -774,7 +774,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   /// Right-clicking outside an existing mark moves the caret here first, so the
   /// action targets the line the user pointed at rather than a stale mark
   /// somewhere else in the file.
-  void _capturePendingMark() {
+  void _capturePendingMark(Offset globalPosition) {
     // Always register this field first — Super Editor embeds often have no
     // DocumentTextFlow, and without register capturePendingMark resolves the
     // wrong controller (or nothing) so the mark looks like "the whole object".
@@ -789,16 +789,41 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       flow: _flow,
     );
 
+    final offset = _offsetForGlobal(globalPosition);
+    if (offset != null && !_clickIsInsideExistingMark(offset)) {
+      widget.controller.selection = TextSelection.collapsed(offset: offset);
+      final flow = _flow;
+      final segmentId = _registeredSegmentId;
+      if (flow != null && segmentId != null) {
+        flow.collapseTo(DocumentTextPosition(segmentId, offset));
+      }
+    }
+    BlockTextFocusRegistry.capturePendingMark();
+  }
+
+  int? _offsetForGlobal(Offset global) {
+    final host = context.findRenderObject();
+    if (host == null) return null;
+    final editable = _findRenderEditable(host);
+    if (editable == null) return null;
+    final offset = editable.getPositionForPoint(global).offset;
+    return offset.clamp(0, widget.controller.text.length);
+  }
+
+  bool _clickIsInsideExistingMark(int offset) {
     final flow = _flow;
     final segmentId = _registeredSegmentId;
     if (flow != null && segmentId != null) {
       final marked = flow.selectionWithin(segmentId);
-      final pointsInsideMark = marked != null;
-      if (!pointsInsideMark && flow.spansSegments) {
-        flow.clearSelection();
+      if (marked != null && offset >= marked.start && offset < marked.end) {
+        return true;
       }
     }
-    BlockTextFocusRegistry.capturePendingMark();
+    final sel = widget.controller.selection;
+    return sel.isValid &&
+        !sel.isCollapsed &&
+        offset >= sel.start &&
+        offset < sel.end;
   }
 
   /// Shift+click extends the document selection into this part; a plain click
@@ -1116,7 +1141,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         if (isSecondary) {
           // Freeze what the action will hit before the menu can move focus or
           // collapse the selection.
-          _capturePendingMark();
+          _capturePendingMark(event.position);
           if (widget.onSecondaryTapDown != null) {
             // Tell Super Editor's translucent secondary-tap handler to stand
             // down — otherwise the document text menu opens on top and

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -87,14 +88,16 @@ Future<void> _placeCaret(
 ) async {
   await tester.tap(find.byKey(ValueKey(segmentId)));
   await tester.pumpAndSettle();
-  state.controllers[segmentId]!.selection =
-      TextSelection.collapsed(offset: offset);
+  state.controllers[segmentId]!.selection = TextSelection.collapsed(
+    offset: offset,
+  );
   await tester.pumpAndSettle();
 }
 
 void main() {
-  testWidgets('right arrow at the end of a paragraph enters the next bullet',
-      (tester) async {
+  testWidgets('right arrow at the end of a paragraph enters the next bullet', (
+    tester,
+  ) async {
     final flow = DocumentTextFlow();
     final segments = {
       paragraphSegmentId('b1'): 'intro',
@@ -110,22 +113,24 @@ void main() {
     expect(flow.focusNodeFor('b2#i0')!.hasFocus, isTrue);
   });
 
-  testWidgets('left arrow at the start of a bullet returns to the paragraph end',
-      (tester) async {
-    final flow = DocumentTextFlow();
-    final segments = {
-      paragraphSegmentId('b1'): 'intro',
-      listItemSegmentId('b2', 0): 'bullet',
-    };
-    final state = await _pump(tester, flow, segments);
-    await _placeCaret(tester, state, 'b2#i0', 0);
+  testWidgets(
+    'left arrow at the start of a bullet returns to the paragraph end',
+    (tester) async {
+      final flow = DocumentTextFlow();
+      final segments = {
+        paragraphSegmentId('b1'): 'intro',
+        listItemSegmentId('b2', 0): 'bullet',
+      };
+      final state = await _pump(tester, flow, segments);
+      await _placeCaret(tester, state, 'b2#i0', 0);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
 
-    expect(flow.selection?.focus, const DocumentTextPosition('b1', 5));
-    expect(flow.focusNodeFor('b1')!.hasFocus, isTrue);
-  });
+      expect(flow.selection?.focus, const DocumentTextPosition('b1', 5));
+      expect(flow.focusNodeFor('b1')!.hasFocus, isTrue);
+    },
+  );
 
   group('in Hebrew the arrows still point where they point', () {
     // The caret follows the arrow on screen, so in right-to-left text the left
@@ -177,8 +182,9 @@ void main() {
       expect(state.controllers['b1']!.selection.baseOffset, 0);
     });
 
-    testWidgets('left arrow at the visual edge crosses into the next part',
-        (tester) async {
+    testWidgets('left arrow at the visual edge crosses into the next part', (
+      tester,
+    ) async {
       final flow = DocumentTextFlow();
       final state = await _pump(
         tester,
@@ -215,8 +221,9 @@ void main() {
       expect(state.controllers['b1']!.selection.baseOffset, 3);
     });
 
-    testWidgets('right arrow at the visual edge returns to the previous part',
-        (tester) async {
+    testWidgets('right arrow at the visual edge returns to the previous part', (
+      tester,
+    ) async {
       final flow = DocumentTextFlow();
       final state = await _pump(
         tester,
@@ -250,8 +257,9 @@ void main() {
     expect(flow.focusNodeFor('b2#i0')!.hasFocus, isFalse);
   });
 
-  testWidgets('shift+arrow builds a selection that spans two parts',
-      (tester) async {
+  testWidgets('shift+arrow builds a selection that spans two parts', (
+    tester,
+  ) async {
     final flow = DocumentTextFlow();
     final segments = {
       paragraphSegmentId('b1'): 'intro',
@@ -286,8 +294,9 @@ void main() {
     );
   });
 
-  testWidgets('down arrow in a table cell moves by column, not reading order',
-      (tester) async {
+  testWidgets('down arrow in a table cell moves by column, not reading order', (
+    tester,
+  ) async {
     final flow = DocumentTextFlow();
     final segments = {
       tableCellSegmentId('t1', 0, 0): 'r0c0',
@@ -389,8 +398,9 @@ void main() {
     expect(flow.positionAtGlobal(cell)?.segmentId, 'b3#c0:0');
   });
 
-  testWidgets('dragging past the end resolves to the nearest part',
-      (tester) async {
+  testWidgets('dragging past the end resolves to the nearest part', (
+    tester,
+  ) async {
     final flow = DocumentTextFlow();
     final segments = {
       paragraphSegmentId('b1'): 'intro',
@@ -399,7 +409,8 @@ void main() {
     await _pump(tester, flow, segments);
 
     final farBelow =
-        tester.getCenter(find.byKey(const ValueKey('b2#i0'))) + const Offset(0, 400);
+        tester.getCenter(find.byKey(const ValueKey('b2#i0'))) +
+        const Offset(0, 400);
 
     expect(flow.positionAtGlobal(farBelow)?.segmentId, 'b2#i0');
   });
@@ -412,15 +423,15 @@ void main() {
       BlockTextFocusRegistry.abandonStashedFocus();
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-        if (call.method == 'Clipboard.setData') {
-          clipboard = (call.arguments as Map)['text'] as String?;
-          return null;
-        }
-        if (call.method == 'Clipboard.getData') {
-          return <String, Object?>{'text': clipboard ?? ''};
-        }
-        return null;
-      });
+            if (call.method == 'Clipboard.setData') {
+              clipboard = (call.arguments as Map)['text'] as String?;
+              return null;
+            }
+            if (call.method == 'Clipboard.getData') {
+              return <String, Object?>{'text': clipboard ?? ''};
+            }
+            return null;
+          });
     });
 
     tearDown(() {
@@ -429,8 +440,9 @@ void main() {
       BlockTextFocusRegistry.abandonStashedFocus();
     });
 
-    testWidgets('a menu action affects every marked part, not just one line',
-        (tester) async {
+    testWidgets('a menu action affects every marked part, not just one line', (
+      tester,
+    ) async {
       final flow = DocumentTextFlow();
       final segments = {
         paragraphSegmentId('b1'): 'alpha',
@@ -457,8 +469,9 @@ void main() {
       expect(clipboard, 'pha\nbeta\ngam');
     });
 
-    testWidgets('with nothing marked an action uses the caret line',
-        (tester) async {
+    testWidgets('with nothing marked an action uses the caret line', (
+      tester,
+    ) async {
       final flow = DocumentTextFlow();
       final segments = {
         paragraphSegmentId('b1'): 'first line\nsecond line',
@@ -480,6 +493,29 @@ void main() {
       expect(state.controllers['b1']!.text, 'first line\n');
       expect(state.controllers['b2#i0']!.text, 'bullet');
       expect(clipboard, 'second line');
+    });
+
+    testWidgets('right-click aims at the pointer, not the old caret', (
+      tester,
+    ) async {
+      final flow = DocumentTextFlow();
+      final segments = {paragraphSegmentId('b1'): 'first line\nsecond line'};
+      final state = await _pump(tester, flow, segments);
+      await _placeCaret(tester, state, 'b1', 0);
+
+      final rect = tester.getRect(
+        find.byKey(ValueKey(paragraphSegmentId('b1'))),
+      );
+      await tester.tapAt(
+        Offset(rect.left + 24, rect.bottom - 6),
+        buttons: kSecondaryMouseButton,
+      );
+      await tester.pump();
+
+      BlockTextFocusRegistry.openMenuSession();
+      expect(BlockTextFocusRegistry.markedText(), 'second line');
+      BlockTextFocusRegistry.closeMenuSession();
+      expect(state.controllers['b1']!.text, 'first line\nsecond line');
     });
 
     testWidgets('copy of a cross-part mark joins the parts', (tester) async {
