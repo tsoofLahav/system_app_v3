@@ -92,8 +92,9 @@ Format examples: [`content/production_agent/reference.md`](../../../content/prod
 | [`services/document_promote.py`](services/document_promote.py) | Promote legacy inline embeds → object rows; writes v4 editor text |
 | [`services/file_versions.py`](services/file_versions.py) | Snapshot before agent/automation writes |
 | [`services/file_ops.py`](services/file_ops.py) | Create / archive / unarchive without a request — used by automations and by the HTTP routes |
+| [`services/file_snapshot.py`](services/file_snapshot.py) | Clone a snippet (marker text + objects) onto a file, append or replace |
 | [`services/archive_files.py`](services/archive_files.py) | Paginated archive listing + heading search (no document bodies) |
-| [`routes/files.py`](routes/files.py) | File CRUD, `GET /files/:id/agent-text`, archive pages |
+| [`routes/files.py`](routes/files.py) | File CRUD, `GET /files/:id/agent-text`, `POST /files/:id/apply-snippet`, archive pages |
 | [`routes/file_versions.py`](routes/file_versions.py) | History and `POST /files/:id/diff` |
 | [`routes/topics.py`](routes/topics.py) | Topics — the container files live in |
 | [`routes/topic_types.py`](routes/topic_types.py) | User-defined topic kinds (`/topic-types`) |

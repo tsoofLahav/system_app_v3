@@ -21,6 +21,7 @@ STEP_SPECS: dict[str, tuple[str, ...]] = {
     "create_file": ("name", "topic_id", "template_slot"),
     "unmark_tasks": ("task_list_id",),
     "archive_files": ("file_ids", "older_than_days", "template_slot"),
+    "fill_file": ("file_id", "template_slot", "document_json", "objects"),
 }
 
 STEP_KINDS = tuple(STEP_SPECS)
@@ -62,6 +63,16 @@ def _validate_one(step: dict, *, position: int) -> dict:
             f"step {position}: a file needs a name or a template slot",
         )
     # archive_files with no extra fields means every live file in scope.
+    elif kind == "fill_file":
+        _require(
+            bool(str(kept.get("document_json") or "").strip()),
+            f"step {position}: fill_file needs saved content",
+        )
+        _require(
+            kept.get("file_id") is not None
+            or bool(str(kept.get("template_slot") or "").strip()),
+            f"step {position}: fill_file needs a file or a template slot",
+        )
 
     return kept
 

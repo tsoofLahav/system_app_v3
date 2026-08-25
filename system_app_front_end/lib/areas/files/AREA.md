@@ -32,7 +32,7 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | [`rich_text/rtl/`](rich_text/rtl/RTL.md) | **RTL solution** — Hebrew/BiDi direction helpers |
 | [`data/`](data/) | File, topic, and topic-type models + API services. `files.meta.template_slot` is the stable key automations use |
 
-A type's template is `template_topic_id` on that type. Set it from Preferences or by right-clicking a topic of that type. New topics copy structure only (backend). **Duplicate** copies the topic in full (live files, object content, in-topic links, tags, icon, colour). Creating a type asks for an English name and a Hebrew name; the sidebar follows the app language.
+A type's template is `template_topic_id` on that type. Set it from Preferences or by right-clicking a topic of that type. Drag types in Preferences to reorder sidebar sections. New topics copy structure only (backend). **Duplicate** copies the topic in full (live files, object content, in-topic links, tags, icon, colour). Creating a type asks for an English name and a Hebrew name; the sidebar follows the app language.
 
 ### Document vs Super Editor (one sync rule)
 
@@ -45,7 +45,7 @@ The header of a pane ([`editor/document_pane.dart`](editor/document_pane.dart)) 
 - Compare the typed text against the name **as shown**, not as stored. Built-in files are displayed translated (`Daily` reads `יומי`), so comparing against the stored name would rename a file to its own translation the first time focus passed through.
 - A rename arriving from elsewhere (agent, reload) refreshes the field only while it is not focused — never on top of what is being typed.
 
-A pane with `isBrought` is a file **visiting Home** from another topic (UX bring-file). It occupies a layout slot like any other file and can be rearranged with them. Edits save to that file; the ⋯ menu can dismiss that visit without archiving or deleting it.
+A pane with `isBrought` is a file **visiting Home** from another topic (UX bring-file). It occupies a layout slot like any other file and can be rearranged with them. Edits save to that file; the ⋯ menu can dismiss that visit without archiving or deleting it. `showFileMenu: false` hides that menu for throwaway hosts (the fill-file snippet dialog).
 
 The user never sees marker/editor text. Every read-only surface uses the same preview: `GET /files/:id/agent-text` (or already-expanded agent text) → `parseAgentTextBlocks` → [`FilePreview`](editor/file_preview.dart) → [`ReadOnlyDocumentView`](editor/read_only_document_view.dart). That is the AI diff, archive spotlight, arrange overlay cards, and bring-file cards. None of them mount `SuperDocumentEditor`, and none of them paint `document_json`. The archive list itself never downloads `document_json`; cards use id, name, and `archived_at`.
 

@@ -27,7 +27,8 @@ A single-topic scope is also the target for a "create a file" step. Broader scop
 | Run AI | A saved action, or a prompt written here, plus review / apply directly |
 | Create a file | A template slot when the scope is a typed template, or a name (`{date}` and friends); a topic if scope is not one topic and not a slot |
 | Unmark tasks | Every done task in scope goes back to active |
-| Archive files | Everything in scope, older than N days, or one template slot |
+| Archive files | Everything in scope, older than N days, one file in a topic, or one template slot |
+| Add to a file | Saved snippet (real file editor) appended onto a chosen topic file or a template slot |
 
 ## Surfaces
 
@@ -37,7 +38,7 @@ A single-topic scope is also the target for a "create a file" step. Broader scop
 | [`automation_builder_dialog.dart`](automation_builder_dialog.dart) | The one editor — create and rewrite |
 | Agent dialog / AI bar ⋯ | Saved **actions**, not automations |
 
-Timing uses locked structured controls rather than free text, so an invalid schedule string cannot be produced. The builder is three framed sections: details (name, scope, daily/weekly/monthly), when (a compact calendar beside a matching 24-hour numbered dial with typed hour and minute, both in this dialog), and steps (a horizontal strip of frames). Frequency stays in details. Weekly marks that weekday every week; monthly infers first / second / third / last from the tapped date (a fourth-of-five that is not the last maps to third). Flip months to see where it falls later. Daily shows only the clock. `+` under the strip adds a new AI action (the regular create dialog), a saved AI action, or a system step. Tap a frame to edit it. Enabled is a switch on the automations **list** (outermost after edit / run / delete), not in the builder. Create sits under the list. The string sent is `daily 08:00`, never `0 8 * * *`.
+Timing uses locked structured controls rather than free text, so an invalid schedule string cannot be produced. The builder is three framed sections: details (name, scope, daily/weekly/monthly), when (a compact calendar beside a matching 24-hour numbered dial with typed hour and minute, both in this dialog), and steps (a horizontal strip of frames). Frequency stays in details. Weekly marks that weekday every week; monthly infers first / second / third / last from the tapped date (a fourth-of-five that is not the last maps to third). Flip months to see where it falls later. Daily shows only the clock. `+` under the strip adds a new AI action (the regular create dialog), a saved AI action, or a system step. Choosing **Add to a file** opens the real file editor on a scratch file; Save stores that snippet on the step (appended onto the target at run). Tap a frame to edit it. Enabled is a switch on the automations **list** (outermost after edit / run / delete), not in the builder. Create sits under the list. The string sent is `daily 08:00`, never `0 8 * * *`.
 
 ## Running
 
@@ -52,6 +53,7 @@ Results: each AI step goes through `presentAgentRunResult`; other steps snackbar
 |------|------|
 | [`automation_dialog.dart`](automation_dialog.dart) | List and run |
 | [`automation_builder_dialog.dart`](automation_builder_dialog.dart) | Scope, schedule, steps |
+| [`fill_file_snippet_dialog.dart`](fill_file_snippet_dialog.dart) | Real file editor for a `fill_file` snippet |
 | [`schedule_format.dart`](schedule_format.dart) | DSL parse / format |
 | [`automation_service.dart`](automation_service.dart) | Automations API |
 | [`automation.dart`](automation.dart) | Model, scope kinds, step kinds |

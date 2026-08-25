@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 
 import '../../core/app_state.dart';
 import '../../core/l10n/app_strings.dart';
 import '../files/data/app_file.dart';
+import '../files/data/topic.dart';
 import '../files/data/topic_type.dart';
 import '../production_agent/agent_run_defaults.dart';
 import '../production_agent/ai_action.dart';
@@ -20,6 +22,7 @@ import '../ui/time_picker_dialog.dart';
 import '../ux/dialogs/dialog_choice_list.dart';
 import '../ux/widgets/topic_emoji.dart';
 import './automation.dart';
+import './fill_file_snippet_dialog.dart';
 import './schedule_format.dart';
 
 /// Create or rewrite an automation: scope, when it fires, and what it does.
@@ -66,6 +69,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   var _saving = false;
   var _addMenuOpen = false;
   List<AppFile> _templateFiles = const [];
+  List<AppFile> _topicFiles = const [];
 
   AppState get state => widget.state;
   AppStrings get s => state.strings;
@@ -88,6 +92,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
         Map<String, dynamic>.from(step),
     ];
     _loadTemplateFiles();
+    _loadTopicFiles();
   }
 
   Map<String, dynamic> _defaultScope() {
@@ -138,6 +143,17 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
       final needsTopic = _scopeKind != AutomationScope.topic;
       return !needsTopic || step['topic_id'] != null;
     }
+    if (kind == StepKinds.fillFile) {
+      if ((step['document_json'] as String? ?? '').trim().isEmpty) return false;
+      if (_scopeKind == AutomationScope.topicType) {
+        return (step['template_slot'] as String? ?? '').trim().isNotEmpty;
+      }
+      if (_scopeKind == AutomationScope.topic) {
+        return _asInt(step['file_id']) != null;
+      }
+      return _asInt(step['file_id']) != null ||
+          (step['template_slot'] as String? ?? '').trim().isNotEmpty;
+    }
     return StepKinds.all.contains(kind);
   }
 
@@ -160,12 +176,35 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     }
   }
 
+  Future<void> _loadTopicFiles() async {
+    if (_scopeKind != AutomationScope.topic || _topicId == null) {
+      _topicFiles = const [];
+      return;
+    }
+    try {
+      final files = await state.filesForTopic(_topicId!);
+      if (!mounted) return;
+      setState(() => _topicFiles = files);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _topicFiles = const []);
+    }
+  }
+
   String _slotLabel(String? slot) {
     if (slot == null || slot.isEmpty) return s['pickTemplateSlot'];
     for (final file in _templateFiles) {
       if (file.templateSlot == slot) return file.name;
     }
     return slot;
+  }
+
+  String _fileLabel(int? id) {
+    if (id == null) return s['pickTopicFile'];
+    for (final file in _topicFiles) {
+      if (file.id == id) return file.name;
+    }
+    return s['pickTopicFile'];
   }
 
   Future<void> _save() async {
@@ -253,7 +292,66 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
         step['name'] = 'Week of {date}';
       }
     }
+    if (kind == StepKinds.fillFile) {
+      unawaited(_addFillFileStep());
+      return;
+    }
     _appendStep(step);
+  }
+
+  Future<void> _addFillFileStep() async {
+    setState(() => _addMenuOpen = false);
+    await _loadTopicFiles();
+    await _loadTemplateFiles();
+    if (!mounted) return;
+    final topic = _scratchHostTopic();
+    if (topic == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s['fillFileNeedScope'])));
+      return;
+    }
+    final content = await showFillFileSnippetDialog(
+      context: context,
+      state: state,
+      topic: topic,
+    );
+    if (content == null || !mounted) return;
+    final step = <String, dynamic>{
+      'kind': StepKinds.fillFile,
+      'document_json': content['document_json'],
+      'objects': content['objects'] ?? const [],
+    };
+    if (_scopeKind == AutomationScope.topicType) {
+      final slot = _templateFiles
+          .map((f) => f.templateSlot)
+          .whereType<String>()
+          .firstOrNull;
+      if (slot != null) step['template_slot'] = slot;
+    } else if (_scopeKind == AutomationScope.topic) {
+      final id = _topicFiles.firstOrNull?.id;
+      if (id != null) step['file_id'] = id;
+    }
+    _appendStep(step);
+  }
+
+  Topic? _scratchHostTopic() {
+    if (_scopeKind == AutomationScope.topic && _topicId != null) {
+      return state.allTopics.where((t) => t.id == _topicId).firstOrNull;
+    }
+    if (_scopeKind == AutomationScope.topicType) {
+      final templateId = _scopedType?.templateTopicId;
+      if (templateId != null) {
+        final template = state.allTopics
+            .where((t) => t.id == templateId)
+            .firstOrNull;
+        if (template != null) return template;
+      }
+      return state.activeTopics
+          .where((t) => t.topicTypeId == _topicTypeId)
+          .firstOrNull;
+    }
+    return state.selectedTopic ?? state.activeTopics.firstOrNull;
   }
 
   String _stepLabel(String kind) => switch (kind) {
@@ -261,6 +359,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     StepKinds.createFile => s['stepCreateFile'],
     StepKinds.unmarkTasks => s['stepUnmarkTasks'],
     StepKinds.archiveFiles => s['stepArchiveFiles'],
+    StepKinds.fillFile => s['stepFillFile'],
     _ => kind,
   };
 
@@ -280,6 +379,12 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
       final name = (step['name'] as String? ?? '').trim();
       if (name.isNotEmpty) return name;
     }
+    if (kind == StepKinds.fillFile) {
+      final slot = (step['template_slot'] as String? ?? '').trim();
+      if (slot.isNotEmpty) return _slotLabel(slot);
+      final fileId = _asInt(step['file_id']);
+      if (fileId != null) return _fileLabel(fileId);
+    }
     return _stepLabel(kind);
   }
 
@@ -297,6 +402,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     if (kind == StepKinds.createFile) return AppIcons.addFile;
     if (kind == StepKinds.unmarkTasks) return AppIcons.unmarkTasks;
     if (kind == StepKinds.archiveFiles) return AppIcons.archiveFiles;
+    if (kind == StepKinds.fillFile) return AppIcons.fillFile;
     return AppIcons.ai;
   }
 
@@ -329,6 +435,49 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
       ),
     );
     return picked?.id;
+  }
+
+  Future<int?> _pickTopicFile(int? currentId) async {
+    final files = _topicFiles;
+    if (files.isEmpty) return null;
+    var initial = 0;
+    for (var i = 0; i < files.length; i++) {
+      if (files[i].id == currentId) {
+        initial = i;
+        break;
+      }
+    }
+    final picked = await showAppChoiceDialog(
+      context: context,
+      title: s['pickTopicFile'],
+      cancelLabel: s['cancel'],
+      items: files,
+      initialIndex: initial,
+      itemBuilder: (context, file, _) => DialogChoiceText(file.name),
+    );
+    return picked?.id;
+  }
+
+  Future<Map<String, dynamic>?> _editFillSnippet(
+    Map<String, dynamic> step,
+  ) async {
+    final topic = _scratchHostTopic();
+    if (topic == null) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s['fillFileNeedScope'])));
+      return null;
+    }
+    return showFillFileSnippetDialog(
+      context: context,
+      state: state,
+      topic: topic,
+      existing: {
+        'document_json': step['document_json'],
+        'objects': step['objects'] ?? const [],
+      },
+    );
   }
 
   String _typeScopeLabel() {
@@ -418,9 +567,13 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
         topicLabel: _topicLabel,
         actionLabel: _actionLabel,
         slotLabel: _slotLabel,
+        fileLabel: _fileLabel,
         templateFiles: _templateFiles,
+        topicFiles: _topicFiles,
         onPickTopic: _pickTopic,
         onPickAction: _pickSavedAction,
+        onPickFile: _pickTopicFile,
+        onEditSnippet: _editFillSnippet,
         aiActions: state.aiActions,
         canMoveUp: index > 0,
         canMoveDown: index < _steps.length - 1,
@@ -548,8 +701,12 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
               if (kind != AutomationScope.topicType) {
                 _templateFiles = const [];
               }
+              if (kind != AutomationScope.topic) {
+                _topicFiles = const [];
+              }
             });
             _loadTemplateFiles();
+            _loadTopicFiles();
           },
         ),
         if (_scopeKind == AutomationScope.topic) ...[
@@ -560,7 +717,9 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
             valueLabel: _topicLabel(_topicId),
             onTap: () async {
               final id = await _pickTopic(currentId: _topicId);
-              if (id != null) setState(() => _topicId = id);
+              if (id == null) return;
+              setState(() => _topicId = id);
+              await _loadTopicFiles();
             },
           ),
         ],
@@ -824,6 +983,11 @@ class _AddStepMenu extends StatelessWidget {
           label: s['stepArchiveFiles'],
           onTap: () => onSystem(StepKinds.archiveFiles),
         ),
+        _AddStepRow(
+          icon: AppIcons.fillFile,
+          label: s['stepFillFile'],
+          onTap: () => onSystem(StepKinds.fillFile),
+        ),
       ],
     );
   }
@@ -868,9 +1032,13 @@ class _StepEditDialog extends StatefulWidget {
     required this.topicLabel,
     required this.actionLabel,
     required this.slotLabel,
+    required this.fileLabel,
     required this.templateFiles,
+    required this.topicFiles,
     required this.onPickTopic,
     required this.onPickAction,
+    required this.onPickFile,
+    required this.onEditSnippet,
     required this.aiActions,
     required this.canMoveUp,
     required this.canMoveDown,
@@ -882,9 +1050,14 @@ class _StepEditDialog extends StatefulWidget {
   final String Function(int? id) topicLabel;
   final String Function(int? id) actionLabel;
   final String Function(String? slot) slotLabel;
+  final String Function(int? id) fileLabel;
   final List<AppFile> templateFiles;
+  final List<AppFile> topicFiles;
   final Future<int?> Function({int? currentId}) onPickTopic;
   final Future<int?> Function(int? currentId) onPickAction;
+  final Future<int?> Function(int? currentId) onPickFile;
+  final Future<Map<String, dynamic>?> Function(Map<String, dynamic> step)
+      onEditSnippet;
   final List<AiAction> aiActions;
   final bool canMoveUp;
   final bool canMoveDown;
@@ -911,6 +1084,7 @@ class _StepEditDialogState extends State<_StepEditDialog> {
     StepKinds.createFile => s['stepCreateFile'],
     StepKinds.unmarkTasks => s['stepUnmarkTasks'],
     StepKinds.archiveFiles => s['stepArchiveFiles'],
+    StepKinds.fillFile => s['stepFillFile'],
     _ => _kind,
   };
 
@@ -954,6 +1128,7 @@ class _StepEditDialogState extends State<_StepEditDialog> {
           if (_kind == StepKinds.ai) _aiFields(),
           if (_kind == StepKinds.createFile) _createFileFields(),
           if (_kind == StepKinds.archiveFiles) _archiveFields(),
+          if (_kind == StepKinds.fillFile) _fillFileFields(),
           if (_kind == StepKinds.unmarkTasks)
             Text(s['unmarkAllInScope'], style: AppTypography.metaStyle),
         ],
@@ -1092,9 +1267,16 @@ class _StepEditDialogState extends State<_StepEditDialog> {
     ];
     final useSlot =
         widget.scopeKind == AutomationScope.topicType && slots.isNotEmpty;
+    final useFile =
+        widget.scopeKind == AutomationScope.topic && widget.topicFiles.isNotEmpty;
     final days = _step['older_than_days'];
     final slot = _step['template_slot'] as String?;
-    final all = days == null && (slot == null || slot.isEmpty);
+    final fileId = _firstFileId(_step);
+    final selected = fileId != null && useFile
+        ? 'file'
+        : (slot != null && slot.isNotEmpty && useSlot
+              ? 'slot'
+              : (days == null ? 'all' : 'older'));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1102,25 +1284,29 @@ class _StepEditDialogState extends State<_StepEditDialog> {
           label: s['archiveAllOrSlot'],
           options: [
             AppSegmentedOption(value: 'all', label: s['archiveAllInScope']),
+            if (useFile)
+              AppSegmentedOption(value: 'file', label: s['archiveThisFile']),
             if (useSlot)
               AppSegmentedOption(value: 'slot', label: s['archiveBySlot']),
             AppSegmentedOption(value: 'older', label: s['archiveOlderThan']),
           ],
-          selected: slot != null && slot.isNotEmpty
-              ? 'slot'
-              : (days == null ? 'all' : 'older'),
+          selected: selected,
           onSelected: (mode) {
             setState(() {
               _step.remove('older_than_days');
               _step.remove('template_slot');
+              _step.remove('file_ids');
               if (mode == 'older') _step['older_than_days'] = 30;
               if (mode == 'slot') {
                 _step['template_slot'] = slots.first.templateSlot;
               }
+              if (mode == 'file') {
+                _step['file_ids'] = [widget.topicFiles.first.id];
+              }
             });
           },
         ),
-        if (!all && days != null) ...[
+        if (selected == 'older' && days != null) ...[
           const SizedBox(height: DialogFieldStyle.fieldGap),
           AppDialogField(
             label: s['days'],
@@ -1135,7 +1321,7 @@ class _StepEditDialogState extends State<_StepEditDialog> {
             ),
           ),
         ],
-        if (slot != null && slot.isNotEmpty) ...[
+        if (selected == 'slot' && slot != null && slot.isNotEmpty) ...[
           const SizedBox(height: DialogFieldStyle.fieldGap),
           AppDialogPickerField(
             label: s['templateSlot'],
@@ -1148,6 +1334,85 @@ class _StepEditDialogState extends State<_StepEditDialog> {
             },
           ),
         ],
+        if (selected == 'file') ...[
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          AppDialogPickerField(
+            label: s['pickTopicFile'],
+            preview: const AppIcon(AppIcons.archiveFiles, size: 16),
+            valueLabel: widget.fileLabel(fileId),
+            onTap: () async {
+              final picked = await widget.onPickFile(fileId);
+              if (picked == null) return;
+              setState(() => _step['file_ids'] = [picked]);
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _fillFileFields() {
+    final slots = [
+      for (final file in widget.templateFiles)
+        if (file.templateSlot != null) file,
+    ];
+    final useSlot =
+        widget.scopeKind == AutomationScope.topicType && slots.isNotEmpty;
+    final useFile = widget.scopeKind == AutomationScope.topic;
+    final fileId = _asInt(_step['file_id']);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppDialogPickerField(
+          label: s['editFillFileContent'],
+          preview: const AppIcon(AppIcons.fillFile, size: 16),
+          valueLabel: s['editFillFileContent'],
+          onTap: () async {
+            final next = await widget.onEditSnippet(_step);
+            if (next == null) return;
+            setState(() {
+              _step['document_json'] = next['document_json'];
+              _step['objects'] = next['objects'] ?? const [];
+            });
+          },
+        ),
+        if (useSlot) ...[
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          AppDialogPickerField(
+            label: s['templateSlot'],
+            preview: const AppIcon(AppIcons.fillFile, size: 16),
+            valueLabel: widget.slotLabel(_step['template_slot'] as String?),
+            onTap: () async {
+              final picked = await _pickSlot(_step['template_slot'] as String?);
+              if (picked == null) return;
+              setState(() {
+                _step.remove('file_id');
+                _step['template_slot'] = picked;
+              });
+            },
+          ),
+        ] else if (useFile) ...[
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          widget.topicFiles.isEmpty
+              ? Text(s['noTemplateFiles'], style: AppTypography.metaStyle)
+              : AppDialogPickerField(
+                  label: s['pickTopicFile'],
+                  preview: const AppIcon(AppIcons.fillFile, size: 16),
+                  valueLabel: widget.fileLabel(fileId),
+                  onTap: () async {
+                    final picked = await widget.onPickFile(fileId);
+                    if (picked == null) return;
+                    setState(() {
+                      _step.remove('template_slot');
+                      _step['file_id'] = picked;
+                    });
+                  },
+                ),
+        ] else
+          Padding(
+            padding: const EdgeInsets.only(top: DialogFieldStyle.fieldGap),
+            child: Text(s['fillFileNeedScope'], style: AppTypography.metaStyle),
+          ),
       ],
     );
   }
@@ -1230,4 +1495,16 @@ class _KeepTextFieldState extends State<_KeepTextField> {
       onChanged: widget.onChanged,
     );
   }
+}
+
+int? _asInt(Object? value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  return int.tryParse('$value');
+}
+
+int? _firstFileId(Map<String, dynamic> step) {
+  final raw = step['file_ids'];
+  if (raw is! List || raw.isEmpty) return null;
+  return _asInt(raw.first);
 }

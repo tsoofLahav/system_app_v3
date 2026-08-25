@@ -8,7 +8,11 @@ A new action is one function here and one entry in `STEP_SPECS`.
 """
 
 from areas.automations.services.actions.ai import ai
-from areas.automations.services.actions.files import archive_files, create_file
+from areas.automations.services.actions.files import (
+    archive_files,
+    create_file,
+    fill_file,
+)
 from areas.automations.services.actions.tasks import unmark_tasks
 
 ACTIONS = {
@@ -16,6 +20,7 @@ ACTIONS = {
     "create_file": create_file,
     "unmark_tasks": unmark_tasks,
     "archive_files": archive_files,
+    "fill_file": fill_file,
 }
 
 __all__ = ["ACTIONS"]

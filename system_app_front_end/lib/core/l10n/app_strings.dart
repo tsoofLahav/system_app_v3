@@ -85,6 +85,9 @@ class AppStrings {
   String deleteTopicMessage(String name) =>
       this['deleteTopicBody'].replaceAll('{name}', name);
 
+  String deleteViewMessage(String name) =>
+      this['deleteViewBody'].replaceAll('{name}', name);
+
   String deleteTopicTypeMessage(String name) =>
       this['deleteTopicTypeBody'].replaceAll('{name}', name);
 
@@ -401,6 +404,11 @@ class AppStrings {
     'stepCreateFile': 'Create a file',
     'stepUnmarkTasks': 'Unmark tasks',
     'stepArchiveFiles': 'Archive files',
+    'stepFillFile': 'Add to a file',
+    'archiveThisFile': 'This file',
+    'pickTopicFile': 'Choose a file',
+    'editFillFileContent': 'Edit the text',
+    'fillFileNeedScope': 'Set the scope to a topic or a type first.',
     'stepAiSource': 'Which prompt',
     'stepAiSaved': 'A saved action',
     'stepAiWrite': 'Write one',
@@ -526,6 +534,8 @@ class AppStrings {
     'save': 'Save',
     'deleteTopicTitle': 'Delete topic?',
     'deleteTopicBody': 'Delete "{name}" and its files?',
+    'deleteViewTitle': 'Delete view?',
+    'deleteViewBody': 'Delete "{name}"? Tasks stay in their files.',
     'deleteFileTitle': 'Delete file?',
     'deleteFileBody': 'Delete "{name}"?',
     'editConflictTitle': 'You and the agent both changed this file',
@@ -1020,6 +1030,11 @@ class AppStrings {
     'stepCreateFile': 'צור קובץ',
     'stepUnmarkTasks': 'בטל סימון משימות',
     'stepArchiveFiles': 'העבר קבצים לארכיון',
+    'stepFillFile': 'הוסף לקובץ',
+    'archiveThisFile': 'הקובץ הזה',
+    'pickTopicFile': 'בחרו קובץ',
+    'editFillFileContent': 'עריכת הטקסט',
+    'fillFileNeedScope': 'קבעו את ההיקף לנושא או לסוג קודם.',
     'stepAiSource': 'איזה פרומפט',
     'stepAiSaved': 'פעולה שמורה',
     'stepAiWrite': 'כתוב אחד',
@@ -1145,6 +1160,8 @@ class AppStrings {
     'save': 'שמור',
     'deleteTopicTitle': 'למחוק נושא?',
     'deleteTopicBody': 'למחוק את "{name}" ואת הקבצים שלו?',
+    'deleteViewTitle': 'למחוק תצוגה?',
+    'deleteViewBody': 'למחוק את "{name}"? המשימות נשארות בקבצים.',
     'deleteFileTitle': 'למחוק קובץ?',
     'deleteFileBody': 'למחוק את "{name}"?',
     'editConflictTitle': 'גם אתם וגם הסוכן שיניתם את הקובץ',

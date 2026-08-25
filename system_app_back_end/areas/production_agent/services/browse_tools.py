@@ -10,6 +10,7 @@ from models import (
     ObjectEmbed,
     TaskList,
     Topic,
+    TopicType,
     db,
 )
 from areas.files.services.document_agent_text import (
@@ -76,6 +77,21 @@ def _topic_names(workspace_id: int) -> dict[int, str]:
     return {t.id: (t.name or "") for t in _topic_rows(workspace_id)}
 
 
+def _topic_type_names(workspace_id: int) -> dict[int, str]:
+    """topic_id → English type name; empty string if the topic is untyped."""
+    topics = _topic_rows(workspace_id)
+    type_ids = {int(t.topic_type_id) for t in topics if t.topic_type_id}
+    type_names: dict[int, str] = {}
+    for type_id in type_ids:
+        row = db.session.get(TopicType, type_id)
+        if row is not None:
+            type_names[type_id] = row.name or ""
+    return {
+        t.id: type_names.get(int(t.topic_type_id), "") if t.topic_type_id else ""
+        for t in topics
+    }
+
+
 def _object_display_name(embed: ObjectEmbed) -> str:
     if embed.type == "info" and embed.information_id:
         info = db.session.get(InformationPiece, embed.information_id)
@@ -133,12 +149,14 @@ def _list_topics(workspace_id: int, *, topic_id: int | None) -> dict[str, Any]:
     topics = _topic_rows(workspace_id)
     if topic_id is not None:
         topics = [t for t in topics if t.id == int(topic_id)]
+    type_names = _topic_type_names(workspace_id)
     return {
         "kind": "topics",
         "items": [
             {
                 "id": t.id,
                 "name": t.name,
+                "topic_type": type_names.get(t.id, ""),
                 "archived": t.archived_at is not None,
                 "file_count": counts.get(t.id, 0),
             }
@@ -163,6 +181,7 @@ def _list_files_by_topic(workspace_id: int, *, topic_id: int | None) -> dict[str
             }
         )
     groups = []
+    type_names = _topic_type_names(workspace_id)
     for t in _topic_rows(workspace_id):
         if topic_id is not None and t.id != int(topic_id):
             continue
@@ -174,6 +193,7 @@ def _list_files_by_topic(workspace_id: int, *, topic_id: int | None) -> dict[str
             {
                 "topic_id": t.id,
                 "topic": t.name,
+                "topic_type": type_names.get(t.id, ""),
                 "archived": t.archived_at is not None,
                 "files": files,
             }
@@ -212,10 +232,12 @@ def _list_objects_by_topic(workspace_id: int, *, topic_id: int | None) -> dict[s
             {"file_id": f.id, "file": f.name, "objects": objects}
         )
 
+    type_names = _topic_type_names(workspace_id)
     groups = [
         {
             "topic_id": t.id,
             "topic": t.name,
+            "topic_type": type_names.get(t.id, ""),
             "files": files_by_topic[t.id],
         }
         for t in _topic_rows(workspace_id)
@@ -232,6 +254,7 @@ def find_file(
     topic_id: int | None = None,
 ) -> dict[str, Any]:
     topic_names = _topic_names(workspace_id)
+    type_names = _topic_type_names(workspace_id)
 
     if file_id is not None:
         file = db.session.get(File, int(file_id))
@@ -244,6 +267,7 @@ def find_file(
                     "name": file.name,
                     "topic_id": file.topic_id,
                     "topic": topic_names.get(file.topic_id, ""),
+                    "topic_type": type_names.get(file.topic_id, ""),
                     "archived": file.archived_at is not None,
                 }
             ]
@@ -267,6 +291,7 @@ def find_file(
                     "name": f.name,
                     "topic_id": f.topic_id,
                     "topic": topic_names.get(f.topic_id, ""),
+                    "topic_type": type_names.get(f.topic_id, ""),
                     "archived": f.archived_at is not None,
                 }
             )
@@ -282,6 +307,7 @@ def find_object(
     topic_id: int | None = None,
 ) -> dict[str, Any]:
     topic_names = _topic_names(workspace_id)
+    type_names = _topic_type_names(workspace_id)
 
     if object_id is not None:
         embed = db.session.get(ObjectEmbed, int(object_id))
@@ -300,6 +326,7 @@ def find_object(
                     "file": file.name,
                     "topic_id": file.topic_id,
                     "topic": topic_names.get(file.topic_id, ""),
+                    "topic_type": type_names.get(file.topic_id, ""),
                 }
             ]
         }
@@ -354,6 +381,7 @@ def find_object(
                 "file": file.name if file is not None else "",
                 "topic_id": file_topic_id,
                 "topic": topic_names.get(file_topic_id, ""),
+                "topic_type": type_names.get(file_topic_id, ""),
             }
         )
     hits.sort(key=lambda r: (r.get("topic_id") or 0, r.get("file_id") or 0, r["id"]))

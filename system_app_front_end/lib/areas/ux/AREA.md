@@ -50,7 +50,7 @@ A file being "the important one" is a fact about the topic's arrangement, not ab
 
 ### Rules that follow
 
-- **A new file is added first**, so it is always on screen. Every layout has at least one slot, and a file you just created that you cannot see would be a bug you could not diagnose.
+- **A new file is added first**, so it is always on screen. Every layout has at least one slot, and a file you just created that you cannot see would be a bug you could not diagnose. The caret lands in that new file.
 - **A hidden file is never lost.** Deleting and archiving are explicit actions with their own UI; being off screen is neither.
 - **Choosing a smaller layout hides files, it does not reorder them.** Switching back shows the same files in the same places.
 - **Phone shows every file of the topic**, one at a time, in order. There are no layouts on phone — a file hidden on desktop is still in the swipe row. Position (`n / total`) is only in the reorder sheet. The **screen structure is locked** — see [Phone screen structure](#phone-screen-structure).
@@ -172,7 +172,7 @@ Tapping outside the focused editor (canvas, empty padding — not another field)
 - Open the **Objects map** (info object graph) — listed after topics
 - Reach the archive
 - Create a topic, view, tag, or **topic type** from the centered sidebar **+** — a context-menu bubble lists the choices; each opens its own create dialog (tags are filtered on the objects map, not listed as a sidebar section). Creating a type does not open the type editor; a short hint points at Preferences.
-- Topic types are user-defined. The sidebar has one section per type, plus Main (Home) and Others (untyped non-Home topics). Configure types from Preferences. Right-click a typed topic to make it that type's template.
+- Topic types are user-defined. The sidebar has one section per type, plus Main (Home) and Others (untyped non-Home topics). Configure types from Preferences; drag to reorder types there. Drag the handle on a topic to reorder it inside its type, and on a view to reorder the views list. Right-click a view to rename or delete it (tasks stay in their files). Right-click a typed topic to make it that type's template.
 
 The sidebar is navigation only. It never edits content.
 
@@ -182,6 +182,7 @@ The sidebar is navigation only. It never edits content.
 |------|-------|---------|
 | Topic / file context menu | Right-click in topic view, or the `⋯` on a file | Archive, delete — same bubble either way |
 | Sidebar topic | Right-click a topic | Edit, duplicate, delete, **use as type template** — `AppContextMenu`, not a native popup |
+| Sidebar view | Right-click a view | Edit (rename) or delete |
 | Text context menu | Right-click inside a document | Formatting, clipboard, **Connect info…** |
 | Table cell menu | Right-click in a table cell | Add column, plus text actions |
 | View section menu | Right-click a section frame on the view page | Edit name / flag / color |

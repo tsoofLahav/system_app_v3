@@ -34,12 +34,18 @@ class ViewService {
     int viewId, {
     String? name,
     Map<String, dynamic>? layoutConfig,
+    int? orderIndex,
   }) async {
     final data = await _api.patch('/views/$viewId', {
       if (name != null) 'name': name,
       if (layoutConfig != null) 'layout_config': layoutConfig,
+      if (orderIndex != null) 'order_index': orderIndex,
     }) as Map<String, dynamic>;
     return AppView.fromJson(data);
+  }
+
+  Future<void> deleteView(int viewId) async {
+    await _api.delete('/views/$viewId');
   }
 
   Future<List<ViewMembership>> listMemberships(int viewId) async {

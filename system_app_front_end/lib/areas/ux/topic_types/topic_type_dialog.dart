@@ -248,19 +248,39 @@ class _TopicTypesListDialogState extends State<_TopicTypesListDialog> {
                   style: AppTypography.metaStyle,
                 ),
               )
-            : ListView.separated(
+            : ReorderableListView.builder(
                 itemCount: types.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
+                buildDefaultDragHandles: false,
+                proxyDecorator: (child, index, animation) => child,
+                onReorder: (oldIndex, newIndex) {
+                  if (newIndex > oldIndex) newIndex -= 1;
+                  final next = List<TopicType>.from(types);
+                  next.insert(newIndex, next.removeAt(oldIndex));
+                  state.reorderTopicTypes(next);
+                },
                 itemBuilder: (context, index) {
                   final type = types[index];
                   return ListTile(
+                    key: ValueKey(type.id),
                     dense: true,
                     title: Text(state.topicTypeDisplayName(type)),
                     onTap: () => _open(type),
-                    trailing: IconButton(
-                      tooltip: s['delete'],
-                      icon: const AppIcon(AppIcons.trash, size: 16),
-                      onPressed: () => _delete(type),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ReorderableDragStartListener(
+                          index: index,
+                          child: const Padding(
+                            padding: EdgeInsetsDirectional.only(end: 4),
+                            child: AppIcon(AppIcons.menu, size: 16),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: s['delete'],
+                          icon: const AppIcon(AppIcons.trash, size: 16),
+                          onPressed: () => _delete(type),
+                        ),
+                      ],
                     ),
                   );
                 },

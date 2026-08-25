@@ -11,6 +11,9 @@ abstract final class AppDialogMetrics {
   /// Calendar + compact clock side by side in the automation builder.
   static const extraWideWidth = 460.0;
 
+  /// Real file editor hosted inside the fill-file automation step.
+  static const fileEditorWidth = 520.0;
+
   static const compactCalendarDay = 20.0;
 
   /// Shared card size so the day and time pickers sit as a matching pair.

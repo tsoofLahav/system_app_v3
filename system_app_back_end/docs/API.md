@@ -75,6 +75,7 @@ Successful DELETE returns `204` with empty body.
 | GET | `/topics/<topic_id>/files` | Files for topic |
 | GET | `/topics/<topic_id>/archive/files` | Paginated archived files (`limit`, `offset`, `q`) — no `document_json` |
 | POST | `/files` | Create |
+| POST | `/files/<id>/apply-snippet` | `{ document_json, objects, append? }` — clone snippet objects and write (replace, or append when `append` is true) |
 | PATCH | `/files/<id>` | Update (name, body, order_index, meta, archived_at) |
 | DELETE | `/files/<id>` | Delete cascade |
 

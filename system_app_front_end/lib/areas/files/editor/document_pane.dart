@@ -25,6 +25,7 @@ class DocumentPane extends StatefulWidget {
     this.isBrought = false,
     this.autoOpenPendingReview = true,
     this.framed = true,
+    this.showFileMenu = true,
   });
 
   final Topic topic;
@@ -41,6 +42,9 @@ class DocumentPane extends StatefulWidget {
 
   /// File card frame. Phone and desktop use the same framed look.
   final bool framed;
+
+  /// Hide archive/delete when this pane is a throwaway snippet editor.
+  final bool showFileMenu;
 
   @override
   State<DocumentPane> createState() => _DocumentPaneState();
@@ -194,18 +198,21 @@ class _DocumentPaneState extends State<DocumentPane> {
                   child: TextField(
                     controller: _titleController,
                     focusNode: _titleFocus,
-                    style: AppTypography.noteTitleStyle,
+                    style: AppTypography.noteTitleStyle.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                     decoration: AppTypography.noteInputDecoration(),
                     // Clicking into the document is how a rename usually ends,
                     // so leaving the field has to save it, not only Enter.
                     onSubmitted: (_) => _titleFocus.unfocus(),
                   ),
                 ),
-                _FileMenuButton(
-                  buttonKey: _menuButtonKey,
-                  tooltip: widget.state.strings['fileMenu'],
-                  onPressed: _showFileMenu,
-                ),
+                if (widget.showFileMenu)
+                  _FileMenuButton(
+                    buttonKey: _menuButtonKey,
+                    tooltip: widget.state.strings['fileMenu'],
+                    onPressed: _showFileMenu,
+                  ),
               ],
             ),
             const SizedBox(height: AppSpacing.xs),

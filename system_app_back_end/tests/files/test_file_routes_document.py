@@ -56,6 +56,11 @@ def test_agent_text_route_exists():
     assert '"/files/<int:file_id>/agent-text"' in source
 
 
+def test_apply_snippet_route_exists():
+    source = inspect.getsource(files_routes)
+    assert '"/files/<int:file_id>/apply-snippet"' in source
+
+
 def test_single_file_includes_documents():
     assert _is_true(_include_document_arg(files_routes._file_response))
 

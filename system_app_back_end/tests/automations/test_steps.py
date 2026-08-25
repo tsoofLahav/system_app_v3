@@ -63,6 +63,39 @@ def test_archiving_with_no_filter_means_everything_in_scope():
     assert validate_steps([{"kind": "archive_files", "older_than_days": 30}])
 
 
+def test_fill_file_needs_content_and_a_target():
+    with pytest.raises(StepError, match="saved content"):
+        validate_steps([{"kind": "fill_file", "file_id": 3}])
+    with pytest.raises(StepError, match="file or a template slot"):
+        validate_steps([{"kind": "fill_file", "document_json": "%%system_app_document v4\nHi"}])
+    assert validate_steps(
+        [
+            {
+                "kind": "fill_file",
+                "file_id": 3,
+                "document_json": "%%system_app_document v4\nHi",
+                "objects": [],
+            }
+        ]
+    ) == [
+        {
+            "kind": "fill_file",
+            "file_id": 3,
+            "document_json": "%%system_app_document v4\nHi",
+            "objects": [],
+        }
+    ]
+    assert validate_steps(
+        [
+            {
+                "kind": "fill_file",
+                "template_slot": "doc",
+                "document_json": "%%system_app_document v4\nHi",
+            }
+        ]
+    )
+
+
 def test_unknown_kind_names_the_position():
     with pytest.raises(StepError, match="step 2"):
         validate_steps([{"kind": "unmark_tasks"}, {"kind": "send_email"}])

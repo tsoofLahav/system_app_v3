@@ -95,7 +95,7 @@ All of it comes from [`app_typography.dart`](app_typography.dart). One family, f
 | Style | Size | Height | Weight | For |
 |-------|------|--------|--------|-----|
 | `pageTitleStyle` | 19 | 1.3 | w500 | Topic title |
-| `noteTitleStyle` | 14 | 1.3 | w500 | File names, dialog titles |
+| `noteTitleStyle` | 14 | 1.3 | w500 | Dialog titles. File names in the pane use this plus **w700** |
 | `blockHeaderStyle` | 14 | 1.4 | w600 | Headers inside a document |
 | `noteBodyStyle` | 12.5 | 1.55 | w400 | Document body, inputs |
 | `listItemStyle` | 12.5 | 1.38 | w400 | Bullets |
@@ -170,7 +170,7 @@ Marking and selection are **gentle by rule**: a translucent fill or a hairline r
 
 ## Dialogs and menus
 
-**Hug the content.** Dialogs and choice bubbles are sized and padded for what they hold — not for empty air. Default max width is `AppDialogMetrics.maxWidth` (280); only pickers/lists that need room use `wideWidth` (400), and the automation builder uses `extraWideWidth` (460) so a calendar and clock can sit side by side. Chrome padding is 12/10/12/8; field gaps are 8. Do not pass a custom `width:` on a dialog unless the body truly overflows at 280. Metrics live in [`dialog_metrics.dart`](dialog_metrics.dart).
+**Hug the content.** Dialogs and choice bubbles are sized and padded for what they hold — not for empty air. Default max width is `AppDialogMetrics.maxWidth` (280); only pickers/lists that need room use `wideWidth` (400), the automation builder uses `extraWideWidth` (460) so a calendar and clock can sit side by side, and the fill-file snippet editor uses `fileEditorWidth` (520) because it hosts a real file pane. Chrome padding is 12/10/12/8; field gaps are 8. Do not pass a custom `width:` on a dialog unless the body truly overflows at 280. Metrics live in [`dialog_metrics.dart`](dialog_metrics.dart).
 
 The preferences dialog is the **reference** glass dialog. Every other dialog uses the same shell and the same field language.
 
@@ -180,6 +180,7 @@ The preferences dialog is the **reference** glass dialog. Every other dialog use
 | Phone dialog | `AppAdaptiveDialogShell` | Radius 16, inset 14×16, tint 0.94, matching tight padding |
 | Wide dialog | same shell + `wideWidth` | 400 — colour/emoji pickers, shortcut list, automations list |
 | Extra-wide dialog | same shell + `extraWideWidth` | 460 — automation builder (calendar + clock) |
+| File-editor dialog | `AppGlassDialog` + `fileEditorWidth` | 520 — fill-file snippet (hosts `DocumentPane`) |
 | Confirm | `showAppConfirmDialog` | Same shell; destructive answers use amber-brown text |
 | Full-screen overlay | `OverlayDialogShell` + `OverlayDialogStyle` | Scrim black 18%, cards radius 14 |
 | Context menu (right-click **and** file `⋯`) | `../ux/widgets/app_context_menu.dart` | Bubble radius 12, rows 28 high, 11.5px labels, `menuTint` frost, highlight in `primary`; compact width 128 + downward caret for anchored create menus |
@@ -207,7 +208,7 @@ The `⋯` on a file opens `AppContextMenu` at the button — the same bubble as 
 
 Sizes in use: 14 dividers and marks · 16 circle buttons and file menus · 18 sidebar and inline actions · 20 default · 22 bottom bar.
 
-A **saved AI action** picks its icon from the small vocabulary in [`action_icons.dart`](action_icons.dart) — the same stroke weight, keyed by name so the database stores `'checklist'` and never a code point. [`action_icon_picker.dart`](action_icon_picker.dart) shows them as a grid in a secondary dialog, and falls back to sparkles for a key it no longer knows.
+A **saved AI action** picks its icon from the vocabulary in [`action_icons.dart`](action_icons.dart) — including emoji and image, same stroke weight, keyed by name so the database stores `'checklist'` and never a code point. [`action_icon_picker.dart`](action_icon_picker.dart) shows them as a grid in a secondary dialog, and falls back to sparkles for a key it no longer knows.
 
 `GlassCircleButton` and every other chrome control draw through `AppIcon`, never a bare `Icon(...)` with a Material glyph.
 

@@ -11,6 +11,7 @@ from areas.files.services.archive_files import list_archived_files_for_topic
 from areas.files.services.document_agent_text import agent_text_from_document_json
 from areas.files.services.document_v3 import validate_document
 from areas.files.services.document_promote import promote_legacy_embeds
+from areas.files.services.file_snapshot import apply_snippet_to_file
 from areas.files.services.file_versions import save_file_version
 
 files_bp = Blueprint("files", __name__)
@@ -134,6 +135,24 @@ def update_file(file_id):
         purge_unreferenced_embeds_for_file(file)
     db.session.commit()
     return jsonify(file.to_dict())
+
+
+@files_bp.route("/files/<int:file_id>/apply-snippet", methods=["POST"])
+def apply_file_snippet(file_id):
+    """Replace or append a saved snippet (marker text + cloned objects)."""
+    file = get_or_404(File, file_id)
+    data = request.get_json(silent=True) or {}
+    save_file_version(file, source="user")
+    apply_snippet_to_file(
+        file,
+        {
+            "document_json": data.get("document_json") or "",
+            "objects": data.get("objects") or [],
+        },
+        append=bool(data.get("append")),
+    )
+    db.session.commit()
+    return _file_response(file)
 
 
 @files_bp.route("/files/<int:file_id>", methods=["DELETE"])

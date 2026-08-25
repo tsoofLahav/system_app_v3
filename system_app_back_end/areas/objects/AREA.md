@@ -47,7 +47,7 @@ tasks ──< view_task_memberships >── views
                               layout_config: sections, display_mode, topic_order
 ```
 
-Views are membership and filtering only. **Never add per-view status columns** — that would duplicate task state.
+Views are membership and filtering only. **Never add per-view status columns** — that would duplicate task state. `DELETE /views/:id` drops memberships and the view row; tasks stay. `views.order_index` is the sidebar list order.
 
 **Membership GET enrichment.** Listing memberships includes the nested task plus home-topic fields (`topic_id`, `topic_name`, `topic_key`, `topic_color`) so the frontend can colour topic frames without extra round-trips.
 

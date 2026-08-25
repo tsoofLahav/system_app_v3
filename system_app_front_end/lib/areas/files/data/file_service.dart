@@ -64,6 +64,20 @@ class FileService {
     await _api.delete('/files/$id');
   }
 
+  Future<AppFile> applySnippet(
+    int id, {
+    required String documentJson,
+    List<Map<String, dynamic>> objects = const [],
+    bool append = false,
+  }) async {
+    final data = await _api.post('/files/$id/apply-snippet', {
+          'document_json': documentJson,
+          'objects': objects,
+          'append': append,
+        }) as Map<String, dynamic>;
+    return AppFile.fromJson(data);
+  }
+
   Future<ArchiveFilesPage> listArchivedForTopic(
     int topicId, {
     int limit = 24,

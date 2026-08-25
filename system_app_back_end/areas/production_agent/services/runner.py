@@ -72,8 +72,9 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "description": (
             "Browse the workspace. kind: topics | files | objects. "
             "files/objects come back grouped under their topic "
-            "(topics[].topic = topic name, topics[].files[]; objects also "
-            "carry their file name). Read the topic names and pick the topic "
+            "(topics[].topic = topic name, topics[].topic_type = type name, "
+            "topics[].files[]; objects also carry their file name). "
+            "Read the topic names and types and pick the topic "
             "that matches the subject of the ask before choosing a file. "
             "topic_id: 0 = all topics; else only that topic."
         ),

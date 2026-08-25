@@ -138,6 +138,7 @@ class AppState extends ChangeNotifier {
   var diagramLayoutEpoch = 0;
   final Map<int, List<Map<String, dynamic>>> descriptionLinksByFileId = {};
   int? pendingFocusObjectId;
+  int? pendingFocusFileId;
 
   final Map<int, List<ObjectEmbed>> embedsByFileId = {};
   int? editingFileId;
@@ -821,6 +822,12 @@ class AppState extends ChangeNotifier {
     return id;
   }
 
+  int? takePendingFocusFileId() {
+    final id = pendingFocusFileId;
+    pendingFocusFileId = null;
+    return id;
+  }
+
   Future<void> loadArchive() async {
     final entries = <ArchiveTopicEntry>[];
     ArchiveTopicEntry? daily;
@@ -1016,6 +1023,7 @@ class AppState extends ChangeNotifier {
     }
     final updated = await _topics.updateTopic(topic.id, body);
     allTopics = allTopics.map((t) => t.id == updated.id ? updated : t).toList();
+    _sortTopics();
     if (selectedTopic?.id == updated.id) selectedTopic = updated;
     if (selectedDetail?.topic.id == updated.id) {
       selectedDetail = TopicDetail(
@@ -1034,6 +1042,32 @@ class AppState extends ChangeNotifier {
       selectedDetail = null;
     }
     notifyListeners();
+  }
+
+  Future<void> reorderTopics(List<Topic> ordered) async {
+    await Future.wait([
+      for (var i = 0; i < ordered.length; i++)
+        _topics.updateTopic(ordered[i].id, {'order_index': i}),
+    ]);
+    final nextIndex = <int, int>{
+      for (var i = 0; i < ordered.length; i++) ordered[i].id: i,
+    };
+    allTopics = [
+      for (final topic in allTopics)
+        if (nextIndex.containsKey(topic.id))
+          topic.copyWith(orderIndex: nextIndex[topic.id])
+        else
+          topic,
+    ];
+    _sortTopics();
+    notifyListeners();
+  }
+
+  void _sortTopics() {
+    allTopics.sort((a, b) {
+      final byOrder = a.orderIndex.compareTo(b.orderIndex);
+      return byOrder != 0 ? byOrder : a.id.compareTo(b.id);
+    });
   }
 
   Future<void> duplicateTopic(Topic topic) async {
@@ -1093,7 +1127,27 @@ class AppState extends ChangeNotifier {
       for (final row in topicTypes)
         if (row.id == updated.id) updated else row,
     ];
+    _sortTopicTypes();
     notifyListeners();
+  }
+
+  Future<void> reorderTopicTypes(List<TopicType> ordered) async {
+    await Future.wait([
+      for (var i = 0; i < ordered.length; i++)
+        _topicTypes.update(ordered[i].id, {'order_index': i}),
+    ]);
+    topicTypes = [
+      for (var i = 0; i < ordered.length; i++)
+        ordered[i].copyWith(orderIndex: i),
+    ];
+    notifyListeners();
+  }
+
+  void _sortTopicTypes() {
+    topicTypes.sort((a, b) {
+      final byOrder = a.orderIndex.compareTo(b.orderIndex);
+      return byOrder != 0 ? byOrder : a.id.compareTo(b.id);
+    });
   }
 
   Future<void> deleteTopicType(TopicType type) async {
@@ -1336,6 +1390,8 @@ class AppState extends ChangeNotifier {
       await _persistBroughtFileLayout();
     }
     await _refreshTopicFiles(topic);
+    pendingFocusFileId = file.id;
+    notifyListeners();
     return file;
   }
 
@@ -1380,6 +1436,83 @@ class AppState extends ChangeNotifier {
       await _refreshTopicFiles(selectedDetail!.topic);
     }
     await loadArchive();
+  }
+
+  /// A throwaway file for the fill-file snippet editor. Not added to the open topic.
+  Future<AppFile> createScratchFile({
+    required int topicId,
+    required String name,
+  }) async {
+    final file = await _files.createFile(
+      topicId: topicId,
+      name: name,
+      orderIndex: 9999,
+      meta: const {'automation_scratch': true},
+    );
+    await loadEmbedsForFile(file.id, notify: false);
+    pendingFocusFileId = file.id;
+    return file;
+  }
+
+  Future<AppFile> applyFileSnippet(
+    int fileId,
+    Map<String, dynamic> snapshot, {
+    bool append = false,
+  }) async {
+    final objects = snapshot['objects'];
+    final file = await _files.applySnippet(
+      fileId,
+      documentJson: snapshot['document_json'] as String? ?? '',
+      objects: [
+        if (objects is List)
+          for (final row in objects)
+            if (row is Map) Map<String, dynamic>.from(row),
+      ],
+      append: append,
+    );
+    await loadEmbedsForFile(file.id, notify: false);
+    return file;
+  }
+
+  Future<Map<String, dynamic>> snapshotFileForAutomation(int fileId) async {
+    await DocumentEditorRegistry.flushActive();
+    final file = await _files.getFile(fileId);
+    final embeds = await loadEmbedsForFile(fileId, notify: false);
+    return {
+      'document_json': file.documentJson,
+      'objects': [for (final embed in embeds) _automationObjectSnapshot(embed)],
+    };
+  }
+
+  Future<void> discardScratchFile(int fileId) async {
+    try {
+      await _files.deleteFile(fileId);
+    } catch (_) {}
+    embedsByFileId.remove(fileId);
+    descriptionLinksByFileId.remove(fileId);
+  }
+
+  Map<String, dynamic> _automationObjectSnapshot(ObjectEmbed embed) {
+    return {
+      'id': embed.id,
+      'type': embed.type,
+      'sort_key': embed.sortKey,
+      if (embed.payload != null) 'payload': embed.payload,
+      if (embed.information != null) 'information': embed.information,
+      if (embed.type == 'task_list')
+        'task_list': {
+          'title': embed.taskListTitle,
+          'tasks': [
+            for (final task in embed.tasks ?? const <Task>[])
+              {
+                'title': task.title,
+                'status': task.status,
+                if (task.dueDate != null) 'due_date': task.dueDate,
+                'list_order_index': task.listOrderIndex,
+              },
+          ],
+        },
+    };
   }
 
   Future<void> _refreshTopicFiles(Topic topic) async {
@@ -2375,6 +2508,28 @@ class AppState extends ChangeNotifier {
     userViews = [for (final v in userViews) v.id == updated.id ? updated : v];
     if (selectedView?.id == updated.id) {
       selectedView = updated;
+    }
+    notifyListeners();
+  }
+
+  Future<void> reorderViews(List<AppView> ordered) async {
+    await Future.wait([
+      for (var i = 0; i < ordered.length; i++)
+        _views.updateView(ordered[i].id, orderIndex: i),
+    ]);
+    userViews = [
+      for (var i = 0; i < ordered.length; i++)
+        ordered[i].copyWith(orderIndex: i),
+    ];
+    notifyListeners();
+  }
+
+  Future<void> deleteView(AppView view) async {
+    await _views.deleteView(view.id);
+    userViews = userViews.where((v) => v.id != view.id).toList();
+    if (selectedView?.id == view.id || selectedViewType == view.type) {
+      await goHome();
+      return;
     }
     notifyListeners();
   }

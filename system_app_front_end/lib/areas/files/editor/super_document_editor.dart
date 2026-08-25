@@ -226,6 +226,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       );
       unawaited(_loadEmbedsQuietly());
       unawaited(_migrateLegacyTablesIfNeeded());
+      _tryFocusPendingFile();
     });
   }
 
@@ -393,6 +394,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       _handleRemoteDocument(remote);
     }
     _tryFocusPendingObject();
+    _tryFocusPendingFile();
   }
 
   bool get _fileHasUnsaved =>
@@ -521,6 +523,34 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _embedCaretRegistry[nodeId]?.enterFromAbove();
+    });
+  }
+
+  void _tryFocusPendingFile() {
+    final pending = widget.state.pendingFocusFileId;
+    if (pending == null || pending != widget.file.id) return;
+    widget.state.takePendingFocusFileId();
+    runNextFrame(() {
+      if (!mounted) return;
+      DocumentEditorRegistry.claim(widget.file.id);
+      if (_doc.nodeCount > 0) {
+        final node = _doc.getNodeAt(0);
+        if (node != null) {
+          _editor.execute([
+            ChangeSelectionRequest(
+              DocumentSelection.collapsed(
+                position: DocumentPosition(
+                  nodeId: node.id,
+                  nodePosition: node.beginningPosition,
+                ),
+              ),
+              SelectionChangeType.placeCaret,
+              SelectionReason.userInteraction,
+            ),
+          ]);
+        }
+      }
+      _focusNode.requestFocus();
     });
   }
 

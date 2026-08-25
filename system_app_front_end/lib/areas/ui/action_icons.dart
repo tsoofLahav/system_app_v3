@@ -72,6 +72,42 @@ const _actionIcons = <String, IconData>{
   'gift': LucideIcons.gift200,
   'wallet': LucideIcons.wallet200,
   'trophy': LucideIcons.trophy200,
+  // Media
+  'emoji': LucideIcons.smile200,
+  'image': LucideIcons.image200,
+  'camera': LucideIcons.camera200,
+  'film': LucideIcons.film200,
+  'mic': LucideIcons.mic200,
+  'music': LucideIcons.music200,
+  // Marks
+  'pin': LucideIcons.pin200,
+  'flag': LucideIcons.flag200,
+  'bookmark': LucideIcons.bookmark200,
+  'check': LucideIcons.check200,
+  'list': LucideIcons.list200,
+  'hash': LucideIcons.hash200,
+  'paperclip': LucideIcons.paperclip200,
+  // World
+  'globe': LucideIcons.globe200,
+  'mail': LucideIcons.mail200,
+  'phone': LucideIcons.phone200,
+  'book': LucideIcons.book200,
+  'archive': LucideIcons.archive200,
+  'trash': LucideIcons.trash2200,
+  'lock': LucideIcons.lock200,
+  'key': LucideIcons.key200,
+  'cloud': LucideIcons.cloud200,
+  'download': LucideIcons.download200,
+  'upload': LucideIcons.upload200,
+  // Life
+  'car': LucideIcons.car200,
+  'plane': LucideIcons.plane200,
+  'cart': LucideIcons.shoppingCart200,
+  'home': LucideIcons.house200,
+  'palette': LucideIcons.palette200,
+  'flame': LucideIcons.flame200,
+  'droplet': LucideIcons.droplet200,
+  'eye': LucideIcons.eye200,
 };
 
 /// Every key, in the order the picker shows them.

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from models import File, ObjectEmbed, Topic, db
+from models import File, ObjectEmbed, Topic, TopicType, db
 from areas.files.services.document_agent_text import (
     document_to_agent_text,
     load_objects_by_id,
@@ -27,6 +27,7 @@ def build_open_file_payload(file: File) -> dict[str, Any]:
         "name": file.name,
         "topic_id": file.topic_id,
         "topic": _topic_name(file.topic_id),
+        "topic_type": _topic_type_name(file.topic_id),
         "archived": file.archived_at is not None,
         "document_plain": document_plain,
         "document_lines": [
@@ -43,6 +44,16 @@ def _topic_name(topic_id: int | None) -> str:
         return ""
     topic = db.session.get(Topic, int(topic_id))
     return (topic.name if topic else "") or ""
+
+
+def _topic_type_name(topic_id: int | None) -> str:
+    if not topic_id:
+        return ""
+    topic = db.session.get(Topic, int(topic_id))
+    if topic is None or not topic.topic_type_id:
+        return ""
+    row = db.session.get(TopicType, int(topic.topic_type_id))
+    return (row.name if row else "") or ""
 
 
 def _object_extras(

@@ -19,6 +19,7 @@ def _topic(topic_id: int, name: str, *, archived: bool = False) -> MagicMock:
     topic = MagicMock()
     topic.id = topic_id
     topic.name = name
+    topic.topic_type_id = None
     topic.archived_at = "yes" if archived else None
     return topic
 
@@ -70,10 +71,10 @@ def test_list_files_grouped_under_topic_names():
         result = list_entities(1, kind="files")
 
     assert result["grouped_by"] == "topic"
-    assert [(g["topic_id"], g["topic"]) for g in result["topics"]] == [
-        (1, "vision"),
-        (2, "nutrition"),
-        (3, "fitness"),
+    assert [(g["topic_id"], g["topic"], g["topic_type"]) for g in result["topics"]] == [
+        (1, "vision", ""),
+        (2, "nutrition", ""),
+        (3, "fitness", ""),
     ]
     by_name = {g["topic"]: g["files"] for g in result["topics"]}
     assert by_name["vision"] == []
@@ -132,6 +133,7 @@ def test_find_file_hit_carries_topic_name():
             "name": "daily log",
             "topic_id": 2,
             "topic": "nutrition",
+            "topic_type": "",
             "archived": False,
         }
     ]

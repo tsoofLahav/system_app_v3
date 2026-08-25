@@ -67,15 +67,15 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 | Tool | Behavior |
 |------|----------|
 | `list` | Topics, or files / objects **grouped by topic** (optional `topic_id`) |
-| `find_file` | By `file_id`, or name (+ optional topic); hits include the topic name |
-| `find_object` | By `object_id`, or type/name (+ optional topic); hits include file + topic name |
-| `open_file` | Returns `name` + `topic`, `document_plain` (agent text), `document_lines` (1-based), + `object_extras`. Archived readable. |
+| `find_file` | By `file_id`, or name (+ optional topic); hits include the topic name and type |
+| `find_object` | By `object_id`, or type/name (+ optional topic); hits include file + topic name and type |
+| `open_file` | Returns `name` + `topic` + `topic_type`, `document_plain` (agent text), `document_lines` (1-based), + `object_extras`. Archived readable. |
 | `create_object` | Create embed + pointer (`task_list` \| `info` \| `table` \| `graph` \| `image`); returns `object_id`. **Image:** `body` is the generation prompt; the tool writes PNG bytes to the upload folder and stores `payload.url` — an empty image object is a missing prompt, not a later patch |
 | `reference` | On-demand examples from `content/production_agent/reference.md` (`agent_text` / `tools` / `all`) |
 | `patch_file` | **Partial edits** with `op` add / remove / replace on `document_lines`; typical outcome **review** |
 | `rewrite_file` | Full new agent text for a true whole-file rewrite; typical outcome **apply** when run allows |
 
-**Everything the agent browses is keyed by topic name, never by a bare `topic_id`.** A file name on its own ("log", "plan") does not say what it is about, so `list files` / `list objects` return `topics: [{topic_id, topic, files: […]}]` and every `find_*` hit repeats its topic name. Choosing a topic is the first decision the agent makes; leaving it to guess from file names put a nutrition note in the wrong topic.
+**Everything the agent browses is keyed by topic name, never by a bare `topic_id`.** A file name on its own ("log", "plan") does not say what it is about, so `list files` / `list objects` return `topics: [{topic_id, topic, topic_type, files: […]}]` and every `find_*` hit repeats its topic name and type. Choosing a topic is the first decision the agent makes; leaving it to guess from file names put a nutrition note in the wrong topic.
 
 Browse helpers: [`services/browse_tools.py`](services/browse_tools.py). Create: [`services/create_object_tool.py`](services/create_object_tool.py) + shared [`areas/objects/services/create_embed.py`](../objects/services/create_embed.py). `open_file` payload: [`services/open_file_tool.py`](services/open_file_tool.py). Writes: [`services/write_tools.py`](services/write_tools.py).
 

@@ -113,3 +113,34 @@ def archive_files(*, workspace_id: int, resolved_scope: dict, params: dict, now:
         "file_ids": [f.id for f in files],
         "summary": f"archived {len(files)} file(s)",
     }
+
+
+def fill_file(*, workspace_id: int, resolved_scope: dict, params: dict, now: datetime):
+    """Append a saved snippet onto matching live files."""
+    from areas.files.services.file_snapshot import apply_snippet_to_file
+    from areas.files.services.file_versions import save_file_version
+
+    snapshot = {
+        "document_json": params.get("document_json") or "",
+        "objects": params.get("objects") or [],
+    }
+    files = files_in_scope(resolved_scope)
+    file_id = params.get("file_id")
+    if file_id is not None:
+        files = [f for f in files if int(f.id) == int(file_id)]
+    slot = str(params.get("template_slot") or "").strip()
+    if slot:
+        files = [
+            f
+            for f in files
+            if str((f.meta or {}).get("template_slot") or "") == slot
+        ]
+    for file in files:
+        save_file_version(file, source="automation")
+        apply_snippet_to_file(file, snapshot, append=True)
+    db.session.flush()
+    return {
+        "ok": True,
+        "file_ids": [f.id for f in files],
+        "summary": f"added content to {len(files)} file(s)",
+    }

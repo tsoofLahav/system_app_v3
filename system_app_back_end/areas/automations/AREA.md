@@ -33,6 +33,7 @@ A single-topic scope is also the **target**: a step that has to put something so
 | `create_file` | Create a file. `{date}` `{weekday}` `{month}` `{year}` in the name move with the calendar. With `template_slot`, copy that empty shell from the type template into every topic in scope. |
 | `unmark_tasks` | Send done tasks in scope (or one `task_list_id`) back to active. |
 | `archive_files` | Soft-archive files in scope; optional `older_than_days`, `file_ids`, or `template_slot`. |
+| `fill_file` | Append saved snippet content onto matching live files. Target is `file_id` (one topic file) or `template_slot` (that named file in every topic of a type). Payload is `document_json` plus cloned `objects`. |
 
 Adding a kind is an entry in [`services/steps.py`](services/steps.py) `STEP_SPECS` and a function in [`services/actions/`](services/actions/). Validation refuses a bad series when it is saved, not at 2am when it fires. Steps stop at the first error; earlier ones stand.
 
@@ -68,7 +69,7 @@ A new `daily 08:00` saved at 10:00 is **armed**, not run — "daily at eight" me
 | [`services/steps.py`](services/steps.py) | Step vocabulary and save-time validation |
 | [`services/scope.py`](services/scope.py) | Kind → `{workspace_id, topic_ids, file_ids}` |
 | [`services/run_automation.py`](services/run_automation.py) | Walk the series, record the run |
-| [`services/actions/`](services/actions/) | `ai`, `create_file`, `unmark_tasks`, `archive_files` |
+| [`services/actions/`](services/actions/) | `ai`, `create_file`, `unmark_tasks`, `archive_files`, `fill_file` |
 | [`services/automation_schedule.py`](services/automation_schedule.py) | `next_run_after()` / `plan_tick()` |
 | [`../../scripts/run_automations.py`](../../scripts/run_automations.py) | Cron entry point |
 

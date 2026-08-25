@@ -342,9 +342,30 @@ class _ViewSection extends StatelessWidget {
     await state.renameView(view, name: name);
   }
 
+  Future<void> _deleteView(BuildContext context, AppView view) async {
+    final s = state.strings;
+    final ok = await showAppConfirmDialog(
+      context: context,
+      title: s['deleteViewTitle'],
+      message: s.deleteViewMessage(view.name),
+      confirmLabel: s['delete'],
+      cancelLabel: s['cancel'],
+      destructive: true,
+    );
+    if (ok) await state.deleteView(view);
+  }
+
+  void _onReorder(int oldIndex, int newIndex) {
+    if (newIndex > oldIndex) newIndex -= 1;
+    final next = List<AppView>.from(state.userViews);
+    next.insert(newIndex, next.removeAt(oldIndex));
+    state.reorderViews(next);
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = state.strings;
+    final views = state.userViews;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -352,13 +373,38 @@ class _ViewSection extends StatelessWidget {
           padding: const EdgeInsetsDirectional.fromSTEB(8, 4, 8, 2),
           child: Text(s['views'], style: AppTypography.sidebarSectionStyle),
         ),
-        for (final view in state.userViews)
-          _ViewTile(
-            label: view.name,
-            selected: state.selectedViewType == view.type,
-            onTap: () => onSelectView(view.type),
-            onEdit: () => _renameView(context, view),
-            strings: s,
+        if (views.length < 2)
+          for (final view in views)
+            _ViewTile(
+              key: ValueKey(view.id),
+              view: view,
+              selected: state.selectedViewType == view.type,
+              onTap: () => onSelectView(view.type),
+              onEdit: () => _renameView(context, view),
+              onDelete: () => _deleteView(context, view),
+              strings: s,
+            )
+        else
+          ReorderableListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            buildDefaultDragHandles: false,
+            proxyDecorator: (child, index, animation) => child,
+            itemCount: views.length,
+            onReorder: _onReorder,
+            itemBuilder: (context, index) {
+              final view = views[index];
+              return _ViewTile(
+                key: ValueKey(view.id),
+                view: view,
+                selected: state.selectedViewType == view.type,
+                onTap: () => onSelectView(view.type),
+                onEdit: () => _renameView(context, view),
+                onDelete: () => _deleteView(context, view),
+                strings: s,
+                dragIndex: index,
+              );
+            },
           ),
         const SizedBox(height: 2),
       ],
@@ -368,18 +414,23 @@ class _ViewSection extends StatelessWidget {
 
 class _ViewTile extends StatelessWidget {
   const _ViewTile({
-    required this.label,
+    super.key,
+    required this.view,
     required this.selected,
     required this.onTap,
     required this.onEdit,
+    required this.onDelete,
     required this.strings,
+    this.dragIndex,
   });
 
-  final String label;
+  final AppView view;
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback onEdit;
+  final VoidCallback onDelete;
   final AppStrings strings;
+  final int? dragIndex;
 
   Future<void> _showContextMenu(
     BuildContext context,
@@ -391,10 +442,16 @@ class _ViewTile extends StatelessWidget {
       isRtl: strings.isRtl,
       entries: [
         AppContextMenuItem(value: 'edit', label: strings['edit']),
+        AppContextMenuItem(
+          value: 'delete',
+          label: strings['delete'],
+          destructive: true,
+        ),
       ],
     );
 
     if (action == 'edit') onEdit();
+    if (action == 'delete') onDelete();
   }
 
   @override
@@ -412,11 +469,22 @@ class _ViewTile extends StatelessWidget {
         onSecondaryTapDown: (details) =>
             _showContextMenu(context, details.globalPosition),
         child: Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(20, 3, 8, 3),
-          child: Text(
-            label,
-            style: AppTypography.sidebarItemStyle,
-            overflow: TextOverflow.ellipsis,
+          padding: const EdgeInsetsDirectional.fromSTEB(20, 3, 4, 3),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  view.name,
+                  style: AppTypography.sidebarItemStyle,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (dragIndex != null)
+                ReorderableDragStartListener(
+                  index: dragIndex!,
+                  child: const _SidebarDragHandle(),
+                ),
+            ],
           ),
         ),
       ),
@@ -623,24 +691,53 @@ class _TopicSectionState extends State<_TopicSection> {
           ),
         ),
         if (expanded)
-          ...widget.topics.map(
-            (topic) => _TopicTile(
-              topic: topic,
-              displayName: widget.state.topicDisplayName(topic),
-              selected: !widget.isViewMode && widget.selected?.id == topic.id,
-              state: widget.state,
-              onTap: () => widget.onSelect(topic),
-              onEdit: () => _editTopic(context, topic),
-              onDuplicate: topic.isMain
-                  ? null
-                  : () => widget.state.duplicateTopic(topic),
-              onDelete: topic.isMain
-                  ? null
-                  : () => _confirmDelete(context, topic),
-            ),
-          ),
+          widget.topics.length < 2
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final topic in widget.topics) _topicTile(context, topic),
+                  ],
+                )
+              : ReorderableListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  buildDefaultDragHandles: false,
+                  proxyDecorator: (child, index, animation) => child,
+                  itemCount: widget.topics.length,
+                  onReorder: (oldIndex, newIndex) {
+                    if (newIndex > oldIndex) newIndex -= 1;
+                    final next = List<Topic>.from(widget.topics);
+                    next.insert(newIndex, next.removeAt(oldIndex));
+                    widget.state.reorderTopics(next);
+                  },
+                  itemBuilder: (context, index) {
+                    final topic = widget.topics[index];
+                    return KeyedSubtree(
+                      key: ValueKey(topic.id),
+                      child: _topicTile(context, topic, dragIndex: index),
+                    );
+                  },
+                ),
         const SizedBox(height: 2),
       ],
+    );
+  }
+
+  Widget _topicTile(BuildContext context, Topic topic, {int? dragIndex}) {
+    return _TopicTile(
+      topic: topic,
+      displayName: widget.state.topicDisplayName(topic),
+      selected: !widget.isViewMode && widget.selected?.id == topic.id,
+      state: widget.state,
+      onTap: () => widget.onSelect(topic),
+      onEdit: () => _editTopic(context, topic),
+      onDuplicate: topic.isMain
+          ? null
+          : () => widget.state.duplicateTopic(topic),
+      onDelete: topic.isMain
+          ? null
+          : () => _confirmDelete(context, topic),
+      dragIndex: dragIndex,
     );
   }
 
@@ -686,6 +783,7 @@ class _TopicTile extends StatelessWidget {
     required this.onEdit,
     this.onDuplicate,
     this.onDelete,
+    this.dragIndex,
   });
 
   final Topic topic;
@@ -696,6 +794,7 @@ class _TopicTile extends StatelessWidget {
   final VoidCallback onEdit;
   final Future<void> Function()? onDuplicate;
   final VoidCallback? onDelete;
+  final int? dragIndex;
 
   Future<void> _showContextMenu(
     BuildContext context,
@@ -750,7 +849,7 @@ class _TopicTile extends StatelessWidget {
         onSecondaryTapDown: (details) =>
             _showContextMenu(context, details.globalPosition),
         child: Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(20, 3, 8, 3),
+          padding: const EdgeInsetsDirectional.fromSTEB(20, 3, 4, 3),
           child: Row(
             children: [
               TopicEmoji(value: topic.icon, size: 14),
@@ -762,10 +861,27 @@ class _TopicTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (dragIndex != null)
+                ReorderableDragStartListener(
+                  index: dragIndex!,
+                  child: const _SidebarDragHandle(),
+                ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SidebarDragHandle extends StatelessWidget {
+  const _SidebarDragHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsetsDirectional.only(start: 4),
+      child: AppIcon(AppIcons.menu, size: 14),
     );
   }
 }

@@ -124,9 +124,9 @@ Row 1 = labels, row 2 = values, optional row 3 = colors. Same `\t` cell separato
   "kind": "files",
   "grouped_by": "topic",
   "topics": [
-    { "topic_id": 2, "topic": "nutrition", "archived": false,
+    { "topic_id": 2, "topic": "nutrition", "topic_type": "process", "archived": false,
       "files": [{ "id": 7, "name": "daily log", "archived": false }] },
-    { "topic_id": 3, "topic": "fitness", "archived": false,
+    { "topic_id": 3, "topic": "fitness", "topic_type": "process", "archived": false,
       "files": [{ "id": 12, "name": "week plan", "archived": false }] }
   ]
 }
@@ -139,14 +139,14 @@ Row 1 = labels, row 2 = values, optional row 3 = colors. Same `\t` cell separato
   "kind": "objects",
   "grouped_by": "topic",
   "topics": [
-    { "topic_id": 3, "topic": "fitness",
+    { "topic_id": 3, "topic": "fitness", "topic_type": "process",
       "files": [{ "file_id": 12, "file": "week plan",
                   "objects": [{ "id": 42, "type": "task_list", "name": "Week" }] }] }
   ]
 }
 ```
 
-`topics` returns `{ id, name, archived, file_count }`. Match the subject of the ask to a topic name first; only then pick a file inside it.
+`topics` returns `{ id, name, topic_type, archived, file_count }`. Match the subject of the ask to a topic name (and its type) first; only then pick a file inside it.
 
 ### `find_file`
 
@@ -154,7 +154,7 @@ Row 1 = labels, row 2 = values, optional row 3 = colors. Same `\t` cell separato
 { "file_id": 0, "name": "plan", "topic_id": 3 }
 ```
 
-Or `{ "file_id": 12, "name": "", "topic_id": 0 }`. Each hit is `{ id, name, topic_id, topic, archived }` — confirm `topic` is the one you meant.
+Or `{ "file_id": 12, "name": "", "topic_id": 0 }`. Each hit is `{ id, name, topic_id, topic, topic_type, archived }` — confirm `topic` is the one you meant.
 
 ### `find_object`
 
@@ -162,11 +162,11 @@ Or `{ "file_id": 12, "name": "", "topic_id": 0 }`. Each hit is `{ id, name, topi
 { "object_id": 0, "name": "clinic", "type": "task_list", "topic_id": 0 }
 ```
 
-Each hit is `{ id, type, name, file_id, file, topic_id, topic }`.
+Each hit is `{ id, type, name, file_id, file, topic_id, topic, topic_type }`.
 
 ### `open_file`
 
-Load one file. Returns `name` + `topic` (so you can confirm where you landed), `document_plain` (agent text), `document_lines` (`[{line, text}, …]` 1-based), and optional `object_extras`.
+Load one file. Returns `name` + `topic` + `topic_type` (so you can confirm where you landed), `document_plain` (agent text), `document_lines` (`[{line, text}, …]` 1-based), and optional `object_extras`.
 
 ### `create_object`
 
