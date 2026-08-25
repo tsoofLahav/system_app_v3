@@ -35,6 +35,17 @@ void main() {
       'topic_type_id': 2,
     });
     expect(topic.topicTypeId, 2);
+    expect(topic.isTemplate, isFalse);
+  });
+
+  test('a template topic is flagged hidden', () {
+    final topic = Topic.fromJson({
+      'id': 9,
+      'workspace_id': 1,
+      'name': 'process',
+      'is_template': true,
+    });
+    expect(topic.isTemplate, isTrue);
   });
 
   test('a file keeps its template slot through JSON', () {

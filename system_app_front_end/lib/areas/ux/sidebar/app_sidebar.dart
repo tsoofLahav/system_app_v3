@@ -805,19 +805,12 @@ class _TopicTile extends StatelessWidget {
     Offset globalPosition,
   ) async {
     final s = state.strings;
-    final type = state.topicTypeById(topic.topicTypeId);
     final action = await AppContextMenu.show(
       context: context,
       globalPosition: globalPosition,
       isRtl: s.isRtl,
       entries: [
         AppContextMenuItem(value: 'edit', label: s['edit']),
-        if (type != null)
-          AppContextMenuItem(
-            value: 'template',
-            label: s['useAsTypeTemplate'],
-            checked: type.templateTopicId == topic.id,
-          ),
         if (onDuplicate != null)
           AppContextMenuItem(value: 'duplicate', label: s['duplicateTopic']),
         if (onDelete != null)
@@ -833,9 +826,6 @@ class _TopicTile extends StatelessWidget {
     if (action == 'edit') onEdit();
     if (action == 'duplicate') await onDuplicate?.call();
     if (action == 'delete') onDelete?.call();
-    if (action == 'template' && type != null) {
-      await state.updateTopicType(type, {'template_topic_id': topic.id});
-    }
   }
 
   @override

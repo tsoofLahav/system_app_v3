@@ -172,7 +172,7 @@ Tapping outside the focused editor (canvas, empty padding — not another field)
 - Open the **Objects map** (info object graph) — listed after topics
 - Reach the archive
 - Create a topic, view, tag, or **topic type** from the centered sidebar **+** — a context-menu bubble lists the choices; each opens its own create dialog (tags are filtered on the objects map, not listed as a sidebar section). Creating a type does not open the type editor; a short hint points at Preferences.
-- Topic types are user-defined. The sidebar has one section per type, plus Main (Home) and Others (untyped non-Home topics). Configure types from Preferences; **Reorder** in that list shows drag handles. Topics and views have no handles until **sidebar reorder mode** (⌘O when no task has the caret, or Preferences → Reorder). Right-click a view to rename or delete it (tasks stay in their files). Right-click a typed topic to make it that type's template.
+- Topic types are user-defined. The sidebar has one section per type, plus Main (Home) and Others (untyped non-Home topics). Configure types from Preferences; **Reorder** in that list shows drag handles. Topics and views have no handles until **sidebar reorder mode** (⌘O when no task has the caret, or Preferences → Reorder). Right-click a view to rename or delete it (tasks stay in their files). A type's template is a hidden topic edited from Preferences.
 
 The sidebar is navigation only. It never edits content.
 
@@ -181,7 +181,7 @@ The sidebar is navigation only. It never edits content.
 | Menu | Where | Purpose |
 |------|-------|---------|
 | Topic / file context menu | Right-click in topic view, or the `⋯` on a file | Archive, delete — same bubble either way |
-| Sidebar topic | Right-click a topic | Edit, duplicate, delete, **use as type template** — `AppContextMenu`, not a native popup |
+| Sidebar topic | Right-click a topic | Edit, duplicate, delete — `AppContextMenu`, not a native popup |
 | Sidebar view | Right-click a view | Edit (rename) or delete |
 | Text context menu | Right-click inside a document | Formatting, clipboard, **Connect info…** |
 | Table cell menu | Right-click in a table cell | Add column, plus text actions |

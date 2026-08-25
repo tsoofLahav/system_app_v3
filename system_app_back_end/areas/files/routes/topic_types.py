@@ -1,4 +1,4 @@
-"""User-defined topic types: name, optional live template topic."""
+"""User-defined topic types: name, optional hidden template topic."""
 
 from flask import Blueprint, jsonify, request
 
@@ -6,6 +6,11 @@ from models import Automation, Topic, TopicType, db
 from shared.bootstrap import default_workspace_id
 from shared.helpers import apply_updates, get_or_404
 from areas.files.services.template_slots import stamp_template_slots
+from areas.files.services.type_templates import (
+    detach_live_templates,
+    ensure_hidden_template,
+)
+from areas.objects.services.delete_cascade import delete_topic_cascade
 
 topic_types_bp = Blueprint("topic_types", __name__)
 
@@ -40,6 +45,8 @@ def list_topic_types():
     workspace_id = request.args.get("workspace_id", type=int) or default_workspace_id()
     if not workspace_id:
         return jsonify({"error": "workspace_id is required"}), 400
+    if detach_live_templates(workspace_id):
+        db.session.commit()
     return jsonify([row.to_dict() for row in _workspace_types(workspace_id)])
 
 
@@ -102,6 +109,8 @@ def update_topic_type(type_id):
                 return jsonify({"error": "template topic not found"}), 400
             if topic.topic_type_id not in (None, row.id):
                 return jsonify({"error": "template must be a topic of this type"}), 400
+            if not topic.is_template:
+                return jsonify({"error": "template must be a hidden template topic"}), 400
             if topic.topic_type_id is None:
                 topic.topic_type_id = row.id
             row.template_topic_id = topic.id
@@ -111,10 +120,20 @@ def update_topic_type(type_id):
     return jsonify(row.to_dict())
 
 
+@topic_types_bp.route("/topic-types/<int:type_id>/template", methods=["POST"])
+def open_type_template(type_id):
+    row = get_or_404(TopicType, type_id)
+    topic = ensure_hidden_template(row)
+    db.session.commit()
+    data = topic.to_dict()
+    data["tags"] = []
+    return jsonify(data)
+
+
 @topic_types_bp.route("/topic-types/<int:type_id>", methods=["DELETE"])
 def delete_topic_type(type_id):
     row = get_or_404(TopicType, type_id)
-    in_use = Topic.query.filter_by(topic_type_id=row.id).count()
+    in_use = Topic.query.filter_by(topic_type_id=row.id, is_template=False).count()
     if in_use:
         return jsonify({"error": "type is still used by topics"}), 409
 
@@ -126,6 +145,12 @@ def delete_topic_type(type_id):
             and int(scope["topic_type_id"]) == row.id
         ):
             return jsonify({"error": "type is still used by automations"}), 409
+    template_id = row.template_topic_id
+    row.template_topic_id = None
+    db.session.flush()
+    if template_id is not None:
+        delete_topic_cascade(template_id)
     db.session.delete(row)
     db.session.commit()
+    return "", 204
     return "", 204

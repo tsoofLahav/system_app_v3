@@ -4,7 +4,6 @@ from models import EntityTag, Tag, Topic, TopicType, db
 from shared.helpers import active_query, apply_updates, get_or_404
 from shared.bootstrap import default_workspace_id
 from areas.files.services.clone_topic_content import clone_topic_content
-from areas.files.services.clone_topic_skeleton import clone_topic_skeleton
 from areas.objects.services.delete_cascade import delete_topic_cascade
 
 topics_bp = Blueprint("topics", __name__)
@@ -96,7 +95,7 @@ def create_topic():
     elif type_row is not None and type_row.template_topic_id:
         source = db.session.get(Topic, type_row.template_topic_id)
         if source is not None:
-            clone_topic_skeleton(topic, source)
+            clone_topic_content(topic, source)
 
     db.session.commit()
     result = topic.to_dict()

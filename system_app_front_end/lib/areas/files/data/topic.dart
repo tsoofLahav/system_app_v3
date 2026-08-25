@@ -10,6 +10,7 @@ class Topic {
     this.orderIndex = 0,
     this.fileLayout = 'auto',
     this.topicTypeId,
+    this.isTemplate = false,
     this.archivedAt,
     this.createdAt,
     this.tags = const [],
@@ -27,6 +28,9 @@ class Topic {
 
   /// User-defined kind. Home stays untyped.
   final int? topicTypeId;
+
+  /// Hidden type template — not listed in the sidebar.
+  final bool isTemplate;
 
   final String? archivedAt;
   final String? createdAt;
@@ -48,6 +52,7 @@ class Topic {
       orderIndex: json['order_index'] as int? ?? 0,
       fileLayout: json['file_layout'] as String? ?? 'auto',
       topicTypeId: json['topic_type_id'] as int?,
+      isTemplate: json['is_template'] as bool? ?? false,
       archivedAt: json['archived_at'] as String?,
       createdAt: json['created_at'] as String?,
       tags: rawTags is List
@@ -77,6 +82,7 @@ class Topic {
       orderIndex: orderIndex ?? this.orderIndex,
       fileLayout: fileLayout ?? this.fileLayout,
       topicTypeId: clearTopicType ? null : (topicTypeId ?? this.topicTypeId),
+      isTemplate: isTemplate,
       archivedAt: archivedAt,
       createdAt: createdAt,
       tags: tags ?? this.tags,

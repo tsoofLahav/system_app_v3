@@ -38,6 +38,7 @@ class Topic(db.Model):
     order_index = db.Column(db.Integer, nullable=False, default=0)
     file_layout = db.Column(db.Text, nullable=False, default="auto")
     topic_type_id = db.Column(db.Integer, db.ForeignKey("topic_types.id"))
+    is_template = db.Column(db.Boolean, nullable=False, default=False)
     archived_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -51,6 +52,7 @@ class Topic(db.Model):
             "order_index": self.order_index,
             "file_layout": self.file_layout or "auto",
             "topic_type_id": self.topic_type_id,
+            "is_template": bool(self.is_template),
             "archived_at": _iso(self.archived_at),
             "created_at": _iso(self.created_at),
         }

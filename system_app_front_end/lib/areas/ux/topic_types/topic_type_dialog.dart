@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../core/app_state.dart';
 import '../../../core/services/api_service.dart';
 import '../../files/data/app_file.dart';
-import '../../files/data/topic.dart';
 import '../../files/data/topic_type.dart';
 import '../../automations/automation.dart';
 import '../../automations/automation_builder_dialog.dart';
@@ -18,7 +17,6 @@ import '../../ui/dialog_metrics.dart';
 import '../dialogs/dialog_choice_list.dart';
 import '../shell/chrome_anchors.dart';
 import '../widgets/app_context_menu.dart';
-import '../widgets/topic_emoji.dart';
 
 Future<void> showTopicTypesListDialog({
   required BuildContext context,
@@ -347,7 +345,6 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
   late final TextEditingController _name;
   late final TextEditingController _nameHe;
   List<AppFile> _templateFiles = const [];
-  Topic? _templateTopic;
   var _loadingFiles = false;
 
   TopicType? get _type => state.topicTypeById(widget.typeId);
@@ -375,21 +372,14 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
     if (templateId == null) {
       setState(() {
         _templateFiles = const [];
-        _templateTopic = null;
       });
       return;
     }
     setState(() => _loadingFiles = true);
     try {
-      Topic? topic;
-      for (final row in state.allTopics) {
-        if (row.id == templateId) topic = row;
-      }
-      topic ??= await state.loadTopic(templateId);
       final files = await state.filesForTopic(templateId);
       if (!mounted) return;
       setState(() {
-        _templateTopic = topic;
         _templateFiles = files;
         _loadingFiles = false;
       });
@@ -419,42 +409,19 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
     if (mounted) Navigator.pop(context);
   }
 
-  Future<void> _pickTemplate() async {
+  Future<void> _openTemplate() async {
     final type = _type;
     if (type == null) return;
-    final s = state.strings;
-    final candidates = state.topicsOfType(type.id);
-    final rows = <({int id, String label, String? icon})>[
-      (id: -1, label: s['noTemplate'], icon: null),
-      for (final topic in candidates)
-        (id: topic.id, label: state.topicDisplayName(topic), icon: topic.icon),
-    ];
-    var initial = 0;
-    for (var i = 0; i < rows.length; i++) {
-      if (rows[i].id == (type.templateTopicId ?? -1)) {
-        initial = i;
-        break;
-      }
+    try {
+      await state.openTypeTemplate(type);
+      if (!mounted) return;
+      Navigator.pop(context);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     }
-    final picked =
-        await showAppChoiceDialog<({int id, String label, String? icon})>(
-          context: context,
-          title: s['pickTemplate'],
-          cancelLabel: s['cancel'],
-          items: rows,
-          initialIndex: initial,
-          itemBuilder: (context, row, _) => DialogChoiceText(
-            row.label,
-            leading: row.icon == null
-                ? null
-                : TopicEmoji(value: row.icon, size: 18),
-          ),
-        );
-    if (picked == null || !mounted) return;
-    await state.updateTopicType(type, {
-      'template_topic_id': picked.id < 0 ? null : picked.id,
-    });
-    await _loadTemplate();
   }
 
   Future<void> _addExistingAction() async {
@@ -534,9 +501,6 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
 
     final actions = state.aiActionsForType(type.id);
     final automations = state.automationsForType(type.id);
-    final templateLabel = _templateTopic == null
-        ? s['noTemplate']
-        : state.topicDisplayName(_templateTopic!);
 
     return AppAdaptiveDialogShell(
       title: Text(s['editTopicType']),
@@ -585,16 +549,13 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                AppDialogPickerField(
-                  label: s['templateTopic'],
-                  preview: const AppIcon(AppIcons.bringFile, size: 16),
-                  valueLabel: templateLabel,
-                  onTap: _pickTemplate,
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton(
+                    onPressed: _openTemplate,
+                    child: Text(s['editTemplate']),
+                  ),
                 ),
-                if (_templateTopic?.isArchived == true) ...[
-                  const SizedBox(height: 6),
-                  Text(s['templateArchived'], style: AppTypography.metaStyle),
-                ],
                 if (_loadingFiles) ...[
                   const SizedBox(height: 8),
                   const LinearProgressIndicator(minHeight: 2),
@@ -606,7 +567,7 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(file.name, style: AppTypography.metaStyle),
                     ),
-                ] else if (type.templateTopicId != null) ...[
+                ] else ...[
                   const SizedBox(height: 6),
                   Text(s['noTemplateFiles'], style: AppTypography.metaStyle),
                 ],

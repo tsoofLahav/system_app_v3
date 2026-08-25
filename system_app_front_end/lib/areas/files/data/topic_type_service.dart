@@ -38,4 +38,11 @@ class TopicTypeService {
   Future<void> delete(int id) async {
     await _api.delete('/topic-types/$id');
   }
+
+  Future<Topic> ensureTemplate(int typeId) async {
+    final data =
+        await _api.post('/topic-types/$typeId/template', {})
+            as Map<String, dynamic>;
+    return Topic.fromJson(data);
+  }
 }

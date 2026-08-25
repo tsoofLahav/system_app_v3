@@ -35,7 +35,7 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | [`rich_text/rtl/`](rich_text/rtl/RTL.md) | **RTL solution** — Hebrew/BiDi direction helpers |
 | [`data/`](data/) | File, topic, and topic-type models + API services. `files.meta.template_slot` is the stable key automations use |
 
-A type's template is `template_topic_id` on that type. Set it from Preferences or by right-clicking a topic of that type. In Manage types, **Reorder** shows drag handles so sidebar sections can move. New topics copy structure only (backend). **Duplicate** copies the topic in full (live files, object content, in-topic links, tags, icon, colour). Creating a type asks for an English name and a Hebrew name; the sidebar follows the app language.
+A type's template is a hidden `is_template` topic (`template_topic_id`). Preferences → **Edit template** opens it. New topics of that type copy its **files with content** (backend). **Duplicate** copies the topic in full (live files, object content, in-topic links, tags, icon, colour). Creating a type asks for an English name and a Hebrew name; the sidebar follows the app language. In Manage types, **Reorder** shows drag handles so sidebar sections can move. Template topics do not appear in the sidebar.
 
 ### Document vs Super Editor (one sync rule)
 

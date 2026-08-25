@@ -27,15 +27,18 @@ from areas.files.services.template_slots import stamp_template_slots
 from areas.objects.services.object_graph import OBJECT_LINK_TYPES, tag_ids_for_object
 
 
-def clone_topic_content(dest: Topic, source: Topic) -> None:
+def clone_topic_content(
+    dest: Topic, source: Topic, *, copy_identity: bool = True
+) -> None:
     """Fill ``dest`` with a full copy of ``source``'s live files and objects."""
     stamp_template_slots(source)
     dest.file_layout = source.file_layout or dest.file_layout
-    if not dest.icon:
-        dest.icon = source.icon
-    if not dest.color:
-        dest.color = source.color
-    _copy_topic_tags(dest, source)
+    if copy_identity:
+        if not dest.icon:
+            dest.icon = source.icon
+        if not dest.color:
+            dest.color = source.color
+        _copy_topic_tags(dest, source)
 
     files = (
         File.query.filter_by(topic_id=source.id, archived_at=None)

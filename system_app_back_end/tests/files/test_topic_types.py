@@ -6,6 +6,7 @@ import textwrap
 
 from areas.files.routes import topic_types as type_routes
 from areas.files.routes import topics as topics_routes
+from areas.files.services import type_templates
 from areas.files.services.document_marker_text import (
     iter_embed_pointers,
     wrap_editor_text,
@@ -30,11 +31,8 @@ def test_topic_type_table_shape():
 def test_topic_carries_its_type():
     assert "topic_type_id" in Topic.__table__.columns
     assert "topic_type_id" in inspect.getsource(Topic.to_dict)
-
-
-def test_ai_action_can_be_typed():
-    assert "topic_type_id" in AiAction.__table__.columns
-    assert "topic_type_id" in inspect.getsource(AiAction.to_dict)
+    assert "is_template" in Topic.__table__.columns
+    assert "is_template" in inspect.getsource(Topic.to_dict)
 
 
 def test_create_topic_accepts_a_type_and_a_clone():
@@ -42,16 +40,21 @@ def test_create_topic_accepts_a_type_and_a_clone():
     assert "topic_type_id" in source
     assert "clone_from_topic_id" in source
     assert "clone_topic_content" in source
-    assert "clone_topic_skeleton" in source
+    assert "clone_topic_skeleton" not in source
 
 
-def test_duplicate_copies_content_type_create_copies_skeleton():
+def test_duplicate_and_type_create_copy_content():
     source = inspect.getsource(topics_routes.create_topic)
     clone_branch = source.split("clone_from_topic_id", 1)[1]
     assert "clone_topic_content" in clone_branch.split("elif type_row", 1)[0]
     template_branch = source.split("template_topic_id", 1)[1]
-    assert "clone_topic_skeleton" in template_branch
-    assert "clone_topic_content" not in template_branch
+    assert "clone_topic_content" in template_branch
+    assert "clone_topic_skeleton" not in template_branch
+
+
+def test_ai_action_can_be_typed():
+    assert "topic_type_id" in AiAction.__table__.columns
+    assert "topic_type_id" in inspect.getsource(AiAction.to_dict)
 
 
 def test_changing_type_does_not_reapply_the_template():
@@ -63,7 +66,16 @@ def test_changing_type_does_not_reapply_the_template():
 def test_type_routes_exist():
     source = inspect.getsource(type_routes)
     assert '"/topic-types"' in source
-    assert "stamp_template_slots" in source
+    assert '"/topic-types/<int:type_id>/template"' in source
+    assert "ensure_hidden_template" in source
+    assert "detach_live_templates" in source
+
+
+def test_hidden_template_is_not_a_live_topic():
+    source = inspect.getsource(type_templates)
+    assert "is_template=True" in source
+    assert "copy_identity=False" in source
+    assert "detach_live_templates" in source
 
 
 def test_create_type_requires_english_and_hebrew_names():

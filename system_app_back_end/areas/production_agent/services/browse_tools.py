@@ -47,7 +47,7 @@ def file_allowed(file: File, scope: dict) -> bool:
 
 
 def _workspace_topics(workspace_id: int, *, include_archived: bool = False):
-    q = Topic.query.filter_by(workspace_id=workspace_id)
+    q = Topic.query.filter_by(workspace_id=workspace_id, is_template=False)
     if not include_archived:
         q = q.filter(Topic.archived_at.is_(None))
     return q.order_by(Topic.order_index, Topic.id)
@@ -60,7 +60,8 @@ def _workspace_files_query(
     include_archived: bool = False,
 ):
     q = File.query.join(Topic, File.topic_id == Topic.id).filter(
-        Topic.workspace_id == workspace_id
+        Topic.workspace_id == workspace_id,
+        Topic.is_template.is_(False),
     )
     if topic_id is not None:
         q = q.filter(File.topic_id == int(topic_id))

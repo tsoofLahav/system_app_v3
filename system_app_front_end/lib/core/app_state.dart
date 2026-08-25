@@ -258,8 +258,10 @@ class AppState extends ChangeNotifier {
   TextDirection get textDirection => strings.textDirection;
   bool get isRtl => strings.isRtl;
 
-  List<Topic> get activeTopics =>
-      allTopics.where((t) => !t.isArchived).toList();
+  List<Topic> get activeTopics => [
+        for (final topic in allTopics)
+          if (!topic.isArchived && !topic.isTemplate) topic,
+      ];
 
   List<Topic> get untypedTopics => [
     for (final topic in activeTopics)
@@ -337,7 +339,9 @@ class AppState extends ChangeNotifier {
       await loadAutomations();
       if (selectedTopic == null && allTopics.isNotEmpty) {
         final home =
-            allTopics.where((t) => t.isMain).firstOrNull ?? allTopics.first;
+            allTopics.where((t) => t.isMain).firstOrNull ??
+            activeTopics.firstOrNull ??
+            allTopics.first;
         await selectTopic(home);
       }
     } catch (e) {
@@ -429,7 +433,8 @@ class AppState extends ChangeNotifier {
     selectedViewType = null;
     selectedView = null;
     final home =
-        allTopics.where((t) => t.isMain).firstOrNull ?? allTopics.firstOrNull;
+        allTopics.where((t) => t.isMain).firstOrNull ??
+        activeTopics.firstOrNull;
     if (home != null) await selectTopic(home);
   }
 
@@ -1161,6 +1166,20 @@ class AppState extends ChangeNotifier {
     ];
     _sortTopicTypes();
     notifyListeners();
+  }
+
+  Future<void> openTypeTemplate(TopicType type) async {
+    final topic = await _topicTypes.ensureTemplate(type.id);
+    await loadTopicTypes();
+    if (!allTopics.any((row) => row.id == topic.id)) {
+      allTopics = [...allTopics, topic];
+    } else {
+      allTopics = [
+        for (final row in allTopics)
+          if (row.id == topic.id) topic else row,
+      ];
+    }
+    await selectTopic(topic);
   }
 
   Future<void> reorderTopicTypes(List<TopicType> ordered) async {
