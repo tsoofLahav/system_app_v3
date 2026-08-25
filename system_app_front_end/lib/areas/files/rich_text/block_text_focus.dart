@@ -53,6 +53,13 @@ class BlockTextFocusRegistry {
   static bool get hasEmojiPickerTarget => _emojiPickerTarget != null;
   static FormatRange? get frozenFormatRange => _frozenRange;
 
+  /// True when the live/recent embed field is inside [owns].
+  static bool markBelongsTo(bool Function(FocusNode node) owns) {
+    final node = activeFocusNode ?? _recentTarget?.focusNode;
+    if (node == null) return false;
+    return owns(node);
+  }
+
   /// The mark an open menu will act on, frozen when the menu opened.
   static DocumentMark? get frozenMark => _frozenMark;
 
@@ -213,6 +220,21 @@ class BlockTextFocusRegistry {
     _bumpFocus();
   }
 
+  /// Clears a leftover embed mark when the user claims another file.
+  static void releaseLiveMark() {
+    final controller = activeController ?? _recentTarget?.controller;
+    if (controller != null &&
+        controller.selection.isValid &&
+        !controller.selection.isCollapsed) {
+      try {
+        controller.selection = TextSelection.collapsed(
+          offset: controller.selection.extentOffset,
+        );
+      } catch (_) {}
+    }
+    abandonStashedFocus();
+  }
+
   /// Clears focus registry before a structural reload (e.g. block insert).
   static void abandonStashedFocus() {
     activeController = null;
@@ -247,8 +269,10 @@ class BlockTextFocusRegistry {
         if (span != null && !span.isEmpty) {
           _frozenRange = FormatRange(start: span.safeStart, end: span.safeEnd);
         } else {
-          _frozenRange =
-              FormatRange.consume(controller.text, controller.selection);
+          _frozenRange = FormatRange.consume(
+            controller.text,
+            controller.selection,
+          );
         }
       }
     }
@@ -289,7 +313,9 @@ class BlockTextFocusRegistry {
           restoreNode.requestFocus();
         }
         if (range != null && range.isValid) {
-          restoreController.selection = TextSelection.collapsed(offset: range.end);
+          restoreController.selection = TextSelection.collapsed(
+            offset: range.end,
+          );
         }
       } catch (_) {
         // Controller or focus node may have been disposed after a reload.
@@ -526,8 +552,11 @@ class BlockTextFocusRegistry {
   ) {
     final safeText = sanitizePlatformText(text);
     if (safeText.isEmpty) return;
-    final (rangeStart, rangeEnd) =
-        normalizeUtf16Range(controller.text, start, end);
+    final (rangeStart, rangeEnd) = normalizeUtf16Range(
+      controller.text,
+      start,
+      end,
+    );
     final next = controller.text.replaceRange(rangeStart, rangeEnd, safeText);
     controller.value = controller.value.copyWith(
       text: sanitizePlatformText(next),
@@ -552,8 +581,9 @@ class BlockTextFocusRegistry {
       }
       if (!mark.spansParts) {
         final span = mark.spans.first;
-        span.controller.selection =
-            TextSelection.collapsed(offset: span.safeEnd);
+        span.controller.selection = TextSelection.collapsed(
+          offset: span.safeEnd,
+        );
       }
       return;
     }
@@ -562,7 +592,8 @@ class BlockTextFocusRegistry {
     final changed = onChanged;
     if (controller == null || changed == null) return;
 
-    final range = _frozenRange ??
+    final range =
+        _frozenRange ??
         FormatRange.resolve(controller.text, controller.selection);
     if (!range.isValid) return;
 

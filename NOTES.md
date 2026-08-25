@@ -47,7 +47,7 @@ This class of bug also comes back after embed/save/focus changes inside a file (
 - Shift+Enter into an object, type, Shift+Enter out, type in the paragraph below.
 - If the assertion appears: **full restart** the app (hot reload can leave keys stuck); then fix the remount/notify path — do not ignore it.
 
-Detail and fluent-text rules: files [`AREA.md`](system_app_front_end/lib/areas/files/AREA.md) · [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md).
+Gathered in one place: [`CARET_AND_WRITING_FOCUS.md`](CARET_AND_WRITING_FOCUS.md). Detail and fluent-text rules: files [`AREA.md`](system_app_front_end/lib/areas/files/AREA.md) · [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md).
 
 ---
 

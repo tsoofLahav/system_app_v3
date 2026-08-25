@@ -335,10 +335,25 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _bumpPhoneObjectGate();
   }
 
-  /// Caret visibility only — no focus node or editor is replaced here, so this
-  /// stays safe mid-keystroke.
+  /// Caret visibility, and one live mark: a pane that is no longer claimed
+  /// drops its selection so it cannot leak into agent hints or stay painted.
   void _onClaimedPaneChanged() {
+    if (DocumentEditorRegistry.activeFileId != widget.file.id &&
+        !BlockTextFocusRegistry.isInMenuSession) {
+      if (_composer.selection != null) {
+        _composer.clearSelection();
+      }
+      if (BlockTextFocusRegistry.markBelongsTo(_ownsFocusNode)) {
+        BlockTextFocusRegistry.releaseLiveMark();
+      }
+    }
     _syncCaretVisibility();
+  }
+
+  bool _ownsFocusNode(FocusNode node) {
+    final ctx = node.context;
+    if (ctx == null || !ctx.mounted) return false;
+    return ctx.findAncestorStateOfType<_SuperDocumentEditorState>() == this;
   }
 
   void _syncCaretVisibility() {
@@ -603,10 +618,12 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   /// Marked span, or the caret line when unmarked — `hints.selected_text`.
   String? _markedTextForAgent() {
-    final embedMark = BlockTextFocusRegistry.resolveMark();
-    if (embedMark.isValid) {
-      final text = embedMark.text.trim();
-      if (text.isNotEmpty) return text;
+    if (BlockTextFocusRegistry.markBelongsTo(_ownsFocusNode)) {
+      final embedMark = BlockTextFocusRegistry.resolveMark();
+      if (embedMark.isValid) {
+        final text = embedMark.text.trim();
+        if (text.isNotEmpty) return text;
+      }
     }
 
     final sel = caretLineSelection(_doc, _composer.selection);

@@ -69,6 +69,7 @@ Area maps: [backend](system_app_back_end/areas/README.md) · [frontend](system_a
 | Doc | Purpose |
 |-----|---------|
 | [`NOTES.md`](NOTES.md) | Situational rules: editor keyboard safety, text model, objects, layout, agent, history |
+| [`CARET_AND_WRITING_FOCUS.md`](CARET_AND_WRITING_FOCUS.md) | Gathered caret, focus, and IME rules (body vs object, remount safety) |
 | [`AGENTS.md`](AGENTS.md) | Monorepo entry and task routing |
 | [`BACKLOG.md`](BACKLOG.md) | Known unresolved issues, grouped by area |
 | [`CONSTITUTION.md`](CONSTITUTION.md) | Product purpose and principles — read-only, never edit |

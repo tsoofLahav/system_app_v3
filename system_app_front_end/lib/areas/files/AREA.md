@@ -202,7 +202,7 @@ A topic shows several files at once, so several Super Editors are mounted at onc
 | Rule | Why |
 |------|-----|
 | Every editor gets `inputRole: 'file-<id>'` | The IME connection is global and shared. Without a role the second file registers as the same input, the two panes fight over the connection, and in debug super_editor throws *duplicate input IDs*. |
-| Only the file that is claimed **and** has primary focus draws a caret (`documentOverlayBuilders`) | A pane keeps its selection when it loses focus — the marking is what actions run on — so the caret is the only thing left to hide (including tap-outside, which closes the keyboard). Text shortcuts Super Editor does not handle itself (underline, size) go through `applyTextAction` on that claimed controller. |
+| Only the file that is claimed **and** has primary focus draws a caret (`documentOverlayBuilders`) | Switching files **releases** the previous pane’s mark (composer + embed registry) so agent hints and paint cannot leak. Tap-outside on the **same** file still keeps the mark for actions. Text shortcuts Super Editor does not handle itself (underline, size) go through `applyTextAction` on that claimed controller. |
 
 Hiding it means swapping Super Editor's cursor layers (desktop caret + the iOS / Android handle layers) for an empty layer of the same count. Two things that look simpler do not work: **removing** a layer leaves it painting, because `ContentLayers` matches overlays by index and never deactivates one past the end of a shorter list; **styling** the caret away fails too, because the blink controller writes its own alpha over the colour, so a transparent caret comes back opaque black.
 

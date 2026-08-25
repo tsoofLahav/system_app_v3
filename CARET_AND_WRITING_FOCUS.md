@@ -51,7 +51,7 @@ A topic can show several files, so several Super Editors are mounted at once.
 | Idea | Rule |
 |------|------|
 | **Claim** | Last file the user clicked or typed in (`DocumentEditorRegistry.claim`). Inserts and AI target this file even if the caret is hidden. |
-| **Caret paint** | Only the file that is **claimed and has primary focus** draws a caret. Other panes keep their **marking** (selection) so actions still have a target. |
+| **Caret paint** | Only the file that is **claimed and has primary focus** draws a caret. Switching files releases the previous pane’s mark. Tap-outside on the same file keeps the mark for actions. |
 | **IME role** | Every editor gets `inputRole: 'file-<id>'`. Without a unique role the panes fight one global IME connection. |
 | **Hiding the caret** | Swap Super Editor cursor overlay layers for empty layers of the **same count**. Removing a layer or styling the caret transparent does not work (`ContentLayers` / blink controller). |
 
@@ -101,7 +101,7 @@ Never read a single field’s `TextEditingController.selection` to decide what a
 **Freeze before focus loss.** Opening a menu or dialog can collapse Super Editor selection.
 
 - Right-click: capture on secondary pointer-down, freeze for the menu session.
-- Agent prompt / saved AI actions: `DocumentEditorRegistry.captureMarkedTextForAgent()` **before** the dialog opens.
+- Agent prompt / saved AI actions: `DocumentEditorRegistry.captureMarkedTextForAgent()` **before** the dialog opens. Embed marks are used only when they belong to the **claimed** file.
 
 While a menu is open there is never a second wash (native selection + line-at-caret) at the same time.
 
