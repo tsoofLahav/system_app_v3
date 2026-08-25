@@ -36,12 +36,12 @@ void main() {
     expect(_ids(draft.ordered), [1, 2, 3]);
   });
 
-  test('showing a hidden file takes the last slot from the file in it', () {
+  test('showing a hidden file puts it first and pushes the last shown off', () {
     final draft = _draft([1, 2, 3, 4], FileLayouts.heroLeft);
 
     expect(draft.show(0), isTrue);
 
-    expect(_ids(draft.shown), [1, 2, 4]);
+    expect(_ids(draft.shown), [4, 1, 2]);
     expect(_ids(draft.hidden), [3]);
   });
 

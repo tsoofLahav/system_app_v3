@@ -99,10 +99,11 @@ Format examples: [`content/production_agent/reference.md`](../../../content/prod
 | [`routes/topic_types.py`](routes/topic_types.py) | User-defined topic kinds (`/topic-types`) |
 | [`services/template_slots.py`](services/template_slots.py) | Stamp `files.meta.template_slot` when a topic becomes a type template |
 | [`services/clone_topic_skeleton.py`](services/clone_topic_skeleton.py) | Copy file structure (names, layout, empty objects) onto a new topic |
+| [`services/clone_topic_content.py`](services/clone_topic_content.py) | Duplicate a topic: live files, object content, in-topic links |
 
 ## Topic types
 
-A type is a row in `topic_types`, not a tag. Each type has an English `name` and a Hebrew `name_he`; the app shows the one that matches the UI language. `topics.topic_type_id` is optional (Home stays untyped). A type may point at a live `template_topic_id` (Preferences, or right-click a topic of that type). Creating a topic of that type copies the template's **structure only**: file names, `file_layout`, `order_index`, `template_slot`, and empty objects of the same kind. Changing a topic's type later does not re-apply the template. Duplicate uses `clone_from_topic_id` so it copies that topic, not only the type template.
+A type is a row in `topic_types`, not a tag. Each type has an English `name` and a Hebrew `name_he`; the app shows the one that matches the UI language. `topics.topic_type_id` is optional (Home stays untyped). A type may point at a live `template_topic_id` (Preferences, or right-click a topic of that type). Creating a topic of that type copies the template's **structure only**: file names, `file_layout`, `order_index`, `template_slot`, and empty objects of the same kind. Changing a topic's type later does not re-apply the template. **Duplicate** (`clone_from_topic_id`) copies that topic in full: live file bodies, object content (tasks, info, tables/graphs, images), in-topic links, tags, icon, and colour. Archived files, views, and automations are not copied.
 
 `files.meta.template_slot` is a stable key (`doc`, `plan`, …) stamped from the file name when the topic is set as the template, so automations can still find “the doc file” after a rename. Copies inherit the same key. Hebrew or empty names fall back to `file-{id}`.
 

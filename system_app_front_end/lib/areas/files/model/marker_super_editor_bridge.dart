@@ -131,7 +131,7 @@ String mutableDocumentToMarkerText(Document document) {
       final tag = ordered ? 'ORDERED_LIST' : 'BULLET_LIST';
       final body = [
         for (var k = 0; k < items.length; k++)
-          _listItemLine(items[k], k, ordered: ordered),
+          listItemClipboardLine(items[k], k, ordered: ordered),
       ].join('\n');
       if (body.isNotEmpty) {
         lines.add('[$tag]\n$body\n[/$tag]');
@@ -279,11 +279,20 @@ List<ListItemNode> _listItemsFromBody(String body, {required bool ordered}) {
   return items;
 }
 
-String _listItemLine(ListItemNode item, int index, {required bool ordered}) {
+String listItemClipboardLine(
+  ListItemNode item,
+  int index, {
+  required bool ordered,
+}) {
   final indent = '  ' * item.indent;
   final text = item.text.toPlainText();
   if (ordered) return '$indent${index + 1}. $text';
   return '$indent- $text';
+}
+
+String listItemClipboardPrefix({required bool ordered, required int index}) {
+  if (ordered) return '${index + 1}. ';
+  return '- ';
 }
 
 List<List<String>> _parseTableRows(String body) {

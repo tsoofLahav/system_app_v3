@@ -6,6 +6,8 @@ import '../../ui/app_icons.dart';
 import '../../ui/glass_surface.dart';
 import './document_editor_controller.dart';
 import '../../ux/shell/app_bottom_bar.dart';
+import '../../ux/shortcuts/app_shortcuts.dart';
+import '../../ux/shortcuts/shortcut_catalog.dart';
 
 class DocumentInsertBar extends StatelessWidget {
   const DocumentInsertBar({
@@ -43,7 +45,11 @@ class DocumentInsertBar extends StatelessWidget {
               // an existing list, switched from its right-click menu.
               _InsertButton(
                 icon: AppIcons.smartList,
-                tooltip: s['list'],
+                tooltip: _tooltip(
+                  state,
+                  s['list'],
+                  ShortcutActionIds.addConnection,
+                ),
                 onPressed: () => controller.insertAtBlock('bullet_list'),
               ),
               _InsertButton(
@@ -86,6 +92,12 @@ class DocumentInsertBar extends StatelessWidget {
         );
       },
     );
+  }
+
+  static String _tooltip(AppState state, String label, String actionId) {
+    final suffix = shortcutTooltipSuffix(state, actionId);
+    if (suffix == null) return label;
+    return '$label ($suffix)';
   }
 }
 

@@ -79,6 +79,15 @@ class _CreateTagDialogState extends State<_CreateTagDialog> {
     setState(() => _pickerColor = TopicAppearance.colorFromHex(picked));
   }
 
+  void _submit() {
+    final name = _name.text.trim();
+    if (name.isEmpty) return;
+    Navigator.pop(
+      context,
+      CreateTagResult(name: name, icon: _icon, color: _colorHex),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.state.strings;
@@ -89,17 +98,7 @@ class _CreateTagDialogState extends State<_CreateTagDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(s['cancel']),
         ),
-        FilledButton(
-          onPressed: () {
-            final name = _name.text.trim();
-            if (name.isEmpty) return;
-            Navigator.pop(
-              context,
-              CreateTagResult(name: name, icon: _icon, color: _colorHex),
-            );
-          },
-          child: Text(s['create']),
-        ),
+        FilledButton(onPressed: _submit, child: Text(s['create'])),
       ],
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -110,6 +109,8 @@ class _CreateTagDialogState extends State<_CreateTagDialog> {
             child: TextField(
               controller: _name,
               autofocus: true,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
               decoration: DialogFieldStyle.decoration(),
             ),
           ),

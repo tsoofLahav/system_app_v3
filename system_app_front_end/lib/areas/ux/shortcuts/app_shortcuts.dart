@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/app_state.dart';
 import '../../files/editor/document_editor_controller.dart';
+import '../../files/rich_text/block_text_focus.dart';
 import './shortcut_bindings_store.dart';
 import './shortcut_catalog.dart';
 import './shortcut_dispatcher.dart';
@@ -93,6 +94,9 @@ class _AppShortcutsScopeState extends State<AppShortcutsScope> {
         !shortcutHasTextFocus()) {
       return false;
     }
+    if (_superEditorOwnsClipboard(action.textAction)) {
+      return false;
+    }
     if (action.context == ShortcutContextRequirement.insertObject &&
         DocumentEditorRegistry.active == null) {
       return false;
@@ -114,6 +118,14 @@ class _AppShortcutsScopeState extends State<AppShortcutsScope> {
     }
     _pressedActionId = actionId;
     dispatchShortcutAction(context, widget.state, actionId);
+  }
+
+  /// Super Editor already handles ⌘V (and would paste twice if the catalog
+  /// also dispatched). Copy/cut stay on the catalog so lists keep their marks.
+  bool _superEditorOwnsClipboard(String? textAction) {
+    if (textAction != 'text:paste') return false;
+    if (BlockTextFocusRegistry.hasFocus) return false;
+    return DocumentEditorRegistry.active?.isFocused?.call() == true;
   }
 
   Map<ShortcutActivator, Intent> _shortcutMap() {

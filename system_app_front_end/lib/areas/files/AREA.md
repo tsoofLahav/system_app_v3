@@ -15,6 +15,7 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | Folder | Role |
 |--------|------|
 | [`editor/super_document_editor.dart`](editor/super_document_editor.dart) | File editor host (`SuperEditor` + save/insert/Move Mode) |
+| [`editor/edit_conflict.dart`](editor/edit_conflict.dart) | User vs agent: take inbound unless dirty, then ask |
 | [`editor/embed_move_bubble.dart`](editor/embed_move_bubble.dart) | Floating glass Move Mode controls (outside the file) |
 | [`model/marker_super_editor_bridge.dart`](model/marker_super_editor_bridge.dart) | Marker text ↔ Super Editor document |
 | [`model/object_embed_node.dart`](model/object_embed_node.dart) | Custom SE node for object pointers |
@@ -31,7 +32,7 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | [`rich_text/rtl/`](rich_text/rtl/RTL.md) | **RTL solution** — Hebrew/BiDi direction helpers |
 | [`data/`](data/) | File, topic, and topic-type models + API services. `files.meta.template_slot` is the stable key automations use |
 
-A type's template is `template_topic_id` on that type. Set it from Preferences or by right-clicking a topic of that type. New topics copy structure only (backend). Creating a type asks for an English name and a Hebrew name; the sidebar follows the app language.
+A type's template is `template_topic_id` on that type. Set it from Preferences or by right-clicking a topic of that type. New topics copy structure only (backend). **Duplicate** copies the topic in full (live files, object content, in-topic links, tags, icon, colour). Creating a type asks for an English name and a Hebrew name; the sidebar follows the app language.
 
 ### Document vs Super Editor (one sync rule)
 
@@ -292,9 +293,9 @@ Objects are atomic SE blocks. ↑/↓ move onto the block; **Tab** (or click) op
 | Type | In the document |
 |------|-----------------|
 | Task list | Active then Done; Enter adds in the same zone; **insert lands on the list header** (then tasks); Escape leaves to SE block; right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title stays blank |
-| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); Enter adds lines; Escape leaves to SE block; field right-click → text + Connect info; chrome → Add tag / Add connection (⌘L) |
+| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); Enter adds lines; Escape leaves to SE block; field right-click → text + Connect info; chrome → Add tag / Add connection (⌘L while in the info; otherwise ⌘L inserts a list) |
 | Table / chart | See **[Tables & charts](#tables--charts)** |
-| Image | Display + caption; resize handles deferred |
+| Image | Display + caption; right-click **Make smaller / larger** (steps of 10% of the pane) or **Tiny / Quarter / Half / Full size**. Width is `payload.width` 0–1 of the file pane; aspect ratio stays (`BoxFit.contain`) |
 
 ### Tables & charts
 
@@ -336,6 +337,8 @@ Edits mutate the Super Editor document; save serializes via the marker bridge an
 
 A newer body from elsewhere (phone, agent) is applied **into** the already-open `SuperDocumentEditor`. The topic page is not rebuilt for that. Who listens where: UX [`AREA.md` § Who rebuilds](../ux/AREA.md#who-rebuilds).
 
+**User vs agent:** if the open file has no unsaved local edits (paragraphs or embeds), take the inbound copy. If both sides changed, ask which version to keep ([`edit_conflict.dart`](editor/edit_conflict.dart)) — never silently write a stale local payload over an agent graph on dispose. Keyboard safety still applies: wait until no key is down before remounting cells or showing the dialog.
+
 In-session undo/redo uses Super Editor’s history stack.
 
 ## Keyboard / focus safety (recurring bug class)
@@ -352,7 +355,7 @@ In this area specifically:
 | `updateFile` / `updateObjectPayload` / task+info title saves with `notify: false` | `notifyListeners` from a keystroke / `onChanged` path |
 | Debounce embed PATCHes; patch cache **before** `await` | PATCH + `notifyListeners` / full embed reload on every `onChanged` |
 | Super Editor `setState` only when embed **id/type/order** changes; defer with `runAfterKeystroke` if keys are down. Phone IME has no keys-down — payload refresh must not remount | Treat every new embeds-list identity as a reason to remount; remount a `TextField` after the first letter |
-| Keep controllers as SoT while focused; skip `didUpdateWidget` resync if focused or keys down | Dispose cell/task/info focus nodes mid-KeyDown |
+| Keep controllers as SoT while **dirty**; take inbound when not dirty (after keys are up). If both dirty, ask. Dispose must not PATCH a payload that is older than the cache | Overwrite live cells from a stale cache while typing; flush old graph/info on dispose over an agent write; dispose cell/task/info focus nodes mid-KeyDown |
 | Tab/Escape → `runNextFrame`; empty-structure Backspace → `runAfterKeystroke` | Sync `unfocus` / delete structure on the KeyDown frame |
 | Tap outside the focused editor (canvas / empty padding) unfocuses and closes the keyboard. Bottom menus and the open object do not. | Leave Super Editor focused when the tap is not on another field |
 | Remount `SuperEditor` (`ValueKey` epoch) when replacing `Editor` after silent reload | Swap `Editor` in place and keep a stale `DocumentImeInputClient` (Escape IME crash) |
@@ -377,4 +380,4 @@ Smoke after edits: type fast in paragraph + info + task + table/chart cell; Tab 
 - Deleting across parts does not merge the first and last part into one.
 - Cmd+arrow and Home/End in Hebrew — see known gap in [`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md).
 - Undo/redo is still per document mutation, not one stack shared with cross-part edits.
-- Image resize handles deferred. Convert selection → Info is an objects-area product flow (uses object APIs) with a small files entry point.
+- Convert selection → Info is an objects-area product flow (uses object APIs) with a small files entry point.

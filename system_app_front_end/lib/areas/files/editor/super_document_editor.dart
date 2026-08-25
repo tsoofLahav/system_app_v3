@@ -25,12 +25,15 @@ import '../rich_text/block_text_actions.dart';
 import '../rich_text/block_text_focus.dart';
 import '../rich_text/document_context_menu.dart';
 import '../rich_text/rtl/rtl.dart';
+import '../../../shared/utils/platform_text.dart';
 import './document_caret_session.dart';
 import './document_editor_controller.dart';
 import './document_secondary_tap.dart';
+import './edit_conflict.dart';
 import './editor_key_handoff.dart';
 import './embed_caret_bridge.dart';
 import './embed_move_bubble.dart';
+import './embeds/image_display_size.dart';
 import './object_embed_component.dart';
 import './selection_background_phase.dart';
 
@@ -110,6 +113,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   Timer? _saveTimer;
   var _dirty = false;
+  var _conflictOpen = false;
   String? _lastSavedJson;
   var _applyingRemote = false;
 
@@ -229,6 +233,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   void dispose() {
     _removeMoveBubble();
     _saveTimer?.cancel();
+    UnsavedEmbedEdits.fileConflictPending = false;
     unawaited(_flushPendingChanges());
     DocumentEditorRegistry.notifier.removeListener(_onClaimedPaneChanged);
     DocumentEditorRegistry.unregister(widget.file.id);
@@ -385,13 +390,67 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     }
     final remote = _currentFile.documentJson;
     if (remote != _lastSavedJson) {
-      // Server/agent wrote a newer body (e.g. selectTopic after apply). Drop
-      // any pending local save so we do not overwrite the applied text.
+      _handleRemoteDocument(remote);
+    }
+    _tryFocusPendingObject();
+  }
+
+  bool get _fileHasUnsaved =>
+      _dirty || UnsavedEmbedEdits.anyOf(_embeds.map((e) => e.id));
+
+  void _handleRemoteDocument(String? remote) {
+    final local = mutableDocumentToMarkerText(_doc);
+    final decision = decideRemoteEdit(
+      localDirty: _fileHasUnsaved,
+      inboundEqualsLocal: remote == local,
+      inboundEqualsBaseline: remote == _lastSavedJson,
+    );
+    switch (decision) {
+      case RemoteEditDecision.ignore:
+        if (remote == local) {
+          _lastSavedJson = remote;
+          _dirty = false;
+        }
+        return;
+      case RemoteEditDecision.takeRemote:
+        _saveTimer?.cancel();
+        _dirty = false;
+        _scheduleRemoteDocumentReload(remote);
+        return;
+      case RemoteEditDecision.ask:
+        UnsavedEmbedEdits.fileConflictPending = true;
+        _askDocumentConflict(remote);
+        return;
+    }
+  }
+
+  void _askDocumentConflict(String? remote) {
+    if (_conflictOpen) return;
+    void run() async {
+      if (!mounted || _conflictOpen) return;
+      _conflictOpen = true;
+      final choice = await showEditConflictDialog(
+        context: context,
+        strings: widget.state.strings,
+      );
+      _conflictOpen = false;
+      UnsavedEmbedEdits.fileConflictPending = false;
+      if (!mounted) return;
+      if (choice == EditConflictChoice.keepYours) {
+        UnsavedEmbedEdits.takeLocalOverInbound = true;
+        await _flushPendingChanges();
+        return;
+      }
       _saveTimer?.cancel();
       _dirty = false;
       _scheduleRemoteDocumentReload(remote);
     }
-    _tryFocusPendingObject();
+
+    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+      runAfterKeystroke(run);
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => run());
   }
 
   void _scheduleRemoteDocumentReload(String? json) {
@@ -578,9 +637,32 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       final nodeContent = selectedNode.copyContent(nodeSelection);
       if (nodeContent == null) continue;
       if (buffer.isNotEmpty) buffer.writeln();
-      buffer.write(nodeContent);
+      if (selectedNode is ListItemNode) {
+        final ordered = selectedNode.type == ListItemType.ordered;
+        final indent = '  ' * selectedNode.indent;
+        final index = _listFenceIndex(selectedNode);
+        buffer.write(
+          '$indent${listItemClipboardPrefix(ordered: ordered, index: index)}$nodeContent',
+        );
+      } else {
+        buffer.write(nodeContent);
+      }
     }
     return buffer.toString();
+  }
+
+  int _listFenceIndex(ListItemNode item) {
+    var index = 0;
+    for (var i = 0; i < _doc.nodeCount; i++) {
+      final node = _doc.getNodeAt(i);
+      if (node is! ListItemNode || node.type != item.type) {
+        index = 0;
+        continue;
+      }
+      if (node.id == item.id) return index;
+      index++;
+    }
+    return 0;
   }
 
   Future<void> _insertAtBlock(String action) async {
@@ -880,6 +962,16 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     Map<String, dynamic> payload,
   ) async {
     await widget.state.updateObjectPayload(objectId, payload);
+    _replaceEmbedPayload(objectId, payload);
+  }
+
+  void _replaceEmbedPayload(int objectId, Map<String, dynamic> payload) {
+    final list = _embedsSnapshot;
+    if (list == null) return;
+    _embedsSnapshot = [
+      for (final embed in list)
+        if (embed.id == objectId) embed.copyWith(payload: payload) else embed,
+    ];
   }
 
   void _onMoveModeChanged(String? nodeId) {
@@ -1280,7 +1372,19 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           );
         }
       case 'image':
-        // No object-specific actions yet — keep caret on the block.
+        await DocumentContextMenu.showImageMenu(
+          context: context,
+          globalPosition: globalPosition,
+          strings: strings,
+          scale: ImageDisplaySize.scaleOf(embed.payload),
+          onAction: (action) async {
+            final next = ImageDisplaySize.apply(action, embed.payload);
+            if (next == null) return;
+            await _onPayloadChanged(embed.id, next);
+            _replaceEmbedPayload(embed.id, next);
+            if (mounted) setState(() {});
+          },
+        );
         return;
       default:
         return;
@@ -1406,12 +1510,15 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       case 'text:cut':
         if (_composer.selection != null &&
             !_composer.selection!.isCollapsed) {
-          _docOps.cut();
+          final text = _plainTextInDocumentSelection(_composer.selection!);
+          if (text.isNotEmpty) await setClipboardText(text);
+          _docOps.deleteSelection(TextAffinity.downstream);
         }
       case 'text:copy':
         if (_composer.selection != null &&
             !_composer.selection!.isCollapsed) {
-          _docOps.copy();
+          final text = _plainTextInDocumentSelection(_composer.selection!);
+          if (text.isNotEmpty) await setClipboardText(text);
         }
       case 'text:paste':
         if (_composer.selection != null) _docOps.paste();

@@ -1,14 +1,18 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../config/api_config.dart';
 import '../../../../core/app_state.dart';
 import '../../../objects/data/object_embed.dart';
 import '../../../objects/links/add_connection_dialog.dart';
 import '../../../ux/topic/topic_appearance.dart';
+import '../document_secondary_tap.dart';
 import '../document_text_flow.dart';
+import '../edit_conflict.dart';
 import '../editor_key_handoff.dart';
 import '../embed_caret_bridge.dart';
 import '../../rich_text/block_text_actions.dart';
@@ -20,6 +24,7 @@ import '../../rich_text/span_text_editing_controller.dart';
 import '../../rich_text/text_formatting.dart';
 import '../../../ui/app_colors.dart';
 import '../../../ui/app_typography.dart';
+import './image_display_size.dart';
 
 /// Compose API `title` + `body` into one editable string (first line = title).
 String composeInfoText(String title, String body) {
@@ -32,6 +37,25 @@ String composeInfoText(String title, String body) {
   final nl = text.indexOf('\n');
   if (nl < 0) return (text, '');
   return (text.substring(0, nl), text.substring(nl + 1));
+}
+
+String infoEditSnapshot({
+  required String title,
+  required String body,
+  required List<dynamic> spans,
+}) =>
+    jsonEncode({'title': title, 'body': body, 'spans': spans});
+
+String infoSnapshotFromEmbed(ObjectEmbed embed) {
+  final info = embed.information ?? const {};
+  final meta = info['metadata'];
+  final rawSpans = meta is Map ? meta['spans'] : null;
+  final spans = rawSpans is List ? rawSpans : const [];
+  return infoEditSnapshot(
+    title: info['title'] as String? ?? '',
+    body: info['body'] as String? ?? '',
+    spans: spans,
+  );
 }
 
 /// Body-relative spans → offsets in the combined title\\nbody string.
@@ -179,6 +203,9 @@ class InfoEmbedState extends State<InfoEmbed>
   late final FocusNode _focus;
   Timer? _saveTimer;
   EmbedCaretRegistry? _registry;
+  var _dirty = false;
+  var _conflictOpen = false;
+  late String _baselineKey;
 
   @override
   String get nodeId => widget.blockId;
@@ -206,8 +233,8 @@ class InfoEmbedState extends State<InfoEmbed>
     );
   }
 
-  void _seedFromEmbed() {
-    final info = widget.embed.information ?? const {};
+  void _seedFromEmbed(ObjectEmbed embed) {
+    final info = embed.information ?? const {};
     final title = info['title'] as String? ?? '';
     final body = info['body'] as String? ?? '';
     final combined = composeInfoText(title, body);
@@ -237,7 +264,9 @@ class InfoEmbedState extends State<InfoEmbed>
     _focus = FocusNode();
     _focus.addListener(_onKeyboardFocus);
     _controller = _InfoTextController();
-    _seedFromEmbed();
+    _seedFromEmbed(widget.embed);
+    _baselineKey = infoSnapshotFromEmbed(widget.embed);
+    widget.state.addListener(_onAppState);
   }
 
   void _onKeyboardFocus() {
@@ -270,29 +299,139 @@ class InfoEmbedState extends State<InfoEmbed>
   @override
   void didUpdateWidget(InfoEmbed oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Controllers are the live source of truth. Only re-seed when the object
-    // identity changes — never overwrite typed text with a stale empty cache
-    // after Move Mode (GlobalKey keeps this State across rebuilds).
-    if (oldWidget.embed.id == widget.embed.id) return;
-    _seedFromEmbed();
+    if (oldWidget.embed.id != widget.embed.id) {
+      _setDirty(false);
+      _seedFromEmbed(widget.embed);
+      _baselineKey = infoSnapshotFromEmbed(widget.embed);
+      return;
+    }
+    _considerInbound(widget.embed);
   }
 
   @override
   void dispose() {
+    widget.state.removeListener(_onAppState);
     if (identical(keyboardFocus, this)) keyboardFocus = null;
     _focus.removeListener(_onKeyboardFocus);
     _registry?.unregister(nodeId);
     _registry = null;
     _saveTimer?.cancel();
-    // Best-effort flush — ignore if the object was already deleted.
-    unawaited(_save(flush: true).catchError((_) {}));
+    if (_shouldFlushOnDispose()) {
+      unawaited(_save(flush: true).catchError((_) {}));
+    }
+    UnsavedEmbedEdits.mark(widget.embed.id, false);
     _focus.dispose();
     _controller.dispose();
     super.dispose();
   }
 
+  ObjectEmbed? get _cachedEmbed {
+    final list = widget.state.embedsByFileId[widget.embed.fileId];
+    if (list == null) return null;
+    for (final embed in list) {
+      if (embed.id == widget.embed.id) return embed;
+    }
+    return null;
+  }
+
+  void _onAppState() {
+    if (!mounted) return;
+    final cached = _cachedEmbed;
+    if (cached == null) return;
+    _considerInbound(cached);
+  }
+
+  void _setDirty(bool value) {
+    if (_dirty == value) return;
+    _dirty = value;
+    UnsavedEmbedEdits.mark(widget.embed.id, value);
+  }
+
+  String get _localKey {
+    final (title, body, spans) = _splitForApi();
+    return infoEditSnapshot(title: title, body: body, spans: spans);
+  }
+
+  bool _shouldFlushOnDispose() {
+    if (!_dirty) return false;
+    final cached = _cachedEmbed;
+    if (cached == null) return true;
+    final cacheKey = infoSnapshotFromEmbed(cached);
+    if (cacheKey == _localKey) return false;
+    if (cacheKey != _baselineKey) return false;
+    return true;
+  }
+
+  void _considerInbound(ObjectEmbed inbound) {
+    if (UnsavedEmbedEdits.takeLocalOverInbound && _dirty) {
+      UnsavedEmbedEdits.takeLocalOverInbound = false;
+      unawaited(_save());
+      return;
+    }
+    final inboundKey = infoSnapshotFromEmbed(inbound);
+    final decision = decideRemoteEdit(
+      localDirty: _dirty,
+      inboundEqualsLocal: inboundKey == _localKey,
+      inboundEqualsBaseline: inboundKey == _baselineKey,
+    );
+    switch (decision) {
+      case RemoteEditDecision.ignore:
+        return;
+      case RemoteEditDecision.takeRemote:
+        _applyRemote(inbound);
+        return;
+      case RemoteEditDecision.ask:
+        if (UnsavedEmbedEdits.fileConflictPending) return;
+        _askConflict(inbound);
+        return;
+    }
+  }
+
+  void _applyRemote(ObjectEmbed inbound) {
+    _saveTimer?.cancel();
+    _setDirty(false);
+    void paint() {
+      if (!mounted) return;
+      if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+        runAfterKeystroke(paint);
+        return;
+      }
+      _seedFromEmbed(inbound);
+      _baselineKey = infoSnapshotFromEmbed(inbound);
+      setState(() {});
+    }
+
+    paint();
+  }
+
+  void _askConflict(ObjectEmbed inbound) {
+    if (_conflictOpen) return;
+    void run() async {
+      if (!mounted || _conflictOpen) return;
+      _conflictOpen = true;
+      final choice = await showEditConflictDialog(
+        context: context,
+        strings: widget.state.strings,
+      );
+      _conflictOpen = false;
+      if (!mounted) return;
+      if (choice == EditConflictChoice.keepYours) {
+        unawaited(_save());
+        return;
+      }
+      _applyRemote(inbound);
+    }
+
+    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+      runAfterKeystroke(run);
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => run());
+  }
+
   void _scheduleSave() {
     widget.onFocus?.call();
+    _setDirty(true);
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(milliseconds: 400), () {
       unawaited(_save());
@@ -309,6 +448,12 @@ class InfoEmbedState extends State<InfoEmbed>
         body: body,
         spans: spans,
       );
+      _baselineKey = infoEditSnapshot(
+        title: title,
+        body: body,
+        spans: spans,
+      );
+      _setDirty(false);
     } catch (_) {
       // Object may have been removed while a debounce was pending.
     }
@@ -482,12 +627,14 @@ class ImageEmbed extends StatefulWidget {
 class _ImageEmbedState extends State<ImageEmbed> {
   late TextEditingController _captionController;
   var _uploading = false;
+  late double _scale;
 
   Map<String, dynamic> get _payload => widget.embed.payload ?? const {};
 
   @override
   void initState() {
     super.initState();
+    _scale = ImageDisplaySize.scaleOf(widget.embed.payload);
     _captionController = TextEditingController(
       text: _payload['caption'] as String? ?? '',
     );
@@ -496,6 +643,8 @@ class _ImageEmbedState extends State<ImageEmbed> {
   @override
   void didUpdateWidget(ImageEmbed oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final nextScale = ImageDisplaySize.scaleOf(widget.embed.payload);
+    if (nextScale != _scale) _scale = nextScale;
     final next = widget.embed.payload?['caption'] as String? ?? '';
     if (next != _captionController.text) {
       _captionController.text = next;
@@ -525,11 +674,33 @@ class _ImageEmbedState extends State<ImageEmbed> {
       widget.onPayloadChanged({
         ..._payload,
         'url': url,
+        'width': _scale,
         'caption': _captionController.text,
       });
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
+  }
+
+  Future<void> _onSecondaryTap(TapDownDetails details) async {
+    DocumentSecondaryTap.markEmbedHandled();
+    if (!mounted) return;
+    await DocumentContextMenu.showImageMenu(
+      context: context,
+      globalPosition: details.globalPosition,
+      strings: widget.state.strings,
+      scale: _scale,
+      onAction: (action) async {
+        final next = ImageDisplaySize.apply(action, {
+          ..._payload,
+          'width': _scale,
+        });
+        if (next == null) return;
+        final scale = ImageDisplaySize.scaleOf(next);
+        setState(() => _scale = scale);
+        widget.onPayloadChanged(next);
+      },
+    );
   }
 
   @override
@@ -539,41 +710,62 @@ class _ImageEmbedState extends State<ImageEmbed> {
         ? null
         : (url.startsWith('http') ? url : '${ApiConfig.baseUrl}$url');
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (resolved != null)
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: Image.network(
-              resolved,
-              fit: BoxFit.contain,
-              errorBuilder: (_, error, stackTrace) =>
-                  Text('Image unavailable', style: AppTypography.metaStyle),
+    return GestureDetector(
+      onSecondaryTapDown: _onSecondaryTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (resolved != null)
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth * _scale;
+                return Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: SizedBox(
+                    width: width,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.network(
+                        resolved,
+                        width: width,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, error, stackTrace) => Text(
+                          'Image unavailable',
+                          style: AppTypography.metaStyle,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            )
+          else
+            OutlinedButton.icon(
+              onPressed: _uploading ? null : _pick,
+              icon: const Icon(Icons.image_outlined, size: 18),
+              label: Text(_uploading ? 'Uploading…' : 'Add image'),
             ),
-          )
-        else
-          OutlinedButton.icon(
-            onPressed: _uploading ? null : _pick,
-            icon: const Icon(Icons.image_outlined, size: 18),
-            label: Text(_uploading ? 'Uploading…' : 'Add image'),
+          const SizedBox(height: 4),
+          TextField(
+            controller: _captionController,
+            style: AppTypography.metaStyle,
+            decoration: const InputDecoration(
+              isDense: true,
+              border: InputBorder.none,
+            ),
+            onSubmitted: (value) => widget.onPayloadChanged({
+              ..._payload,
+              'width': _scale,
+              'caption': value,
+            }),
+            onEditingComplete: () => widget.onPayloadChanged({
+              ..._payload,
+              'width': _scale,
+              'caption': _captionController.text,
+            }),
           ),
-        const SizedBox(height: 4),
-        TextField(
-          controller: _captionController,
-          style: AppTypography.metaStyle,
-          decoration: const InputDecoration(
-            isDense: true,
-            border: InputBorder.none,
-          ),
-          onSubmitted: (value) =>
-              widget.onPayloadChanged({..._payload, 'caption': value}),
-          onEditingComplete: () => widget.onPayloadChanged({
-            ..._payload,
-            'caption': _captionController.text,
-          }),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

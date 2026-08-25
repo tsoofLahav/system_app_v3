@@ -71,37 +71,63 @@ class _SegmentChip extends StatelessWidget {
         ? AppColors.primary.withValues(alpha: 0.55)
         : AppColors.noteBorder.withValues(alpha: 0.42);
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(AppSegmentedToggle._radius),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.primaryBright.withValues(alpha: 0.92)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppSegmentedToggle._radius),
-            border: Border.all(color: borderColor, width: 0.8),
-          ),
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSegmentedToggle._horizontalPadding,
-            vertical: AppSegmentedToggle._verticalPadding,
-          ),
-          child: Text(
-            label,
-            style: AppTypography.metaStyle.copyWith(
-              fontSize: 11.5,
-              height: 1.15,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              color: !enabled
-                  ? AppColors.textHint.withValues(alpha: 0.55)
-                  : selected
-                  ? Colors.white.withValues(alpha: 0.96)
-                  : AppColors.text.withValues(alpha: 0.82),
-            ),
-          ),
+    return FocusableActionDetector(
+      enabled: enabled && onTap != null,
+      mouseCursor: enabled
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) {
+            onTap?.call();
+            return null;
+          },
         ),
+      },
+      child: Builder(
+        builder: (context) {
+          final focused = enabled && Focus.of(context).hasFocus;
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: enabled ? onTap : null,
+              borderRadius: BorderRadius.circular(AppSegmentedToggle._radius),
+              child: Ink(
+                decoration: BoxDecoration(
+                  color: selected
+                      ? AppColors.primaryBright.withValues(alpha: 0.92)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(
+                    AppSegmentedToggle._radius,
+                  ),
+                  border: Border.all(
+                    color: focused
+                        ? AppColors.primary.withValues(alpha: 0.54)
+                        : borderColor,
+                    width: focused ? 0.9 : 0.8,
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSegmentedToggle._horizontalPadding,
+                  vertical: AppSegmentedToggle._verticalPadding,
+                ),
+                child: Text(
+                  label,
+                  style: AppTypography.metaStyle.copyWith(
+                    fontSize: 11.5,
+                    height: 1.15,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    color: !enabled
+                        ? AppColors.textHint.withValues(alpha: 0.55)
+                        : selected
+                        ? Colors.white.withValues(alpha: 0.96)
+                        : AppColors.text.withValues(alpha: 0.82),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

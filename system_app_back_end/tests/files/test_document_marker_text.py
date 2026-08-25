@@ -15,6 +15,7 @@ from areas.files.services.document_marker_text import (
     pointer_line,
     remove_embed_pointers,
     strip_header,
+    rewrite_pointer_ids,
     wrap_editor_text,
 )
 from areas.files.services.document_v3 import serialize_document
@@ -120,3 +121,11 @@ def test_document_to_agent_text_accepts_v3_and_v4():
 def test_pointer_line_helpers():
     assert pointer_line(3, "graph") == '[GRAPH id="3"]'
     assert pointer_line(3, None) == '[EMBED id="3"]'
+
+
+def test_rewrite_pointer_ids_maps_old_to_new():
+    body = wrap_editor_text('[INFO id="4"]\n\nHello\n\n[TABLE id="9"]')
+    out = rewrite_pointer_ids(body, {4: 40, 9: 90})
+    assert '[INFO id="40"]' in out
+    assert '[TABLE id="90"]' in out
+    assert '[INFO id="4"]' not in out

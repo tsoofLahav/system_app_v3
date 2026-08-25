@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import re
 from datetime import datetime
 from difflib import SequenceMatcher
 from typing import Any
@@ -19,16 +18,12 @@ from models import (
     db,
 )
 from areas.files.services.document_agent_text import apply_agent_text_to_file
-from areas.files.services.document_marker_text import embed_ids_in_text
+from areas.files.services.document_marker_text import embed_ids_in_text, rewrite_pointer_ids
 from areas.files.services.document_v3 import sync_object_anchors
 from areas.production_agent.services.write_tools import (
     _known_object_ids,
     _object_updates_from_json,
     commit_agent_file_apply,
-)
-
-_POINTER_ID_RE = re.compile(
-    r'(\[(?:TABLE|GRAPH|INFO|TASK_LIST|IMAGE|EMBED)\b[^\]]*?\bid=")(\d+)(")'
 )
 
 # Opcode tuple: (tag, i1, i2, j1, j2) — same shape as SequenceMatcher.
@@ -238,15 +233,6 @@ def discard_pending(file_id: int) -> bool:
     return True
 
 
-def _rewrite_pointer_ids(text: str, id_map: dict[int, int]) -> str:
-    def repl(match: re.Match[str]) -> str:
-        old_id = int(match.group(2))
-        new_id = id_map.get(old_id, old_id)
-        return f"{match.group(1)}{new_id}{match.group(3)}"
-
-    return _POINTER_ID_RE.sub(repl, text or "")
-
-
 def _clone_embed_to_file(src: ObjectEmbed, dest_file_id: int) -> ObjectEmbed:
     task_list_id = None
     information_id = None
@@ -328,7 +314,7 @@ def archive_copy_of_document(
         clone = _clone_embed_to_file(src, archived.id)
         id_map[old_id] = clone.id
 
-    rewritten = _rewrite_pointer_ids(old_document_json or "", id_map)
+    rewritten = rewrite_pointer_ids(old_document_json or "", id_map)
     archived.document_json = rewritten
     embeds = ObjectEmbed.query.filter_by(file_id=archived.id).all()
     sync_object_anchors(archived.document_json or "", embeds)

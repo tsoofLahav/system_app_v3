@@ -17,7 +17,7 @@ import '../ui/dialog_field_style.dart';
 import '../ui/dialog_metrics.dart';
 import '../ui/compact_calendar.dart';
 import '../ui/time_picker_dialog.dart';
-import '../ux/topic/topic_appearance.dart';
+import '../ux/dialogs/dialog_choice_list.dart';
 import '../ux/widgets/topic_emoji.dart';
 import './automation.dart';
 import './schedule_format.dart';
@@ -105,8 +105,9 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
 
   Map<String, dynamic> _scope() {
     return switch (_scopeKind) {
-      AutomationScope.topic when _topicId != null =>
-        AutomationScope.oneTopic(_topicId!),
+      AutomationScope.topic when _topicId != null => AutomationScope.oneTopic(
+        _topicId!,
+      ),
       AutomationScope.topicType when _topicTypeId != null =>
         AutomationScope.ofType(_topicTypeId!),
       _ => AutomationScope.everywhere(),
@@ -193,9 +194,9 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -208,10 +209,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
 
   Future<void> _addNewAiAction() async {
     setState(() => _addMenuOpen = false);
-    final action = await showAiActionEditDialog(
-      context: context,
-      state: state,
-    );
+    final action = await showAiActionEditDialog(context: context, state: state);
     if (action == null || !mounted) return;
     _appendStep({
       'kind': StepKinds.ai,
@@ -224,9 +222,9 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     setState(() => _addMenuOpen = false);
     if (state.aiActions.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s['noSavedActionsForStep'])),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s['noSavedActionsForStep'])));
       return;
     }
     final id = await _pickSavedAction(null);
@@ -259,12 +257,12 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   }
 
   String _stepLabel(String kind) => switch (kind) {
-        StepKinds.ai => s['stepAi'],
-        StepKinds.createFile => s['stepCreateFile'],
-        StepKinds.unmarkTasks => s['stepUnmarkTasks'],
-        StepKinds.archiveFiles => s['stepArchiveFiles'],
-        _ => kind,
-      };
+    StepKinds.ai => s['stepAi'],
+    StepKinds.createFile => s['stepCreateFile'],
+    StepKinds.unmarkTasks => s['stepUnmarkTasks'],
+    StepKinds.archiveFiles => s['stepArchiveFiles'],
+    _ => kind,
+  };
 
   String _stepFrameName(Map<String, dynamic> step) {
     final kind = step['kind'] as String? ?? '';
@@ -310,43 +308,27 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     return s['pickTopic'];
   }
 
-  Future<int?> _pickTopic({int? currentId}) {
-    return showAppDialog<int>(
+  Future<int?> _pickTopic({int? currentId}) async {
+    final topics = state.activeTopics;
+    var initial = 0;
+    for (var i = 0; i < topics.length; i++) {
+      if (topics[i].id == currentId) {
+        initial = i;
+        break;
+      }
+    }
+    final picked = await showAppChoiceDialog(
       context: context,
-      builder: (ctx) => AppAdaptiveDialogShell(
-        title: Text(s['pickTopic']),
-        width: AppDialogMetrics.wideWidth,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s['cancel']),
-          ),
-        ],
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 320),
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              for (final topic in state.activeTopics)
-                ListTile(
-                  dense: true,
-                  selected: topic.id == currentId,
-                  leading: TopicEmoji(value: topic.icon, size: 18),
-                  title: Text(state.topicDisplayName(topic)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    side: BorderSide(
-                      color: TopicAppearance.colorFromHex(topic.color)
-                          .withValues(alpha: 0.35),
-                    ),
-                  ),
-                  onTap: () => Navigator.pop(ctx, topic.id),
-                ),
-            ],
-          ),
-        ),
+      title: s['pickTopic'],
+      cancelLabel: s['cancel'],
+      items: topics,
+      initialIndex: initial,
+      itemBuilder: (context, topic, _) => DialogChoiceText(
+        state.topicDisplayName(topic),
+        leading: TopicEmoji(value: topic.icon, size: 18),
       ),
     );
+    return picked?.id;
   }
 
   String _typeScopeLabel() {
@@ -355,35 +337,25 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     return state.topicTypeDisplayName(type);
   }
 
-  Future<int?> _pickTopicType() {
-    return showAppDialog<int>(
+  Future<int?> _pickTopicType() async {
+    final types = state.topicTypes;
+    var initial = 0;
+    for (var i = 0; i < types.length; i++) {
+      if (types[i].id == _topicTypeId) {
+        initial = i;
+        break;
+      }
+    }
+    final picked = await showAppChoiceDialog(
       context: context,
-      builder: (ctx) => AppAdaptiveDialogShell(
-        title: Text(s['scopeTopicType']),
-        width: AppDialogMetrics.wideWidth,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s['cancel']),
-          ),
-        ],
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 320),
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              for (final type in state.topicTypes)
-                ListTile(
-                  dense: true,
-                  selected: type.id == _topicTypeId,
-                  title: Text(state.topicTypeDisplayName(type)),
-                  onTap: () => Navigator.pop(ctx, type.id),
-                ),
-            ],
-          ),
-        ),
-      ),
+      title: s['scopeTopicType'],
+      cancelLabel: s['cancel'],
+      items: types,
+      initialIndex: initial,
+      itemBuilder: (context, type, _) =>
+          DialogChoiceText(state.topicTypeDisplayName(type)),
     );
+    return picked?.id;
   }
 
   String _actionLabel(int? id) {
@@ -533,15 +505,9 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
             child: _basicsFields(),
           ),
           const SizedBox(height: DialogFieldStyle.fieldGap),
-          _BuilderSection(
-            label: s['builderSectionWhen'],
-            child: _whenFields(),
-          ),
+          _BuilderSection(label: s['builderSectionWhen'], child: _whenFields()),
           const SizedBox(height: DialogFieldStyle.fieldGap),
-          _BuilderSection(
-            label: s['automationSteps'],
-            child: _stepsStrip(),
-          ),
+          _BuilderSection(label: s['automationSteps'], child: _stepsStrip()),
         ],
       ),
     );
@@ -797,7 +763,10 @@ class _StepFrame extends StatelessWidget {
                     tooltip: deleteTooltip,
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                    constraints: const BoxConstraints(
+                      minWidth: 24,
+                      minHeight: 24,
+                    ),
                     onPressed: onDelete,
                     icon: const AppIcon(AppIcons.close, size: 12),
                   ),
@@ -938,12 +907,12 @@ class _StepEditDialogState extends State<_StepEditDialog> {
   String get _kind => _step['kind'] as String? ?? '';
 
   String _title() => switch (_kind) {
-        StepKinds.ai => s['stepAi'],
-        StepKinds.createFile => s['stepCreateFile'],
-        StepKinds.unmarkTasks => s['stepUnmarkTasks'],
-        StepKinds.archiveFiles => s['stepArchiveFiles'],
-        _ => _kind,
-      };
+    StepKinds.ai => s['stepAi'],
+    StepKinds.createFile => s['stepCreateFile'],
+    StepKinds.unmarkTasks => s['stepUnmarkTasks'],
+    StepKinds.archiveFiles => s['stepArchiveFiles'],
+    _ => _kind,
+  };
 
   void _pop(String op) => Navigator.pop(context, _StepEditPop(op, _step));
 
@@ -956,10 +925,7 @@ class _StepEditDialogState extends State<_StepEditDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(s['cancel']),
         ),
-        FilledButton(
-          onPressed: () => _pop('save'),
-          child: Text(s['save']),
-        ),
+        FilledButton(onPressed: () => _pop('save'), child: Text(s['save'])),
       ],
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1036,7 +1002,8 @@ class _StepEditDialogState extends State<_StepEditDialog> {
               label: s['applyModeDirect'],
             ),
           ],
-          selected: (_step['apply_mode'] as String?) ?? defaultAutomationApplyMode,
+          selected:
+              (_step['apply_mode'] as String?) ?? defaultAutomationApplyMode,
           onSelected: (mode) => setState(() => _step['apply_mode'] = mode),
         ),
       ],
@@ -1051,8 +1018,7 @@ class _StepEditDialogState extends State<_StepEditDialog> {
     final useSlot =
         widget.scopeKind == AutomationScope.topicType && slots.isNotEmpty;
     final slotMode = (_step['template_slot'] as String? ?? '').isNotEmpty;
-    final needsTopic =
-        widget.scopeKind != AutomationScope.topic && !slotMode;
+    final needsTopic = widget.scopeKind != AutomationScope.topic && !slotMode;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1187,35 +1153,25 @@ class _StepEditDialogState extends State<_StepEditDialog> {
   }
 
   Future<String?> _pickSlot(String? current) {
-    return showAppDialog<String>(
+    final files = [
+      for (final file in widget.templateFiles)
+        if (file.templateSlot != null) file,
+    ];
+    var initial = 0;
+    for (var i = 0; i < files.length; i++) {
+      if (files[i].templateSlot == current) {
+        initial = i;
+        break;
+      }
+    }
+    return showAppChoiceDialog(
       context: context,
-      builder: (ctx) => AppAdaptiveDialogShell(
-        title: Text(s['pickTemplateSlot']),
-        width: AppDialogMetrics.wideWidth,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s['cancel']),
-          ),
-        ],
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 320),
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              for (final file in widget.templateFiles)
-                if (file.templateSlot != null)
-                  ListTile(
-                    dense: true,
-                    selected: file.templateSlot == current,
-                    title: Text(file.name),
-                    onTap: () => Navigator.pop(ctx, file.templateSlot),
-                  ),
-            ],
-          ),
-        ),
-      ),
-    );
+      title: s['pickTemplateSlot'],
+      cancelLabel: s['cancel'],
+      items: files,
+      initialIndex: initial,
+      itemBuilder: (context, file, _) => DialogChoiceText(file.name),
+    ).then((file) => file?.templateSlot);
   }
 }
 

@@ -7,7 +7,7 @@ import '../ui/adaptive_dialog.dart';
 import '../ui/app_icons.dart';
 import '../ui/app_segmented_toggle.dart';
 import '../ui/dialog_field_style.dart';
-import '../ui/dialog_metrics.dart';
+import '../ux/dialogs/dialog_choice_list.dart';
 import './agent_run_defaults.dart';
 import './ai_action.dart';
 
@@ -117,9 +117,9 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -151,6 +151,8 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
             label: s['actionName'],
             child: TextField(
               controller: _name,
+              autofocus: true,
+              textInputAction: TextInputAction.next,
               decoration: DialogFieldStyle.decoration(),
             ),
           ),
@@ -206,10 +208,7 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
               alignment: AlignmentDirectional.centerStart,
               child: AppSegmentedToggle<bool>(
                 options: [
-                  AppSegmentedOption(
-                    value: false,
-                    label: s['actionPlaceMenu'],
-                  ),
+                  AppSegmentedOption(value: false, label: s['actionPlaceMenu']),
                   AppSegmentedOption(value: true, label: s['putOnBar']),
                 ],
                 selected: _onBar,
@@ -234,41 +233,27 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
 
   Future<void> _pickType() async {
     final s = widget.state.strings;
-    final picked = await showAppDialog<int>(
+    final rows = <({int? id, String label})>[
+      (id: null, label: s['actionAppliesEveryTopic']),
+      for (final type in widget.state.topicTypes)
+        (id: type.id, label: widget.state.topicTypeDisplayName(type)),
+    ];
+    var initial = 0;
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].id == _topicTypeId) {
+        initial = i;
+        break;
+      }
+    }
+    final picked = await showAppChoiceDialog<({int? id, String label})>(
       context: context,
-      builder: (ctx) => AppAdaptiveDialogShell(
-        title: Text(s['actionAppliesTo']),
-        width: AppDialogMetrics.wideWidth,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s['cancel']),
-          ),
-        ],
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 320),
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              ListTile(
-                dense: true,
-                selected: _topicTypeId == null,
-                title: Text(s['actionAppliesEveryTopic']),
-                onTap: () => Navigator.pop(ctx, -1),
-              ),
-              for (final type in widget.state.topicTypes)
-                ListTile(
-                  dense: true,
-                  selected: type.id == _topicTypeId,
-                  title: Text(widget.state.topicTypeDisplayName(type)),
-                  onTap: () => Navigator.pop(ctx, type.id),
-                ),
-            ],
-          ),
-        ),
-      ),
+      title: s['actionAppliesTo'],
+      cancelLabel: s['cancel'],
+      items: rows,
+      initialIndex: initial,
+      itemBuilder: (context, row, _) => DialogChoiceText(row.label),
     );
     if (picked == null || !mounted) return;
-    setState(() => _topicTypeId = picked < 0 ? null : picked);
+    setState(() => _topicTypeId = picked.id);
   }
 }

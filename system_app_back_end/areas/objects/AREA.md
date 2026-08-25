@@ -91,7 +91,7 @@ Object GET / file object list payloads include `tags[]` and `connections[]` (und
 
 | Type | Typical payload |
 |------|-----------------|
-| `image` | `{ "url", "path", "width", "caption" }` |
+| `image` | `{ "url", "path", "width", "caption" }` — `width` is 0–1 of the file pane (full = `1`); the picture keeps its aspect ratio |
 | `table` | `{ "rows": [[{ "text" }], …], "chart"?: { "enabled", "chartType", "colors" } }` |
 
 Chart tables use the same `table` type; agent text still expands them as `[GRAPH id chartType=…]` with two TSV rows (+ optional colors). New charts start with empty cells. Normalize helpers: [`services/table_payload.py`](services/table_payload.py). Spec: production agent system prompt.

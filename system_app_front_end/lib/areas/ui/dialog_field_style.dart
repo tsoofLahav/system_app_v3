@@ -37,10 +37,37 @@ abstract final class DialogFieldStyle {
   }
 
   /// The name of a field, in small letters above it.
-  static TextStyle get labelStyle => AppTypography.metaStyle.copyWith(
-        fontSize: 11,
-        height: 1.2,
-      );
+  static TextStyle get labelStyle =>
+      AppTypography.metaStyle.copyWith(fontSize: 11, height: 1.2);
+
+  /// Ring around a keyboard pane (emoji grid, colour presets, HSV area).
+  /// Same weight and teal as a focused [AppDialogPickerField].
+  static BoxDecoration paneFocusDecoration({required bool focused}) {
+    return BoxDecoration(
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(
+        color: focused
+            ? AppColors.primary.withValues(alpha: 0.54)
+            : Colors.transparent,
+        width: 0.9,
+      ),
+    );
+  }
+}
+
+/// One line under a picker that has more than one keyboard pane.
+class DialogKeyboardHint extends StatelessWidget {
+  const DialogKeyboardHint(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: DialogFieldStyle.labelStyle.copyWith(color: AppColors.textHint),
+    );
+  }
 }
 
 /// One labelled thing in a dialog.
@@ -150,45 +177,66 @@ class AppDialogPickerField extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppDialogField(
       label: label,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
-          child: Ink(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: AppColors.noteBorder.withValues(alpha: 0.68),
-                width: 0.85,
-              ),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-            child: Row(
-              children: [
-                preview,
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    valueLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.noteBodyStyle.copyWith(
-                      fontSize: 12,
-                      color: AppColors.text.withValues(alpha: 0.9),
+      child: FocusableActionDetector(
+        mouseCursor: SystemMouseCursors.click,
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              onTap();
+              return null;
+            },
+          ),
+        },
+        child: Builder(
+          builder: (context) {
+            final focused = Focus.of(context).hasFocus;
+            return Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(10),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: focused
+                          ? AppColors.primary.withValues(alpha: 0.54)
+                          : AppColors.noteBorder.withValues(alpha: 0.68),
+                      width: focused ? 0.9 : 0.85,
                     ),
                   ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 5,
+                  ),
+                  child: Row(
+                    children: [
+                      preview,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          valueLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.noteBodyStyle.copyWith(
+                            fontSize: 12,
+                            color: AppColors.text.withValues(alpha: 0.9),
+                          ),
+                        ),
+                      ),
+                      AppIcon(
+                        Directionality.of(context) == TextDirection.rtl
+                            ? AppIcons.chevronLeft
+                            : AppIcons.chevronRight,
+                        size: 16,
+                        color: AppColors.text.withValues(alpha: 0.38),
+                      ),
+                    ],
+                  ),
                 ),
-                AppIcon(
-                  Directionality.of(context) == TextDirection.rtl
-                      ? AppIcons.chevronLeft
-                      : AppIcons.chevronRight,
-                  size: 16,
-                  color: AppColors.text.withValues(alpha: 0.38),
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );

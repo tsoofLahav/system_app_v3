@@ -1,7 +1,73 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_colors.dart';
+import '../../ui/app_typography.dart';
+import '../../ui/dialog_metrics.dart';
+
+/// Arrow / Enter / Escape picker in the standard dialog shell.
+Future<T?> showAppChoiceDialog<T>({
+  required BuildContext context,
+  required String title,
+  required String cancelLabel,
+  required List<T> items,
+  required Widget Function(BuildContext context, T item, bool highlighted)
+  itemBuilder,
+  int initialIndex = 0,
+  double maxHeight = 320,
+}) {
+  return showAppDialog<T>(
+    context: context,
+    builder: (ctx) => AppAdaptiveDialogShell(
+      title: Text(title),
+      width: AppDialogMetrics.wideWidth,
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: Text(cancelLabel),
+        ),
+      ],
+      child: items.isEmpty
+          ? const SizedBox.shrink()
+          : DialogChoiceList(
+              itemCount: items.length,
+              initialIndex: initialIndex,
+              maxHeight: maxHeight,
+              onActivate: (i) => Navigator.pop(ctx, items[i]),
+              itemBuilder: (context, i, highlighted) =>
+                  itemBuilder(context, items[i], highlighted),
+            ),
+    ),
+  );
+}
+
+/// Label inside a [DialogChoiceList] / [showAppChoiceDialog] row.
+class DialogChoiceText extends StatelessWidget {
+  const DialogChoiceText(this.text, {super.key, this.leading});
+
+  final String text;
+  final Widget? leading;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = Padding(
+      padding: DialogChoiceList.itemPadding,
+      child: Text(text, style: AppTypography.noteBodyStyle),
+    );
+    if (leading == null) return label;
+    return Padding(
+      padding: DialogChoiceList.itemPadding,
+      child: Row(
+        children: [
+          leading!,
+          const SizedBox(width: 10),
+          Expanded(child: Text(text, style: AppTypography.noteBodyStyle)),
+        ],
+      ),
+    );
+  }
+}
 
 class _MoveChoiceIntent extends Intent {
   const _MoveChoiceIntent(this.delta);
@@ -18,6 +84,8 @@ class _DismissChoiceIntent extends Intent {
 
 /// Arrow / Enter / Escape list for dialogs that currently only respond to taps.
 class DialogChoiceList extends StatefulWidget {
+  static const itemPadding = EdgeInsets.symmetric(horizontal: 12, vertical: 8);
+
   const DialogChoiceList({
     super.key,
     required this.itemCount,
@@ -30,8 +98,9 @@ class DialogChoiceList extends StatefulWidget {
 
   final int itemCount;
   final Widget Function(BuildContext context, int index, bool highlighted)
-      itemBuilder;
+  itemBuilder;
   final ValueChanged<int> onActivate;
+
   /// Defaults to [onActivate]. Use a different callback when tap should not
   /// also close the dialog.
   final ValueChanged<int>? onTap;
@@ -109,10 +178,8 @@ class _DialogChoiceListState extends State<DialogChoiceList> {
     return Shortcuts(
       shortcuts: {
         LogicalKeySet(LogicalKeyboardKey.escape): const _DismissChoiceIntent(),
-        LogicalKeySet(LogicalKeyboardKey.arrowDown):
-            const _MoveChoiceIntent(1),
-        LogicalKeySet(LogicalKeyboardKey.arrowUp):
-            const _MoveChoiceIntent(-1),
+        LogicalKeySet(LogicalKeyboardKey.arrowDown): const _MoveChoiceIntent(1),
+        LogicalKeySet(LogicalKeyboardKey.arrowUp): const _MoveChoiceIntent(-1),
         LogicalKeySet(LogicalKeyboardKey.enter): const _ActivateChoiceIntent(),
         LogicalKeySet(LogicalKeyboardKey.numpadEnter):
             const _ActivateChoiceIntent(),

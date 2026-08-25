@@ -186,14 +186,14 @@ The preferences dialog is the **reference** glass dialog. Every other dialog use
 | Hover bubble | `../ux/widgets/details_hover_bubble.dart` | Radius 10, blur 18, white 82%, max 320×240 |
 | Native popup menu | Avoid — use `AppContextMenu` | — |
 
-Route every dialog through [`adaptive_dialog.dart`](adaptive_dialog.dart). List pickers are keyboard-walked (↑/↓, Enter, Escape) by UX [`dialog_choice_list.dart`](../ux/dialogs/dialog_choice_list.dart). Form fields autofocus and submit on Enter; confirmations accept Enter for the confirm answer. Fields inside dialogs use the helpers in [`dialog_field_style.dart`](dialog_field_style.dart):
+Route every dialog through [`adaptive_dialog.dart`](adaptive_dialog.dart). List pickers are keyboard-walked (↑/↓, Enter, Escape) by UX [`dialog_choice_list.dart`](../ux/dialogs/dialog_choice_list.dart). Form fields autofocus and submit on Enter; picker rows are in the tab order; confirmations accept Enter for the confirm answer. Fields inside dialogs use the helpers in [`dialog_field_style.dart`](dialog_field_style.dart):
 
 | Helper | Rule |
 |--------|------|
 | `AppDialogField` | The field's **name sits above it** in 11px meta text — never as a hint inside the field |
 | `AppDialogChoiceField` | Multiple choices as chips; the chosen one is filled in **bright teal** (`primaryBright`) |
-| `AppDialogPickerField` | Opens a **secondary** dialog for the value (colour, emoji) — a dialog never grows a picker inside itself, except the automation builder's When section |
-| Colour | [`color_dialog.dart`](color_dialog.dart) → `showAppColorDialog` | Full HSV spectrum + hex field; optional preset swatches. Used for topic theme, text colour, graph colour |
+| `AppDialogPickerField` | Opens a **secondary** dialog for the value (colour, emoji) — a dialog never grows a picker inside itself, except the automation builder's When section. Tab-focusable; Enter/Space opens it. Multi-pane pickers draw `paneFocusDecoration` on the active pane and a `DialogKeyboardHint` under the body |
+| Colour | [`color_dialog.dart`](color_dialog.dart) → `showAppColorDialog` | Full HSV spectrum + hex field; optional preset swatches. Tab walks presets → spectrum → hex; arrows move inside the focused pane (presets, HSV, or hex); Enter chooses. Presets and spectrum stay LTR in Hebrew — not language. Used for topic theme, text colour, graph colour |
 | Time | [`time_picker_dialog.dart`](time_picker_dialog.dart) → `AppCompactTimePicker` | Same card size as the calendar. 24-hour numbered dial above, typed hour and minute below (no AM/PM, no dropdowns). Hour then minute stays **LTR** even in Hebrew — it is numeric clock notation. `showAppTimePicker` remains for a secondary dial if something else needs one. |
 | Calendar | [`compact_calendar.dart`](compact_calendar.dart) → `AppCompactCalendar` | Compact month grid. Presentational: marked days and labels come from the caller. |
 

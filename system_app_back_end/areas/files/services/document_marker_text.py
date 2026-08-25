@@ -31,6 +31,10 @@ _POINTER_LINE_RE = re.compile(
     r'\[(INFO|TASK_LIST|IMAGE|GRAPH|TABLE|EMBED)\s+id="(\d+)"\s*\]',
     re.IGNORECASE,
 )
+_POINTER_ID_RE = re.compile(
+    r'(\[(?:TABLE|GRAPH|INFO|TASK_LIST|IMAGE|EMBED)\b[^\]]*?\bid=")(\d+)(")',
+    re.IGNORECASE,
+)
 
 _TYPE_TO_TAG = {
     "info": "INFO",
@@ -73,6 +77,17 @@ def pointer_line(object_id: int, object_type: str | None = None) -> str:
 
 def embed_ids_in_text(text: str) -> set[int]:
     return {int(m.group(2)) for m in _POINTER_LINE_RE.finditer(text or "")}
+
+
+def rewrite_pointer_ids(text: str, id_map: dict[int, int]) -> str:
+    """Replace pointer ``id="N"`` values using ``id_map`` (old → new)."""
+
+    def repl(match: re.Match[str]) -> str:
+        old_id = int(match.group(2))
+        new_id = id_map.get(old_id, old_id)
+        return f"{match.group(1)}{new_id}{match.group(3)}"
+
+    return _POINTER_ID_RE.sub(repl, text or "")
 
 
 def iter_embed_pointers(text: str):

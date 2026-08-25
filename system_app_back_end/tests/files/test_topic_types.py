@@ -41,7 +41,17 @@ def test_create_topic_accepts_a_type_and_a_clone():
     source = inspect.getsource(topics_routes.create_topic)
     assert "topic_type_id" in source
     assert "clone_from_topic_id" in source
+    assert "clone_topic_content" in source
     assert "clone_topic_skeleton" in source
+
+
+def test_duplicate_copies_content_type_create_copies_skeleton():
+    source = inspect.getsource(topics_routes.create_topic)
+    clone_branch = source.split("clone_from_topic_id", 1)[1]
+    assert "clone_topic_content" in clone_branch.split("elif type_row", 1)[0]
+    template_branch = source.split("template_topic_id", 1)[1]
+    assert "clone_topic_skeleton" in template_branch
+    assert "clone_topic_content" not in template_branch
 
 
 def test_changing_type_does_not_reapply_the_template():

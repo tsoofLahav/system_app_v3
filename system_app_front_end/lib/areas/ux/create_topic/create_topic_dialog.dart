@@ -6,7 +6,7 @@ import '../topic/topic_appearance.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/dialog_field_style.dart';
-import '../../ui/dialog_metrics.dart';
+import '../dialogs/dialog_choice_list.dart';
 import './topic_color_dialog.dart';
 import './topic_emoji_dialog.dart';
 
@@ -84,47 +84,62 @@ class _CreateTopicDialogState extends State<CreateTopicDialog> {
     final s = widget.state.strings;
     if (id == null) return s['untyped'];
     final type = widget.state.topicTypeById(id);
-    return type == null ? s['untyped'] : widget.state.topicTypeDisplayName(type);
+    return type == null
+        ? s['untyped']
+        : widget.state.topicTypeDisplayName(type);
   }
 
   Future<void> _pickType() async {
+    final s = widget.state.strings;
     final types = widget.state.topicTypes;
-    final picked = await showAppDialog<int?>(
+    final rows = <({int? id, String label})>[
+      (id: null, label: s['untyped']),
+      for (final type in types)
+        (id: type.id, label: widget.state.topicTypeDisplayName(type)),
+    ];
+    var initial = 0;
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].id == _topicTypeId) {
+        initial = i;
+        break;
+      }
+    }
+    final picked = await showAppChoiceDialog<({int? id, String label})>(
       context: context,
-      builder: (ctx) => AppAdaptiveDialogShell(
-        title: Text(widget.state.strings['type']),
-        width: AppDialogMetrics.wideWidth,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(widget.state.strings['cancel']),
-          ),
-        ],
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 320),
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              ListTile(
-                dense: true,
-                selected: _topicTypeId == null,
-                title: Text(widget.state.strings['untyped']),
-                onTap: () => Navigator.pop(ctx, -1),
-              ),
-              for (final type in types)
-                ListTile(
-                  dense: true,
-                  selected: type.id == _topicTypeId,
-                  title: Text(widget.state.topicTypeDisplayName(type)),
-                  onTap: () => Navigator.pop(ctx, type.id),
-                ),
-            ],
-          ),
-        ),
-      ),
+      title: s['type'],
+      cancelLabel: s['cancel'],
+      items: rows,
+      initialIndex: initial,
+      itemBuilder: (context, row, _) => DialogChoiceText(row.label),
     );
     if (picked == null || !mounted) return;
-    setState(() => _topicTypeId = picked < 0 ? null : picked);
+    setState(() => _topicTypeId = picked.id);
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+    if (widget.isEdit) {
+      Navigator.pop(
+        context,
+        EditTopicResult(
+          name: name,
+          icon: _icon,
+          color: _colorHex,
+          topicTypeId: _topicTypeId,
+        ),
+      );
+    } else {
+      Navigator.pop(
+        context,
+        CreateTopicResult(
+          name: name,
+          topicTypeId: _topicTypeId,
+          icon: _icon,
+          color: _colorHex,
+        ),
+      );
+    }
   }
 
   @override
@@ -135,33 +150,12 @@ class _CreateTopicDialogState extends State<CreateTopicDialog> {
     return AppAdaptiveDialogShell(
       title: Text(isEdit ? s['editTopic'] : s['newTopic']),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text(s['cancel'])),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(s['cancel']),
+        ),
         FilledButton(
-          onPressed: () {
-            final name = _nameController.text.trim();
-            if (name.isEmpty) return;
-            if (isEdit) {
-              Navigator.pop(
-                context,
-                EditTopicResult(
-                  name: name,
-                  icon: _icon,
-                  color: _colorHex,
-                  topicTypeId: _topicTypeId,
-                ),
-              );
-            } else {
-              Navigator.pop(
-                context,
-                CreateTopicResult(
-                  name: name,
-                  topicTypeId: _topicTypeId,
-                  icon: _icon,
-                  color: _colorHex,
-                ),
-              );
-            }
-          },
+          onPressed: _submit,
           child: Text(isEdit ? s['save'] : s['create']),
         ),
       ],
@@ -174,6 +168,8 @@ class _CreateTopicDialogState extends State<CreateTopicDialog> {
               controller: _nameController,
               decoration: DialogFieldStyle.decoration(),
               autofocus: !isEdit,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
             ),
           ),
           if ((!isEdit || widget.topic?.isMain != true) &&

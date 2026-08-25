@@ -979,6 +979,7 @@ class AppState extends ChangeNotifier {
     int? cloneFromTopicId,
     String? icon,
     String? color,
+    List<int>? tagIds,
   }) async {
     if (workspaceId == null) return;
     final topic = await _topics.createTopic(
@@ -988,6 +989,7 @@ class AppState extends ChangeNotifier {
       color: color,
       topicTypeId: topicTypeId,
       cloneFromTopicId: cloneFromTopicId,
+      tagIds: tagIds,
     );
     allTopics = [...allTopics, topic];
     await selectTopic(topic);
@@ -1039,6 +1041,9 @@ class AppState extends ChangeNotifier {
       name: '${topic.name} copy',
       topicTypeId: topic.topicTypeId,
       cloneFromTopicId: topic.id,
+      icon: topic.icon,
+      color: topic.color,
+      tagIds: [for (final tag in topic.tags) tag.id],
     );
   }
 

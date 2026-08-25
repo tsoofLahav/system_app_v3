@@ -29,6 +29,7 @@ Future<String?> showTopicEmojiDialog({
       child: IconCategoryPicker(
         selectedId: selected,
         searchHint: strings['searchEmoji'],
+        keyboardHint: strings['emojiPickerKeyboardHint'],
         onSelected: (emoji) => Navigator.pop(ctx, emoji),
       ),
     ),

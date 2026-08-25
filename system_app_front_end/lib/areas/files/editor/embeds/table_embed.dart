@@ -15,6 +15,8 @@ import '../../rich_text/document_context_menu.dart';
 import '../../rich_text/rich_table_editor.dart';
 import '../document_secondary_tap.dart';
 import '../document_text_flow.dart';
+import '../edit_conflict.dart';
+import '../editor_key_handoff.dart';
 import '../embed_caret_bridge.dart';
 import './table_chart.dart';
 
@@ -48,6 +50,9 @@ class TableEmbedState extends State<TableEmbed>
   final _editorKey = GlobalKey<RichTableEditorState>();
   EmbedCaretRegistry? _registry;
   late Map<String, dynamic> _payload;
+  late Map<String, dynamic> _baseline;
+  var _dirty = false;
+  var _conflictOpen = false;
   Timer? _saveTimer;
 
   @override
@@ -77,20 +82,20 @@ class TableEmbedState extends State<TableEmbed>
   void initState() {
     super.initState();
     _payload = TableObjectPayload.normalize(widget.embed.payload);
+    _baseline = _payload;
+    widget.state.addListener(_onAppState);
   }
 
   @override
   void didUpdateWidget(TableEmbed oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.embed.id != widget.embed.id) {
+      _setDirty(false);
       _payload = TableObjectPayload.normalize(widget.embed.payload);
+      _baseline = _payload;
       return;
     }
-    // Controllers are live SoT while typing — never clobber with a cache patch.
-    if (_editorBusy) return;
-    if (oldWidget.embed.payload != widget.embed.payload) {
-      _payload = TableObjectPayload.normalize(widget.embed.payload);
-    }
+    _considerInbound(TableObjectPayload.normalize(widget.embed.payload));
   }
 
   @override
@@ -106,12 +111,116 @@ class TableEmbedState extends State<TableEmbed>
 
   @override
   void dispose() {
+    widget.state.removeListener(_onAppState);
     _saveTimer?.cancel();
-    // Best-effort flush of the last debounced cell edits.
-    widget.onPayloadChanged(_payload);
+    if (_shouldFlushOnDispose()) {
+      widget.onPayloadChanged(_payload);
+    }
+    UnsavedEmbedEdits.mark(widget.embed.id, false);
     _registry?.unregister(nodeId);
     _registry = null;
     super.dispose();
+  }
+
+  ObjectEmbed? get _cachedEmbed {
+    final list = widget.state.embedsByFileId[widget.embed.fileId];
+    if (list == null) return null;
+    for (final embed in list) {
+      if (embed.id == widget.embed.id) return embed;
+    }
+    return null;
+  }
+
+  void _onAppState() {
+    if (!mounted) return;
+    final cached = _cachedEmbed;
+    if (cached == null) return;
+    _considerInbound(TableObjectPayload.normalize(cached.payload));
+  }
+
+  void _setDirty(bool value) {
+    if (_dirty == value) return;
+    _dirty = value;
+    UnsavedEmbedEdits.mark(widget.embed.id, value);
+  }
+
+  bool _shouldFlushOnDispose() {
+    if (!_dirty) return false;
+    final cached = TableObjectPayload.normalize(_cachedEmbed?.payload);
+    if (jsonEquals(cached, _payload)) return false;
+    // Cache moved to something that is not our last save — agent wrote.
+    if (!jsonEquals(cached, _baseline)) return false;
+    return true;
+  }
+
+  void _considerInbound(Map<String, dynamic> inbound) {
+    if (UnsavedEmbedEdits.takeLocalOverInbound && _dirty) {
+      UnsavedEmbedEdits.takeLocalOverInbound = false;
+      _persistNow();
+      return;
+    }
+    final decision = decideRemoteEdit(
+      localDirty: _dirty,
+      inboundEqualsLocal: jsonEquals(inbound, _payload),
+      inboundEqualsBaseline: jsonEquals(inbound, _baseline),
+    );
+    switch (decision) {
+      case RemoteEditDecision.ignore:
+        return;
+      case RemoteEditDecision.takeRemote:
+        _applyRemote(inbound);
+        return;
+      case RemoteEditDecision.ask:
+        if (UnsavedEmbedEdits.fileConflictPending) return;
+        _askConflict(inbound);
+        return;
+    }
+  }
+
+  void _applyRemote(Map<String, dynamic> inbound) {
+    _saveTimer?.cancel();
+    _setDirty(false);
+    _payload = inbound;
+    _baseline = inbound;
+    void paint() {
+      if (!mounted) return;
+      if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+        runAfterKeystroke(paint);
+        return;
+      }
+      setState(() {});
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _editorKey.currentState?.syncFromNode(force: true);
+      });
+    }
+
+    paint();
+  }
+
+  void _askConflict(Map<String, dynamic> inbound) {
+    if (_conflictOpen) return;
+    void run() async {
+      if (!mounted || _conflictOpen) return;
+      _conflictOpen = true;
+      final choice = await showEditConflictDialog(
+        context: context,
+        strings: widget.strings,
+      );
+      _conflictOpen = false;
+      if (!mounted) return;
+      if (choice == EditConflictChoice.keepYours) {
+        _persistNow();
+        return;
+      }
+      _applyRemote(inbound);
+    }
+
+    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+      runAfterKeystroke(run);
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => run());
   }
 
   TableNode _nodeFromPayload() {
@@ -130,16 +239,19 @@ class TableEmbedState extends State<TableEmbed>
 
   void _scheduleSave() {
     widget.onFocus?.call();
+    _setDirty(true);
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(milliseconds: 400), () {
       if (!mounted) return;
-      widget.onPayloadChanged(_payload);
+      _persistNow();
     });
   }
 
   void _persistNow() {
     _saveTimer?.cancel();
     widget.onPayloadChanged(_payload);
+    _baseline = _payload;
+    _setDirty(false);
   }
 
   void _onRowsChanged(TableNode node) {

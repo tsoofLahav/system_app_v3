@@ -35,14 +35,13 @@ class FileArrangeDraft {
     return true;
   }
 
-  /// Brings a hidden file into the last slot, pushing out whatever sat there.
+  /// Brings a hidden file into the first slot, pushing the last shown file off.
   bool show(int hiddenIndex) {
     if (hiddenIndex < 0 || hiddenIndex >= hidden.length) return false;
-    final lastSlot = shownCount - 1;
-    if (lastSlot < 0) return false;
+    if (shownCount <= 0) return false;
     final file = hidden[hiddenIndex];
     ordered.removeAt(ordered.indexWhere((f) => f.id == file.id));
-    ordered.insert(lastSlot, file);
+    ordered.insert(0, file);
     return true;
   }
 

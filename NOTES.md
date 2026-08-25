@@ -28,7 +28,7 @@ This class of bug also comes back after embed/save/focus changes inside a file (
 2. Call `notifyListeners()` / `loadEmbedsForFile(notify: true)` / `_reloadEmbedsForOpenFiles` **from a keystroke path** (cell/title/body `onChanged`, every character).
 3. `setState` the Super Editor (or replace `Editor` / remount embeds) while `HardwareKeyboard.instance.physicalKeysPressed` is non-empty — unless the change is purely visual and keeps the same `FocusNode`s.
 4. Dispose or recreate cell/task/info `FocusNode`s / controllers in `didUpdateWidget` while those fields have focus or keys are down.
-5. Overwrite live controller text from a stale embed cache while the user is typing in that embed.
+5. Overwrite live controller text from a stale embed cache while the user is typing in that embed (dirty). A **clean** embed must take a newer inbound payload (after keys are up) — do not ignore inbound just because a cell is focused, and do not flush old payload on dispose over that inbound.
 6. **Notify listeners from a registry's `dispose`.** Flutter locks the tree while unmounting, so a listener rebuilding then throws *setState() called when widget tree was locked* — once per listener, which buries the console.
 
 ### MUST

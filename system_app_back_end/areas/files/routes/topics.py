@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request
 from models import EntityTag, Tag, Topic, TopicType, db
 from shared.helpers import active_query, apply_updates, get_or_404
 from shared.bootstrap import default_workspace_id
+from areas.files.services.clone_topic_content import clone_topic_content
 from areas.files.services.clone_topic_skeleton import clone_topic_skeleton
 from areas.objects.services.delete_cascade import delete_topic_cascade
 
@@ -91,11 +92,11 @@ def create_topic():
             return jsonify({"error": "topic to copy from not found"}), 400
         if topic.topic_type_id is None:
             topic.topic_type_id = source.topic_type_id
+        clone_topic_content(topic, source)
     elif type_row is not None and type_row.template_topic_id:
         source = db.session.get(Topic, type_row.template_topic_id)
-
-    if source is not None:
-        clone_topic_skeleton(topic, source)
+        if source is not None:
+            clone_topic_skeleton(topic, source)
 
     db.session.commit()
     result = topic.to_dict()

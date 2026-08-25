@@ -79,12 +79,13 @@ Each object type keeps its own menu (not the plain paragraph menu):
 | Task list | Text + **Choose view…** / **Reorder tasks** |
 | Table | Text + **Add row/column after** + **Reorder rows…** / **Reorder columns…** (+ Connect info when wired) |
 | Chart table | **Reorder columns…** + chart type + palette (on chart chrome **and** cells); block caret → chart menu |
+| Image | **Make smaller / larger** + **Tiny / Quarter / Half / Full size** |
 
 Embed fields mark [`DocumentSecondaryTap`](document_secondary_tap.dart) so Super Editor’s translucent secondary-tap handler does not open a second menu. Right-click on an object block (SE caret on the embed) resolves the node under the pointer and opens that object’s menu.
 
 ### 3. Object remount
 
-The file owns placement; the object owns content. Embed node ids are stable (`embed:<objectId>`). After move or reload, object UI must keep or re-seed payload from the in-memory embed cache — never dispose a live info editor into a blank cache entry.
+The file owns placement; the object owns content. Embed node ids are stable (`embed:<objectId>`). After move or reload, object UI must keep or re-seed payload from the in-memory embed cache — never dispose a live info editor into a blank cache entry. A clean (not dirty) graph/info takes a newer inbound payload; dispose must not write the old local copy over it. If the user and the agent both changed the file, ask which to keep.
 
 ## Move Mode
 

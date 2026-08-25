@@ -127,7 +127,12 @@ Future<void> dispatchShortcutAction(
       });
       return;
     case ShortcutActionIds.addConnection:
-      await InfoEmbedState.keyboardFocus?.addConnectionFromShortcut();
+      final info = InfoEmbedState.keyboardFocus;
+      if (info != null) {
+        await info.addConnectionFromShortcut();
+        return;
+      }
+      await DocumentEditorRegistry.active?.insertAtBlock('bullet_list');
       return;
     case ShortcutActionIds.toggleReorderMode:
       final list = TaskListSurfaceState.keyboardFocus;
@@ -180,6 +185,12 @@ Future<void> _dispatchTextAction(ShortcutAction action) async {
 
   if (BlockTextFocusRegistry.hasFocus) {
     await runBlockTextAction(textAction);
+    return;
+  }
+
+  // Super Editor already pastes on ⌘V. Dispatching again inserts twice.
+  if (textAction == 'text:paste' &&
+      DocumentEditorRegistry.active?.isFocused?.call() == true) {
     return;
   }
 

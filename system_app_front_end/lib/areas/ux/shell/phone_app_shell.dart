@@ -121,7 +121,7 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
               decoration: AppColors.phoneHeaderDecoration(
                 topicAccent: accent,
                 isMainTopic: isMain,
-                neutral: state.isViewMode,
+                neutral: state.isViewMode || state.isDiagramMode,
               ),
               child: const SizedBox.expand(),
             ),

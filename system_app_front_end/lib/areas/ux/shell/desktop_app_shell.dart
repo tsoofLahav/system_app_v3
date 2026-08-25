@@ -41,8 +41,11 @@ class _DesktopAppShellState extends State<DesktopAppShell> {
         final topic = state.isArchiveMode
             ? state.selectedArchiveTopic
             : (state.selectedDetail?.topic ?? state.selectedTopic);
-        final accent = topic == null ? null : TopicAppearance.accentFor(topic);
-        final isMain = topic?.isMain ?? true;
+        final neutralCanvas = state.isViewMode || state.isDiagramMode;
+        final accent = (topic == null || neutralCanvas)
+            ? null
+            : TopicAppearance.accentFor(topic);
+        final isMain = neutralCanvas || (topic?.isMain ?? true);
 
         return Scaffold(
           backgroundColor: AppColors.canvasNeutralBottom,

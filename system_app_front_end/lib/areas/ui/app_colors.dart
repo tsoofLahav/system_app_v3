@@ -264,7 +264,7 @@ abstract final class AppColors {
   }
 
   /// Off-white stripe, or the header ombre when a non-Home topic is open.
-  /// Views and Home stay solid ([neutral] or [isMainTopic]).
+  /// Views, the objects map, and Home stay solid ([neutral] or [isMainTopic]).
   static BoxDecoration phoneHeaderDecoration({
     required Color? topicAccent,
     required bool isMainTopic,

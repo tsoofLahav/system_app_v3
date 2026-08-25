@@ -153,13 +153,18 @@ class RichTableEditorState extends State<RichTableEditor> {
       _ensureFocusGrid();
       return;
     }
+    syncFromNode(force: false);
+  }
+
+  /// Apply [widget.node] into live cells.
+  ///
+  /// [force] is a remote take (agent / reload). Same-shape updates rewrite
+  /// text in place so FocusNodes stay. Shape changes still wait until no key
+  /// is down — never remount cells mid-KeyDown.
+  void syncFromNode({required bool force}) {
     if (_localStateMatchesNode()) return;
-    // Live cell is SoT. Never remount / rewrite controllers while typing
-    // (IME language switch, last-char delete, parent payload setState).
-    if (hasInnerFocus ||
-        HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
-      return;
-    }
+    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) return;
+    if (!force && hasInnerFocus) return;
     if (_sameControllerShape()) {
       _applyIncomingCellText();
       return;

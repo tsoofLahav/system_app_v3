@@ -6,6 +6,7 @@ import '../../ui/app_colors.dart';
 import '../../ui/color_dialog.dart';
 import '../../ux/widgets/app_context_menu.dart';
 import '../editor/document_secondary_tap.dart';
+import '../editor/embeds/image_display_size.dart';
 import './block_text_focus.dart';
 
 typedef DocumentMenuHandler = Future<void> Function(String action);
@@ -52,6 +53,62 @@ class DocumentContextMenu {
     AppContextMenuItem(value: 'text:copy', label: strings['copy'] ?? 'Copy'),
     AppContextMenuItem(value: 'text:paste', label: strings['paste'] ?? 'Paste'),
   ];
+
+  /// Image block: nudge a little, or jump to a named fraction of the pane.
+  static List<AppContextMenuEntry> buildImageEntries(
+    AppStrings strings, {
+    double scale = ImageDisplaySize.full,
+  }) =>
+      [
+        AppContextMenuItem(
+          value: 'image:smaller',
+          label: strings['imageMakeSmaller'],
+        ),
+        AppContextMenuItem(
+          value: 'image:larger',
+          label: strings['imageMakeLarger'],
+        ),
+        const AppContextMenuDivider(),
+        AppContextMenuItem(
+          value: 'image:size:tiny',
+          label: strings['imageSizeTiny'],
+          checked: ImageDisplaySize.matchesNamed(scale, ImageDisplaySize.tiny),
+        ),
+        AppContextMenuItem(
+          value: 'image:size:quarter',
+          label: strings['imageSizeQuarter'],
+          checked: ImageDisplaySize.matchesNamed(
+            scale,
+            ImageDisplaySize.quarter,
+          ),
+        ),
+        AppContextMenuItem(
+          value: 'image:size:half',
+          label: strings['imageSizeHalf'],
+          checked: ImageDisplaySize.matchesNamed(scale, ImageDisplaySize.half),
+        ),
+        AppContextMenuItem(
+          value: 'image:size:full',
+          label: strings['imageSizeFull'],
+          checked: ImageDisplaySize.matchesNamed(scale, ImageDisplaySize.full),
+        ),
+      ];
+
+  static Future<void> showImageMenu({
+    required BuildContext context,
+    required Offset globalPosition,
+    required AppStrings strings,
+    required DocumentMenuHandler onAction,
+    double scale = ImageDisplaySize.full,
+  }) {
+    return _showMenu(
+      context: context,
+      globalPosition: globalPosition,
+      strings: strings,
+      onAction: onAction,
+      entries: buildImageEntries(strings, scale: scale),
+    );
+  }
 
   static Future<void> _showMenu({
     required BuildContext context,

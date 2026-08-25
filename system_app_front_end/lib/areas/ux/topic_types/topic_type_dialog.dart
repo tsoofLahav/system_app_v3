@@ -7,7 +7,6 @@ import '../../files/data/topic.dart';
 import '../../files/data/topic_type.dart';
 import '../../automations/automation.dart';
 import '../../automations/automation_builder_dialog.dart';
-import '../../production_agent/ai_action.dart';
 import '../../production_agent/ai_action_edit_dialog.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_colors.dart';
@@ -16,6 +15,7 @@ import '../../ui/app_typography.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/dialog_field_style.dart';
 import '../../ui/dialog_metrics.dart';
+import '../dialogs/dialog_choice_list.dart';
 import '../shell/chrome_anchors.dart';
 import '../widgets/app_context_menu.dart';
 import '../widgets/topic_emoji.dart';
@@ -47,9 +47,9 @@ Future<void> createTopicTypeFromDialog({
     showTopicTypeConfigHint(context, state);
   } on ApiException catch (error) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(error.message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(error.message)));
   }
 }
 
@@ -65,8 +65,9 @@ Future<void> showTopicTypeDialog({
 }
 
 void showTopicTypeConfigHint(BuildContext context, AppState state) {
-  final box = ChromeAnchors.preferencesButton.currentContext
-      ?.findRenderObject() as RenderBox?;
+  final box =
+      ChromeAnchors.preferencesButton.currentContext?.findRenderObject()
+          as RenderBox?;
   if (box == null || !box.hasSize) return;
   final anchor = box.localToGlobal(Offset(box.size.width / 2, 0));
   AppContextMenu.showHint(
@@ -151,6 +152,7 @@ class _TopicTypeNameDialogState extends State<_TopicTypeNameDialog> {
             child: TextField(
               controller: _name,
               autofocus: true,
+              textInputAction: TextInputAction.next,
               decoration: DialogFieldStyle.decoration(),
             ),
           ),
@@ -160,6 +162,8 @@ class _TopicTypeNameDialogState extends State<_TopicTypeNameDialog> {
             child: TextField(
               controller: _nameHe,
               textDirection: TextDirection.rtl,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
               decoration: DialogFieldStyle.decoration(),
             ),
           ),
@@ -212,7 +216,9 @@ class _TopicTypesListDialogState extends State<_TopicTypesListDialog> {
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message.isEmpty ? s['typeInUse'] : error.message)),
+        SnackBar(
+          content: Text(error.message.isEmpty ? s['typeInUse'] : error.message),
+        ),
       );
     }
   }
@@ -339,15 +345,12 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
     if (name.isEmpty || nameHe.isEmpty) return;
     if (name != type.name || nameHe != type.nameHe) {
       try {
-        await state.updateTopicType(type, {
-          'name': name,
-          'name_he': nameHe,
-        });
+        await state.updateTopicType(type, {'name': name, 'name_he': nameHe});
       } on ApiException catch (error) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
         return;
       }
     }
@@ -359,43 +362,35 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
     if (type == null) return;
     final s = state.strings;
     final candidates = state.topicsOfType(type.id);
-    final picked = await showAppDialog<int?>(
-      context: context,
-      builder: (ctx) => AppAdaptiveDialogShell(
-        title: Text(s['pickTemplate']),
-        width: AppDialogMetrics.wideWidth,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s['cancel']),
+    final rows = <({int id, String label, String? icon})>[
+      (id: -1, label: s['noTemplate'], icon: null),
+      for (final topic in candidates)
+        (id: topic.id, label: state.topicDisplayName(topic), icon: topic.icon),
+    ];
+    var initial = 0;
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].id == (type.templateTopicId ?? -1)) {
+        initial = i;
+        break;
+      }
+    }
+    final picked =
+        await showAppChoiceDialog<({int id, String label, String? icon})>(
+          context: context,
+          title: s['pickTemplate'],
+          cancelLabel: s['cancel'],
+          items: rows,
+          initialIndex: initial,
+          itemBuilder: (context, row, _) => DialogChoiceText(
+            row.label,
+            leading: row.icon == null
+                ? null
+                : TopicEmoji(value: row.icon, size: 18),
           ),
-        ],
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 320),
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              ListTile(
-                dense: true,
-                title: Text(s['noTemplate']),
-                onTap: () => Navigator.pop(ctx, -1),
-              ),
-              for (final topic in candidates)
-                ListTile(
-                  dense: true,
-                  selected: topic.id == type.templateTopicId,
-                  leading: TopicEmoji(value: topic.icon, size: 18),
-                  title: Text(state.topicDisplayName(topic)),
-                  onTap: () => Navigator.pop(ctx, topic.id),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
+        );
     if (picked == null || !mounted) return;
     await state.updateTopicType(type, {
-      'template_topic_id': picked < 0 ? null : picked,
+      'template_topic_id': picked.id < 0 ? null : picked.id,
     });
     await _loadTemplate();
   }
@@ -409,44 +404,19 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
         if (action.topicTypeId == null) action,
     ];
     if (globals.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s['noGlobalActionsToAdd'])),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s['noGlobalActionsToAdd'])));
       return;
     }
-    final id = await showAppDialog<int>(
+    final picked = await showAppChoiceDialog(
       context: context,
-      builder: (ctx) => AppAdaptiveDialogShell(
-        title: Text(s['addExistingAction']),
-        width: AppDialogMetrics.wideWidth,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s['cancel']),
-          ),
-        ],
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 320),
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              for (final action in globals)
-                ListTile(
-                  dense: true,
-                  title: Text(action.name),
-                  onTap: () => Navigator.pop(ctx, action.id),
-                ),
-            ],
-          ),
-        ),
-      ),
+      title: s['addExistingAction'],
+      cancelLabel: s['cancel'],
+      items: globals,
+      itemBuilder: (context, action, _) => DialogChoiceText(action.name),
     );
-    if (id == null || !mounted) return;
-    AiAction? picked;
-    for (final action in state.aiActions) {
-      if (action.id == id) picked = action;
-    }
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
     await state.updateAiAction(picked, {'topic_type_id': type.id});
     if (mounted) setState(() {});
   }
@@ -541,6 +511,8 @@ class _TopicTypeDialogState extends State<_TopicTypeDialog> {
             child: TextField(
               controller: _nameHe,
               textDirection: TextDirection.rtl,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _saveAndClose(),
               decoration: DialogFieldStyle.decoration(),
             ),
           ),
