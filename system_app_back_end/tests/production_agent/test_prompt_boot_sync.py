@@ -36,3 +36,15 @@ def test_boot_sync_opt_in_locally(monkeypatch):
     monkeypatch.delenv("RENDER_EXTERNAL_URL", raising=False)
     monkeypatch.setenv("SYNC_AGENT_PROMPT_ON_DEPLOY", "1")
     assert should_sync_prompt_on_boot() is True
+
+
+def test_create_app_does_not_sync_until_a_request(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "areas.production_agent.services.prompt.maybe_sync_prompts_on_boot",
+        lambda: calls.append(1),
+    )
+    from app import create_app
+
+    create_app()
+    assert calls == []

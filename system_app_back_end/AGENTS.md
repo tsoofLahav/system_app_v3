@@ -22,6 +22,7 @@ Read the relevant `AREA.md` before changing that area, and update it in the same
 ```
 system_app_back_end/
 ├── app.py              Flask app factory + /health
+├── gunicorn.conf.py    Workers, timeout, post_fork DB dispose
 ├── config.py           DATABASE_URL, UPLOAD_FOLDER, AI config
 ├── models.py           All SQLAlchemy models + to_dict()
 ├── areas/              Areas — each with routes/, services/, AREA.md
@@ -38,7 +39,7 @@ system_app_back_end/
 | Framework | Flask 3 |
 | ORM | Flask-SQLAlchemy / SQLAlchemy 2 |
 | Database | PostgreSQL on Render |
-| Production server | gunicorn (`Procfile`) |
+| Production server | gunicorn (`Procfile` + `gunicorn.conf.py`, 2 workers) |
 | Image storage | Local disk (`/var/data/uploads` on Render) |
 
 No authentication — do not add it unless asked.

@@ -27,6 +27,10 @@ def create_app():
     app = Flask(__name__)
     app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+    }
     app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
     _ensure_upload_folder(app)
 
@@ -39,14 +43,29 @@ def create_app():
     def health():
         return jsonify({"status": "ok"})
 
-    # On Render, push content/production_agent/system_prompt.md into the DB
-    # using the service's internal DATABASE_URL (external psql is flaky).
-    with app.app_context():
-        from areas.production_agent.services.prompt import maybe_sync_prompts_on_boot
-
-        maybe_sync_prompts_on_boot()
+    @app.before_request
+    def _sync_agent_prompt_once():
+        # gunicorn workers sync in after_worker_fork; flask run uses this.
+        if app.config.get("_PROMPT_BOOT_DONE"):
+            return
+        _sync_agent_prompt(app)
 
     return app
+
+
+def _sync_agent_prompt(flask_app: Flask) -> None:
+    from areas.production_agent.services.prompt import maybe_sync_prompts_on_boot
+
+    maybe_sync_prompts_on_boot()
+    flask_app.config["_PROMPT_BOOT_DONE"] = True
+
+
+def after_worker_fork() -> None:
+    """Open a fresh DB pool in this worker, then sync the agent prompt."""
+    with app.app_context():
+        db.session.remove()
+        db.engine.dispose()
+        _sync_agent_prompt(app)
 
 
 app = create_app()

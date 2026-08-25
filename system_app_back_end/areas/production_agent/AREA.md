@@ -15,7 +15,7 @@ The agent's standing instructions are a real document it is allowed to read:
 | **Git source** (edit here) | [`content/production_agent/system_prompt.md`](../../../content/production_agent/system_prompt.md) |
 | **Runtime source** (what the agent actually reads) | `agent_configs.system_prompt` in PostgreSQL |
 | **Sync (local)** | `python scripts/sync_agent_prompt.py --overwrite` |
-| **Sync (Render)** | On web boot when `RENDER=true` — uses the service **internal** `DATABASE_URL` (`maybe_sync_prompts_on_boot`). Opt out with `SYNC_AGENT_PROMPT_ON_DEPLOY=0`. |
+| **Sync (Render)** | Each gunicorn **worker** after fork (`after_worker_fork` → `maybe_sync_prompts_on_boot`), never in the parent — forked workers would share one SSL socket. Uses the service **internal** `DATABASE_URL`. Opt out with `SYNC_AGENT_PROMPT_ON_DEPLOY=0`. |
 
 Bootstrap seeds the DB row on first launch. The runner never reads the markdown file at request time — only the DB. Deploying the backend refreshes the prompt over the internal DB link (no laptop → external Postgres needed).
 
