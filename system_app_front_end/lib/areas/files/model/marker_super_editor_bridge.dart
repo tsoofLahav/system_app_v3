@@ -6,6 +6,7 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:super_editor/super_editor.dart';
 
+import '../rich_text/list_text_parse.dart';
 import '../rich_text/text_links.dart';
 import './document_text_codec.dart';
 import './object_embed_node.dart';
@@ -42,9 +43,9 @@ MutableDocument markerTextToMutableDocument(String? raw) {
           ParagraphNode(id: Editor.createNodeId(), text: AttributedText()),
         );
       case MarkerPartKind.bulletList:
-        nodes.addAll(_listItemsFromBody(info.listBody ?? '', ordered: false));
+        nodes.addAll(listItemsFromMarkerBody(info.listBody ?? '', ordered: false));
       case MarkerPartKind.orderedList:
-        nodes.addAll(_listItemsFromBody(info.listBody ?? '', ordered: true));
+        nodes.addAll(listItemsFromMarkerBody(info.listBody ?? '', ordered: true));
       case MarkerPartKind.table:
         // Legacy structure fence — caller migrates to a table object.
         nodes.add(
@@ -240,7 +241,29 @@ int? _headingLevel(Object? blockType) {
   return null;
 }
 
-List<ListItemNode> _listItemsFromBody(String body, {required bool ordered}) {
+List<ListItemNode> listItemsFromClipboard(String raw) {
+  final ordered = clipboardLooksLikeOrderedList(raw);
+  return listItemsFromMarkerBody(
+    clipboardListAsMarkerBody(raw, ordered: ordered),
+    ordered: ordered,
+  );
+}
+
+List<ListItemNode> listItemsFromPlainLines(
+  List<String> lines, {
+  bool ordered = false,
+}) {
+  if (lines.isEmpty) {
+    return listItemsFromMarkerBody('', ordered: ordered);
+  }
+  final body = [
+    for (var i = 0; i < lines.length; i++)
+      ordered ? '${i + 1}. ${lines[i]}' : '- ${lines[i]}',
+  ].join('\n');
+  return listItemsFromMarkerBody(body, ordered: ordered);
+}
+
+List<ListItemNode> listItemsFromMarkerBody(String body, {required bool ordered}) {
   final items = <ListItemNode>[];
   final itemRe = ordered
       ? RegExp(r'^(\s*)\d+[\.\)]\s+(.*)$')

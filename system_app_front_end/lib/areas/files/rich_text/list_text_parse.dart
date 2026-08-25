@@ -1,4 +1,48 @@
 final _bulletPrefix = RegExp(r'^\s*(?:[•\-\*]|\d+[\.\)])\s*');
+final _listClipboardLine = RegExp(r'^\s*(?:[•\-\*]|\d+[\.\)])\s+');
+final _orderedClipboardLine = RegExp(r'^\s*\d+[\.\)]\s+');
+
+List<String> _nonEmptyClipboardLines(String raw) {
+  return [
+    for (final line in raw.replaceAll('\r\n', '\n').split('\n'))
+      if (line.trim().isNotEmpty) line,
+  ];
+}
+
+/// True when every non-empty line already looks like a bullet or numbered item.
+bool clipboardLooksLikeList(String raw) {
+  final lines = _nonEmptyClipboardLines(raw);
+  if (lines.isEmpty) return false;
+  return lines.every(_listClipboardLine.hasMatch);
+}
+
+bool clipboardLooksLikeOrderedList(String raw) {
+  final lines = _nonEmptyClipboardLines(raw);
+  if (lines.isEmpty) return false;
+  return lines.every(_orderedClipboardLine.hasMatch);
+}
+
+/// One list item per newline. Strips an existing `-` / `1.` prefix if present.
+List<String> listItemTextsFromMarkedText(String raw) {
+  return [
+    for (final line in raw.replaceAll('\r\n', '\n').split('\n'))
+      line.replaceFirst(_bulletPrefix, '').trim(),
+  ].where((s) => s.isNotEmpty).toList();
+}
+
+/// Marker-body lines (`- …` / `1. …`) for the Super Editor list parser.
+String clipboardListAsMarkerBody(String raw, {required bool ordered}) {
+  final texts = [
+    for (final line in _nonEmptyClipboardLines(raw))
+      line.replaceFirst(_bulletPrefix, '').trim(),
+  ].where((s) => s.isNotEmpty).toList();
+  final buffer = StringBuffer();
+  for (var i = 0; i < texts.length; i++) {
+    if (i > 0) buffer.writeln();
+    buffer.write(ordered ? '${i + 1}. ${texts[i]}' : '- ${texts[i]}');
+  }
+  return buffer.toString();
+}
 
 /// Splits pasted plain text into list/task lines (bullets, numbers, newlines, `;`).
 List<String> parsePastedListText(String raw) {

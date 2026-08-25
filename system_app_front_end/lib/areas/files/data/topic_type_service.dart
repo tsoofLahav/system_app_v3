@@ -1,4 +1,5 @@
 import '../../../core/services/api_service.dart';
+import './topic.dart';
 import './topic_type.dart';
 
 class TopicTypeService {

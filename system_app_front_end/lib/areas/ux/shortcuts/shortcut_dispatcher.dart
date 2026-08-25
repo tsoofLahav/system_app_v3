@@ -188,12 +188,6 @@ Future<void> _dispatchTextAction(ShortcutAction action) async {
     return;
   }
 
-  // Super Editor already pastes on ⌘V. Dispatching again inserts twice.
-  if (textAction == 'text:paste' &&
-      DocumentEditorRegistry.active?.isFocused?.call() == true) {
-    return;
-  }
-
   await DocumentEditorRegistry.active?.applyTextAction?.call(textAction);
 }
 

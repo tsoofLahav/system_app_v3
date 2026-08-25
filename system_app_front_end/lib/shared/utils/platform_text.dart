@@ -117,6 +117,14 @@ Future<void> setClipboardText(String text) async {
   await Clipboard.setData(ClipboardData(text: safe));
 }
 
+Future<String?> getClipboardText() async {
+  final data = await Clipboard.getData(Clipboard.kTextPlain);
+  final text = data?.text;
+  if (text == null) return null;
+  final safe = sanitizePlatformText(text);
+  return safe.isEmpty ? null : safe;
+}
+
 bool looksLikeEmojiGrapheme(String grapheme) {
   if (grapheme.isEmpty) return false;
   for (final rune in grapheme.runes) {

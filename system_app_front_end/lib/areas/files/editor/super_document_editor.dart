@@ -23,6 +23,7 @@ import '../model/object_embed_node.dart';
 import '../rich_text/block_text_actions.dart';
 import '../rich_text/block_text_focus.dart';
 import '../rich_text/document_context_menu.dart';
+import '../rich_text/list_text_parse.dart';
 import '../rich_text/rtl/rtl.dart';
 import '../rich_text/text_links.dart';
 import '../../../shared/utils/platform_text.dart';
@@ -687,6 +688,14 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   Future<void> _insertAtBlock(String action) async {
     await _flushPendingChanges();
     DocumentEditorRegistry.claim(widget.file.id);
+
+    if (action == 'list' || action == 'bullet_list') {
+      if (_convertSelectionToList()) {
+        _focusNode.requestFocus();
+        return;
+      }
+    }
+
     final seInsertIndex = _insertIndexFromSelection();
 
     if (action == 'task_list' ||
@@ -752,6 +761,94 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       }
     }
     return index + 1;
+  }
+
+  /// Marked text (or the caret line) becomes one bullet per newline.
+  /// Returns false when there is nothing to convert (empty caret / already a list).
+  bool _convertSelectionToList({bool ordered = false}) {
+    _expandCollapsedToCaretLine();
+    final sel = _composer.selection;
+    if (sel == null) return false;
+    final nodes = _doc.getNodesInside(sel.base, sel.extent);
+    if (nodes.isEmpty) return false;
+    if (nodes.any((n) => n is ObjectEmbedNode)) return false;
+    if (nodes.every((n) => n is ListItemNode)) return false;
+
+    final texts = listItemTextsFromMarkedText(
+      _plainTextInDocumentSelection(sel),
+    );
+    if (texts.isEmpty) return false;
+
+    final firstIndex = _doc.getNodeIndexById(nodes.first.id);
+    if (firstIndex < 0) return false;
+    final items = listItemsFromPlainLines(texts, ordered: ordered);
+    final last = items.last;
+    _editor.execute([
+      for (final node in nodes.reversed) DeleteNodeRequest(nodeId: node.id),
+      for (var i = 0; i < items.length; i++)
+        InsertNodeAtIndexRequest(
+          nodeIndex: firstIndex + i,
+          newNode: items[i],
+        ),
+      ChangeSelectionRequest(
+        DocumentSelection.collapsed(
+          position: DocumentPosition(
+            nodeId: last.id,
+            nodePosition: last.endPosition,
+          ),
+        ),
+        SelectionChangeType.placeCaret,
+        SelectionReason.userInteraction,
+      ),
+    ]);
+    return true;
+  }
+
+  Future<void> _pasteInDocument() async {
+    final raw = await getClipboardText();
+    if (raw == null) return;
+    if (_composer.selection == null) return;
+    if (!clipboardLooksLikeList(raw)) {
+      _docOps.paste();
+      return;
+    }
+    if (!_composer.selection!.isCollapsed) {
+      _docOps.deleteSelection(TextAffinity.downstream);
+    }
+    final items = listItemsFromClipboard(raw);
+    if (items.isEmpty) return;
+    final sel = _composer.selection;
+    if (sel == null) return;
+    final current = _doc.getNodeById(sel.extent.nodeId);
+    var index = current == null ? _doc.nodeCount : _doc.getNodeIndexById(current.id);
+    if (index < 0) index = _doc.nodeCount;
+    final replaceEmpty = current is TextNode &&
+        current.text.toPlainText().trim().isEmpty;
+    if (!replaceEmpty) {
+      final pos = sel.extent.nodePosition;
+      if (pos is TextNodePosition && pos.offset > 0) {
+        index += 1;
+      }
+    }
+    final last = items.last;
+    _editor.execute([
+      if (replaceEmpty && current != null) DeleteNodeRequest(nodeId: current.id),
+      for (var i = 0; i < items.length; i++)
+        InsertNodeAtIndexRequest(
+          nodeIndex: index + i,
+          newNode: items[i],
+        ),
+      ChangeSelectionRequest(
+        DocumentSelection.collapsed(
+          position: DocumentPosition(
+            nodeId: last.id,
+            nodePosition: last.endPosition,
+          ),
+        ),
+        SelectionChangeType.insertContent,
+        SelectionReason.userInteraction,
+      ),
+    ]);
   }
 
   Future<void> _insertObject(String type, int blockIndex) async {
@@ -1273,6 +1370,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       context: context,
       globalPosition: details.globalPosition,
       strings: strings,
+      includeMakeList: true,
       onAction: _handleTextMenuAction,
     );
   }
@@ -1581,7 +1679,9 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           if (text.isNotEmpty) await setClipboardText(text);
         }
       case 'text:paste':
-        if (_composer.selection != null) _docOps.paste();
+        if (_composer.selection != null) await _pasteInDocument();
+      case 'list:make':
+        _convertSelectionToList();
       default:
         if (action.startsWith('text:emoji:')) {
           final emoji = action.substring('text:emoji:'.length);

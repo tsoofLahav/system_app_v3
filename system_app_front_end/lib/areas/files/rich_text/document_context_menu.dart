@@ -17,6 +17,7 @@ class DocumentContextMenu {
   static List<AppContextMenuEntry> buildTextEntries(
     AppStrings strings, {
     bool includeConnectInfo = false,
+    bool includeMakeList = false,
   }) => [
     AppContextMenuItem(value: 'text:bold', label: strings['bold'] ?? 'Bold'),
     AppContextMenuItem(value: 'text:italic', label: strings['italic'] ?? 'Italic'),
@@ -56,6 +57,13 @@ class DocumentContextMenu {
     AppContextMenuItem(value: 'text:cut', label: strings['cut'] ?? 'Cut'),
     AppContextMenuItem(value: 'text:copy', label: strings['copy'] ?? 'Copy'),
     AppContextMenuItem(value: 'text:paste', label: strings['paste'] ?? 'Paste'),
+    if (includeMakeList) ...[
+      const AppContextMenuDivider(),
+      AppContextMenuItem(
+        value: 'list:make',
+        label: strings['makeList'] ?? 'Make list',
+      ),
+    ],
   ];
 
   /// Image block: nudge a little, or jump to a named fraction of the pane.
@@ -162,6 +170,7 @@ class DocumentContextMenu {
     required AppStrings strings,
     required DocumentMenuHandler onAction,
     bool includeConnectInfo = false,
+    bool includeMakeList = false,
   }) {
     return _showMenu(
       context: context,
@@ -171,6 +180,7 @@ class DocumentContextMenu {
       entries: buildTextEntries(
         strings,
         includeConnectInfo: includeConnectInfo,
+        includeMakeList: includeMakeList,
       ),
     );
   }

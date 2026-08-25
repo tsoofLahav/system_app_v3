@@ -113,7 +113,7 @@ Adjacent paragraphs are coalesced on load so a document that was split into many
 
 A newly inserted list or table gets the caret in its first bullet or its top-left cell, so inserting one is the same gesture as starting a new paragraph — insert and type.
 
-The insert bar offers **one** list button, not two. Points vs numbers is a property of a list that already exists, switched from its right-click menu, so the user chooses "a list" and then how it looks.
+The insert bar offers **one** list button, not two. Points vs numbers is a property of a list that already exists, switched from its right-click menu, so the user chooses "a list" and then how it looks. Insert list / ⌘L / **Make list** on marked text (or the caret line) turns each newline-separated part into a point. Paste of lines that already have `-` / `1.` prefixes inserts list items, not plain paragraphs.
 
 It offers no paragraph button either: the file is free text, so a plain line is always one keystroke away. The bar is only for what typing cannot make — a list, and the objects.
 
