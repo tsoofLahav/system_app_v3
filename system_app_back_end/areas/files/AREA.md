@@ -76,7 +76,7 @@ Agent text **expands** pointers with live object payloads (same fences as before
 | `SPACER` | Extra blank gaps |
 | `TASK_LIST` | `title="…"` on the opener is the list header (`task_lists.title`); ACTIVE/DONE checkbox lines (expanded) |
 | `INFO` | First line title, remaining body (expanded) |
-| `IMAGE` | `caption` + optional `url` + optional `width` 0–1 (expanded) |
+| `IMAGE` | `caption` + optional `url` + optional `width` 0–1 (expanded). Extra pictures in the same object are extra `url="…"` lines inside `[IMAGE]…[/IMAGE]` |
 | `GRAPH` | Chart table sugar: chartType + 2 TSV rows (+ colors); object type is `table` |
 | `TABLE` | Full grid TSV rows (expanded); object type `table` |
 

@@ -90,6 +90,7 @@ class DocumentContextMenu {
   static List<AppContextMenuEntry> buildImageEntries(
     AppStrings strings, {
     double scale = ImageDisplaySize.full,
+    bool canMergeNext = false,
   }) =>
       [
         AppContextMenuItem(
@@ -124,6 +125,13 @@ class DocumentContextMenu {
           label: strings['imageSizeFull'],
           checked: ImageDisplaySize.matchesNamed(scale, ImageDisplaySize.full),
         ),
+        if (canMergeNext) ...[
+          const AppContextMenuDivider(),
+          AppContextMenuItem(
+            value: 'image:merge_next',
+            label: strings['mergeWithNext'],
+          ),
+        ],
       ];
 
   static Future<void> showImageMenu({
@@ -133,6 +141,7 @@ class DocumentContextMenu {
     required DocumentMenuHandler onAction,
     double scale = ImageDisplaySize.full,
     String look = ObjectLook.imageNone,
+    bool canMergeNext = false,
   }) {
     return _showMenu(
       context: context,
@@ -147,7 +156,11 @@ class DocumentContextMenu {
         const AppContextMenuDivider(),
         lookSubmenu(strings, kind: 'image', current: look),
         const AppContextMenuDivider(),
-        ...buildImageEntries(strings, scale: scale),
+        ...buildImageEntries(
+          strings,
+          scale: scale,
+          canMergeNext: canMergeNext,
+        ),
       ],
     );
   }

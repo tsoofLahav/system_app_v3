@@ -432,32 +432,49 @@ class ReadOnlyDocumentView extends StatelessWidget {
   }
 
   Widget _image(AgentImageBlock block) {
-    final url = block.url.isEmpty
-        ? null
-        : (block.url.startsWith('http')
-            ? block.url
-            : '${ApiConfig.baseUrl}${block.url}');
-    return Column(
+    final panes = [
+      (url: block.url, caption: block.caption),
+      ...block.extraPanes,
+    ];
+    Widget pane(({String url, String caption}) item) {
+      final url = item.url.isEmpty
+          ? null
+          : (item.url.startsWith('http')
+              ? item.url
+              : '${ApiConfig.baseUrl}${item.url}');
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (url != null)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.network(
+                url,
+                height: 96,
+                fit: BoxFit.contain,
+                errorBuilder: (_, error, stack) =>
+                    Icon(AppIcons.image, size: 18, color: AppColors.textHint),
+              ),
+            )
+          else
+            Icon(AppIcons.image, size: 18, color: AppColors.textHint),
+          if (item.caption.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(item.caption, style: AppTypography.metaStyle),
+            ),
+        ],
+      );
+    }
+
+    if (panes.length == 1) return pane(panes.first);
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (url != null)
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: Image.network(
-              url,
-              height: 96,
-              fit: BoxFit.contain,
-              errorBuilder: (_, error, stack) =>
-                  Icon(AppIcons.image, size: 18, color: AppColors.textHint),
-            ),
-          )
-        else
-          Icon(AppIcons.image, size: 18, color: AppColors.textHint),
-        if (block.caption.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 3),
-            child: Text(block.caption, style: AppTypography.metaStyle),
-          ),
+        for (var i = 0; i < panes.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(child: pane(panes[i])),
+        ],
       ],
     );
   }

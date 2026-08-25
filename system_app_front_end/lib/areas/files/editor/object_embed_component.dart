@@ -23,6 +23,8 @@ typedef ObjectPayloadChanged = void Function(
   Map<String, dynamic> payload,
 );
 typedef EmbedMoveRequested = void Function(String nodeId, int targetIndex);
+typedef ImageMergeQuery = bool Function(int objectId);
+typedef ImageMergeAction = Future<void> Function(int objectId);
 
 /// Builds [ObjectEmbedComponent]s for [ObjectEmbedNode]s.
 class ObjectEmbedComponentBuilder implements ComponentBuilder {
@@ -36,6 +38,8 @@ class ObjectEmbedComponentBuilder implements ComponentBuilder {
     required this.onInnerFocusChanged,
     required this.moveModeNodeId,
     required this.onMoveToIndex,
+    this.canMergeImageWithNext,
+    this.onMergeImageWithNext,
   });
 
   final AppState state;
@@ -49,6 +53,8 @@ class ObjectEmbedComponentBuilder implements ComponentBuilder {
   final ValueChanged<String?> onInnerFocusChanged;
   final String? moveModeNodeId;
   final EmbedMoveRequested onMoveToIndex;
+  final ImageMergeQuery? canMergeImageWithNext;
+  final ImageMergeAction? onMergeImageWithNext;
 
   @override
   SingleColumnLayoutComponentViewModel? createViewModel(
@@ -84,6 +90,8 @@ class ObjectEmbedComponentBuilder implements ComponentBuilder {
       onInnerFocusChanged: onInnerFocusChanged,
       moveMode: moveModeNodeId == componentViewModel.nodeId,
       onMoveToIndex: onMoveToIndex,
+      canMergeImageWithNext: canMergeImageWithNext,
+      onMergeImageWithNext: onMergeImageWithNext,
     );
   }
 }
@@ -157,6 +165,8 @@ class ObjectEmbedComponent extends StatelessWidget {
     required this.onInnerFocusChanged,
     required this.moveMode,
     required this.onMoveToIndex,
+    this.canMergeImageWithNext,
+    this.onMergeImageWithNext,
   });
 
   /// Must land on [BoxComponent] — SE looks up [DocumentComponent] via this key.
@@ -171,6 +181,8 @@ class ObjectEmbedComponent extends StatelessWidget {
   final ValueChanged<String?> onInnerFocusChanged;
   final bool moveMode;
   final EmbedMoveRequested onMoveToIndex;
+  final ImageMergeQuery? canMergeImageWithNext;
+  final ImageMergeAction? onMergeImageWithNext;
 
   @override
   Widget build(BuildContext context) {
@@ -241,6 +253,10 @@ class ObjectEmbedComponent extends StatelessWidget {
           embed: embed,
           state: state,
           onPayloadChanged: (p) => onPayloadChanged(embed.id, p),
+          canMergeNext: canMergeImageWithNext?.call(embed.id) ?? false,
+          onMergeNext: onMergeImageWithNext == null
+              ? null
+              : () => onMergeImageWithNext!(embed.id),
         );
       case 'table':
       case 'graph': // legacy unmigrated cache — same host as table + chart

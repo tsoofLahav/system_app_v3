@@ -36,7 +36,7 @@ Line numbers belong to a single `open_file`: open a file before writing to it, a
 The form you read and write, returned by `open_file`:
 
 - Structure (no id): headings `## …`; paragraphs; `[BULLET_LIST]` / `[ORDERED_LIST]` … closers; blank gaps = `[SPACER n="…"]`
-- Embeds (keep `id="…"`): `[TABLE id]` / `[GRAPH id]` (cells joined by `\t`); `[INFO id]` (line 1 = title, rest = body); `[TASK_LIST id]` (`title="…"` on the opener is the list header; `ACTIVE:` / `DONE:` with `- [ ]` / `- [x]`); `[IMAGE id …]` (`caption`, `url`, optional `width` 0–1 of the pane)
+- Embeds (keep `id="…"`): `[TABLE id]` / `[GRAPH id]` (cells joined by `\t`); `[INFO id]` (line 1 = title, rest = body); `[TASK_LIST id]` (`title="…"` on the opener is the list header; `ACTIVE:` / `DONE:` with `- [ ]` / `- [x]`); `[IMAGE id …]` (`caption`, `url`, optional `width` 0–1 of the pane; extra pictures are extra `url="…"` lines before `[/IMAGE]`)
 - Open and close markers are each their own numbered line. Content lives only between them, one line per item: a list item, a table row, a task.
 - A block's last line is the one **before** its closing marker. A line added after that closing marker sits outside the block — loose text under a table, a second `[BULLET_LIST]` beside a list rather than a longer one.
 - Markers are structure, not text. An unmatched fence, or attributes on `[BULLET_LIST]` / `[ORDERED_LIST]`, is rejected and the write fails.

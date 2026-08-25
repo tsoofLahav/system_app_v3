@@ -302,7 +302,7 @@ Objects are atomic SE blocks. ↑/↓ move onto the block; **Shift+Enter** (or c
 | Task list | Active then Done; Enter adds in the same zone; **insert lands on the list header** (then tasks); Shift+Enter leaves to SE block; right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title stays blank |
 | Info | One field; first line = title (diagrams/API `title`, not announced in the UI); Enter adds lines; Shift+Enter leaves to SE block; field right-click → text + Connect info; chrome → **Look** / Add tag / Add connection (⌘L while in the info; otherwise ⌘L inserts a list) |
 | Table / chart | See **[Tables & charts](#tables--charts)** |
-| Image | Display + caption; chrome **Look** (`none` / `frame` / `greyscale` / `frame_greyscale`); right-click **Make smaller / larger** (steps of 10% of the pane) or **Tiny / Quarter / Half / Full size**. Width is `payload.width` 0–1 of the file pane; aspect ratio stays (`BoxFit.contain`) |
+| Image | Display + caption; chrome **Look** (`none` / `frame` / `greyscale` / `frame_greyscale`); **Merge with next** when the following Super Editor node is also an image (folds it into `payload.images` and cascade-deletes the second object — Super Editor cannot put two image blocks on one line). Right-click **Make smaller / larger** (steps of 10% of the pane) or **Tiny / Quarter / Half / Full size** (size is the row as a whole). Width is `payload.width` 0–1 of the file pane; aspect ratio stays (`BoxFit.contain`) |
 
 ### Tables & charts
 

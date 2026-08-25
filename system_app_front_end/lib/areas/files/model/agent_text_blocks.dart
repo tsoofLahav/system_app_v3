@@ -189,6 +189,7 @@ class AgentImageBlock extends AgentBlock {
     required this.objectId,
     required this.caption,
     required this.url,
+    this.extraPanes = const [],
     required super.lineStart,
     required super.lineEnd,
   });
@@ -196,6 +197,7 @@ class AgentImageBlock extends AgentBlock {
   final int objectId;
   final String caption;
   final String url;
+  final List<({String url, String caption})> extraPanes;
 }
 
 /// A line no rule matched — shown as-is rather than dropped.
@@ -230,6 +232,11 @@ final _imageRe = RegExp(
   r'^\[IMAGE\s+id="(\d+)"(?:\s+caption="([^"]*)")?(?:\s+url="([^"]*)")?(?:\s+width="([^"]*)")?\]$',
   caseSensitive: false,
 );
+final _imagePaneRe = RegExp(
+  r'^url="([^"]*)"(?:\s+caption="([^"]*)")?(?:\s+width="([^"]*)")?$',
+  caseSensitive: false,
+);
+final _imageCloseRe = RegExp(r'^\[/IMAGE\]$', caseSensitive: false);
 final _bulletOpenRe = RegExp(r'^\[BULLET_LIST\]$', caseSensitive: false);
 final _orderedOpenRe = RegExp(r'^\[ORDERED_LIST\]$', caseSensitive: false);
 final _taskLineRe = RegExp(r'^-\s*\[( |x|X)\]\s*(.*)$');
@@ -286,16 +293,37 @@ List<AgentBlock> parseAgentTextBlocks(String text) {
 
     final image = _imageRe.firstMatch(line);
     if (image != null) {
+      var end = i;
+      final extras = <({String url, String caption})>[];
+      var j = i + 1;
+      while (j < lines.length) {
+        final t = lines[j].trim();
+        if (_imageCloseRe.hasMatch(t)) {
+          end = j;
+          break;
+        }
+        final pane = _imagePaneRe.firstMatch(t);
+        if (pane != null) {
+          extras.add((url: pane.group(1) ?? '', caption: pane.group(2) ?? ''));
+          j++;
+          continue;
+        }
+        extras.clear();
+        end = i;
+        break;
+      }
+      if (end == i) extras.clear();
       blocks.add(
         AgentImageBlock(
           objectId: int.parse(image.group(1)!),
           caption: image.group(2) ?? '',
           url: image.group(3) ?? '',
+          extraPanes: extras,
           lineStart: i,
-          lineEnd: i,
+          lineEnd: end,
         ),
       );
-      i++;
+      i = end + 1;
       continue;
     }
 

@@ -556,6 +556,35 @@ def test_image_width_round_trip():
     assert parsed["object_updates"][5]["payload"]["width"] == 0.5
 
 
+def test_image_row_extra_panes_round_trip():
+    objects = {
+        5: {
+            "type": "image",
+            "payload": {
+                "url": "/uploads/a.png",
+                "caption": "A",
+                "width": 0.5,
+                "images": [
+                    {"url": "/uploads/a.png", "caption": "A"},
+                    {"url": "/uploads/b.png", "caption": "B"},
+                ],
+            },
+        }
+    }
+    original = serialize_document(
+        {"version": 3, "blocks": [{"id": "b1", "type": "embed", "object_id": 5}]}
+    )
+    text = document_to_agent_text(original, objects_by_id=objects)
+    assert 'url="/uploads/a.png"' in text
+    assert 'url="/uploads/b.png"' in text
+    assert "[/IMAGE]" in text
+    parsed = parse_agent_text(text)
+    payload = parsed["object_updates"][5]["payload"]
+    assert payload["url"] == "/uploads/a.png"
+    assert payload["images"][1]["url"] == "/uploads/b.png"
+    assert payload["images"][1]["caption"] == "B"
+
+
 def test_parse_agent_text_bullet_list_and_table():
     parsed = parse_agent_text(
         "[BULLET_LIST]\n- Alpha\n- Beta\n[/BULLET_LIST]\n\n"

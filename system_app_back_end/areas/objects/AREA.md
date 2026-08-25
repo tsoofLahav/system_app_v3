@@ -94,7 +94,7 @@ Object GET / file object list payloads include `tags[]` and `connections[]` (und
 
 | Type | Typical payload |
 |------|-----------------|
-| `image` | `{ "url", "path", "width", "caption", "look"? }` — `width` is 0–1 of the file pane (full = `1`); the picture keeps its aspect ratio. `look`: `none` (default) / `frame` / `greyscale` / `frame_greyscale` |
+| `image` | `{ "url", "path", "width", "caption", "look"? }` — `width` is 0–1 of the file pane (full = `1`); the picture keeps its aspect ratio. `look`: `none` (default) / `frame` / `greyscale` / `frame_greyscale`. Adjacent pictures can merge into `{ "images": [{url, caption}, …] }` with the first pane also mirrored on `url` / `caption` so older readers still see one picture |
 | `table` | `{ "rows": [[{ "text" }], …], "chart"?: { "enabled", "chartType", "colors" }, "look"? }` — `look`: `grid` (default) / `open` / `lined`. Normalize keeps `look`. |
 | `info` | Title/body on `information_pieces`. Optional `objects.payload.look`: `card` (default) / `plain` / `ruled` |
 
@@ -119,6 +119,7 @@ Deleting anything that contains objects must cascade, or the database keeps orph
 | [`routes/objects.py`](routes/objects.py) | Create/update/delete embeds; links; graph; object tags; insert embed blocks |
 | [`services/object_graph.py`](services/object_graph.py) | Links-map build, connection dicts, link/tag helpers |
 | [`services/table_payload.py`](services/table_payload.py) | Normalize table/chart payloads (incl. legacy graph shape) |
+| [`services/image_payload.py`](services/image_payload.py) | One picture or a row of panes (`images[]`, first mirrored on `url`) |
 | [`routes/tasks.py`](routes/tasks.py) | Task CRUD, status, due date, task description links |
 | [`routes/task_lists.py`](routes/task_lists.py) | Task list contents and reorder |
 | [`routes/information.py`](routes/information.py) | Info pieces |

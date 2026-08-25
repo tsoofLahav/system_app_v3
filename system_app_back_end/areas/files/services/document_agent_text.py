@@ -40,7 +40,12 @@ _IMAGE_RE = re.compile(
     r'(?: caption="([^"]*)")?'
     r'(?: url="([^"]*)")?'
     r'(?: width="([^"]*)")?'
-    r']',
+    r'\]'
+    r'(?:\n((?:url="[^"]*"(?: caption="[^"]*")?(?: width="[^"]*")?\n)*)\[/IMAGE])?',
+    re.IGNORECASE,
+)
+_IMAGE_PANE_LINE_RE = re.compile(
+    r'url="([^"]*)"(?: caption="([^"]*)")?(?: width="([^"]*)")?',
     re.IGNORECASE,
 )
 # Block form (frozen). Legacy single-line `[GRAPH id="N" title="…"]` still matches.
@@ -337,19 +342,35 @@ def _info_section(object_id: int, obj: dict[str, Any]) -> str:
 
 
 def _image_section(object_id: int, obj: dict[str, Any]) -> str:
-    """Frozen shape: caption + optional url/path ref."""
+    """Frozen shape: caption + optional url/path ref; extra panes as fence lines."""
+    from areas.objects.services.image_payload import panes_of
+
     payload = obj.get("payload") or {}
-    caption = str(payload.get("caption") or "").strip()
-    ref = str(payload.get("url") or payload.get("path") or "").strip()
+    panes = panes_of(payload if isinstance(payload, dict) else {})
+    first = panes[0] if panes else {"url": "", "caption": ""}
+    caption = str(first.get("caption") or "").strip()
+    ref = str(first.get("url") or "").strip()
     attrs = [f'id="{object_id}"']
     if caption:
         attrs.append(f'caption="{_attr_escape(caption)}"')
     if ref:
         attrs.append(f'url="{_attr_escape(ref)}"')
-    width = payload.get("width")
+    width = payload.get("width") if isinstance(payload, dict) else None
     if width is not None and width != "":
         attrs.append(f'width="{_attr_escape(str(width))}"')
-    return f'[IMAGE {" ".join(attrs)}]'
+    opener = f'[IMAGE {" ".join(attrs)}]'
+    extras = panes[1:]
+    if not extras:
+        return opener
+    lines = [opener]
+    for pane in extras:
+        extra = f'url="{_attr_escape(str(pane.get("url") or ""))}"'
+        cap = str(pane.get("caption") or "").strip()
+        if cap:
+            extra += f' caption="{_attr_escape(cap)}"'
+        lines.append(extra)
+    lines.append("[/IMAGE]")
+    return "\n".join(lines)
 
 
 def _table_or_graph_section(object_id: int, obj: dict[str, Any]) -> str:
@@ -896,6 +917,7 @@ def _parse_image_marker(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
     caption = match.group(2)
     url = match.group(3)
     width_raw = match.group(4)
+    extra_body = match.group(5)
     payload: dict[str, Any] = {}
     if caption is not None:
         payload["caption"] = caption
@@ -906,6 +928,34 @@ def _parse_image_marker(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
             payload["width"] = float(width_raw.strip())
         except ValueError:
             payload["width"] = width_raw.strip()
+    extras: list[dict[str, Any]] = []
+    if extra_body:
+        for raw in extra_body.splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            pane = _IMAGE_PANE_LINE_RE.fullmatch(line)
+            if pane is None:
+                continue
+            extras.append(
+                {
+                    "url": pane.group(1) or "",
+                    "caption": pane.group(2) or "",
+                }
+            )
+    if extras:
+        from areas.objects.services.image_payload import mirrored
+
+        payload = mirrored(
+            [
+                {
+                    "url": payload.get("url") or "",
+                    "caption": payload.get("caption") or "",
+                },
+                *extras,
+            ],
+            width=payload.get("width"),
+        )
     return (
         {"id": new_id("b"), "type": "embed", "object_id": object_id},
         {object_id: {"type": "image", "payload": payload}},

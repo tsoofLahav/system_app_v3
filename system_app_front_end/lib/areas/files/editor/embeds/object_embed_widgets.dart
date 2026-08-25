@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../../../../config/api_config.dart';
 import '../../../../core/app_state.dart';
+import '../../../objects/data/image_payload.dart';
 import '../../../objects/data/object_embed.dart';
 import '../../../objects/links/add_connection_dialog.dart';
 import '../../../ux/topic/topic_appearance.dart';
@@ -616,18 +617,22 @@ class ImageEmbed extends StatefulWidget {
     required this.embed,
     required this.state,
     required this.onPayloadChanged,
+    this.canMergeNext = false,
+    this.onMergeNext,
   });
 
   final ObjectEmbed embed;
   final AppState state;
   final ValueChanged<Map<String, dynamic>> onPayloadChanged;
+  final bool canMergeNext;
+  final Future<void> Function()? onMergeNext;
 
   @override
   State<ImageEmbed> createState() => _ImageEmbedState();
 }
 
 class _ImageEmbedState extends State<ImageEmbed> {
-  late TextEditingController _captionController;
+  late List<TextEditingController> _captionControllers;
   var _uploading = false;
   late double _scale;
 
@@ -643,29 +648,49 @@ class _ImageEmbedState extends State<ImageEmbed> {
     return widget.embed.payload ?? const {};
   }
 
+  List<Map<String, String>> get _panes => ImageObjectPayload.panesOf(_payload);
+
   @override
   void initState() {
     super.initState();
     _scale = ImageDisplaySize.scaleOf(widget.embed.payload);
-    _captionController = TextEditingController(
-      text: _payload['caption'] as String? ?? '',
-    );
+    _captionControllers = [
+      for (final pane in _panes) TextEditingController(text: pane['caption']),
+    ];
   }
 
   @override
   void didUpdateWidget(ImageEmbed oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final nextScale = ImageDisplaySize.scaleOf(widget.embed.payload);
+    final nextScale = ImageDisplaySize.scaleOf(_payload);
     if (nextScale != _scale) _scale = nextScale;
-    final next = widget.embed.payload?['caption'] as String? ?? '';
-    if (next != _captionController.text) {
-      _captionController.text = next;
+    _syncCaptionControllers();
+  }
+
+  void _syncCaptionControllers() {
+    final panes = _panes;
+    while (_captionControllers.length > panes.length) {
+      _captionControllers.removeLast().dispose();
+    }
+    while (_captionControllers.length < panes.length) {
+      final i = _captionControllers.length;
+      _captionControllers.add(
+        TextEditingController(text: panes[i]['caption'] ?? ''),
+      );
+    }
+    for (var i = 0; i < panes.length; i++) {
+      final next = panes[i]['caption'] ?? '';
+      if (next != _captionControllers[i].text) {
+        _captionControllers[i].text = next;
+      }
     }
   }
 
   @override
   void dispose() {
-    _captionController.dispose();
+    for (final c in _captionControllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -687,11 +712,26 @@ class _ImageEmbedState extends State<ImageEmbed> {
         ..._payload,
         'url': url,
         'width': _scale,
-        'caption': _captionController.text,
+        'caption': _captionControllers.firstOrNull?.text ?? '',
       });
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
+  }
+
+  void _commitCaptions() {
+    final panes = [
+      for (var i = 0; i < _panes.length; i++)
+        {
+          'url': _panes[i]['url'] ?? '',
+          'caption': i < _captionControllers.length
+              ? _captionControllers[i].text
+              : (_panes[i]['caption'] ?? ''),
+        },
+    ];
+    widget.onPayloadChanged(
+      ImageObjectPayload.mirrored(panes, existing: {..._payload, 'width': _scale}),
+    );
   }
 
   Future<void> _onSecondaryTap(TapDownDetails details) async {
@@ -703,7 +743,12 @@ class _ImageEmbedState extends State<ImageEmbed> {
       strings: widget.state.strings,
       scale: _scale,
       look: ObjectLook.imageOf(_payload),
+      canMergeNext: widget.canMergeNext,
       onAction: (action) async {
+        if (action == 'image:merge_next') {
+          await widget.onMergeNext?.call();
+          return;
+        }
         if (action.startsWith('look:')) {
           final look = action.substring('look:'.length);
           if (!ObjectLook.imageLooks.contains(look)) return;
@@ -723,85 +768,119 @@ class _ImageEmbedState extends State<ImageEmbed> {
     );
   }
 
+  Widget _picture(String url) {
+    final resolved = url.startsWith('http') ? url : '${ApiConfig.baseUrl}$url';
+    final look = ObjectLook.imageOf(_payload);
+    Widget picture = Image.network(
+      resolved,
+      fit: BoxFit.contain,
+      errorBuilder: (_, error, stackTrace) => Text(
+        'Image unavailable',
+        style: AppTypography.metaStyle,
+      ),
+    );
+    if (ObjectLook.imageIsGreyscale(look)) {
+      picture = ColorFiltered(
+        colorFilter: ObjectLook.greyscaleFilter,
+        child: picture,
+      );
+    }
+    picture = ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: picture,
+    );
+    if (ObjectLook.imageHasFrame(look)) {
+      picture = DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.noteBorder, width: 0.85),
+        ),
+        child: picture,
+      );
+    }
+    return picture;
+  }
+
+  Widget _captionField(int index) {
+    return TextField(
+      controller: _captionControllers[index],
+      style: AppTypography.metaStyle,
+      decoration: const InputDecoration(
+        isDense: true,
+        border: InputBorder.none,
+      ),
+      onSubmitted: (_) => _commitCaptions(),
+      onEditingComplete: _commitCaptions,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final url = _payload['url'] as String? ?? '';
-    final resolved = url.isEmpty
-        ? null
-        : (url.startsWith('http') ? url : '${ApiConfig.baseUrl}$url');
+    final panes = _panes;
+    final hasPicture = panes.any((p) => (p['url'] ?? '').isNotEmpty);
 
     return GestureDetector(
       onSecondaryTapDown: _onSecondaryTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (resolved != null)
+          if (hasPicture)
             LayoutBuilder(
               builder: (context, constraints) {
-                final width = constraints.maxWidth * _scale;
-                final look = ObjectLook.imageOf(_payload);
-                Widget picture = Image.network(
-                  resolved,
-                  width: width,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, error, stackTrace) => Text(
-                    'Image unavailable',
-                    style: AppTypography.metaStyle,
-                  ),
-                );
-                if (ObjectLook.imageIsGreyscale(look)) {
-                  picture = ColorFiltered(
-                    colorFilter: ObjectLook.greyscaleFilter,
-                    child: picture,
-                  );
-                }
-                picture = ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: picture,
-                );
-                if (ObjectLook.imageHasFrame(look)) {
-                  picture = DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: AppColors.noteBorder,
-                        width: 0.85,
+                final rowWidth = constraints.maxWidth * _scale;
+                if (panes.length == 1) {
+                  final url = panes.first['url'] ?? '';
+                  return Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: SizedBox(
+                      width: rowWidth,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (url.isNotEmpty) _picture(url),
+                          const SizedBox(height: 4),
+                          _captionField(0),
+                        ],
                       ),
                     ),
-                    child: picture,
                   );
                 }
                 return Align(
                   alignment: AlignmentDirectional.centerStart,
-                  child: SizedBox(width: width, child: picture),
+                  child: SizedBox(
+                    width: rowWidth,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (var i = 0; i < panes.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if ((panes[i]['url'] ?? '').isNotEmpty)
+                                  _picture(panes[i]['url'] ?? ''),
+                                const SizedBox(height: 4),
+                                _captionField(i),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 );
               },
             )
-          else
+          else ...[
             OutlinedButton.icon(
               onPressed: _uploading ? null : _pick,
               icon: const Icon(Icons.image_outlined, size: 18),
               label: Text(_uploading ? 'Uploading…' : 'Add image'),
             ),
-          const SizedBox(height: 4),
-          TextField(
-            controller: _captionController,
-            style: AppTypography.metaStyle,
-            decoration: const InputDecoration(
-              isDense: true,
-              border: InputBorder.none,
-            ),
-            onSubmitted: (value) => widget.onPayloadChanged({
-              ..._payload,
-              'width': _scale,
-              'caption': value,
-            }),
-            onEditingComplete: () => widget.onPayloadChanged({
-              ..._payload,
-              'width': _scale,
-              'caption': _captionController.text,
-            }),
-          ),
+            const SizedBox(height: 4),
+            _captionField(0),
+          ],
         ],
       ),
     );

@@ -126,6 +126,20 @@ void main() {
     expect(block.url, '/uploads/shot.png');
   });
 
+  test('image fence keeps extra panes', () {
+    final block = parseAgentTextBlocks(
+      '[IMAGE id="5" caption="A" url="/uploads/a.png"]\n'
+      'url="/uploads/b.png" caption="B"\n'
+      '[/IMAGE]',
+    ).single as AgentImageBlock;
+
+    expect(block.url, '/uploads/a.png');
+    expect(block.extraPanes, hasLength(1));
+    expect(block.extraPanes.single.url, '/uploads/b.png');
+    expect(block.extraPanes.single.caption, 'B');
+    expect(block.lineEnd, 2);
+  });
+
   test('an unclosed fence still ends at the last line', () {
     final block =
         parseAgentTextBlocks('[TABLE id="3"]\na\\tb').single as AgentTableBlock;

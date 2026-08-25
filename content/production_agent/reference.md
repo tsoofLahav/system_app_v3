@@ -95,6 +95,16 @@ First line = title; rest = body. `open_file` may also return `object_extras` wit
 
 The `url` is an uploaded path written by `create_object` after it generates the picture. Do not invent one, and do not leave an `[IMAGE]` with no url — that is an empty slot. `caption` is the label under the picture. `width` is the display size as a fraction of the file pane (0.125–1); omit it to leave the current size.
 
+Several pictures in one object (side-by-side in the file) expand as extra `url="…"` lines inside the same fence so they are not dropped on `open_file`:
+
+```text
+[IMAGE id="5" caption="Left" url="/images/a.png" width="0.5"]
+url="/images/b.png" caption="Right"
+[/IMAGE]
+```
+
+Single pictures stay one line, with no closer.
+
 ### Chart table (graph sugar)
 
 A graph is a **table object with chart quality** — same object type, pointer tagged `[GRAPH]`:

@@ -6,6 +6,7 @@ import 'package:super_editor/super_editor.dart';
 
 import '../../../core/app_state.dart';
 import '../../../core/platform/app_form_factor.dart';
+import '../../objects/data/image_payload.dart';
 import '../../objects/data/object_embed.dart';
 import '../../objects/data/table_payload.dart';
 import '../../objects/data/task.dart';
@@ -1082,6 +1083,29 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _replaceEmbedPayload(objectId, payload);
   }
 
+  ObjectEmbedNode? _nextImageNode(int objectId) {
+    final index = _doc.getNodeIndexById(ObjectEmbedNode.idFor(objectId));
+    if (index < 0 || index + 1 >= _doc.nodeCount) return null;
+    final next = _doc.getNodeAt(index + 1);
+    if (next is! ObjectEmbedNode) return null;
+    final embed = _lookup(next.objectId);
+    if (embed == null || embed.type != 'image') return null;
+    return next;
+  }
+
+  bool _canMergeImageWithNext(int objectId) => _nextImageNode(objectId) != null;
+
+  Future<void> _mergeImageWithNext(int objectId) async {
+    final nextNode = _nextImageNode(objectId);
+    final keeper = _lookup(objectId);
+    final absorbed = nextNode == null ? null : _lookup(nextNode.objectId);
+    if (keeper == null || absorbed == null) return;
+    final merged = ImageObjectPayload.merge(keeper.payload, absorbed.payload);
+    await _onPayloadChanged(objectId, merged);
+    await _deleteObject(absorbed.id);
+    if (mounted) setState(() {});
+  }
+
   void _replaceEmbedPayload(int objectId, Map<String, dynamic> payload) {
     final list = _embedsSnapshot;
     if (list == null) return;
@@ -1542,9 +1566,14 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           strings: strings,
           scale: ImageDisplaySize.scaleOf(embed.payload),
           look: ObjectLook.imageOf(embed.payload),
+          canMergeNext: _canMergeImageWithNext(embed.id),
           onAction: (action) async {
             if (action == 'object:move_mode') {
               _toggleMoveModeForNode(node.id);
+              return;
+            }
+            if (action == 'image:merge_next') {
+              await _mergeImageWithNext(embed.id);
               return;
             }
             if (action.startsWith('look:')) {
@@ -1926,6 +1955,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           onInnerFocusChanged: _onEmbedInnerFocusChanged,
           moveModeNodeId: _moveModeNodeId,
           onMoveToIndex: _moveEmbedToIndex,
+          canMergeImageWithNext: _canMergeImageWithNext,
+          onMergeImageWithNext: _mergeImageWithNext,
         ),
         const LegacyTableFenceComponentBuilder(),
         ...ambientAwareTextBuilders(ambient),
