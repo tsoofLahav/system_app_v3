@@ -32,6 +32,7 @@ from areas.production_agent.services.browse_tools import (
     find_object,
     list_entities,
 )
+from areas.production_agent.services.create_file_tool import create_file
 from areas.production_agent.services.create_object_tool import create_object
 from areas.production_agent.services.pending_reviews import upsert_pending_from_proposals
 from areas.production_agent.services.write_tools import (
@@ -155,6 +156,33 @@ TOOL_DEFS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {"file_id": {"type": "integer"}},
             "required": ["file_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "create_file",
+        "description": (
+            "Create a new empty file in a topic. "
+            "Returns file_id — then open_file and patch_file / rewrite_file "
+            "to fill it. name is required. topic_id must be a real topic id "
+            "from list / find_file (never invent one). "
+            "The new file is placed first in that topic."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "topic_id": {
+                    "type": "integer",
+                    "description": "Topic that will own the file",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "File name; required, non-empty",
+                },
+            },
+            "required": ["topic_id", "name"],
             "additionalProperties": False,
         },
     },
@@ -334,6 +362,18 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
             "section": str(args.get("section") or "all"),
             "content": load_reference_section(str(args.get("section") or "all")),
         }
+    if name == "create_file":
+        try:
+            topic_id = int(args["topic_id"])
+        except (KeyError, TypeError, ValueError):
+            return {"error": "topic_id required", "tool": "create_file"}
+        write_mode = resolve_write_mode("create_file", apply_mode)
+        return create_file(
+            topic_id=topic_id,
+            name=str(args.get("name") or ""),
+            scope=scope,
+            write_mode=write_mode,
+        )
     if name == "create_object":
         try:
             file_id = int(args["file_id"])

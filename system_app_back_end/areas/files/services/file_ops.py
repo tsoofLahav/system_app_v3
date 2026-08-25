@@ -21,6 +21,7 @@ def create_file(
     document_json: str | None = None,
     order_index: int = 0,
     meta: dict | None = None,
+    place_first: bool = False,
 ) -> File:
     name = (name or "").strip()
     if not name:
@@ -38,6 +39,8 @@ def create_file(
     )
     db.session.add(file)
     db.session.flush()
+    if place_first:
+        place_file_first(file)
     return file
 
 
@@ -52,11 +55,12 @@ def archive_file(file: File, *, when: datetime | None = None) -> File:
 def unarchive_file(file: File) -> File:
     """Clear the archive stamp and put the file first so it is on screen."""
     file.archived_at = None
-    _place_file_first(file)
+    place_file_first(file)
     return file
 
 
-def _place_file_first(file: File) -> None:
+def place_file_first(file: File) -> None:
+    """Shift live siblings so this file is first on screen."""
     siblings = (
         File.query.filter_by(topic_id=file.topic_id)
         .filter(File.archived_at.is_(None))

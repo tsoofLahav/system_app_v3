@@ -65,13 +65,15 @@ patch_file: {"edits": [{"op": "add", "line": 31, "text": "Value 3\tValue 4", "en
 ### Task list embed
 
 ```text
-[TASK_LIST id="42"]
+[TASK_LIST id="42" title="Week"]
 ACTIVE:
 - [ ] Call clinic
 DONE:
 - [x] Done item
 [/TASK_LIST]
 ```
+
+`title="…"` on the opener is the list header (the line above the tasks). Change it with `replace` on that opening line. `title=""` clears it. A fence with no `title` attribute leaves the stored header unchanged.
 
 ### Info embed
 
@@ -88,10 +90,10 @@ First line = title; rest = body. `open_file` may also return `object_extras` wit
 ### Image embed
 
 ```text
-[IMAGE id="5" caption="Screenshot" url="/images/shot.png"]
+[IMAGE id="5" caption="Screenshot" url="/images/shot.png" width="0.5"]
 ```
 
-The `url` is an uploaded path written by `create_object` after it generates the picture. Do not invent one, and do not leave an `[IMAGE]` with no url — that is an empty slot.
+The `url` is an uploaded path written by `create_object` after it generates the picture. Do not invent one, and do not leave an `[IMAGE]` with no url — that is an empty slot. `caption` is the label under the picture. `width` is the display size as a fraction of the file pane (0.125–1); omit it to leave the current size.
 
 ### Chart table (graph sugar)
 
@@ -167,6 +169,14 @@ Each hit is `{ id, type, name, file_id, file, topic_id, topic, topic_type }`.
 ### `open_file`
 
 Load one file. Returns `name` + `topic` + `topic_type` (so you can confirm where you landed), `document_plain` (agent text), `document_lines` (`[{line, text}, …]` 1-based), and optional `object_extras`.
+
+### `create_file`
+
+```json
+{ "topic_id": 3, "name": "week plan" }
+```
+
+Creates an empty file in that topic and returns `file_id`. Then `open_file` and `patch_file` / `rewrite_file` to fill it. `topic_id` comes from `list` / `find_file` — never invent one.
 
 ### `create_object`
 

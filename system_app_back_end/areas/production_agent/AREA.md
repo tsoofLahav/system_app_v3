@@ -37,7 +37,7 @@ Reasoning models take `reasoning.effort` (env `OPENAI_REASONING_EFFORT`, default
 |-------|----------|
 | **instructions** | `agent_configs.system_prompt` + operational suffix (attached on each Responses turn) |
 | **First user input** | `prompt` + client `scope` (open topic/files as context) + optional tiny `hints` — **no file bodies** |
-| **Tools** | `list`, `find_file`, `find_object`, `open_file`, `create_object`, `reference`, `patch_file`, `rewrite_file` |
+| **Tools** | `list`, `find_file`, `find_object`, `open_file`, `create_file`, `create_object`, `reference`, `patch_file`, `rewrite_file` |
 | **Follow-up input** | Tool results only (`function_call_output` items) |
 
 Tools authorize by **workspace membership** (run `workspace_id`), not the FE allow-list. Client `scope` / `hints` are preferred context (`focused_file_id`, open topic). Archived files stay read-only on writes.
@@ -70,6 +70,7 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 | `find_file` | By `file_id`, or name (+ optional topic); hits include the topic name and type |
 | `find_object` | By `object_id`, or type/name (+ optional topic); hits include file + topic name and type |
 | `open_file` | Returns `name` + `topic` + `topic_type`, `document_plain` (agent text), `document_lines` (1-based), + `object_extras`. Archived readable. |
+| `create_file` | Create an empty file in a topic (`name` + `topic_id`); returns `file_id`. Places it first in the topic. Then `open_file` + `patch_file` / `rewrite_file` to fill |
 | `create_object` | Create embed + pointer (`task_list` \| `info` \| `table` \| `graph` \| `image`); returns `object_id`. **Image:** `body` is the generation prompt; the tool writes PNG bytes to the upload folder and stores `payload.url` — an empty image object is a missing prompt, not a later patch |
 | `reference` | On-demand examples from `content/production_agent/reference.md` (`agent_text` / `tools` / `all`) |
 | `patch_file` | **Partial edits** with `op` add / remove / replace on `document_lines`; typical outcome **review** |
@@ -77,7 +78,7 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 
 **Everything the agent browses is keyed by topic name, never by a bare `topic_id`.** A file name on its own ("log", "plan") does not say what it is about, so `list files` / `list objects` return `topics: [{topic_id, topic, topic_type, files: […]}]` and every `find_*` hit repeats its topic name and type. Choosing a topic is the first decision the agent makes; leaving it to guess from file names put a nutrition note in the wrong topic.
 
-Browse helpers: [`services/browse_tools.py`](services/browse_tools.py). Create: [`services/create_object_tool.py`](services/create_object_tool.py) + shared [`areas/objects/services/create_embed.py`](../objects/services/create_embed.py). `open_file` payload: [`services/open_file_tool.py`](services/open_file_tool.py). Writes: [`services/write_tools.py`](services/write_tools.py).
+Browse helpers: [`services/browse_tools.py`](services/browse_tools.py). Create file: [`services/create_file_tool.py`](services/create_file_tool.py) + [`areas/files/services/file_ops.py`](../files/services/file_ops.py). Create object: [`services/create_object_tool.py`](services/create_object_tool.py) + shared [`areas/objects/services/create_embed.py`](../objects/services/create_embed.py). `open_file` payload: [`services/open_file_tool.py`](services/open_file_tool.py). Writes: [`services/write_tools.py`](services/write_tools.py).
 
 **Apply vs review:** the run’s `apply_mode` wins (`review` / `direct_apply` / `notify_only`). Defaults live in **one place**: [`shared/run_config.py`](../../shared/run_config.py) (`DEFAULT_MANUAL_APPLY_MODE`, `DEFAULT_AUTOMATION_APPLY_MODE`). Routes/runner/models import those — do not hardcode fallback strings. Manual **Consult** sends `apply_mode` from the FE toggle (default apply directly). A saved AI action stores its own mode. An automation `ai` step stores its own mode, default review — nobody is watching at 2am. The model does not choose the dialog.
 
@@ -139,6 +140,8 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 | [`services/pending_reviews.py`](services/pending_reviews.py) | Hunks, merge, archive copy, finish/discard |
 | [`services/write_tools.py`](services/write_tools.py) | `patch_file` / `rewrite_file`, `commit_agent_file_apply`, diff, mode resolution |
 | [`services/open_file_tool.py`](services/open_file_tool.py) | `open_file` payload (agent text + extras) |
+| [`services/create_file_tool.py`](services/create_file_tool.py) | Empty file in a topic, placed first |
+| [`services/create_object_tool.py`](services/create_object_tool.py) | Embed + pointer; image generation |
 | [`services/prompt.py`](services/prompt.py) | Load/seed/sync the system prompt from the DB |
 | [`services/openai_service.py`](services/openai_service.py) | Responses conversation helpers + legacy chat/image helpers |
 | [`routes/agent.py`](routes/agent.py) | `POST /agent/run`; apply-agent-text; pending-review routes |

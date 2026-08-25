@@ -74,13 +74,15 @@ Agent text **expands** pointers with live object payloads (same fences as before
 | Fence (agent) | Shape |
 |-------|--------|
 | `SPACER` | Extra blank gaps |
-| `TASK_LIST` | ACTIVE/DONE checkbox lines (expanded) |
+| `TASK_LIST` | `title="…"` on the opener is the list header (`task_lists.title`); ACTIVE/DONE checkbox lines (expanded) |
 | `INFO` | First line title, remaining body (expanded) |
-| `IMAGE` | `caption` + optional `url` (expanded) |
+| `IMAGE` | `caption` + optional `url` + optional `width` 0–1 (expanded) |
 | `GRAPH` | Chart table sugar: chartType + 2 TSV rows (+ colors); object type is `table` |
 | `TABLE` | Full grid TSV rows (expanded); object type `table` |
 
 Format examples: [`content/production_agent/reference.md`](../../../content/production_agent/reference.md)
+
+What the user sees **inside the file** is in those fences (list header, tasks, info title/body, table/graph cells, image caption/url/width). Tags, related links, and view membership live on the object graph / views — not in agent text.
 
 ## Modules
 

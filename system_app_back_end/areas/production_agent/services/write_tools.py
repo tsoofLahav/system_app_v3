@@ -103,6 +103,7 @@ TOOL_WRITE_DEFAULTS: dict[str, WriteMode] = {
     "patch_file": "review",
     "rewrite_file": "direct_apply",
     "create_object": "direct_apply",
+    "create_file": "direct_apply",
 }
 
 WRITE_TOOL_NAMES = frozenset(TOOL_WRITE_DEFAULTS)

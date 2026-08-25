@@ -24,6 +24,7 @@ DEFAULT_TOOL_ALLOWLIST = [
     "patch_file",
     "rewrite_file",
     "create_object",
+    "create_file",
 ]
 _HERE = Path(__file__).resolve()
 # Monorepo root (…/system_app) when services live under system_app_back_end/areas/…

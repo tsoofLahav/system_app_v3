@@ -245,12 +245,28 @@ class ReadOnlyDocumentView extends StatelessWidget {
   }
 
   Widget _tasks(AgentTaskListBlock block) {
-    if (block.tasks.isEmpty) {
+    if (block.title.isEmpty && block.tasks.isEmpty) {
       return Text('No tasks', style: AppTypography.metaStyle);
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (block.title.isNotEmpty)
+          _line(
+            block.lineStart,
+            block.lineStart,
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: _text(
+                block.title,
+                AppTypography.noteTitleStyle,
+                block.lineStart,
+                block.lineStart,
+              ),
+            ),
+          ),
+        if (block.tasks.isEmpty && block.title.isNotEmpty)
+          Text('No tasks', style: AppTypography.metaStyle),
         for (final task in block.tasks)
           _line(
             task.line,

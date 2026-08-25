@@ -84,9 +84,7 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
     await presentAgentRunResult(context, state, result);
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(e.toString())),
-    );
+    showAgentMessageSnackBar(context, e.toString());
   }
 }
 

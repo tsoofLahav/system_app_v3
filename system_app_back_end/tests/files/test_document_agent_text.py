@@ -44,6 +44,39 @@ def test_document_to_agent_text_task_list():
     assert "- [x] Find phone" in text
 
 
+def test_task_list_title_round_trip():
+    text = document_to_agent_text(
+        _sample_doc_with_embed(),
+        objects_by_id={
+            42: {
+                "type": "task_list",
+                "title": "Week",
+                "tasks": [
+                    {"title": "Call clinic", "status": "active", "list_order_index": 0},
+                ],
+            }
+        },
+    )
+    assert '[TASK_LIST id="42" title="Week"]' in text
+    parsed = parse_agent_text(text)
+    assert parsed["object_updates"][42]["title"] == "Week"
+    assert parsed["object_updates"][42]["tasks"][0]["title"] == "Call clinic"
+
+
+def test_task_list_legacy_fence_leaves_title_alone():
+    parsed = parse_agent_text(
+        '[TASK_LIST id="42"]\nACTIVE:\n- [ ] A\nDONE:\n[/TASK_LIST]'
+    )
+    assert "title" not in parsed["object_updates"][42]
+
+
+def test_task_list_empty_title_attr_clears_header():
+    parsed = parse_agent_text(
+        '[TASK_LIST id="42" title=""]\nACTIVE:\nDONE:\n[/TASK_LIST]'
+    )
+    assert parsed["object_updates"][42]["title"] == ""
+
+
 def test_document_to_agent_text_lists_and_table():
     body = serialize_document(
         {
@@ -505,6 +538,22 @@ def test_image_caption_and_url():
     parsed = parse_agent_text(text)
     assert parsed["object_updates"][5]["payload"]["caption"] == "Shot"
     assert parsed["object_updates"][5]["payload"]["url"] == "/uploads/a.png"
+
+
+def test_image_width_round_trip():
+    objects = {
+        5: {
+            "type": "image",
+            "payload": {"caption": "Shot", "url": "/uploads/a.png", "width": 0.5},
+        }
+    }
+    original = serialize_document(
+        {"version": 3, "blocks": [{"id": "b1", "type": "embed", "object_id": 5}]}
+    )
+    text = document_to_agent_text(original, objects_by_id=objects)
+    assert 'width="0.5"' in text
+    parsed = parse_agent_text(text)
+    assert parsed["object_updates"][5]["payload"]["width"] == 0.5
 
 
 def test_parse_agent_text_bullet_list_and_table():

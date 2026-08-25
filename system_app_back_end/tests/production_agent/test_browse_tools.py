@@ -365,3 +365,65 @@ def test_create_object_rejects_archived(mock_session, mock_create):
 
     assert "error" in result
     mock_create.assert_not_called()
+
+
+@patch("areas.production_agent.services.create_file_tool.file_ops.create_file")
+@patch("areas.production_agent.services.create_file_tool.db.session")
+def test_create_file_direct(mock_session, mock_create):
+    from areas.production_agent.services.create_file_tool import (
+        create_file as create_file_tool,
+    )
+
+    topic = MagicMock()
+    topic.id = 3
+    topic.name = "fitness"
+    topic.workspace_id = 1
+    topic.archived_at = None
+    mock_session.get.return_value = topic
+
+    file_row = MagicMock()
+    file_row.id = 88
+    file_row.name = "week plan"
+    mock_create.return_value = file_row
+
+    result = create_file_tool(
+        topic_id=3,
+        name="week plan",
+        scope={"workspace_id": 1},
+        write_mode="direct_apply",
+    )
+
+    assert result["applied"] is True
+    assert result["file_id"] == 88
+    assert result["topic"] == "fitness"
+    mock_create.assert_called_once()
+    assert mock_create.call_args.kwargs["place_first"] is True
+
+
+@patch("areas.production_agent.services.create_file_tool.file_ops.create_file")
+@patch("areas.production_agent.services.create_file_tool.db.session")
+def test_create_file_rejects_other_workspace(mock_session, mock_create):
+    from areas.production_agent.services.create_file_tool import (
+        create_file as create_file_tool,
+    )
+
+    topic = MagicMock()
+    topic.id = 3
+    topic.workspace_id = 9
+    topic.archived_at = None
+    mock_session.get.return_value = topic
+
+    result = create_file_tool(
+        topic_id=3,
+        name="week plan",
+        scope={"workspace_id": 1},
+        write_mode="direct_apply",
+    )
+
+    assert result["error"] == "topic out of scope"
+    mock_create.assert_not_called()
+
+
+def test_resolve_write_mode_includes_create_file():
+    assert resolve_write_mode("create_file", "direct_apply") == "direct_apply"
+    assert resolve_write_mode("create_file", "review") == "review"

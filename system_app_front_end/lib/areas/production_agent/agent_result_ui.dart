@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
 import '../production_agent/ai_action.dart';
+import './agent_message_snackbar.dart';
 import './compact_undo_toast.dart';
 import './pending_review_ui.dart';
+
+export './agent_message_snackbar.dart';
 
 /// Fire a saved AI action and show whatever it did.
 ///
@@ -20,9 +23,7 @@ Future<void> runSavedAgentAction(
     await presentAgentRunResult(context, state, result);
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(e.toString())),
-    );
+    showAgentMessageSnackBar(context, e.toString());
   }
 }
 
@@ -36,9 +37,7 @@ Future<void> presentAutomationRunResult(
   final s = state.strings;
   final run = result['run'];
   if (run is! Map) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(s['automationFailed'])),
-    );
+    showAgentMessageSnackBar(context, s['automationFailed']);
     return;
   }
   final payload = run['result'];
@@ -70,7 +69,7 @@ Future<void> presentAutomationRunResult(
   final message = failed
       ? (error.isNotEmpty ? error : s['automationFailed'])
       : (summaries.isNotEmpty ? summaries.join(' · ') : s['automationRan']);
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  showAgentMessageSnackBar(context, message);
 }
 
 /// Present an agent run from its result shape — not from a copied apply_mode.
@@ -102,9 +101,7 @@ Future<void> presentAgentRunResult(
       );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(s['aiReviewOpenFile'])),
-    );
+    showAgentMessageSnackBar(context, s['aiReviewOpenFile']);
     return;
   }
 
@@ -119,14 +116,15 @@ Future<void> presentAgentRunResult(
     return;
   }
 
+  final error = result['error']?.toString().trim() ?? '';
   final summary = result['summary']?.toString().trim() ?? '';
-  final message = summary.isNotEmpty
-      ? summary
-      : (applied ? s['aiAgentApplied'] : s['aiAgentNoChanges']);
+  final message = error.isNotEmpty
+      ? error
+      : (summary.isNotEmpty
+          ? summary
+          : (applied ? s['aiAgentApplied'] : s['aiAgentNoChanges']));
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(message)),
-  );
+  showAgentMessageSnackBar(context, message);
   if (reloadTopicIfApplied &&
       applied &&
       state.selectedTopic != null) {

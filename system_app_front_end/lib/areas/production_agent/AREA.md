@@ -53,7 +53,7 @@ After finish pending / direct apply, the topic reloads; open Super Editors pick 
 
 - `has_pending_review` / review proposals → if any edited file is **already on screen**, open lookalike dialogs in a queue (Finish/Discard on one → next pending on-screen file); otherwise snackbar “Open the file to review changes”
 - `applied` with `undo` cards → compact undo toast queue ([`compact_undo_toast.dart`](compact_undo_toast.dart)): file + topic + change summary, **Undo** / **X** / ~8s auto-close; next file when one closes
-- else → snackbar summary; reload topic when `applied`
+- else → snackbar summary (or error); **~10s** with an **X** to dismiss early ([`showAgentMessageSnackBar`](agent_result_ui.dart)); reload topic when `applied`
 
 Pending also opens when the **file** mounts ([`document_pane.dart`](../files/editor/document_pane.dart) → [`pending_review_ui.dart`](pending_review_ui.dart) → [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart)). After a dialog closes, the same helper continues to any other on-screen file that still has pending.
 
@@ -76,6 +76,7 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 | [`ai_action.dart`](ai_action.dart) / [`ai_action_service.dart`](ai_action_service.dart) | Saved-action model and `/ai-actions`. English `name` + Hebrew `name_he`. Scope: `topicId` xor `topicTypeId` xor neither (all) |
 | [`ai_action_edit_dialog.dart`](ai_action_edit_dialog.dart) | Create/rewrite: both names, All / type / topic picker (create defaults to the current topic) |
 | [`agent_result_ui.dart`](agent_result_ui.dart) | Result → dialog or snackbar; runs a saved action |
+| [`agent_message_snackbar.dart`](agent_message_snackbar.dart) | Agent summary / error snackbar (~10s, **X**) |
 | [`pending_review_ui.dart`](pending_review_ui.dart) | Shared open-pending helper (anti double-open) |
 | [`pending_review_service.dart`](pending_review_service.dart) | GET/DELETE/finish pending |
 | [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart) | Two file panes on glass + the moving bubble |

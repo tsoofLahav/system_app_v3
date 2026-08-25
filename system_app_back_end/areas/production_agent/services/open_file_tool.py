@@ -68,7 +68,8 @@ def _object_extras(
             entry = _info_extra(object_id, obj)
             if entry:
                 extras.append(entry)
-        # task_list / image / graph: usually none (content is in the fence)
+        # task_list header + tasks, image caption/url/width, and graph
+        # cells live in the fence; extras stay for info links.
     return extras
 
 

@@ -10,7 +10,7 @@ import re
 from datetime import datetime
 from typing import Any
 
-from models import InformationPiece, ObjectEmbed, Task, db
+from models import InformationPiece, ObjectEmbed, Task, TaskList, db
 from areas.files.services import document_marker_text as marker_text
 from areas.files.services.document_v3 import new_id, parse_document, serialize_document
 from areas.objects.services.task_list_order import tasks_for_list
@@ -26,7 +26,9 @@ _spacer_marker = marker_text._spacer_marker
 _append_spacer = marker_text._append_spacer
 
 _TASK_LIST_RE = re.compile(
-    r"\[TASK_LIST id=\"(\d+)\"]\s*(.*?)\s*\[/TASK_LIST]",
+    r'\[TASK_LIST id="(\d+)"'
+    r'(?: title="([^"]*)")?'
+    r'\]\s*(.*?)\s*\[/TASK_LIST]',
     re.DOTALL | re.IGNORECASE,
 )
 _INFO_RE = re.compile(
@@ -37,6 +39,7 @@ _IMAGE_RE = re.compile(
     r'\[IMAGE id="(\d+)"'
     r'(?: caption="([^"]*)")?'
     r'(?: url="([^"]*)")?'
+    r'(?: width="([^"]*)")?'
     r']',
     re.IGNORECASE,
 )
@@ -251,8 +254,13 @@ def load_objects_by_id(file_id: int) -> dict[int, dict[str, Any]]:
             if embed.information_id
             else None
         )
+        task_list = (
+            db.session.get(TaskList, embed.task_list_id)
+            if embed.task_list_id
+            else None
+        )
         # Pass model instances — ObjectEmbed.to_dict serializes them.
-        data = embed.to_dict(tasks=tasks, information=info)
+        data = embed.to_dict(task_list=task_list, tasks=tasks, information=info)
         by_id[embed.id] = data
     return by_id
 
@@ -338,6 +346,9 @@ def _image_section(object_id: int, obj: dict[str, Any]) -> str:
         attrs.append(f'caption="{_attr_escape(caption)}"')
     if ref:
         attrs.append(f'url="{_attr_escape(ref)}"')
+    width = payload.get("width")
+    if width is not None and width != "":
+        attrs.append(f'width="{_attr_escape(str(width))}"')
     return f'[IMAGE {" ".join(attrs)}]'
 
 
@@ -412,7 +423,13 @@ def _task_list_section(object_id: int, obj: dict[str, Any]) -> str:
     tasks = obj.get("tasks") or []
     active = [t for t in tasks if t.get("status") != "done"]
     done = [t for t in tasks if t.get("status") == "done"]
-    lines = [f'[TASK_LIST id="{object_id}"]', "ACTIVE:"]
+    task_list = obj.get("task_list") if isinstance(obj.get("task_list"), dict) else {}
+    title = str(task_list.get("title") or obj.get("title") or "")
+    open_tag = f'[TASK_LIST id="{object_id}"'
+    if title:
+        open_tag += f' title="{_attr_escape(title)}"'
+    open_tag += "]"
+    lines = [open_tag, "ACTIVE:"]
     for task in sorted(active, key=lambda t: (t.get("list_order_index", 0), t.get("id", 0))):
         lines.append(f"- [ ] {task.get('title', '')}")
     lines.append("DONE:")
@@ -583,7 +600,8 @@ def apply_object_updates(
             continue
         update_type = update.get("type")
         if update_type == "task_list":
-            _sync_task_list(embed, update.get("tasks") or [])
+            title = update["title"] if "title" in update else None
+            _sync_task_list(embed, update.get("tasks") or [], title=title)
         elif update_type == "info":
             _sync_info(embed, update)
         elif update_type in {"image", "graph", "table"}:
@@ -600,9 +618,18 @@ def apply_object_updates(
     return errors
 
 
-def _sync_task_list(embed: ObjectEmbed, tasks_data: list[dict[str, Any]]) -> None:
+def _sync_task_list(
+    embed: ObjectEmbed,
+    tasks_data: list[dict[str, Any]],
+    *,
+    title: str | None = None,
+) -> None:
     if not embed.task_list_id:
         return
+    if title is not None:
+        task_list = db.session.get(TaskList, embed.task_list_id)
+        if task_list is not None:
+            task_list.title = str(title)
     existing = tasks_for_list(embed.task_list_id)
     now = datetime.utcnow()
     for task in existing:
@@ -809,7 +836,8 @@ def _parse_table(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
 
 def _parse_task_list(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
     object_id = int(match.group(1))
-    body = match.group(2)
+    title_attr = match.group(2)
+    body = match.group(3)
     tasks: list[dict[str, Any]] = []
     section = "active"
     order = 0
@@ -836,9 +864,12 @@ def _parse_task_list(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
             }
         )
         order += 1
+    update: dict[str, Any] = {"type": "task_list", "tasks": tasks}
+    if title_attr is not None:
+        update["title"] = title_attr
     return (
         {"id": new_id("b"), "type": "embed", "object_id": object_id},
-        {object_id: {"type": "task_list", "tasks": tasks}},
+        {object_id: update},
     )
 
 
@@ -862,13 +893,19 @@ def _parse_info(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
 
 def _parse_image_marker(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
     object_id = int(match.group(1))
-    caption = match.group(2) or ""
-    url = match.group(3) or ""
+    caption = match.group(2)
+    url = match.group(3)
+    width_raw = match.group(4)
     payload: dict[str, Any] = {}
-    if caption:
+    if caption is not None:
         payload["caption"] = caption
-    if url:
+    if url is not None:
         payload["url"] = url
+    if width_raw is not None and width_raw.strip():
+        try:
+            payload["width"] = float(width_raw.strip())
+        except ValueError:
+            payload["width"] = width_raw.strip()
     return (
         {"id": new_id("b"), "type": "embed", "object_id": object_id},
         {object_id: {"type": "image", "payload": payload}},

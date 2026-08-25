@@ -53,7 +53,7 @@ Views are membership and filtering only. **Never add per-view status columns** �
 
 **Create task in a view.** `POST /views/:id/tasks` creates a real `tasks` row with **`task_list_id` null by default** (orphan — no home list). Optional `task_list_id` places it into an existing list. `tasks.task_list_id` is already nullable. Deleting a task with a home list should warn; orphans need no “original list” warning.
 
-**Task list header.** `task_lists.title` (migration `005`) is the list’s header — same role as info title. `PATCH /task-lists/:id` updates it. Membership/task payloads include `task_list_title` when the task has a home list.
+**Task list header.** `task_lists.title` (migration `005`) is the list’s header — same role as info title. `PATCH /task-lists/:id` updates it. Membership/task payloads include `task_list_title` when the task has a home list. Agent text carries it as `title="…"` on `[TASK_LIST id="…"]` so `patch_file` can rename the list.
 
 ## Information and the object graph
 

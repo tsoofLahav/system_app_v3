@@ -101,9 +101,11 @@ class AgentTaskListBlock extends AgentBlock {
     required this.tasks,
     required super.lineStart,
     required super.lineEnd,
+    this.title = '',
   });
 
   final int objectId;
+  final String title;
   final List<AgentTaskItem> tasks;
 }
 
@@ -214,7 +216,10 @@ class AgentUnknownBlock extends AgentBlock {
 
 final _headingRe = RegExp(r'^(#{1,6})\s*(.*)$');
 final _spacerRe = RegExp(r'^\[SPACER(?:\s+n="(\d+)")?\]$', caseSensitive: false);
-final _taskListOpenRe = RegExp(r'^\[TASK_LIST\s+id="(\d+)"\]$', caseSensitive: false);
+final _taskListOpenRe = RegExp(
+  r'^\[TASK_LIST\s+id="(\d+)"(?:\s+title="([^"]*)")?\]$',
+  caseSensitive: false,
+);
 final _infoOpenRe = RegExp(r'^\[INFO\s+id="(\d+)"\]$', caseSensitive: false);
 final _tableOpenRe = RegExp(r'^\[TABLE(?:\s+id="(\d+)")?\]$', caseSensitive: false);
 final _graphOpenRe = RegExp(
@@ -222,7 +227,7 @@ final _graphOpenRe = RegExp(
   caseSensitive: false,
 );
 final _imageRe = RegExp(
-  r'^\[IMAGE\s+id="(\d+)"(?:\s+caption="([^"]*)")?(?:\s+url="([^"]*)")?\]$',
+  r'^\[IMAGE\s+id="(\d+)"(?:\s+caption="([^"]*)")?(?:\s+url="([^"]*)")?(?:\s+width="([^"]*)")?\]$',
   caseSensitive: false,
 );
 final _bulletOpenRe = RegExp(r'^\[BULLET_LIST\]$', caseSensitive: false);
@@ -296,7 +301,13 @@ List<AgentBlock> parseAgentTextBlocks(String text) {
 
     final taskOpen = _taskListOpenRe.firstMatch(line);
     if (taskOpen != null) {
-      i = _readTaskList(lines, i, int.parse(taskOpen.group(1)!), blocks);
+      i = _readTaskList(
+        lines,
+        i,
+        int.parse(taskOpen.group(1)!),
+        taskOpen.group(2) ?? '',
+        blocks,
+      );
       continue;
     }
 
@@ -424,6 +435,7 @@ int _readTaskList(
   List<String> lines,
   int open,
   int objectId,
+  String title,
   List<AgentBlock> blocks,
 ) {
   final close = _findCloser(lines, open + 1, '[/TASK_LIST]');
@@ -447,6 +459,7 @@ int _readTaskList(
   blocks.add(
     AgentTaskListBlock(
       objectId: objectId,
+      title: title,
       tasks: tasks,
       lineStart: open,
       lineEnd: end,

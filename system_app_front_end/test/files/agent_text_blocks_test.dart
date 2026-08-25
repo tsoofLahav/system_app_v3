@@ -31,12 +31,23 @@ void main() {
     final block = parseAgentTextBlocks(text).single as AgentTaskListBlock;
 
     expect(block.objectId, 42);
+    expect(block.title, '');
     expect(block.lineStart, 0);
     expect(block.lineEnd, 5);
     expect(block.tasks.map((t) => t.title), ['Call clinic', 'Book room']);
     expect(block.tasks.map((t) => t.done), [false, true]);
     // The second task sits on line 4 — a hunk there marks only that task.
     expect(block.tasks[1].line, 4);
+  });
+
+  test('task list opener title is the list header', () {
+    const text = '[TASK_LIST id="42" title="Week"]\n'
+        'ACTIVE:\n'
+        '- [ ] Call clinic\n'
+        '[/TASK_LIST]';
+    final block = parseAgentTextBlocks(text).single as AgentTaskListBlock;
+    expect(block.title, 'Week');
+    expect(block.tasks.single.title, 'Call clinic');
   });
 
   test('info takes the first line as title, keeps body lines addressable', () {

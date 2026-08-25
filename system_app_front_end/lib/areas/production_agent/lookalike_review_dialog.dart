@@ -12,6 +12,7 @@ import '../ui/app_typography.dart';
 import '../ui/dialog_metrics.dart';
 import '../ui/glass_surface.dart';
 import '../ui/note_widgets.dart';
+import './agent_message_snackbar.dart';
 import './pending_review_service.dart';
 import './review_marks.dart';
 
@@ -347,7 +348,7 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      showAgentMessageSnackBar(context, '$e');
     }
   }
 
@@ -360,7 +361,7 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      showAgentMessageSnackBar(context, '$e');
     }
   }
 
