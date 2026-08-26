@@ -10,14 +10,12 @@ import '../topic/topic_appearance.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
-import '../layout/file_layouts.dart';
 import '../layout/topic_file_slots.dart';
 import '../../ui/glass_surface.dart';
 import '../../ui/overlay_dialog_shell.dart';
 import '../../ui/overlay_dialog_style.dart';
 import '../../ui/overlay_file_preview_card.dart';
 import '../../ui/horizontal_carousel.dart';
-import '../widgets/layout_picker_tile.dart';
 import '../../files/editor/file_preview.dart';
 import './arrange_layout_preview.dart';
 import './file_arrange_draft.dart';
@@ -65,7 +63,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   late HorizontalCarouselController _carousel;
   late FileArrangeDraft _draft;
   ArrangeFocusZone _focusZone = ArrangeFocusZone.shown;
-  ArrangeBottomFocus _bottomFocus = const ArrangeBottomFocus.layout(0);
+  ArrangeBottomFocus _bottomFocus = const ArrangeBottomFocus.done();
   bool _saving = false;
   bool _tapCandidate = false;
   Offset? _tapDownPosition;
@@ -92,7 +90,6 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
       scrollController: _scrollController,
       onChanged: () => setState(() {}),
     );
-    _syncLayoutFocusIndex();
   }
 
   @override
@@ -103,19 +100,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
     super.dispose();
   }
 
-  void _syncLayoutFocusIndex() {
-    _bottomFocus = ArrangeBottomFocus.forLayoutId(
-      _draft.layoutId,
-      _enabledLayoutIds(),
-    );
-  }
-
-  List<String> _enabledLayoutIds() => enabledLayoutIds(_draft.ordered.length);
-
-  void _setStateAndSyncLayout() {
-    _syncLayoutFocusIndex();
-    setState(() {});
-  }
+  void _bump() => setState(() {});
 
   int _centeredHiddenIndex() {
     final files = _draft.hidden;
@@ -147,19 +132,8 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
 
   void _handleHorizontal(int delta) {
     switch (_focusZone) {
-      case ArrangeFocusZone.layouts:
-        final ids = _enabledLayoutIds();
-        if (ids.isEmpty && delta != 0) {
-          _bottomFocus = delta < 0
-              ? const ArrangeBottomFocus.done()
-              : const ArrangeBottomFocus.cancel();
-          setState(() {});
-          return;
-        }
-        _bottomFocus = _bottomFocus.step(layoutCount: ids.length, delta: delta);
-        if (_bottomFocus.target == ArrangeBottomFocusTarget.layout) {
-          _draft.setLayoutId(ids[_bottomFocus.layoutIndex]);
-        }
+      case ArrangeFocusZone.actions:
+        _bottomFocus = _bottomFocus.step(layoutCount: 0, delta: delta);
         setState(() {});
       case ArrangeFocusZone.hidden:
         final files = _draft.hidden;
@@ -180,7 +154,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
         } else {
           if (!_draft.rotateShownLeft()) return;
         }
-        _setStateAndSyncLayout();
+        _bump();
     }
   }
 
@@ -192,8 +166,8 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
           _onShowCenteredHidden(_overlayWidth);
         }
       case ArrangeFocusZone.shown:
-        if (_draft.hide(0)) _setStateAndSyncLayout();
-      case ArrangeFocusZone.layouts:
+        if (_draft.hide(0)) _bump();
+      case ArrangeFocusZone.actions:
         return;
     }
   }
@@ -222,7 +196,12 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
         _transferBetweenSections();
         return KeyEventResult.handled;
       case LogicalKeyboardKey.enter:
-        _save();
+        if (_focusZone == ArrangeFocusZone.actions &&
+            _bottomFocus.target == ArrangeBottomFocusTarget.cancel) {
+          if (!_saving) Navigator.of(context).pop(false);
+        } else {
+          _save();
+        }
         return KeyEventResult.handled;
       case LogicalKeyboardKey.escape:
         if (!_saving) Navigator.of(context).pop(false);
@@ -281,16 +260,8 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   Future<void> _save() async {
     if (_saving) return;
     setState(() => _saving = true);
-    await widget.state.setLayoutForTopic(widget.topic, _draft.layoutId);
-    // Prefer the topic state just wrote — the overlay still holds the snapshot
-    // from when it opened, whose layout is the old one.
-    final topic =
-        widget.state.allTopics
-            .where((t) => t.id == widget.topic.id)
-            .firstOrNull ??
-        widget.topic;
     final error = await widget.state.reorderTopicFiles(
-      topic,
+      widget.topic,
       ordered: _draft.ordered,
     );
     if (!mounted) return;
@@ -308,14 +279,14 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
     final index = _draft.shown.indexWhere((f) => f.id == file.id);
     if (index < 0) return;
     if (!_draft.moveShownToFirst(index)) return;
-    _setStateAndSyncLayout();
+    _bump();
   }
 
   void _onShownFileSecondaryTap(AppFile file) {
     final index = _draft.shown.indexWhere((f) => f.id == file.id);
     if (index < 0) return;
     if (!_draft.hide(index)) return;
-    _setStateAndSyncLayout();
+    _bump();
   }
 
   void _onShowCenteredHidden(double viewportWidth) {
@@ -327,7 +298,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
       itemCount: files.length,
     );
     if (!_draft.show(index)) return;
-    _setStateAndSyncLayout();
+    _bump();
   }
 
   void _onCarouselPointerDown(PointerDownEvent event) {
@@ -429,7 +400,7 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
               ],
               const SizedBox(height: 14),
               _zoneChrome(
-                focused: _focusZone == ArrangeFocusZone.layouts,
+                focused: _focusZone == ArrangeFocusZone.actions,
                 borderRadius: BorderRadius.circular(10),
                 child: _buildBottomBars(s),
               ),
@@ -513,89 +484,31 @@ class _FileArrangeOverlayState extends State<FileArrangeOverlay> {
   }
 
   Widget _buildBottomBars(AppStrings s) {
-    final enabledIds = _enabledLayoutIds();
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GlassBarSegment(
-          height: _bottomBarHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < FileLayouts.all.length; i++) ...[
-                if (i > 0) const SizedBox(width: 2),
-                Builder(
-                  builder: (context) {
-                    final layout = FileLayouts.all[i];
-                    final enabled = FileLayouts.isAvailable(
-                      layout.id,
-                      _draft.ordered.length,
-                    );
-                    final enabledIndex = enabledIds.indexOf(layout.id);
-                    final keyboardFocused =
-                        _focusZone == ArrangeFocusZone.layouts &&
-                        _bottomFocus.target ==
-                            ArrangeBottomFocusTarget.layout &&
-                        _bottomFocus.layoutIndex == enabledIndex;
-                    return LayoutPickerTile(
-                      layoutId: layout.id,
-                      label: s.layoutLabel(layout.id),
-                      selected: _draft.layoutId == layout.id,
-                      focused: keyboardFocused,
-                      enabled: enabled,
-                      compact: true,
-                      iconWidth: 40,
-                      iconHeight: 28,
-                      onTap: enabled
-                          ? () {
-                              setState(() {
-                                _draft.setLayoutId(layout.id);
-                                _bottomFocus = ArrangeBottomFocus.layout(
-                                  enabledIndex,
-                                );
-                                _focusZone = ArrangeFocusZone.layouts;
-                              });
-                            }
-                          : null,
-                    );
-                  },
-                ),
-              ],
-            ],
+    return GlassBarSegment(
+      height: _bottomBarHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ChromeIconButton(
+            tooltip: s['cancel'],
+            icon: AppIcons.close,
+            focused:
+                _focusZone == ArrangeFocusZone.actions &&
+                _bottomFocus.target == ArrangeBottomFocusTarget.cancel,
+            onPressed: _saving ? null : () => Navigator.of(context).pop(false),
           ),
-        ),
-        const SizedBox(width: 8),
-        GlassBarSegment(
-          height: _bottomBarHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _ChromeIconButton(
-                tooltip: s['cancel'],
-                icon: AppIcons.close,
-                focused:
-                    _focusZone == ArrangeFocusZone.layouts &&
-                    _bottomFocus.target == ArrangeBottomFocusTarget.cancel,
-                onPressed: _saving
-                    ? null
-                    : () => Navigator.of(context).pop(false),
-              ),
-              _ChromeIconButton(
-                tooltip: s['arrangeDone'],
-                icon: AppIcons.check,
-                focused:
-                    _focusZone == ArrangeFocusZone.layouts &&
-                    _bottomFocus.target == ArrangeBottomFocusTarget.done,
-                onPressed: _saving ? null : _save,
-                emphasized: true,
-              ),
-            ],
+          _ChromeIconButton(
+            tooltip: s['arrangeDone'],
+            icon: AppIcons.check,
+            focused:
+                _focusZone == ArrangeFocusZone.actions &&
+                _bottomFocus.target == ArrangeBottomFocusTarget.done,
+            onPressed: _saving ? null : _save,
+            emphasized: true,
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

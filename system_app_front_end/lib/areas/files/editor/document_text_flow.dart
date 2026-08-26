@@ -105,6 +105,52 @@ bool isGraphCellSegmentId(String segmentId) =>
   );
 }
 
+/// Rows whose every cell is in [fullyEmptied] — a whole marked row is
+/// removed, not left blank.
+List<int> fullyMarkedTableRows({
+  required String tableId,
+  required int rowCount,
+  required int columnCount,
+  required Set<String> fullyEmptied,
+}) {
+  if (rowCount <= 0 || columnCount <= 0) return const [];
+  final rows = <int>[];
+  for (var r = 0; r < rowCount; r++) {
+    var whole = true;
+    for (var c = 0; c < columnCount; c++) {
+      if (!fullyEmptied.contains(tableCellSegmentId(tableId, r, c))) {
+        whole = false;
+        break;
+      }
+    }
+    if (whole) rows.add(r);
+  }
+  return rows;
+}
+
+/// Columns whose every cell is in [fullyEmptied] — a whole marked chart
+/// series is removed, not left blank.
+List<int> fullyMarkedTableColumns({
+  required String tableId,
+  required int rowCount,
+  required int columnCount,
+  required Set<String> fullyEmptied,
+}) {
+  if (rowCount <= 0 || columnCount <= 0) return const [];
+  final cols = <int>[];
+  for (var c = 0; c < columnCount; c++) {
+    var whole = true;
+    for (var r = 0; r < rowCount; r++) {
+      if (!fullyEmptied.contains(tableCellSegmentId(tableId, r, c))) {
+        whole = false;
+        break;
+      }
+    }
+    if (whole) cols.add(c);
+  }
+  return cols;
+}
+
 /// A caret position expressed against the document rather than one field.
 @immutable
 class DocumentTextPosition {
@@ -478,10 +524,17 @@ class DocumentTextFlow extends FrameSafeNotifier {
   Set<String> fullyMarkedSegments() {
     final result = <String>{};
     for (final id in segmentsInSelection()) {
-      final range = selectionWithin(id);
       final length = lengthOf(id);
-      if (range == null || length == null) continue;
-      if (range.start == 0 && range.end == length && length > 0) result.add(id);
+      if (length == null) continue;
+      // Empty parts in the selection are covered end to end — a blank task
+      // or cell in a whole-row mark must go with the row.
+      if (length == 0) {
+        result.add(id);
+        continue;
+      }
+      final range = selectionWithin(id);
+      if (range == null) continue;
+      if (range.start == 0 && range.end == length) result.add(id);
     }
     return result;
   }
@@ -490,7 +543,11 @@ class DocumentTextFlow extends FrameSafeNotifier {
   /// to drop any structure that was marked in full.
   ///
   /// Returns false when there was nothing to delete.
-  bool deleteSelection() {
+  ///
+  /// [keepFirstPart] is for typing/paste over the mark: the first part
+  /// receives the replacement, so it must not be dropped even if it was
+  /// marked end to end.
+  bool deleteSelection({bool keepFirstPart = false}) {
     if (!spansSegments) return false;
     final ends = orderedSelection();
     if (ends == null) return false;
@@ -521,7 +578,9 @@ class DocumentTextFlow extends FrameSafeNotifier {
 
     if (!changed) return false;
     placeCaret(start);
-    pruneStructures(fullyEmptied, spansParts: touched.length > 1);
+    final prunable = {...fullyEmptied};
+    if (keepFirstPart) prunable.remove(start.segmentId);
+    pruneStructures(prunable, spansParts: touched.length > 1);
     return true;
   }
 

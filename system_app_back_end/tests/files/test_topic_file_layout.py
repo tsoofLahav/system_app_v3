@@ -13,7 +13,16 @@ import inspect
 from areas.files.routes import topics as topics_routes
 from models import File, Topic
 
-LAYOUT_IDS = {"auto", "single", "split", "hero_left", "hero_right", "row", "grid"}
+LAYOUT_IDS = {
+    "auto",
+    "single",
+    "split",
+    "hero",
+    "grid",
+    "hero_left",
+    "hero_right",
+    "row",
+}
 
 
 def test_topic_stores_its_file_layout():
@@ -30,7 +39,7 @@ def test_layout_is_updatable_through_the_api():
     source = inspect.getsource(topics_routes.update_topic)
     assert '"file_layout"' in source, (
         "PATCH /topics/<id> must accept file_layout — it is the only way the "
-        "arrange dialog persists which files stay on screen"
+        "layout picker persists which files stay on screen"
     )
 
 

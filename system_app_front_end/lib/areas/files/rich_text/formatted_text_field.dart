@@ -32,9 +32,10 @@ class DescriptionTextRange {
   final Map<String, dynamic> link;
 }
 
-/// Object inner text (info, tasks, table cells): a Material [TextField].
-/// Flutter paints the caret. Tap placement is [embedCaretForTap] only.
-/// See `CARET_AND_WRITING_FOCUS.md` § Object inner text.
+/// Object inner text (info, tasks, table cells, captions): a Material
+/// [TextField]. Flutter paints the caret. Click placement is
+/// [embedCaretForTap] only — not drags, not an existing mark, not Shift+click.
+/// See `CARET_AND_WRITING_FOCUS.md` § Writing in objects.
 class FormattedTextField extends StatefulWidget {
   const FormattedTextField({
     super.key,
@@ -139,6 +140,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   bool _applyingFlowSelection = false;
   TextDirection? _detectedDirection;
   Offset? _pendingTapGlobal;
+  var _pointerMovedBeyondSlop = false;
   late final Map<Type, Action<Intent>> _rtlMotionActions;
   bool _mutatingImeSentinel = false;
   bool _structureEnterArmed = true;
@@ -426,8 +428,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     };
     if (viewportBox == null || !viewportBox.hasSize) return true;
     final field = box.localToGlobal(Offset.zero) & box.size;
-    final visible =
-        viewportBox.localToGlobal(Offset.zero) & viewportBox.size;
+    final visible = viewportBox.localToGlobal(Offset.zero) & viewportBox.size;
     return visible.overlaps(field);
   }
 
@@ -719,8 +720,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
 
     final segmentId = _registeredSegmentId;
     final flow = _flow;
-    // Structure parts have `#` in the id; plain paragraphs do not.
-    if (segmentId == null || flow == null || !segmentId.contains('#')) {
+    // Object flows (task list, table) treat every segment as a structure
+    // part. Task ids are `task:<id>` and have no `#`.
+    if (segmentId == null || flow == null) {
       return true;
     }
 
@@ -731,7 +733,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   }
 
   /// When clearing one part leaves a list/table/info with no content left,
-  /// mark every part so prune removes the whole structure.
+  /// mark every sibling part so prune can drop them. Inner object hosts keep
+  /// one empty part; they do not destroy the object.
   void _expandPruneToWholeStructureIfEmpty(
     DocumentTextFlow flow,
     String segmentId,
@@ -758,7 +761,18 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     }
 
     final hash = segmentId.indexOf('#');
-    if (hash < 0) return;
+    if (hash < 0) {
+      // Task rows: `task:<id>` / `task:pending:` — if every task is empty,
+      // prune all of them; the host keeps one empty row (object stays).
+      if (isTaskRowSegmentId(segmentId)) {
+        final ids = [
+          for (final id in flow.order)
+            if (isTaskRowSegmentId(id)) id,
+        ];
+        if (_allSegmentsEmpty(flow, ids, toPrune)) toPrune.addAll(ids);
+      }
+      return;
+    }
     final blockId = segmentId.substring(0, hash);
     final suffix = segmentId.substring(hash);
 
@@ -772,7 +786,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       return;
     }
 
-    // Table cells: `#cR:C` — if every cell is empty, drop the table.
+    // Table cells: `#cR:C` — if every cell is empty, prune them; the host
+    // keeps one empty row (object stays).
     if (RegExp(r'^#c\d+:\d+$').hasMatch(suffix)) {
       final ids = [
         for (final id in flow.order)
@@ -782,12 +797,11 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       return;
     }
 
-    // Task rows: `#tN` — if every task is empty, drop them all (host removes
-    // the object when no tasks remain).
-    if (RegExp(r'^#t\d+$').hasMatch(suffix)) {
+    // Legacy slot-based task rows `#tN`.
+    if (RegExp(r'^#t\d+$').hasMatch(suffix) || isTaskRowSegmentId(segmentId)) {
       final ids = [
         for (final id in flow.order)
-          if (id.startsWith('$blockId#t')) id,
+          if (isTaskRowSegmentId(id)) id,
       ];
       if (_allSegmentsEmpty(flow, ids, toPrune)) toPrune.addAll(ids);
     }
@@ -908,23 +922,36 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   /// Shift+click extends the document selection into this part; a plain click
   /// drops a selection that was covering several parts.
   ///
-  /// RTL solution (`rtl/RTL.md`): padding beside the line → logical end;
-  /// BiDi gaps snap to the nearest glyph; end-of-line taps keep affinity on
-  /// that line. Same turn, no post-frame.
+  /// RTL solution (`rtl/RTL.md`): padding beside the line → logical end **on
+  /// a click**; BiDi gaps snap to the nearest glyph; end-of-line taps keep
+  /// affinity on that line. Same turn, no post-frame. Drags, an existing
+  /// mark, and Shift+click keep Flutter's selection — [embedCaretForTap]
+  /// would collapse them to the line end (Hebrew whole-line mark).
   void _handleTap() {
     final flow = _flow;
     final segmentId = _registeredSegmentId;
     final tapGlobal = _pendingTapGlobal;
+    final dragged = _pointerMovedBeyondSlop;
     _pendingTapGlobal = null;
+    _pointerMovedBeyondSlop = false;
 
-    var offset = widget.controller.selection.isValid
-        ? widget.controller.selection.extentOffset
+    final selection = widget.controller.selection;
+    final hasRange = selection.isValid && !selection.isCollapsed;
+    final extending = HardwareKeyboard.instance.isShiftPressed;
+
+    var offset = selection.isValid
+        ? selection.extentOffset
         : widget.controller.text.length;
 
     if (tapGlobal != null) {
       final host = context.findRenderObject();
       final editable = host == null ? null : _findRenderEditable(host);
-      if (editable != null) {
+      if (editable != null &&
+          shouldApplyEmbedCaretForTap(
+            draggedBeyondSlop: dragged,
+            selectionIsRange: hasRange,
+            shiftPressed: extending,
+          )) {
         final next = embedCaretForTap(
           editable: editable,
           globalPosition: tapGlobal,
@@ -935,6 +962,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         if (flow != null && segmentId != null) {
           flow.collapseTo(DocumentTextPosition(segmentId, offset));
         }
+      } else {
+        offset = _offsetForGlobal(tapGlobal) ?? offset;
       }
       final hostBox = context.findRenderObject();
       if (hostBox is RenderBox) {
@@ -947,15 +976,19 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     }
 
     if (flow == null || segmentId == null) return;
-    if (!widget.controller.selection.isValid) return;
+    if (!widget.controller.selection.isValid && !extending) return;
 
-    if (HardwareKeyboard.instance.isShiftPressed && flow.selection != null) {
+    if (extending) {
+      if (flow.selection == null) {
+        final base = selection.isValid ? selection.baseOffset : offset;
+        flow.collapseTo(DocumentTextPosition(segmentId, base));
+      }
       _applyFlowSelection(
         flow,
         DocumentTextPosition(segmentId, offset),
         extend: true,
       );
-    } else if (flow.spansSegments) {
+    } else if (flow.spansSegments && !hasRange && !dragged) {
       _applyFlowSelection(
         flow,
         DocumentTextPosition(segmentId, offset),
@@ -994,7 +1027,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     }
 
     final start = flow.orderedSelection()?.$1;
-    flow.deleteSelection();
+    flow.deleteSelection(keepFirstPart: true);
     if (start != null) flow.insertTextAt(start, character);
     return true;
   }
@@ -1228,7 +1261,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
           onEnter: _invokeStructureEnter,
           onEmptyBackspace: _invokeEmptyBackspace,
         ),
-      if (widget.stripNewlines) _StripNewlinesFormatter(),
+      if (widget.stripNewlines) StripNewlinesFormatter(),
     ];
 
     return Listener(
@@ -1236,9 +1269,18 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       onPointerDown: (event) {
         if (event.buttons == kPrimaryButton) {
           _pendingTapGlobal = event.position;
+          _pointerMovedBeyondSlop = false;
         }
         final isSecondary = (event.buttons & kSecondaryMouseButton) != 0;
         if (isSecondary) {
+          DocumentSecondaryTap.notePointer(event.pointer);
+          // New right-click retargets even while the previous menu is open.
+          BlockTextFocusRegistry.beginNewPointerAim();
+          // Claim writing before freeze — a right-click must move the caret
+          // into this field and drop the Super Editor caret/mark.
+          if (!_focusNode.hasFocus) {
+            _focusNode.requestFocus();
+          }
           // Freeze what the action will hit before the menu can move focus or
           // collapse the selection.
           _capturePendingMark(event.position);
@@ -1261,6 +1303,17 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
             );
           }
         }
+      },
+      onPointerMove: (event) {
+        final down = _pendingTapGlobal;
+        if (down == null) return;
+        if ((event.position - down).distance > kTouchSlop) {
+          _pointerMovedBeyondSlop = true;
+        }
+      },
+      onPointerCancel: (_) {
+        _pendingTapGlobal = null;
+        _pointerMovedBeyondSlop = false;
       },
       child: MouseRegion(
         onHover: widget.descriptionRanges.isEmpty
@@ -1863,7 +1916,19 @@ bool imeDeletedEmptySentinel(String previous, String next) {
   return previous == imeEmptySentinel && next.isEmpty;
 }
 
-class _StripNewlinesFormatter extends TextInputFormatter {
+/// Click caret correction ([embedCaretForTap]) is for a collapsed click.
+/// Drags, an existing mark, and Shift+click keep Flutter's selection so a
+/// Hebrew padding hit does not expand to the whole visual line.
+@visibleForTesting
+bool shouldApplyEmbedCaretForTap({
+  required bool draggedBeyondSlop,
+  required bool selectionIsRange,
+  required bool shiftPressed,
+}) {
+  return !draggedBeyondSlop && !selectionIsRange && !shiftPressed;
+}
+
+class StripNewlinesFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
@@ -1871,9 +1936,10 @@ class _StripNewlinesFormatter extends TextInputFormatter {
   ) {
     if (!newValue.text.contains('\n')) return newValue;
     final cleaned = newValue.text.replaceAll('\n', ' ');
+    final extent = newValue.selection.extentOffset.clamp(0, cleaned.length);
     return newValue.copyWith(
       text: cleaned,
-      selection: TextSelection.collapsed(offset: cleaned.length),
+      selection: TextSelection.collapsed(offset: extent),
       composing: TextRange.empty,
     );
   }

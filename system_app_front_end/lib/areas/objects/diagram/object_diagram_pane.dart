@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:interactive_graph_view/interactive_graph_view.dart';
 
 import '../../../core/app_state.dart';
@@ -14,6 +15,7 @@ import '../../ui/glass_surface.dart';
 import '../../ux/shell/app_bottom_bar.dart';
 import '../../ux/topic/topic_appearance.dart';
 import '../../ux/widgets/app_context_menu.dart';
+import '../../files/rich_text/rtl/rtl.dart';
 import '../data/object_embed.dart';
 import '../data/object_service.dart';
 import '../links/add_connection_dialog.dart';
@@ -1101,7 +1103,8 @@ class _ExpandedInfoCardState extends State<_ExpandedInfoCard> {
                   controller: _title,
                   style: titleStyle,
                   spans: titleSpans,
-                  maxLines: 1,
+                  maxLines: null,
+                  stripNewlines: true,
                 ),
               ),
               _linkedMapField(
@@ -1122,14 +1125,20 @@ class _ExpandedInfoCardState extends State<_ExpandedInfoCard> {
     required TextStyle style,
     required List<_MapDescriptionSpan> spans,
     required int? maxLines,
+    bool stripNewlines = false,
   }) {
     controller.ranges = spans;
     final field = TextField(
       controller: controller,
       autofocus: false,
       style: style,
+      textDirection: resolveFieldTextDirection(
+        controller.text,
+        Directionality.of(context),
+      ),
       maxLines: maxLines,
       minLines: 1,
+      inputFormatters: stripNewlines ? [_StripMapNewlinesFormatter()] : null,
       decoration: const InputDecoration(
         isDense: true,
         border: InputBorder.none,
@@ -1321,5 +1330,23 @@ extension _FirstOrNull<E> on Iterable<E> {
     final it = iterator;
     if (!it.moveNext()) return null;
     return it.current;
+  }
+}
+
+/// One visual line — same as task list titles (`maxLines: null` + strip).
+class _StripMapNewlinesFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (!newValue.text.contains('\n')) return newValue;
+    final cleaned = newValue.text.replaceAll('\n', ' ');
+    final extent = newValue.selection.extentOffset.clamp(0, cleaned.length);
+    return newValue.copyWith(
+      text: cleaned,
+      selection: TextSelection.collapsed(offset: extent),
+      composing: TextRange.empty,
+    );
   }
 }

@@ -45,8 +45,7 @@ String infoEditSnapshot({
   required String title,
   required String body,
   required List<dynamic> spans,
-}) =>
-    jsonEncode({'title': title, 'body': body, 'spans': spans});
+}) => jsonEncode({'title': title, 'body': body, 'spans': spans});
 
 String infoSnapshotFromEmbed(ObjectEmbed embed) {
   final info = embed.information ?? const {};
@@ -226,16 +225,12 @@ class InfoEmbedState extends State<InfoEmbed>
       controller: _controller,
       changed: _scheduleSave,
       focusNode: _focus,
-      fontSize: AppTypography.noteBodyStyle.fontSize ?? 12.5,
+      fontSize: AppTypography.noteTitleStyle.fontSize ?? 14,
     );
-    BlockTextFocusRegistry.capturePendingWholeFieldMark(
-      controller: _controller,
-      onChanged: _scheduleSave,
-      segmentId: infoTextSegmentId(widget.blockId),
-    );
+    BlockTextFocusRegistry.capturePendingMark();
   }
 
-  void _seedFromEmbed(ObjectEmbed embed) {
+  void _seedFromEmbed(ObjectEmbed embed, {bool preserveSelection = false}) {
     final info = embed.information ?? const {};
     final title = info['title'] as String? ?? '';
     final body = info['body'] as String? ?? '';
@@ -251,6 +246,7 @@ class InfoEmbedState extends State<InfoEmbed>
     _controller.setRichState(
       text: combined,
       spans: infoSpansToCombined(bodySpans, combined),
+      preserveSelection: preserveSelection,
     );
   }
 
@@ -277,6 +273,8 @@ class InfoEmbedState extends State<InfoEmbed>
       return;
     }
     if (identical(keyboardFocus, this)) keyboardFocus = null;
+    final cached = _cachedEmbed;
+    if (cached != null) _considerInbound(cached);
   }
 
   Future<void> addConnectionFromShortcut() => _addConnection();
@@ -380,6 +378,9 @@ class InfoEmbedState extends State<InfoEmbed>
       case RemoteEditDecision.ignore:
         return;
       case RemoteEditDecision.takeRemote:
+        // Do not jump the caret while this field owns typing. Apply on blur
+        // (see _onKeyboardFocus) unless the user chose Take theirs.
+        if (_focus.hasFocus) return;
         _applyRemote(inbound);
         return;
       case RemoteEditDecision.ask:
@@ -398,7 +399,7 @@ class InfoEmbedState extends State<InfoEmbed>
         runAfterKeystroke(paint);
         return;
       }
-      _seedFromEmbed(inbound);
+      _seedFromEmbed(inbound, preserveSelection: _focus.hasFocus);
       _baselineKey = infoSnapshotFromEmbed(inbound);
       setState(() {});
     }
@@ -450,11 +451,7 @@ class InfoEmbedState extends State<InfoEmbed>
         body: body,
         spans: spans,
       );
-      _baselineKey = infoEditSnapshot(
-        title: title,
-        body: body,
-        spans: spans,
-      );
+      _baselineKey = infoEditSnapshot(title: title, body: body, spans: spans);
       _setDirty(false);
     } catch (_) {
       // Object may have been removed while a debounce was pending.
@@ -480,23 +477,6 @@ class InfoEmbedState extends State<InfoEmbed>
     if (_isEmptyObject) {
       runAfterKeystroke(() => widget.onDeleteObject?.call());
     }
-  }
-
-  /// Enter inserts a newline (first line stays the title). Leave with Shift+Enter.
-  void _onEnter() {
-    widget.onFocus?.call();
-    final text = _controller.text;
-    final sel = _controller.selection;
-    final offset = sel.isValid
-        ? sel.baseOffset.clamp(0, text.length)
-        : text.length;
-
-    final next = text.replaceRange(offset, offset, '\n');
-    _controller.value = TextEditingValue(
-      text: next,
-      selection: TextSelection.collapsed(offset: offset + 1),
-    );
-    _scheduleSave();
   }
 
   Future<void> _showTextMenu(TapDownDetails details) async {
@@ -542,69 +522,68 @@ class InfoEmbedState extends State<InfoEmbed>
     final body = Padding(
       padding: infoLookPadding(look),
       child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            FormattedTextField(
-              controller: _controller,
-              focusNode: _focus,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          FormattedTextField(
+            controller: _controller,
+            focusNode: _focus,
+            segmentId: infoTextSegmentId(widget.blockId),
+            documentBaseOffset: widget.documentBaseOffset,
+            style: AppTypography.noteTitleStyle,
+            maxLines: null,
+            minLines: 1,
+            onChanged: (_) => _scheduleSave(),
+            onBackspaceAtStart: _onBackspaceAtStart,
+            onSecondaryTapDown: _showTextMenu,
+            descriptionRanges: descriptionRangesForSegment(
+              state: widget.state,
+              fileId: widget.embed.fileId,
               segmentId: infoTextSegmentId(widget.blockId),
-              documentBaseOffset: widget.documentBaseOffset,
-              style: AppTypography.noteBodyStyle,
-              maxLines: null,
-              minLines: 1,
-              onChanged: (_) => _scheduleSave(),
-              onEnter: _onEnter,
-              onBackspaceAtStart: _onBackspaceAtStart,
-              onSecondaryTapDown: _showTextMenu,
-              descriptionRanges: descriptionRangesForSegment(
-                state: widget.state,
-                fileId: widget.embed.fileId,
-                segmentId: infoTextSegmentId(widget.blockId),
-              ),
-              onDescriptionActivate: (range) =>
-                  openDescriptionTarget(state: widget.state, link: range.link),
-              onArrowExitAbove: () => navigateEmbedLine(
-                lineIndex: 0,
-                lineCount: lineCount,
-                focusLine: focusLine,
-                goingDown: false,
-              ),
-              onArrowExitBelow: () => navigateEmbedLine(
-                lineIndex: 0,
-                lineCount: lineCount,
-                focusLine: focusLine,
-                goingDown: true,
-              ),
             ),
-            if (tags.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  for (final tag in tags)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: TopicAppearance.colorFromHex(
-                          tag.color ?? TopicAppearance.defaultColor,
-                        ).withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        '${tag.icon?.isNotEmpty == true ? '${tag.icon} ' : ''}${tag.name}',
-                        style: AppTypography.metaStyle.copyWith(fontSize: 11),
-                      ),
+            onDescriptionActivate: (range) =>
+                openDescriptionTarget(state: widget.state, link: range.link),
+            onArrowExitAbove: () => navigateEmbedLine(
+              lineIndex: 0,
+              lineCount: lineCount,
+              focusLine: focusLine,
+              goingDown: false,
+            ),
+            onArrowExitBelow: () => navigateEmbedLine(
+              lineIndex: 0,
+              lineCount: lineCount,
+              focusLine: focusLine,
+              goingDown: true,
+            ),
+          ),
+          if (tags.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                for (final tag in tags)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
                     ),
-                ],
-              ),
-            ],
+                    decoration: BoxDecoration(
+                      color: TopicAppearance.colorFromHex(
+                        tag.color ?? TopicAppearance.defaultColor,
+                      ).withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${tag.icon?.isNotEmpty == true ? '${tag.icon} ' : ''}${tag.name}',
+                      style: AppTypography.metaStyle.copyWith(fontSize: 11),
+                    ),
+                  ),
+              ],
+            ),
           ],
-        ),
+        ],
+      ),
     );
     if (decoration == null) return body;
     return DecoratedBox(decoration: decoration, child: body);
@@ -633,6 +612,8 @@ class ImageEmbed extends StatefulWidget {
 
 class _ImageEmbedState extends State<ImageEmbed> {
   late List<TextEditingController> _captionControllers;
+  late List<FocusNode> _captionFocus;
+  Timer? _captionSaveTimer;
   var _uploading = false;
   late double _scale;
 
@@ -657,6 +638,7 @@ class _ImageEmbedState extends State<ImageEmbed> {
     _captionControllers = [
       for (final pane in _panes) TextEditingController(text: pane['caption']),
     ];
+    _captionFocus = [for (final _ in _panes) FocusNode()];
   }
 
   @override
@@ -671,15 +653,18 @@ class _ImageEmbedState extends State<ImageEmbed> {
     final panes = _panes;
     while (_captionControllers.length > panes.length) {
       _captionControllers.removeLast().dispose();
+      _captionFocus.removeLast().dispose();
     }
     while (_captionControllers.length < panes.length) {
       final i = _captionControllers.length;
       _captionControllers.add(
         TextEditingController(text: panes[i]['caption'] ?? ''),
       );
+      _captionFocus.add(FocusNode());
     }
     for (var i = 0; i < panes.length; i++) {
       final next = panes[i]['caption'] ?? '';
+      if (_captionFocus[i].hasFocus) continue;
       if (next != _captionControllers[i].text) {
         _captionControllers[i].text = next;
       }
@@ -688,8 +673,12 @@ class _ImageEmbedState extends State<ImageEmbed> {
 
   @override
   void dispose() {
+    _captionSaveTimer?.cancel();
     for (final c in _captionControllers) {
       c.dispose();
+    }
+    for (final n in _captionFocus) {
+      n.dispose();
     }
     super.dispose();
   }
@@ -719,6 +708,14 @@ class _ImageEmbedState extends State<ImageEmbed> {
     }
   }
 
+  void _scheduleCaptionSave() {
+    _captionSaveTimer?.cancel();
+    _captionSaveTimer = Timer(
+      const Duration(milliseconds: 400),
+      _commitCaptions,
+    );
+  }
+
   void _commitCaptions() {
     final panes = [
       for (var i = 0; i < _panes.length; i++)
@@ -730,7 +727,10 @@ class _ImageEmbedState extends State<ImageEmbed> {
         },
     ];
     widget.onPayloadChanged(
-      ImageObjectPayload.mirrored(panes, existing: {..._payload, 'width': _scale}),
+      ImageObjectPayload.mirrored(
+        panes,
+        existing: {..._payload, 'width': _scale},
+      ),
     );
   }
 
@@ -774,10 +774,8 @@ class _ImageEmbedState extends State<ImageEmbed> {
     Widget picture = Image.network(
       resolved,
       fit: BoxFit.contain,
-      errorBuilder: (_, error, stackTrace) => Text(
-        'Image unavailable',
-        style: AppTypography.metaStyle,
-      ),
+      errorBuilder: (_, error, stackTrace) =>
+          Text('Image unavailable', style: AppTypography.metaStyle),
     );
     if (ObjectLook.imageIsGreyscale(look)) {
       picture = ColorFiltered(
@@ -785,10 +783,7 @@ class _ImageEmbedState extends State<ImageEmbed> {
         child: picture,
       );
     }
-    picture = ClipRRect(
-      borderRadius: BorderRadius.circular(6),
-      child: picture,
-    );
+    picture = ClipRRect(borderRadius: BorderRadius.circular(6), child: picture);
     if (ObjectLook.imageHasFrame(look)) {
       picture = DecoratedBox(
         decoration: BoxDecoration(
@@ -802,15 +797,14 @@ class _ImageEmbedState extends State<ImageEmbed> {
   }
 
   Widget _captionField(int index) {
-    return TextField(
+    return FormattedTextField(
       controller: _captionControllers[index],
+      focusNode: _captionFocus[index],
       style: AppTypography.metaStyle,
-      decoration: const InputDecoration(
-        isDense: true,
-        border: InputBorder.none,
-      ),
-      onSubmitted: (_) => _commitCaptions(),
-      onEditingComplete: _commitCaptions,
+      maxLines: null,
+      minLines: 1,
+      stripNewlines: true,
+      onChanged: (_) => _scheduleCaptionSave(),
     );
   }
 

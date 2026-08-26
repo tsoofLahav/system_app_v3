@@ -12,6 +12,7 @@ DocumentTextFlow _flowWith(Map<String, String> segments) {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('segment ids', () {
     test('encode paragraph, list item and table cell distinctly', () {
       expect(paragraphSegmentId('b1'), 'b1');
@@ -117,11 +118,11 @@ void main() {
       expect(flow.fullyMarkedSegments(), {'a', 'b', 'c'});
     });
 
-    test('an already empty part is not reported', () {
+    test('an already empty part in a spanning mark is fully marked', () {
       final flow = _flowWith({'a': 'alpha', 'b': '', 'c': 'gamma'});
       flow.selectAll();
 
-      expect(flow.fullyMarkedSegments(), {'a', 'c'});
+      expect(flow.fullyMarkedSegments(), {'a', 'b', 'c'});
     });
 
     test('delete hands the fully marked parts to the editor', () {
@@ -139,6 +140,17 @@ void main() {
 
       expect(pruned, {'b'});
       expect(sawSpansParts, isTrue);
+    });
+
+    test('typing over a mark keeps the first part', () {
+      final flow = _flowWith({'a': 'alpha', 'b': 'beta', 'c': 'gamma'});
+      Set<String>? pruned;
+      flow.onPruneStructures = (ids, {required spansParts}) => pruned = ids;
+      flow.selectAll();
+
+      flow.deleteSelection(keepFirstPart: true);
+
+      expect(pruned, {'b', 'c'});
     });
 
     test('a partial delete prunes nothing', () {
@@ -353,6 +365,39 @@ void main() {
       );
 
       expect(at, const DocumentTextPosition('only', 0));
+    });
+  });
+
+  group('fully marked table rows and columns', () {
+    test('a row goes only when every cell is fully marked', () {
+      expect(
+        fullyMarkedTableRows(
+          tableId: 't1',
+          rowCount: 2,
+          columnCount: 2,
+          fullyEmptied: {
+            tableCellSegmentId('t1', 0, 0),
+            tableCellSegmentId('t1', 0, 1),
+            tableCellSegmentId('t1', 1, 0),
+          },
+        ),
+        [0],
+      );
+    });
+
+    test('a chart column goes when every row of it is fully marked', () {
+      expect(
+        fullyMarkedTableColumns(
+          tableId: 't1',
+          rowCount: 2,
+          columnCount: 3,
+          fullyEmptied: {
+            tableCellSegmentId('t1', 0, 1),
+            tableCellSegmentId('t1', 1, 1),
+          },
+        ),
+        [1],
+      );
     });
   });
 }

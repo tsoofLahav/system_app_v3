@@ -2,9 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/ux/arrange/file_arrange_keyboard.dart';
 
 void main() {
-  test('moveArrangeFocusUp walks layouts to shown through hidden', () {
+  test('moveArrangeFocusUp walks actions to shown through hidden', () {
     expect(
-      moveArrangeFocusUp(current: ArrangeFocusZone.layouts, hasHidden: true),
+      moveArrangeFocusUp(current: ArrangeFocusZone.actions, hasHidden: true),
       ArrangeFocusZone.hidden,
     );
     expect(
@@ -13,36 +13,41 @@ void main() {
     );
     expect(
       moveArrangeFocusUp(current: ArrangeFocusZone.shown, hasHidden: true),
-      ArrangeFocusZone.layouts,
+      ArrangeFocusZone.actions,
     );
   });
 
   test('moveArrangeFocusDown skips the hidden band when nothing is hidden', () {
     expect(
       moveArrangeFocusDown(current: ArrangeFocusZone.shown, hasHidden: false),
-      ArrangeFocusZone.layouts,
+      ArrangeFocusZone.actions,
     );
     expect(
-      moveArrangeFocusUp(current: ArrangeFocusZone.layouts, hasHidden: false),
+      moveArrangeFocusUp(current: ArrangeFocusZone.actions, hasHidden: false),
       ArrangeFocusZone.shown,
     );
   });
 
   test('stepLayoutFocusIndex wraps around enabled layouts', () {
-    expect(
-      stepLayoutFocusIndex(currentIndex: 0, layoutCount: 3, delta: -1),
-      2,
-    );
-    expect(
-      stepLayoutFocusIndex(currentIndex: 2, layoutCount: 3, delta: 1),
-      0,
-    );
+    expect(stepLayoutFocusIndex(currentIndex: 0, layoutCount: 3, delta: -1), 2);
+    expect(stepLayoutFocusIndex(currentIndex: 2, layoutCount: 3, delta: 1), 0);
   });
 
   test('enabledLayoutIds respects how many files the topic has', () {
-    expect(enabledLayoutIds(1), ['single', 'row', 'grid']);
+    expect(enabledLayoutIds(1), ['grid', 'single']);
     expect(enabledLayoutIds(2), contains('split'));
-    expect(enabledLayoutIds(3), contains('hero_left'));
+    expect(enabledLayoutIds(3), contains('hero'));
+    expect(enabledLayoutIds(3), isNot(contains('hero_left')));
+    expect(enabledLayoutIds(3), isNot(contains('row')));
+  });
+
+  test('bottom bar with no layouts is cancel and done only', () {
+    const focus = ArrangeBottomFocus.done();
+    final cancel = focus.step(layoutCount: 0, delta: -1);
+    expect(cancel.target, ArrangeBottomFocusTarget.cancel);
+
+    final done = cancel.step(layoutCount: 0, delta: -1);
+    expect(done.target, ArrangeBottomFocusTarget.done);
   });
 
   test('bottom bar focus steps left into done and cancel', () {

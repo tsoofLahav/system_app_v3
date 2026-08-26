@@ -28,6 +28,7 @@ import '../areas/production_agent/pending_review_service.dart';
 import './services/api_service.dart';
 import './services/bootstrap_service.dart';
 import './services/image_service.dart';
+import '../shared/utils/hardware_keyboard_guard.dart';
 import '../areas/files/data/file_service.dart';
 import '../areas/objects/data/object_service.dart';
 import '../areas/objects/tags/object_tag_filter.dart';
@@ -345,6 +346,7 @@ class AppState extends ChangeNotifier {
       await _reloadAll();
       await _migrateImplicitSingleLayouts();
       await _restoreBroughtFile();
+      await settleHardwareKeyboardForLaunch();
       appReady = true;
       await loadAiActions();
       await loadAutomations();
@@ -1754,10 +1756,7 @@ class AppState extends ChangeNotifier {
   }) async {
     final embeds = await _objects.listForFile(fileId);
     embedsByFileId[fileId] = embeds;
-    _ingestTasks([
-      for (final embed in embeds)
-        ...?embed.tasks,
-    ]);
+    _ingestTasks([for (final embed in embeds) ...?embed.tasks]);
     try {
       descriptionLinksByFileId[fileId] = await _objects
           .listFileDescriptionLinks(fileId);
@@ -2186,10 +2185,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> toggleTaskStatus(Task task, {bool notify = true}) async {
     await _api.post('/tasks/${task.id}/toggle', {});
-    _patchCachedTask(
-      task.id,
-      status: task.isDone ? 'active' : 'done',
-    );
+    _patchCachedTask(task.id, status: task.isDone ? 'active' : 'done');
     await _reloadEmbedsForOpenFiles(notify: notify);
   }
 
@@ -2282,19 +2278,20 @@ class AppState extends ChangeNotifier {
     String? taskListTitle,
   }) {
     final prev = tasksById[taskId];
-    final next = (prev ??
-            Task(
-              id: taskId,
-              title: title ?? '',
-              status: status ?? 'active',
-            ))
-        .copyWith(
-          title: title,
-          status: status,
-          descriptionLinks: descriptionLinks,
-          taskListId: taskListId,
-          taskListTitle: taskListTitle,
-        );
+    final next =
+        (prev ??
+                Task(
+                  id: taskId,
+                  title: title ?? '',
+                  status: status ?? 'active',
+                ))
+            .copyWith(
+              title: title,
+              status: status,
+              descriptionLinks: descriptionLinks,
+              taskListId: taskListId,
+              taskListTitle: taskListTitle,
+            );
     _ingestTask(next);
     for (final entry in embedsByFileId.entries.toList()) {
       final embeds = entry.value;
@@ -2708,10 +2705,7 @@ class AppState extends ChangeNotifier {
         },
     ];
     _applyViewMemberships(
-      await _views.replaceMemberships(
-        selectedView!.id,
-        memberships,
-      ),
+      await _views.replaceMemberships(selectedView!.id, memberships),
     );
     notifyListeners();
   }
@@ -2737,15 +2731,10 @@ class AppState extends ChangeNotifier {
     await _persistViewLayout(layout);
     final memberships = [
       for (final m in viewMemberships)
-        m
-            .copyWith(clearSection: m.sectionName == section)
-            .toReplaceJson(),
+        m.copyWith(clearSection: m.sectionName == section).toReplaceJson(),
     ];
     _applyViewMemberships(
-      await _views.replaceMemberships(
-        selectedView!.id,
-        memberships,
-      ),
+      await _views.replaceMemberships(selectedView!.id, memberships),
     );
     notifyListeners();
   }

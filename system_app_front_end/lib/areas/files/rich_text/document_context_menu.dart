@@ -21,7 +21,10 @@ class DocumentContextMenu {
     bool includeMakeList = false,
   }) => [
     AppContextMenuItem(value: 'text:bold', label: strings['bold'] ?? 'Bold'),
-    AppContextMenuItem(value: 'text:italic', label: strings['italic'] ?? 'Italic'),
+    AppContextMenuItem(
+      value: 'text:italic',
+      label: strings['italic'] ?? 'Italic',
+    ),
     AppContextMenuItem(
       value: 'text:underline',
       label: strings['underline'] ?? 'Underline',
@@ -91,48 +94,44 @@ class DocumentContextMenu {
     AppStrings strings, {
     double scale = ImageDisplaySize.full,
     bool canMergeNext = false,
-  }) =>
-      [
-        AppContextMenuItem(
-          value: 'image:smaller',
-          label: strings['imageMakeSmaller'],
-        ),
-        AppContextMenuItem(
-          value: 'image:larger',
-          label: strings['imageMakeLarger'],
-        ),
-        const AppContextMenuDivider(),
-        AppContextMenuItem(
-          value: 'image:size:tiny',
-          label: strings['imageSizeTiny'],
-          checked: ImageDisplaySize.matchesNamed(scale, ImageDisplaySize.tiny),
-        ),
-        AppContextMenuItem(
-          value: 'image:size:quarter',
-          label: strings['imageSizeQuarter'],
-          checked: ImageDisplaySize.matchesNamed(
-            scale,
-            ImageDisplaySize.quarter,
-          ),
-        ),
-        AppContextMenuItem(
-          value: 'image:size:half',
-          label: strings['imageSizeHalf'],
-          checked: ImageDisplaySize.matchesNamed(scale, ImageDisplaySize.half),
-        ),
-        AppContextMenuItem(
-          value: 'image:size:full',
-          label: strings['imageSizeFull'],
-          checked: ImageDisplaySize.matchesNamed(scale, ImageDisplaySize.full),
-        ),
-        if (canMergeNext) ...[
-          const AppContextMenuDivider(),
-          AppContextMenuItem(
-            value: 'image:merge_next',
-            label: strings['mergeWithNext'],
-          ),
-        ],
-      ];
+  }) => [
+    AppContextMenuItem(
+      value: 'image:smaller',
+      label: strings['imageMakeSmaller'],
+    ),
+    AppContextMenuItem(
+      value: 'image:larger',
+      label: strings['imageMakeLarger'],
+    ),
+    const AppContextMenuDivider(),
+    AppContextMenuItem(
+      value: 'image:size:tiny',
+      label: strings['imageSizeTiny'],
+      checked: ImageDisplaySize.matchesNamed(scale, ImageDisplaySize.tiny),
+    ),
+    AppContextMenuItem(
+      value: 'image:size:quarter',
+      label: strings['imageSizeQuarter'],
+      checked: ImageDisplaySize.matchesNamed(scale, ImageDisplaySize.quarter),
+    ),
+    AppContextMenuItem(
+      value: 'image:size:half',
+      label: strings['imageSizeHalf'],
+      checked: ImageDisplaySize.matchesNamed(scale, ImageDisplaySize.half),
+    ),
+    AppContextMenuItem(
+      value: 'image:size:full',
+      label: strings['imageSizeFull'],
+      checked: ImageDisplaySize.matchesNamed(scale, ImageDisplaySize.full),
+    ),
+    if (canMergeNext) ...[
+      const AppContextMenuDivider(),
+      AppContextMenuItem(
+        value: 'image:merge_next',
+        label: strings['mergeWithNext'],
+      ),
+    ],
+  ];
 
   static Future<void> showImageMenu({
     required BuildContext context,
@@ -156,11 +155,7 @@ class DocumentContextMenu {
         const AppContextMenuDivider(),
         lookSubmenu(strings, kind: 'image', current: look),
         const AppContextMenuDivider(),
-        ...buildImageEntries(
-          strings,
-          scale: scale,
-          canMergeNext: canMergeNext,
-        ),
+        ...buildImageEntries(strings, scale: scale, canMergeNext: canMergeNext),
       ],
     );
   }
@@ -173,7 +168,7 @@ class DocumentContextMenu {
     required List<AppContextMenuEntry> entries,
   }) async {
     AppContextMenu.dismissActive();
-    BlockTextFocusRegistry.openMenuSession();
+    final session = BlockTextFocusRegistry.openMenuSession();
     try {
       final value = await AppContextMenu.show(
         context: context,
@@ -195,7 +190,7 @@ class DocumentContextMenu {
         await onAction(value);
       }
     } finally {
-      BlockTextFocusRegistry.closeMenuSession();
+      BlockTextFocusRegistry.closeMenuSession(session);
       DocumentSecondaryTap.clearEmbedHandled();
     }
   }
@@ -253,24 +248,21 @@ class DocumentContextMenu {
 
   /// Chart-quality table: bar / line / pie + colour palettes.
   static List<AppContextMenuEntry> buildChartEntries(AppStrings strings) => [
-        AppContextMenuItem(value: 'chart:type:bar', label: strings['graphBar']),
-        AppContextMenuItem(
-          value: 'chart:type:line',
-          label: strings['graphLine'],
-        ),
-        AppContextMenuItem(value: 'chart:type:pie', label: strings['graphPie']),
-        const AppContextMenuDivider(),
-        AppContextMenuSubmenu(
-          label: strings['graphChangeColors'],
-          children: [
-            for (final palette in AppColorPalettes.chart)
-              AppContextMenuItem(
-                value: 'chart:palette:${palette.id}',
-                label: strings[palette.nameKey],
-              ),
-          ],
-        ),
-      ];
+    AppContextMenuItem(value: 'chart:type:bar', label: strings['graphBar']),
+    AppContextMenuItem(value: 'chart:type:line', label: strings['graphLine']),
+    AppContextMenuItem(value: 'chart:type:pie', label: strings['graphPie']),
+    const AppContextMenuDivider(),
+    AppContextMenuSubmenu(
+      label: strings['graphChangeColors'],
+      children: [
+        for (final palette in AppColorPalettes.chart)
+          AppContextMenuItem(
+            value: 'chart:palette:${palette.id}',
+            label: strings[palette.nameKey],
+          ),
+      ],
+    ),
+  ];
 
   static Future<void> showTableCellMenu({
     required BuildContext context,
@@ -399,10 +391,7 @@ class DocumentContextMenu {
         const AppContextMenuDivider(),
         lookSubmenu(strings, kind: 'info', current: look),
         const AppContextMenuDivider(),
-        AppContextMenuItem(
-          value: 'info:add_tag',
-          label: strings['addTag'],
-        ),
+        AppContextMenuItem(value: 'info:add_tag', label: strings['addTag']),
         AppContextMenuItem(
           value: 'info:add_connection',
           label: strings['addConnection'],

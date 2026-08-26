@@ -29,8 +29,8 @@ class LayoutPreviewIcon extends StatelessWidget {
         : AppColors.textHint.withValues(alpha: 0.35);
     final fill = enabled
         ? (selected
-            ? primary.withValues(alpha: 0.92)
-            : AppColors.noteBottom.withValues(alpha: 0.55))
+              ? primary.withValues(alpha: 0.92)
+              : AppColors.noteBottom.withValues(alpha: 0.55))
         : AppColors.noteBorder.withValues(alpha: 0.25);
 
     return Opacity(
@@ -47,6 +47,7 @@ class LayoutPreviewIcon extends StatelessWidget {
                 ? primary.withValues(alpha: 0.55)
                 : AppColors.noteBorder.withValues(alpha: 0.65),
             selected: selected,
+            rtl: Directionality.of(context) == TextDirection.rtl,
           ),
         ),
       ),
@@ -61,6 +62,7 @@ class _LayoutPreviewPainter extends CustomPainter {
     required this.fill,
     required this.frameStroke,
     required this.selected,
+    required this.rtl,
   });
 
   final String layoutId;
@@ -68,6 +70,7 @@ class _LayoutPreviewPainter extends CustomPainter {
   final Color fill;
   final Color frameStroke;
   final bool selected;
+  final bool rtl;
 
   static const _gap = 3.0;
   static const _radius = 2.5;
@@ -82,9 +85,7 @@ class _LayoutPreviewPainter extends CustomPainter {
     canvas.drawRRect(
       frame,
       Paint()
-        ..color = selected
-            ? fill.withValues(alpha: 0.35)
-            : AppColors.noteTop,
+        ..color = selected ? fill.withValues(alpha: 0.35) : AppColors.noteTop,
     );
     canvas.drawRRect(
       frame,
@@ -106,13 +107,12 @@ class _LayoutPreviewPainter extends CustomPainter {
         _panel(canvas, area);
       case 'split':
         _split(canvas, area, columns: 2);
+      case 'hero':
       case 'hero_left':
-        _hero(canvas, area, largeOnStart: true);
       case 'hero_right':
-        _hero(canvas, area, largeOnStart: false);
-      case 'row':
-        _split(canvas, area, columns: 3);
+        _hero(canvas, area, largeOnStart: !rtl);
       case 'grid':
+      case 'row':
         _grid(canvas, area);
       default:
         _panel(canvas, area);
@@ -149,10 +149,7 @@ class _LayoutPreviewPainter extends CustomPainter {
     final sideLeft = largeOnStart ? area.left + largeW + _gap : area.left;
 
     _drawCell(canvas, largeRect);
-    _drawCell(
-      canvas,
-      Rect.fromLTWH(sideLeft, area.top, sideW, halfH),
-    );
+    _drawCell(canvas, Rect.fromLTWH(sideLeft, area.top, sideW, halfH));
     _drawCell(
       canvas,
       Rect.fromLTWH(sideLeft, area.top + halfH + _gap, sideW, halfH),
@@ -184,10 +181,7 @@ class _LayoutPreviewPainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [
-          fill.withValues(alpha: 1),
-          fill.withValues(alpha: 0.65),
-        ],
+        colors: [fill.withValues(alpha: 1), fill.withValues(alpha: 0.65)],
       ).createShader(rect);
 
     canvas.drawRRect(rrect, fillPaint);
@@ -217,5 +211,6 @@ class _LayoutPreviewPainter extends CustomPainter {
       old.stroke != stroke ||
       old.fill != fill ||
       old.frameStroke != frameStroke ||
-      old.selected != selected;
+      old.selected != selected ||
+      old.rtl != rtl;
 }

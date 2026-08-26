@@ -9,6 +9,7 @@ import '../../ui/app_typography.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/glass_surface.dart';
 import '../arrange/file_arrange_overlay.dart';
+import '../layout/file_layout_picker.dart';
 import '../arrange/phone_file_reorder_sheet.dart';
 import '../../production_agent/ai_tool_bar.dart';
 import '../../automations/automation_dialog.dart';
@@ -154,12 +155,18 @@ class AppBottomBar extends StatelessWidget {
               onPressed: () =>
                   showDiagramGraphConfigDialog(context: context, state: state),
             ),
-          if (_showArrange)
+          if (_showArrange) ...[
+            _BarIconButton(
+              tooltip: s['layout'],
+              icon: AppIcons.layout,
+              onPressed: () => showFileLayoutPicker(context, state),
+            ),
             _BarIconButton(
               tooltip: s['arrangeFiles'],
               icon: AppIcons.arrange,
               onPressed: () => showFileArrangeOverlay(context, state),
             ),
+          ],
           if (_showArchiveDelete)
             _BarIconButton(
               tooltip: state.archiveDeleteMode

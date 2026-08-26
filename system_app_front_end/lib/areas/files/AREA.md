@@ -41,7 +41,7 @@ A type's template is a hidden `is_template` topic (`template_topic_id`). Prefere
 
 **Persisted SoT** = marker text (`%%system_app_document v4\n` + body). **Session SoT** = Super Editor `MutableDocument` (undo via SE history). Save = bridge serialize → debounced `PATCH document_json`. Embed node ids are stable (`embed:<objectId>`). Object **payloads** stay in the objects area.
 
-**One marking.** Super Editor body actions (right-click, format, cut/copy, Make link, AI `selected_text`) use the same rule as embed fields: if anything is marked, use that span; if not, use the **line at the caret**. [`caretLineSelection`](editor/super_editor_mark.dart) expands a collapsed caret before those actions. Object blocks stay whole-object (chrome menu), not a text line. Catalog **⌘B / ⌘I / ⌘U** toggle once — Super Editor’s own Cmd+B / Cmd+I are stripped so they cannot double-toggle.
+**One marking.** Super Editor body actions (right-click, format, cut/copy, Make link, AI `selected_text`) use the same rule as embed fields: if anything is marked, use that span; if not, use the **line at the caret**. Paste is the exception — unmarked paste inserts at the caret. [`caretLineSelection`](editor/super_editor_mark.dart) expands a collapsed caret before those other actions. Object blocks stay whole-object (chrome menu), not a text line. Catalog **⌘B / ⌘I / ⌘U** toggle once — Super Editor’s own Cmd+B / Cmd+I are stripped so they cannot double-toggle.
 
 **Web links.** Right-click **Make link** (no shortcut; ⌘K is bring-file) finds `http(s)://` or `www.` in the mark-or-caret-line and paints it like a description link. v4 still has no general span encoding; **links only** round-trip as CommonMark `[text](url)` in paragraph/list lines. Click / tap opens the URL (⌘-click still works). Object-field links store `link` on existing payload spans and open the same way.
 
@@ -130,22 +130,23 @@ This is the rule the rest of the cursor behavior follows from. **A bullet, a tab
 | Delete an object | Caret at the **end** of the text that was above it |
 | Vertical movement | Keeps the caret's horizontal position, measured in pixels off the caret rect, so it holds through wrapping and mixed scripts |
 | Marking a whole bullet, row, or object and deleting | That part goes, the way deleting a marked line removes the line |
-| Marking every bullet or every row | The list or table goes with them |
+| Marking every bullet (file-body list) | The list goes with them |
+| Marking whole tasks / table rows inside an object and deleting | Those tasks / rows are removed (not left empty). If every part is marked, **one empty part stays** — delete the object from chrome or empty Backspace on the last unit |
 
 Anything that would make a part behave unlike a line — a caret that stalls at a boundary, a delete that leaves an empty bullet or blank gap behind — is a bug in this area, not a detail of the widget.
 
 ### Deleting a part, not just its text
 
-A marking that covers a part **end to end** removes the part; a marking that covers only some of its text just deletes the text. The same applies when the user selects **all** of a structure part and presses Backspace/Delete/Cut — lists, tables, and objects should disappear like lines of text, not leave empty shells. [`editor/document_structure_prune.dart`](editor/document_structure_prune.dart) is the single place that decides this (pure over `blocks[]`).
+A marking that covers a part **end to end** removes the part; a marking that covers only some of its text just deletes the text. File-body lists and whole objects go through [`editor/document_structure_prune.dart`](editor/document_structure_prune.dart) and disappear like lines. **Inside** a task list or table, the object's [`DocumentTextFlow.onPruneStructures`](editor/document_text_flow.dart) drops fully marked tasks / rows (chart: columns) — that callback must be wired or a cross-task mark only clears the titles. Inner prune may remove parts, but **not the whole object**: if every task / row / chart column is marked, one empty part stays. Chrome or empty Backspace on the last unit still deletes the object.
 
 | Marked / cleared | Result |
 |------------------|--------|
 | A whole bullet (mark or select-all + delete) | The bullet is removed |
 | Every bullet / last bullet deleted | The list block is removed |
 | Every cell of a row | The row is removed |
-| Every cell of a table | The table block is removed |
+| Every cell of a table (inner mark-delete) | Rows go; if every row is marked, one empty row stays |
 | Whole atomic embed, or info text cleared | The object is removed (and its backing row) |
-| All tasks in a task list | The task-list object is removed |
+| All tasks in a task list (inner mark-delete) | Tasks go; if every task is marked, one empty task stays |
 | A whole paragraph, as part of a larger marking | The paragraph is removed |
 | A whole paragraph, marked on its own | Text cleared, the paragraph stays |
 | Part of a bullet, row, or cell | Text only, nothing is removed |
@@ -158,9 +159,11 @@ Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed H
 
 ### Object inner text
 
-Object fields are Flutter `TextField`s. Flutter paints the caret. Tap placement is [`embedCaretForTap`](rich_text/rtl/embed_caret_hit.dart) only. Do not overlay a caret, hide `showCursor`, or write selection while typing. The open object and the bottom menu keep focus; the file canvas does not. `onKeyEvent` is installed once. Focusing a field must not scroll the file pane unless that field is completely off-screen (skip when not laid out yet — Enter on a new task or table row).
+Object fields are Flutter `TextField`s ([`FormattedTextField`](rich_text/formatted_text_field.dart)). Super Editor is a package — writing-inside-objects rules live in [`CARET_AND_WRITING_FOCUS.md`](../../../../../CARET_AND_WRITING_FOCUS.md) § Writing in objects. Short form: native caret; click placement via [`embedCaretForTap`](rich_text/rtl/embed_caret_hit.dart); do not rewrite selection on a drag, inbound refresh, or while typing; `maxLines: null`; do not remount or reseed a focused field; expand-to-line only for an unmarked **action**, never while marking.
 
-Each task list and each table owns one [`DocumentTextFlow`](editor/document_text_flow.dart) so Shift+arrows and Shift+click mark across **tasks or cells inside that object**. Marks do not cross objects or into the Super Editor body. Choose view / ⌘J applies to every marked task in the list. Full list: [`CARET_AND_WRITING_FOCUS.md`](../../../../../CARET_AND_WRITING_FOCUS.md) § Object inner text.
+**One owner.** Click or right-click a paragraph → body owns writing and the object mark is forgotten. Click or right-click an inner field → that field owns writing and the Super Editor caret is cleared. Super Editor `hasFocus` is true for descendant fields; only **primary** focus means the body owns writing. Never paint both washes. A second right-click while a menu is open retargets the mark and menu to the new line.
+
+Each **multi-field** object (task list, table) owns one [`DocumentTextFlow`](editor/document_text_flow.dart) so Shift+arrows and Shift+click mark across **tasks or cells inside that object**. Info is one field and has no flow. Marks do not cross objects or into the Super Editor body. Choose view / ⌘J applies to every marked task in the list.
 
 ## One cursor across the whole file
 
@@ -225,6 +228,8 @@ Claim still follows the click (inserts and AI keep a target file). The caret its
 1. **If anything is marked, that is the target** — even when the marking runs across several paragraphs, bullets, or cells.
 2. **If nothing is marked, the target is the line at the caret.**
 
+**Paste** is the exception: with no marking it inserts at the caret (same as Super Editor body paste). A real marking still replaces. Copy, cut, format, and AI keep the caret-line fallback.
+
 There is no second kind of marking. A single field's `TextEditingController.selection` is an implementation detail of how that field paints; it must never be what an action reads to decide what to affect. Two selections would drift apart, and an action would hit text the user did not mark.
 
 [`editor/document_mark.dart`](editor/document_mark.dart) owns this.
@@ -242,12 +247,12 @@ Everything an action needs is on the mark, so no action re-derives ranges:
 |--------|---------|
 | `text` | Copy, cut, and the text handed to AI |
 | `delete()` | Cut, backspace, typing over a marking |
-| `replaceWith()` | Paste, typing over a marking |
+| `replaceWith()` | Paste **over a marking** |
 | `applyFormat()` | Bold, italic, underline, size, color |
 
 ### Freezing
 
-Opening the right-click menu can move focus and collapse a selection, so the mark is captured on secondary pointer-down (`capturePendingMark`) and **frozen** for the life of the menu (`openMenuSession`). While a menu is open, `resolveMark()` returns the frozen mark, so the target cannot shift under the user between opening the menu and choosing an item. The agent prompt and saved AI actions capture the same way **before** the dialog or run steals focus (`DocumentEditorRegistry.captureMarkedTextForAgent`), so `hints.selected_text` is the mark the user had, not an empty selection.
+Opening the right-click menu can move focus and collapse a selection, so the mark is captured on secondary pointer-down (`capturePendingMark`) and **frozen** for the life of the menu (`openMenuSession`). While a menu is open, `resolveMark()` returns the frozen mark, so the target cannot shift under the user between opening the menu and choosing an item. A **new** right-click (another line, body or field) is not nested: `beginNewPointerAim` drops that freeze so the new pointer can mark its line and open its menu — even while the previous overlay is still completing. The agent prompt and saved AI actions capture the same way **before** the dialog or run steals focus (`DocumentEditorRegistry.captureMarkedTextForAgent`), so `hints.selected_text` is the mark the user had, not an empty selection.
 
 The frozen mark is also what gets highlighted, on **every part it covers**, so the user can see the exact extent an action will apply to before choosing it. While that overlay is up, the field's native selection paint is hidden — there is never a second wash (user selection + line-at-caret) at the same time.
 
@@ -324,6 +329,7 @@ One object type `table` (`payload.rows` + optional `payload.chart`). UI: [`table
 | Enter | Cell below; add row on last filled row | Next column; add column on last |
 | Empty Enter | Drop that row; keep table; continue below | (column exit path) |
 | Empty Backspace | Empty cell → previous cell (reading order, land at end). First cell of an **empty row** removes that row; last empty row removes the table | Empty cell → previous cell; empty column still removes the column; last removes object |
+| Mark whole row / column + delete | Every cell of a row marked end to end → row is removed. Every row marked → keep one empty row (object stays). Empty Backspace on the last empty row / chrome still removes the table | Every cell of a column → column is removed. Every column marked → keep one empty column. Last empty column + empty Backspace / chrome still removes the object |
 | Phone | Same Enter / empty Backspace, via the IME map in `FormattedTextField` (no hardware keys). Moving between cells/tasks keeps the keyboard up (no unfocus gap). Arrow pad order: left, down, up, right — pad icons never mirror. The typing session never remounts a cell on IME language switch or clearing one cell | Same |
 | Arrows | One owner: [`table_grid_nav.dart`](rich_text/table_grid_nav.dart). Physical ←/→ (pad and hardware) move to the cell that is visually left/right. Hebrew **UI** paints col 0 on the right, so physical left is a higher column. In-cell caret is first-strong (`rtl/`), not grid RTL. Landing is the **visual** edge entered from: visual-right of an RTL cell is logical start. From below → end; from above → start. Phone edges stay inside the table | Same grid rules |
 | Tab | Next cell | Same |
@@ -372,6 +378,7 @@ In this area specifically:
 | `updateFile` / `updateObjectPayload` / task+info title saves with `notify: false` | `notifyListeners` from a keystroke / `onChanged` path |
 | Debounce embed PATCHes; patch cache **before** `await` | PATCH + `notifyListeners` / full embed reload on every `onChanged` |
 | Super Editor `setState` only when embed **id/type/order** changes; defer with `runAfterKeystroke` if keys are down. Phone IME has no keys-down — payload refresh must not remount | Treat every new embeds-list identity as a reason to remount; remount a `TextField` after the first letter |
+| Drop engine-seeded keys while [`MainPaneLoader`](../ux/widgets/main_pane_loader.dart) is showing; `settleHardwareKeyboardForLaunch` before `appReady` | Call `HardwareKeyboard.clearState` (wipes shortcut handlers) |
 | Keep controllers as SoT while **dirty**; take inbound when not dirty (after keys are up). If both dirty, ask. Dispose must not PATCH a payload that is older than the cache | Overwrite live cells from a stale cache while typing; flush old graph/info on dispose over an agent write; dispose cell/task/info focus nodes mid-KeyDown |
 | Shift+Enter → `runNextFrame`; empty-structure Backspace → `runAfterKeystroke` | Sync `unfocus` / delete structure on the KeyDown frame |
 | Install `FormattedTextField` `onKeyEvent` **once** (stored tear-off) | Re-wrap `FocusNode.onKeyEvent` on every rebuild — tear-offs are not `==`, so Arrow Up stack-overflows |

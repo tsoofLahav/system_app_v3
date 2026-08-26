@@ -5,11 +5,7 @@ import '../model/object_embed_node.dart';
 import './editor_key_handoff.dart';
 
 /// Who owns typing: Super Editor on the document, or an embed [TextField].
-enum DocumentCaretOwner {
-  document,
-  embed,
-  transferring,
-}
+enum DocumentCaretOwner { document, embed, transferring }
 
 /// Enter/exit for atomic object blocks.
 ///
@@ -22,9 +18,9 @@ class DocumentCaretSession {
     required Document document,
     required MutableDocumentComposer composer,
     required FocusNode editorFocus,
-  })  : _editor = editor,
-        _composer = composer,
-        _editorFocus = editorFocus {
+  }) : _editor = editor,
+       _composer = composer,
+       _editorFocus = editorFocus {
     assert(identical(document, editor.document));
   }
 
@@ -52,8 +48,8 @@ class DocumentCaretSession {
 
   /// Inner field focused — drop SE selection/focus so two carets/IMEs do not fight.
   void adoptEmbed(String embedNodeId) {
-    final staying = owner == DocumentCaretOwner.embed &&
-        activeEmbedNodeId == embedNodeId;
+    final staying =
+        owner == DocumentCaretOwner.embed && activeEmbedNodeId == embedNodeId;
     owner = DocumentCaretOwner.embed;
     activeEmbedNodeId = embedNodeId;
     if (_composer.selection != null) _clearSelection();
@@ -67,6 +63,13 @@ class DocumentCaretSession {
     }
   }
 
+  /// Body owns typing. Call when the user clicks or right-clicks a paragraph
+  /// (not an inner field). Pair with [BlockTextFocusRegistry.releaseLiveMark].
+  void adoptDocument() {
+    owner = DocumentCaretOwner.document;
+    activeEmbedNodeId = null;
+  }
+
   void embedBlurred() {
     if (owner == DocumentCaretOwner.transferring) return;
     if (owner == DocumentCaretOwner.embed) {
@@ -78,6 +81,12 @@ class DocumentCaretSession {
   void suppressDocumentSelectionWhileEmbedOwns() {
     if (owner != DocumentCaretOwner.embed) return;
     if (_composer.selection == null) return;
+    // A click/right-click on a paragraph gives Super Editor primary focus.
+    // Keep that selection and leave the object — do not swallow it.
+    if (_editorFocus.hasPrimaryFocus) {
+      adoptDocument();
+      return;
+    }
     _clearSelection();
   }
 

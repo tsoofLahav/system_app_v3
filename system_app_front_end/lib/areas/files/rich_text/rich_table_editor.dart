@@ -141,6 +141,7 @@ class RichTableEditorState extends State<RichTableEditor> {
     super.initState();
     _syncControllers();
     _ensureFocusGrid();
+    _flow.onPruneStructures = _onPruneFullyMarked;
     if (widget.node.rows.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _emit());
     }
@@ -359,6 +360,7 @@ class RichTableEditorState extends State<RichTableEditor> {
   @override
   void dispose() {
     _disposeAll();
+    _flow.onPruneStructures = null;
     _flow.dispose();
     super.dispose();
   }
@@ -563,6 +565,115 @@ class RichTableEditorState extends State<RichTableEditor> {
 
   bool _rowIsEmpty(int row) {
     return _controllers[row].every((c) => imeFieldLooksEmpty(c.text));
+  }
+
+  /// Fully marked rows (or chart columns) are removed, not left blank.
+  void _onPruneFullyMarked(
+    Set<String> fullyEmptied, {
+    required bool spansParts,
+  }) {
+    if (_isChart) {
+      final cols = fullyMarkedTableColumns(
+        tableId: widget.node.id,
+        rowCount: _controllers.length,
+        columnCount: _columnCount,
+        fullyEmptied: fullyEmptied,
+      );
+      if (cols.isEmpty) return;
+      _afterKeystroke(() => _dropColumns(cols));
+      return;
+    }
+    final rows = fullyMarkedTableRows(
+      tableId: widget.node.id,
+      rowCount: _controllers.length,
+      columnCount: _columnCount,
+      fullyEmptied: fullyEmptied,
+    );
+    if (rows.isEmpty) return;
+    _afterKeystroke(() => _dropRows(rows));
+  }
+
+  void _afterKeystroke(VoidCallback fn) {
+    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+      runAfterKeystroke(fn);
+    } else {
+      fn();
+    }
+  }
+
+  void _dropRows(List<int> rows) {
+    widget.onFocus?.call();
+    if (rows.isEmpty || !mounted) return;
+    final drop = rows.toSet();
+    if (drop.length >= _controllers.length) {
+      // Inner mark-delete must not destroy the table — keep one empty row.
+      drop.remove(0);
+      if (drop.isEmpty) return;
+    }
+    final descending = drop.toList()..sort((a, b) => b.compareTo(a));
+    final focusSource = () {
+      for (var r = 0; r < _controllers.length; r++) {
+        if (!drop.contains(r)) return r;
+      }
+      return 0;
+    }();
+    final focusRow = focusSource - drop.where((r) => r < focusSource).length;
+    setState(() {
+      _unfocusAllCells();
+      for (final r in descending) {
+        if (r < 0 || r >= _controllers.length) continue;
+        for (final c in _controllers.removeAt(r)) {
+          c.dispose();
+        }
+      }
+      _rebuildFocusGrid();
+    });
+    _emit();
+    runNextFrame(() {
+      if (!mounted) return;
+      _focusCell(focusRow.clamp(0, _controllers.length - 1), 0);
+    });
+  }
+
+  void _dropColumns(List<int> cols) {
+    widget.onFocus?.call();
+    if (cols.isEmpty || !mounted) return;
+    final drop = cols.toSet();
+    if (drop.length >= _columnCount) {
+      // Inner mark-delete must not destroy the chart — keep one empty column.
+      drop.remove(0);
+      if (drop.isEmpty) return;
+    }
+    final descending = drop.toList()..sort((a, b) => b.compareTo(a));
+    final focusSource = () {
+      for (var c = 0; c < _columnCount; c++) {
+        if (!drop.contains(c)) return c;
+      }
+      return 0;
+    }();
+    final focusCol = focusSource - drop.where((c) => c < focusSource).length;
+    setState(() {
+      _unfocusAllCells();
+      _ensureFocusGrid();
+      for (final col in descending) {
+        for (var r = 0; r < _controllers.length; r++) {
+          if (col < 0 || col >= _controllers[r].length) continue;
+          _controllers[r].removeAt(col).dispose();
+          if (r < _focusGrid.length && col < _focusGrid[r].length) {
+            _focusGrid[r].removeAt(col).dispose();
+          }
+        }
+      }
+    });
+    _emit();
+    runNextFrame(() {
+      if (!mounted) return;
+      _unfocusAllCells();
+      _focusCell(
+        (_lastCell?.$1 ?? 0).clamp(0, _controllers.length - 1),
+        focusCol.clamp(0, _columnCount - 1),
+      );
+    });
   }
 
   /// Empty-cell Backspace: previous cell in reading order; first cell of an

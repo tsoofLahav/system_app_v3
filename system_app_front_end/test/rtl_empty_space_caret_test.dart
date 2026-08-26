@@ -44,6 +44,21 @@ void main() {
       expect(probed, const Offset(80, 10));
     });
 
+    test(
+      'beside glyphs in RTL (padding on the left) → line end, not whole field',
+      () {
+        expect(
+          emptySpaceCaretOffsetFromBoxes(
+            boxes: const [Rect.fromLTRB(80, 0, 160, 20)],
+            local: const Offset(20, 10),
+            textLength: 24,
+            logicalLineEndAt: (_) => 12,
+          ),
+          12,
+        );
+      },
+    );
+
     test('on glyphs → null (Flutter keeps the hit-test)', () {
       expect(
         emptySpaceCaretOffsetFromBoxes(

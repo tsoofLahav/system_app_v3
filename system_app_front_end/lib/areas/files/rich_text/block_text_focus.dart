@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import './format_range.dart';
 import './span_text_editing_controller.dart';
 import '../../../shared/utils/platform_text.dart';
+import '../../ux/widgets/app_context_menu.dart';
 import '../editor/document_mark.dart';
 import '../editor/document_text_flow.dart';
 import './text_formatting.dart';
@@ -27,6 +28,11 @@ class BlockTextFocusRegistry {
   static DocumentTextFlow? activeFlow;
 
   static int _menuSessionDepth = 0;
+  static int _menuEpoch = 0;
+
+  /// Bumped on every top-level [openMenuSession] so a stale
+  /// [closeMenuSession] from a dismissed menu cannot unfreeze the next one.
+  static int _sessionToken = 0;
   static FormatRange? _frozenRange;
   static DocumentMark? _frozenMark;
   static DocumentMark? _pendingMark;
@@ -49,6 +55,27 @@ class BlockTextFocusRegistry {
 
   static bool get hasFocus => activeController != null;
   static bool get isInMenuSession => _menuSessionDepth > 0;
+
+  /// A new right-click is aiming. Drop the previous menu freeze so this
+  /// pointer can mark a different line and open its menu — even while the
+  /// last right-click menu is still on screen.
+  ///
+  /// Completing the old [openMenuSession] is async (the overlay Completer),
+  /// so a second [openMenuSession] would otherwise look nested and keep the
+  /// first freeze.
+  static void beginNewPointerAim() {
+    _menuEpoch++;
+    _sessionToken++;
+    AppContextMenu.dismissActive();
+    _menuSessionDepth = 0;
+    _frozenMark = null;
+    _frozenRange = null;
+    _pendingMark = null;
+    discardTransientMark();
+    FormatRange.clearPending();
+    menuSessionListenable.value++;
+  }
+
   static bool get isInEmojiPickerSession => _emojiPickerSessionDepth > 0;
   static bool get hasEmojiPickerTarget => _emojiPickerTarget != null;
   static FormatRange? get frozenFormatRange => _frozenRange;
@@ -146,7 +173,7 @@ class BlockTextFocusRegistry {
             segmentId: activeFlow?.focusedSegmentId,
             onChanged: onChanged ?? _recentTarget?.onChanged,
           ),
-        ]);
+        ], fromMarking: true);
         return;
       }
       // Platform may have collapsed the selection already — use the snapshot
@@ -167,7 +194,7 @@ class BlockTextFocusRegistry {
               segmentId: activeFlow?.focusedSegmentId,
               onChanged: onChanged ?? _recentTarget?.onChanged,
             ),
-          ]);
+          ], fromMarking: true);
           return;
         }
       }
@@ -193,7 +220,7 @@ class BlockTextFocusRegistry {
               segmentId: segmentId,
               onChanged: onChanged,
             ),
-          ]);
+          ], fromMarking: true);
   }
 
   static void clearPendingMark() => _pendingMark = null;
@@ -255,17 +282,19 @@ class BlockTextFocusRegistry {
     _bumpFocus();
   }
 
-  /// Clears a leftover embed mark when the user claims another file.
+  /// Clears a leftover embed mark when the user claims the Super Editor body
+  /// or another file. Collapses the field selection so it cannot keep painting.
   static void releaseLiveMark() {
+    if (_menuSessionDepth > 0) return;
+    final node = activeFocusNode ?? _recentTarget?.focusNode;
     final controller = activeController ?? _recentTarget?.controller;
-    if (controller != null &&
-        controller.selection.isValid &&
-        !controller.selection.isCollapsed) {
-      try {
-        controller.selection = TextSelection.collapsed(
-          offset: controller.selection.extentOffset,
-        );
-      } catch (_) {}
+    _collapseIfMarked(controller);
+    final flow = activeFlow;
+    if (flow != null && !flow.isDisposed) {
+      flow.clearSelection();
+    }
+    if (node != null && node.hasFocus) {
+      node.unfocus();
     }
     abandonStashedFocus();
   }
@@ -287,12 +316,17 @@ class BlockTextFocusRegistry {
     _bumpFocus();
   }
 
-  static void openMenuSession() {
+  /// Opens a freeze for the current mark. Nested calls share the freeze.
+  ///
+  /// Returns a token; pass it to [closeMenuSession] so a dismissed menu's
+  /// `finally` cannot close a newer freeze (the overlay Completer is async).
+  static int openMenuSession() {
     final opening = _menuSessionDepth == 0;
     _menuSessionDepth++;
     // Only freeze once per top-level menu. Nested openMenuSession must not
     // re-resolve from a collapsed live selection and clobber the mark.
     if (opening) {
+      _sessionToken++;
       _frozenMark = _pendingMark ?? _resolveLiveMark();
       _pendingMark = null;
       final controller = activeController;
@@ -312,10 +346,14 @@ class BlockTextFocusRegistry {
       }
     }
     menuSessionListenable.value++;
+    return _sessionToken;
   }
 
-  static void closeMenuSession() {
-    if (_menuSessionDepth > 0) _menuSessionDepth--;
+  static void closeMenuSession([int? token]) {
+    if (token != null && token != _sessionToken) return;
+    if (_menuSessionDepth <= 0) return;
+    final epoch = _menuEpoch;
+    _menuSessionDepth--;
     if (_menuSessionDepth > 0) {
       menuSessionListenable.value++;
       return;
@@ -340,6 +378,7 @@ class BlockTextFocusRegistry {
     final restoreController = controller;
     final restoreNode = node;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (epoch != _menuEpoch) return;
       if (restoreController != activeController) return;
       try {
         if (restoreNode.context != null &&
@@ -497,12 +536,17 @@ class BlockTextFocusRegistry {
     final text = data?.text;
     if (text == null) return;
     final mark = resolveMark();
-    if (mark.spans.isEmpty) return;
-    // Pasting over parts that were marked in full replaces them, so the emptied
-    // structures should go the same way as for a cut.
-    final fullyCovered = mark.fullyCoveredSegmentIds;
-    mark.replaceWith(sanitizePlatformText(text));
-    _afterMarkEdit(mark, fullyCovered: fullyCovered, keepFirstPart: true);
+    if (mark.fromMarking) {
+      if (mark.spans.isEmpty) return;
+      // Pasting over parts that were marked in full replaces them, so the
+      // emptied structures should go the same way as for a cut.
+      final fullyCovered = mark.fullyCoveredSegmentIds;
+      mark.replaceWith(sanitizePlatformText(text));
+      _afterMarkEdit(mark, fullyCovered: fullyCovered, keepFirstPart: true);
+      return;
+    }
+    // Nothing marked: insert at the caret, same as Super Editor body paste.
+    insertText(sanitizePlatformText(text));
   }
 
   /// After an edit the old mark no longer describes anything, so the caret is

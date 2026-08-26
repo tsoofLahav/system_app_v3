@@ -19,15 +19,17 @@ Every action targets **the mark**, resolved by a single rule:
 1. **Anything marked** → that is the target, across as many parts as it covers.
 2. **Nothing marked** → the **line at the caret** (previous `\n` or start, to next `\n` or end).
 
+Paste is the exception: unmarked paste inserts at the caret. Copy, cut, format, and AI still use the caret line.
+
 `DocumentMark.resolve()` in [`../editor/document_mark.dart`](../editor/document_mark.dart) is the only implementation of this rule, and cut/copy/paste/format/AI all go through it via `BlockTextFocusRegistry.resolveMark()`.
 
 **Never read a single field's `controller.selection` to decide what an action affects.** A field's selection only describes how that field paints itself. Inside the file editor a marking routinely spans several fields, and reading one of them would silently act on a fraction of what the user marked.
 
 The mark is captured on secondary pointer-down (`capturePendingMark`) and frozen for the menu session (`openMenuSession`), so focus loss or a collapsed selection cannot change the target mid-menu. `FormatRange` remains only as the fallback for a lone field outside any document flow.
 
-**Embed objects:** same mark rule as the file body. Right-click on text places the caret at the pointer (unless the click is inside an existing mark), expands to that line, then freezes. A leftover selection snapshot must not override the pointer. Right-click on object chrome (not text) freezes the **whole field** via `prepareObjectMenuMark`. Claiming another field or the Super Editor body collapses the previous object mark. Embed fields keep `DocumentSecondaryTap` until the menu closes so Super Editor cannot open a second menu that clobbers the freeze.
+**Embed objects:** same mark rule as the file body. Right-click on text **focuses the field first**, places the caret at the pointer (unless the click is inside an existing mark), expands to that line, then freezes. A leftover selection snapshot must not override the pointer. Right-click on object chrome (not text) freezes the **whole field** via `prepareObjectMenuMark`. Claiming another field or the Super Editor body **collapses and forgets** the previous object mark before the body menu opens (`releaseLiveMark`) — Super Editor `hasFocus` is not enough (descendant fields keep it true); the body must have **primary** focus. [`DocumentSecondaryTap`](../editor/document_secondary_tap.dart) is per pointer so Super Editor does not open a second menu on the **same** click, but a new right-click can retarget.
 
-**Only the first valid pending capture is kept** until the menu consumes it — do not capture again from parents after focus loss (that replaced a word selection with the whole paragraph). Nested `openMenuSession` must not re-resolve from a live collapsed selection.
+**Only the first valid pending capture is kept** until the menu consumes it — do not capture again from parents after focus loss (that replaced a word selection with the whole paragraph). Nested `openMenuSession` must not re-resolve from a live collapsed selection. A **new** right-click is not nested: [`beginNewPointerAim`](block_text_focus.dart) resets the session so the new pointer can freeze a different line. [`DocumentSecondaryTap`](../editor/document_secondary_tap.dart) is **per pointer** so a second right-click on the body is not swallowed by an open field menu.
 
 ### 3. Span shifts only on text changes
 

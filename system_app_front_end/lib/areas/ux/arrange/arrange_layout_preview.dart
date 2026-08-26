@@ -105,7 +105,9 @@ class ArrangeLayoutPreview extends StatelessWidget {
             ],
           ),
         );
+      case FileLayouts.hero:
       case FileLayouts.heroLeft:
+      case FileLayouts.heroRight:
         return SizedBox(
           height: h,
           child: Row(
@@ -126,41 +128,8 @@ class ArrangeLayoutPreview extends StatelessWidget {
             ],
           ),
         );
-      case FileLayouts.heroRight:
-        return SizedBox(
-          height: h,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                flex: 2,
-                child: Column(
-                  children: [
-                    Expanded(child: _slotAt(slots, 0)),
-                    SizedBox(height: gap),
-                    Expanded(child: _slotAt(slots, 1)),
-                  ],
-                ),
-              ),
-              SizedBox(width: gap),
-              Expanded(flex: 3, child: _slotAt(slots, 2)),
-            ],
-          ),
-        );
-      case FileLayouts.row:
-        return SizedBox(
-          height: h,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < slots.length; i++) ...[
-                if (i > 0) SizedBox(width: gap),
-                Expanded(child: slots[i]),
-              ],
-            ],
-          ),
-        );
       case FileLayouts.grid:
+      case FileLayouts.row:
       default:
         final cols = w >= 460 ? 2 : 1;
         final rows = (slots.length / cols).ceil().clamp(1, 3);

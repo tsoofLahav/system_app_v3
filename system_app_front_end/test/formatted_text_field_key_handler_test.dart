@@ -85,4 +85,39 @@ void main() {
 
     expect(scrollController.offset, 0);
   });
+
+  test('embed caret correction is only for a collapsed click', () {
+    expect(
+      shouldApplyEmbedCaretForTap(
+        draggedBeyondSlop: false,
+        selectionIsRange: false,
+        shiftPressed: false,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldApplyEmbedCaretForTap(
+        draggedBeyondSlop: true,
+        selectionIsRange: false,
+        shiftPressed: false,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldApplyEmbedCaretForTap(
+        draggedBeyondSlop: false,
+        selectionIsRange: true,
+        shiftPressed: false,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldApplyEmbedCaretForTap(
+        draggedBeyondSlop: false,
+        selectionIsRange: false,
+        shiftPressed: true,
+      ),
+      isFalse,
+    );
+  });
 }

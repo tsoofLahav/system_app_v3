@@ -85,4 +85,10 @@ void main() {
     notifier.notify();
     expect(notified, 1);
   });
+
+  test('notify after dispose is a no-op', () {
+    final notifier = FrameSafeNotifier();
+    notifier.dispose();
+    expect(() => notifier.notify(), returnsNormally);
+  });
 }

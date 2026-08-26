@@ -54,9 +54,26 @@ class _ViewFrameTaskListState extends State<ViewFrameTaskList> {
     _bridge.sectionName = widget.sectionName;
     _bridge.sectionFlag = widget.sectionFlag;
     _bridge.topicKey = widget.topicKey;
+    final tasksArrived =
+        widget.tasks.isNotEmpty &&
+        (oldWidget.tasks.length != widget.tasks.length ||
+            !_sameTaskIds(oldWidget.tasks, widget.tasks));
+    if (tasksArrived) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _surfaceKey.currentState?.syncFromRemote();
+      });
+    }
     if (oldWidget.reorderMode != widget.reorderMode) {
       _surfaceKey.currentState?.setReorderMode(widget.reorderMode);
     }
+  }
+
+  bool _sameTaskIds(List<Task> a, List<Task> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id) return false;
+    }
+    return true;
   }
 
   ViewFrameTaskListBridge _makeBridge() {

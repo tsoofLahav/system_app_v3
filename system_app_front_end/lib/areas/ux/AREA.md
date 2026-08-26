@@ -29,13 +29,12 @@ A layout has a number of slots. Files fill them in order. Everything past the la
 
 | Layout | Slots | Shows |
 |--------|-------|-------|
-| Single | 1 | The first file |
-| Split | 2 | The first two, side by side |
-| Large left / Large right | 3 | A hero and two smaller |
-| Row | all | Every file, in a row |
 | Grid | all | Every file, wrapped |
+| One file | 1 | The first file |
+| Two files | 2 | The first two, side by side |
+| Three files | 3 | One large file at the **start** (left in English, right in Hebrew) and two stacked beside it |
 
-So with five files: a grid shows all five, `Large left` shows three, and `Single` shows one. In every case the other files are **not on screen at all** — not collapsed, not below a divider. The only place they appear is the arrange overlay.
+So with five files: a grid shows all five, three-files shows three, and one-file shows one. In every case the other files are **not on screen at all** — not collapsed, not below a divider. The only place they appear is the arrange overlay.
 
 ### Why prominence is not a flag
 
@@ -46,7 +45,7 @@ A file being "the important one" is a fact about the topic's arrangement, not ab
 | Which files are on screen? | `shownFiles(ordered, layoutId)` |
 | Which are not? | `hiddenFiles(ordered, layoutId)` |
 | What if the layout needs more files than exist? | `effectiveLayoutId` falls back for drawing and **leaves the stored layout alone**, so adding the files back restores it |
-| What if the user never picked a layout? | Stored `auto`. 1 file → single, 2 files → split, 3+ → large left. Arrange writes a real id only when the pick is not that default |
+| What if the user never picked a layout? | Stored `auto`. 1 file → single, 2 files → split, 3+ → three-file hero. The layout picker writes a real id only when the pick is not that default |
 
 ### Rules that follow
 
@@ -57,24 +56,22 @@ A file being "the important one" is a fact about the topic's arrangement, not ab
 
 | Concern | Files |
 |---------|-------|
-| The layouts themselves | [`layout/file_layouts.dart`](layout/file_layouts.dart) |
+| The layouts themselves | [`layout/file_layouts.dart`](layout/file_layouts.dart) — four pickable: grid, one, two, three. Legacy `hero_left` / `hero_right` / `row` still load. |
 | Which files a layout reaches | [`layout/topic_file_slots.dart`](layout/topic_file_slots.dart) |
 | Drawing them | [`layout/file_layout_board.dart`](layout/file_layout_board.dart) |
-| Rearranging | [`arrange/`](arrange/) — desktop overlay; phone reorder sheet |
+| Choosing a layout | [`layout/file_layout_picker.dart`](layout/file_layout_picker.dart) — glass strip above the bottom bar, no scrim |
+| Rearranging files | [`arrange/`](arrange/) — desktop overlay (files only); phone reorder sheet |
 
 ### Arranging
 
 Arranging is a **mode**: the user opens it from the bottom bar (desktop) or the phone bottom tools, moves files, and commits. Nothing is written until Done, and Escape / Cancel leaves everything as it was.
 
-**Desktop** overlay has three bands, walked with up/down:
+**Desktop** has two dialogs:
 
-| Band | What it holds | Actions |
-|------|---------------|---------|
-| Shown | The layout, previewed as the shared read-only file | Tap a file to make it first, right-click to take it off screen, left/right to cycle |
-| Not on screen | The hidden files, in a strip | Tap to bring one to the first slot (the last shown file moves off) |
-| Layouts | The pickable shapes | Click or left/right; layouts needing more files than the topic has are disabled |
-
-On commit it writes one `order_index` per file and one `file_layout` on the topic.
+| Dialog | Opens from | What it does |
+|--------|------------|--------------|
+| Layout picker | Bottom-bar layout icon | Four tiles above the bar. No darkened scrim. Tap applies immediately |
+| Arrange files | Bottom-bar arrange icon, ⌘R | Shown files + off-screen strip. Writes `order_index` only |
 
 **Phone** has no layouts, so arrange is only the swipe row: a `ReorderableListView` of file names ([`arrange/phone_file_reorder_sheet.dart`](arrange/phone_file_reorder_sheet.dart)). Done calls `reorderTopicFiles` and does not change `file_layout`.
 
@@ -125,6 +122,8 @@ Listeners sit as low as they need to. The open document is not remounted because
 | Document body or embeds (this device or another) | [`SuperDocumentEditor`](../files/editor/super_document_editor.dart) listens itself and applies into the open editor. If a key is down, the apply waits |
 
 Do not wrap `MaterialApp` or the topic canvas in `Consumer<AppState>` / a shell listen that rebuilds the files on every notify.
+
+[`MainPaneLoader`](widgets/main_pane_loader.dart) (until `appReady`, and while a topic is stale) drops Flutter’s startup-seeded pressed keys so the editor does not open into a looping `KeyDownEvent … already pressed`. Details: [`NOTES.md` § Editor keyboard safety](../../../../NOTES.md#editor-keyboard-safety).
 
 ## Sections
 
@@ -223,7 +222,7 @@ Heavy-use defaults are **two keys** (⌘ + letter) so they stay in muscle memory
 | Move object | ⌘⇧O | Toggle Move Mode for the caret / last-interacted embed. Also on every object chrome menu. Rebindable in Preferences. |
 | Add connection / list | ⌘L | Inserts a bullet list at the caret. In an info, opens the connect-to picker |
 | Agent / slot keys | ⌘1… | Agent prompt, or the saved action in that bar seat |
-| Text (bold, italic, underline, Make link, cut/copy/paste, size) | ⌘B/I/U/X/C/V, ⌘⇧+/− | Mark, else the caret line. Embed fields via `runBlockTextAction`; Super Editor via `DocumentEditorController.applyTextAction`. Super Editor’s own Cmd+B / Cmd+I / ⌘V are stripped so catalog toggles once and list paste keeps `-` / `1.` points. Copy/cut of lists include those prefixes. **Make link** is menu-only (⌘K is bring-file, ⌘L is connect-info); click / tap opens a persisted URL. **Make list** (menu, or insert list / ⌘L on marked text) gives each newline a point. |
+| Text (bold, italic, underline, Make link, cut/copy/paste, size) | ⌘B/I/U/X/C/V, ⌘⇧+/− | Mark, else the caret line — except **paste**, which inserts at the caret unless something is marked. Embed fields via `runBlockTextAction`; Super Editor via `DocumentEditorController.applyTextAction`. Super Editor’s own Cmd+B / Cmd+I / ⌘V are stripped so catalog toggles once and list paste keeps `-` / `1.` points. Copy/cut of lists include those prefixes. **Make link** is menu-only (⌘K is bring-file, ⌘L is connect-info); click / tap opens a persisted URL. **Make list** (menu, or insert list / ⌘L on marked text) gives each newline a point. |
 | Insert object | ⌘D info, ⌘T task, ⌘⌥T table, ⌘G graph, ⌘⇧I image, ⌘L list | Active file via `DocumentEditorRegistry`. ⌘L is a list unless the caret is in an info (connection) |
 | Layout toggle | ⌘⇧M | View page: sections ↔ topics |
 | Language | ⌘E | English ↔ Hebrew (after the keystroke, so the editor is not remounted mid-KeyDown) |

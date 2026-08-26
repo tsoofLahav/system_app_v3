@@ -62,7 +62,7 @@ Successful DELETE returns `204` with empty body.
 
 **PATCH:** `name`, `icon`, `color`, `order_index`, `file_layout`, `archived_at`
 
-`file_layout` is how the topic arranges its files on screen (`auto`, `single`, `split`, `hero_left`, `hero_right`, `row`, `grid`). `auto` follows file count (1 → single, 2 → split, 3+ → large left) until the user picks a layout. It also decides how many files are shown at all — see [files area](../areas/files/AREA.md).
+`file_layout` is how the topic arranges its files on screen (`auto`, `single`, `split`, `hero`, `grid`). `auto` follows file count (1 → single, 2 → split, 3+ → three-file hero) until the user picks a layout. Leftover `hero_left` / `hero_right` / `row` still load. It also decides how many files are shown at all — see [files area](../areas/files/AREA.md).
 
 ---
 

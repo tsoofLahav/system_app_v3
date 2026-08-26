@@ -13,40 +13,41 @@ void main() {
     test('the fixed layouts stop at their slot count', () {
       expect(shownFileCount(FileLayouts.single, 5), 1);
       expect(shownFileCount(FileLayouts.split, 5), 2);
+      expect(shownFileCount(FileLayouts.hero, 5), 3);
       expect(shownFileCount(FileLayouts.heroLeft, 5), 3);
       expect(shownFileCount(FileLayouts.heroRight, 5), 3);
     });
 
-    test('row and grid show everything', () {
-      expect(shownFileCount(FileLayouts.row, 5), 5);
+    test('grid shows everything, and leftover row does too', () {
       expect(shownFileCount(FileLayouts.grid, 5), 5);
+      expect(shownFileCount(FileLayouts.row, 5), 5);
     });
 
     test('a layout never shows more files than exist', () {
-      expect(shownFileCount(FileLayouts.heroLeft, 2), 2);
+      expect(shownFileCount(FileLayouts.hero, 2), 2);
       expect(shownFileCount(FileLayouts.single, 0), 0);
     });
   });
 
   group('a layout that no longer fits', () {
     test('falls back while there are too few files', () {
-      expect(effectiveLayoutId(FileLayouts.heroLeft, 2), FileLayouts.split);
+      expect(effectiveLayoutId(FileLayouts.hero, 2), FileLayouts.split);
       expect(effectiveLayoutId(FileLayouts.split, 1), FileLayouts.single);
     });
 
-    test('is kept, so adding the files back restores it', () {
-      const stored = FileLayouts.heroLeft;
-      expect(effectiveLayoutId(stored, 2), isNot(stored));
-      expect(effectiveLayoutId(stored, 3), stored);
+    test('leftover ids draw as the four pickable layouts', () {
+      expect(effectiveLayoutId(FileLayouts.heroLeft, 3), FileLayouts.hero);
+      expect(effectiveLayoutId(FileLayouts.heroRight, 5), FileLayouts.hero);
+      expect(effectiveLayoutId(FileLayouts.row, 4), FileLayouts.grid);
     });
   });
 
   group('auto layout follows file count until the user picks', () {
-    test('1 file is single, 2 is split, 3+ is large left', () {
+    test('1 file is single, 2 is split, 3+ is hero', () {
       expect(effectiveLayoutId(FileLayouts.auto, 1), FileLayouts.single);
       expect(effectiveLayoutId(FileLayouts.auto, 2), FileLayouts.split);
-      expect(effectiveLayoutId(FileLayouts.auto, 3), FileLayouts.heroLeft);
-      expect(effectiveLayoutId(FileLayouts.auto, 8), FileLayouts.heroLeft);
+      expect(effectiveLayoutId(FileLayouts.auto, 3), FileLayouts.hero);
+      expect(effectiveLayoutId(FileLayouts.auto, 8), FileLayouts.hero);
     });
 
     test('an explicit pick is kept when it still fits', () {
@@ -63,6 +64,7 @@ void main() {
         FileLayouts.storedLayoutId(FileLayouts.split, 2),
         FileLayouts.auto,
       );
+      expect(FileLayouts.storedLayoutId(FileLayouts.hero, 4), FileLayouts.auto);
       expect(
         FileLayouts.storedLayoutId(FileLayouts.heroLeft, 4),
         FileLayouts.auto,

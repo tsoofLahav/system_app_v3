@@ -25,17 +25,21 @@ class FileLayoutDefinition {
 }
 
 abstract final class FileLayouts {
-  /// Follows file count: 1 → single, 2 → split, 3+ → large left.
-  /// Stored until the user picks a layout in arrange.
+  /// Follows file count: 1 → single, 2 → split, 3+ → hero.
+  /// Stored until the user picks a layout.
   static const auto = 'auto';
   static const single = 'single';
   static const split = 'split';
+  static const hero = 'hero';
+  static const grid = 'grid';
+
+  /// Legacy stored ids — still read, never offered in the picker.
   static const heroLeft = 'hero_left';
   static const heroRight = 'hero_right';
-  static const grid = 'grid';
   static const row = 'row';
 
   static const List<FileLayoutDefinition> all = [
+    FileLayoutDefinition(id: grid, label: 'Grid', minSlots: 1, builder: _grid),
     FileLayoutDefinition(
       id: single,
       label: 'Single',
@@ -51,31 +55,39 @@ abstract final class FileLayouts {
       builder: _split,
     ),
     FileLayoutDefinition(
-      id: heroLeft,
-      label: 'Large left',
+      id: hero,
+      label: 'Three files',
       minSlots: 3,
       fixedCapacity: 3,
-      builder: _heroLeft,
+      builder: _hero,
     ),
-    FileLayoutDefinition(
-      id: heroRight,
-      label: 'Large right',
-      minSlots: 3,
-      fixedCapacity: 3,
-      builder: _heroRight,
-    ),
-    FileLayoutDefinition(id: row, label: 'Row', minSlots: 1, builder: _row),
-    FileLayoutDefinition(id: grid, label: 'Grid', minSlots: 1, builder: _grid),
   ];
+
+  /// Maps leftover stored ids onto the four pickable layouts.
+  static String canonicalId(String id) {
+    switch (id) {
+      case heroLeft:
+      case heroRight:
+      case hero:
+        return hero;
+      case row:
+        return grid;
+      default:
+        return id;
+    }
+  }
 
   static FileLayoutDefinition byId(String id) {
     if (id == auto) return byId(single);
-    return all.firstWhere((l) => l.id == id, orElse: () => all.first);
+    final canonical = canonicalId(id);
+    return all.firstWhere((l) => l.id == canonical, orElse: () => all.first);
   }
 
   /// Persist [auto] when the pick is still the count-based default.
   static String storedLayoutId(String layoutId, int fileCount) {
-    final resolved = layoutId == auto ? bestForFileCount(fileCount) : layoutId;
+    final resolved = layoutId == auto
+        ? bestForFileCount(fileCount)
+        : canonicalId(layoutId);
     if (resolved == bestForFileCount(fileCount)) return auto;
     return resolved;
   }
@@ -86,7 +98,7 @@ abstract final class FileLayouts {
   }
 
   static String bestForFileCount(int fileCount) {
-    if (fileCount >= 3) return heroLeft;
+    if (fileCount >= 3) return hero;
     if (fileCount == 2) return split;
     return single;
   }
@@ -163,7 +175,8 @@ abstract final class FileLayouts {
     );
   }
 
-  static Widget _heroLeft(BuildContext context, List<Widget> slots) {
+  /// Big pane first in the [Row] — start edge, so left in LTR and right in RTL.
+  static Widget _hero(BuildContext context, List<Widget> slots) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final h = _slotHeightFromConstraints(constraints);
@@ -191,34 +204,6 @@ abstract final class FileLayouts {
     );
   }
 
-  static Widget _heroRight(BuildContext context, List<Widget> slots) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final h = _slotHeightFromConstraints(constraints);
-        return SizedBox(
-          height: h,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                flex: 2,
-                child: Column(
-                  children: [
-                    Expanded(child: _slot(slots, 0)),
-                    const SizedBox(height: AppLayoutSpacing.gap),
-                    Expanded(child: _slot(slots, 1)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AppLayoutSpacing.gap),
-              Expanded(flex: 3, child: _slot(slots, 2)),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   static Widget _grid(BuildContext context, List<Widget> slots) {
     return Wrap(
       spacing: AppLayoutSpacing.gap,
@@ -227,21 +212,6 @@ abstract final class FileLayouts {
         for (var i = 0; i < slots.length; i++)
           SizedBox(width: 340, height: 300, child: slots[i]),
       ],
-    );
-  }
-
-  static Widget _row(BuildContext context, List<Widget> slots) {
-    return SizedBox(
-      height: 420,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var i = 0; i < slots.length; i++) ...[
-            if (i > 0) const SizedBox(width: AppLayoutSpacing.gap),
-            Expanded(child: slots[i]),
-          ],
-        ],
-      ),
     );
   }
 

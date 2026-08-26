@@ -21,6 +21,7 @@ void runNextFrame(VoidCallback action) {
 /// [runNextFrame] instead.
 ///
 /// See [`FLUENT_TEXT.md`](FLUENT_TEXT.md) § "Keystroke handoff".
+/// Startup leftover keys: `shared/utils/hardware_keyboard_guard.dart`.
 void runAfterKeystroke(VoidCallback action) {
   var finished = false;
 

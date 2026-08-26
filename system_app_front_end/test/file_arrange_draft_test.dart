@@ -5,10 +5,8 @@ import 'package:system_app_front_end/areas/ux/layout/file_layouts.dart';
 
 AppFile _file(int id) => AppFile(id: id, topicId: 1, name: 'f$id');
 
-FileArrangeDraft _draft(List<int> ids, String layoutId) => FileArrangeDraft(
-  ordered: ids.map(_file).toList(),
-  layoutId: layoutId,
-);
+FileArrangeDraft _draft(List<int> ids, String layoutId) =>
+    FileArrangeDraft(ordered: ids.map(_file).toList(), layoutId: layoutId);
 
 List<int> _ids(List<AppFile> files) => files.map((f) => f.id).toList();
 
@@ -17,27 +15,28 @@ void main() {
     expect(_ids(_draft([1, 2, 3, 4], FileLayouts.single).shown), [1]);
     expect(_ids(_draft([1, 2, 3, 4], FileLayouts.single).hidden), [2, 3, 4]);
 
+    expect(_ids(_draft([1, 2, 3, 4], FileLayouts.hero).shown), [1, 2, 3]);
+    expect(_ids(_draft([1, 2, 3, 4], FileLayouts.hero).hidden), [4]);
     expect(_ids(_draft([1, 2, 3, 4], FileLayouts.heroLeft).shown), [1, 2, 3]);
-    expect(_ids(_draft([1, 2, 3, 4], FileLayouts.heroLeft).hidden), [4]);
 
     expect(_ids(_draft([1, 2, 3, 4], FileLayouts.grid).shown), [1, 2, 3, 4]);
     expect(_draft([1, 2, 3, 4], FileLayouts.grid).hidden, isEmpty);
   });
 
   test('tapping a shown file makes it the first one', () {
-    final draft = _draft([1, 2, 3], FileLayouts.heroLeft);
+    final draft = _draft([1, 2, 3], FileLayouts.hero);
     expect(draft.moveShownToFirst(2), isTrue);
     expect(_ids(draft.ordered), [3, 1, 2]);
   });
 
   test('the first file is already first', () {
-    final draft = _draft([1, 2, 3], FileLayouts.heroLeft);
+    final draft = _draft([1, 2, 3], FileLayouts.hero);
     expect(draft.moveShownToFirst(0), isFalse);
     expect(_ids(draft.ordered), [1, 2, 3]);
   });
 
   test('showing a hidden file puts it first and pushes the last shown off', () {
-    final draft = _draft([1, 2, 3, 4], FileLayouts.heroLeft);
+    final draft = _draft([1, 2, 3, 4], FileLayouts.hero);
 
     expect(draft.show(0), isTrue);
 
@@ -46,7 +45,7 @@ void main() {
   });
 
   test('hiding a shown file sends it to the end of the order', () {
-    final draft = _draft([1, 2, 3, 4], FileLayouts.heroLeft);
+    final draft = _draft([1, 2, 3, 4], FileLayouts.hero);
 
     expect(draft.hide(0), isTrue);
 
@@ -55,7 +54,7 @@ void main() {
   });
 
   test('rotating cycles the shown files and leaves the hidden ones alone', () {
-    final draft = _draft([1, 2, 3, 4], FileLayouts.heroLeft);
+    final draft = _draft([1, 2, 3, 4], FileLayouts.hero);
 
     expect(draft.rotateShownLeft(), isTrue);
     expect(_ids(draft.ordered), [2, 3, 1, 4]);
@@ -71,7 +70,7 @@ void main() {
   });
 
   test('choosing a smaller layout pushes files off screen, not away', () {
-    final draft = _draft([1, 2, 3], FileLayouts.heroLeft);
+    final draft = _draft([1, 2, 3], FileLayouts.hero);
     expect(draft.hidden, isEmpty);
 
     draft.setLayoutId(FileLayouts.single);

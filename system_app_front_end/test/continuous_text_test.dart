@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:system_app_front_end/areas/files/editor/document_secondary_tap.dart';
 import 'package:system_app_front_end/areas/files/editor/document_text_flow.dart';
 import 'package:system_app_front_end/areas/files/rich_text/block_text_actions.dart';
 import 'package:system_app_front_end/areas/files/rich_text/block_text_focus.dart';
@@ -579,6 +580,54 @@ void main() {
       expect(clipboard, 'second line');
     });
 
+    testWidgets('paste without a mark inserts at the caret', (tester) async {
+      final flow = DocumentTextFlow();
+      final segments = {paragraphSegmentId('b1'): 'hello'};
+      final state = await _pump(tester, flow, segments);
+      await _placeCaret(tester, state, 'b1', 2);
+
+      clipboard = 'XX';
+      await runBlockTextAction('text:paste');
+      await tester.pumpAndSettle();
+
+      expect(state.controllers['b1']!.text, 'heXXllo');
+    });
+
+    testWidgets('paste over a mark replaces it', (tester) async {
+      final flow = DocumentTextFlow();
+      final segments = {paragraphSegmentId('b1'): 'hello'};
+      final state = await _pump(tester, flow, segments);
+      await _placeCaret(tester, state, 'b1', 1);
+      flow.collapseTo(const DocumentTextPosition('b1', 1));
+      flow.extendTo(const DocumentTextPosition('b1', 4));
+      await tester.pumpAndSettle();
+
+      clipboard = 'XX';
+      await runBlockTextAction('text:paste');
+      await tester.pumpAndSettle();
+
+      expect(state.controllers['b1']!.text, 'hXXo');
+    });
+
+    testWidgets('paste with a frozen caret line still inserts', (tester) async {
+      final flow = DocumentTextFlow();
+      final segments = {paragraphSegmentId('b1'): 'hello'};
+      final state = await _pump(tester, flow, segments);
+      await _placeCaret(tester, state, 'b1', 2);
+
+      BlockTextFocusRegistry.capturePendingMark();
+      BlockTextFocusRegistry.openMenuSession();
+      expect(BlockTextFocusRegistry.frozenMark?.fromMarking, isFalse);
+      expect(BlockTextFocusRegistry.frozenMark?.text, 'hello');
+
+      clipboard = 'XX';
+      await runBlockTextAction('text:paste');
+      BlockTextFocusRegistry.closeMenuSession();
+      await tester.pumpAndSettle();
+
+      expect(state.controllers['b1']!.text, 'heXXllo');
+    });
+
     testWidgets('right-click aims at the pointer, not the old caret', (
       tester,
     ) async {
@@ -607,6 +656,76 @@ void main() {
       expect(BlockTextFocusRegistry.markedText(), 'second line');
       BlockTextFocusRegistry.closeMenuSession();
       expect(state.controllers['b1']!.text, 'first line\nsecond line');
+    });
+
+    testWidgets(
+      'a second right-click retargets the mark while a menu is open',
+      (tester) async {
+        final flow = DocumentTextFlow();
+        final segments = {paragraphSegmentId('b1'): 'first line\nsecond line'};
+        final state = await _pump(tester, flow, segments);
+        await _placeCaret(tester, state, 'b1', 0);
+
+        final rect = tester.getRect(
+          find.byKey(ValueKey(paragraphSegmentId('b1'))),
+        );
+        await tester.tapAt(
+          Offset(rect.left + 24, rect.top + 6),
+          buttons: kSecondaryMouseButton,
+        );
+        await tester.pump();
+        BlockTextFocusRegistry.openMenuSession();
+        expect(BlockTextFocusRegistry.markedText(), 'first line');
+
+        await tester.tapAt(
+          Offset(rect.left + 24, rect.bottom - 6),
+          buttons: kSecondaryMouseButton,
+        );
+        await tester.pump();
+        BlockTextFocusRegistry.openMenuSession();
+        expect(BlockTextFocusRegistry.markedText(), 'second line');
+        BlockTextFocusRegistry.closeMenuSession();
+      },
+    );
+
+    test('a new right-click pointer is not swallowed by the previous menu', () {
+      DocumentSecondaryTap.notePointer(1);
+      DocumentSecondaryTap.markEmbedHandled();
+      expect(DocumentSecondaryTap.embedHandled, isTrue);
+      DocumentSecondaryTap.notePointer(2);
+      expect(DocumentSecondaryTap.embedHandled, isFalse);
+      DocumentSecondaryTap.clearEmbedHandled();
+    });
+
+    testWidgets('beginNewPointerAim lets a second menu freeze a new line', (
+      tester,
+    ) async {
+      final controller = TextEditingController(text: 'aaa\nbbb');
+      addTearDown(controller.dispose);
+      BlockTextFocusRegistry.register(controller: controller, changed: () {});
+      addTearDown(() => BlockTextFocusRegistry.unregister(controller));
+      controller.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 3,
+      );
+      BlockTextFocusRegistry.capturePendingMark();
+      final first = BlockTextFocusRegistry.openMenuSession();
+      expect(BlockTextFocusRegistry.markedText(), 'aaa');
+
+      BlockTextFocusRegistry.beginNewPointerAim();
+      controller.selection = const TextSelection(
+        baseOffset: 4,
+        extentOffset: 7,
+      );
+      BlockTextFocusRegistry.capturePendingMark();
+      final second = BlockTextFocusRegistry.openMenuSession();
+      expect(BlockTextFocusRegistry.markedText(), 'bbb');
+
+      // Completing the first overlay is async; its finally must not
+      // unfreeze the line this right-click just marked.
+      BlockTextFocusRegistry.closeMenuSession(first);
+      expect(BlockTextFocusRegistry.markedText(), 'bbb');
+      BlockTextFocusRegistry.closeMenuSession(second);
     });
 
     testWidgets('focusing another object field drops the previous mark', (
@@ -686,5 +805,21 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(flow.focusNodeFor('b1')!.hasFocus, isTrue);
+  });
+
+  test('releaseLiveMark forgets an object-field mark', () {
+    final controller = TextEditingController(text: 'hello world');
+    addTearDown(controller.dispose);
+    final focus = FocusNode();
+    addTearDown(focus.dispose);
+    BlockTextFocusRegistry.register(
+      controller: controller,
+      changed: () {},
+      focusNode: focus,
+    );
+    controller.selection = const TextSelection(baseOffset: 0, extentOffset: 5);
+    BlockTextFocusRegistry.releaseLiveMark();
+    expect(controller.selection.isCollapsed, isTrue);
+    expect(BlockTextFocusRegistry.activeController, isNull);
   });
 }

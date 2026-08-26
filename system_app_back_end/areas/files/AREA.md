@@ -21,7 +21,7 @@ Legacy **v3 JSON** in this column is migrated to editor text on read (`File.to_d
 
 ## Which files a topic shows
 
-`topics.file_layout` holds the layout the user picked, or `auto` until they pick one. `auto` follows file count: 1 → `single`, 2 → `split`, 3+ → `hero_left`. A picked layout has a fixed number of slots — `single` 1, `split` 2, `hero_left` and `hero_right` 3, `row` and `grid` all of them — and files fill those slots in `order_index` order.
+`topics.file_layout` holds the layout the user picked, or `auto` until they pick one. `auto` follows file count: 1 → `single`, 2 → `split`, 3+ → `hero`. A picked layout has a fixed number of slots — `single` 1, `split` 2, `hero` 3 (large pane on the start edge), `grid` all of them — and files fill those slots in `order_index` order. Leftover stored ids `hero_left`, `hero_right`, and `row` still load (`hero_*` as `hero`, `row` as `grid`).
 
 A file past the last slot is **not on screen**. It is not archived and not marked; it is simply further down the order than the layout has room for, and the user reaches it by rearranging the topic.
 

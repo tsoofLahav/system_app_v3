@@ -3,8 +3,8 @@ import './file_layouts.dart';
 
 /// Which of a topic's files are on screen.
 ///
-/// A layout has a fixed number of slots — `single` one, `split` two, the hero
-/// layouts three, `row` and `grid` as many as there are. Files fill those slots
+/// A layout has a fixed number of slots — `single` one, `split` two, `hero`
+/// three, `grid` as many as there are. Files fill those slots
 /// in order. A file past the last slot is simply not on screen: not archived,
 /// not flagged, just further down the order than the layout has room for. The
 /// user brings it back by rearranging the topic.
@@ -19,7 +19,7 @@ import './file_layouts.dart';
 String effectiveLayoutId(String layoutId, int fileCount) {
   final stored = layoutId == FileLayouts.auto || layoutId.isEmpty
       ? FileLayouts.bestForFileCount(fileCount)
-      : layoutId;
+      : FileLayouts.canonicalId(layoutId);
   if (FileLayouts.isAvailable(stored, fileCount)) return stored;
   return FileLayouts.bestForFileCount(fileCount);
 }

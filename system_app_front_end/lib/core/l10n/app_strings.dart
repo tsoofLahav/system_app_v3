@@ -109,9 +109,10 @@ class AppStrings {
   String templateForType(String name) =>
       this['templateForType'].replaceAll('{name}', name);
 
-  String compactUndoInFile(String file, String topic) => this['compactUndoInFile']
-      .replaceAll('{file}', file)
-      .replaceAll('{topic}', topic);
+  String compactUndoInFile(String file, String topic) =>
+      this['compactUndoInFile']
+          .replaceAll('{file}', file)
+          .replaceAll('{topic}', topic);
 
   String compactUndoOneAdded(String text) =>
       this['compactUndoOneAdded'].replaceAll('{text}', text);
@@ -176,14 +177,14 @@ class AppStrings {
   }
 
   List<String> get narrowWeekdaysSundayFirst => [
-        this['narrowSun'],
-        this['narrowMon'],
-        this['narrowTue'],
-        this['narrowWed'],
-        this['narrowThu'],
-        this['narrowFri'],
-        this['narrowSat'],
-      ];
+    this['narrowSun'],
+    this['narrowMon'],
+    this['narrowTue'],
+    this['narrowWed'],
+    this['narrowThu'],
+    this['narrowFri'],
+    this['narrowSat'],
+  ];
 
   String reviewDecidedCount(int decided, int total) =>
       this['reviewDecidedCount']
@@ -379,7 +380,8 @@ class AppStrings {
     'consultApplyMode': 'How to apply',
     'consultApplyModeReview': 'Review changes (diff)',
     'consultApplyModeDirect': 'Apply directly',
-    'consultApplyModeHint': 'For testing — review stores a pending diff on the file',
+    'consultApplyModeHint':
+        'For testing — review stores a pending diff on the file',
     'saveAsAction': 'Save as action…',
     'saveAction': 'Save',
     'saveAndRunAction': 'Save and run',
@@ -410,7 +412,8 @@ class AppStrings {
     'builderSectionBasics': 'Details',
     'builderSectionWhen': 'When',
     'addStep': 'Add a step',
-    'addStepHint': 'Add at least one step — a file, a task reset, or an AI run.',
+    'addStepHint':
+        'Add at least one step — a file, a task reset, or an AI run.',
     'stepAi': 'Run AI',
     'stepCreateFile': 'Create a file',
     'stepUnmarkTasks': 'Unmark tasks',
@@ -426,12 +429,14 @@ class AppStrings {
     'pickAiAction': 'Choose an action',
     'noSavedActionsForStep': 'Save an AI action first, then pick it here.',
     'fileNamePattern': 'File name',
-    'fileNamePatternHint': '{date}, {weekday}, {month}, {year} move with the calendar.',
+    'fileNamePatternHint':
+        '{date}, {weekday}, {month}, {year} move with the calendar.',
     'archiveAllInScope': 'Everything in scope',
     'archiveOlderThan': 'Older than',
     'days': 'Days',
     'unmarkAllInScope': 'Every done task in this scope goes back to active.',
-    'noAutomationsHint': 'No automations yet.\nCreate one: a scope, a time, and the steps to run.',
+    'noAutomationsHint':
+        'No automations yet.\nCreate one: a scope, a time, and the steps to run.',
     'editAutomationTitle': 'Editing {name}',
     'deleteAutomationBody': 'Delete "{name}"?',
     'automationFailed': 'The automation did not finish.',
@@ -513,7 +518,8 @@ class AppStrings {
     'newTopicType': 'New topic type',
     'editTopicType': 'Topic type',
     'deleteTopicTypeTitle': 'Delete this type?',
-    'deleteTopicTypeBody': 'Delete "{name}"? Topics that still use it must be retyped first.',
+    'deleteTopicTypeBody':
+        'Delete "{name}"? Topics that still use it must be retyped first.',
     'typeInUse': 'This type is still used.',
     'noTopicTypes': 'No topic types yet.',
     'untyped': 'None',
@@ -572,7 +578,8 @@ class AppStrings {
     'partNameHint': 'e.g. Auth flow',
     'editPart': 'Rename part',
     'deletePart': 'Delete part',
-    'deletePartBody': 'Delete "{name}"? It will be removed from the part list. Placed headers in files are kept.',
+    'deletePartBody':
+        'Delete "{name}"? It will be removed from the part list. Placed headers in files are kept.',
     'partAlreadyInFile': 'Already in this file',
     'noPartsAvailable': 'No other parts to add',
     'addText': 'Add text',
@@ -710,13 +717,15 @@ class AppStrings {
     'preferences': 'Preferences',
     'manageTopicTypes': 'Manage types…',
     'reorderSidebar': 'Sidebar order',
-    'reorderSidebarHint': 'Drag handles on topics and views until you turn this off.',
+    'reorderSidebarHint':
+        'Drag handles on topics and views until you turn this off.',
     'startReorderSidebar': 'Reorder',
     'doneReorderSidebar': 'Stop reordering',
     'reorderTypes': 'Reorder',
     'topicTypeConfigHint': 'Type settings are managed from here.',
     'shortcuts': 'Shortcuts',
-    'shortcutHint': 'Text shortcuts need a caret. The rest work anywhere except inside a dialog.',
+    'shortcutHint':
+        'Text shortcuts need a caret. The rest work anywhere except inside a dialog.',
     'shortcutPressKeys': 'Press shortcut…',
     'shortcutConflict': 'Already used by {action}',
     'shortcutChange': 'Change',
@@ -756,7 +765,8 @@ class AppStrings {
     'aiSuggestEmojiNeedSelection': 'Select text to suggest an emoji.',
     'aiSuggestEmojiFailed': 'Could not suggest an emoji.',
     'aiReview': 'Review',
-    'aiNoContext': 'Select text or place the caret on a line, task, or list item.',
+    'aiNoContext':
+        'Select text or place the caret on a line, task, or list item.',
     'aiRunning': 'Running…',
     'aiDone': 'Done',
     'archive': 'Archive',
@@ -862,7 +872,8 @@ class AppStrings {
     'approveAll': 'Approve all',
     'suggestedNewPoint': 'New point',
     'replaceWith': 'Replace with',
-    'reviewContextNote': 'Unchanged lines are shown for context. Review suggested changes only.',
+    'reviewContextNote':
+        'Unchanged lines are shown for context. Review suggested changes only.',
     'reviewPaneCurrent': 'Current',
     'reviewPaneSuggested': 'Suggested',
     'reviewAccept': 'Accept',
@@ -1077,12 +1088,14 @@ class AppStrings {
     'pickAiAction': 'בחר פעולה',
     'noSavedActionsForStep': 'שמור פעולת AI קודם, ואז בחר אותה כאן.',
     'fileNamePattern': 'שם הקובץ',
-    'fileNamePatternHint': '{date}, {weekday}, {month}, {year} זזים עם הלוח שנה.',
+    'fileNamePatternHint':
+        '{date}, {weekday}, {month}, {year} זזים עם הלוח שנה.',
     'archiveAllInScope': 'הכול בהיקף',
     'archiveOlderThan': 'ישנים מ',
     'days': 'ימים',
     'unmarkAllInScope': 'כל משימה שסומנה בהיקף חוזרת לפעיל.',
-    'noAutomationsHint': 'אין עדיין אוטומציות.\nצרי אחת: היקף, זמן, והשלבים להרצה.',
+    'noAutomationsHint':
+        'אין עדיין אוטומציות.\nצרי אחת: היקף, זמן, והשלבים להרצה.',
     'editAutomationTitle': 'עריכת {name}',
     'deleteAutomationBody': 'למחוק את "{name}"?',
     'automationFailed': 'האוטומציה לא הסתיימה.',
@@ -1164,7 +1177,8 @@ class AppStrings {
     'newTopicType': 'סוג נושא חדש',
     'editTopicType': 'סוג נושא',
     'deleteTopicTypeTitle': 'למחוק את הסוג?',
-    'deleteTopicTypeBody': 'למחוק את "{name}"? נושאים שעדיין משתמשים בו צריכים סוג אחר קודם.',
+    'deleteTopicTypeBody':
+        'למחוק את "{name}"? נושאים שעדיין משתמשים בו צריכים סוג אחר קודם.',
     'typeInUse': 'הסוג עדיין בשימוש.',
     'noTopicTypes': 'אין עדיין סוגי נושאים.',
     'untyped': 'ללא',
@@ -1210,8 +1224,7 @@ class AppStrings {
         'להעביר את "{name}" לארכיון? אפשר לצפות בו מאוחר יותר מהתפריט בצד.',
     'unarchiveFile': 'שחזר מהארכיון',
     'unarchiveFileTitle': 'לשחזר מהארכיון?',
-    'unarchiveFileBody':
-        'להחזיר את "{name}" לנושא? הוא יופיע ראשון בעמוד.',
+    'unarchiveFileBody': 'להחזיר את "{name}" לנושא? הוא יופיע ראשון בעמוד.',
     'allFilesExist': 'כל הקבצים הזמינים כבר קיימים לנושא זה.',
     'ok': 'אישור',
     'addBlock': 'הוסף בלוק',
@@ -1222,7 +1235,8 @@ class AppStrings {
     'partNameHint': 'לדוגמה: זרימת הרשמה',
     'editPart': 'שנה שם חלק',
     'deletePart': 'מחק חלק',
-    'deletePartBody': 'למחוק את "{name}"? החלק יוסר מהרשימה. כותרות שכבר הוצבו בקבצים יישארו.',
+    'deletePartBody':
+        'למחוק את "{name}"? החלק יוסר מהרשימה. כותרות שכבר הוצבו בקבצים יישארו.',
     'partAlreadyInFile': 'כבר בקובץ זה',
     'noPartsAvailable': 'אין חלקים נוספים להוספה',
     'addText': 'הוסף טקסט',
@@ -1366,7 +1380,8 @@ class AppStrings {
     'reorderTypes': 'סדר מחדש',
     'topicTypeConfigHint': 'הגדרות הסוג מנוהלות מכאן.',
     'shortcuts': 'קיצורי מקלדת',
-    'shortcutHint': 'קיצורי טקסט דורשים סמן. השאר פועלים בכל מקום, חוץ מבתוך דו-שיח.',
+    'shortcutHint':
+        'קיצורי טקסט דורשים סמן. השאר פועלים בכל מקום, חוץ מבתוך דו-שיח.',
     'shortcutPressKeys': 'הקש קיצור…',
     'shortcutConflict': 'כבר בשימוש עבור {action}',
     'shortcutChange': 'שנה',
@@ -1511,7 +1526,8 @@ class AppStrings {
     'approveAll': 'אשר הכל',
     'suggestedNewPoint': 'נקודה חדשה',
     'replaceWith': 'החלף ב',
-    'reviewContextNote': 'שורות שלא השתנו מוצגות להקשר. סקור רק את השינויים המוצעים.',
+    'reviewContextNote':
+        'שורות שלא השתנו מוצגות להקשר. סקור רק את השינויים המוצעים.',
     'reviewPaneCurrent': 'נוכחי',
     'reviewPaneSuggested': 'מוצע',
     'reviewAccept': 'אשר',
@@ -1716,20 +1732,22 @@ class AppStrings {
   };
 
   static const _layoutsEn = {
-    'single': 'Single file',
-    'split': 'Split half',
-    'hero_left': 'Large left',
-    'hero_right': 'Large right',
+    'single': 'One file',
+    'split': 'Two files',
+    'hero': 'Three files',
+    'hero_left': 'Three files',
+    'hero_right': 'Three files',
     'grid': 'Grid',
-    'row': 'Row',
+    'row': 'Grid',
   };
 
   static const _layoutsHe = {
-    'single': 'קובץ יחיד',
-    'split': 'שני חצאים',
-    'hero_left': 'גדול משמאל',
-    'hero_right': 'גדול מימין',
+    'single': 'קובץ אחד',
+    'split': 'שני קבצים',
+    'hero': 'שלושה קבצים',
+    'hero_left': 'שלושה קבצים',
+    'hero_right': 'שלושה קבצים',
     'grid': 'רשת',
-    'row': 'שורה',
+    'row': 'רשת',
   };
 }

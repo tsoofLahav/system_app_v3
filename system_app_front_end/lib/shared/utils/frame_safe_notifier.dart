@@ -14,8 +14,12 @@ import 'package:flutter/widgets.dart';
 /// bump made while idle has to be delivered now or it may never arrive.
 class FrameSafeNotifier extends ChangeNotifier {
   bool _pending = false;
+  var _disposed = false;
+
+  bool get isDisposed => _disposed;
 
   void notify() {
+    if (_disposed) return;
     switch (SchedulerBinding.instance.schedulerPhase) {
       case SchedulerPhase.idle:
       case SchedulerPhase.postFrameCallbacks:
@@ -27,8 +31,15 @@ class FrameSafeNotifier extends ChangeNotifier {
         _pending = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _pending = false;
+          if (_disposed) return;
           notifyListeners();
         });
     }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }

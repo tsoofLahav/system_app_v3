@@ -27,8 +27,13 @@ A bullet, a table row, and an **embed block** count as **one line** of the docum
 | Shift+Enter on an object block | Opens the object (first inner field); click also works |
 | Enter on an object block | New paragraph **below** the object (keep writing) |
 | Shift+Enter inside an object | SE caret **after** the object (downstream / empty paragraph below) so typing continues under it. Phone: leave icon on the first bottom-bar pill |
+| Click / right-click a paragraph | Body owns writing; object mark and caret are forgotten. One mark only |
+| Click / right-click an inner field | Field owns writing; Super Editor caret is cleared. Right-click focuses the field first |
+| Right-click while a menu is already open | Retarget: mark the new line and open **its** menu (`beginNewPointerAim`). Not nested on the old freeze |
 | ↑/↓ inside an open object | Moves between that object’s lines only (does not leave). Shift+arrows mark across tasks, or a **rectangle of cells** (Shift+↑/↓ and Shift+←/→). Coming from below lands at the end of the line (fluent text). Phone: keep the keyboard up across inner fields |
 | Delete a marked object | Object goes, like deleting a marked line |
+| Delete a fully marked task / table row | The task or row is removed, not left empty. If every inner part is marked, one empty part stays — delete the object from chrome or empty Backspace on the last unit |
+| Paste inside an object | Inserts at the caret. A marking still replaces |
 
 ## Three principles
 
@@ -58,10 +63,11 @@ Mechanism ([`embed_caret_bridge.dart`](embed_caret_bridge.dart) + [`document_car
 
 | Embed | Inner lines (after Shift+Enter) |
 |-------|---------------------------|
-| Info | one field — first line is title (API/diagrams); rest is body |
+| Info | one field — first line is title (API/diagrams); rest is body. Native Enter = newline. Do not reseed while focused. Caret/mark: [`CARET_AND_WRITING_FOCUS.md`](../../../../../CARET_AND_WRITING_FOCUS.md) § Writing in objects |
 | Task list | list title → each task |
 | Table / chart grid | Physical 2D cells. Product rules (Enter, add-after, reorder, empty Backspace): files [`AREA.md` § Tables & charts](../AREA.md#tables--charts). Caret: [`table_grid_nav.dart`](../rich_text/table_grid_nav.dart) is the only physical→visual cell move (pad + hardware + edge exit). Hebrew UI flips columns; the phone pad does not. Landing is the visual edge entered from, converted with the destination cell’s first-strong direction (RTL visual-right = logical start). Empty Backspace steps to the previous cell; first cell of an empty row removes the row. One `FocusNode` per cell. Document enter/exit still uses row-major `focusLine` |
-| Image | none — block only |
+| Image | optional captions (`FormattedTextField`, strip newlines); picture is block-only |
+| Map open card | title + body (title is one visual line: `maxLines: null` + strip newlines) |
 
 ### Keystroke handoff
 
@@ -82,7 +88,7 @@ Each object type keeps its own menu (not the plain paragraph menu):
 | Chart table | **Reorder columns…** + chart type + palette (on chart chrome **and** cells); block caret → chart menu + **Move object** |
 | Image | **Move object** + **Make smaller / larger** + **Tiny / Quarter / Half / Full size** |
 
-Embed fields mark [`DocumentSecondaryTap`](document_secondary_tap.dart) so Super Editor’s translucent secondary-tap handler does not open a second menu. Right-click on an object block (SE caret on the embed) resolves the node under the pointer and opens that object’s menu.
+Embed fields mark [`DocumentSecondaryTap`](document_secondary_tap.dart) **for that pointer** so Super Editor’s translucent secondary-tap handler does not open a second menu on the same click. A new right-click is a new pointer and is not swallowed by an open field menu. Right-click on an object block (SE caret on the embed) resolves the node under the pointer and opens that object’s menu.
 
 ### 3. Object remount
 

@@ -8,6 +8,10 @@
 ///    across several paragraphs, bullets or table cells.
 /// 2. If nothing is marked, the mark is the **line at the caret**.
 ///
+/// Paste is the exception: unmarked paste inserts at the caret
+/// ([fromMarking] is false). Copy, cut, format, and AI still use the caret
+/// line. Super Editor body paste already skips caret-line expansion.
+///
 /// Nothing else may look at a single field's selection to decide what to act
 /// on, or the two would drift apart and actions would hit the wrong text.
 library;
@@ -66,11 +70,15 @@ class MarkedSpan {
 /// A resolved target for an action: one or more parts, in document order.
 @immutable
 class DocumentMark {
-  const DocumentMark(this.spans);
+  const DocumentMark(this.spans, {this.fromMarking = false});
 
-  const DocumentMark.empty() : spans = const [];
+  const DocumentMark.empty() : spans = const [], fromMarking = false;
 
   final List<MarkedSpan> spans;
+
+  /// True when the user marked text. False for the caret-line fallback.
+  /// Paste replaces only when this is true; otherwise it inserts at the caret.
+  final bool fromMarking;
 
   bool get isEmpty => spans.isEmpty || spans.every((s) => s.isEmpty);
 
@@ -88,13 +96,12 @@ class DocumentMark {
   /// Parts the mark covers end to end. Read this **before** deleting — the
   /// editor uses it to drop the row, bullet, or table that was fully marked.
   Set<String> get fullyCoveredSegmentIds => {
-        for (final span in spans)
-          if (span.segmentId != null &&
-              span.safeStart == 0 &&
-              span.safeEnd == span.controller.text.length &&
-              span.controller.text.isNotEmpty)
-            span.segmentId!,
-      };
+    for (final span in spans)
+      if (span.segmentId != null &&
+          span.safeStart == 0 &&
+          span.safeEnd == span.controller.text.length)
+        span.segmentId!,
+  };
 
   // ---------------------------------------------------------------- resolving
 
@@ -111,18 +118,33 @@ class DocumentMark {
         final controller = flow.controllerFor(id);
         final range = flow.selectionWithin(id);
         if (controller == null) continue;
-        // Keep zero-width parts out of the mark, but a boundary-only selection
-        // (just the break between two parts) still counts as marked.
-        if (range == null) continue;
-        spans.add(MarkedSpan(
-          segmentId: id,
-          controller: controller,
-          start: range.start,
-          end: range.end,
-          onChanged: flow.onChangedFor(id),
-        ));
+        if (range == null) {
+          if (controller.text.isEmpty) {
+            spans.add(
+              MarkedSpan(
+                segmentId: id,
+                controller: controller,
+                start: 0,
+                end: 0,
+                onChanged: flow.onChangedFor(id),
+              ),
+            );
+          }
+          continue;
+        }
+        spans.add(
+          MarkedSpan(
+            segmentId: id,
+            controller: controller,
+            start: range.start,
+            end: range.end,
+            onChanged: flow.onChangedFor(id),
+          ),
+        );
       }
-      if (spans.isNotEmpty) return DocumentMark(spans);
+      if (spans.isNotEmpty) {
+        return DocumentMark(spans, fromMarking: true);
+      }
     }
 
     // Nothing marked: fall back to the line holding the caret.
@@ -151,7 +173,8 @@ class DocumentMark {
     TextEditingController controller, {
     VoidCallback? onChanged,
   }) {
-    final line = LineRange.resolve(controller.text, controller.selection);
+    final selection = controller.selection;
+    final line = LineRange.resolve(controller.text, selection);
     return DocumentMark([
       MarkedSpan(
         controller: controller,
@@ -159,7 +182,7 @@ class DocumentMark {
         end: line.end,
         onChanged: onChanged,
       ),
-    ]);
+    ], fromMarking: selection.isValid && !selection.isCollapsed);
   }
 
   // --------------------------------------------------------------- operations
@@ -199,8 +222,7 @@ class DocumentMark {
       final index = at.clamp(0, text.length);
       target.controller.value = target.controller.value.copyWith(
         text: text.replaceRange(index, index, replacement),
-        selection:
-            TextSelection.collapsed(offset: index + replacement.length),
+        selection: TextSelection.collapsed(offset: index + replacement.length),
         composing: TextRange.empty,
       );
       target.spanController?.ensureSpansMatchText();

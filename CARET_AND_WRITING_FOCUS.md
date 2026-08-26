@@ -21,20 +21,22 @@ Canonical checklists that this file consolidates:
 
 A file is **one continuous piece of text**. Paragraphs, lists, tables, and objects sit in that same flow. The user should never feel that they clicked into a nested widget to keep writing.
 
-**Parts are lines.** A bullet, a table row, and an embed (or each of its editable inner parts, once the object is open) count as one line of the document. Any caret or marking decision is settled by asking what a plain line would do. A caret that stalls at a boundary, or a delete that leaves an empty bullet or blank gap, is a bug — not a widget detail.
+**Parts are lines.** A bullet, a table row, and an embed (or each of its editable inner parts, once the object is open) count as one line of the document. Any caret or marking decision is settled by asking what a plain line would do. A caret that stalls at a boundary, or a delete that leaves an empty bullet or blank gap, is a bug — not a widget detail. Inner mark-delete of every task or table row is the exception: one empty part stays so the object is not destroyed from the inside (chrome or empty Backspace on the last unit still deletes it).
 
 A blank line the user typed is text and is saved. Move and delete must not leave empty paragraphs the user did not make.
 
-A tap **on glyphs** in a table cell, task, or info stays on that glyph. Padding beside the line jumps to the logical end. Gaps between Hebrew and numbers snap to the nearest glyph. End-of-line taps keep the caret on that line.
+A tap **on glyphs** in a table cell, task, or info stays on that glyph. Padding beside the line jumps to the logical end **on a click**. A drag or Shift+click keeps the user’s mark (do not snap it to the whole line). Gaps between Hebrew and numbers snap to the nearest glyph. End-of-line taps keep the caret on that line.
 
 ---
 
-## 2. Two surfaces, one writing session
+## 2. Writing in objects
+
+Super Editor is a package. Almost all of **our** writing work is inside objects: a Material [`FormattedTextField`](system_app_front_end/lib/areas/files/rich_text/formatted_text_field.dart). Flutter paints the caret. Do not imitate Super Editor’s caret painter.
 
 | Surface | What it is | Who owns the caret |
 |---------|------------|--------------------|
-| File body | Super Editor (`SuperDocumentEditor`) | Super Editor composer + [`DocumentCaretSession`](system_app_front_end/lib/areas/files/editor/document_caret_session.dart) |
-| Inside an object | `FormattedTextField` / table cells / task rows | That field’s `FocusNode`, via [`BlockTextFocusRegistry`](system_app_front_end/lib/areas/files/rich_text/block_text_focus.dart) |
+| File body | Super Editor (`SuperDocumentEditor`) — package | Super Editor composer + [`DocumentCaretSession`](system_app_front_end/lib/areas/files/editor/document_caret_session.dart) |
+| Inside an object | `FormattedTextField` (info, tasks, cells, captions) | That field’s `FocusNode`, via [`BlockTextFocusRegistry`](system_app_front_end/lib/areas/files/rich_text/block_text_focus.dart) |
 
 Only **one** of those owns typing at a time (`DocumentCaretOwner.document` vs `embed`). While an inner field is focused:
 
@@ -42,23 +44,51 @@ Only **one** of those owns typing at a time (`DocumentCaretOwner.document` vs `e
 - `openImeOnNonPrimaryFocusGain` is false, so SuperIme does not steal the IME from the field.
 - Insert must not `notifyListeners` mid-handoff or the IME dies after one character.
 
-Embed fields still use local text fields. [`DocumentTextFlow`](system_app_front_end/lib/areas/files/editor/document_text_flow.dart) still exists for **cross-part marks inside embeds** (bullets, cells, tasks). The file body itself is Super Editor, not a stack of body `TextField`s.
-
-### Object inner text — Flutter owns it
-
-Info, tasks, and table cells are a Material `TextField` ([`FormattedTextField`](system_app_front_end/lib/areas/files/rich_text/formatted_text_field.dart)). They are not Super Editor. Do not make them imitate Super Editor’s caret painter.
+### Rules (every inner field)
 
 | Do | Don't |
 |----|--------|
 | Leave the native caret (`showCursor` on) | Hide the cursor and overlay-paint a bar |
-| Place the caret on **tap** with [`embedCaretForTap`](system_app_front_end/lib/areas/files/rich_text/rtl/embed_caret_hit.dart) in the same turn | Write `controller.selection` on every keystroke |
-| Visual ←/→ via `Actions`; install `onKeyEvent` **once** | Re-wrap `onKeyEvent` on rebuild; reimplement arrows in `onKeyEvent` |
-| Keep-focus: **bottom menu** and the **open object** | Treat object chrome / padding as “outside” and kill the field |
-| One `DocumentTextFlow` **per object** (tasks / cells) | Mark across objects or into the file body |
-| Scroll a field only when it is completely off-screen | `ensureVisible` on every focus, or when the field is not laid out yet (new task / table row) |
-| Keyboard safety in [`NOTES.md`](NOTES.md#editor-keyboard-safety) | `notifyListeners` from a keystroke; remount the field while typing |
+| Place the caret on a **click** with [`embedCaretForTap`](system_app_front_end/lib/areas/files/rich_text/rtl/embed_caret_hit.dart) in the same turn | Write `controller.selection` on keystrokes, inbound refresh, or mouse-up after a drag |
+| Hebrew: tap **on glyphs** stays; empty padding beside the line → logical end **only for a collapsed click** | Apply padding→line-end on a drag, an existing mark, or Shift+click (that is the Hebrew “whole line immediately” bug) |
+| Expand to the caret line only when resolving an **unmarked action** (right-click / format / AI) | Expand-to-line while the user is marking |
+| `maxLines: null` even for one visual line; strip newlines where a single line is required | `maxLines: 1` (vertical intents mark the whole field) |
+| Silent saves (`notify: false`); stable widget keys; skip reseed while the field is focused | Remount or `setRichState` a focused field (caret jumps to the end) |
+| `TextField.style` at least as large as the largest painted run | Body-sized field style under a larger title run (Hebrew hit-test treats glyphs as padding) |
+| One [`DocumentTextFlow`](system_app_front_end/lib/areas/files/editor/document_text_flow.dart) per **multi-field** object | A flow on a single-field object (info); marks across objects or into the file body |
+| Scroll a field only when it is completely off-screen | `ensureVisible` on every focus, or when the field is not laid out yet |
+| Install `onKeyEvent` **once**; visual ←/→ via `Actions` | Re-wrap `onKeyEvent` on rebuild; reimplement arrows in `onKeyEvent` |
+| Keyboard safety in [`NOTES.md`](NOTES.md#editor-keyboard-safety) | `notifyListeners` from a keystroke |
 
-Tap the **file canvas / body** (not another field): unfocus, hide the caret, **clear the mark**. Tap the open object’s frame: keep typing.
+Keep-focus: the **bottom menu** and the **open object**. Tap the file canvas / body (not another field): unfocus, hide the caret, **clear the mark**. Tap the open object’s frame: keep typing.
+
+### Moving between objects and Super Editor
+
+Only **one** surface owns writing, and only **one** mark is painted. Super Editor’s `FocusNode.hasFocus` is also true when a descendant field is focused — that must not count as “the body owns writing.” Use **primary** focus.
+
+| Gesture | Who owns writing | What happens to the other surface |
+|---------|------------------|-----------------------------------|
+| Click or right-click a **paragraph / list line** | Super Editor body | Object mark and caret are forgotten (collapsed, not frozen into the body menu). Right-click expands to that body line for the action. |
+| Click or right-click an **inner field** | That field | Super Editor caret and mark are cleared (`adoptEmbed`). Right-click focuses the field first, then freezes the mark or caret line. |
+| Right-click **object chrome** (not text) | Block / chrome menu | Whole-object menu. Inner-field mark is not the target. |
+| **Shift+Enter** on the block / inside | Enter or leave the object | Same as §4. |
+| Tap **canvas / empty padding** | Nobody | Hide caret, clear every mark. |
+
+Never paint an object-field wash and a Super Editor line wash at the same time. Opening the body menu must not freeze a leftover object mark (`releaseLiveMark` before `openMenuSession`).
+
+A **new** right-click, anywhere, retargets even while the previous right-click menu is still open: close that freeze (`beginNewPointerAim`), mark the new line, open the new menu. The first menu’s `openMenuSession` completing later must not keep the old freeze or restore the old caret.
+
+Enter inside info is a native newline (the field is multiline). Shift+Enter still leaves the object (Super Editor embed path). Tasks / table cells keep structural Enter.
+
+### Per type
+
+| Object | Inner fields | Flow | Notes |
+|--------|--------------|------|--------|
+| Info | One field (first line = title, rest = body) | None | Do not reseed while focused. Freeze the **mark or caret line** for the field menu — not the whole object. |
+| Task list | List title + one field per task | One `DocumentTextFlow` | Stable row keys when a pending id arrives. Shift+arrows / Shift+click mark across tasks in that list only. |
+| Table / chart | One field per cell | One `DocumentTextFlow` | Do not reseed a focused cell. Grid ←/→ is [`table_grid_nav.dart`](system_app_front_end/lib/areas/files/rich_text/table_grid_nav.dart). |
+| Image | Optional captions | None | Same field rules; `stripNewlines`. Picture is block-only. |
+| Map open card | Title + body | None | Title: `maxLines: null` + strip newlines (not `maxLines: 1`). |
 
 ---
 
@@ -88,15 +118,17 @@ Objects are **atomic Super Editor blocks**. Arrows do **not** auto-enter or auto
 | Gesture | Result |
 |---------|--------|
 | ↑/↓ in the file body | Moves through paragraphs and object blocks as units |
-| Click an inner field, or **Shift+Enter** on the block | Opens the object (first inner field) |
+| Click an inner field, or **Shift+Enter** on the block | Opens the object (first inner field); Super Editor caret is cleared |
+| Click / right-click a paragraph | Body owns writing; object mark and caret are forgotten |
+| Right-click an inner field | Field owns writing (focus + caret at the pointer); Super Editor caret is cleared |
 | **Enter** on the block | New paragraph **below** the object |
 | **Shift+Enter** inside | Unfocus the field; place Super Editor caret on a text node **after** the object (insert an empty paragraph if needed); `requestFocus` next frame |
 | ↑/↓ inside an open object | Stay inside that object’s lines |
-| Image | No inner field — block only |
+| Image | Captions are inner fields; the picture is block only |
 
 **Phone** has no Shift+Enter key. The first bottom-bar pill is arrows plus enter/leave. Those arrow **icons** never mirror in Hebrew (physical left stays left). Table **cells** still flip with the Hebrew UI.
 
-After insert, the caret enters the new object’s first inner field. Images with no field keep the block caret. Insert bar and **Insert object** shortcuts must do this **without** a shell-wide `notifyListeners`.
+After insert, the caret enters the new object’s first inner field. Images without a caption keep the block caret. Insert bar and **Insert object** shortcuts must do this **without** a shell-wide `notifyListeners`.
 
 Timing:
 
@@ -118,7 +150,7 @@ Never read a single field’s `TextEditingController.selection` to decide what a
 
 **Freeze before focus loss.** Opening a menu or dialog can collapse Super Editor selection.
 
-- Right-click: place the caret at the pointer (unless the click is inside an existing mark), expand to that line, then capture and freeze. Object fields use this same sequence — a leftover snapshot on the field must not win.
+- Right-click: place the caret at the pointer (unless the click is inside an existing mark), expand to that line, then capture and freeze. Object fields use this same sequence — a leftover snapshot on the field must not win. Mouse **marking** (drag / Shift+click) must not expand to the line.
 - Agent prompt / saved AI actions: `DocumentEditorRegistry.captureMarkedTextForAgent()` **before** the dialog opens. An embed mark is used only while that field owns typing (or tap-outside left no Super Editor selection). A leftover object field must not win once the body has a mark.
 
 While a menu is open there is never a second wash (native selection + line-at-caret) at the same time.
@@ -155,6 +187,7 @@ Symptom: looping `KeyDownEvent is dispatched, but the state shows that the physi
 6. Registries bump through [`FrameSafeNotifier`](system_app_front_end/lib/shared/utils/frame_safe_notifier.dart): notify now when the tree is free; wait for end of frame when it is locked. Waiting always is wrong — post-frame callbacks do not schedule a frame, so an idle bump would never arrive.
 7. `wrapVisualCaretMotion` always keeps an `Actions` parent (same tree shape so an IME language switch does not remount the field). `TableEmbed` must not `setState` on text-only emits.
 8. After arrange / reorder / Move Mode, restore writing focus with `runNextFrame` — never `runAfterKeystroke`.
+9. On launch / hot restart, drop engine-seeded pressed keys while the loading pane is showing (`hardware_keyboard_guard.dart`). Never `HardwareKeyboard.clearState` (it wipes handlers).
 
 ### Who rebuilds (chrome vs document)
 

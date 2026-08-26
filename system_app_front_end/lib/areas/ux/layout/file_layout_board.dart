@@ -30,8 +30,8 @@ class FileLayoutBoard extends StatelessWidget {
   final AppState state;
   final void Function(AppFile file) onDeleteFile;
 
-  /// Height for the layouts that fill the viewport. `row` and `grid` size
-  /// their own rectangles and ignore it.
+  /// Height for the layouts that fill the viewport. Grid sizes its own
+  /// rectangles and ignores it.
   final double? slotHeight;
 
   @override
@@ -50,7 +50,9 @@ class FileLayoutBoard extends StatelessWidget {
             topic: state.canvasTopicFor(topic, file),
             file: file,
             state: state,
-            accent: TopicAppearance.accentFor(state.canvasTopicFor(topic, file)),
+            accent: TopicAppearance.accentFor(
+              state.canvasTopicFor(topic, file),
+            ),
             isBrought: state.isBroughtFileOnCanvas(topic, file.id),
             onDelete: () => onDeleteFile(file),
           ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:system_app_front_end/areas/files/editor/document_text_flow.dart';
 import 'package:system_app_front_end/areas/files/model/document_model.dart';
 import 'package:system_app_front_end/areas/files/rich_text/rich_table_editor.dart';
 import 'package:system_app_front_end/areas/files/rich_text/rtl/rtl.dart';
@@ -226,5 +227,61 @@ void main() {
       childKey.currentContext!.findAncestorWidgetOfExactType<Actions>(),
       isNotNull,
     );
+  });
+
+  testWidgets('deleting a fully marked row removes the row', (tester) async {
+    var node = _grid([
+      ['a1', 'a2'],
+      ['b1', 'b2'],
+      ['c1', 'c2'],
+    ]);
+    await _pumpTable(tester, node, onChanged: (n) => node = n);
+
+    final flow = DocumentTextFlowScope.readOf(
+      tester.element(find.byType(TextField).first),
+    )!;
+    flow.collapseTo(DocumentTextPosition(tableCellSegmentId('t1', 0, 0), 0));
+    flow.extendTo(DocumentTextPosition(tableCellSegmentId('t1', 0, 1), 2));
+    flow.deleteSelection();
+    await tester.pump();
+    await tester.pump();
+
+    expect(node.rows, hasLength(2));
+    expect(node.rows[0].map((c) => c.text).toList(), ['b1', 'b2']);
+    expect(node.rows[1].map((c) => c.text).toList(), ['c1', 'c2']);
+  });
+
+  testWidgets('deleting every fully marked row keeps one empty row', (
+    tester,
+  ) async {
+    var node = _grid([
+      ['a1', 'a2'],
+      ['b1', 'b2'],
+    ]);
+    var deleted = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RichTableEditor(
+            node: node,
+            strings: AppStrings.en,
+            onChanged: (n) => node = n,
+            onDeleteTable: () => deleted = true,
+          ),
+        ),
+      ),
+    );
+
+    final flow = DocumentTextFlowScope.readOf(
+      tester.element(find.byType(TextField).first),
+    )!;
+    flow.selectAll();
+    flow.deleteSelection();
+    await tester.pump();
+    await tester.pump();
+
+    expect(deleted, isFalse);
+    expect(node.rows, hasLength(1));
+    expect(node.rows[0].map((c) => c.text).toList(), ['', '']);
   });
 }

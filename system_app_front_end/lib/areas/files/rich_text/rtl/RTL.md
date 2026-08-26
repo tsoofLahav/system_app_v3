@@ -66,14 +66,14 @@ Full-width fields leave empty space beside glyphs (especially RTL). Flutter’s 
 | Extra cell/row padding above/below ink (tall cells, centered tasks) | Flutter — do not treat ink-bottom as the line |
 | Empty space under the whole file (outside every field) | `DocumentTextFlow` → logical end of last part |
 
-Correction runs in `FormattedTextField.onTap` **in the same event turn** (before paint). Never post-frame — that flashes wrong → right.
+Correction runs in `FormattedTextField.onTap` **in the same event turn** (before paint). Never post-frame — that flashes wrong → right. Apply it on a **collapsed click** only. A drag, an existing mark, or Shift+click keeps Flutter’s selection — padding→line-end on mouse-up is the Hebrew “whole line immediately” bug.
 
 ## Wiring checklist (`FormattedTextField`)
 
 - [ ] `textDirection: resolveFieldTextDirection(text, ambient)`
 - [ ] `textAlign: TextAlign.start` (follows direction)
 - [ ] `wrapVisualCaretMotion(...)` always (identity actions when LTR)
-- [ ] Primary pointer down stores global position; `onTap` calls `embedCaretForTap`
+- [ ] Primary pointer down stores global position; `onTap` calls `embedCaretForTap` **only on a collapsed click** (not drag / mark / Shift+click)
 - [ ] Cross-part arrow edge uses the **resolved** field direction, not only ambient locale
 - [ ] Horizontal arrows flip only on an RTL glyph run (not on numbers / Latin)
 

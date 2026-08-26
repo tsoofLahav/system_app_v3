@@ -1,38 +1,54 @@
 import 'package:flutter/material.dart';
 
 import '../../ui/app_typography.dart';
+import '../../../shared/utils/hardware_keyboard_guard.dart';
 
 /// Loading indicator scoped to the main content pane (not sidebar/bottom bar).
-class MainPaneLoader extends StatelessWidget {
-  const MainPaneLoader({
-    super.key,
-    this.message,
-    this.compact = false,
-  });
+///
+/// While this is on screen the user cannot type. Each frame drops any keys
+/// Flutter seeded on startup so the editor does not open with a stuck KeyDown.
+class MainPaneLoader extends StatefulWidget {
+  const MainPaneLoader({super.key, this.message, this.compact = false});
 
   final String? message;
   final bool compact;
 
   @override
+  State<MainPaneLoader> createState() => _MainPaneLoaderState();
+}
+
+class _MainPaneLoaderState extends State<MainPaneLoader> {
+  @override
+  void initState() {
+    super.initState();
+    releaseTrackedHardwareKeys();
+    WidgetsBinding.instance.addPostFrameCallback(_onTick);
+  }
+
+  void _onTick(Duration _) {
+    if (!mounted) return;
+    releaseTrackedHardwareKeys();
+    WidgetsBinding.instance.addPostFrameCallback(_onTick);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final indicator = SizedBox(
-      width: compact ? 18 : null,
-      height: compact ? 18 : null,
-      child: const CircularProgressIndicator(
-        strokeWidth: 2,
-      ),
+      width: widget.compact ? 18 : null,
+      height: widget.compact ? 18 : null,
+      child: const CircularProgressIndicator(strokeWidth: 2),
     );
 
-    if (compact) return Center(child: indicator);
+    if (widget.compact) return Center(child: indicator);
 
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           indicator,
-          if (message != null) ...[
+          if (widget.message != null) ...[
             const SizedBox(height: 12),
-            Text(message!, style: AppTypography.noteBodyStyle),
+            Text(widget.message!, style: AppTypography.noteBodyStyle),
           ],
         ],
       ),

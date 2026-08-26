@@ -203,6 +203,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     _titleController = SpanTextEditingController(text: _bridge.listTitle);
     _syncFromTasks(_displayTasks);
     _syncFlowOrder();
+    _flow.onPruneStructures = _onPruneFullyMarked;
     if (_taskIds.isEmpty || _taskIds.every((id) => id == null)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(_ensureSeedTask());
@@ -221,13 +222,33 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     if (_optimistic != null) {
       if (_idsMatch(_optimistic!, _remoteTasks)) {
         _optimistic = null;
-      } else {
+      } else if (_optimistic!.isNotEmpty) {
         return;
+      } else {
+        // Empty optimistic (seed-only) must not block adopting real tasks.
+        _optimistic = null;
       }
     }
+    _syncRowsFromRemote();
+  }
+
+  /// Pull remote tasks into the row model. Drops the empty placeholder once
+  /// a real task has landed in this list (new section + drag/Place).
+  void syncFromRemote() {
+    if (!mounted || _persisting) return;
+    _optimistic = null;
+    _syncRowsFromRemote(notify: true);
+  }
+
+  void _syncRowsFromRemote({bool notify = false}) {
     final tasks = _displayTasks;
-    if (!_rowsNeedAdopt(tasks)) return;
+    if (tasks.isNotEmpty) _dropBlankUnsavedSeeds();
+    if (!_rowsNeedAdopt(tasks)) {
+      if (notify && mounted) setState(() {});
+      return;
+    }
     _adoptTasks(tasks);
+    if (notify && mounted) setState(() {});
   }
 
   bool _idsMatch(List<Task> a, List<Task> b) {
@@ -244,18 +265,51 @@ class TaskListSurfaceState extends State<TaskListSurface> {
           _taskIds.length == 1 &&
           _taskIds.first == null);
     }
+    // A leftover empty seed must not sit next to real tasks.
+    if (_taskIds.any((id) => id == null)) return true;
     if (_taskIds.whereType<int>().length != tasks.length) return true;
     if (_taskIds.length != tasks.length) return true;
     for (var i = 0; i < tasks.length; i++) {
       if (_taskIds[i] != tasks[i].id) return true;
       if (_done[i] != tasks[i].isDone) return true;
       final focused = i < _focusNodes.length && _focusNodes[i].hasFocus;
-      if (!focused &&
-          imeVisibleText(_controllers[i].text) != tasks[i].title) {
+      if (!focused && imeVisibleText(_controllers[i].text) != tasks[i].title) {
         return true;
       }
     }
     return false;
+  }
+
+  /// Unsaved empty placeholder — shown only while the list has no real tasks.
+  bool _isBlankUnsavedRow(int index) {
+    if (index < 0 || index >= _taskIds.length) return false;
+    if (_taskIds[index] != null) return false;
+    return imeFieldLooksEmpty(_controllers[index].text);
+  }
+
+  bool _dropBlankUnsavedSeeds() {
+    final removedControllers = <SpanTextEditingController>[];
+    final removedFocus = <FocusNode>[];
+    for (var i = _taskIds.length - 1; i >= 0; i--) {
+      if (!_isBlankUnsavedRow(i)) continue;
+      _saveTimers.removeAt(i)?.cancel();
+      removedControllers.add(_controllers.removeAt(i));
+      removedFocus.add(_focusNodes.removeAt(i));
+      _taskIds.removeAt(i);
+      _done.removeAt(i);
+      _rowKeys.removeAt(i);
+    }
+    if (removedControllers.isEmpty) return false;
+    _syncFlowOrder();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final c in removedControllers) {
+        c.dispose();
+      }
+      for (final f in removedFocus) {
+        f.dispose();
+      }
+    });
+    return true;
   }
 
   /// Reuse controllers / focus nodes by [Task.id] so an insert is a new row
@@ -314,8 +368,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       if (oldIndex != null) {
         final focus = oldFocus[oldIndex];
         final controller = oldControllers[oldIndex];
-        if (!focus.hasFocus &&
-            imeVisibleText(controller.text) != task.title) {
+        if (!focus.hasFocus && imeVisibleText(controller.text) != task.title) {
           controller.text = task.title;
         }
         nextControllers.add(controller);
@@ -509,6 +562,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     _titleFocus.dispose();
     _titleController.dispose();
     _disposeRows();
+    _flow.onPruneStructures = null;
     _flow.dispose();
     super.dispose();
   }
@@ -585,6 +639,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   Future<void> _ensureSeedTask() async {
     if (_ensuringSeed) return;
     if (_bridge.remoteTasks.isNotEmpty) return;
+    if (_taskIds.any((id) => id != null)) return;
     _ensuringSeed = true;
     try {
       final created = await _bridge.ensureSeed();
@@ -680,6 +735,107 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       return;
     }
     await _insertAfter(index);
+  }
+
+  /// Fully marked tasks (whole title) are removed, not left as empty rows.
+  void _onPruneFullyMarked(
+    Set<String> fullyEmptied, {
+    required bool spansParts,
+  }) {
+    final indices = <int>[
+      for (var i = 0; i < _controllers.length; i++)
+        if (fullyEmptied.contains(_taskSegmentId(i))) i,
+    ];
+    if (indices.isEmpty) return;
+    unawaited(_dropFullyMarkedTasks(indices));
+  }
+
+  Future<void> _dropFullyMarkedTasks(List<int> indices) async {
+    if (indices.isEmpty || !mounted) return;
+    widget.onFocus?.call();
+    final unique = indices.toSet().toList()..sort();
+    final removingAll = unique.length >= _controllers.length;
+
+    // Inner mark-delete must not destroy the object — keep one empty row.
+    // Delete the object from chrome / empty Backspace on the last unit.
+    var drop = unique;
+    if (removingAll) {
+      drop = unique.skip(1).toList();
+    }
+    if (drop.isEmpty) return;
+
+    final descending = [...drop]..sort((a, b) => b.compareTo(a));
+    final toDelete = <Task>[];
+    for (final i in drop) {
+      final id = _taskIds[i];
+      if (id == null) continue;
+      final task = _taskById(id);
+      if (task != null) toDelete.add(task);
+    }
+
+    final removedControllers = <SpanTextEditingController>[];
+    final removedFocus = <FocusNode>[];
+
+    void dropRows() {
+      if (!mounted) return;
+      _flow.clearSelection();
+      setState(() {
+        for (final i in descending) {
+          if (i < 0 || i >= _controllers.length) continue;
+          _saveTimers.removeAt(i)?.cancel();
+          removedControllers.add(_controllers.removeAt(i));
+          removedFocus.add(_focusNodes.removeAt(i));
+          _taskIds.removeAt(i);
+          _done.removeAt(i);
+          _rowKeys.removeAt(i);
+        }
+        _optimistic = _tasksFromLocalRows();
+      });
+      _syncFlowOrder();
+      final focusIndex = () {
+        final firstDropped = drop.first;
+        if (firstDropped > 0) return firstDropped - 1;
+        return 0;
+      }();
+      if (focusIndex < _focusNodes.length) {
+        _focusNodes[focusIndex].requestFocus();
+        final controller = _controllers[focusIndex];
+        controller.selection = TextSelection.collapsed(
+          offset: controller.text.length,
+        );
+      }
+    }
+
+    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+      final ready = Completer<void>();
+      runAfterKeystroke(() {
+        dropRows();
+        ready.complete();
+      });
+      await ready.future;
+    } else {
+      dropRows();
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final c in removedControllers) {
+        c.dispose();
+      }
+      for (final f in removedFocus) {
+        f.dispose();
+      }
+    });
+
+    _persisting = true;
+    try {
+      for (final task in toDelete) {
+        await _bridge.delete(task);
+      }
+      if (!mounted) return;
+      await _bridge.refresh();
+    } finally {
+      _persisting = false;
+    }
   }
 
   Future<void> _handleBackspace(int index) async {
@@ -867,7 +1023,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       final idx = _taskIds.indexOf(focusId);
       if (idx >= 0) {
         _pendingFocusIndex = idx;
-        WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _applyPendingFocus(),
+        );
       }
     }
   }
@@ -935,6 +1093,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     if (!_bridge.acceptsDrag(payload)) return;
     final localIds = {for (final id in _taskIds) ?id};
     if (!localIds.contains(payload.task.id)) {
+      if (_dropBlankUnsavedSeeds()) setState(() {});
       widget.onForeignDrop?.call(
         payload: payload,
         targetDone: targetDone,

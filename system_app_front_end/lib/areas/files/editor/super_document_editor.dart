@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:super_editor/super_editor.dart';
@@ -255,14 +256,13 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   void _onFocusChanged() {
-    if (_focusNode.hasFocus) {
+    if (_focusNode.hasPrimaryFocus) {
       _claimFile();
-      // Body owns the live mark now — do not let a leftover object field
-      // keep painting or win agent hints.
-      if (_caretSession.owner != DocumentCaretOwner.embed &&
-          !BlockTextFocusRegistry.isInMenuSession &&
-          BlockTextFocusRegistry.markBelongsTo(_ownsFocusNode)) {
+      // Descendant object fields also make [_focusNode.hasFocus] true — only
+      // primary focus means the body owns writing. Forget the object mark.
+      if (!BlockTextFocusRegistry.isInMenuSession) {
         BlockTextFocusRegistry.releaseLiveMark();
+        _caretSession.adoptDocument();
       }
     }
     _syncCaretVisibility();
@@ -270,7 +270,11 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   void _onComposerSelection() {
+    final wasEmbed = _caretSession.owner == DocumentCaretOwner.embed;
     _caretSession.suppressDocumentSelectionWhileEmbedOwns();
+    if (wasEmbed && _caretSession.owner == DocumentCaretOwner.document) {
+      BlockTextFocusRegistry.releaseLiveMark();
+    }
     _bumpPhoneObjectGate();
   }
 
@@ -1211,6 +1215,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       _composer.clearSelection();
     }
     BlockTextFocusRegistry.releaseLiveMark();
+    _caretSession.adoptDocument();
     _syncCaretVisibility();
   }
 
@@ -1290,6 +1295,9 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || gen != _embedFocusGen) return;
       _caretSession.embedBlurred();
+      if (!BlockTextFocusRegistry.isInMenuSession) {
+        BlockTextFocusRegistry.releaseLiveMark();
+      }
       _bumpPhoneObjectGate();
     });
   }
@@ -1424,11 +1432,23 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     ]);
   }
 
+  /// Body claimed typing: forget the object mark and caret, then focus SE.
+  void _takeDocumentWriting() {
+    if (BlockTextFocusRegistry.isInMenuSession) return;
+    BlockTextFocusRegistry.releaseLiveMark();
+    _caretSession.adoptDocument();
+    if (!_focusNode.hasPrimaryFocus) {
+      _focusNode.requestFocus();
+    }
+  }
+
   Future<void> _onSecondaryTap(TapDownDetails details) async {
     _claimFile();
-    // Embed fields show their own menus and mark the gate first.
+    // Embed fields show their own menus and mark the gate first — same pointer
+    // only. A new right-click is a new pointer and must retarget.
     if (DocumentSecondaryTap.embedHandled) return;
     if (!mounted) return;
+    BlockTextFocusRegistry.beginNewPointerAim();
 
     // Super Editor is hosted as a sliver — never cast documentLayoutKey's
     // render object to RenderBox. Use DocumentLayout's coordinate helper.
@@ -1450,7 +1470,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       return;
     }
 
-    _focusNode.requestFocus();
+    _takeDocumentWriting();
     if (!mounted) return;
     _aimCaretAtPointer(details.globalPosition);
     _expandCollapsedToCaretLine();
@@ -2057,53 +2077,61 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     return EmbedCaretScope(
       registry: _embedCaretRegistry,
       onExitObject: _exitEmbedObject,
-      child: GestureDetector(
-        onSecondaryTapDown: _onSecondaryTap,
+      child: Listener(
         behavior: HitTestBehavior.translucent,
-        child: CustomScrollView(
-          slivers: [
-            SuperEditor(
-              key: ValueKey<int>(_superEditorEpoch),
-              editor: _editor,
-              focusNode: _focusNode,
-              // One IME identity per file. Panes share the app's single IME
-              // connection, so without a role a second open file registers as
-              // the same input: super_editor throws "duplicate input IDs" and
-              // the two panes fight over the connection.
-              inputRole: 'file-${widget.file.id}',
-              documentLayoutKey: _docLayoutKey,
-              stylesheet: _stylesheet,
-              selectionStyle: _selectionStyles,
-              componentBuilders: _componentBuilders(ambient),
-              keyboardActions: kFileEditorImeKeyboardActions,
-              contentTapDelegateFactories: [cmdClickLinkTapHandlerFactory],
-              documentOverlayBuilders: documentOverlayBuilders(
-                withCaret: _showCaret,
+        onPointerDown: (event) {
+          if ((event.buttons & kSecondaryMouseButton) != 0) {
+            DocumentSecondaryTap.notePointer(event.pointer);
+          }
+        },
+        child: GestureDetector(
+          onSecondaryTapDown: _onSecondaryTap,
+          behavior: HitTestBehavior.translucent,
+          child: CustomScrollView(
+            slivers: [
+              SuperEditor(
+                key: ValueKey<int>(_superEditorEpoch),
+                editor: _editor,
+                focusNode: _focusNode,
+                // One IME identity per file. Panes share the app's single IME
+                // connection, so without a role a second open file registers as
+                // the same input: super_editor throws "duplicate input IDs" and
+                // the two panes fight over the connection.
+                inputRole: 'file-${widget.file.id}',
+                documentLayoutKey: _docLayoutKey,
+                stylesheet: _stylesheet,
+                selectionStyle: _selectionStyles,
+                componentBuilders: _componentBuilders(ambient),
+                keyboardActions: kFileEditorImeKeyboardActions,
+                contentTapDelegateFactories: [cmdClickLinkTapHandlerFactory],
+                documentOverlayBuilders: documentOverlayBuilders(
+                  withCaret: _showCaret,
+                ),
+                plugins: {
+                  _visibleSelectionPlugin,
+                  _visualCaretPlugin,
+                  _embedCaretPlugin,
+                },
+                // Tab/Enter embeds + visual ←/→ when the paragraph is RTL.
+                selectorHandlers: withVisualHorizontalSelectors(
+                  base: _embedCaretPlugin.selectorHandlers,
+                  ambient: ambient,
+                ),
+                shrinkWrap: true,
+                imePolicies: const SuperEditorImePolicies(
+                  openImeOnNonPrimaryFocusGain: false,
+                  closeKeyboardOnLosePrimaryFocus: true,
+                  openKeyboardOnGainPrimaryFocus: true,
+                  openKeyboardOnSelectionChange: true,
+                  closeKeyboardOnSelectionLost: true,
+                ),
+                selectionPolicies: const SuperEditorSelectionPolicies(
+                  clearSelectionWhenEditorLosesFocus: false,
+                  clearSelectionWhenImeConnectionCloses: false,
+                ),
               ),
-              plugins: {
-                _visibleSelectionPlugin,
-                _visualCaretPlugin,
-                _embedCaretPlugin,
-              },
-              // Tab/Enter embeds + visual ←/→ when the paragraph is RTL.
-              selectorHandlers: withVisualHorizontalSelectors(
-                base: _embedCaretPlugin.selectorHandlers,
-                ambient: ambient,
-              ),
-              shrinkWrap: true,
-              imePolicies: const SuperEditorImePolicies(
-                openImeOnNonPrimaryFocusGain: false,
-                closeKeyboardOnLosePrimaryFocus: true,
-                openKeyboardOnGainPrimaryFocus: true,
-                openKeyboardOnSelectionChange: true,
-                closeKeyboardOnSelectionLost: true,
-              ),
-              selectionPolicies: const SuperEditorSelectionPolicies(
-                clearSelectionWhenEditorLosesFocus: false,
-                clearSelectionWhenImeConnectionCloses: false,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

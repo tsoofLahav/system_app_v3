@@ -50,6 +50,7 @@ void main() {
       expect(mark.isValid, isTrue);
       expect(mark.spansParts, isTrue);
       expect(mark.text, 'text\nbeta');
+      expect(mark.fromMarking, isTrue);
     });
 
     test('falls back to the caret line when nothing is marked', () {
@@ -62,6 +63,7 @@ void main() {
       expect(mark.isValid, isTrue);
       expect(mark.spansParts, isFalse);
       expect(mark.text, 'second line');
+      expect(mark.fromMarking, isFalse);
     });
 
     test('the caret-line fallback stays inside the caret part', () {
@@ -83,6 +85,7 @@ void main() {
 
       expect(mark.text, 'alpha');
       expect(mark.spansParts, isFalse);
+      expect(mark.fromMarking, isTrue);
     });
   });
 
@@ -104,6 +107,16 @@ void main() {
       expect(built.segments['c']!.changeCount, 1);
     });
 
+    test('fullyCoveredSegmentIds includes an empty middle part', () {
+      final built = _build({'a': 'alpha', 'b': '', 'c': 'gamma'});
+      built.flow.selectAll();
+      expect(DocumentMark.resolve(built.flow).fullyCoveredSegmentIds, {
+        'a',
+        'b',
+        'c',
+      });
+    });
+
     test('replace puts the new text in the first part', () {
       final built = _build({'a': 'alpha', 'b': 'beta'});
       built.flow.collapseTo(const DocumentTextPosition('a', 2));
@@ -120,8 +133,9 @@ void main() {
       built.flow.collapseTo(const DocumentTextPosition('a', 0));
       built.flow.extendTo(const DocumentTextPosition('b', 4));
 
-      final applied = DocumentMark.resolve(built.flow)
-          .applyFormat('text:bold', baseFontSize: 12.5);
+      final applied = DocumentMark.resolve(
+        built.flow,
+      ).applyFormat('text:bold', baseFontSize: 12.5);
 
       expect(applied, isTrue);
       expect(built.segments['a']!.controller.spans, isNotEmpty);
@@ -132,8 +146,9 @@ void main() {
       final built = _build({'a': 'alpha', 'b': 'beta'});
       built.flow.collapseTo(const DocumentTextPosition('a', 2));
 
-      DocumentMark.resolve(built.flow)
-          .applyFormat('text:bold', baseFontSize: 12.5);
+      DocumentMark.resolve(
+        built.flow,
+      ).applyFormat('text:bold', baseFontSize: 12.5);
 
       expect(built.segments['a']!.controller.spans, isNotEmpty);
       expect(built.segments['b']!.controller.spans, isEmpty);
