@@ -25,7 +25,7 @@ A file is **one continuous piece of text**. Paragraphs, lists, tables, and objec
 
 A blank line the user typed is text and is saved. Move and delete must not leave empty paragraphs the user did not make.
 
-A tap **on glyphs** in a table cell, task, or info stays on that glyph. Padding beside the line jumps to the logical end. Gaps between Hebrew and numbers snap to the nearest glyph. End-of-line taps keep the caret on that line.
+A tap **on glyphs** in a table cell, task, or info stays on that glyph. Padding beside the line jumps to the logical end. Gaps between Hebrew and numbers snap to the nearest glyph. End-of-line taps keep the caret on that line. While typing, object fields hide the native cursor and paint a 2px bar from the insertion glyph’s layout box (same idea as Super Editor).
 
 ---
 

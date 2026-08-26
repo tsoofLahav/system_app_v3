@@ -154,7 +154,7 @@ Empty **Enter** still exits below a list/table/object without destroying it (con
 
 ### RTL / Hebrew
 
-Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed Hebrew+English) lives in one place: **[`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)** — embeds via `FormattedTextField`, file body via ambient-aware SE builders + visual ←/→ plugin. Do not add competing caret math outside that folder.
+Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed Hebrew+English) lives in one place: **[`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)** — embeds via `FormattedTextField` (native cursor hidden; overlay paints a 2px bar from glyph rects), file body via ambient-aware SE builders + visual ←/→ plugin. Do not add competing caret math outside that folder.
 
 ## One cursor across the whole file
 

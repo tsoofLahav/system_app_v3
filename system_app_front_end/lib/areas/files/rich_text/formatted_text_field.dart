@@ -1253,7 +1253,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                 child: TextField(
                   controller: widget.controller,
                   focusNode: _focusNode,
-                  showCursor: _focusNode.hasPrimaryFocus,
+                  showCursor: false,
+                  cursorWidth: embedCaretBarWidth,
                   style: style,
                   textDirection: textDirection,
                   textAlign: TextAlign.start,
@@ -1324,6 +1325,14 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                   ],
                 );
               }
+
+              body = EmbedCaretOverlay(
+                focusNode: _focusNode,
+                controller: widget.controller,
+                color: style.color ?? const Color(0xFF000000),
+                enabled: !inMenu,
+                child: body,
+              );
 
               if (!inMenu) return body;
 
