@@ -61,7 +61,7 @@ Claim follows the click. The visible caret follows primary focus. Tap-outside, a
 
 After chrome that stole the keyboard (arrange, task/table reorder, Move Mode), `DocumentEditorRegistry.restoreActiveWritingFocus()` puts it back on the next frame. Tap-outside does **not** restore.
 
-**Tap outside** the focused editor (canvas / empty padding — not another field) unfocuses, hides the caret, **clears the mark**, and closes the keyboard. The **bottom menu** is excluded so insert tools stay usable while typing. An **open object** is excluded so a tap on its frame does not kill the inner field.
+**Tap outside** the focused editor (canvas / empty padding / object chrome — not another field) unfocuses, hides the caret, **clears the mark**, and closes the keyboard. The **bottom menu** is the only keep-focus island so insert tools stay usable while typing. Tapping empty table padding, space between tasks, or object chrome is outside the text.
 
 ---
 

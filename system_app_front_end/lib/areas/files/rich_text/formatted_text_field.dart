@@ -366,6 +366,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   }
 
   void _onFocusChanged() {
+    if (mounted) setState(() {});
     if (_focusNode.hasFocus) {
       BlockTextFocusRegistry.register(
         controller: widget.controller,
@@ -1252,6 +1253,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                 child: TextField(
                   controller: widget.controller,
                   focusNode: _focusNode,
+                  showCursor: _focusNode.hasPrimaryFocus,
                   style: style,
                   textDirection: textDirection,
                   textAlign: TextAlign.start,

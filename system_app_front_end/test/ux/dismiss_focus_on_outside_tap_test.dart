@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:system_app_front_end/areas/files/editor/embed_caret_bridge.dart';
 import 'package:system_app_front_end/areas/ui/app_colors.dart';
 import 'package:system_app_front_end/areas/ux/shell/app_bottom_bar.dart';
 import 'package:system_app_front_end/areas/ux/shell/dismiss_focus_on_outside_tap.dart';
@@ -76,9 +77,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: DismissFocusOnOutsideTap(
-          child: Scaffold(
-            body: TextField(focusNode: focus),
-          ),
+          child: Scaffold(body: TextField(focusNode: focus)),
         ),
       ),
     );
@@ -158,5 +157,48 @@ void main() {
     await tester.tap(find.text('bottom-menu'));
     await tester.pump();
     expect(focus.hasFocus, isTrue);
+  });
+
+  testWidgets('tapping object chrome unfocuses the inner field', (
+    tester,
+  ) async {
+    final focus = FocusNode();
+    addTearDown(focus.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DismissFocusOnOutsideTap(
+          child: Scaffold(
+            body: Column(
+              children: [
+                TextField(focusNode: focus),
+                const SizedBox(
+                  width: double.infinity,
+                  height: 80,
+                  child: Text('object-chrome'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    expect(focus.hasFocus, isTrue);
+
+    await tester.tap(find.text('object-chrome'));
+    await tester.pump();
+    expect(focus.hasFocus, isFalse);
+  });
+
+  testWidgets('EmbedEditScope is not a keep-focus island', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: EmbedEditScope(nodeId: 'embed:1', child: Text('object')),
+      ),
+    );
+    expect(find.byType(KeepEditorFocus), findsNothing);
   });
 }

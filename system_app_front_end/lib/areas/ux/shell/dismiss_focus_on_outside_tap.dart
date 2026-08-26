@@ -4,8 +4,9 @@ import 'package:flutter/widgets.dart';
 
 import '../../files/editor/document_editor_controller.dart';
 
-/// Marks a region where a tap must not steal editor focus — the bottom bar,
-/// and an object while its inner field is focused (so insert tools still work).
+/// Marks a region where a tap must not steal editor focus — the bottom bar
+/// only. Object chrome is not a keep-focus island: a tap there is outside the
+/// text and must unfocus and clear the mark.
 const keepEditorFocusToken = Object();
 
 class KeepEditorFocus extends StatelessWidget {
@@ -30,7 +31,7 @@ class KeepEditorFocus extends StatelessWidget {
 /// the keyboard stays up. This listens at the shell and unfocuses when the
 /// pointer is outside the focused widget's box — not when it is another field
 /// (that field then requests focus on the same tap), and not when it hits
-/// [KeepEditorFocus] (bottom menus, the open object).
+/// [KeepEditorFocus] (the bottom menu).
 ///
 /// Does not rebuild the editor tree or notify [AppState].
 class DismissFocusOnOutsideTap extends StatelessWidget {

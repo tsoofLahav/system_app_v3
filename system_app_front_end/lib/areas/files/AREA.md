@@ -365,7 +365,7 @@ In this area specifically:
 | Keep controllers as SoT while **dirty**; take inbound when not dirty (after keys are up). If both dirty, ask. Dispose must not PATCH a payload that is older than the cache | Overwrite live cells from a stale cache while typing; flush old graph/info on dispose over an agent write; dispose cell/task/info focus nodes mid-KeyDown |
 | Shift+Enter → `runNextFrame`; empty-structure Backspace → `runAfterKeystroke` | Sync `unfocus` / delete structure on the KeyDown frame |
 | Install `FormattedTextField` `onKeyEvent` **once** (stored tear-off) | Re-wrap `FocusNode.onKeyEvent` on every rebuild — tear-offs are not `==`, so Arrow Up stack-overflows |
-| Tap outside the focused editor (canvas / empty padding) unfocuses, closes the keyboard, and **clears the mark**. Bottom menus and the open object do not. | Leave Super Editor focused when the tap is not on another field; keep the mark painted after tap-outside |
+| Tap outside **text** (canvas / empty padding / object chrome) unfocuses, closes the keyboard, and **clears the mark**. The bottom menu is the only keep-focus island. | Leave Super Editor focused when the tap is not on another field; wrap the whole object in `KeepEditorFocus` so chrome taps keep the mark |
 | Remount `SuperEditor` (`ValueKey` epoch) when replacing `Editor` after silent reload | Swap `Editor` in place and keep a stale `DocumentImeInputClient` (Escape IME crash) |
 
 Smoke after edits: type fast in paragraph + info + task + table/chart cell; Shift+Enter into object, type, Shift+Enter out, keep typing.
