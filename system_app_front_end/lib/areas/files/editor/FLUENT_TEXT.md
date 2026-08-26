@@ -82,17 +82,17 @@ Each object type keeps its own menu (not the plain paragraph menu):
 
 | Object | Menu |
 |--------|------|
-| Info | Text + **Add tag** / **Add connection** / **Move object** |
-| Task list | Text + **Choose view…** / **Reorder tasks** / **Move object** |
-| Table | Text + **Add row/column after** + **Reorder rows…** / **Reorder columns…** (+ Connect info when wired). Chrome includes **Move object**; cell menus do not. |
-| Chart table | **Reorder columns…** + chart type + palette (on chart chrome **and** cells); block caret → chart menu + **Move object** |
-| Image | **Move object** + **Make smaller / larger** + **Tiny / Quarter / Half / Full size** |
+| Info | Text + **Connect info…** / **Remove connection**; chrome **Add tag** / **Add connection** / **Design…** / **Move object** |
+| Task list | Text + **Connect info…** / **Remove connection** + **Choose view…** / **Reorder tasks** / **Move object** |
+| Table | Text + **Add row/column after** + **Reorder rows…** / **Reorder columns…** + **Design…** (+ Connect info / Remove connection when wired). Chrome includes **Move object**; cell menus do not. |
+| Chart table | **Design…** (look, chart type, colours) + **Reorder columns…**; block caret → chart menu + **Move object** |
+| Image | **Move object** + **Design…** + **Make smaller / larger** + **Tiny / Quarter / Half / Full size** |
 
 Embed fields mark [`DocumentSecondaryTap`](document_secondary_tap.dart) **for that pointer** so Super Editor’s translucent secondary-tap handler does not open a second menu on the same click. A new right-click is a new pointer and is not swallowed by an open field menu. Right-click on an object block (SE caret on the embed) resolves the node under the pointer and opens that object’s menu.
 
 ### 3. Object remount
 
-The file owns placement; the object owns content. Embed node ids are stable (`embed:<objectId>`). After move or reload, object UI must keep or re-seed payload from the in-memory embed cache — never dispose a live info editor into a blank cache entry. A clean (not dirty) graph/info takes a newer inbound payload; dispose must not write the old local copy over it. If the user and the agent both changed the file, ask which to keep.
+The file owns placement; the object owns content. Embed node ids are stable (`embed:<objectId>`). After move or reload, object UI must keep or re-seed payload from the in-memory embed cache — never dispose a live info editor into a blank cache entry. A clean (not dirty) graph/info takes a newer inbound payload; dispose must not write the old local copy over it. If the user and the agent both changed the **same** object or the file body, ask which to keep. Different objects in the same file do not open that dialog.
 
 ## Move Mode
 

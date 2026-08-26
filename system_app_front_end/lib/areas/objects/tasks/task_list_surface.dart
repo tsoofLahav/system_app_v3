@@ -1207,6 +1207,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         : (widget.extraMenuEntries?.call(task) ?? const []);
     final onReorderChanged = widget.onReorderModeChanged;
 
+    final ranges = _taskDescriptionRanges(index);
     await DocumentContextMenu.showTaskListMenu(
       context: context,
       globalPosition: details.globalPosition,
@@ -1214,9 +1215,15 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       extraEntries: extras,
       includeAssignView: widget.includeAssignView,
       includeConnectInfo: true,
+      includeDisconnectInfo: descriptionRangeCoveringMark(ranges) != null,
       onAction: (action) async {
         if (action == 'text:connect_info') {
           await _connectTaskInfo(index);
+          return;
+        }
+        if (action == 'text:disconnect_info') {
+          await disconnectInfoAtMark(state: widget.state, ranges: ranges);
+          if (mounted) setState(() {});
           return;
         }
         if (action == 'tasks:reorder_mode') {
@@ -1483,6 +1490,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
             },
             onSecondaryTapDown: (d) {
               final onReorderChanged = widget.onReorderModeChanged;
+              final ranges = _descriptionRanges(widget.listTitleSegmentId);
               unawaited(
                 DocumentContextMenu.showTaskListMenu(
                   context: context,
@@ -1490,9 +1498,19 @@ class TaskListSurfaceState extends State<TaskListSurface> {
                   strings: widget.state.strings,
                   includeAssignView: false,
                   includeConnectInfo: widget.hostEmbed != null,
+                  includeDisconnectInfo:
+                      descriptionRangeCoveringMark(ranges) != null,
                   onAction: (action) async {
                     if (action == 'text:connect_info') {
                       await _connectInfo(segmentId: widget.listTitleSegmentId);
+                      return;
+                    }
+                    if (action == 'text:disconnect_info') {
+                      await disconnectInfoAtMark(
+                        state: widget.state,
+                        ranges: ranges,
+                      );
+                      if (mounted) setState(() {});
                       return;
                     }
                     if (action == 'tasks:reorder_mode') {

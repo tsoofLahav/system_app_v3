@@ -159,6 +159,7 @@ class AppState extends ChangeNotifier {
   int? editingFileId;
   String? _automationNotice;
   bool aiRunning = false;
+  bool aiCancelRequested = false;
   bool archiveDeleteMode = false;
   final Set<int> archiveDeleteSelection = {};
   Map<String, dynamic>? pendingAgentReview;
@@ -866,6 +867,34 @@ class AppState extends ChangeNotifier {
     await refreshOpenTaskSurfaces(notify: true);
   }
 
+  Future<void> removeDescriptionLink(Map<String, dynamic> link) async {
+    final linkId = _jsonInt(link['id']);
+    final sourceId = _jsonInt(link['source_id']);
+    if (linkId == null || sourceId == null) return;
+    final sourceType = '${link['source_type'] ?? ''}';
+    if (sourceType == 'task') {
+      await _tasks.deleteDescriptionLink(sourceId, linkId);
+      await refreshOpenTaskSurfaces(notify: false);
+    } else {
+      await _objects.deleteLink(sourceId, linkId);
+      final hostFileId = embedsByFileId.entries
+          .where((e) => e.value.any((o) => o.id == sourceId))
+          .map((e) => e.key)
+          .firstOrNull;
+      if (hostFileId != null) await loadEmbedsForFile(hostFileId);
+    }
+    final anchor = link['anchor'];
+    final fileId = anchor is Map ? _jsonInt(anchor['file_id']) : null;
+    if (fileId != null) {
+      await loadDescriptionLinksForFile(fileId);
+    } else {
+      for (final id in descriptionLinksByFileId.keys.toList()) {
+        await loadDescriptionLinksForFile(id);
+      }
+    }
+    notifyListeners();
+  }
+
   Future<List<Map<String, dynamic>>> listObjectLinks(int objectId) {
     return _objects.listLinks(objectId);
   }
@@ -1482,14 +1511,37 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _beginAiRun() {
+    aiRunning = true;
+    aiCancelRequested = false;
+    notifyListeners();
+  }
+
+  /// Keep the spinner until the HTTP call returns, then drop the result.
+  void requestCancelAiRun() {
+    if (!aiRunning || aiCancelRequested) return;
+    aiCancelRequested = true;
+    notifyListeners();
+  }
+
+  void endAiRun() {
+    if (!aiRunning && !aiCancelRequested) return;
+    aiRunning = false;
+    aiCancelRequested = false;
+    notifyListeners();
+  }
+
+  void _endAiRunUnlessCanceling() {
+    if (!aiCancelRequested) endAiRun();
+  }
+
   /// Runs a saved action on what is open right now — the same scope and hints
   /// the agent dialog sends.
   Future<Map<String, dynamic>> runAiAction(
     AiAction action, {
     String? selectedText,
   }) async {
-    aiRunning = true;
-    notifyListeners();
+    _beginAiRun();
     try {
       await DocumentEditorRegistry.flushActive();
       final result = await _aiActions.run(
@@ -1498,14 +1550,14 @@ class AppState extends ChangeNotifier {
         hints: agentRunHints(selectedText: selectedText),
       );
       final changes = result['proposed_changes'];
-      if (changes is List &&
+      if (!aiCancelRequested &&
+          changes is List &&
           changes.any((c) => c is Map && c['review'] != null)) {
         pendingAgentReview = Map<String, dynamic>.from(result);
       }
       return result;
     } finally {
-      aiRunning = false;
-      notifyListeners();
+      _endAiRunUnlessCanceling();
     }
   }
 
@@ -1564,14 +1616,12 @@ class AppState extends ChangeNotifier {
 
   /// Run it now, on its stored scope — what the clock would have done.
   Future<Map<String, dynamic>> runAutomationNow(Automation automation) async {
-    aiRunning = true;
-    notifyListeners();
+    _beginAiRun();
     try {
       await DocumentEditorRegistry.flushActive();
       return await _automations.run(automation.id);
     } finally {
-      aiRunning = false;
-      notifyListeners();
+      _endAiRunUnlessCanceling();
     }
   }
 
@@ -2914,8 +2964,7 @@ class AppState extends ChangeNotifier {
     String? selectedText,
   }) async {
     if (workspaceId == null) return null;
-    aiRunning = true;
-    notifyListeners();
+    _beginAiRun();
     try {
       // Persist the open editor first so open_file matches what the user sees,
       // and so a later apply reload is not racing a stale debounce save.
@@ -2929,8 +2978,7 @@ class AppState extends ChangeNotifier {
       );
       return result;
     } finally {
-      aiRunning = false;
-      notifyListeners();
+      _endAiRunUnlessCanceling();
     }
   }
 
@@ -2956,13 +3004,15 @@ class AppState extends ChangeNotifier {
     required int fileId,
     required String oldDocumentJson,
     int? topicId,
+    bool reloadTopic = true,
   }) async {
     await _files.applyAgentText(
       fileId,
       documentJson: oldDocumentJson,
       tool: 'undo',
     );
-    if (selectedTopic != null &&
+    if (reloadTopic &&
+        selectedTopic != null &&
         (topicId == null || selectedTopic!.id == topicId)) {
       await selectTopic(selectedTopic!);
     }
@@ -3059,4 +3109,10 @@ extension _FirstOrNull<E> on Iterable<E> {
     if (!iterator.moveNext()) return null;
     return iterator.current;
   }
+}
+
+int? _jsonInt(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse('$value');
 }

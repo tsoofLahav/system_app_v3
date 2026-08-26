@@ -70,8 +70,8 @@ Arranging is a **mode**: the user opens it from the bottom bar (desktop) or the 
 
 | Dialog | Opens from | What it does |
 |--------|------------|--------------|
-| Layout picker | Bottom-bar layout icon | Four tiles above the bar. No darkened scrim. Tap applies immediately |
-| Arrange files | Bottom-bar arrange icon, ⌘R | Shown files + off-screen strip. Writes `order_index` only |
+| Layout picker | Bottom-bar layout icon, ⌘R | Four tiles above the bar. No darkened scrim. Tap applies immediately |
+| Arrange files | Bottom-bar arrange icon, ⌘⌥R | Shown files + off-screen strip. Writes `order_index` only |
 
 **Phone** has no layouts, so arrange is only the swipe row: a `ReorderableListView` of file names ([`arrange/phone_file_reorder_sheet.dart`](arrange/phone_file_reorder_sheet.dart)). Done calls `reorderTopicFiles` and does not change `file_layout`.
 
@@ -182,12 +182,12 @@ The sidebar is navigation only. It never edits content.
 | Topic / file context menu | Right-click in topic view, or the `⋯` on a file | Archive, delete — same bubble either way |
 | Sidebar topic | Right-click a topic | Edit, duplicate, delete — `AppContextMenu`, not a native popup |
 | Sidebar view | Right-click a view | Edit (rename) or delete |
-| Text context menu | Right-click inside a document | Formatting, clipboard, **Connect info…** |
+| Text context menu | Right-click inside a document | Formatting, clipboard, **Connect info…** / **Remove connection** |
 | Table cell menu | Right-click in a table cell | Add column, plus text actions |
 | View section menu | Right-click a section frame on the view page | Edit name / flag / color |
 | View task menu | Right-click a task in a view frame | Reorder tasks, **Place…**, Connect info, Delete |
 | View chrome | Floating capsule on the view page | Sections/topics, add section, reorder frames |
-| AI actions | Bottom bar | Pinned actions, the actions menu, and the agent prompt — see [production agent](../production_agent/AREA.md) |
+| AI actions | Bottom bar | Pinned actions, the actions menu, and the agent prompt. While a run is in flight: spinner + Cancel — see [production agent](../production_agent/AREA.md) |
 | Automations | Bottom bar | Manage rules — see [automations](../automations/AREA.md) |
 | Preferences | Bottom bar | App settings, shortcut bindings, topic types, sidebar reorder |
 
@@ -207,19 +207,20 @@ Shortcuts are user-rebindable. [`shortcuts/`](shortcuts/) owns the catalog of av
 
 **Insert object** (not “blocks”): catalog category `objects` inserts into the **active** file via `DocumentEditorRegistry` — info, task list, table, graph (chart table), image. After insert, the caret enters the new object (first inner field); images with no field keep the block caret. ⌘L inserts a bullet list (document structure, not an object) unless the caret is in an info, where it adds a connection. Marked paragraph text (or the caret line) becomes points — one per newline. A paragraph has no button anywhere — it is what typing already does.
 
-Heavy-use defaults are **two keys** (⌘ + letter) so they stay in muscle memory. Letters still follow the English name (`D`etails, `T`ask, `G`raph). The OS already owns some of those letters for text (⌘A select-all, ⌘C/V/X clipboard, ⌘Z undo, ⌘B/I/U format) and a few window actions (⌘W close, ⌘M minimize, ⌘Q quit, ⌘H hide — Home already uses ⌘H). Flutter intercepts catalog keys while this window is focused, so ⌘N / ⌘T / ⌘F / ⌘G / ⌘D / ⌘L / ⌘R / ⌘O do **not** leak to Finder or Chrome; they are safe here because this is a desktop document window, not a browser. **Keep the extra modifier only where the 2-key letter is already a text or window key:** table ⌘⌥T (task took ⌘T), image ⌘⇧I (italic took ⌘I), add view ⌘⇧W (close window), layout toggle ⌘⇧M (minimize). Preferences can rebind any of them.
+Heavy-use defaults are **two keys** (⌘ + letter) so they stay in muscle memory. Letters still follow the English name (`D`etails, `T`ask, `G`raph). The OS already owns some of those letters for text (⌘A select-all, ⌘C/V/X clipboard, ⌘Z undo, ⌘B/I/U format) and a few window actions (⌘W close, ⌘M minimize, ⌘Q quit, ⌘H hide — Home already uses ⌘H). Flutter intercepts catalog keys while this window is focused, so ⌘N / ⌘T / ⌘F / ⌘G / ⌘D / ⌘L / ⌘R / ⌘O do **not** leak to Finder or Chrome; they are safe here because this is a desktop document window, not a browser. **Keep the extra modifier only where the 2-key letter is already a text or window key:** table ⌘⌥T (task took ⌘T), image ⌘⇧I (italic took ⌘I), add view ⌘⇧W (close window), layout toggle ⌘⇧M (minimize), arrange files ⌘⌥R (file layout took ⌘R). Preferences can rebind any of them.
 
 | Catalog | Default | Does |
 |---------|---------|------|
 | Go home | ⌘H | Opens Home |
 | Bring file | ⌘K | Search overlay of files from other topics; choosing one **visits** it on Home in the layout (same document, still owned by its topic). Repeat to visit more. Arrange and cycle include those visits. |
-| Arrange | ⌘R | File arrange overlay (topic page) |
+| Arrange | ⌘⌥R | File arrange overlay (topic page) |
+| File layout | ⌘R | Layout picker (topic page, desktop). Phone has no layouts. |
 | Cycle files | ⌘[ ⌘] | Rotate **every live file in the topic** in a circle (not only the layout’s slots; not archived). Applies immediately — do not wait for KeyUp / `runAfterKeystroke` |
 | Add file / topic | ⌘F / ⌘N | The same dialogs as the chrome |
 | Add view | ⌘⇧W | Same as the sidebar + |
 | Assign task view | ⌘J | Assign dialog when a task has the caret |
 | Reorder mode | ⌘O | Task-list caret: toggle task reorder. Else if a view is open: toggle that view’s task reorder. Otherwise: sidebar topics and views (handles appear until you press it again). View frames: the Reorder control on the view chrome still starts *frame* reorder |
-| Move object | ⌘⇧O | Toggle Move Mode for the caret / last-interacted embed. Also on every object chrome menu. Rebindable in Preferences. |
+| Move object | ⌘⇧O | Toggle Move Mode for the caret / last-interacted embed. Also on every object chrome menu. Rebindable in Preferences. In Move Mode, arrows nudge the object; Enter / Esc end it (same as Done). |
 | Add connection / list | ⌘L | Inserts a bullet list at the caret. In an info, opens the connect-to picker |
 | Agent / slot keys | ⌘1… | Agent prompt, or the saved action in that bar seat |
 | Text (bold, italic, underline, Make link, cut/copy/paste, size) | ⌘B/I/U/X/C/V, ⌘⇧+/− | Mark, else the caret line — except **paste**, which inserts at the caret unless something is marked. Embed fields via `runBlockTextAction`; Super Editor via `DocumentEditorController.applyTextAction`. Super Editor’s own Cmd+B / Cmd+I / ⌘V are stripped so catalog toggles once and list paste keeps `-` / `1.` points. Copy/cut of lists include those prefixes. **Make link** is menu-only (⌘K is bring-file, ⌘L is connect-info); click / tap opens a persisted URL. **Make list** (menu, or insert list / ⌘L on marked text) gives each newline a point. |

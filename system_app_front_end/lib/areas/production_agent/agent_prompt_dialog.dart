@@ -80,14 +80,24 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
         return;
       }
     }
+    if (state.aiRunning) return;
     final result = await state.runAgentPrompt(
       request.prompt,
       applyMode: request.applyMode,
       selectedText: selectedText,
     );
-    if (!context.mounted || result == null) return;
+    if (result == null) return;
+    if (state.aiCancelRequested) {
+      await discardCancelledAgentRun(state, result);
+      return;
+    }
+    if (!context.mounted) return;
     await presentAgentRunResult(context, state, result);
   } catch (e) {
+    if (state.aiCancelRequested) {
+      state.endAiRun();
+      return;
+    }
     if (!context.mounted) return;
     showAgentMessageSnackBar(context, e.toString());
   }

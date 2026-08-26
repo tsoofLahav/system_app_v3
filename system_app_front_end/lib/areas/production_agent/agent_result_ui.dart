@@ -13,17 +13,27 @@ export './agent_message_snackbar.dart';
 ///
 /// Same ending as a typed prompt — a review dialog, an undo toast or a
 /// summary — because a saved action is a prompt the user wrote once.
+/// Cancel waits for the run to return, then drops the result instead.
 Future<void> runSavedAgentAction(
   BuildContext context,
   AppState state,
   AiAction action,
 ) async {
+  if (state.aiRunning) return;
   try {
     final selectedText = DocumentEditorRegistry.captureMarkedTextForAgent();
     final result = await state.runAiAction(action, selectedText: selectedText);
+    if (state.aiCancelRequested) {
+      await discardCancelledAgentRun(state, result);
+      return;
+    }
     if (!context.mounted) return;
     await presentAgentRunResult(context, state, result);
   } catch (e) {
+    if (state.aiCancelRequested) {
+      state.endAiRun();
+      return;
+    }
     if (!context.mounted) return;
     showAgentMessageSnackBar(context, e.toString());
   }
@@ -72,6 +82,73 @@ Future<void> presentAutomationRunResult(
       ? (error.isNotEmpty ? error : s['automationFailed'])
       : (summaries.isNotEmpty ? summaries.join(' · ') : s['automationRan']);
   showAgentMessageSnackBar(context, message);
+}
+
+/// Wait out a cancelled run, then drop its result: no review, undo toast, or
+/// summary. Direct-apply writes are rolled back when undo cards exist; review
+/// proposals are discarded so they do not open later.
+Future<void> discardCancelledAgentRun(
+  AppState state,
+  Map<dynamic, dynamic> result,
+) async {
+  try {
+    await _silentDiscardAgentResult(state, result);
+  } finally {
+    state.endAiRun();
+  }
+}
+
+Future<void> discardCancelledAutomationRun(
+  AppState state,
+  Map<dynamic, dynamic> result,
+) async {
+  try {
+    for (final agent in agentResultsFromAutomationRun(result)) {
+      await _silentDiscardAgentResult(state, agent);
+    }
+  } finally {
+    state.endAiRun();
+  }
+}
+
+Future<void> _silentDiscardAgentResult(
+  AppState state,
+  Map<dynamic, dynamic> result,
+) async {
+  for (final fileId in pendingFileIdsFromAgentResult(result)) {
+    try {
+      await state.discardPendingReview(fileId);
+    } catch (_) {}
+  }
+  state.dismissAgentReview();
+  for (final card in undoCardsFromAgentResult(result)) {
+    try {
+      await state.undoDirectApply(
+        fileId: card.fileId,
+        oldDocumentJson: card.oldDocumentJson,
+        topicId: card.topicId,
+        reloadTopic: false,
+      );
+    } catch (_) {}
+  }
+}
+
+/// Agent step payloads inside an automation run result.
+List<Map<dynamic, dynamic>> agentResultsFromAutomationRun(
+  Map<dynamic, dynamic> result,
+) {
+  final run = result['run'];
+  if (run is! Map) return const [];
+  final payload = run['result'];
+  final steps = payload is Map ? payload['steps'] : null;
+  if (steps is! List) return const [];
+  final agents = <Map<dynamic, dynamic>>[];
+  for (final step in steps) {
+    if (step is! Map) continue;
+    final agent = step['agent'];
+    if (agent is Map) agents.add(agent);
+  }
+  return agents;
 }
 
 /// Present an agent run from its result shape — not from a copied apply_mode.

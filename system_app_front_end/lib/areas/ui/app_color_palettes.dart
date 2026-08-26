@@ -137,5 +137,27 @@ abstract final class AppColorPalettes {
     return null;
   }
 
+  /// First matching palette when [hexes] starts with that set's colours.
+  static String? matchingId(List<String> hexes) {
+    if (hexes.isEmpty) return null;
+    for (final palette in chart) {
+      final n = hexes.length < palette.hexes.length
+          ? hexes.length
+          : palette.hexes.length;
+      var matches = true;
+      for (var i = 0; i < n; i++) {
+        if (_norm(hexes[i]) != _norm(palette.hexes[i])) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) return palette.id;
+    }
+    return null;
+  }
+
+  static String _norm(String hex) =>
+      hex.trim().replaceFirst('#', '').toUpperCase();
+
   static AppColorPalette get defaultChart => chart.first;
 }

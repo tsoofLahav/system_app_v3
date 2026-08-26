@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/app_strings.dart';
-import '../../ui/app_color_palettes.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/color_dialog.dart';
 import '../../ux/widgets/app_context_menu.dart';
 import '../editor/document_secondary_tap.dart';
 import '../editor/embeds/image_display_size.dart';
-import '../editor/embeds/object_look.dart';
 import './block_text_focus.dart';
 
 typedef DocumentMenuHandler = Future<void> Function(String action);
@@ -18,6 +16,7 @@ class DocumentContextMenu {
   static List<AppContextMenuEntry> buildTextEntries(
     AppStrings strings, {
     bool includeConnectInfo = false,
+    bool includeDisconnectInfo = false,
     bool includeMakeList = false,
   }) => [
     AppContextMenuItem(value: 'text:bold', label: strings['bold'] ?? 'Bold'),
@@ -50,12 +49,18 @@ class DocumentContextMenu {
       value: 'text:color:clear',
       label: strings['clearColor'] ?? 'Clear color',
     ),
-    if (includeConnectInfo) ...[
+    if (includeConnectInfo || includeDisconnectInfo) ...[
       const AppContextMenuDivider(),
-      AppContextMenuItem(
-        value: 'text:connect_info',
-        label: strings['connectInfo'] ?? 'Connect info…',
-      ),
+      if (includeConnectInfo)
+        AppContextMenuItem(
+          value: 'text:connect_info',
+          label: strings['connectInfo'] ?? 'Connect info…',
+        ),
+      if (includeDisconnectInfo)
+        AppContextMenuItem(
+          value: 'text:disconnect_info',
+          label: strings['removeConnection'] ?? 'Remove connection',
+        ),
     ],
     const AppContextMenuDivider(),
     AppContextMenuItem(value: 'text:cut', label: strings['cut'] ?? 'Cut'),
@@ -70,24 +75,9 @@ class DocumentContextMenu {
     ],
   ];
 
-  /// Per-object chrome Look submenu (info / table / image).
-  static AppContextMenuSubmenu lookSubmenu(
-    AppStrings strings, {
-    required String kind,
-    required String current,
-  }) {
-    return AppContextMenuSubmenu(
-      label: strings['look'],
-      children: [
-        for (final look in ObjectLook.looksFor(kind))
-          AppContextMenuItem(
-            value: 'look:$look',
-            label: strings[ObjectLook.labelKey(kind, look)],
-            checked: look == current,
-          ),
-      ],
-    );
-  }
+  /// Design… — opens the sample dialog for look (and graph type / colours).
+  static AppContextMenuItem designItem(AppStrings strings) =>
+      AppContextMenuItem(value: 'object:design', label: strings['design']);
 
   /// Image block: nudge a little, or jump to a named fraction of the pane.
   static List<AppContextMenuEntry> buildImageEntries(
@@ -139,7 +129,6 @@ class DocumentContextMenu {
     required AppStrings strings,
     required DocumentMenuHandler onAction,
     double scale = ImageDisplaySize.full,
-    String look = ObjectLook.imageNone,
     bool canMergeNext = false,
   }) {
     return _showMenu(
@@ -153,7 +142,7 @@ class DocumentContextMenu {
           label: strings['moveObject'],
         ),
         const AppContextMenuDivider(),
-        lookSubmenu(strings, kind: 'image', current: look),
+        designItem(strings),
         const AppContextMenuDivider(),
         ...buildImageEntries(strings, scale: scale, canMergeNext: canMergeNext),
       ],
@@ -201,6 +190,7 @@ class DocumentContextMenu {
     required AppStrings strings,
     required DocumentMenuHandler onAction,
     bool includeConnectInfo = false,
+    bool includeDisconnectInfo = false,
     bool includeMakeList = false,
   }) {
     return _showMenu(
@@ -211,6 +201,7 @@ class DocumentContextMenu {
       entries: buildTextEntries(
         strings,
         includeConnectInfo: includeConnectInfo,
+        includeDisconnectInfo: includeDisconnectInfo,
         includeMakeList: includeMakeList,
       ),
     );
@@ -246,24 +237,6 @@ class DocumentContextMenu {
     );
   }
 
-  /// Chart-quality table: bar / line / pie + colour palettes.
-  static List<AppContextMenuEntry> buildChartEntries(AppStrings strings) => [
-    AppContextMenuItem(value: 'chart:type:bar', label: strings['graphBar']),
-    AppContextMenuItem(value: 'chart:type:line', label: strings['graphLine']),
-    AppContextMenuItem(value: 'chart:type:pie', label: strings['graphPie']),
-    const AppContextMenuDivider(),
-    AppContextMenuSubmenu(
-      label: strings['graphChangeColors'],
-      children: [
-        for (final palette in AppColorPalettes.chart)
-          AppContextMenuItem(
-            value: 'chart:palette:${palette.id}',
-            label: strings[palette.nameKey],
-          ),
-      ],
-    ),
-  ];
-
   static Future<void> showTableCellMenu({
     required BuildContext context,
     required Offset globalPosition,
@@ -274,8 +247,9 @@ class DocumentContextMenu {
     bool includeReorderRows = true,
     bool includeReorderColumns = true,
     bool includeConnectInfo = true,
+    bool includeDisconnectInfo = false,
     bool includeMoveObject = false,
-    String? tableLook,
+    bool includeDesign = true,
   }) {
     return _showMenu(
       context: context,
@@ -290,7 +264,11 @@ class DocumentContextMenu {
           ),
           const AppContextMenuDivider(),
         ],
-        ...buildTextEntries(strings, includeConnectInfo: includeConnectInfo),
+        ...buildTextEntries(
+          strings,
+          includeConnectInfo: includeConnectInfo,
+          includeDisconnectInfo: includeDisconnectInfo,
+        ),
         const AppContextMenuDivider(),
         if (includeAddRow)
           AppContextMenuItem(
@@ -311,9 +289,9 @@ class DocumentContextMenu {
             value: 'table:reorder_columns',
             label: strings['reorderColumns'],
           ),
-        if (tableLook != null) ...[
+        if (includeDesign) ...[
           const AppContextMenuDivider(),
-          lookSubmenu(strings, kind: 'table', current: tableLook),
+          designItem(strings),
         ],
         if (extraEntries.isNotEmpty) ...[
           const AppContextMenuDivider(),
@@ -329,7 +307,6 @@ class DocumentContextMenu {
     required Offset globalPosition,
     required AppStrings strings,
     required DocumentMenuHandler onAction,
-    String look = ObjectLook.tableGrid,
   }) {
     return _showMenu(
       context: context,
@@ -342,14 +319,12 @@ class DocumentContextMenu {
           label: strings['moveObject'],
         ),
         const AppContextMenuDivider(),
-        lookSubmenu(strings, kind: 'table', current: look),
+        designItem(strings),
         const AppContextMenuDivider(),
         AppContextMenuItem(
           value: 'table:reorder_columns',
           label: strings['reorderColumns'],
         ),
-        const AppContextMenuDivider(),
-        ...buildChartEntries(strings),
       ],
     );
   }
@@ -360,6 +335,7 @@ class DocumentContextMenu {
     required Offset globalPosition,
     required AppStrings strings,
     required DocumentMenuHandler onAction,
+    bool includeDisconnectInfo = false,
   }) {
     return showTextMenu(
       context: context,
@@ -367,6 +343,7 @@ class DocumentContextMenu {
       strings: strings,
       onAction: onAction,
       includeConnectInfo: true,
+      includeDisconnectInfo: includeDisconnectInfo,
     );
   }
 
@@ -376,7 +353,6 @@ class DocumentContextMenu {
     required Offset globalPosition,
     required AppStrings strings,
     required DocumentMenuHandler onAction,
-    String look = ObjectLook.infoCard,
   }) {
     return _showMenu(
       context: context,
@@ -389,7 +365,7 @@ class DocumentContextMenu {
           label: strings['moveObject'],
         ),
         const AppContextMenuDivider(),
-        lookSubmenu(strings, kind: 'info', current: look),
+        designItem(strings),
         const AppContextMenuDivider(),
         AppContextMenuItem(value: 'info:add_tag', label: strings['addTag']),
         AppContextMenuItem(
@@ -424,6 +400,7 @@ class DocumentContextMenu {
     List<AppContextMenuEntry> extraEntries = const [],
     bool includeAssignView = true,
     bool includeConnectInfo = false,
+    bool includeDisconnectInfo = false,
   }) {
     return _showMenu(
       context: context,
@@ -436,7 +413,11 @@ class DocumentContextMenu {
           label: strings['moveObject'],
         ),
         const AppContextMenuDivider(),
-        ...buildTextEntries(strings, includeConnectInfo: includeConnectInfo),
+        ...buildTextEntries(
+          strings,
+          includeConnectInfo: includeConnectInfo,
+          includeDisconnectInfo: includeDisconnectInfo,
+        ),
         const AppContextMenuDivider(),
         if (includeAssignView)
           AppContextMenuItem(

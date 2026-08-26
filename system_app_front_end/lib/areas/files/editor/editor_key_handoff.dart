@@ -7,6 +7,9 @@ import 'package:flutter/widgets.dart';
 /// mid-KeyDown. Waiting for keys to clear can stall up to 500ms.
 void runNextFrame(VoidCallback action) {
   WidgetsBinding.instance.addPostFrameCallback((_) => action());
+  // A post-frame callback does not schedule a frame. Enter/Esc with no
+  // pointer motion would otherwise sit until the next unrelated paint.
+  WidgetsBinding.instance.scheduleFrame();
 }
 
 /// Runs [action] only after the current keystroke has fully settled.

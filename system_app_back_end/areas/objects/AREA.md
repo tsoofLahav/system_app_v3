@@ -57,7 +57,7 @@ Views are membership and filtering only. **Never add per-view status columns** �
 
 ## Information and the object graph
 
-An `info` object holds a piece of knowledge (`title`, `body`, `metadata`). The file UI edits them as one text field (first line → `title`); storage and agent text stay title + body.
+An `info` object holds a piece of knowledge (`title`, `body`, `metadata`). The file UI edits them as one text field (first line → `title`); storage and agent text stay title + body. Graph node titles are the stored title — empty stays empty (the map paints a fallback; Connect info hides unnamed infos). Do not coerce empty titles to `"Info"`.
 
 The `links` table is the workspace **object graph**, keyed by **`objects.id`** for object endpoints (migration `006` also adds `links.kind`, `links.anchor`, `tags.icon`).
 

@@ -187,7 +187,7 @@ def info_peer_dict(embed: ObjectEmbed | None, object_id: int) -> dict:
     return {
         "type": "info",
         "id": object_id,
-        "title": (info.title if info else "") or "Info",
+        "title": ((info.title if info else "") or "").strip(),
         "body": (info.body if info else "") or "",
         "file_id": embed.file_id if embed else None,
     }
@@ -197,7 +197,7 @@ def object_title(embed: ObjectEmbed) -> str:
     if embed.type == "info" and embed.information_id:
         info = db.session.get(InformationPiece, embed.information_id)
         if info is not None:
-            return (info.title or "").strip() or "Info"
+            return (info.title or "").strip()
     if embed.type == "task_list" and embed.task_list_id:
         from models import TaskList
 

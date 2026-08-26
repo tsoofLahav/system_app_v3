@@ -11,9 +11,9 @@ This area owns **data, services, and type logic**. How an object is *presented i
 | Type | Special quality (this area) | In-file presentation (files) |
 |------|-----------------------------|------------------------------|
 | `task_list` | Tasks as rows; order; done/active; **views** | List-like embed ([`../files/editor/embeds/inline_task_list.dart`](../files/editor/embeds/inline_task_list.dart)) |
-| `info` | Knowledge piece; **links / object graph**; optional `payload.look` | One-text embed; first line = title ([`../files/editor/embeds/object_embed_widgets.dart`](../files/editor/embeds/object_embed_widgets.dart)); chrome **Look** |
-| `image` | Asset + caption payload; `width` 0–1 of the pane; optional `payload.look`; optional `images[]` row | Image embed (same file); right-click size + **Look** + **Merge with next** |
-| `table` | Grid (`payload.rows`); optional **chart** quality; optional `payload.look` | [`../files/editor/embeds/table_embed.dart`](../files/editor/embeds/table_embed.dart) (`RichTableEditor` + chart chrome); chrome **Look** |
+| `info` | Knowledge piece; **links / object graph**; optional `payload.look` | One-text embed; first line = title ([`../files/editor/embeds/object_embed_widgets.dart`](../files/editor/embeds/object_embed_widgets.dart)); chrome **Design…** |
+| `image` | Asset + caption payload; `width` 0–1 of the pane; optional `payload.look`; optional `images[]` row | Image embed (same file); right-click size + **Design…** + **Merge with next** |
+| `table` | Grid (`payload.rows`); optional **chart** quality; optional `payload.look` | [`../files/editor/embeds/table_embed.dart`](../files/editor/embeds/table_embed.dart) (`RichTableEditor` + chart chrome); chrome **Design…** |
 
 Payload helpers: [`data/table_payload.dart`](data/table_payload.dart), [`data/image_payload.dart`](data/image_payload.dart). Insert “graph” creates a table with `chart.enabled`.
 
@@ -77,8 +77,8 @@ Connect info on a task row works in the file **and** in a view (same `TaskListSu
 
 **UI here:**
 - Create tag via sidebar **+**; assign tags on info **chrome** (block caret / object menu)
-- Info **field**: formatting + **Connect info…** (description). Info **chrome**: Add tag + **Add connection…** (related, infos only). ⌘L still adds a related connection while the caret is in an info.
-- Description: right-click marked text / caret line in an object field → Connect info… → dark-teal glyphs + 1px underline, hover bubble, double-click / double-tap opens the target info in its file
+- Info **field**: formatting + **Connect info…** / **Remove connection** (description). Info **chrome**: Add tag + **Add connection…** (related, infos only). ⌘L still adds a related connection while the caret is in an info.
+- Description: right-click marked text / caret line in an object field → Connect info… (search by name; empty-title infos are hidden, including ones the graph used to label `Info`) → dark-teal glyphs + 1px underline, hover bubble, double-click / double-tap opens the target info in its file. Right-click a connected span for **Remove connection**.
 - **Objects map** ([`interactive_graph_view`](https://pub.dev/packages/interactive_graph_view)): info nodes + related edges; pan/zoom; drag to move — the same while cards are open. The package has no layout or persistence — we own `NodeWidget.position`. Coordinates live on the object (`diagram_x` / `diagram_y`); unsaved nodes get a connected layout (layers along links, then spring forces) so related objects sit near each other. **Arrange by links** (map chip, or Graph configuration) throws every saved spot away and writes that connected layout; a later drag is saved until Arrange is pressed again. The stored point is the **center of the circle that fits the card**. Double-click a chip opens a content-tight card on that same center (several may be open); every other closed node moves out along its ray by `R_open − R_closed`. The open card is a pane overlay that follows the chip — not a larger graph node. Close with × (that card) or **Close all**. Isolated objects stay off the map unless Graph configuration shows them. Tag filter above the bottom bar lists object tags only (not topic types); topic/tag color modes. Right-click a chip or open card: **Add connection…** (related, infos only) and **Go to source**. Linked spans on an open card: double-click / double-tap pans to the target chip at the current zoom, then opens it the same way as a chip double-click. Cards stay editable.
 
 In-file editing of the unified info text is presentation (files).
@@ -87,13 +87,13 @@ In-file editing of the unified info text is presentation (files).
 
 | Type | Data |
 |------|------|
-| `image` | Payload: url/path/caption; `width` is 0–1 of the file pane; optional `look` (`none` / `frame` / `greyscale` / `frame_greyscale`); optional `images[]` when several pictures share one object (first pane is also on `url` / `caption`) |
-| `table` | Payload: `rows` + optional `chart` (`enabled`, `chartType`, `colors[]`) + optional `look` (`grid` / `open` / `lined`) — see [`data/table_payload.dart`](data/table_payload.dart) |
-| `info` | Title/body on `information_pieces`; optional `objects.payload.look` (`card` / `plain` / `ruled`) so the card chrome can persist |
+| `image` | Payload: url/path/caption; `width` is 0–1 of the file pane; optional `look` (`card` / `glass` / `outline` / `fill` / `plain`); optional `greyscale`; optional `images[]` when several pictures share one object (first pane is also on `url` / `caption`) |
+| `table` | Payload: `rows` + optional `chart` (`enabled`, `chartType`, `colors[]`) + optional `look` (`grid` / `glass` / `outline` / `fill` / `lined` / `plain`) — see [`data/table_payload.dart`](data/table_payload.dart) |
+| `info` | Title/body on `information_pieces`; optional `objects.payload.look` (`card` / `glass` / `outline` / `fill` / `ruled` / `plain`) so the card chrome can persist |
 
-Each object remembers its own look (chrome right-click **Look**). Omitted `look` is today’s default. Task lists have no look picker. Table normalize must keep `look`.
+Each object remembers its own look (chrome right-click **Design…**). Omitted `look` is today’s default. Task lists have no look picker. Table normalize must keep `look`. Legacy ids (`none` / `frame` / `greyscale` / `open`) still load.
 
-Graph/table cells and info title/body live on the object row, not in marker text. Concurrent user + agent edits are resolved in files ([`../files/editor/edit_conflict.dart`](../files/editor/edit_conflict.dart)): inbound wins unless the embed is dirty, then the user chooses.
+Graph/table cells and info title/body live on the object row, not in marker text. Concurrent user + agent edits are resolved in files ([`../files/editor/edit_conflict.dart`](../files/editor/edit_conflict.dart)): inbound wins unless that embed is dirty **and** inbound changed it, then the user chooses. A dirty object does not block inbound for a different object in the same file.
 
 Agent text and API shapes: backend objects `AREA.md` + production agent prompt. “Object graph” (links map) is separate from chart tables.
 

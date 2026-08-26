@@ -71,7 +71,7 @@ void main() {
       expect(action.defaultBinding.alt, isFalse);
     }
 
-    expectCmd(ShortcutActionIds.openArrange, LogicalKeyboardKey.keyR);
+    expectCmd(ShortcutActionIds.openFileLayout, LogicalKeyboardKey.keyR);
     expectCmd(ShortcutActionIds.addFile, LogicalKeyboardKey.keyF);
     expectCmd(ShortcutActionIds.addTopic, LogicalKeyboardKey.keyN);
     expectCmd(ShortcutActionIds.insertInfo, LogicalKeyboardKey.keyD);
@@ -86,5 +86,20 @@ void main() {
     expect(action.defaultBinding.keyId, LogicalKeyboardKey.keyO.keyId);
     expect(action.defaultBinding.meta, isTrue);
     expect(action.defaultBinding.shift, isTrue);
+  });
+
+  test('file layout defaults to Cmd+R and arrange to Cmd+Option+R', () {
+    final layout = shortcutActionById(ShortcutActionIds.openFileLayout)!;
+    expect(layout.defaultBinding.keyId, LogicalKeyboardKey.keyR.keyId);
+    expect(layout.defaultBinding.meta, isTrue);
+    expect(layout.defaultBinding.shift, isFalse);
+    expect(layout.defaultBinding.alt, isFalse);
+    expect(layout.context, ShortcutContextRequirement.topicMode);
+
+    final arrange = shortcutActionById(ShortcutActionIds.openArrange)!;
+    expect(arrange.defaultBinding.keyId, LogicalKeyboardKey.keyR.keyId);
+    expect(arrange.defaultBinding.meta, isTrue);
+    expect(arrange.defaultBinding.shift, isFalse);
+    expect(arrange.defaultBinding.alt, isTrue);
   });
 }

@@ -72,6 +72,34 @@ bool objectHasRelatedTo(ObjectEmbed embed, int targetId) {
   });
 }
 
+/// The description span under the current mark (or caret line).
+DescriptionTextRange? descriptionRangeCoveringMark(
+  List<DescriptionTextRange> ranges,
+) {
+  if (ranges.isEmpty) return null;
+  final span = BlockTextFocusRegistry.resolveMark().first;
+  if (span == null) return null;
+  final start = span.safeStart;
+  final end = span.safeEnd;
+  for (final range in ranges) {
+    if (range.end <= range.start) continue;
+    final overlaps = start < range.end && end > range.start;
+    final caretInside =
+        start == end && start >= range.start && start < range.end;
+    if (overlaps || caretInside) return range;
+  }
+  return null;
+}
+
+Future<void> disconnectInfoAtMark({
+  required AppState state,
+  required List<DescriptionTextRange> ranges,
+}) async {
+  final hit = descriptionRangeCoveringMark(ranges);
+  if (hit == null) return;
+  await state.removeDescriptionLink(hit.link);
+}
+
 Future<void> connectInfoFromMark({
   required BuildContext context,
   required AppState state,

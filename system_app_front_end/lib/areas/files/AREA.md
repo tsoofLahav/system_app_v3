@@ -18,7 +18,7 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | [`editor/super_editor_mark.dart`](editor/super_editor_mark.dart) | Super Editor twin of `DocumentMark`: marked span, else caret line |
 | [`editor/file_editor_keyboard_actions.dart`](editor/file_editor_keyboard_actions.dart) | Super Editor IME keys minus Cmd+B / Cmd+I (catalog owns those) |
 | [`editor/cmd_click_link_handler.dart`](editor/cmd_click_link_handler.dart) | Click / tap (or ⌘-click) opens a persisted web link |
-| [`editor/edit_conflict.dart`](editor/edit_conflict.dart) | User vs agent: take inbound unless dirty, then ask |
+| [`editor/edit_conflict.dart`](editor/edit_conflict.dart) | User vs agent: take inbound unless dirty; same object or body asks, different objects do not |
 | [`editor/embed_move_bubble.dart`](editor/embed_move_bubble.dart) | Floating glass Move Mode controls (outside the file) |
 | [`model/marker_super_editor_bridge.dart`](model/marker_super_editor_bridge.dart) | Marker text ↔ Super Editor document |
 | [`model/object_embed_node.dart`](model/object_embed_node.dart) | Custom SE node for object pointers |
@@ -278,8 +278,8 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Embed | Widget | Flow role |
 |-------|--------|-----------|
 | Task list | [`embeds/inline_task_list.dart`](editor/embeds/inline_task_list.dart) | Thin host: document segments + Move Mode; rows via objects [`TaskListSurface`](../objects/tasks/task_list_surface.dart) |
-| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); tag chips; **field** right-click → formatting + **Connect info…**; **chrome** (block caret) → **Look** / Add tag / Add connection (related) |
-| Image | same | Atomic unit; caption field; chrome **Look** + size |
+| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); tag chips; **field** right-click → formatting + **Connect info…** / **Remove connection**; **chrome** (block caret) → **Design…** / Add tag / Add connection (related) |
+| Image | same | Atomic unit; caption field; chrome **Design…** + size |
 | Table (+ chart) | [`embeds/table_embed.dart`](editor/embeds/table_embed.dart) | `RichTableEditor` + optional chart; behaviour in **[Tables & charts](#tables--charts)** |
 | Host | [`embed_block_host.dart`](editor/embed_block_host.dart) | Move Mode; optional atomic `#embed` segment |
 | Drag chrome | [`drag_mode_frame.dart`](editor/drag_mode_frame.dart) | Shared gentle glass frame for Move / Reorder modes |
@@ -291,8 +291,8 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Between blocks only | Never inside a list item or table cell |
 | Create at the caret | Inserts go to the **last-claimed** file. Mid-paragraph / mid-heading **splits** at the caret (`before \| new \| after`); caret at the start inserts before that block; at the end, after it. List / table / embed carets insert after the containing block. |
 | Marker buffer is source of truth | Position is top-level parts in buffer text (view = `blocks[]`); the object row holds data, not placement |
-| Right-click on embed text | Same text menu as paragraphs (`DocumentMark`) plus **Connect info…** on object fields (info / task / table) and **Make link**. Connected spans and URL `link` spans paint in `AppColors.descriptionLink` (dark teal glyphs + 1px underline). Description-link colour is paint-only; URL `link` is stored on the field span. Double-click / double-tap a description span opens the target info in its file; a single click only places the caret. Click / tap still opens a web URL. Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Tables/charts: see **[Tables & charts](#tables--charts)**. Task lists add **Add to view…** and **Reorder tasks**. Info **chrome** (not a field) is **Look** / Add tag / Add connection / **Move object**. Image and table/graph chrome also have **Look** (per object, `payload.look`). Super Editor body paragraphs do not offer Connect info. |
-| Move Mode | Object chrome menu **Move object**, or **⌘⇧O** when the caret / last-interacted embed is an object → glass frame on the object + floating glass bubble ([`embed_move_bubble.dart`](editor/embed_move_bubble.dart), no scrim; drag to reposition). Double-click selects a word in inner fields, like body text. Up/down in the bubble nudge the object and **stay in Move Mode**; Done or tap outside the bubble ends it and restores writing focus on that object. After move/delete, adjacent paragraphs **coalesce** (blank/`\n`-only stubs dropped, including next to embeds). |
+| Right-click on embed text | Same text menu as paragraphs (`DocumentMark`) plus **Connect info…** on object fields (info / task / table) and **Make link**. The picker searches by name and hides infos with no title (including empty ones the graph used to send as `Info`). A connected span also gets **Remove connection**. Connected spans and URL `link` spans paint in `AppColors.descriptionLink` (dark teal glyphs + 1px underline). Description-link colour is paint-only; URL `link` is stored on the field span. Double-click / double-tap a description span opens the target info in its file; a single click only places the caret. Click / tap still opens a web URL. Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Tables/charts: see **[Tables & charts](#tables--charts)**. Task lists add **Add to view…** and **Reorder tasks**. Info **chrome** (not a field) is **Design…** / Add tag / Add connection / **Move object**. Image and table/graph chrome also have **Design…** (look samples; graphs add chart type and colour-set samples). Super Editor body paragraphs do not offer Connect info. |
+| Move Mode | Object chrome menu **Move object**, or **⌘⇧O** when the caret / last-interacted embed is an object → glass frame on the object + floating glass bubble ([`embed_move_bubble.dart`](editor/embed_move_bubble.dart), no scrim; drag to reposition). Double-click selects a word in inner fields, like body text. Arrows (↑/← previous, ↓/→ next; hold to repeat) and the bubble arrows nudge the object and **stay in Move Mode**; Done, Enter, Esc, or tap outside the bubble ends it and restores writing focus on that object. After move/delete, adjacent paragraphs **coalesce** (blank/`\n`-only stubs dropped, including next to embeds). |
 | Empty object + Backspace | Same fluent rule as an empty list bullet / table row: last empty unit + Backspace **removes the object** (cascade-delete). |
 | Object block + Shift+Enter | Opens the object (first inner field). **Shift+Enter** inside lands **after** the object so typing continues below. On phone, those keys are not on the keyboard — the first bottom-bar pill is arrows plus enter/leave. **Enter** inserts a paragraph below. Arrows do not auto-enter/leave objects. Phone long-press / secondary tap opens the object chrome menu (Move Mode lives there). |
 | Task Reorder Mode | Owned by `TaskListSurface` (objects): right-click → Reorder tasks → glass per task; **tap outside the list** ends it |
@@ -315,9 +315,9 @@ Objects are atomic SE blocks. ↑/↓ move onto the block; **Shift+Enter** (or c
 | Type | In the document |
 |------|-----------------|
 | Task list | Active then Done; Enter adds in the same zone; **insert lands on the list header** (then tasks); Shift+Enter leaves to SE block; right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title stays blank |
-| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); Enter adds lines; Shift+Enter leaves to SE block; field right-click → text + Connect info; chrome → **Look** / Add tag / Add connection (⌘L while in the info; otherwise ⌘L inserts a list) |
+| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); Enter adds lines; Shift+Enter leaves to SE block; field right-click → text + Connect info / Remove connection; chrome → **Design…** / Add tag / Add connection (⌘L while in the info; otherwise ⌘L inserts a list) |
 | Table / chart | See **[Tables & charts](#tables--charts)** |
-| Image | Display + caption; chrome **Look** (`none` / `frame` / `greyscale` / `frame_greyscale`); **Merge with next** when the following Super Editor node is also an image (folds it into `payload.images` and cascade-deletes the second object — Super Editor cannot put two image blocks on one line). Right-click **Make smaller / larger** (steps of 10% of the pane) or **Tiny / Quarter / Half / Full size** (size is the row as a whole). Width is `payload.width` 0–1 of the file pane; aspect ratio stays (`BoxFit.contain`) |
+| Image | Display + caption; chrome **Design…** (card / glass / lines / fill / plain, plus greyscale); **Merge with next** when the following Super Editor node is also an image (folds it into `payload.images` and cascade-deletes the second object — Super Editor cannot put two image blocks on one line). Right-click **Make smaller / larger** (steps of 10% of the pane) or **Tiny / Quarter / Half / Full size** (size is the row as a whole). Width is `payload.width` 0–1 of the file pane; aspect ratio stays (`BoxFit.contain`) |
 
 ### Tables & charts
 
@@ -337,7 +337,7 @@ One object type `table` (`payload.rows` + optional `payload.chart`). UI: [`table
 | Add row / column | **Immediately after the right-clicked cell** (storage index + 1; in RTL that is visually left of the cell). Anchor is the click, not a drifting “end” | Add **column** only (same anchor rule) |
 | Reorder | Separate **Reorder rows…** / **Reorder columns…**; grab the glass row/column (no handles) | **Reorder columns…** only; series colors move with the column |
 | Exit reorder | Tap outside / Escape / Done | Same |
-| Right-click | Text + Connect info + add/reorder + **Look**; block caret is add/reorder + **Look** | Chart chrome **or** cell → type + palette ([`AppColorPalettes`](../ui/app_color_palettes.dart)) + **Look**; columns reorder; cells still get Connect info |
+| Right-click | Text + Connect info + add/reorder + **Design…**; block caret is add/reorder + **Design…** | Chart chrome **or** cell → **Design…** (look samples, chart type, colour-set samples); columns reorder; cells still get Connect info |
 
 Type logic beyond presentation (views, links, cascades) → [objects](../objects/AREA.md).
 
@@ -360,7 +360,7 @@ Edits mutate the Super Editor document; save serializes via the marker bridge an
 
 A newer body from elsewhere (phone, agent) is applied **into** the already-open `SuperDocumentEditor`. The topic page is not rebuilt for that. Who listens where: UX [`AREA.md` § Who rebuilds](../ux/AREA.md#who-rebuilds).
 
-**User vs agent:** if the open file has no unsaved local edits (paragraphs or embeds), take the inbound copy. If both sides changed, ask which version to keep ([`edit_conflict.dart`](editor/edit_conflict.dart)) — never silently write a stale local payload over an agent graph on dispose. Keyboard safety still applies: wait until no key is down before remounting cells or showing the dialog.
+**User vs agent:** if the open file has no unsaved local **body** edits, take the inbound copy. A dirty embed only counts as a file conflict when the agent also wrote **that same object**. Typing in object A while the agent edits object B does not open keep-yours / use-agent — B takes inbound and A keeps local. If both sides changed the body, or the same object, ask which version to keep ([`edit_conflict.dart`](editor/edit_conflict.dart)) — never silently write a stale local payload over an agent graph on dispose. Keyboard safety still applies: wait until no key is down before remounting cells or showing the dialog.
 
 In-session undo/redo uses Super Editor’s history stack.
 
@@ -379,7 +379,7 @@ In this area specifically:
 | Debounce embed PATCHes; patch cache **before** `await` | PATCH + `notifyListeners` / full embed reload on every `onChanged` |
 | Super Editor `setState` only when embed **id/type/order** changes; defer with `runAfterKeystroke` if keys are down. Phone IME has no keys-down — payload refresh must not remount | Treat every new embeds-list identity as a reason to remount; remount a `TextField` after the first letter |
 | Drop engine-seeded keys while [`MainPaneLoader`](../ux/widgets/main_pane_loader.dart) is showing; `settleHardwareKeyboardForLaunch` before `appReady` | Call `HardwareKeyboard.clearState` (wipes shortcut handlers) |
-| Keep controllers as SoT while **dirty**; take inbound when not dirty (after keys are up). If both dirty, ask. Dispose must not PATCH a payload that is older than the cache | Overwrite live cells from a stale cache while typing; flush old graph/info on dispose over an agent write; dispose cell/task/info focus nodes mid-KeyDown |
+| Keep controllers as SoT while **dirty**; take inbound when not dirty (after keys are up). If the same object (or the file body) is dirty on both sides, ask. Different objects do not. Dispose must not PATCH a payload that is older than the cache | Overwrite live cells from a stale cache while typing; flush old graph/info on dispose over an agent write; dispose cell/task/info focus nodes mid-KeyDown |
 | Shift+Enter → `runNextFrame`; empty-structure Backspace → `runAfterKeystroke` | Sync `unfocus` / delete structure on the KeyDown frame |
 | Install `FormattedTextField` `onKeyEvent` **once** (stored tear-off) | Re-wrap `FocusNode.onKeyEvent` on every rebuild — tear-offs are not `==`, so Arrow Up stack-overflows |
 | Tap outside the focused editor (canvas / empty padding) unfocuses, closes the keyboard, and **clears the mark**. Bottom menus and the open object do not. | Leave Super Editor focused when the tap is not on another field; keep the mark painted after tap-outside |

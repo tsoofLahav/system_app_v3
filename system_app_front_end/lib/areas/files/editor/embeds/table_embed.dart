@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -18,6 +19,7 @@ import '../document_text_flow.dart';
 import '../edit_conflict.dart';
 import '../editor_key_handoff.dart';
 import '../embed_caret_bridge.dart';
+import './object_design_dialog.dart';
 import './object_look.dart';
 import './table_chart.dart';
 
@@ -142,7 +144,11 @@ class TableEmbedState extends State<TableEmbed>
   void _setDirty(bool value) {
     if (_dirty == value) return;
     _dirty = value;
-    UnsavedEmbedEdits.mark(widget.embed.id, value);
+    UnsavedEmbedEdits.mark(
+      widget.embed.id,
+      value,
+      baselineKey: value ? jsonEncode(_baseline) : null,
+    );
   }
 
   bool _shouldFlushOnDispose() {
@@ -375,6 +381,10 @@ class TableEmbedState extends State<TableEmbed>
   }
 
   Future<void> _onChartMenuAction(String action) async {
+    if (action == 'object:design') {
+      await _openDesign();
+      return;
+    }
     if (action.startsWith('look:')) {
       _setLook(action.substring('look:'.length));
       return;
@@ -398,16 +408,38 @@ class TableEmbedState extends State<TableEmbed>
     _persistNow();
   }
 
+  Future<void> _openDesign() async {
+    final chart = TableObjectPayload.chartOf(_payload);
+    final colors = List<String>.from(
+      (chart?['colors'] as List?)?.map((e) => '$e') ?? const [],
+    );
+    await showObjectDesignDialog(
+      context: context,
+      strings: widget.strings,
+      kind: 'table',
+      look: ObjectLook.tableOf(_payload),
+      isChart: _chartOn,
+      chartType: '${chart?['chartType'] ?? 'bar'}',
+      paletteId: AppColorPalettes.matchingId(colors),
+      onLook: _setLook,
+      onChartType: _chartOn ? _setChartType : null,
+      onPalette: _chartOn ? _applyPalette : null,
+    );
+  }
+
   Future<void> _showChartMenu(TapDownDetails details) async {
     DocumentSecondaryTap.markEmbedHandled();
     await DocumentContextMenu.showChartMenu(
       context: context,
       globalPosition: details.globalPosition,
       strings: widget.strings,
-      look: ObjectLook.tableOf(_payload),
       onAction: (action) async {
         if (action == 'table:reorder_columns') {
           beginTableReorderColumns();
+          return;
+        }
+        if (action == 'object:design') {
+          await _openDesign();
           return;
         }
         await _onChartMenuAction(action);
@@ -444,54 +476,63 @@ class TableEmbedState extends State<TableEmbed>
         ),
     ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (chartOn)
-          TableChartView(
-            type: '${chart?['chartType'] ?? 'bar'}',
-            values: values,
-            labels: labels,
-            colors: colors,
-            textDirection: Directionality.of(context),
-            onSecondaryTapDown: _showChartMenu,
-          ),
-        if (chartOn) const SizedBox(height: 6),
-        RichTableEditor(
-          key: _editorKey,
-          node: _nodeFromPayload(),
-          strings: widget.strings,
-          mode: chartOn ? TableEditorMode.chartSeries : TableEditorMode.grid,
-          maxColumns: chartOn ? AppColorPalettes.seriesLimit : null,
-          onChanged: _onRowsChanged,
-          onFocus: widget.onFocus,
-          onExitTable: _onExitTable,
-          onDeleteTable: widget.onDeleteObject,
-          onReorderColumn: chartOn ? _onReorderColumn : null,
-          look: ObjectLook.tableOf(_payload),
-          extraMenuEntries: chartOn
-              ? DocumentContextMenu.buildChartEntries(widget.strings)
-              : const [],
-          onExtraMenuAction: _onChartMenuAction,
-          onConnectInfo: () async {
-            await connectInfoFromMark(
-              context: context,
+    return wrapTableLook(
+      look: ObjectLook.tableOf(_payload),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (chartOn)
+            TableChartView(
+              type: '${chart?['chartType'] ?? 'bar'}',
+              values: values,
+              labels: labels,
+              colors: colors,
+              textDirection: Directionality.of(context),
+              onSecondaryTapDown: _showChartMenu,
+            ),
+          if (chartOn) const SizedBox(height: 6),
+          RichTableEditor(
+            key: _editorKey,
+            node: _nodeFromPayload(),
+            strings: widget.strings,
+            mode: chartOn ? TableEditorMode.chartSeries : TableEditorMode.grid,
+            maxColumns: chartOn ? AppColorPalettes.seriesLimit : null,
+            onChanged: _onRowsChanged,
+            onFocus: widget.onFocus,
+            onExitTable: _onExitTable,
+            onDeleteTable: widget.onDeleteObject,
+            onReorderColumn: chartOn ? _onReorderColumn : null,
+            look: ObjectLook.tableOf(_payload),
+            onExtraMenuAction: _onChartMenuAction,
+            onConnectInfo: () async {
+              await connectInfoFromMark(
+                context: context,
+                state: widget.state,
+                host: widget.embed,
+              );
+              if (mounted) setState(() {});
+            },
+            onDisconnectInfo: (r, c) async {
+              await disconnectInfoAtMark(
+                state: widget.state,
+                ranges: descriptionRangesForSegment(
+                  state: widget.state,
+                  fileId: widget.embed.fileId,
+                  segmentId: tableCellSegmentId(widget.blockId, r, c),
+                ),
+              );
+              if (mounted) setState(() {});
+            },
+            descriptionRangesForCell: (r, c) => descriptionRangesForSegment(
               state: widget.state,
-              host: widget.embed,
-            );
-            if (mounted) setState(() {});
-          },
-          descriptionRangesForCell: (r, c) => descriptionRangesForSegment(
-            state: widget.state,
-            fileId: widget.embed.fileId,
-            segmentId: tableCellSegmentId(widget.blockId, r, c),
+              fileId: widget.embed.fileId,
+              segmentId: tableCellSegmentId(widget.blockId, r, c),
+            ),
+            onDescriptionActivate: (range) =>
+                openDescriptionTarget(state: widget.state, link: range.link),
           ),
-          onDescriptionActivate: (range) => openDescriptionTarget(
-            state: widget.state,
-            link: range.link,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

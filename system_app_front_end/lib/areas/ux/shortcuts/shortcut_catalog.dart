@@ -46,6 +46,7 @@ abstract final class ShortcutActionIds {
   static const goHome = 'go_home';
   static const bringFile = 'bring_file';
   static const openArrange = 'open_arrange';
+  static const openFileLayout = 'open_file_layout';
   static const cycleMainFiles = 'cycle_main_files';
   static const cycleMainFilesBack = 'cycle_main_files_back';
   static const addFile = 'add_file';
@@ -130,6 +131,13 @@ final List<ShortcutAction> kShortcutCatalog = [
     id: ShortcutActionIds.openArrange,
     category: ShortcutCategory.navigation,
     labelKey: 'shortcutOpenArrange',
+    defaultBinding: _m(LogicalKeyboardKey.keyR, alt: true),
+    context: ShortcutContextRequirement.topicMode,
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.openFileLayout,
+    category: ShortcutCategory.navigation,
+    labelKey: 'shortcutOpenFileLayout',
     defaultBinding: _m(LogicalKeyboardKey.keyR),
     context: ShortcutContextRequirement.topicMode,
   ),

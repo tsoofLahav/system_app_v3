@@ -12,6 +12,7 @@ import '../editor/embeds/object_look.dart';
 import '../model/document_model.dart';
 import '../../ux/widgets/app_context_menu.dart';
 import './block_text_actions.dart';
+import './connect_info.dart';
 import './document_context_menu.dart';
 import './formatted_text_field.dart';
 import './rtl/rtl.dart';
@@ -52,6 +53,7 @@ class RichTableEditor extends StatefulWidget {
     this.onExtraMenuAction,
     this.onReorderColumn,
     this.onConnectInfo,
+    this.onDisconnectInfo,
     this.descriptionRangesForCell,
     this.onDescriptionActivate,
   });
@@ -84,6 +86,7 @@ class RichTableEditor extends StatefulWidget {
   final void Function(int from, int to)? onReorderColumn;
 
   final Future<void> Function()? onConnectInfo;
+  final Future<void> Function(int row, int column)? onDisconnectInfo;
   final List<DescriptionTextRange> Function(int row, int column)?
   descriptionRangesForCell;
   final ValueChanged<DescriptionTextRange>? onDescriptionActivate;
@@ -895,10 +898,18 @@ class RichTableEditorState extends State<RichTableEditor> {
       includeReorderColumns: true,
       extraEntries: widget.extraMenuEntries,
       includeConnectInfo: widget.onConnectInfo != null,
-      tableLook: widget.look,
+      includeDisconnectInfo: widget.onDisconnectInfo != null &&
+          descriptionRangeCoveringMark(
+                widget.descriptionRangesForCell?.call(row, col) ?? const [],
+              ) !=
+              null,
       onAction: (action) async {
         if (action == 'text:connect_info') {
           await widget.onConnectInfo?.call();
+          return;
+        }
+        if (action == 'text:disconnect_info') {
+          await widget.onDisconnectInfo?.call(row, col);
           return;
         }
         if (action == 'table:add_column') {
@@ -919,10 +930,13 @@ class RichTableEditorState extends State<RichTableEditor> {
         }
         final extra = widget.onExtraMenuAction;
         if (extra != null &&
-            (action.startsWith('chart:') ||
+            (action == 'object:design' ||
+                action.startsWith('chart:') ||
                 action.startsWith('look:') ||
                 widget.extraMenuEntries.isNotEmpty)) {
-          if (action.startsWith('chart:') || action.startsWith('look:')) {
+          if (action == 'object:design' ||
+              action.startsWith('chart:') ||
+              action.startsWith('look:')) {
             await extra(action);
             return;
           }
@@ -987,8 +1001,8 @@ class RichTableEditorState extends State<RichTableEditor> {
 
   Widget _buildEditGrid(BuildContext context) {
     _syncFlowGeometry();
-    final borderColor = tableLookBorderColor();
     final look = widget.look;
+    final borderColor = tableLookBorderColor(look);
     final showVertical = tableLookHasVerticalRules(look);
     final outer = tableLookHasOuterBox(look);
 

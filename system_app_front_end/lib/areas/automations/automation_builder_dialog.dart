@@ -1127,16 +1127,6 @@ class _StepEditDialogState extends State<_StepEditDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              const Spacer(),
-              IconButton(
-                tooltip: s['delete'],
-                onPressed: () => _pop('delete'),
-                icon: const AppIcon(AppIcons.trash, size: 16),
-              ),
-            ],
-          ),
           if (_kind == StepKinds.ai) _aiFields(),
           if (_kind == StepKinds.createFile) _createFileFields(),
           if (_kind == StepKinds.archiveFiles) _archiveFields(),

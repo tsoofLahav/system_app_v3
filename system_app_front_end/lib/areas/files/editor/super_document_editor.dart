@@ -37,6 +37,7 @@ import './editor_key_handoff.dart';
 import './embed_caret_bridge.dart';
 import './embed_move_bubble.dart';
 import './embeds/image_display_size.dart';
+import './embeds/object_design_dialog.dart';
 import './embeds/object_look.dart';
 import './cmd_click_link_handler.dart';
 import './file_editor_keyboard_actions.dart';
@@ -435,7 +436,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   bool get _fileHasUnsaved =>
-      _dirty || UnsavedEmbedEdits.anyOf(_embeds.map((e) => e.id));
+      _dirty || UnsavedEmbedEdits.anyDirtyConflictsWith(_embeds);
 
   void _handleRemoteDocument(String? remote) {
     final local = mutableDocumentToMarkerText(_doc);
@@ -1163,19 +1164,37 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       ),
     ]);
     // Stay in Move Mode so the user can keep nudging with the bubble.
-    _moveBubbleEntry?.markNeedsBuild();
-    setState(() {});
     _dirty = true;
     _scheduleSave();
+    _rebuildAfterEmbedMove();
+  }
+
+  void _rebuildAfterEmbedMove() {
+    void apply() {
+      if (!mounted) return;
+      _moveBubbleEntry?.markNeedsBuild();
+      setState(() {});
+    }
+
+    // Arrow-key nudge fires while a key is down. Rebuilding Super Editor
+    // mid-KeyDown desyncs HardwareKeyboard.
+    if (HardwareKeyboard.instance.physicalKeysPressed.isEmpty) {
+      apply();
+    } else {
+      runNextFrame(apply);
+    }
   }
 
   void _endMoveMode() {
     if (_moveModeNodeId == null) return;
     final movedId = _moveModeNodeId!;
-    setState(() => _moveModeNodeId = null);
-    _removeMoveBubble();
+    _moveModeNodeId = null;
+    // Drop the bubble after this key/pointer finishes so its FocusNode is
+    // not disposed mid-KeyDown (Enter / Esc).
     runNextFrame(() {
       if (!mounted) return;
+      _removeMoveBubble();
+      setState(() {});
       DocumentEditorRegistry.claim(widget.file.id);
       final node = _doc.getNodeById(movedId);
       if (node != null) {
@@ -1229,6 +1248,28 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     } else if (i + 1 < _doc.nodeCount) {
       _moveEmbedToIndex(id, i + 2);
     }
+  }
+
+  /// Super Editor still has IME focus until the bubble steals it — own arrows
+  /// / Enter / Esc so they do not move the caret or insert a line.
+  ExecutionInstruction _handleMoveModeKey({
+    required SuperEditorContext editContext,
+    required KeyEvent keyEvent,
+  }) {
+    if (_moveModeNodeId == null || !embedMoveModeConsumes(keyEvent)) {
+      return ExecutionInstruction.continueExecution;
+    }
+    switch (embedMoveKeyCommand(keyEvent)) {
+      case EmbedMoveKeyCommand.moveUp:
+        _nudgeMoveEmbed(up: true);
+      case EmbedMoveKeyCommand.moveDown:
+        _nudgeMoveEmbed(up: false);
+      case EmbedMoveKeyCommand.done:
+        _endMoveMode();
+      case null:
+        break;
+    }
+    return ExecutionInstruction.haltExecution;
   }
 
   void _removeMoveBubble() {
@@ -1523,14 +1564,13 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           context: context,
           globalPosition: globalPosition,
           strings: strings,
-          look: ObjectLook.infoOf(embed.payload),
           onAction: (action) async {
             if (action == 'object:move_mode') {
               _toggleMoveModeForNode(node.id);
               return;
             }
-            if (action.startsWith('look:')) {
-              await _applyObjectLook(embed, action);
+            if (action == 'object:design') {
+              await _openObjectDesign(embed, kind: 'info');
               return;
             }
             if (action == 'info:add_tag') {
@@ -1595,14 +1635,13 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
             context: context,
             globalPosition: globalPosition,
             strings: strings,
-            look: ObjectLook.tableOf(embed.payload),
             onAction: (action) async {
               if (action == 'object:move_mode') {
                 _toggleMoveModeForNode(node.id);
                 return;
               }
-              if (action.startsWith('look:')) {
-                await _applyObjectLook(embed, action);
+              if (action == 'object:design') {
+                await _openObjectDesign(embed, kind: 'table', isChart: true);
                 return;
               }
               if (action == 'table:reorder_columns') {
@@ -1621,14 +1660,13 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
             strings: strings,
             includeConnectInfo: false,
             includeMoveObject: true,
-            tableLook: ObjectLook.tableOf(embed.payload),
             onAction: (action) async {
               if (action == 'object:move_mode') {
                 _toggleMoveModeForNode(node.id);
                 return;
               }
-              if (action.startsWith('look:')) {
-                await _applyObjectLook(embed, action);
+              if (action == 'object:design') {
+                await _openObjectDesign(embed, kind: 'table');
                 return;
               }
               if (action == 'table:add_column') {
@@ -1673,19 +1711,18 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           globalPosition: globalPosition,
           strings: strings,
           scale: ImageDisplaySize.scaleOf(embed.payload),
-          look: ObjectLook.imageOf(embed.payload),
           canMergeNext: _canMergeImageWithNext(embed.id),
           onAction: (action) async {
             if (action == 'object:move_mode') {
               _toggleMoveModeForNode(node.id);
               return;
             }
-            if (action == 'image:merge_next') {
-              await _mergeImageWithNext(embed.id);
+            if (action == 'object:design') {
+              await _openObjectDesign(embed, kind: 'image');
               return;
             }
-            if (action.startsWith('look:')) {
-              await _applyObjectLook(embed, action);
+            if (action == 'image:merge_next') {
+              await _mergeImageWithNext(embed.id);
               return;
             }
             final next = ImageDisplaySize.apply(action, embed.payload);
@@ -1775,15 +1812,84 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     await _loadEmbedsQuietly();
   }
 
-  Future<void> _applyObjectLook(ObjectEmbed embed, String action) async {
-    if (!action.startsWith('look:')) return;
-    final look = action.substring('look:'.length);
-    final kind = embed.type == 'graph' ? 'table' : embed.type;
+  Future<void> _openObjectDesign(
+    ObjectEmbed embed, {
+    required String kind,
+    bool isChart = false,
+  }) async {
+    Map<String, dynamic> livePayload() {
+      final live = _lookup(embed.id) ?? embed;
+      return kind == 'table'
+          ? TableObjectPayload.normalize(live.payload)
+          : Map<String, dynamic>.from(live.payload ?? const {});
+    }
+
+    final payload = livePayload();
+    final chart = TableObjectPayload.chartOf(payload);
+    final colors = List<String>.from(
+      (chart?['colors'] as List?)?.map((e) => '$e') ?? const [],
+    );
+    final initialLook = switch (kind) {
+      'info' => ObjectLook.infoOf(payload),
+      'table' => ObjectLook.tableOf(payload),
+      _ => ObjectLook.imageOf(payload),
+    };
+    await showObjectDesignDialog(
+      context: context,
+      strings: widget.state.strings,
+      kind: kind,
+      look: initialLook,
+      isChart: isChart,
+      chartType: '${chart?['chartType'] ?? 'bar'}',
+      paletteId: AppColorPalettes.matchingId(colors),
+      greyscale: ObjectLook.imageGreyscaleOf(payload),
+      onLook: (look) {
+        _writeObjectLook(embed.id, kind, look);
+      },
+      onChartType: isChart
+          ? (type) {
+              final live = _lookup(embed.id) ?? embed;
+              _applyChartMenuToEmbed(live, 'chart:type:$type');
+            }
+          : null,
+      onPalette: isChart
+          ? (id) {
+              final live = _lookup(embed.id) ?? embed;
+              _applyChartMenuToEmbed(live, 'chart:palette:$id');
+            }
+          : null,
+      onGreyscale: kind == 'image'
+          ? (value) {
+              final base = livePayload();
+              _onPayloadChanged(
+                embed.id,
+                ObjectLook.withLook(
+                  base,
+                  ObjectLook.imageOf(base),
+                  greyscale: value,
+                ),
+              );
+            }
+          : null,
+    );
+  }
+
+  Future<void> _writeObjectLook(int objectId, String kind, String look) async {
     if (!ObjectLook.looksFor(kind).contains(look)) return;
-    final next = kind == 'table'
-        ? TableObjectPayload.normalize(ObjectLook.withLook(embed.payload, look))
-        : ObjectLook.withLook(embed.payload, look);
-    await _onPayloadChanged(embed.id, next);
+    final live = _lookup(objectId);
+    final raw = live?.payload ?? const <String, dynamic>{};
+    final base = kind == 'table'
+        ? TableObjectPayload.normalize(raw)
+        : Map<String, dynamic>.from(raw);
+    final next = ObjectLook.withLook(
+      base,
+      look,
+      greyscale: kind == 'image' ? ObjectLook.imageGreyscaleOf(base) : null,
+    );
+    await _onPayloadChanged(
+      objectId,
+      kind == 'table' ? TableObjectPayload.normalize(next) : next,
+    );
     if (mounted) setState(() {});
   }
 
@@ -2102,7 +2208,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
                 stylesheet: _stylesheet,
                 selectionStyle: _selectionStyles,
                 componentBuilders: _componentBuilders(ambient),
-                keyboardActions: kFileEditorImeKeyboardActions,
+                keyboardActions: [
+                  if (_moveModeNodeId != null) _handleMoveModeKey,
+                  ...kFileEditorImeKeyboardActions,
+                ],
                 contentTapDelegateFactories: [cmdClickLinkTapHandlerFactory],
                 documentOverlayBuilders: documentOverlayBuilders(
                   withCaret: _showCaret,

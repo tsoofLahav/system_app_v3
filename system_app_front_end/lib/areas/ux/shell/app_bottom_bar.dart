@@ -10,7 +10,10 @@ import '../../ui/confirm_dialog.dart';
 import '../../ui/glass_surface.dart';
 import '../arrange/file_arrange_overlay.dart';
 import '../layout/file_layout_picker.dart';
+import '../shortcuts/app_shortcuts.dart';
+import '../shortcuts/shortcut_catalog.dart';
 import '../arrange/phone_file_reorder_sheet.dart';
+import '../../production_agent/ai_running_status.dart';
 import '../../production_agent/ai_tool_bar.dart';
 import '../../automations/automation_dialog.dart';
 import '../../files/editor/document_editor_controller.dart';
@@ -157,12 +160,20 @@ class AppBottomBar extends StatelessWidget {
             ),
           if (_showArrange) ...[
             _BarIconButton(
-              tooltip: s['layout'],
+              tooltip: _shortcutTooltip(
+                state,
+                s['layout'],
+                ShortcutActionIds.openFileLayout,
+              ),
               icon: AppIcons.layout,
               onPressed: () => showFileLayoutPicker(context, state),
             ),
             _BarIconButton(
-              tooltip: s['arrangeFiles'],
+              tooltip: _shortcutTooltip(
+                state,
+                s['arrangeFiles'],
+                ShortcutActionIds.openArrange,
+              ),
               icon: AppIcons.arrange,
               onPressed: () => showFileArrangeOverlay(context, state),
             ),
@@ -212,24 +223,10 @@ class AppBottomBar extends StatelessWidget {
           labelOnBorder: true,
           child: AiToolBar(state: state, compact: true),
         ),
-      if (state.aiRunning) ...[
-        if (canAi) const SizedBox(width: 8),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppColors.aiCyan.withValues(alpha: 0.85),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(s['aiRunning'], style: AppTypography.metaStyle),
-          ],
-        ),
-      ],
+        if (state.aiRunning) ...[
+          if (canAi) const SizedBox(width: 8),
+          AiRunningStatus(state: state),
+        ],
     ];
   }
 
@@ -322,7 +319,7 @@ class PhoneBottomBar extends StatelessWidget {
         ),
       if (showInsert(state)) DocumentInsertBar(state: state, embedded: true),
       if (showArchiveDeleteConfirm(state)) _archiveConfirmSegment(context, s),
-      if (showAi(state)) _aiSegment(s),
+      if (showAi(state)) _aiSegment(),
     ];
 
     return Padding(
@@ -415,7 +412,7 @@ class PhoneBottomBar extends StatelessWidget {
     );
   }
 
-  Widget _aiSegment(AppStrings s) {
+  Widget _aiSegment() {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -432,21 +429,7 @@ class PhoneBottomBar extends StatelessWidget {
         if (state.aiRunning) ...[
           if (state.canUseAiTools)
             const SizedBox(width: AppBottomBarMetrics.phoneSegmentGap),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.aiCyan.withValues(alpha: 0.85),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(s['aiRunning'], style: AppTypography.metaStyle),
-            ],
-          ),
+          AiRunningStatus(state: state),
         ],
       ],
     );
@@ -579,6 +562,11 @@ class ObjectArrowPad extends StatelessWidget {
       ),
     );
   }
+}
+
+String _shortcutTooltip(AppState state, String label, String actionId) {
+  final suffix = shortcutTooltipSuffix(state, actionId);
+  return suffix == null ? label : '$label ($suffix)';
 }
 
 class _BarIconButton extends StatelessWidget {

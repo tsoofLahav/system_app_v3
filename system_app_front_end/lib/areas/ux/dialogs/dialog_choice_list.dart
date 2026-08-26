@@ -94,6 +94,7 @@ class DialogChoiceList extends StatefulWidget {
     this.onTap,
     this.initialIndex = 0,
     this.maxHeight = 360,
+    this.autofocus = true,
   });
 
   final int itemCount;
@@ -106,6 +107,7 @@ class DialogChoiceList extends StatefulWidget {
   final ValueChanged<int>? onTap;
   final int initialIndex;
   final double maxHeight;
+  final bool autofocus;
 
   @override
   State<DialogChoiceList> createState() => _DialogChoiceListState();
@@ -206,7 +208,7 @@ class _DialogChoiceListState extends State<DialogChoiceList> {
           ),
         },
         child: Focus(
-          autofocus: true,
+          autofocus: widget.autofocus,
           child: ConstrainedBox(
             constraints: BoxConstraints(maxHeight: widget.maxHeight),
             child: ListView.builder(

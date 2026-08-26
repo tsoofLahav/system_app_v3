@@ -18,11 +18,13 @@ Each icon uses the same 34px tap slot as the other bottom-bar buttons, so the AI
 
 The agent comes first and never moves: it is the one control that is always there, so it must always be in the same place. Everything is disabled when there is no AI context (nothing selected) or a run is already in flight — `AppState.hasAiContext` and `aiRunning` gate them, and `aiRunning` drives the busy state so the user cannot double-fire.
 
+While a run is in flight, the bottom bar keeps the spinner and **Running…**, plus **Cancel**. Cancel does not abort the request: the spinner stays with **Canceling the action…** until the call returns, then the client drops the result — no review dialog, undo toast, or summary. Pending reviews are discarded; direct-apply file writes are rolled back when undo cards exist (`create_object` still has no undo).
+
 ### Keeping an ask
 
 The prompt dialog opens small. **Save as action…** grows it into English and Hebrew names, an icon grid and a seat choice, and the footer becomes Cancel / Save and run / Save — naming and placing something is only interesting once the user has decided to keep it. Saving writes an `ai_actions` row ([`ai_action.dart`](ai_action.dart)) scoped to the current topic by default; it is not an automation.
 
-A saved action runs through `runSavedAgentAction` and ends the same way a typed prompt does — review dialog, undo toast, or summary.
+A saved action runs through `runSavedAgentAction` and ends the same way a typed prompt does — review dialog, undo toast, or summary — unless the user cancelled, in which case that ending is skipped.
 
 ## Scope and hints come from what is open
 
@@ -51,7 +53,7 @@ After finish pending / direct apply, the topic reloads; open Super Editors pick 
 
 ## Presenting a run result
 
-[`agent_result_ui.dart`](agent_result_ui.dart) branches on the **result**, not a copied mode string:
+[`agent_result_ui.dart`](agent_result_ui.dart) branches on the **result**, not a copied mode string — unless the user hit **Cancel**, in which case the result is dropped (pending discarded, direct-apply undone when possible) and none of the following UI appears:
 
 - `has_pending_review` / review proposals → if any edited file is **already on screen**, open lookalike dialogs in a queue (Finish/Discard on one → next pending on-screen file); otherwise snackbar “Open the file to review changes”
 - `applied` with `undo` cards → compact undo toast queue ([`compact_undo_toast.dart`](compact_undo_toast.dart)): file + topic + change summary, **Undo** / **X** / ~8s auto-close; next file when one closes
@@ -74,10 +76,11 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 | File | Role |
 |------|------|
 | [`ai_tool_bar.dart`](ai_tool_bar.dart) | Pinned action buttons, ⋯ menu, agent button |
+| [`ai_running_status.dart`](ai_running_status.dart) | Spinner + Running… / Cancel / Canceling the action… |
 | [`agent_prompt_dialog.dart`](agent_prompt_dialog.dart) | Prompt + apply toggle + save-as-action, run orchestration |
 | [`ai_action.dart`](ai_action.dart) / [`ai_action_service.dart`](ai_action_service.dart) | Saved-action model and `/ai-actions`. English `name` + Hebrew `name_he`. Scope: `topicId` xor `topicTypeId` xor neither (all) |
 | [`ai_action_edit_dialog.dart`](ai_action_edit_dialog.dart) | Create/rewrite: both names, All / type / topic picker (create defaults to the current topic) |
-| [`agent_result_ui.dart`](agent_result_ui.dart) | Result → dialog or snackbar; runs a saved action |
+| [`agent_result_ui.dart`](agent_result_ui.dart) | Result → dialog or snackbar; runs a saved action; cancelled runs are discarded |
 | [`agent_message_snackbar.dart`](agent_message_snackbar.dart) | Agent summary / error snackbar (~10s, **X**) |
 | [`pending_review_ui.dart`](pending_review_ui.dart) | Shared open-pending helper (anti double-open) |
 | [`pending_review_service.dart`](pending_review_service.dart) | GET/DELETE/finish pending |
@@ -92,6 +95,7 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 ## Rules
 
 - Never apply a review proposal without Finish (or Discard) on the lookalike dialog.
+- Never present a cancelled run — wait for the return, discard pending / undo direct-apply, and skip the result UI.
 - Never hardcode a silent consult `apply_mode` — the dialog chooses and sends it.
 - Never show raw JSON or marker/editor text to the user — visual [`FilePreview`](../files/editor/file_preview.dart) only.
 - Refresh the open topic after Finish so the editor and Archive list update.

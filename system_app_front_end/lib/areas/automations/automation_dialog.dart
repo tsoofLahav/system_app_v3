@@ -186,11 +186,20 @@ Future<void> presentAutomationRun(
   AppState state,
   Automation automation,
 ) async {
+  if (state.aiRunning) return;
   try {
     final result = await state.runAutomationNow(automation);
+    if (state.aiCancelRequested) {
+      await discardCancelledAutomationRun(state, result);
+      return;
+    }
     if (!context.mounted) return;
     await presentAutomationRunResult(context, state, result);
   } catch (e) {
+    if (state.aiCancelRequested) {
+      state.endAiRun();
+      return;
+    }
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(e.toString())),

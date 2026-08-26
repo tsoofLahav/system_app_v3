@@ -76,6 +76,7 @@ Gathered in one place: [`CARET_AND_WRITING_FOCUS.md`](CARET_AND_WRITING_FOCUS.md
 - **2026-07-27** — **Objects in a file** are top-level embed blocks. The document owns position; the object owns data. Move Mode is the object chrome menu and **⌘⇧O** (double-click selects a word in inner fields). Enter on an empty final task / info line / graph column exits below without destroying the object.
 - **2026-08-10** — **Atomic object blocks:** SE caret treats embeds as one block. **Shift+Enter**/click opens; **Shift+Enter** returns to the block; **Enter** inserts a line below. Shift+Enter uses `runNextFrame`; destructive deletes still use `runAfterKeystroke`. Info is one text field (first line = title). No arrow auto-enter/exit. Rules: [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md).
 - **2026-08-11** — **Tables + charts:** one object type `table` (`payload.rows` + optional `payload.chart`). `[GRAPH id]` is sugar for chart-on tables. Shared UI: [`table_embed.dart`](system_app_front_end/lib/areas/files/editor/embeds/table_embed.dart) + [`RichTableEditor`](system_app_front_end/lib/areas/files/rich_text/rich_table_editor.dart).
+- **2026-08-26** — Object **Design…** is its own dialog with samples, not a right-click submenu. Looks: glass, lines-only, fill-only, plus type extras. Graph type and colour sets live there too.
 
 ---
 

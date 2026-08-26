@@ -14,6 +14,7 @@ class TableChartView extends StatelessWidget {
     required this.colors,
     required this.textDirection,
     this.onSecondaryTapDown,
+    this.height = 88,
   });
 
   final String type;
@@ -22,6 +23,7 @@ class TableChartView extends StatelessWidget {
   final List<Color> colors;
   final TextDirection textDirection;
   final GestureTapDownCallback? onSecondaryTapDown;
+  final double height;
 
   Color _colorAt(int i) {
     if (colors.isEmpty) return AppColors.primary;
@@ -35,27 +37,27 @@ class TableChartView extends StatelessWidget {
         : CustomPaint(
             painter: switch (type) {
               'line' => _LineChartPainter(
-                  values: values,
-                  colors: [for (var i = 0; i < values.length; i++) _colorAt(i)],
-                  textDirection: textDirection,
-                ),
+                values: values,
+                colors: [for (var i = 0; i < values.length; i++) _colorAt(i)],
+                textDirection: textDirection,
+              ),
               'pie' => _PieChartPainter(
-                  values: values,
-                  colors: [for (var i = 0; i < values.length; i++) _colorAt(i)],
-                  textDirection: textDirection,
-                ),
+                values: values,
+                colors: [for (var i = 0; i < values.length; i++) _colorAt(i)],
+                textDirection: textDirection,
+              ),
               _ => _BarChartPainter(
-                  values: values,
-                  colors: [for (var i = 0; i < values.length; i++) _colorAt(i)],
-                  textDirection: textDirection,
-                ),
+                values: values,
+                colors: [for (var i = 0; i < values.length; i++) _colorAt(i)],
+                textDirection: textDirection,
+              ),
             },
             child: const SizedBox.expand(),
           );
 
     return GestureDetector(
       onSecondaryTapDown: onSecondaryTapDown,
-      child: SizedBox(height: 88, child: chart),
+      child: SizedBox(height: height, child: chart),
     );
   }
 }
@@ -78,8 +80,9 @@ class _BarChartPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final maxVal =
-        values.fold<double>(0, (a, b) => a > b ? a : b).clamp(1.0, double.infinity);
+    final maxVal = values
+        .fold<double>(0, (a, b) => a > b ? a : b)
+        .clamp(1.0, double.infinity);
     final gap = size.width / values.length;
     final barWidth = gap * 0.55;
     for (var i = 0; i < values.length; i++) {
@@ -117,14 +120,17 @@ class _LineChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (values.isEmpty) return;
-    final maxVal =
-        values.fold<double>(0, (a, b) => a > b ? a : b).clamp(1.0, double.infinity);
-    final dx =
-        values.length == 1 ? size.width / 2 : size.width / (values.length - 1);
+    final maxVal = values
+        .fold<double>(0, (a, b) => a > b ? a : b)
+        .clamp(1.0, double.infinity);
+    final dx = values.length == 1
+        ? size.width / 2
+        : size.width / (values.length - 1);
     Offset point(int i) {
       final slot = _visualSlot(i, values.length, textDirection);
       final x = values.length == 1 ? size.width / 2 : dx * slot;
-      final y = size.height -
+      final y =
+          size.height -
           (values[i] / maxVal).clamp(0.0, 1.0) * (size.height - 4) -
           2;
       return Offset(x, y);

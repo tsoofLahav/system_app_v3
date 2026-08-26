@@ -85,4 +85,8 @@ class TaskService {
         })
         as Map<String, dynamic>;
   }
+
+  Future<void> deleteDescriptionLink(int taskId, int linkId) async {
+    await _api.delete('/tasks/$taskId/links/$linkId');
+  }
 }

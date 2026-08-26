@@ -13,6 +13,7 @@ import '../../objects/views/view_chrome_menu.dart';
 import '../../../core/platform/app_form_factor.dart';
 import '../arrange/file_arrange_overlay.dart';
 import '../arrange/phone_file_reorder_sheet.dart';
+import '../layout/file_layout_picker.dart';
 import '../bring_file/bring_file_picker_dialog.dart';
 import '../create_topic/add_file_dialog.dart';
 import '../sidebar/sidebar_create_menu.dart';
@@ -73,6 +74,10 @@ Future<void> dispatchShortcutAction(
       } else {
         await showFileArrangeOverlay(context, state);
       }
+      return;
+    case ShortcutActionIds.openFileLayout:
+      if (!context.mounted || isPhoneLayout) return;
+      await showFileLayoutPicker(context, state);
       return;
     case ShortcutActionIds.cycleMainFiles:
       await _cycleTopicFiles(context, state);

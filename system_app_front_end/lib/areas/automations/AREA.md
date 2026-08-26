@@ -16,7 +16,7 @@ An automation is a **scope**, a **trigger**, and an ordered **series of steps**.
 | Scope | All topics / one topic / a topic type (loaded from `topic_types`) |
 | Schedule | Once a day / week / month. Weekly and monthly use a calendar next to a matching 24-hour numbered dial (typed hour and minute under the dial); daily is the clock alone |
 | Enabled | Switch on the **end** of each automations-list row (after edit, run, delete) — off means it never fires automatically |
-| Steps | Horizontal frames. Drag to reorder (run order is the array order). Add from `+`, tap a frame to edit. |
+| Steps | Horizontal frames. Drag to reorder (run order is the array order). Add from `+`, tap a frame to edit. Delete a step with the small x on the frame — the step editor has no trash. |
 
 A single-topic scope is also the target for a "create a file" step. Broader scope makes that step pick its own topic, except a type-scoped step with a **template slot**, which copies that empty file into every topic of the type.
 
@@ -38,7 +38,7 @@ A single-topic scope is also the target for a "create a file" step. Broader scop
 | [`automation_builder_dialog.dart`](automation_builder_dialog.dart) | The one editor — create and rewrite |
 | Agent dialog / AI bar ⋯ | Saved **actions**, not automations |
 
-Timing uses locked structured controls rather than free text, so an invalid schedule string cannot be produced. The builder is three framed sections: details (name, scope, daily/weekly/monthly), when (a compact calendar beside a matching 24-hour numbered dial with typed hour and minute, both in this dialog), and steps (a horizontal strip of frames; long-press drag reorders them — the run walks that array in order). Frequency stays in details. Weekly marks that weekday every week; monthly infers first / second / third / last from the tapped date (a fourth-of-five that is not the last maps to third). Flip months to see where it falls later. Daily shows only the clock. `+` under the strip adds a new AI action (the regular create dialog), a saved AI action, or a system step. Choosing **Add to a file** opens the real file editor on a scratch file; Save stores that snippet on the step (appended onto the target at run). Tap a frame to edit it. Enabled is a switch on the automations **list** (outermost after edit / run / delete), not in the builder. Create sits under the list. The string sent is `daily 08:00`, never `0 8 * * *`.
+Timing uses locked structured controls rather than free text, so an invalid schedule string cannot be produced. The builder is three framed sections: details (name, scope, daily/weekly/monthly), when (a compact calendar beside a matching 24-hour numbered dial with typed hour and minute, both in this dialog), and steps (a horizontal strip of frames; long-press drag reorders them — the run walks that array in order). Frequency stays in details. Weekly marks that weekday every week; monthly infers first / second / third / last from the tapped date (a fourth-of-five that is not the last maps to third). Flip months to see where it falls later. Daily shows only the clock. `+` under the strip adds a new AI action (the regular create dialog), a saved AI action, or a system step. Choosing **Add to a file** opens the real file editor on a scratch file; Save stores that snippet on the step (appended onto the target at run). Tap a frame to edit it. Remove a step with the corner x on its frame, not from inside the step editor. Enabled is a switch on the automations **list** (outermost after edit / run / delete), not in the builder. Create sits under the list. The string sent is `daily 08:00`, never `0 8 * * *`.
 
 ## Running
 
@@ -47,7 +47,7 @@ Timing uses locked structured controls rather than free text, so an invalid sche
 | **Run now** | `POST /automations/:id/run` — the stored scope, same as the clock |
 | **Schedule** | Server cron; `next_run_at` is the next fire |
 
-Results: each AI step goes through `presentAgentRunResult`; other steps snackbar their summaries. The open topic reloads so a new or archived file appears.
+Results: each AI step goes through `presentAgentRunResult`; other steps snackbar their summaries. The open topic reloads so a new or archived file appears. Cancel on the AI spinner drops those results the same way a cancelled consult does.
 
 | File | Role |
 |------|------|

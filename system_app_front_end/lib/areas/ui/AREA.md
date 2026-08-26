@@ -228,7 +228,7 @@ Every surface must work in English (LTR) and Hebrew (RTL). Use [`bilingual_layou
 | Controls | [`app_segmented_toggle.dart`](app_segmented_toggle.dart), [`app_switch.dart`](app_switch.dart) |
 | Dialogs | [`adaptive_dialog.dart`](adaptive_dialog.dart), [`dialog_metrics.dart`](dialog_metrics.dart), [`color_dialog.dart`](color_dialog.dart), [`time_picker_dialog.dart`](time_picker_dialog.dart), [`compact_calendar.dart`](compact_calendar.dart), [`overlay_dialog_shell.dart`](overlay_dialog_shell.dart), [`overlay_dialog_style.dart`](overlay_dialog_style.dart), [`dialog_field_style.dart`](dialog_field_style.dart) |
 | Icons | [`app_icons.dart`](app_icons.dart), [`action_icons.dart`](action_icons.dart), [`action_icon_picker.dart`](action_icon_picker.dart) |
-| Cards and previews | [`note_widgets.dart`](note_widgets.dart), [`overlay_file_preview_card.dart`](overlay_file_preview_card.dart), [`layout_preview_icon.dart`](layout_preview_icon.dart) |
+| Cards and previews | [`note_widgets.dart`](note_widgets.dart), [`overlay_file_preview_card.dart`](overlay_file_preview_card.dart), [`layout_preview_icon.dart`](layout_preview_icon.dart), [`object_look_preview.dart`](object_look_preview.dart) |
 | Carousel | [`horizontal_carousel.dart`](horizontal_carousel.dart) |
 | RTL primitives | [`bilingual_layout.dart`](bilingual_layout.dart) |
 

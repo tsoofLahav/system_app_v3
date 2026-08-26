@@ -23,9 +23,9 @@ import '../../rich_text/document_context_menu.dart';
 import '../../rich_text/formatted_text_field.dart';
 import '../../rich_text/span_text_editing_controller.dart';
 import '../../rich_text/text_formatting.dart';
-import '../../../ui/app_colors.dart';
 import '../../../ui/app_typography.dart';
 import './image_display_size.dart';
+import './object_design_dialog.dart';
 import './object_look.dart';
 
 /// Compose API `title` + `body` into one editable string (first line = title).
@@ -344,7 +344,11 @@ class InfoEmbedState extends State<InfoEmbed>
   void _setDirty(bool value) {
     if (_dirty == value) return;
     _dirty = value;
-    UnsavedEmbedEdits.mark(widget.embed.id, value);
+    UnsavedEmbedEdits.mark(
+      widget.embed.id,
+      value,
+      baselineKey: value ? _baselineKey : null,
+    );
   }
 
   String get _localKey {
@@ -480,10 +484,16 @@ class InfoEmbedState extends State<InfoEmbed>
   }
 
   Future<void> _showTextMenu(TapDownDetails details) async {
+    final ranges = descriptionRangesForSegment(
+      state: widget.state,
+      fileId: widget.embed.fileId,
+      segmentId: infoTextSegmentId(widget.blockId),
+    );
     await DocumentContextMenu.showInfoFieldMenu(
       context: context,
       globalPosition: details.globalPosition,
       strings: widget.state.strings,
+      includeDisconnectInfo: descriptionRangeCoveringMark(ranges) != null,
       onAction: (action) async {
         if (action == 'text:connect_info') {
           await connectInfoFromMark(
@@ -492,6 +502,11 @@ class InfoEmbedState extends State<InfoEmbed>
             host: widget.embed,
             segmentId: infoTextSegmentId(widget.blockId),
           );
+          if (mounted) setState(() {});
+          return;
+        }
+        if (action == 'text:disconnect_info') {
+          await disconnectInfoAtMark(state: widget.state, ranges: ranges);
           if (mounted) setState(() {});
           return;
         }
@@ -518,75 +533,70 @@ class InfoEmbedState extends State<InfoEmbed>
   Widget build(BuildContext context) {
     final tags = widget.embed.tags;
     final look = ObjectLook.infoOf(widget.embed.payload);
-    final decoration = infoLookDecoration(look);
-    final body = Padding(
-      padding: infoLookPadding(look),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          FormattedTextField(
-            controller: _controller,
-            focusNode: _focus,
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FormattedTextField(
+          controller: _controller,
+          focusNode: _focus,
+          segmentId: infoTextSegmentId(widget.blockId),
+          documentBaseOffset: widget.documentBaseOffset,
+          style: AppTypography.noteTitleStyle,
+          maxLines: null,
+          minLines: 1,
+          onChanged: (_) => _scheduleSave(),
+          onBackspaceAtStart: _onBackspaceAtStart,
+          onSecondaryTapDown: _showTextMenu,
+          descriptionRanges: descriptionRangesForSegment(
+            state: widget.state,
+            fileId: widget.embed.fileId,
             segmentId: infoTextSegmentId(widget.blockId),
-            documentBaseOffset: widget.documentBaseOffset,
-            style: AppTypography.noteTitleStyle,
-            maxLines: null,
-            minLines: 1,
-            onChanged: (_) => _scheduleSave(),
-            onBackspaceAtStart: _onBackspaceAtStart,
-            onSecondaryTapDown: _showTextMenu,
-            descriptionRanges: descriptionRangesForSegment(
-              state: widget.state,
-              fileId: widget.embed.fileId,
-              segmentId: infoTextSegmentId(widget.blockId),
-            ),
-            onDescriptionActivate: (range) =>
-                openDescriptionTarget(state: widget.state, link: range.link),
-            onArrowExitAbove: () => navigateEmbedLine(
-              lineIndex: 0,
-              lineCount: lineCount,
-              focusLine: focusLine,
-              goingDown: false,
-            ),
-            onArrowExitBelow: () => navigateEmbedLine(
-              lineIndex: 0,
-              lineCount: lineCount,
-              focusLine: focusLine,
-              goingDown: true,
-            ),
           ),
-          if (tags.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                for (final tag in tags)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: TopicAppearance.colorFromHex(
-                        tag.color ?? TopicAppearance.defaultColor,
-                      ).withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      '${tag.icon?.isNotEmpty == true ? '${tag.icon} ' : ''}${tag.name}',
-                      style: AppTypography.metaStyle.copyWith(fontSize: 11),
-                    ),
+          onDescriptionActivate: (range) =>
+              openDescriptionTarget(state: widget.state, link: range.link),
+          onArrowExitAbove: () => navigateEmbedLine(
+            lineIndex: 0,
+            lineCount: lineCount,
+            focusLine: focusLine,
+            goingDown: false,
+          ),
+          onArrowExitBelow: () => navigateEmbedLine(
+            lineIndex: 0,
+            lineCount: lineCount,
+            focusLine: focusLine,
+            goingDown: true,
+          ),
+        ),
+        if (tags.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (final tag in tags)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
                   ),
-              ],
-            ),
-          ],
+                  decoration: BoxDecoration(
+                    color: TopicAppearance.colorFromHex(
+                      tag.color ?? TopicAppearance.defaultColor,
+                    ).withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '${tag.icon?.isNotEmpty == true ? '${tag.icon} ' : ''}${tag.name}',
+                    style: AppTypography.metaStyle.copyWith(fontSize: 11),
+                  ),
+                ),
+            ],
+          ),
         ],
-      ),
+      ],
     );
-    if (decoration == null) return body;
-    return DecoratedBox(decoration: decoration, child: body);
+    return wrapInfoLook(look: look, child: body);
   }
 }
 
@@ -742,18 +752,14 @@ class _ImageEmbedState extends State<ImageEmbed> {
       globalPosition: details.globalPosition,
       strings: widget.state.strings,
       scale: _scale,
-      look: ObjectLook.imageOf(_payload),
       canMergeNext: widget.canMergeNext,
       onAction: (action) async {
         if (action == 'image:merge_next') {
           await widget.onMergeNext?.call();
           return;
         }
-        if (action.startsWith('look:')) {
-          final look = action.substring('look:'.length);
-          if (!ObjectLook.imageLooks.contains(look)) return;
-          widget.onPayloadChanged(ObjectLook.withLook(_payload, look));
-          if (mounted) setState(() {});
+        if (action == 'object:design') {
+          await _openDesign();
           return;
         }
         final next = ImageDisplaySize.apply(action, {
@@ -768,32 +774,49 @@ class _ImageEmbedState extends State<ImageEmbed> {
     );
   }
 
+  Future<void> _openDesign() async {
+    await showObjectDesignDialog(
+      context: context,
+      strings: widget.state.strings,
+      kind: 'image',
+      look: ObjectLook.imageOf(_payload),
+      greyscale: ObjectLook.imageGreyscaleOf(_payload),
+      onLook: (look) {
+        widget.onPayloadChanged(
+          ObjectLook.withLook(
+            _payload,
+            look,
+            greyscale: ObjectLook.imageGreyscaleOf(_payload),
+          ),
+        );
+        if (mounted) setState(() {});
+      },
+      onGreyscale: (value) {
+        widget.onPayloadChanged(
+          ObjectLook.withLook(
+            _payload,
+            ObjectLook.imageOf(_payload),
+            greyscale: value,
+          ),
+        );
+        if (mounted) setState(() {});
+      },
+    );
+  }
+
   Widget _picture(String url) {
     final resolved = url.startsWith('http') ? url : '${ApiConfig.baseUrl}$url';
-    final look = ObjectLook.imageOf(_payload);
     Widget picture = Image.network(
       resolved,
       fit: BoxFit.contain,
       errorBuilder: (_, error, stackTrace) =>
           Text('Image unavailable', style: AppTypography.metaStyle),
     );
-    if (ObjectLook.imageIsGreyscale(look)) {
-      picture = ColorFiltered(
-        colorFilter: ObjectLook.greyscaleFilter,
-        child: picture,
-      );
-    }
-    picture = ClipRRect(borderRadius: BorderRadius.circular(6), child: picture);
-    if (ObjectLook.imageHasFrame(look)) {
-      picture = DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppColors.noteBorder, width: 0.85),
-        ),
-        child: picture,
-      );
-    }
-    return picture;
+    return wrapImageLook(
+      look: ObjectLook.imageOf(_payload),
+      greyscale: ObjectLook.imageGreyscaleOf(_payload),
+      child: picture,
+    );
   }
 
   Widget _captionField(int index) {
