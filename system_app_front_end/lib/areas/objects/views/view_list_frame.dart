@@ -8,7 +8,6 @@ import '../../ui/app_typography.dart';
 import '../../ui/note_widgets.dart';
 import '../data/task.dart';
 import '../tasks/task_list_surface.dart';
-import './view_frame_options.dart';
 import './view_frame_task_list.dart';
 
 /// One file-like frame holding a section or topic task list.
@@ -22,19 +21,15 @@ class ViewListFrame extends StatelessWidget {
     this.sectionName,
     this.sectionFlag,
     this.topicKey,
-    this.editableSection = false,
-    this.onEditSection,
-    this.onDeleteSection,
     this.onSectionTitleMenu,
-    this.homeLists = const [],
-    this.sectionOptions = const [],
-    this.topicOptions = const [],
     this.accent,
     this.tintSeed = 1,
     this.isImportant = false,
     this.frameReorderMode = false,
     this.taskReorderMode = false,
+    this.selectedReorderTaskId,
     this.onTaskReorderModeChanged,
+    this.onReorderTaskSelected,
   });
 
   final AppState state;
@@ -44,21 +39,17 @@ class ViewListFrame extends StatelessWidget {
   final String? sectionName;
   final String? sectionFlag;
   final String? topicKey;
-  final bool editableSection;
-  final Future<void> Function()? onEditSection;
-  final Future<void> Function()? onDeleteSection;
-  /// Right-click on the title only (edit / delete section). Task rows use the
-  /// combined menu inside [ViewFrameTaskList].
+
+  /// Right-click on the title only (edit / delete section).
   final GestureTapDownCallback? onSectionTitleMenu;
-  final List<ViewFrameListOption> homeLists;
-  final List<ViewSectionOption> sectionOptions;
-  final List<ViewTopicOption> topicOptions;
   final Color? accent;
   final int tintSeed;
   final bool isImportant;
   final bool frameReorderMode;
   final bool taskReorderMode;
+  final int? selectedReorderTaskId;
   final ValueChanged<bool>? onTaskReorderModeChanged;
+  final ValueChanged<int?>? onReorderTaskSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -102,14 +93,10 @@ class ViewListFrame extends StatelessWidget {
                 sectionName: sectionName,
                 sectionFlag: sectionFlag,
                 topicKey: topicKey,
-                editableSection: editableSection,
-                onEditSection: onEditSection,
-                onDeleteSection: onDeleteSection,
-                homeLists: homeLists,
-                sectionOptions: sectionOptions,
-                topicOptions: topicOptions,
                 reorderMode: taskReorderMode,
+                selectedReorderTaskId: selectedReorderTaskId,
                 onReorderModeChanged: onTaskReorderModeChanged,
+                onReorderTaskSelected: onReorderTaskSelected,
                 onForeignDrop: onForeignDrop,
                 enabled: !frameReorderMode,
               ),

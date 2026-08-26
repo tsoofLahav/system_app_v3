@@ -34,13 +34,13 @@ Every object has a stable id, file id, type, optional typed FKs / payload, and t
 
 Tasks are the richest object type — a sub-part of this area, not a separate one.
 
-**Order.** Every task carries `list_order_index` within its `task_list`. Users reorder freely; order is explicit, not derived from creation time. Reordering rewrites indices for the whole list so they stay dense (`active` ids then `done` ids). Views keep a separate `order_index` on `view_task_memberships`.
+**Order.** Every task carries `list_order_index` within its `task_list`. Users reorder freely; order is explicit, not derived from creation time. Reordering rewrites indices for the whole list so they stay dense (`active` ids then `done` ids). Views keep **two** membership orders: `order_index` for section mode and `topic_order_index` for topic mode (`view_task_memberships`). List order, view-by-section, and view-by-topic are independent.
 
 **Done / active toggle.** `tasks.status` is `active` or `done`. A task exists **once**. Marking it done anywhere updates the single row and is reflected everywhere it appears. List queries and the UI show Active then Done zones; `POST /tasks/:id/move` can place a task into a zone (including the same list).
 
 **Empty titles.** `POST /task-lists/:id/tasks` accepts `title: ""` (blank row). Only a missing title key may default; never coerce empty string to `"New task"`.
 
-**Views.** A view is a user-made list that a task can appear in without being copied. Membership lives in `view_task_memberships`, with its own ordering per view. **Product rule: a task belongs to at most one view at a time** (the client replaces memberships rather than stacking them). Section definitions, display mode (`by_section` / `by_topic`), and topic-frame order live in `views.layout_config` (JSON) — not separate tables. Memberships still carry `section_name` / `section_flag` for which section a task sits in.
+**Views.** A view is a user-made list that a task can appear in without being copied. Membership lives in `view_task_memberships`, with its own ordering per view **and per display mode**. **Product rule: a task belongs to at most one view at a time** (the client replaces memberships rather than stacking them). Section definitions, display mode (`by_section` / `by_topic`), and topic-frame order live in `views.layout_config` (JSON) — not separate tables. Memberships still carry `section_name` / `section_flag` for which section a task sits in, plus `order_index` (section mode) and `topic_order_index` (topic mode). Putting a task in a view page uses **Place…** on the client, which lists that topic’s task-list objects via `GET /topics/:id/task-lists` (live files only).
 
 ```
 tasks ──< view_task_memberships >── views

@@ -102,6 +102,7 @@ class RichTableEditorState extends State<RichTableEditor> {
   (int, int)? _lastCell;
 
   TableReorderKind? _reorderKind;
+  final _flow = DocumentTextFlow();
 
   static const _defaultColumns = 2;
   static const _minCellHeight = 36.0;
@@ -358,6 +359,7 @@ class RichTableEditorState extends State<RichTableEditor> {
   @override
   void dispose() {
     _disposeAll();
+    _flow.dispose();
     super.dispose();
   }
 
@@ -873,6 +875,7 @@ class RichTableEditorState extends State<RichTableEditor> {
   }
 
   Widget _buildEditGrid(BuildContext context) {
+    _syncFlowGeometry();
     final borderColor = tableLookBorderColor();
     final look = widget.look;
     final showVertical = tableLookHasVerticalRules(look);
@@ -961,13 +964,61 @@ class RichTableEditorState extends State<RichTableEditor> {
           ),
       ],
     );
-    if (!outer) return grid;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: borderColor, width: 0.85),
-        borderRadius: BorderRadius.circular(3),
+    if (!outer) return DocumentTextFlowScope(flow: _flow, child: grid);
+    return DocumentTextFlowScope(
+      flow: _flow,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: borderColor, width: 0.85),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: grid,
       ),
-      child: grid,
     );
+  }
+
+  void _syncFlowGeometry() {
+    final order = <String>[];
+    final above = <String, String>{};
+    final below = <String, String>{};
+    final left = <String, String>{};
+    final right = <String, String>{};
+    final gridRtl = _gridRtl;
+    for (var r = 0; r < _controllers.length; r++) {
+      for (var c = 0; c < _controllers[r].length; c++) {
+        final id = tableCellSegmentId(widget.node.id, r, c);
+        order.add(id);
+        for (final dir in const [
+          AxisDirection.left,
+          AxisDirection.right,
+          AxisDirection.up,
+          AxisDirection.down,
+        ]) {
+          final next = TableGridNav.move(
+            direction: dir,
+            gridRtl: gridRtl,
+            row: r,
+            col: c,
+            rowCount: _controllers.length,
+            columnCount: _columnCount,
+          );
+          if (next.stayed) continue;
+          final nid = tableCellSegmentId(widget.node.id, next.row, next.col);
+          switch (dir) {
+            case AxisDirection.left:
+              left[id] = nid;
+            case AxisDirection.right:
+              right[id] = nid;
+            case AxisDirection.up:
+              above[id] = nid;
+            case AxisDirection.down:
+              below[id] = nid;
+          }
+        }
+      }
+    }
+    _flow.setOrder(order);
+    _flow.setVerticalLinks(above: above, below: below);
+    _flow.setHorizontalLinks(left: left, right: right);
   }
 }

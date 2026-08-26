@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from models import EntityTag, Tag, Topic, TopicType, db
+from models import EntityTag, File, ObjectEmbed, Tag, TaskList, Topic, TopicType, db
 from shared.helpers import active_query, apply_updates, get_or_404
 from shared.bootstrap import default_workspace_id
 from areas.files.services.clone_topic_content import clone_topic_content
@@ -145,3 +145,37 @@ def delete_topic(topic_id):
     delete_topic_cascade(topic_id)
     db.session.commit()
     return "", 204
+
+
+@topics_bp.route("/topics/<int:topic_id>/task-lists", methods=["GET"])
+def list_topic_task_lists(topic_id):
+    """Task-list objects in live (non-archived) files of this topic."""
+    get_or_404(Topic, topic_id)
+    rows = (
+        db.session.query(ObjectEmbed, TaskList)
+        .join(File, File.id == ObjectEmbed.file_id)
+        .join(TaskList, TaskList.id == ObjectEmbed.task_list_id)
+        .filter(
+            File.topic_id == topic_id,
+            File.archived_at.is_(None),
+            ObjectEmbed.type == "task_list",
+            ObjectEmbed.task_list_id.isnot(None),
+        )
+        .order_by(File.order_index, File.id, ObjectEmbed.sort_key, ObjectEmbed.id)
+        .all()
+    )
+    seen = set()
+    result = []
+    for obj, task_list in rows:
+        if task_list.id in seen:
+            continue
+        seen.add(task_list.id)
+        result.append(
+            {
+                "id": task_list.id,
+                "title": task_list.title or "",
+                "object_id": obj.id,
+                "file_id": obj.file_id,
+            }
+        )
+    return jsonify(result)

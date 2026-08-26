@@ -52,4 +52,12 @@ class TopicService {
     final data = await _api.patch('/topics/$id', body) as Map<String, dynamic>;
     return Topic.fromJson(data);
   }
+
+  Future<List<TopicTaskList>> listTaskLists(int topicId) async {
+    final data =
+        await _api.get('/topics/$topicId/task-lists') as List<dynamic>;
+    return data
+        .map((e) => TopicTaskList.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
 }

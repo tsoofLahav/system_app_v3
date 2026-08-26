@@ -12,6 +12,10 @@ abstract class TaskListBridge {
   bool get showListTitle;
   String get listTitle;
 
+  /// When false, keep [remoteTasks] order (view frames). File lists sort by
+  /// `list_order_index`.
+  bool get sortRemoteByListOrder => true;
+
   Future<void> refresh();
 
   Future<Task> createAfter({

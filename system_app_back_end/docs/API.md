@@ -53,6 +53,7 @@ Successful DELETE returns `204` with empty body.
 |--------|------|-------------|
 | GET | `/topics` | List (`?workspace_id=`) |
 | GET | `/topics/<id>` | Get one |
+| GET | `/topics/<id>/task-lists` | Task-list objects in live files of that topic |
 | POST | `/topics` | Create |
 | PATCH | `/topics/<id>` | Update |
 | DELETE | `/topics/<id>` | Delete cascade |
@@ -160,7 +161,7 @@ Archive list response: `{ "files", "total", "has_more", "heading_texts_by_file_i
 | POST | `/views` | Create |
 | PATCH | `/views/<id>` | Update |
 | DELETE | `/views/<id>` | Delete |
-| GET | `/views/<id>/memberships` | Task memberships |
+| GET | `/views/<id>/memberships` | Task memberships (`order_index` = section-mode order, `topic_order_index` = topic-mode order) |
 | PUT | `/views/<id>/memberships` | Replace ordered memberships |
 
 ---

@@ -58,21 +58,28 @@ void main() {
       expect(flow.positionAfter(const DocumentTextPosition('b', 3)), isNull);
     });
 
-    test('vertical movement keeps the column where the target is long enough', () {
-      final flow = _flowWith({'a': 'a long line', 'b': 'hi'});
+    test(
+      'vertical movement keeps the column where the target is long enough',
+      () {
+        final flow = _flowWith({'a': 'a long line', 'b': 'hi'});
 
-      expect(
-        flow.positionAbove(const DocumentTextPosition('b', 1),
-            preferredOffset: 5),
-        const DocumentTextPosition('a', 5),
-      );
-      // Clamped: target is shorter than the preferred column.
-      expect(
-        flow.positionBelow(const DocumentTextPosition('a', 0),
-            preferredOffset: 9),
-        const DocumentTextPosition('b', 2),
-      );
-    });
+        expect(
+          flow.positionAbove(
+            const DocumentTextPosition('b', 1),
+            preferredOffset: 5,
+          ),
+          const DocumentTextPosition('a', 5),
+        );
+        // Clamped: target is shorter than the preferred column.
+        expect(
+          flow.positionBelow(
+            const DocumentTextPosition('a', 0),
+            preferredOffset: 9,
+          ),
+          const DocumentTextPosition('b', 2),
+        );
+      },
+    );
 
     test('walks a paragraph into a list bullet and then a table cell', () {
       final flow = _flowWith({
@@ -213,9 +220,18 @@ void main() {
       flow.collapseTo(const DocumentTextPosition('a', 2));
       flow.extendTo(const DocumentTextPosition('c', 3));
 
-      expect(flow.selectionWithin('a'), const TextSelection(baseOffset: 2, extentOffset: 5));
-      expect(flow.selectionWithin('b'), const TextSelection(baseOffset: 0, extentOffset: 4));
-      expect(flow.selectionWithin('c'), const TextSelection(baseOffset: 0, extentOffset: 3));
+      expect(
+        flow.selectionWithin('a'),
+        const TextSelection(baseOffset: 2, extentOffset: 5),
+      );
+      expect(
+        flow.selectionWithin('b'),
+        const TextSelection(baseOffset: 0, extentOffset: 4),
+      );
+      expect(
+        flow.selectionWithin('c'),
+        const TextSelection(baseOffset: 0, extentOffset: 3),
+      );
     });
 
     test('normalizes a backwards selection', () {
@@ -239,6 +255,27 @@ void main() {
       expect(flow.selectionWithin('b'), isNull);
       expect(flow.selectionWithin('c'), isNull);
       expect(flow.segmentsInSelection(), ['a']);
+    });
+
+    test('table mark is a rectangle of whole cells, not reading order', () {
+      final flow = _flowWith({
+        tableCellSegmentId('t', 0, 0): 'aa',
+        tableCellSegmentId('t', 0, 1): 'bb',
+        tableCellSegmentId('t', 1, 0): 'cc',
+        tableCellSegmentId('t', 1, 1): 'dd',
+      });
+      flow.collapseTo(DocumentTextPosition(tableCellSegmentId('t', 0, 0), 2));
+      flow.extendTo(DocumentTextPosition(tableCellSegmentId('t', 1, 0), 0));
+
+      expect(flow.segmentsInSelection(), [
+        tableCellSegmentId('t', 0, 0),
+        tableCellSegmentId('t', 1, 0),
+      ]);
+      expect(
+        flow.selectionWithin(tableCellSegmentId('t', 0, 0)),
+        const TextSelection(baseOffset: 0, extentOffset: 2),
+      );
+      expect(flow.selectionWithin(tableCellSegmentId('t', 0, 1)), isNull);
     });
 
     test('joins text across parts with newlines', () {
@@ -279,17 +316,20 @@ void main() {
       expect(at, const DocumentTextPosition('b', 8));
     });
 
-    test('click in the gap between parts lands at the end of the part above', () {
-      final at = DocumentTextFlow.resolvePointerMiss(
-        order: ['a', 'b'],
-        tops: {'a': 0, 'b': 50},
-        bottoms: {'a': 30, 'b': 80},
-        dy: 40,
-        lengthOf: (id) => id == 'a' ? 5 : 8,
-      );
+    test(
+      'click in the gap between parts lands at the end of the part above',
+      () {
+        final at = DocumentTextFlow.resolvePointerMiss(
+          order: ['a', 'b'],
+          tops: {'a': 0, 'b': 50},
+          bottoms: {'a': 30, 'b': 80},
+          dy: 40,
+          lengthOf: (id) => id == 'a' ? 5 : 8,
+        );
 
-      expect(at, const DocumentTextPosition('a', 5));
-    });
+        expect(at, const DocumentTextPosition('a', 5));
+      },
+    );
 
     test('click above the file lands at the start of the first line', () {
       final at = DocumentTextFlow.resolvePointerMiss(
@@ -315,5 +355,4 @@ void main() {
       expect(at, const DocumentTextPosition('only', 0));
     });
   });
-
 }

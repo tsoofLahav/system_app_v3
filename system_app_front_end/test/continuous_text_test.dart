@@ -94,6 +94,24 @@ Future<void> _placeCaret(
   await tester.pumpAndSettle();
 }
 
+void _linkLtrTable(DocumentTextFlow flow, String id, int rows, int cols) {
+  final above = <String, String>{};
+  final below = <String, String>{};
+  final left = <String, String>{};
+  final right = <String, String>{};
+  for (var r = 0; r < rows; r++) {
+    for (var c = 0; c < cols; c++) {
+      final cell = tableCellSegmentId(id, r, c);
+      if (r > 0) above[cell] = tableCellSegmentId(id, r - 1, c);
+      if (r + 1 < rows) below[cell] = tableCellSegmentId(id, r + 1, c);
+      if (c > 0) left[cell] = tableCellSegmentId(id, r, c - 1);
+      if (c + 1 < cols) right[cell] = tableCellSegmentId(id, r, c + 1);
+    }
+  }
+  flow.setVerticalLinks(above: above, below: below);
+  flow.setHorizontalLinks(left: left, right: right);
+}
+
 void main() {
   testWidgets('right arrow at the end of a paragraph enters the next bullet', (
     tester,
@@ -294,6 +312,27 @@ void main() {
     );
   });
 
+  testWidgets('shift+down marks across two task rows', (tester) async {
+    final flow = DocumentTextFlow();
+    final segments = {
+      taskItemSegmentId('list', 0): 'one',
+      taskItemSegmentId('list', 1): 'two',
+    };
+    final state = await _pump(tester, flow, segments);
+    await _placeCaret(tester, state, taskItemSegmentId('list', 0), 0);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+
+    expect(flow.spansSegments, isTrue);
+    expect(flow.segmentsInSelection(), [
+      taskItemSegmentId('list', 0),
+      taskItemSegmentId('list', 1),
+    ]);
+  });
+
   testWidgets('down arrow in a table cell moves by column, not reading order', (
     tester,
   ) async {
@@ -305,16 +344,7 @@ void main() {
       tableCellSegmentId('t1', 1, 1): 'r1c1',
     };
     final state = await _pump(tester, flow, segments);
-    flow.setVerticalLinks(
-      above: {
-        tableCellSegmentId('t1', 1, 0): tableCellSegmentId('t1', 0, 0),
-        tableCellSegmentId('t1', 1, 1): tableCellSegmentId('t1', 0, 1),
-      },
-      below: {
-        tableCellSegmentId('t1', 0, 0): tableCellSegmentId('t1', 1, 0),
-        tableCellSegmentId('t1', 0, 1): tableCellSegmentId('t1', 1, 1),
-      },
-    );
+    _linkLtrTable(flow, 't1', 2, 2);
     await _placeCaret(tester, state, tableCellSegmentId('t1', 0, 1), 2);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
@@ -322,6 +352,60 @@ void main() {
 
     // Reading order would have gone to r1c0; column order gives r1c1.
     expect(flow.selection?.focus.segmentId, tableCellSegmentId('t1', 1, 1));
+  });
+
+  testWidgets('shift+down marks the column, including the first cell', (
+    tester,
+  ) async {
+    final flow = DocumentTextFlow();
+    final segments = {
+      tableCellSegmentId('t1', 0, 0): 'r0c0',
+      tableCellSegmentId('t1', 0, 1): 'r0c1',
+      tableCellSegmentId('t1', 1, 0): 'r1c0',
+      tableCellSegmentId('t1', 1, 1): 'r1c1',
+    };
+    final state = await _pump(tester, flow, segments);
+    _linkLtrTable(flow, 't1', 2, 2);
+    await _placeCaret(tester, state, tableCellSegmentId('t1', 0, 0), 4);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+
+    expect(flow.segmentsInSelection(), [
+      tableCellSegmentId('t1', 0, 0),
+      tableCellSegmentId('t1', 1, 0),
+    ]);
+    expect(
+      flow.selectionWithin(tableCellSegmentId('t1', 0, 0)),
+      const TextSelection(baseOffset: 0, extentOffset: 4),
+    );
+    expect(flow.selectionWithin(tableCellSegmentId('t1', 0, 1)), isNull);
+  });
+
+  testWidgets('shift+right widens a table mark to the side', (tester) async {
+    final flow = DocumentTextFlow();
+    final segments = {
+      tableCellSegmentId('t1', 0, 0): 'r0c0',
+      tableCellSegmentId('t1', 0, 1): 'r0c1',
+      tableCellSegmentId('t1', 1, 0): 'r1c0',
+      tableCellSegmentId('t1', 1, 1): 'r1c1',
+    };
+    final state = await _pump(tester, flow, segments);
+    _linkLtrTable(flow, 't1', 2, 2);
+    await _placeCaret(tester, state, tableCellSegmentId('t1', 0, 0), 0);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+
+    expect(flow.segmentsInSelection(), [
+      tableCellSegmentId('t1', 0, 0),
+      tableCellSegmentId('t1', 0, 1),
+    ]);
+    expect(flow.selectionWithin(tableCellSegmentId('t1', 1, 0)), isNull);
   });
 
   testWidgets('select all covers every part of the file', (tester) async {

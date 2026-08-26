@@ -45,4 +45,44 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
   });
+
+  testWidgets('focusing an already-visible field does not jump the scroll', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: 'task title');
+    addTearDown(controller.dispose);
+    final scrollController = ScrollController();
+    addTearDown(scrollController.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 400,
+            child: SingleChildScrollView(
+              controller: scrollController,
+              child: Column(
+                children: [
+                  FormattedTextField(
+                    controller: controller,
+                    style: const TextStyle(fontSize: 14),
+                    maxLines: null,
+                  ),
+                  const SizedBox(height: 1200),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(scrollController.offset, 0);
+
+    await tester.tap(find.byType(FormattedTextField));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(scrollController.offset, 0);
+  });
 }

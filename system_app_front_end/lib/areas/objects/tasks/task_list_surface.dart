@@ -5,10 +5,13 @@ import 'package:flutter/services.dart';
 
 import '../../../core/app_state.dart';
 import '../../files/editor/document_editor_controller.dart';
+import '../../files/editor/document_mark.dart';
+import '../../files/editor/document_text_flow.dart';
 import '../../files/editor/drag_mode_frame.dart';
 import '../../files/editor/editor_key_handoff.dart';
 import '../../files/editor/embed_caret_bridge.dart';
 import '../../files/rich_text/block_text_actions.dart';
+import '../../files/rich_text/block_text_focus.dart';
 import '../../files/rich_text/connect_info.dart';
 import '../../files/rich_text/document_context_menu.dart';
 import '../../files/rich_text/formatted_text_field.dart';
@@ -54,6 +57,8 @@ class TaskListSurface extends StatefulWidget {
     this.onExtraMenuAction,
     this.onForeignDrop,
     this.onReorderModeChanged,
+    this.selectedReorderTaskId,
+    this.onReorderTaskSelected,
     this.climbToListTitleOnLastBackspace = true,
     this.includeAssignView = true,
     this.onArrowExitAbove,
@@ -79,6 +84,8 @@ class TaskListSurface extends StatefulWidget {
   final Future<void> Function(String action, Task task)? onExtraMenuAction;
   final TaskListForeignDrop? onForeignDrop;
   final ValueChanged<bool>? onReorderModeChanged;
+  final int? selectedReorderTaskId;
+  final ValueChanged<int?>? onReorderTaskSelected;
   final bool climbToListTitleOnLastBackspace;
 
   /// When false, the host supplies its own Choose view entry (view frames).
@@ -115,10 +122,13 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   var _reorderMode = false;
   int? _reorderResumeIndex;
   List<Task>? _optimistic;
+  final _flow = DocumentTextFlow();
 
   TaskListBridge get _bridge => widget.bridge;
 
-  List<Task> get _remoteTasks => TaskZones.fromTasks(_bridge.remoteTasks).all;
+  List<Task> get _remoteTasks => _bridge.sortRemoteByListOrder
+      ? TaskZones.fromTasks(_bridge.remoteTasks).all
+      : TaskZones.fromOrdered(_bridge.remoteTasks).all;
 
   List<Task> get _displayTasks => _optimistic ?? _remoteTasks;
 
@@ -197,6 +207,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     _titleFocus.addListener(_onFieldFocus);
     _titleController = SpanTextEditingController(text: _bridge.listTitle);
     _syncFromTasks(_displayTasks);
+    _syncFlowOrder();
     if (_taskIds.isEmpty || _taskIds.every((id) => id == null)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(_ensureSeedTask());
@@ -264,6 +275,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       _taskIds.add(null);
       _done.add(false);
       _saveTimers.add(null);
+      _syncFlowOrder();
       return;
     }
     for (final task in tasks) {
@@ -273,6 +285,68 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       _done.add(task.isDone);
       _saveTimers.add(null);
     }
+    _syncFlowOrder();
+  }
+
+  String? get _titleSegmentId => _hasTitleLine
+      ? (widget.listTitleSegmentId ?? 'taskListTitle:local')
+      : null;
+
+  void _syncFlowOrder() {
+    final ids = <String>[
+      ?_titleSegmentId,
+      for (var i = 0; i < _controllers.length; i++) _taskSegmentId(i),
+    ];
+    _flow.setOrder(ids);
+  }
+
+  /// Tasks Choose view / ⌘J should hit: every marked task in this list, else
+  /// the focused task.
+  List<int> markedTaskIds() {
+    final fromMark = _taskIdsFromMark(BlockTextFocusRegistry.resolveMark());
+    if (fromMark.isNotEmpty) return fromMark;
+    final fromFlow = _taskIdsFromMark(DocumentMark.resolve(_flow));
+    if (fromFlow.isNotEmpty) return fromFlow;
+    final i = _focusNodes.indexWhere((f) => f.hasFocus);
+    if (i >= 0) {
+      final id = _taskIds[i];
+      if (id != null) return [id];
+    }
+    return const [];
+  }
+
+  /// Marked tasks in the list that currently owns the caret, else [fallback].
+  static List<int> taskIdsForAssignView({int? fallback}) {
+    final marked = keyboardFocus?.markedTaskIds() ?? const [];
+    if (marked.isNotEmpty) return marked;
+    if (fallback != null) return [fallback];
+    final active =
+        BlockTextFocusRegistry.activeTaskId ??
+        DocumentEditorRegistry.active?.focusedTaskId?.call();
+    if (active != null) return [active];
+    return const [];
+  }
+
+  List<int> _taskIdsFromMark(DocumentMark mark) {
+    final out = <int>[];
+    final seen = <int>{};
+    for (final span in mark.spans) {
+      final id = _taskIdFromSegment(span.segmentId);
+      if (id != null && seen.add(id)) out.add(id);
+    }
+    return out;
+  }
+
+  int? _taskIdFromSegment(String? segmentId) {
+    if (segmentId == null) return null;
+    final parsed = parseTaskItemSegmentId(segmentId);
+    if (parsed != null) {
+      final i = parsed.$2;
+      if (i >= 0 && i < _taskIds.length) return _taskIds[i];
+    }
+    final standalone = RegExp(r'^task:(\d+)$').firstMatch(segmentId);
+    if (standalone != null) return int.parse(standalone.group(1)!);
+    return null;
   }
 
   List<Task> _tasksFromLocalRows() {
@@ -335,6 +409,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     _titleFocus.dispose();
     _titleController.dispose();
     _disposeRows();
+    _flow.dispose();
     super.dispose();
   }
 
@@ -597,14 +672,38 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final removedController = _controllers[index];
 
     _persisting = true;
-    setState(() {
-      _saveTimers.removeAt(index)?.cancel();
-      _controllers.removeAt(index);
-      _focusNodes.removeAt(index);
-      _taskIds.removeAt(index);
-      _done.removeAt(index);
-      _optimistic = _tasksFromLocalRows();
-    });
+    void dropRow() {
+      if (!mounted) return;
+      _flow.clearSelection();
+      setState(() {
+        _saveTimers.removeAt(index)?.cancel();
+        _controllers.removeAt(index);
+        _focusNodes.removeAt(index);
+        _taskIds.removeAt(index);
+        _done.removeAt(index);
+        _optimistic = _tasksFromLocalRows();
+      });
+      _syncFlowOrder();
+      final nextFocus = index > 0 ? index - 1 : 0;
+      if (nextFocus < _focusNodes.length) {
+        _focusNodes[nextFocus].requestFocus();
+        final controller = _controllers[nextFocus];
+        controller.selection = TextSelection.collapsed(
+          offset: controller.text.length,
+        );
+      }
+    }
+
+    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+      final ready = Completer<void>();
+      runAfterKeystroke(() {
+        dropRow();
+        ready.complete();
+      });
+      await ready.future;
+    } else {
+      dropRow();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       removedController.dispose();
       removedFocus.dispose();
@@ -620,12 +719,6 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       await _bridge.refresh();
     } finally {
       _persisting = false;
-    }
-    if (!mounted) return;
-    final focusPrev = index > 0 ? index - 1 : 0;
-    if (focusPrev < _focusNodes.length) {
-      _pendingFocusIndex = focusPrev;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
     }
   }
 
@@ -789,11 +882,17 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       _reorderResumeIndex = fi >= 0 ? fi : _reorderResumeIndex;
       FocusManager.instance.primaryFocus?.unfocus();
     }
-    setState(() => _reorderMode = value);
+    if (mounted) {
+      setState(() => _reorderMode = value);
+    } else {
+      _reorderMode = value;
+    }
     widget.onReorderModeChanged?.call(value);
     if (!value) {
+      widget.onReorderTaskSelected?.call(null);
       final idx = _reorderResumeIndex;
       _reorderResumeIndex = null;
+      if (!mounted) return;
       if (idx != null && idx >= 0 && idx < _focusNodes.length) {
         _pendingFocusIndex = idx;
         runNextFrame(_applyPendingFocus);
@@ -827,12 +926,12 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     ];
   }
 
-  String? _taskSegmentId(int index) {
+  String _taskSegmentId(int index) {
     final fromHost = widget.taskSegmentId?.call(index);
     if (fromHost != null && fromHost.isNotEmpty) return fromHost;
     final id = index >= 0 && index < _taskIds.length ? _taskIds[index] : null;
-    if (id == null) return null;
-    return 'task:$id';
+    if (id != null) return 'task:$id';
+    return 'task:pending:$index';
   }
 
   Future<void> _connectInfo({String? segmentId}) async {
@@ -866,6 +965,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final extras = task == null
         ? const <AppContextMenuEntry>[]
         : (widget.extraMenuEntries?.call(task) ?? const []);
+    final onReorderChanged = widget.onReorderModeChanged;
+    final onReorderSelected = widget.onReorderTaskSelected;
 
     await DocumentContextMenu.showTaskListMenu(
       context: context,
@@ -880,15 +981,23 @@ class TaskListSurfaceState extends State<TaskListSurface> {
           return;
         }
         if (action == 'tasks:reorder_mode') {
-          _setReorderMode(true);
+          if (mounted) {
+            _setReorderMode(true);
+            if (id != null) onReorderSelected?.call(id);
+          } else {
+            onReorderChanged?.call(true);
+            if (id != null) onReorderSelected?.call(id);
+          }
           return;
         }
         if (action == 'tasks:assign_view') {
-          if (id == null || !mounted) return;
+          var ids = markedTaskIds();
+          if (ids.isEmpty && id != null) ids = [id];
+          if (ids.isEmpty || !mounted) return;
           await showAssignTaskViewDialog(
             context: context,
             state: widget.state,
-            taskId: id,
+            taskIds: ids,
           );
           return;
         }
@@ -984,7 +1093,23 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       ],
     );
     final chip = glass ? DragModeFrame.chip(child: body) : body;
-    return Align(alignment: AlignmentDirectional.centerStart, child: chip);
+    final id = index >= 0 && index < _taskIds.length ? _taskIds[index] : null;
+    final selected = glass &&
+        id != null &&
+        widget.selectedReorderTaskId == id;
+    final painted = selected
+        ? DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.75),
+                width: 1.5,
+              ),
+            ),
+            child: chip,
+          )
+        : chip;
+    return Align(alignment: AlignmentDirectional.centerStart, child: painted);
   }
 
   Widget _taskRow(int index) {
@@ -1037,9 +1162,14 @@ class TaskListSurfaceState extends State<TaskListSurface> {
                   child: _compactTaskChip(index, glass: true),
                 ),
                 childWhenDragging: Opacity(opacity: 0.28, child: framed),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.grab,
-                  child: framed,
+                child: GestureDetector(
+                  onTap: () {
+                    if (id != null) widget.onReorderTaskSelected?.call(id);
+                  },
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.grab,
+                    child: framed,
+                  ),
                 ),
               ),
             ],
@@ -1096,6 +1226,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final s = widget.state.strings;
     final compact = widget.compactMode;
 
+    _syncFlowOrder();
+
     final list = Column(
       crossAxisAlignment: compact || _reorderMode
           ? CrossAxisAlignment.start
@@ -1105,7 +1237,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
           FormattedTextField(
             controller: _titleController,
             focusNode: _titleFocus,
-            segmentId: widget.listTitleSegmentId,
+            segmentId: _titleSegmentId,
             documentBaseOffset: widget.documentBaseOffset,
             style: AppTypography.noteTitleStyle,
             // Multi-line field (one visual line) — avoids single-line vertical
@@ -1123,26 +1255,33 @@ class TaskListSurfaceState extends State<TaskListSurface> {
                 widget.onDeleteObject!();
               }
             },
-            onSecondaryTapDown: (d) => unawaited(
-              DocumentContextMenu.showTaskListMenu(
-                context: context,
-                globalPosition: d.globalPosition,
-                strings: widget.state.strings,
-                includeAssignView: false,
-                includeConnectInfo: widget.hostEmbed != null,
-                onAction: (action) async {
-                  if (action == 'text:connect_info') {
-                    await _connectInfo(segmentId: widget.listTitleSegmentId);
-                    return;
-                  }
-                  if (action == 'tasks:reorder_mode') {
-                    _setReorderMode(true);
-                    return;
-                  }
-                  await runBlockTextAction(action);
-                },
-              ),
-            ),
+            onSecondaryTapDown: (d) {
+              final onReorderChanged = widget.onReorderModeChanged;
+              unawaited(
+                DocumentContextMenu.showTaskListMenu(
+                  context: context,
+                  globalPosition: d.globalPosition,
+                  strings: widget.state.strings,
+                  includeAssignView: false,
+                  includeConnectInfo: widget.hostEmbed != null,
+                  onAction: (action) async {
+                    if (action == 'text:connect_info') {
+                      await _connectInfo(segmentId: widget.listTitleSegmentId);
+                      return;
+                    }
+                    if (action == 'tasks:reorder_mode') {
+                      if (mounted) {
+                        _setReorderMode(true);
+                      } else {
+                        onReorderChanged?.call(true);
+                      }
+                      return;
+                    }
+                    await runBlockTextAction(action);
+                  },
+                ),
+              );
+            },
             descriptionRanges: _descriptionRanges(widget.listTitleSegmentId),
             onDescriptionActivate: widget.hostEmbed == null
                 ? null
@@ -1166,8 +1305,12 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       ],
     );
 
-    if (!_reorderMode) return list;
+    final wrapped = DocumentTextFlowScope(flow: _flow, child: list);
+    if (!_reorderMode) return wrapped;
 
-    return TapRegion(onTapOutside: (_) => _setReorderMode(false), child: list);
+    return TapRegion(
+      onTapOutside: (_) => _setReorderMode(false),
+      child: wrapped,
+    );
   }
 }

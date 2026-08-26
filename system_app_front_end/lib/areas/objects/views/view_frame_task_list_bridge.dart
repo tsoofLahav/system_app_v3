@@ -31,6 +31,9 @@ class ViewFrameTaskListBridge extends TaskListBridge {
   bool get showListTitle => false;
 
   @override
+  bool get sortRemoteByListOrder => false;
+
+  @override
   String get listTitle => '';
 
   @override
@@ -107,50 +110,18 @@ class ViewFrameTaskListBridge extends TaskListBridge {
 
   Future<void> _persistFrameOrder(List<int> frameOrderedIds) async {
     if (state.selectedView == null) return;
-    final global = <int>[
-      for (final m in state.viewMemberships)
-        if (m.taskId != null) m.taskId!,
-    ];
-    final frameSet = frameOrderedIds.toSet();
-    final merged = <int>[];
-    var qi = 0;
-    for (final id in global) {
-      if (frameSet.contains(id)) {
-        if (qi < frameOrderedIds.length) {
-          merged.add(frameOrderedIds[qi++]);
-        }
-      } else {
-        merged.add(id);
-      }
-    }
-    while (qi < frameOrderedIds.length) {
-      merged.add(frameOrderedIds[qi++]);
-    }
-
-    final byTaskId = {
-      for (final m in state.viewMemberships)
-        if (m.taskId != null) m.taskId!: m,
+    final byTopic = state.viewDisplayMode == ViewDisplayMode.byTopic;
+    final frameIndex = {
+      for (var i = 0; i < frameOrderedIds.length; i++) frameOrderedIds[i]: i,
     };
     final memberships = <Map<String, dynamic>>[];
-    var index = 0;
-    for (final id in merged) {
-      final existing = byTaskId[id];
-      memberships.add({
-        'task_id': id,
-        'section_name': existing?.sectionName,
-        'order_index': index++,
-        'section_flag': existing?.sectionFlag,
-        'topic_key': existing?.topicKey,
-      });
-    }
     for (final m in state.viewMemberships) {
-      if (m.taskId != null) continue;
+      final id = m.taskId;
+      final at = id == null ? null : frameIndex[id];
       memberships.add({
-        'task_id': null,
-        'section_name': m.sectionName,
-        'order_index': index++,
-        'section_flag': m.sectionFlag,
-        'topic_key': m.topicKey,
+        ...m.toReplaceJson(),
+        if (!byTopic && at != null) 'order_index': at,
+        if (byTopic && at != null) 'topic_order_index': at,
       });
     }
     await state.reorderViewMemberships(memberships, notify: false);

@@ -159,7 +159,7 @@ Opening a view replaces the main pane with a **grid of file-like frames**. Each 
 | Add section | Always visible; dormant in topics mode |
 | Reorder | Mode: drag frames to reorder sections or topics |
 
-Right-click a **section** frame to edit name, important flag, and section color. **Topic** frames wear the topic colour. Task behaviour inside a frame matches the in-file list: mark/unmark, Active/Done, and right-click **Reorder tasks** (glass chips; tap outside ends the mode).
+Right-click a **section** frame to edit name, important flag, and section color. **Topic** frames wear the topic colour. Task behaviour inside a frame matches the in-file list: mark/unmark, Active/Done, and right-click **Reorder tasks** (glass chips; tap outside ends the mode). **Place…** opens a dialog: searchable topic, that topic’s lists, view, and that view’s sections. Empty Uncategorized / No topic frames stay hidden until they have a task. While task reorder is on, ←/→ moves the selected chip to the adjacent frame (end of Active, or Done if done). ⌘O on the view page toggles task reorder when no in-file list has the caret.
 
 Phone uses its own shell — see [Phone screen structure](#phone-screen-structure). The two rolls are independent. A pending AI review opens as a full-width dialog with Current / Suggested toggle ([`lookalike_review_dialog.dart`](../production_agent/lookalike_review_dialog.dart)); it is not dismissible until Finish or Discard.
 
@@ -186,7 +186,7 @@ The sidebar is navigation only. It never edits content.
 | Text context menu | Right-click inside a document | Formatting, clipboard, **Connect info…** |
 | Table cell menu | Right-click in a table cell | Add column, plus text actions |
 | View section menu | Right-click a section frame on the view page | Edit name / flag / color |
-| View task menu | Right-click a task in a view frame | Reorder tasks (same mode as in-file) |
+| View task menu | Right-click a task in a view frame | Reorder tasks, **Place…**, Connect info, Delete |
 | View chrome | Floating capsule on the view page | Sections/topics, add section, reorder frames |
 | AI actions | Bottom bar | Pinned actions, the actions menu, and the agent prompt — see [production agent](../production_agent/AREA.md) |
 | Automations | Bottom bar | Manage rules — see [automations](../automations/AREA.md) |
@@ -219,7 +219,7 @@ Heavy-use defaults are **two keys** (⌘ + letter) so they stay in muscle memory
 | Add file / topic | ⌘F / ⌘N | The same dialogs as the chrome |
 | Add view | ⌘⇧W | Same as the sidebar + |
 | Assign task view | ⌘J | Assign dialog when a task has the caret |
-| Reorder mode | ⌘O | Task-list caret: toggle task reorder. Otherwise: sidebar topics and views (handles appear until you press it again). View frames: the Reorder control on the view chrome |
+| Reorder mode | ⌘O | Task-list caret: toggle task reorder. Else if a view is open: toggle that view’s task reorder. Otherwise: sidebar topics and views (handles appear until you press it again). View frames: the Reorder control on the view chrome still starts *frame* reorder |
 | Move object | ⌘⇧O | Toggle Move Mode for the caret / last-interacted embed. Also on every object chrome menu. Rebindable in Preferences. |
 | Add connection / list | ⌘L | Inserts a bullet list at the caret. In an info, opens the connect-to picker |
 | Agent / slot keys | ⌘1… | Agent prompt, or the saved action in that bar seat |
@@ -230,7 +230,7 @@ Heavy-use defaults are **two keys** (⌘ + letter) so they stay in muscle memory
 
 **AI keys belong to the seat, not the action.** ⌘1 is the agent; ⌘2…⌘7 fire whatever saved action sits in bar slots 1–6, and do nothing while a seat is empty. Moving an action to another seat moves its key with it, so there is no shortcut to pick when creating one. Rebinding a seat works like any other action and now survives a restart — `ShortcutBindingsStore.restore()` runs during `AppState.initialize()`.
 
-List dialogs (connect, choose view, tags, move-file topic, topic type, and the nested pickers on create-topic / automations / AI actions) are walked with **↑/↓, Enter, Escape** via [`dialogs/dialog_choice_list.dart`](dialogs/dialog_choice_list.dart) (`showAppChoiceDialog`). Form dialogs keep autofocus + Enter to submit. Picker fields (type, colour, emoji) are in the tab order and open with Enter or Space. Confirmations accept Enter for the confirm answer. Colour pickers: Tab walks presets / spectrum / hex, arrows move inside the focused pane, Enter chooses. Preset swatches and the emoji grid/section bar are locked LTR — they are not language, so ←/→ never mirror in Hebrew. Emoji pickers: Tab switches the grid and the section bar (each draws a focus ring); arrows move inside the focused pane; Enter chooses.
+List dialogs (connect, choose view, place task, tags, move-file topic, topic type, and the nested pickers on create-topic / automations / AI actions) are walked with **↑/↓, Enter, Escape** via [`dialogs/dialog_choice_list.dart`](dialogs/dialog_choice_list.dart) (`showAppChoiceDialog`). Form dialogs keep autofocus + Enter to submit. Picker fields (type, colour, emoji) are in the tab order and open with Enter or Space. Confirmations accept Enter for the confirm answer. Colour pickers: Tab walks presets / spectrum / hex, arrows move inside the focused pane, Enter chooses. Preset swatches and the emoji grid/section bar are locked LTR — they are not language, so ←/→ never mirror in Hebrew. Emoji pickers: Tab switches the grid and the section bar (each draws a focus ring); arrows move inside the focused pane; Enter chooses.
 
 ## Rules
 

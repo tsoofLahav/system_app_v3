@@ -9,6 +9,16 @@ from areas.objects.services.task_list_order import next_list_order_index
 views_bp = Blueprint("views", __name__)
 
 
+def _topic_order_index(item, fallback):
+    raw = item.get("topic_order_index")
+    if raw is None:
+        raw = item.get("order_index", fallback)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return fallback
+
+
 @views_bp.route("/views", methods=["GET"])
 def list_views():
     workspace_id = request.args.get("workspace_id", type=int) or default_workspace_id()
@@ -126,10 +136,12 @@ def create_view_task(view_id):
     db.session.flush()
 
     insert_at = None
+    topic_insert_at = None
     if after_task_id is not None:
         for row in ViewTaskMembership.query.filter_by(view_id=view_id).all():
             if row.task_id == int(after_task_id):
                 insert_at = (row.order_index or 0) + 1
+                topic_insert_at = (row.topic_order_index or 0) + 1
                 break
 
     rows = (
@@ -139,10 +151,14 @@ def create_view_task(view_id):
     )
     if insert_at is None:
         insert_at = len(rows)
+    if topic_insert_at is None:
+        topic_insert_at = len(rows)
 
     for row in rows:
         if (row.order_index or 0) >= insert_at:
             row.order_index = (row.order_index or 0) + 1
+        if (row.topic_order_index or 0) >= topic_insert_at:
+            row.topic_order_index = (row.topic_order_index or 0) + 1
 
     db.session.add(
         ViewTaskMembership(
@@ -150,6 +166,7 @@ def create_view_task(view_id):
             task_id=task.id,
             section_name=section_name,
             order_index=insert_at,
+            topic_order_index=topic_insert_at,
             section_flag=section_flag,
             topic_key=topic_key,
         )
@@ -192,6 +209,7 @@ def replace_memberships(view_id):
             task_id=item.get("task_id"),
             section_name=item.get("section_name"),
             order_index=item.get("order_index", index),
+            topic_order_index=_topic_order_index(item, index),
             section_flag=item.get("section_flag"),
             topic_key=item.get("topic_key"),
         )

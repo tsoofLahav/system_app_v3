@@ -54,6 +54,8 @@ Info, tasks, and table cells are a Material `TextField` ([`FormattedTextField`](
 | Place the caret on **tap** with [`embedCaretForTap`](system_app_front_end/lib/areas/files/rich_text/rtl/embed_caret_hit.dart) in the same turn | Write `controller.selection` on every keystroke |
 | Visual ←/→ via `Actions`; install `onKeyEvent` **once** | Re-wrap `onKeyEvent` on rebuild; reimplement arrows in `onKeyEvent` |
 | Keep-focus: **bottom menu** and the **open object** | Treat object chrome / padding as “outside” and kill the field |
+| One `DocumentTextFlow` **per object** (tasks / cells) | Mark across objects or into the file body |
+| Scroll a field only when it is off-screen | `ensureVisible` with `alignment: 0.15` on every focus |
 | Keyboard safety in [`NOTES.md`](NOTES.md#editor-keyboard-safety) | `notifyListeners` from a keystroke; remount the field while typing |
 
 Tap the **file canvas / body** (not another field): unfocus, hide the caret, **clear the mark**. Tap the open object’s frame: keep typing.
@@ -210,7 +212,7 @@ Table grid ←/→ is only [`table_grid_nav.dart`](system_app_front_end/lib/area
 
 These are defined as **not done**, not as rules to implement around:
 
-- Nested caret inside object fields is not fully linked to `DocumentTextFlow` as segments ([`BACKLOG.md`](BACKLOG.md) O3 / leftover E6).
+- Marks do not cross objects or into the Super Editor body ([`BACKLOG.md`](BACKLOG.md) O3 / leftover E6).
 - Deleting across parts does not merge the first and last part into one.
 - Cmd+arrow and Home/End in Hebrew.
 - Undo/redo is per Super Editor document, not one stack shared with cross-part embed edits.

@@ -1176,6 +1176,9 @@ class AppState extends ChangeNotifier {
 
   Future<Topic> loadTopic(int id) => _topics.getTopic(id);
 
+  Future<List<TopicTaskList>> listTaskListsForTopic(int topicId) =>
+      _topics.listTaskLists(topicId);
+
   Future<List<AppFile>> templateFilesForType(TopicType type) async {
     final templateId = type.templateTopicId;
     if (templateId == null) return const [];
@@ -1970,22 +1973,20 @@ class AppState extends ChangeNotifier {
   }) async {
     if (selectedView == null) return;
     final memberships = <Map<String, dynamic>>[];
-    var index = 0;
     for (final m in viewMemberships) {
       final isTarget = m.taskId == taskId;
-      memberships.add({
-        'task_id': m.taskId,
-        'section_name': isTarget
-            ? (clearSection ? null : (sectionName ?? m.sectionName))
-            : m.sectionName,
-        'order_index': index++,
-        'section_flag': isTarget
-            ? (clearSection ? null : (sectionFlag ?? m.sectionFlag))
-            : m.sectionFlag,
-        'topic_key': isTarget
-            ? (clearTopic ? null : (topicKey ?? m.topicKey))
-            : m.topicKey,
-      });
+      memberships.add(
+        (isTarget
+                ? m.copyWith(
+                    sectionName: sectionName,
+                    sectionFlag: sectionFlag,
+                    topicKey: topicKey,
+                    clearSection: clearSection,
+                    clearTopic: clearTopic,
+                  )
+                : m)
+            .toReplaceJson(),
+      );
     }
     await reorderViewMemberships(memberships, notify: notify);
   }
@@ -1996,29 +1997,99 @@ class AppState extends ChangeNotifier {
   }
 
   /// A task belongs to at most one view — [viewId] replaces any previous one.
-  Future<void> setTaskView(int taskId, int? viewId) async {
-    final existing = await loadTaskMemberships(taskId);
-    final previousIds = {for (final m in existing) m.viewId};
-    if (viewId == null) {
-      if (existing.isEmpty) return;
-      await _tasks.replaceTaskMemberships(taskId, const []);
-    } else {
+  Future<void> setTaskView(int taskId, int? viewId) =>
+      setTaskViews([taskId], viewId);
+
+  /// Same as [setTaskView] for every id; one notify at the end.
+  Future<void> setTaskViews(Iterable<int> taskIds, int? viewId) async {
+    final ids = <int>{...taskIds};
+    if (ids.isEmpty) return;
+    final previousIds = <int>{};
+    var wrote = false;
+    for (final taskId in ids) {
+      final existing = await loadTaskMemberships(taskId);
+      previousIds.addAll(existing.map((m) => m.viewId));
+      if (viewId == null) {
+        if (existing.isEmpty) continue;
+        await _tasks.replaceTaskMemberships(taskId, const []);
+        wrote = true;
+        continue;
+      }
       final keep = existing.where((m) => m.viewId == viewId).firstOrNull;
-      if (existing.length == 1 && keep != null) return;
+      if (existing.length == 1 && keep != null) continue;
       await _tasks.replaceTaskMemberships(taskId, [
         {
           'view_id': viewId,
           'section_name': keep?.sectionName,
-          'order_index': 0,
+          'order_index': keep?.orderIndex ?? 0,
+          'topic_order_index': keep?.topicOrderIndex ?? 0,
           'section_flag': keep?.sectionFlag,
           'topic_key': keep?.topicKey,
         },
       ]);
       previousIds.add(viewId);
+      wrote = true;
     }
+    if (!wrote) return;
     if (isViewMode &&
         selectedView != null &&
         previousIds.contains(selectedView!.id)) {
+      viewMemberships = await _views.listMemberships(selectedView!.id);
+    }
+    notifyListeners();
+  }
+
+  /// Apply view → section → topic → list on the view page Place dialog.
+  Future<void> placeViewTasks({
+    required List<int> taskIds,
+    required int? viewId,
+    String? sectionName,
+    String? sectionFlag,
+    bool uncategorized = false,
+    String? topicKey,
+    bool noTopic = false,
+    int? taskListId,
+    bool noList = false,
+  }) async {
+    final ids = [...taskIds];
+    if (ids.isEmpty) return;
+
+    await setTaskViews(ids, viewId);
+    if (viewId != null) {
+      for (final taskId in ids) {
+        final existing = await loadTaskMemberships(taskId);
+        final keep = existing.where((m) => m.viewId == viewId).firstOrNull;
+        if (keep == null) continue;
+        await _tasks.replaceTaskMemberships(taskId, [
+          {
+            'view_id': viewId,
+            'section_name': uncategorized ? null : sectionName,
+            'order_index': keep.orderIndex,
+            'topic_order_index': keep.topicOrderIndex,
+            'section_flag': uncategorized ? null : sectionFlag,
+            'topic_key': noTopic ? null : topicKey,
+          },
+        ]);
+      }
+    }
+
+    for (final taskId in ids) {
+      final current = viewTasks.where((t) => t.id == taskId).firstOrNull;
+      if (noList || noTopic) {
+        if (current?.taskListId != null) {
+          await clearTaskHomeList(taskId);
+        }
+        continue;
+      }
+      if (taskListId == null) continue;
+      if (current?.taskListId == taskListId) continue;
+      await assignViewTaskToList(
+        current ?? Task(id: taskId, title: '', status: 'active'),
+        taskListId,
+      );
+    }
+
+    if (isViewMode && selectedView != null) {
       viewMemberships = await _views.listMemberships(selectedView!.id);
     }
     notifyListeners();
@@ -2542,13 +2613,11 @@ class AppState extends ChangeNotifier {
     final memberships = [
       for (final m in viewMemberships)
         {
-          'task_id': m.taskId,
+          ...m.toReplaceJson(),
           'section_name': m.sectionName == oldName ? next.name : m.sectionName,
-          'order_index': m.orderIndex,
           'section_flag': m.sectionName == oldName || m.sectionName == next.name
               ? flag
               : m.sectionFlag,
-          'topic_key': m.topicKey,
         },
     ];
     viewMemberships = await _views.replaceMemberships(
@@ -2579,13 +2648,9 @@ class AppState extends ChangeNotifier {
     await _persistViewLayout(layout);
     final memberships = [
       for (final m in viewMemberships)
-        {
-          'task_id': m.taskId,
-          'section_name': m.sectionName == section ? null : m.sectionName,
-          'order_index': m.orderIndex,
-          'section_flag': m.sectionName == section ? null : m.sectionFlag,
-          'topic_key': m.topicKey,
-        },
+        m
+            .copyWith(clearSection: m.sectionName == section)
+            .toReplaceJson(),
     ];
     viewMemberships = await _views.replaceMemberships(
       selectedView!.id,

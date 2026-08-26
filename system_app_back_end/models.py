@@ -328,6 +328,7 @@ class ViewTaskMembership(db.Model):
     task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"))
     section_name = db.Column(db.Text)
     order_index = db.Column(db.Integer, nullable=False, default=0)
+    topic_order_index = db.Column(db.Integer, nullable=False, default=0)
     section_flag = db.Column(db.Text)
     topic_key = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -339,6 +340,7 @@ class ViewTaskMembership(db.Model):
             "task_id": self.task_id,
             "section_name": self.section_name,
             "order_index": self.order_index,
+            "topic_order_index": self.topic_order_index,
             "section_flag": self.section_flag,
             "topic_key": self.topic_key,
             "created_at": _iso(self.created_at),

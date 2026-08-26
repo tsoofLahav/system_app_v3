@@ -9,6 +9,7 @@ import '../../files/rich_text/block_text_actions.dart';
 import '../../files/rich_text/block_text_focus.dart';
 import '../../objects/tasks/task_list_surface.dart';
 import '../../objects/views/assign_task_view_dialog.dart';
+import '../../objects/views/view_chrome_menu.dart';
 import '../../../core/platform/app_form_factor.dart';
 import '../arrange/file_arrange_overlay.dart';
 import '../arrange/phone_file_reorder_sheet.dart';
@@ -97,14 +98,12 @@ Future<void> dispatchShortcutAction(
       await state.addFile(topic: topic, name: fileResult.name);
       return;
     case ShortcutActionIds.assignTaskView:
-      final taskId =
-          BlockTextFocusRegistry.activeTaskId ??
-          DocumentEditorRegistry.active?.focusedTaskId?.call();
-      if (taskId == null || !context.mounted) return;
+      final taskIds = TaskListSurfaceState.taskIdsForAssignView();
+      if (taskIds.isEmpty || !context.mounted) return;
       await showAssignTaskViewDialog(
         context: context,
         state: state,
-        taskId: taskId,
+        taskIds: taskIds,
       );
       return;
     case ShortcutActionIds.aiConsult:
@@ -137,6 +136,11 @@ Future<void> dispatchShortcutAction(
       final list = TaskListSurfaceState.keyboardFocus;
       if (list != null) {
         list.toggleReorderMode();
+        return;
+      }
+      final viewChrome = ViewChromeRegistry.active;
+      if (viewChrome != null) {
+        viewChrome.onToggleTaskReorder();
         return;
       }
       state.toggleSidebarReorderMode();

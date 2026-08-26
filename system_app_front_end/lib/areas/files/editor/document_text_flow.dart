@@ -1,25 +1,41 @@
-/// Makes the whole file behave like one continuous run of text.
+/// Makes the fields **inside one object** behave like one continuous run of text.
 ///
-/// The editor renders a separate text field per paragraph, per list bullet and
-/// per table cell. Each of those is a **segment**. This flow puts the segments
-/// in document order and owns the caret and selection *across* them, so arrow
-/// keys walk out of one segment into the next and a selection can cover parts
-/// of several.
+/// The file body is Super Editor. Each open object (a task list, a table) owns
+/// its own flow so Shift+arrows and Shift+click can mark several tasks or cells
+/// in that object. Flows do not cross objects or into the file body.
+///
+/// Each inner field is a **segment**. This flow puts the segments in visual
+/// order and owns the caret and selection *across* them.
 ///
 /// Segment ids are built by [paragraphSegmentId], [listItemSegmentId],
-/// [tableCellSegmentId] and [embedSegmentId] so that order can be derived from
-/// the document tree without the flow knowing anything about block types.
+/// [tableCellSegmentId], [taskItemSegmentId] and [embedSegmentId] so that order
+/// can be derived without the flow knowing anything about block types.
 library;
+
+import 'dart:math' as math;
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 String paragraphSegmentId(String blockId) => blockId;
 
-String listItemSegmentId(String blockId, int itemIndex) => '$blockId#i$itemIndex';
+String listItemSegmentId(String blockId, int itemIndex) =>
+    '$blockId#i$itemIndex';
 
 String tableCellSegmentId(String blockId, int row, int column) =>
     '$blockId#c$row:$column';
+
+(String blockId, int row, int column)? parseTableCellSegmentId(
+  String segmentId,
+) {
+  final match = RegExp(r'^(.*)#c(\d+):(\d+)$').firstMatch(segmentId);
+  if (match == null) return null;
+  return (
+    match.group(1)!,
+    int.parse(match.group(2)!),
+    int.parse(match.group(3)!),
+  );
+}
 
 /// One task title inside a task-list embed — same role as a list bullet.
 String taskItemSegmentId(String blockId, int itemIndex) =>
@@ -58,7 +74,9 @@ bool isGraphCellSegmentId(String segmentId) =>
   return (match.group(1)!, int.parse(match.group(2)!));
 }
 
-(String blockId, int row, int column)? parseGraphCellSegmentId(String segmentId) {
+(String blockId, int row, int column)? parseGraphCellSegmentId(
+  String segmentId,
+) {
   final match = RegExp(r'^(.*)#g(\d+):(\d+)$').firstMatch(segmentId);
   if (match == null) return null;
   return (
@@ -95,8 +113,8 @@ class DocumentTextSelection {
   const DocumentTextSelection({required this.anchor, required this.focus});
 
   const DocumentTextSelection.collapsed(DocumentTextPosition at)
-      : anchor = at,
-        focus = at;
+    : anchor = at,
+      focus = at;
 
   /// Where the selection was started; stays put while the user extends.
   final DocumentTextPosition anchor;
@@ -139,12 +157,15 @@ class _SegmentBinding {
 class DocumentTextFlow extends ChangeNotifier {
   final _order = <String>[];
   final _bindings = <String, _SegmentBinding>{};
+
   /// Absolute start offset of each segment in the marker-text buffer.
   final _baseOffset = <String, int>{};
-  // Vertical neighbours differ from reading order inside a table: pressing down
-  // in a cell should reach the cell below it, not the next cell in the row.
+  // Grid neighbours differ from reading order inside a table: down stays in
+  // the column, left/right stay in the row (visual, via TableGridNav).
   final _above = <String, String>{};
   final _below = <String, String>{};
+  final _left = <String, String>{};
+  final _right = <String, String>{};
   DocumentTextSelection? _selection;
 
   List<String> get order => List.unmodifiable(_order);
@@ -188,6 +209,36 @@ class DocumentTextFlow extends ChangeNotifier {
       ..clear()
       ..addAll(below);
   }
+
+  /// Overrides left/right targets for table cells (visual neighbours).
+  void setHorizontalLinks({
+    required Map<String, String> left,
+    required Map<String, String> right,
+  }) {
+    if (_mapEquals(_left, left) && _mapEquals(_right, right)) return;
+    _left
+      ..clear()
+      ..addAll(left);
+    _right
+      ..clear()
+      ..addAll(right);
+  }
+
+  /// Visual neighbour of a table cell, if this flow has grid links.
+  String? gridNeighbor(String id, AxisDirection direction) {
+    return switch (direction) {
+      AxisDirection.left => _left[id],
+      AxisDirection.right => _right[id],
+      AxisDirection.up => _above[id],
+      AxisDirection.down => _below[id],
+    };
+  }
+
+  bool hasGridNeighbors(String id) =>
+      _left.containsKey(id) ||
+      _right.containsKey(id) ||
+      _above.containsKey(id) ||
+      _below.containsKey(id);
 
   void register(
     String id,
@@ -291,19 +342,26 @@ class DocumentTextFlow extends ChangeNotifier {
 
   /// The part of [id] that is selected, or null when the segment is untouched.
   ///
-  /// Returns a full-width range for segments in the middle of a multi-segment
-  /// selection, which is what lets the highlight look continuous.
+  /// Table / task marks that span several fields cover each field end to end
+  /// (a cell is a unit). A 1D mark inside prose still uses the real offsets.
   TextSelection? selectionWithin(String id) {
+    final covered = segmentsInSelection();
+    if (!covered.contains(id)) return null;
+    final length = lengthOf(id);
+    if (length == null) return null;
+
+    if (_markUsesWholeFields) {
+      if (length == 0) return null;
+      return TextSelection(baseOffset: 0, extentOffset: length);
+    }
+
     final ends = orderedSelection();
     if (ends == null) return null;
     final (start, end) = ends;
     final index = indexOf(id);
     final startIndex = indexOf(start.segmentId);
     final endIndex = indexOf(end.segmentId);
-    if (index < startIndex || index > endIndex) return null;
-
-    final length = lengthOf(id);
-    if (length == null) return null;
+    if (index < 0 || startIndex < 0 || endIndex < 0) return null;
 
     final from = index == startIndex ? start.offset.clamp(0, length) : 0;
     final to = index == endIndex ? end.offset.clamp(0, length) : length;
@@ -312,7 +370,14 @@ class DocumentTextFlow extends ChangeNotifier {
   }
 
   /// Segment ids the selection touches, in document order.
+  ///
+  /// Table marks are the bounding rectangle of the two cells, not the
+  /// reading-order slice between them (which would include extra cells).
   List<String> segmentsInSelection() {
+    final current = _selection;
+    if (current == null) return const [];
+    final rect = _tableRectIds(current);
+    if (rect != null) return rect;
     final ends = orderedSelection();
     if (ends == null) return const [];
     final (start, end) = ends;
@@ -320,6 +385,38 @@ class DocumentTextFlow extends ChangeNotifier {
     final endIndex = indexOf(end.segmentId);
     if (startIndex < 0 || endIndex < 0) return const [];
     return _order.sublist(startIndex, endIndex + 1);
+  }
+
+  bool get _markUsesWholeFields {
+    final current = _selection;
+    if (current == null || current.isWithinOneSegment) return false;
+    if (_tableRectIds(current) != null) return true;
+    return parseTaskItemSegmentId(current.anchor.segmentId) != null &&
+        parseTaskItemSegmentId(current.focus.segmentId) != null;
+  }
+
+  List<String>? _tableRectIds(DocumentTextSelection sel) {
+    if (sel.isWithinOneSegment) return null;
+    final a = parseTableCellSegmentId(sel.anchor.segmentId);
+    final b = parseTableCellSegmentId(sel.focus.segmentId);
+    if (a == null || b == null || a.$1 != b.$1) return null;
+    final r0 = math.min(a.$2, b.$2);
+    final r1 = math.max(a.$2, b.$2);
+    final c0 = math.min(a.$3, b.$3);
+    final c1 = math.max(a.$3, b.$3);
+    return [
+      for (final id in _order)
+        if (_cellInRect(id, a.$1, r0, r1, c0, c1)) id,
+    ];
+  }
+
+  bool _cellInRect(String id, String blockId, int r0, int r1, int c0, int c1) {
+    final parsed = parseTableCellSegmentId(id);
+    if (parsed == null || parsed.$1 != blockId) return false;
+    return parsed.$2 >= r0 &&
+        parsed.$2 <= r1 &&
+        parsed.$3 >= c0 &&
+        parsed.$3 <= c1;
   }
 
   /// Selected text with a newline between segments, matching what the user sees.
@@ -333,10 +430,12 @@ class DocumentTextFlow extends ChangeNotifier {
         continue;
       }
       final text = controller.text;
-      parts.add(text.substring(
-        range.start.clamp(0, text.length),
-        range.end.clamp(0, text.length),
-      ));
+      parts.add(
+        text.substring(
+          range.start.clamp(0, text.length),
+          range.end.clamp(0, text.length),
+        ),
+      );
     }
     return parts.join('\n');
   }
@@ -354,7 +453,7 @@ class DocumentTextFlow extends ChangeNotifier {
   /// **entirely**, so the structures they belonged to can go too — a fully
   /// marked row, bullet, or table is removed rather than left blank.
   void Function(Set<String> fullyEmptied, {required bool spansParts})?
-      onPruneStructures;
+  onPruneStructures;
 
   /// Parts of the current selection that are covered end to end.
   Set<String> fullyMarkedSegments() {
@@ -567,11 +666,17 @@ class DocumentTextFlow extends ChangeNotifier {
     int? preferredOffset,
     double? caretX,
   }) {
-    final previous = _above[position.segmentId] ?? segmentBefore(position.segmentId);
+    final previous =
+        _above[position.segmentId] ?? segmentBefore(position.segmentId);
     if (previous == null) return null;
     return DocumentTextPosition(
       previous,
-      _offsetOnEdgeLine(previous, caretX: caretX, preferredOffset: preferredOffset, last: true),
+      _offsetOnEdgeLine(
+        previous,
+        caretX: caretX,
+        preferredOffset: preferredOffset,
+        last: true,
+      ),
     );
   }
 
@@ -586,7 +691,12 @@ class DocumentTextFlow extends ChangeNotifier {
     if (next == null) return null;
     return DocumentTextPosition(
       next,
-      _offsetOnEdgeLine(next, caretX: caretX, preferredOffset: preferredOffset, last: false),
+      _offsetOnEdgeLine(
+        next,
+        caretX: caretX,
+        preferredOffset: preferredOffset,
+        last: false,
+      ),
     );
   }
 
@@ -633,7 +743,10 @@ class DocumentTextFlow extends ChangeNotifier {
   ///
   /// End-of-text placements use [TextAffinity.upstream] so soft-wrap / BiDi
   /// boundaries prefer the end of the line over the start of the next run.
-  void placeCaret(DocumentTextPosition position, {bool extendSelection = false}) {
+  void placeCaret(
+    DocumentTextPosition position, {
+    bool extendSelection = false,
+  }) {
     if (extendSelection) {
       extendTo(position);
     } else {
@@ -652,8 +765,9 @@ class DocumentTextFlow extends ChangeNotifier {
     }
     binding.controller.selection = TextSelection.collapsed(
       offset: offset,
-      affinity:
-          offset >= length ? TextAffinity.upstream : TextAffinity.downstream,
+      affinity: offset >= length
+          ? TextAffinity.upstream
+          : TextAffinity.downstream,
     );
   }
 

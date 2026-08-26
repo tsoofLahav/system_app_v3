@@ -94,9 +94,9 @@ class FormattedTextField extends StatefulWidget {
   /// normal text / RTL motion run.
   final KeyEventResult Function(FocusNode node, KeyEvent event)? hostKeyEvent;
 
-  /// Position of this field in the document-wide text flow. When set (and a
-  /// [DocumentTextFlowScope] is above), arrow keys and selection cross out of
-  /// this field into neighbouring paragraphs, bullets and cells.
+  /// Position of this field in the **object** text flow (tasks in a list, cells
+  /// in a table). When set and a [DocumentTextFlowScope] is above, Shift+arrows
+  /// and Shift+click mark across neighbouring fields in that same object.
   final String? segmentId;
 
   /// Absolute start of this field's slice in the marker-text buffer.
@@ -206,7 +206,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _attachToFlow(DocumentTextFlowScope.maybeOf(context));
+    // readOf: do not rebuild this State on every caret move in the object
+    // flow. Highlight overlays already listen via AnimatedBuilder.
+    _attachToFlow(DocumentTextFlowScope.readOf(context));
   }
 
   void _attachToFlow(DocumentTextFlow? flow) {
@@ -398,12 +400,15 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   void _ensureVisibleInFilePane() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_focusNode.hasFocus) return;
+      // Only scroll when this field is off-screen. Forcing alignment 0.15
+      // jumps a lower task/cell to the top of the file pane on every focus.
       Scrollable.ensureVisible(
         context,
-        alignment: 0.15,
-        alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
+      Scrollable.ensureVisible(
+        context,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
       );
     });
   }
@@ -863,8 +868,15 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     final flow = _flow;
     final segmentId = _registeredSegmentId;
     if (flow != null && segmentId != null) {
+      // A spanning mark covers whole fields (several tasks / cells). A click
+      // anywhere on one of those fields must keep the mark, so Choose view
+      // can apply to all of them.
+      if (flow.spansSegments &&
+          flow.segmentsInSelection().contains(segmentId)) {
+        return true;
+      }
       final marked = flow.selectionWithin(segmentId);
-      if (marked != null && offset >= marked.start && offset < marked.end) {
+      if (marked != null && offset >= marked.start && offset <= marked.end) {
         return true;
       }
     }
@@ -1004,6 +1016,30 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     if (!selection.isValid) return false;
 
     final extending = HardwareKeyboard.instance.isShiftPressed;
+    if (extending && flow.hasGridNeighbors(segmentId)) {
+      AxisDirection? dir;
+      if (key == LogicalKeyboardKey.arrowLeft) dir = AxisDirection.left;
+      if (key == LogicalKeyboardKey.arrowRight) dir = AxisDirection.right;
+      if (key == LogicalKeyboardKey.arrowUp) dir = AxisDirection.up;
+      if (key == LogicalKeyboardKey.arrowDown) dir = AxisDirection.down;
+      if (dir != null) {
+        final fromId = (flow.selection != null && !flow.selection!.isCollapsed)
+            ? flow.selection!.focus.segmentId
+            : segmentId;
+        if (flow.selection == null || flow.selection!.isCollapsed) {
+          flow.collapseTo(DocumentTextPosition(segmentId, 0));
+        }
+        final targetId = flow.gridNeighbor(fromId, dir);
+        if (targetId == null) return true;
+        _applyFlowSelection(
+          flow,
+          DocumentTextPosition(targetId, 0),
+          extend: true,
+        );
+        return true;
+      }
+    }
+
     final text = widget.controller.text;
 
     // Movement *within* a part is the text field's job, including its direction

@@ -1555,7 +1555,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
               await showAssignTaskViewDialog(
                 context: context,
                 state: widget.state,
-                taskId: taskId,
+                taskIds: [taskId],
               );
               return;
             }

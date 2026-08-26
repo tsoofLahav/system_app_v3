@@ -12,12 +12,14 @@ class ViewChromeHost {
     required this.onToggleDisplayMode,
     required this.onAddSection,
     required this.onStartFrameReorder,
+    required this.onToggleTaskReorder,
     required this.frameReorderMode,
   });
 
   final VoidCallback onToggleDisplayMode;
   final VoidCallback onAddSection;
   final VoidCallback onStartFrameReorder;
+  final VoidCallback onToggleTaskReorder;
   final bool frameReorderMode;
 }
 

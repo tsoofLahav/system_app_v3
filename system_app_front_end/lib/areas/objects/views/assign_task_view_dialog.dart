@@ -11,18 +11,19 @@ import '../data/app_view.dart';
 
 var _assignTaskViewDialogOpen = false;
 
-/// Pick exactly one view for a task (replaces any previous view).
+/// Pick exactly one view for the given tasks (replaces any previous view).
 Future<void> showAssignTaskViewDialog({
   required BuildContext context,
   required AppState state,
-  required int taskId,
+  required List<int> taskIds,
 }) async {
+  if (taskIds.isEmpty) return;
   if (_assignTaskViewDialogOpen) return;
   _assignTaskViewDialogOpen = true;
   try {
     await showAppDialog<void>(
       context: context,
-      builder: (_) => _AssignTaskViewDialog(state: state, taskId: taskId),
+      builder: (_) => _AssignTaskViewDialog(state: state, taskIds: taskIds),
     );
   } finally {
     _assignTaskViewDialogOpen = false;
@@ -30,13 +31,10 @@ Future<void> showAssignTaskViewDialog({
 }
 
 class _AssignTaskViewDialog extends StatefulWidget {
-  const _AssignTaskViewDialog({
-    required this.state,
-    required this.taskId,
-  });
+  const _AssignTaskViewDialog({required this.state, required this.taskIds});
 
   final AppState state;
-  final int taskId;
+  final List<int> taskIds;
 
   @override
   State<_AssignTaskViewDialog> createState() => _AssignTaskViewDialogState();
@@ -45,6 +43,7 @@ class _AssignTaskViewDialog extends StatefulWidget {
 class _AssignTaskViewDialogState extends State<_AssignTaskViewDialog> {
   var _loading = true;
   int? _selectedViewId;
+  var _mixed = false;
 
   @override
   void initState() {
@@ -53,10 +52,22 @@ class _AssignTaskViewDialogState extends State<_AssignTaskViewDialog> {
   }
 
   Future<void> _load() async {
-    final rows = await widget.state.loadTaskMemberships(widget.taskId);
+    int? shared;
+    var mixed = false;
+    for (var i = 0; i < widget.taskIds.length; i++) {
+      final rows = await widget.state.loadTaskMemberships(widget.taskIds[i]);
+      final viewId = rows.isEmpty ? null : rows.first.viewId;
+      if (i == 0) {
+        shared = viewId;
+      } else if (viewId != shared) {
+        mixed = true;
+        break;
+      }
+    }
     if (!mounted) return;
     setState(() {
-      _selectedViewId = rows.isEmpty ? null : rows.first.viewId;
+      _mixed = mixed;
+      _selectedViewId = mixed ? null : shared;
       _loading = false;
     });
   }
@@ -64,6 +75,7 @@ class _AssignTaskViewDialogState extends State<_AssignTaskViewDialog> {
   List<AppView?> get _choices => [null, ...widget.state.userViews];
 
   int get _initialIndex {
+    if (_mixed) return 0;
     final id = _selectedViewId;
     if (id == null) return 0;
     final i = widget.state.userViews.indexWhere((v) => v.id == id);
@@ -72,14 +84,21 @@ class _AssignTaskViewDialogState extends State<_AssignTaskViewDialog> {
 
   Future<void> _select(AppView? view) async {
     final nextId = view?.id;
-    if (nextId == _selectedViewId) return;
+    if (!_mixed && nextId == _selectedViewId) return;
     final previous = _selectedViewId;
-    setState(() => _selectedViewId = nextId);
+    final wasMixed = _mixed;
+    setState(() {
+      _selectedViewId = nextId;
+      _mixed = false;
+    });
     try {
-      await widget.state.setTaskView(widget.taskId, nextId);
+      await widget.state.setTaskViews(widget.taskIds, nextId);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _selectedViewId = previous);
+      setState(() {
+        _selectedViewId = previous;
+        _mixed = wasMixed;
+      });
     }
   }
 
@@ -131,7 +150,7 @@ class _AssignTaskViewDialogState extends State<_AssignTaskViewDialog> {
                     },
                     itemBuilder: (context, i, _) {
                       final view = _choices[i];
-                      final selected = view?.id == _selectedViewId;
+                      final selected = !_mixed && view?.id == _selectedViewId;
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         child: Row(

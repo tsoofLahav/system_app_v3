@@ -158,11 +158,15 @@ Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed H
 
 ### Object inner text
 
-Object fields are Flutter `TextField`s. Flutter paints the caret. Tap placement is [`embedCaretForTap`](rich_text/rtl/embed_caret_hit.dart) only. Do not overlay a caret, hide `showCursor`, or write selection while typing. The open object and the bottom menu keep focus; the file canvas does not. `onKeyEvent` is installed once. Full list: [`CARET_AND_WRITING_FOCUS.md`](../../../../../CARET_AND_WRITING_FOCUS.md) § Object inner text.
+Object fields are Flutter `TextField`s. Flutter paints the caret. Tap placement is [`embedCaretForTap`](rich_text/rtl/embed_caret_hit.dart) only. Do not overlay a caret, hide `showCursor`, or write selection while typing. The open object and the bottom menu keep focus; the file canvas does not. `onKeyEvent` is installed once. Focusing a field that is already on screen must not scroll the file pane.
+
+Each task list and each table owns one [`DocumentTextFlow`](editor/document_text_flow.dart) so Shift+arrows and Shift+click mark across **tasks or cells inside that object**. Marks do not cross objects or into the Super Editor body. Choose view / ⌘J applies to every marked task in the list. Full list: [`CARET_AND_WRITING_FOCUS.md`](../../../../../CARET_AND_WRITING_FOCUS.md) § Object inner text.
 
 ## One cursor across the whole file
 
-Each paragraph, each bullet, and each table cell is a separate `TextField` — but the user must never feel that. [`editor/document_text_flow.dart`](editor/document_text_flow.dart) puts every one of those **segments** in document order and owns the caret and selection *across* them.
+The file body is Super Editor. [`editor/document_text_flow.dart`](editor/document_text_flow.dart) is **not** wrapped around the file. It is mounted around **one object** (a task list or a table) so that object's inner fields can share a caret and a mark. Paragraphs in the file body are Super Editor nodes, not flow segments.
+
+Each task, and each table cell, is a separate `TextField`. The object's flow puts those **segments** in visual order and owns the caret and selection *across them, inside that object only*.
 
 | Concept | Meaning |
 |---------|---------|
@@ -179,7 +183,7 @@ Segment ids come from buffer parts (view = `blocks[]`), never from widget build 
 | Table cell | `blockId#c<row>:<col>` |
 | Embed (whole object) | `blockId#embed` |
 
-Embed-internal fields may still register with `DocumentTextFlow` when nested; the file body itself is owned by Super Editor.
+Embed-internal fields register with that object's `DocumentTextFlow`. The file body itself is owned by Super Editor. There is no flow that joins two objects, or an object and the body.
 
 ### What it gives the user
 
@@ -187,15 +191,16 @@ Embed-internal fields may still register with `DocumentTextFlow` when nested; th
 |--------|----------|
 | Left/Right at a part's edge | Caret crosses into the neighbouring part |
 | Up/Down on the first/last line | Caret moves into the part above/below |
-| Up/Down inside a table | Moves **by column**, and leaves the table from the edge rows |
-| Shift+arrows | Selection grows past part boundaries |
-| Shift+click, drag | Marks across paragraphs, bullets, and cells at once |
+| Up/Down inside a table | Moves **by column**; arrows stay inside the table |
+| Shift+↑/↓ / Shift+←/→ in a table | Grows a **rectangle** of whole cells (not reading-order) |
+| Shift+arrows in a task list | Selection grows across tasks in that list |
+| Shift+click, drag | Marks across tasks or cells in the same object |
 | Click in empty space below / between parts | Structure: caret at the **logical end** of the last part above. Empty files fill the viewport so that area is tappable. In-field: glyph taps stay with Flutter; padding beside the line slot → logical end ([RTL solution](rich_text/rtl/RTL.md)). |
-| Cmd+A | Selects the entire file, every part |
+| Cmd+A | Inside an object: every field in that object. File body: Super Editor select-all |
 | Copy / cut | Joins the marked parts with newlines |
 | Backspace / typing | Replaces the whole marked range |
 
-Vertical movement is grid-aware because reading order and visual order differ in a table: the cell after `r0c0` is `r0c1`, but the cell *below* it is `r1c0`. `setVerticalLinks` carries that override.
+Grid movement is column/row-aware because reading order is row-wise: the cell after `r0c0` is `r0c1`, but the cell *below* it is `r1c0`. `setVerticalLinks` / `setHorizontalLinks` carry that override. A Shift+arrow mark in a table is the **rectangle** of whole cells between the two corners.
 
 A selection inside a single part is left to that text field's own painting. Only a selection that spans parts is drawn by the editor, over every part it touches, while the focused field keeps the caret.
 

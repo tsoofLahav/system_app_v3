@@ -99,3 +99,27 @@ class Topic {
     if (archivedAt != null) 'archived_at': archivedAt,
   };
 }
+
+/// A task-list object living in a live file of a topic.
+class TopicTaskList {
+  const TopicTaskList({
+    required this.id,
+    required this.title,
+    this.objectId,
+    this.fileId,
+  });
+
+  final int id;
+  final String title;
+  final int? objectId;
+  final int? fileId;
+
+  factory TopicTaskList.fromJson(Map<String, dynamic> json) {
+    return TopicTaskList(
+      id: json['id'] as int,
+      title: (json['title'] as String?) ?? '',
+      objectId: json['object_id'] as int?,
+      fileId: json['file_id'] as int?,
+    );
+  }
+}

@@ -16,6 +16,16 @@ from areas.objects.services.object_graph import (
 tasks_bp = Blueprint("tasks", __name__)
 
 
+def _topic_order_index(item, fallback):
+    raw = item.get("topic_order_index")
+    if raw is None:
+        raw = item.get("order_index", fallback)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return fallback
+
+
 @tasks_bp.route("/tasks/<int:task_id>", methods=["GET"])
 def get_task(task_id):
     return jsonify(get_or_404(Task, task_id).to_dict())
@@ -82,6 +92,7 @@ def replace_task_memberships(task_id):
             task_id=task_id,
             section_name=item.get("section_name"),
             order_index=item.get("order_index", index),
+            topic_order_index=_topic_order_index(item, index),
             section_flag=item.get("section_flag"),
             topic_key=item.get("topic_key"),
         )

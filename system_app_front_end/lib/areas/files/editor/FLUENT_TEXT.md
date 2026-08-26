@@ -27,7 +27,7 @@ A bullet, a table row, and an **embed block** count as **one line** of the docum
 | Shift+Enter on an object block | Opens the object (first inner field); click also works |
 | Enter on an object block | New paragraph **below** the object (keep writing) |
 | Shift+Enter inside an object | SE caret **after** the object (downstream / empty paragraph below) so typing continues under it. Phone: leave icon on the first bottom-bar pill |
-| ↑/↓ inside an open object | Moves between that object’s lines only (does not leave). Coming from below lands at the end of the line (fluent text). Phone: keep the keyboard up across inner fields |
+| ↑/↓ inside an open object | Moves between that object’s lines only (does not leave). Shift+arrows mark across tasks, or a **rectangle of cells** (Shift+↑/↓ and Shift+←/→). Coming from below lands at the end of the line (fluent text). Phone: keep the keyboard up across inner fields |
 | Delete a marked object | Object goes, like deleting a marked line |
 
 ## Three principles

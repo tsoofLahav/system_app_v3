@@ -98,7 +98,7 @@ What the user sees **inside the file** is in those fences (list header, tasks, i
 | [`services/archive_files.py`](services/archive_files.py) | Paginated archive listing + heading search (no document bodies) |
 | [`routes/files.py`](routes/files.py) | File CRUD, `GET /files/:id/agent-text`, `POST /files/:id/apply-snippet`, archive pages |
 | [`routes/file_versions.py`](routes/file_versions.py) | History and `POST /files/:id/diff` |
-| [`routes/topics.py`](routes/topics.py) | Topics — the container files live in |
+| [`routes/topics.py`](routes/topics.py) | Topics — the container files live in. `GET /topics/:id/task-lists` lists task-list objects in **live** files of that topic (objects join files, `archived_at` null). |
 | [`routes/topic_types.py`](routes/topic_types.py) | User-defined topic kinds (`/topic-types`) |
 | [`services/template_slots.py`](services/template_slots.py) | Stamp `files.meta.template_slot` when a topic becomes a type template |
 | [`services/type_templates.py`](services/type_templates.py) | Hidden per-type template topic (`is_template`); detach a live topic into that shell |
