@@ -128,6 +128,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   bool _ownsFocus = false;
   bool _normalizingSelection = false;
   FocusOnKeyEventCallback? _editableKeyHandler;
+  FocusOnKeyEventCallback? _installedKeyHandler;
   DocumentTextFlow? _flow;
   String? _registeredSegmentId;
   int? _registeredBaseOffset;
@@ -286,12 +287,17 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         _ownsFocus = true;
       }
       _focusNode.addListener(_onFocusChanged);
+      _installedKeyHandler = null;
+      _editableKeyHandler = null;
     }
     _attachToFlow(_flow);
     _syncDescriptionPaint();
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _ensureKeyHandlerChained(),
-    );
+    if (oldWidget.focusNode != widget.focusNode ||
+        _focusNode.onKeyEvent != _installedKeyHandler) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _ensureKeyHandlerChained(),
+      );
+    }
   }
 
   void _syncDescriptionPaint() {
@@ -305,7 +311,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
 
   @override
   void dispose() {
-    if (_focusNode.onKeyEvent == _chainedKeyHandler) {
+    if (_focusNode.onKeyEvent == _installedKeyHandler) {
       _focusNode.onKeyEvent = _editableKeyHandler;
     }
     final registeredId = _registeredSegmentId;
@@ -324,12 +330,24 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     super.dispose();
   }
 
+  /// Installs our handler in front of EditableText's **once**. Tear-offs of
+  /// [_chainedKeyHandler] are not identical, so comparing them with `==` and
+  /// re-wrapping on every rebuild stacked the chain until Arrow Up overflowed.
   void _ensureKeyHandlerChained() {
     if (!mounted) return;
     final current = _focusNode.onKeyEvent;
-    if (current == _chainedKeyHandler) return;
+    final installed = _installedKeyHandler;
+    if (installed != null) {
+      if (current == installed) return;
+      if (current != _editableKeyHandler) {
+        _editableKeyHandler = current;
+      }
+      _focusNode.onKeyEvent = installed;
+      return;
+    }
     _editableKeyHandler = current;
-    _focusNode.onKeyEvent = _chainedKeyHandler;
+    _installedKeyHandler = _chainedKeyHandler;
+    _focusNode.onKeyEvent = _installedKeyHandler;
   }
 
   KeyEventResult _chainedKeyHandler(FocusNode node, KeyEvent event) {
@@ -341,7 +359,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     final result = _onFocusKeyEvent(node, event);
     if (result == KeyEventResult.handled) return result;
     final editable = _editableKeyHandler;
-    if (editable != null && editable != _chainedKeyHandler) {
+    if (editable != null && editable != _installedKeyHandler) {
       return editable(node, event);
     }
     return KeyEventResult.ignored;
