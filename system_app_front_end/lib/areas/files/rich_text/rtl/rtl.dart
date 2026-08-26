@@ -6,7 +6,6 @@
 /// - [detectParagraphTextDirection] / [resolveFieldTextDirection] — base direction
 /// - [rtlCaretMotionActions] / [wrapVisualCaretMotion] — visual arrow keys (embeds; flip RTL runs only)
 /// - [emptySpaceCaretOffset] / [embedCaretForTap] — padding, BiDi gaps, end-of-line affinity
-/// - [embedCaretPaintRect] / [EmbedCaretOverlay] — paint-only caret bar (native cursor hidden)
 /// - [ambientAwareTextBuilders] / [SuperEditorVisualCaretPlugin] — Super Editor
 ///
 /// Wire caret/direction helpers through [FormattedTextField] (embeds) and
@@ -21,7 +20,6 @@ import './rtl_caret_motion.dart';
 
 export './empty_space_caret.dart';
 export './embed_caret_hit.dart';
-export './embed_caret_overlay.dart';
 export './paragraph_text_direction.dart';
 export './rtl_caret_motion.dart';
 export './super_editor_text_direction.dart';

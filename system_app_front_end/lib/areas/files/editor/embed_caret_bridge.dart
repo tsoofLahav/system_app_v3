@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:super_editor/super_editor.dart';
 
+import '../../ux/shell/dismiss_focus_on_outside_tap.dart';
 import '../model/object_embed_node.dart';
 import '../rich_text/formatted_text_field.dart';
 import './document_caret_session.dart';
@@ -168,8 +169,10 @@ class EmbedCaretScope extends InheritedWidget {
 
 /// Shift+Enter opens an object; Enter on an object inserts a paragraph below it.
 class EmbedCaretPlugin extends SuperEditorPlugin {
-  EmbedCaretPlugin({required this.registry, required this.caretSession})
-    : _tapDelegate = _EmbedAwareTapDelegate(caretSession);
+  EmbedCaretPlugin({
+    required this.registry,
+    required this.caretSession,
+  }) : _tapDelegate = _EmbedAwareTapDelegate(caretSession);
 
   final EmbedCaretRegistry registry;
   final DocumentCaretSession caretSession;
@@ -276,7 +279,11 @@ class EmbedCaretPlugin extends SuperEditorPlugin {
 
 /// Wraps embed content: Shift+Enter returns to the SE caret on this object.
 class EmbedEditScope extends StatelessWidget {
-  const EmbedEditScope({super.key, required this.nodeId, required this.child});
+  const EmbedEditScope({
+    super.key,
+    required this.nodeId,
+    required this.child,
+  });
 
   final String nodeId;
   final Widget child;
@@ -287,26 +294,28 @@ class EmbedEditScope extends StatelessWidget {
       EmbedCaretScope.maybeOf(context)?.onExitObject(nodeId);
     }
 
-    return EmbedExitScope(
-      nodeId: nodeId,
-      onExit: (_) => exit(),
-      child: Shortcuts(
-        shortcuts: const {
-          SingleActivator(LogicalKeyboardKey.enter, shift: true):
-              _ExitObjectIntent(),
-          SingleActivator(LogicalKeyboardKey.numpadEnter, shift: true):
-              _ExitObjectIntent(),
-        },
-        child: Actions(
-          actions: {
-            _ExitObjectIntent: CallbackAction<_ExitObjectIntent>(
-              onInvoke: (_) {
-                exit();
-                return null;
-              },
-            ),
+    return KeepEditorFocus(
+      child: EmbedExitScope(
+        nodeId: nodeId,
+        onExit: (_) => exit(),
+        child: Shortcuts(
+          shortcuts: const {
+            SingleActivator(LogicalKeyboardKey.enter, shift: true):
+                _ExitObjectIntent(),
+            SingleActivator(LogicalKeyboardKey.numpadEnter, shift: true):
+                _ExitObjectIntent(),
           },
-          child: child,
+          child: Actions(
+            actions: {
+              _ExitObjectIntent: CallbackAction<_ExitObjectIntent>(
+                onInvoke: (_) {
+                  exit();
+                  return null;
+                },
+              ),
+            },
+            child: child,
+          ),
         ),
       ),
     );
@@ -327,9 +336,8 @@ class _EmbedAwareTapDelegate extends ContentTapDelegate {
     if (caretSession.owner == DocumentCaretOwner.embed) {
       return TapHandlingInstruction.halt;
     }
-    final pos = details.documentLayout.getDocumentPositionNearestToOffset(
-      details.layoutOffset,
-    );
+    final pos = details.documentLayout
+        .getDocumentPositionNearestToOffset(details.layoutOffset);
     if (pos != null && caretSession.isObjectEmbed(pos.nodeId)) {
       return TapHandlingInstruction.halt;
     }

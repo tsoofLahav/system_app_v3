@@ -11,7 +11,7 @@ This folder is the **only** place that owns RTL/BiDi policy for editable text. W
 | [`DocumentTextFlow`](../../editor/document_text_flow.dart) | Segment order, moving **between** parts, click in empty space **under the file** → logical end of last part |
 | This folder + Flutter `TextField` | Base direction, visual arrows, caret/selection/IME **inside** a part |
 
-Custom code decides “leave paragraph A for task B”. Flutter decides “where on these glyphs is the caret?” — except empty padding (below), which Flutter gets wrong in BiDi.
+Custom code decides “leave paragraph A for task B”. Flutter decides “where on these glyphs is the caret?” — except empty padding (below), which Flutter gets wrong in BiDi. **Flutter also paints the caret.** Do not hide `showCursor` or overlay a bar.
 
 ## The three pieces
 
@@ -23,7 +23,6 @@ rtl/
   rtl_caret_motion.dart       ← FormattedTextField visual ←/→
   empty_space_caret.dart
   embed_caret_hit.dart        ← tap affinity + BiDi-gap snap; run-aware arrows
-  embed_caret_overlay.dart    ← paint-only 2px caret from glyph rects
   super_editor_text_direction.dart  ← SE empty → ambient direction
   super_editor_visual_caret.dart    ← SE visual ←/→ + selectors
 ```
@@ -75,7 +74,6 @@ Correction runs in `FormattedTextField.onTap` **in the same event turn** (before
 - [ ] `textAlign: TextAlign.start` (follows direction)
 - [ ] `wrapVisualCaretMotion(...)` always (identity actions when LTR)
 - [ ] Primary pointer down stores global position; `onTap` calls `embedCaretForTap`
-- [ ] Native `showCursor: false`; `EmbedCaretOverlay` paints the 2px bar from layout boxes (do not write selection on keystroke)
 - [ ] Cross-part arrow edge uses the **resolved** field direction, not only ambient locale
 - [ ] Horizontal arrows flip only on an RTL glyph run (not on numbers / Latin)
 
@@ -90,14 +88,14 @@ The file body is Super Editor, not `FormattedTextField`. Same direction rules ap
 | Visual ←/→ | [`SuperEditorVisualCaretPlugin`](super_editor_visual_caret.dart) + `withVisualHorizontalSelectors` — same flip idea as `rtl_caret_motion.dart` (character/word; not Cmd+line / Home / End) |
 | Selection wash | SE’s beneath-layer highlight is unreliable for RTL/Hebrew → [`selection_background_phase.dart`](../../editor/selection_background_phase.dart) also paints `BackgroundColorAttribution` on the selected span |
 
-Embed fields (table cells, info, …) still use `FormattedTextField` + the pieces above. The native `TextField` cursor is hidden; [`EmbedCaretOverlay`](embed_caret_overlay.dart) paints a 2px bar from upstream/downstream `getLocalRectForCaret`, picking the rect on the insertion glyph’s line — the same idea as tap affinity, paint-only. Taps still go through `embedCaretForTap`.
+Embed fields (table cells, info, …) still use `FormattedTextField` + the three pieces above.
 
 ## What we deliberately do not do
 
 - Reverse Hebrew strings or map “visual columns” ourselves for normal typing  
 - Fight the `TextField` from the parent editor on taps **inside** a field box (causes caret jump)  
-- Post-frame caret “snaps” of **selection** (the paint overlay may measure next frame)  
-- Write `controller.selection` on every keystroke to “fix” the native caret  
+- Post-frame caret “snaps”  
+- Hide `showCursor` / overlay-paint a caret / write `selection` on every keystroke  
 - Rely on SE’s translucent beneath-layer selection alone for Hebrew
 
 ## Regression tests
@@ -106,7 +104,6 @@ Embed fields (table cells, info, …) still use `FormattedTextField` + the piece
 flutter test \
   test/rtl_paragraph_text_direction_test.dart \
   test/rtl_empty_space_caret_test.dart \
-  test/rtl_embed_caret_paint_test.dart \
   test/rtl_super_editor_direction_test.dart \
   test/document_text_flow_test.dart \
   test/files/table_grid_nav_test.dart \
@@ -117,7 +114,7 @@ flutter test \
 Manual (Hebrew UI):
 
 1. Empty file paragraph — caret already on the **right** (no left→right jump on first Hebrew key)  
-2. Type `אני משתמש ב-Flutter 3.29 היום` — layout stays coherent; caret at end after typing (file body **and** object fields — bar on the insertion point, not ahead)  
+2. Type `אני משתמש ב-Flutter 3.29 היום` — layout stays coherent; caret at end after typing  
 3. ← → move the caret the way the keys point on screen (file body **and** object fields)  
 4. Click empty space beside the line → caret at logical end (resume writing)  
 5. Click below the paragraph / empty file → caret at end of last line  

@@ -31,6 +31,9 @@ class DescriptionTextRange {
   final Map<String, dynamic> link;
 }
 
+/// Object inner text (info, tasks, table cells): a Material [TextField].
+/// Flutter paints the caret. Tap placement is [embedCaretForTap] only.
+/// See `CARET_AND_WRITING_FOCUS.md` § Object inner text.
 class FormattedTextField extends StatefulWidget {
   const FormattedTextField({
     super.key,
@@ -366,7 +369,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   }
 
   void _onFocusChanged() {
-    if (mounted) setState(() {});
     if (_focusNode.hasFocus) {
       BlockTextFocusRegistry.register(
         controller: widget.controller,
@@ -1253,8 +1255,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                 child: TextField(
                   controller: widget.controller,
                   focusNode: _focusNode,
-                  showCursor: false,
-                  cursorWidth: embedCaretBarWidth,
                   style: style,
                   textDirection: textDirection,
                   textAlign: TextAlign.start,
@@ -1325,14 +1325,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                   ],
                 );
               }
-
-              body = EmbedCaretOverlay(
-                focusNode: _focusNode,
-                controller: widget.controller,
-                color: style.color ?? const Color(0xFF000000),
-                enabled: !inMenu,
-                child: body,
-              );
 
               if (!inMenu) return body;
 

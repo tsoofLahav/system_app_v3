@@ -2,9 +2,7 @@
 ///
 /// Flutter's `getPositionForPoint` often lands on a BiDi boundary (start of
 /// line, or after an English/number run) and paints a downstream caret on the
-/// next line. Super Editor does not. Apply in `onTap` the same turn. The
-/// visible bar is paint-only ([embedCaretPaintRect]) — do not write selection
-/// on keystroke.
+/// next line. Super Editor does not. Apply in `onTap` the same turn.
 library;
 
 import 'package:flutter/rendering.dart';
@@ -123,96 +121,4 @@ bool caretRunIsRtl({
     }
   } catch (_) {}
   return paragraphDir == TextDirection.rtl;
-}
-
-/// Width of the object-field caret bar (Super Editor uses 2px).
-const embedCaretBarWidth = 2.0;
-
-/// Visible caret rect for an embed field. Picks upstream vs downstream so the
-/// bar stays on the insertion glyph's line (and at that glyph's trailing edge).
-///
-/// Paint-only: never writes [RenderEditable] selection.
-Rect? embedCaretPaintRect({
-  required RenderEditable editable,
-  required TextSelection selection,
-  required int textLength,
-}) {
-  if (!selection.isValid || !selection.isCollapsed) return null;
-  final offset = selection.extentOffset.clamp(0, textLength);
-  late final Rect downRect;
-  late final Rect upRect;
-  try {
-    downRect = editable.getLocalRectForCaret(
-      TextPosition(offset: offset, affinity: TextAffinity.downstream),
-    );
-    upRect = editable.getLocalRectForCaret(
-      TextPosition(offset: offset, affinity: TextAffinity.upstream),
-    );
-  } catch (_) {
-    return null;
-  }
-
-  Rect? glyph;
-  var glyphDirection = TextDirection.ltr;
-  var caretBeforeGlyph = false;
-  if (offset > 0) {
-    final boxes = _glyphBoxes(editable, offset - 1, offset);
-    if (boxes.isNotEmpty) {
-      glyph = boxes.first.toRect();
-      glyphDirection = boxes.first.direction;
-    }
-  } else if (textLength > 0) {
-    final boxes = _glyphBoxes(editable, 0, 1);
-    if (boxes.isNotEmpty) {
-      glyph = boxes.first.toRect();
-      glyphDirection = boxes.first.direction;
-      caretBeforeGlyph = true;
-    }
-  }
-
-  final picked = pickCaretPaintRect(
-    downstream: downRect,
-    upstream: upRect,
-    glyph: glyph,
-    glyphDirection: glyphDirection,
-    caretBeforeGlyph: caretBeforeGlyph,
-  );
-  return Rect.fromLTWH(
-    picked.left,
-    picked.top,
-    embedCaretBarWidth,
-    picked.height,
-  );
-}
-
-List<TextBox> _glyphBoxes(RenderEditable editable, int start, int end) {
-  try {
-    return editable.getBoxesForSelection(
-      TextSelection(baseOffset: start, extentOffset: end),
-    );
-  } catch (_) {
-    return const [];
-  }
-}
-
-/// Chooses upstream vs downstream caret geometry from layout boxes.
-Rect pickCaretPaintRect({
-  required Rect downstream,
-  required Rect upstream,
-  Rect? glyph,
-  required TextDirection glyphDirection,
-  required bool caretBeforeGlyph,
-}) {
-  if (glyph == null) return downstream;
-  final downDy = (downstream.center.dy - glyph.center.dy).abs();
-  final upDy = (upstream.center.dy - glyph.center.dy).abs();
-  if ((downDy - upDy).abs() > 0.5) {
-    return downDy < upDy ? downstream : upstream;
-  }
-  final edgeX = caretBeforeGlyph
-      ? (glyphDirection == TextDirection.rtl ? glyph.right : glyph.left)
-      : (glyphDirection == TextDirection.rtl ? glyph.left : glyph.right);
-  final downDx = (downstream.left - edgeX).abs();
-  final upDx = (upstream.left - edgeX).abs();
-  return downDx <= upDx ? downstream : upstream;
 }

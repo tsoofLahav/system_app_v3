@@ -25,7 +25,7 @@ A file is **one continuous piece of text**. Paragraphs, lists, tables, and objec
 
 A blank line the user typed is text and is saved. Move and delete must not leave empty paragraphs the user did not make.
 
-A tap **on glyphs** in a table cell, task, or info stays on that glyph. Padding beside the line jumps to the logical end. Gaps between Hebrew and numbers snap to the nearest glyph. End-of-line taps keep the caret on that line. While typing, object fields hide the native cursor and paint a 2px bar from the insertion glyph’s layout box (same idea as Super Editor).
+A tap **on glyphs** in a table cell, task, or info stays on that glyph. Padding beside the line jumps to the logical end. Gaps between Hebrew and numbers snap to the nearest glyph. End-of-line taps keep the caret on that line.
 
 ---
 
@@ -44,6 +44,20 @@ Only **one** of those owns typing at a time (`DocumentCaretOwner.document` vs `e
 
 Embed fields still use local text fields. [`DocumentTextFlow`](system_app_front_end/lib/areas/files/editor/document_text_flow.dart) still exists for **cross-part marks inside embeds** (bullets, cells, tasks). The file body itself is Super Editor, not a stack of body `TextField`s.
 
+### Object inner text — Flutter owns it
+
+Info, tasks, and table cells are a Material `TextField` ([`FormattedTextField`](system_app_front_end/lib/areas/files/rich_text/formatted_text_field.dart)). They are not Super Editor. Do not make them imitate Super Editor’s caret painter.
+
+| Do | Don't |
+|----|--------|
+| Leave the native caret (`showCursor` on) | Hide the cursor and overlay-paint a bar |
+| Place the caret on **tap** with [`embedCaretForTap`](system_app_front_end/lib/areas/files/rich_text/rtl/embed_caret_hit.dart) in the same turn | Write `controller.selection` on every keystroke |
+| Visual ←/→ via `Actions`; install `onKeyEvent` **once** | Re-wrap `onKeyEvent` on rebuild; reimplement arrows in `onKeyEvent` |
+| Keep-focus: **bottom menu** and the **open object** | Treat object chrome / padding as “outside” and kill the field |
+| Keyboard safety in [`NOTES.md`](NOTES.md#editor-keyboard-safety) | `notifyListeners` from a keystroke; remount the field while typing |
+
+Tap the **file canvas / body** (not another field): unfocus, hide the caret, **clear the mark**. Tap the open object’s frame: keep typing.
+
 ---
 
 ## 3. Claim vs caret vs IME
@@ -61,7 +75,7 @@ Claim follows the click. The visible caret follows primary focus. Tap-outside, a
 
 After chrome that stole the keyboard (arrange, task/table reorder, Move Mode), `DocumentEditorRegistry.restoreActiveWritingFocus()` puts it back on the next frame. Tap-outside does **not** restore.
 
-**Tap outside** the focused editor (canvas / empty padding / object chrome — not another field) unfocuses, hides the caret, **clears the mark**, and closes the keyboard. The **bottom menu** is the only keep-focus island so insert tools stay usable while typing. Tapping empty table padding, space between tasks, or object chrome is outside the text.
+**Tap outside** the focused editor (canvas / empty padding — not another field) unfocuses, hides the caret, **clears the mark**, and closes the keyboard. The **bottom menu** is excluded so insert tools stay usable while typing. An **open object** is excluded so a tap on its frame does not kill the inner field.
 
 ---
 

@@ -154,7 +154,11 @@ Empty **Enter** still exits below a list/table/object without destroying it (con
 
 ### RTL / Hebrew
 
-Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed Hebrew+English) lives in one place: **[`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)** — embeds via `FormattedTextField` (native cursor hidden; overlay paints a 2px bar from glyph rects), file body via ambient-aware SE builders + visual ←/→ plugin. Do not add competing caret math outside that folder.
+Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed Hebrew+English) lives in one place: **[`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)** — embeds via `FormattedTextField`, file body via ambient-aware SE builders + visual ←/→ plugin. Do not add competing caret math outside that folder.
+
+### Object inner text
+
+Object fields are Flutter `TextField`s. Flutter paints the caret. Tap placement is [`embedCaretForTap`](rich_text/rtl/embed_caret_hit.dart) only. Do not overlay a caret, hide `showCursor`, or write selection while typing. The open object and the bottom menu keep focus; the file canvas does not. `onKeyEvent` is installed once. Full list: [`CARET_AND_WRITING_FOCUS.md`](../../../../../CARET_AND_WRITING_FOCUS.md) § Object inner text.
 
 ## One cursor across the whole file
 
@@ -365,7 +369,7 @@ In this area specifically:
 | Keep controllers as SoT while **dirty**; take inbound when not dirty (after keys are up). If both dirty, ask. Dispose must not PATCH a payload that is older than the cache | Overwrite live cells from a stale cache while typing; flush old graph/info on dispose over an agent write; dispose cell/task/info focus nodes mid-KeyDown |
 | Shift+Enter → `runNextFrame`; empty-structure Backspace → `runAfterKeystroke` | Sync `unfocus` / delete structure on the KeyDown frame |
 | Install `FormattedTextField` `onKeyEvent` **once** (stored tear-off) | Re-wrap `FocusNode.onKeyEvent` on every rebuild — tear-offs are not `==`, so Arrow Up stack-overflows |
-| Tap outside **text** (canvas / empty padding / object chrome) unfocuses, closes the keyboard, and **clears the mark**. The bottom menu is the only keep-focus island. | Leave Super Editor focused when the tap is not on another field; wrap the whole object in `KeepEditorFocus` so chrome taps keep the mark |
+| Tap outside the focused editor (canvas / empty padding) unfocuses, closes the keyboard, and **clears the mark**. Bottom menus and the open object do not. | Leave Super Editor focused when the tap is not on another field; keep the mark painted after tap-outside |
 | Remount `SuperEditor` (`ValueKey` epoch) when replacing `Editor` after silent reload | Swap `Editor` in place and keep a stale `DocumentImeInputClient` (Escape IME crash) |
 
 Smoke after edits: type fast in paragraph + info + task + table/chart cell; Shift+Enter into object, type, Shift+Enter out, keep typing.
