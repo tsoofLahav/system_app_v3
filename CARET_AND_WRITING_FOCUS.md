@@ -102,8 +102,8 @@ Never read a single field’s `TextEditingController.selection` to decide what a
 
 **Freeze before focus loss.** Opening a menu or dialog can collapse Super Editor selection.
 
-- Right-click: place the caret at the pointer (unless the click is inside an existing mark), then capture on secondary pointer-down and freeze for the menu session.
-- Agent prompt / saved AI actions: `DocumentEditorRegistry.captureMarkedTextForAgent()` **before** the dialog opens. Embed marks are used only when they belong to the **claimed** file.
+- Right-click: place the caret at the pointer (unless the click is inside an existing mark), expand to that line, then capture and freeze. Object fields use this same sequence — a leftover snapshot on the field must not win.
+- Agent prompt / saved AI actions: `DocumentEditorRegistry.captureMarkedTextForAgent()` **before** the dialog opens. An embed mark is used only while that field owns typing (or tap-outside left no Super Editor selection). A leftover object field must not win once the body has a mark.
 
 While a menu is open there is never a second wash (native selection + line-at-caret) at the same time.
 

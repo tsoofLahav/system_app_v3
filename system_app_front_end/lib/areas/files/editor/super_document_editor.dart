@@ -254,7 +254,16 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   void _onFocusChanged() {
-    if (_focusNode.hasFocus) _claimFile();
+    if (_focusNode.hasFocus) {
+      _claimFile();
+      // Body owns the live mark now — do not let a leftover object field
+      // keep painting or win agent hints.
+      if (_caretSession.owner != DocumentCaretOwner.embed &&
+          !BlockTextFocusRegistry.isInMenuSession &&
+          BlockTextFocusRegistry.markBelongsTo(_ownsFocusNode)) {
+        BlockTextFocusRegistry.releaseLiveMark();
+      }
+    }
     _syncCaretVisibility();
     _bumpPhoneObjectGate();
   }
@@ -618,7 +627,13 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   /// Marked span, or the caret line when unmarked — `hints.selected_text`.
   String? _markedTextForAgent() {
-    if (BlockTextFocusRegistry.markBelongsTo(_ownsFocusNode)) {
+    final seSel = _composer.selection;
+    final embedLive = BlockTextFocusRegistry.activeFocusNode?.hasFocus == true;
+    // Prefer an embed mark only while that field owns typing, or after
+    // tap-outside left no Super Editor selection. A leftover object field
+    // must not win once the body has a mark.
+    if ((embedLive || seSel == null) &&
+        BlockTextFocusRegistry.markBelongsTo(_ownsFocusNode)) {
       final embedMark = BlockTextFocusRegistry.resolveMark();
       if (embedMark.isValid) {
         final text = embedMark.text.trim();
@@ -626,7 +641,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       }
     }
 
-    final sel = caretLineSelection(_doc, _composer.selection);
+    final sel = caretLineSelection(_doc, seSel);
     if (sel == null) return null;
     if (!sel.isCollapsed) {
       final text = _plainTextInDocumentSelection(sel).trim();

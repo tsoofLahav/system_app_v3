@@ -502,6 +502,13 @@ void main() {
       final segments = {paragraphSegmentId('b1'): 'first line\nsecond line'};
       final state = await _pump(tester, flow, segments);
       await _placeCaret(tester, state, 'b1', 0);
+      // A prior mark on this field used to freeze via snapshot, ignoring the
+      // pointer — the same leak Super Editor already stopped.
+      state.controllers['b1']!.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 10,
+      );
+      await tester.pump();
 
       final rect = tester.getRect(
         find.byKey(ValueKey(paragraphSegmentId('b1'))),
@@ -516,6 +523,28 @@ void main() {
       expect(BlockTextFocusRegistry.markedText(), 'second line');
       BlockTextFocusRegistry.closeMenuSession();
       expect(state.controllers['b1']!.text, 'first line\nsecond line');
+    });
+
+    testWidgets('focusing another object field drops the previous mark', (
+      tester,
+    ) async {
+      final flow = DocumentTextFlow();
+      final segments = {
+        paragraphSegmentId('b1'): 'alpha',
+        listItemSegmentId('b2', 0): 'beta',
+      };
+      final state = await _pump(tester, flow, segments);
+      await _placeCaret(tester, state, 'b1', 0);
+      state.controllers['b1']!.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 5,
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(ValueKey(listItemSegmentId('b2', 0))));
+      await tester.pumpAndSettle();
+
+      expect(state.controllers['b1']!.selection.isCollapsed, isTrue);
     });
 
     testWidgets('copy of a cross-part mark joins the parts', (tester) async {

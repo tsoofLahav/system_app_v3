@@ -10,6 +10,7 @@ import '../../objects/links/info_description_bubble.dart';
 import '../editor/document_secondary_tap.dart';
 import '../editor/document_text_flow.dart';
 import '../editor/embed_exit_scope.dart';
+import '../model/line_range.dart';
 import './block_text_focus.dart';
 import './format_range.dart';
 import './frozen_selection_painter.dart';
@@ -791,11 +792,23 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
 
     final offset = _offsetForGlobal(globalPosition);
     if (offset != null && !_clickIsInsideExistingMark(offset)) {
-      widget.controller.selection = TextSelection.collapsed(offset: offset);
+      // Same as Super Editor: drop a stale snapshot, place the caret, expand
+      // to the line at the pointer, then freeze.
+      BlockTextFocusRegistry.discardTransientMark();
+      final line = LineRange.resolve(
+        widget.controller.text,
+        TextSelection.collapsed(offset: offset),
+      );
+      widget.controller.selection = line.isValid
+          ? line.selection
+          : TextSelection.collapsed(offset: offset);
       final flow = _flow;
       final segmentId = _registeredSegmentId;
       if (flow != null && segmentId != null) {
-        flow.collapseTo(DocumentTextPosition(segmentId, offset));
+        flow.collapseTo(DocumentTextPosition(segmentId, line.start));
+        if (line.isValid) {
+          flow.extendTo(DocumentTextPosition(segmentId, line.end));
+        }
       }
     }
     BlockTextFocusRegistry.capturePendingMark();

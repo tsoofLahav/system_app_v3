@@ -101,10 +101,38 @@ class BlockTextFocusRegistry {
     _snapshotSelection = sel;
   }
 
+  /// Drop a leftover snapshot / pending mark so a new pointer aim can freeze
+  /// the caret line instead of the previous selection on this field.
+  static void discardTransientMark() {
+    _pendingMark = null;
+    _snapshotController = null;
+    _snapshotSelection = null;
+  }
+
+  static void _collapseIfMarked(TextEditingController? controller) {
+    if (controller == null) return;
+    final sel = controller.selection;
+    if (!sel.isValid || sel.isCollapsed) return;
+    try {
+      controller.selection = TextSelection.collapsed(offset: sel.extentOffset);
+    } catch (_) {}
+  }
+
   /// Captured on secondary pointer-down, before opening the menu can disturb
   /// focus or collapse the selection.
   static void capturePendingMark() {
     if (_pendingMark != null && _pendingMark!.isValid) return;
+
+    final flow = activeFlow;
+    if (flow != null &&
+        flow.selection != null &&
+        !flow.selection!.isCollapsed) {
+      final mark = DocumentMark.resolve(flow);
+      if (mark.isValid) {
+        _pendingMark = mark;
+        return;
+      }
+    }
 
     final controller = activeController ?? _recentTarget?.controller;
     if (controller != null) {
@@ -180,6 +208,13 @@ class BlockTextFocusRegistry {
     int? taskId,
     DocumentTextFlow? flow,
   }) {
+    if (!isInMenuSession) {
+      final previous = activeController ?? _recentTarget?.controller;
+      if (previous != null && !identical(previous, controller)) {
+        _collapseIfMarked(previous);
+        discardTransientMark();
+      }
+    }
     activeController = controller;
     onChanged = changed;
     activeBlockContent = blockContent;
