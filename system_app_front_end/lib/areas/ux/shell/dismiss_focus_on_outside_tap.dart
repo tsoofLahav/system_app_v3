@@ -2,6 +2,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../files/editor/document_editor_controller.dart';
+
 /// Marks a region where a tap must not steal editor focus — the bottom bar,
 /// and an object while its inner field is focused (so insert tools still work).
 const keepEditorFocusToken = Object();
@@ -50,10 +52,7 @@ class DismissFocusOnOutsideTap extends StatelessWidget {
         event.buttons != kPrimaryMouseButton) {
       return;
     }
-    dismissPrimaryFocusIfPointerOutside(
-      event.position,
-      viewId: event.viewId,
-    );
+    dismissPrimaryFocusIfPointerOutside(event.position, viewId: event.viewId);
   }
 }
 
@@ -72,6 +71,7 @@ void dismissPrimaryFocusIfPointerOutside(
   final origin = box.localToGlobal(Offset.zero);
   if (!(origin & box.size).contains(globalPosition)) {
     focus.unfocus();
+    DocumentEditorRegistry.dismissLiveMarkOnOutsideTap();
   }
 }
 

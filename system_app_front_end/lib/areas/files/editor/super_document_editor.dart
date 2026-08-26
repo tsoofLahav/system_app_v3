@@ -222,6 +222,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           applyTextAction: _handleTextMenuAction,
           toggleMoveMode: _toggleMoveModeFromShortcut,
           restoreWritingFocus: _restoreWritingFocus,
+          dismissLiveMark: _dismissLiveMark,
           isFocused: () => _focusNode.hasFocus,
           canEnterObject: _canEnterObject,
           canLeaveObject: _canLeaveObject,
@@ -368,7 +369,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   void _syncCaretVisibility() {
     if (!mounted) return;
     final show =
-        _focusNode.hasFocus &&
+        _focusNode.hasPrimaryFocus &&
+        _caretSession.owner != DocumentCaretOwner.embed &&
         DocumentEditorRegistry.activeFileId == widget.file.id;
     if (show == _showCaret) return;
     setState(() => _showCaret = show);
@@ -1200,6 +1202,16 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       return;
     }
     _focusNode.requestFocus();
+  }
+
+  /// Tap-outside: hide the caret and drop the live mark (body + object fields).
+  void _dismissLiveMark() {
+    if (BlockTextFocusRegistry.isInMenuSession) return;
+    if (_composer.selection != null) {
+      _composer.clearSelection();
+    }
+    BlockTextFocusRegistry.releaseLiveMark();
+    _syncCaretVisibility();
   }
 
   void _nudgeMoveEmbed({required bool up}) {

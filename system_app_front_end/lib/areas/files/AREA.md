@@ -202,7 +202,7 @@ A topic shows several files at once, so several Super Editors are mounted at onc
 | Rule | Why |
 |------|-----|
 | Every editor gets `inputRole: 'file-<id>'` | The IME connection is global and shared. Without a role the second file registers as the same input, the two panes fight over the connection, and in debug super_editor throws *duplicate input IDs*. |
-| Only the file that is claimed **and** has primary focus draws a caret (`documentOverlayBuilders`) | Switching files **releases** the previous pane’s mark (composer + embed registry) so agent hints and paint cannot leak. Tap-outside on the **same** file still keeps the mark for actions. Text shortcuts Super Editor does not handle itself (underline, size) go through `applyTextAction` on that claimed controller. |
+| Only the file that is claimed **and** has **primary** focus draws a caret (`documentOverlayBuilders`) | `hasFocus` is also true when a descendant object field is focused, which painted a second caret. Switching files releases the previous pane’s mark. **Tap-outside** unfocuses **and clears the mark**. Text shortcuts Super Editor does not handle itself (underline, size) go through `applyTextAction` on that claimed controller. |
 
 Hiding it means swapping Super Editor's cursor layers (desktop caret + the iOS / Android handle layers) for an empty layer of the same count. Two things that look simpler do not work: **removing** a layer leaves it painting, because `ContentLayers` matches overlays by index and never deactivates one past the end of a shorter list; **styling** the caret away fails too, because the blink controller writes its own alpha over the colour, so a transparent caret comes back opaque black.
 
@@ -364,7 +364,7 @@ In this area specifically:
 | Super Editor `setState` only when embed **id/type/order** changes; defer with `runAfterKeystroke` if keys are down. Phone IME has no keys-down — payload refresh must not remount | Treat every new embeds-list identity as a reason to remount; remount a `TextField` after the first letter |
 | Keep controllers as SoT while **dirty**; take inbound when not dirty (after keys are up). If both dirty, ask. Dispose must not PATCH a payload that is older than the cache | Overwrite live cells from a stale cache while typing; flush old graph/info on dispose over an agent write; dispose cell/task/info focus nodes mid-KeyDown |
 | Shift+Enter → `runNextFrame`; empty-structure Backspace → `runAfterKeystroke` | Sync `unfocus` / delete structure on the KeyDown frame |
-| Tap outside the focused editor (canvas / empty padding) unfocuses and closes the keyboard. Bottom menus and the open object do not. | Leave Super Editor focused when the tap is not on another field |
+| Tap outside the focused editor (canvas / empty padding) unfocuses, closes the keyboard, and **clears the mark**. Bottom menus and the open object do not. | Leave Super Editor focused when the tap is not on another field; keep the mark painted after tap-outside |
 | Remount `SuperEditor` (`ValueKey` epoch) when replacing `Editor` after silent reload | Swap `Editor` in place and keep a stale `DocumentImeInputClient` (Escape IME crash) |
 
 Smoke after edits: type fast in paragraph + info + task + table/chart cell; Shift+Enter into object, type, Shift+Enter out, keep typing.

@@ -7,7 +7,6 @@
 /// post-frame.
 library;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 
 /// Hit slop around glyph ink so a tap on a letter in a tall cell stays Flutter.
@@ -41,7 +40,6 @@ int? emptySpaceCaretOffset({
 }
 
 /// Pure geometry for [emptySpaceCaretOffset] — testable without a field.
-@visibleForTesting
 int? emptySpaceCaretOffsetFromBoxes({
   required List<Rect> boxes,
   required Offset local,
@@ -79,4 +77,50 @@ int? emptySpaceCaretOffsetFromBoxes({
   }
 
   return null;
+}
+
+/// Probe slightly inside the nearest glyph when the tap sits in a BiDi gap
+/// on the line (between Hebrew and a number/English run). Null on a glyph
+/// or in padding beside the line — those use other rules.
+Offset? bidiGapCaretProbe({required List<Rect> boxes, required Offset local}) {
+  if (boxes.isEmpty) return null;
+
+  for (final box in boxes) {
+    if (box.inflate(_kEmptySpaceGlyphSlop).contains(local)) return null;
+  }
+
+  final onLine = [
+    for (final box in boxes)
+      if (local.dy >= box.top - _kEmptySpaceGlyphSlop &&
+          local.dy <= box.bottom + _kEmptySpaceGlyphSlop)
+        box,
+  ];
+  if (onLine.isEmpty) return null;
+
+  var left = onLine.first.left;
+  var right = onLine.first.right;
+  for (final box in onLine) {
+    if (box.left < left) left = box.left;
+    if (box.right > right) right = box.right;
+  }
+  if (local.dx < left - 0.5 || local.dx > right + 0.5) return null;
+
+  Rect nearest = onLine.first;
+  var best = _horizontalGap(local.dx, nearest);
+  for (final box in onLine) {
+    final d = _horizontalGap(local.dx, box);
+    if (d < best) {
+      best = d;
+      nearest = box;
+    }
+  }
+  final midY = (nearest.top + nearest.bottom) / 2;
+  final x = local.dx < nearest.left ? nearest.left + 0.5 : nearest.right - 0.5;
+  return Offset(x, midY);
+}
+
+double _horizontalGap(double dx, Rect box) {
+  if (dx < box.left) return box.left - dx;
+  if (dx > box.right) return dx - box.right;
+  return 0;
 }

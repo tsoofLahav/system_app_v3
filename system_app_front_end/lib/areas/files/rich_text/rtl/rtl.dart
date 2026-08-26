@@ -4,8 +4,8 @@
 ///
 /// Pieces:
 /// - [detectParagraphTextDirection] / [resolveFieldTextDirection] — base direction
-/// - [rtlCaretMotionActions] / [wrapVisualCaretMotion] — visual arrow keys (embeds)
-/// - [emptySpaceCaretOffset] — taps in empty padding beside/below glyphs
+/// - [rtlCaretMotionActions] / [wrapVisualCaretMotion] — visual arrow keys (embeds; flip RTL runs only)
+/// - [emptySpaceCaretOffset] / [embedCaretForTap] — padding, BiDi gaps, end-of-line affinity
 /// - [ambientAwareTextBuilders] / [SuperEditorVisualCaretPlugin] — Super Editor
 ///
 /// Wire caret/direction helpers through [FormattedTextField] (embeds) and
@@ -19,6 +19,7 @@ import './paragraph_text_direction.dart';
 import './rtl_caret_motion.dart';
 
 export './empty_space_caret.dart';
+export './embed_caret_hit.dart';
 export './paragraph_text_direction.dart';
 export './rtl_caret_motion.dart';
 export './super_editor_text_direction.dart';
@@ -40,16 +41,14 @@ TextSelection collapsedAtLogicalEnd(int offset) {
 
 /// Always wraps [child] in [Actions] so LTR↔RTL does not remount the field.
 ///
-/// Flip actions apply only when [textDirection] is RTL; LTR is an identity map.
+/// [actions] decide whether to flip (RTL glyph run vs English/number run).
 Widget wrapVisualCaretMotion({
   required TextDirection textDirection,
   required Map<Type, Action<Intent>> actions,
   required Widget child,
 }) {
-  return Actions(
-    actions: textDirection == TextDirection.rtl
-        ? actions
-        : const <Type, Action<Intent>>{},
-    child: child,
+  assert(
+    textDirection == TextDirection.ltr || textDirection == TextDirection.rtl,
   );
+  return Actions(actions: actions, child: child);
 }

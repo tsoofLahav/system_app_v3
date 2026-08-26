@@ -163,7 +163,7 @@ Right-click a **section** frame to edit name, important flag, and section color.
 
 Phone uses its own shell — see [Phone screen structure](#phone-screen-structure). The two rolls are independent. A pending AI review opens as a full-width dialog with Current / Suggested toggle ([`lookalike_review_dialog.dart`](../production_agent/lookalike_review_dialog.dart)); it is not dismissible until Finish or Discard.
 
-Tapping outside the focused editor (canvas, empty padding — not another field) unfocuses it, hides the caret, and closes the keyboard, on phone and desktop ([`shell/dismiss_focus_on_outside_tap.dart`](shell/dismiss_focus_on_outside_tap.dart)). The **bottom menu** is excluded: insert and other bar tools must stay usable while typing. An open object is also excluded so a tap on its frame does not kill the field. On phone, the first pill is arrows plus enter/leave (Shift+Enter has no key). Those arrows never mirror in Hebrew.
+Tapping outside the focused editor (canvas, empty padding — not another field) unfocuses it, hides the caret, **clears the mark**, and closes the keyboard, on phone and desktop ([`shell/dismiss_focus_on_outside_tap.dart`](shell/dismiss_focus_on_outside_tap.dart)). The **bottom menu** is excluded: insert and other bar tools must stay usable while typing. An open object is also excluded so a tap on its frame does not kill the field. On phone, the first pill is arrows plus enter/leave (Shift+Enter has no key). Those arrows never mirror in Hebrew.
 
 ## What the sidebar allows
 

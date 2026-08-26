@@ -23,8 +23,7 @@ bool isSuperEditorCaretRtl(
   if (selection == null) return ambient == TextDirection.rtl;
   final node = editContext.document.getNodeById(selection.extent.nodeId);
   if (node is! TextNode) return ambient == TextDirection.rtl;
-  final dir =
-      detectParagraphTextDirection(node.text.toPlainText()) ?? ambient;
+  final dir = detectParagraphTextDirection(node.text.toPlainText()) ?? ambient;
   return dir == TextDirection.rtl;
 }
 
@@ -61,7 +60,8 @@ ExecutionInstruction moveVisuallyLeftAndRightWithArrowKeys({
     return ExecutionInstruction.continueExecution;
   }
 
-  final isApple = defaultTargetPlatform == TargetPlatform.macOS ||
+  final isApple =
+      defaultTargetPlatform == TargetPlatform.macOS ||
       defaultTargetPlatform == TargetPlatform.iOS;
 
   // Cmd+arrow = line — leave unflipped (RTL.md known gap).
@@ -146,11 +146,11 @@ class SuperEditorVisualCaretPlugin extends SuperEditorPlugin {
 
   @override
   List<SuperEditorKeyboardAction> get keyboardActions => [
-        ({required editContext, required keyEvent}) =>
-            moveVisuallyLeftAndRightWithArrowKeys(
-              editContext: editContext,
-              keyEvent: keyEvent,
-              ambient: ambient,
-            ),
-      ];
+    ({required editContext, required keyEvent}) =>
+        moveVisuallyLeftAndRightWithArrowKeys(
+          editContext: editContext,
+          keyEvent: keyEvent,
+          ambient: ambient,
+        ),
+  ];
 }

@@ -134,8 +134,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   bool _applyingFlowSelection = false;
   TextDirection? _detectedDirection;
   Offset? _pendingTapGlobal;
-  // Built once: the overrides are stateless, so they can outlive a rebuild.
-  final _rtlMotionActions = rtlCaretMotionActions();
+  late final Map<Type, Action<Intent>> _rtlMotionActions;
   bool _mutatingImeSentinel = false;
   bool _structureEnterArmed = true;
   OverlayEntry? _descriptionBubble;
@@ -150,6 +149,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       _focusNode = FocusNode();
       _ownsFocus = true;
     }
+    _rtlMotionActions = rtlCaretMotionActions(
+      shouldFlip: _shouldFlipVisualArrows,
+    );
     _focusNode.addListener(_onFocusChanged);
     widget.controller.addListener(_normalizeSelectionIfNeeded);
     widget.controller.addListener(_syncFlowFromLocalSelection);
@@ -181,6 +183,19 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     return resolveFieldTextDirection(
       widget.controller.text,
       Directionality.of(context),
+    );
+  }
+
+  bool _shouldFlipVisualArrows() {
+    if (!mounted) return false;
+    final paragraph = _resolvedTextDirection(context);
+    return caretRunIsRtl(
+      editable: _renderEditable(),
+      text: widget.controller.text,
+      offset: widget.controller.selection.isValid
+          ? widget.controller.selection.extentOffset
+          : widget.controller.text.length,
+      paragraphDir: paragraph,
     );
   }
 
@@ -842,8 +857,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   /// Shift+click extends the document selection into this part; a plain click
   /// drops a selection that was covering several parts.
   ///
-  /// RTL solution (`rtl/RTL.md`): padding beside the line → logical end in this
-  /// same `onTap` turn; glyph taps and tall-cell padding keep Flutter.
+  /// RTL solution (`rtl/RTL.md`): padding beside the line → logical end;
+  /// BiDi gaps snap to the nearest glyph; end-of-line taps keep affinity on
+  /// that line. Same turn, no post-frame.
   void _handleTap() {
     final flow = _flow;
     final segmentId = _registeredSegmentId;
@@ -858,17 +874,15 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       final host = context.findRenderObject();
       final editable = host == null ? null : _findRenderEditable(host);
       if (editable != null) {
-        final corrected = emptySpaceCaretOffset(
+        final next = embedCaretForTap(
           editable: editable,
           globalPosition: tapGlobal,
           textLength: widget.controller.text.length,
         );
-        if (corrected != null) {
-          offset = corrected;
-          widget.controller.selection = collapsedAtLogicalEnd(corrected);
-          if (flow != null && segmentId != null) {
-            flow.collapseTo(DocumentTextPosition(segmentId, corrected));
-          }
+        offset = next.extentOffset;
+        widget.controller.selection = next;
+        if (flow != null && segmentId != null) {
+          flow.collapseTo(DocumentTextPosition(segmentId, offset));
         }
       }
       final hostBox = context.findRenderObject();

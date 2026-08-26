@@ -54,5 +54,25 @@ void main() {
         isNull,
       );
     });
+
+    test('gap between BiDi runs probes the nearest glyph, not line end', () {
+      const hebrew = Rect.fromLTRB(80, 0, 160, 20);
+      const number = Rect.fromLTRB(20, 0, 50, 20);
+      expect(
+        bidiGapCaretProbe(
+          boxes: const [hebrew, number],
+          local: const Offset(65, 10),
+        ),
+        const Offset(80.5, 10),
+      );
+      expect(
+        emptySpaceCaretOffsetFromBoxes(
+          boxes: const [hebrew, number],
+          local: const Offset(65, 10),
+          textLength: 12,
+        ),
+        isNull,
+      );
+    });
   });
 }

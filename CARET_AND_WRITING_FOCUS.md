@@ -25,7 +25,7 @@ A file is **one continuous piece of text**. Paragraphs, lists, tables, and objec
 
 A blank line the user typed is text and is saved. Move and delete must not leave empty paragraphs the user did not make.
 
-A tap **on glyphs** in a table cell, task, or info stays with Flutter. Only empty padding **beside** the line jumps to the logical end — extra cell/row padding below ink does not.
+A tap **on glyphs** in a table cell, task, or info stays on that glyph. Padding beside the line jumps to the logical end. Gaps between Hebrew and numbers snap to the nearest glyph. End-of-line taps keep the caret on that line.
 
 ---
 
@@ -53,7 +53,7 @@ A topic can show several files, so several Super Editors are mounted at once.
 | Idea | Rule |
 |------|------|
 | **Claim** | Last file the user clicked or typed in (`DocumentEditorRegistry.claim`). Inserts and AI target this file even if the caret is hidden. |
-| **Caret paint** | Only the file that is **claimed and has primary focus** draws a caret. Switching files releases the previous pane’s mark. Tap-outside on the same file keeps the mark for actions. |
+| **Caret paint** | Only the file that is **claimed and has primary focus** draws a caret. A focused object field is a descendant — Super Editor `hasFocus` is not enough or you get two carets. Switching files releases the previous pane’s mark. Tap-outside clears the mark. |
 | **IME role** | Every editor gets `inputRole: 'file-<id>'`. Without a unique role the panes fight one global IME connection. |
 | **Hiding the caret** | Swap Super Editor cursor overlay layers for empty layers of the **same count**. Removing a layer or styling the caret transparent does not work (`ContentLayers` / blink controller). |
 
@@ -61,7 +61,7 @@ Claim follows the click. The visible caret follows primary focus. Tap-outside, a
 
 After chrome that stole the keyboard (arrange, task/table reorder, Move Mode), `DocumentEditorRegistry.restoreActiveWritingFocus()` puts it back on the next frame. Tap-outside does **not** restore.
 
-**Tap outside** the focused editor (canvas / empty padding — not another field) unfocuses, hides the caret, and closes the keyboard. The **bottom menu** is excluded so insert tools stay usable while typing. An **open object** is excluded so a tap on its frame does not kill the inner field.
+**Tap outside** the focused editor (canvas / empty padding — not another field) unfocuses, hides the caret, **clears the mark**, and closes the keyboard. The **bottom menu** is excluded so insert tools stay usable while typing. An **open object** is excluded so a tap on its frame does not kill the inner field.
 
 ---
 

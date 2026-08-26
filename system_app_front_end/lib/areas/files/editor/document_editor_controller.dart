@@ -15,6 +15,7 @@ class DocumentEditorController {
     this.applyTextAction,
     this.toggleMoveMode,
     this.restoreWritingFocus,
+    this.dismissLiveMark,
     this.isFocused,
     this.canEnterObject,
     this.canLeaveObject,
@@ -42,6 +43,9 @@ class DocumentEditorController {
 
   /// Put the keyboard back after chrome (arrange, reorder, Move Mode) stole it.
   final VoidCallback? restoreWritingFocus;
+
+  /// Tap-outside: drop the live mark so it does not stay painted without focus.
+  final VoidCallback? dismissLiveMark;
 
   /// True while this file's Super Editor focus node owns the keyboard.
   final bool Function()? isFocused;
@@ -98,6 +102,12 @@ class DocumentEditorRegistry {
       final target = active ?? (_byFile.isEmpty ? null : _byFile.values.first);
       target?.restoreWritingFocus?.call();
     });
+  }
+
+  /// Tap-outside dismissed the keyboard — drop the mark too.
+  static void dismissLiveMarkOnOutsideTap() {
+    if (BlockTextFocusRegistry.isInMenuSession) return;
+    active?.dismissLiveMark?.call();
   }
 
   static void unregister(int fileId) {

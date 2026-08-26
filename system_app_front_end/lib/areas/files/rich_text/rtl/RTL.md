@@ -22,6 +22,7 @@ rtl/
   paragraph_text_direction.dart
   rtl_caret_motion.dart       ← FormattedTextField visual ←/→
   empty_space_caret.dart
+  embed_caret_hit.dart        ← tap affinity + BiDi-gap snap; run-aware arrows
   super_editor_text_direction.dart  ← SE empty → ambient direction
   super_editor_visual_caret.dart    ← SE visual ←/→ + selectors
 ```
@@ -47,7 +48,7 @@ Flutter moves the caret through the **string**. In RTL that makes ← walk the w
 
 **Do not** reimplement arrows in a `onKeyEvent` handler.
 
-`wrapVisualCaretMotion` always wraps the field in `Actions` (same tree shape so an IME language switch does not remount the `TextField`). Flip actions apply only when the field’s resolved direction is RTL.
+`wrapVisualCaretMotion` always wraps the field in `Actions` (same tree shape so an IME language switch does not remount the `TextField`). Flip actions apply only when the **glyph run at the caret** is RTL. European numbers and Latin inside a Hebrew paragraph paint LTR — do not flip those, or the caret walks the wrong way on the number (Super Editor already does this).
 
 **Not flipped:** Cmd+arrow / Home / End (they share intents; flipping would break Home/End). Documented as a known gap in the files [`AREA.md`](../../AREA.md).
 
@@ -59,22 +60,22 @@ Full-width fields leave empty space beside glyphs (especially RTL). Flutter’s 
 
 | Tap target | Who places the caret |
 |------------|----------------------|
-| On painted glyphs (few px slop), or empty `boxes` | Flutter (`getPositionForPoint`) |
+| On painted glyphs (few px slop), or empty `boxes` | Flutter hit-test, then **affinity** so an end-of-line tap does not jump to the line below |
+| Gap between BiDi runs on the same line (Hebrew vs number/English) | Snap to the nearest glyph, then affinity |
 | Empty padding **beside** the line slot | Logical line end via `getLineAtOffset` (probe glyph **center** only to learn which line) |
 | Extra cell/row padding above/below ink (tall cells, centered tasks) | Flutter — do not treat ink-bottom as the line |
 | Empty space under the whole file (outside every field) | `DocumentTextFlow` → logical end of last part |
 
 Correction runs in `FormattedTextField.onTap` **in the same event turn** (before paint). Never post-frame — that flashes wrong → right.
 
-Use `collapsedAtLogicalEnd(offset)` so affinity stays upstream at ends.
-
 ## Wiring checklist (`FormattedTextField`)
 
 - [ ] `textDirection: resolveFieldTextDirection(text, ambient)`
 - [ ] `textAlign: TextAlign.start` (follows direction)
 - [ ] `wrapVisualCaretMotion(...)` always (identity actions when LTR)
-- [ ] Primary pointer down stores global position; `onTap` may call `emptySpaceCaretOffset`
+- [ ] Primary pointer down stores global position; `onTap` calls `embedCaretForTap`
 - [ ] Cross-part arrow edge uses the **resolved** field direction, not only ambient locale
+- [ ] Horizontal arrows flip only on an RTL glyph run (not on numbers / Latin)
 
 ## Super Editor (file body)
 
@@ -118,6 +119,8 @@ Manual (Hebrew UI):
 5. Click below the paragraph / empty file → caret at end of last line  
 6. Click on a Hebrew letter mid-word → caret stays where Flutter put it on the glyph  
 7. Click mid-word in a table cell / task / info (including tall-cell padding below ink) → caret stays on the word, not the line end  
+8. Click the end of a wrapped line in an object field → caret stays on that line (not the start of the next)  
+9. Numbers inside Hebrew in an object field — arrows and clicks follow the number run, like the file body
 
 ## Related
 

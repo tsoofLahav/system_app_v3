@@ -198,7 +198,7 @@ void main() {
     tester,
   ) async {
     final childKey = GlobalKey();
-    final actions = rtlCaretMotionActions();
+    final actions = rtlCaretMotionActions(shouldFlip: () => false);
 
     await tester.pumpWidget(
       MaterialApp(
