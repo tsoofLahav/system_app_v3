@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/objects/data/app_view.dart';
+import 'package:system_app_front_end/areas/objects/data/view_layout.dart';
 
 void main() {
   test('ViewMembership keeps topic_order_index apart from order_index', () {
@@ -41,5 +42,30 @@ void main() {
     expect(next.sectionName, isNull);
     expect(next.topicOrderIndex, 8);
     expect(next.orderIndex, 1);
+  });
+
+  test('membership with empty topic_key stays in No topic', () {
+    expect(
+      ViewLayoutConfig.topicBucketKey(
+        hasMembership: true,
+        membershipTopicKey: null,
+        homeTopicId: 7,
+      ),
+      'no_topic',
+    );
+    expect(
+      ViewLayoutConfig.topicBucketKey(
+        hasMembership: true,
+        membershipTopicKey: 'topic_3',
+      ),
+      'topic_3',
+    );
+    expect(
+      ViewLayoutConfig.topicBucketKey(
+        hasMembership: false,
+        homeTopicId: 7,
+      ),
+      'topic_7',
+    );
   });
 }

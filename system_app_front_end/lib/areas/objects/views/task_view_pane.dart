@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../core/app_state.dart';
 import '../../../core/platform/app_form_factor.dart';
@@ -61,9 +60,7 @@ class TaskViewPane extends StatefulWidget {
 class _TaskViewPaneState extends State<TaskViewPane> {
   var _frameReorderMode = false;
   var _taskReorderMode = false;
-  int? _selectedReorderTaskId;
   ViewChromeHost? _chromeHost;
-  final _reorderFocus = FocusNode();
 
   AppState get state => widget.state;
 
@@ -75,7 +72,6 @@ class _TaskViewPaneState extends State<TaskViewPane> {
 
   @override
   void dispose() {
-    _reorderFocus.dispose();
     final host = _chromeHost;
     if (host != null) ViewChromeRegistry.detach(host);
     super.dispose();
@@ -97,7 +93,6 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     setState(() {
       _frameReorderMode = false;
       _taskReorderMode = false;
-      _selectedReorderTaskId = null;
     });
     _publishChrome();
     final next = state.viewDisplayMode == ViewDisplayMode.byTopic
@@ -109,7 +104,7 @@ class _TaskViewPaneState extends State<TaskViewPane> {
   List<Task> get _membershipTasks {
     return [
       for (final m in state.viewMemberships)
-        if (m.task != null) Task.fromJson(m.task!),
+        if (state.taskForMembership(m) case final task?) task,
     ];
   }
 
@@ -149,18 +144,15 @@ class _TaskViewPaneState extends State<TaskViewPane> {
   }
 
   String _topicKeyFor(Task task) {
-    for (final m in state.viewMemberships) {
-      if (m.taskId == task.id &&
-          m.topicKey != null &&
-          m.topicKey!.isNotEmpty) {
-        return m.topicKey!;
-      }
-    }
-    if (task.topicKey != null && task.topicKey!.isNotEmpty) {
-      return task.topicKey!;
-    }
-    if (task.topicId != null) return 'topic_${task.topicId}';
-    return 'no_topic';
+    final membership = state.viewMemberships
+        .where((m) => m.taskId == task.id)
+        .firstOrNull;
+    return ViewLayoutConfig.topicBucketKey(
+      hasMembership: membership != null,
+      membershipTopicKey: membership?.topicKey,
+      taskTopicKey: task.topicKey,
+      homeTopicId: task.topicId,
+    );
   }
 
   String _topicTitle(String key, List<Task> tasksInFrame) {
@@ -485,7 +477,6 @@ class _TaskViewPaneState extends State<TaskViewPane> {
   void _startFrameReorder() {
     setState(() {
       _taskReorderMode = false;
-      _selectedReorderTaskId = null;
       _frameReorderMode = true;
     });
     _publishChrome();
@@ -495,64 +486,8 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     setState(() {
       _frameReorderMode = false;
       _taskReorderMode = !_taskReorderMode;
-      if (!_taskReorderMode) _selectedReorderTaskId = null;
     });
     _publishChrome();
-    if (_taskReorderMode) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _reorderFocus.requestFocus();
-      });
-    }
-  }
-
-  List<_ViewFrame> _currentFrames() {
-    final tasks = _membershipTasks;
-    return state.viewDisplayMode == ViewDisplayMode.byTopic
-        ? _framesForTopics(tasks)
-        : _framesForSections(tasks);
-  }
-
-  Future<void> _moveSelectedToAdjacentFrame(int delta) async {
-    final id = _selectedReorderTaskId;
-    if (id == null || !_taskReorderMode || _frameReorderMode) return;
-    final frames = _currentFrames();
-    final from = frames.indexWhere((f) => f.tasks.any((t) => t.id == id));
-    final to = from + delta;
-    if (from < 0 || to < 0 || to >= frames.length) return;
-    final task = frames[from].tasks.firstWhere((t) => t.id == id);
-    final target = frames[to];
-    final targetDone = task.isDone;
-    final indexInZone = targetDone
-        ? target.tasks.where((t) => t.isDone).length
-        : target.tasks.where((t) => !t.isDone).length;
-    await _onForeignDrop(
-      frame: target,
-      payload: TaskDragPayload(
-        task: task,
-        sourceListId: state.selectedView?.id ?? 0,
-        sourceDone: task.isDone,
-      ),
-      targetDone: targetDone,
-      indexInZone: indexInZone,
-    );
-  }
-
-  KeyEventResult _onReorderKey(FocusNode node, KeyEvent event) {
-    if (!_taskReorderMode || _frameReorderMode) {
-      return KeyEventResult.ignored;
-    }
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      unawaited(_moveSelectedToAdjacentFrame(-1));
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      unawaited(_moveSelectedToAdjacentFrame(1));
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
   }
 
   void _moveFrame(List<_ViewFrame> frames, String fromKey, String toKey) {
@@ -585,27 +520,10 @@ class _TaskViewPaneState extends State<TaskViewPane> {
           frames: frames,
           frameReorderMode: _frameReorderMode,
           taskReorderMode: _taskReorderMode,
-          selectedReorderTaskId: _selectedReorderTaskId,
           state: state,
           onForeignDrop: _onForeignDrop,
           onTaskReorderModeChanged: (value) {
-            setState(() {
-              _taskReorderMode = value;
-              if (!value) _selectedReorderTaskId = null;
-            });
-            if (value) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) _reorderFocus.requestFocus();
-              });
-            }
-          },
-          onReorderTaskSelected: (id) {
-            setState(() => _selectedReorderTaskId = id);
-            if (_taskReorderMode) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) _reorderFocus.requestFocus();
-              });
-            }
+            setState(() => _taskReorderMode = value);
           },
           onSectionTitleMenu: _onSectionTitleMenu,
           onEditSection: _editSection,
@@ -616,17 +534,9 @@ class _TaskViewPaneState extends State<TaskViewPane> {
 
         // Task reorder: tap outside the grid ends the mode.
         if (_taskReorderMode && !_frameReorderMode) {
-          grid = Focus(
-            focusNode: _reorderFocus,
-            autofocus: true,
-            onKeyEvent: _onReorderKey,
-            child: TapRegion(
-              onTapOutside: (_) => setState(() {
-                _taskReorderMode = false;
-                _selectedReorderTaskId = null;
-              }),
-              child: grid,
-            ),
+          grid = TapRegion(
+            onTapOutside: (_) => setState(() => _taskReorderMode = false),
+            child: grid,
           );
         }
 
@@ -708,11 +618,9 @@ class _FrameGrid extends StatelessWidget {
     required this.frames,
     required this.frameReorderMode,
     required this.taskReorderMode,
-    required this.selectedReorderTaskId,
     required this.state,
     required this.onForeignDrop,
     required this.onTaskReorderModeChanged,
-    required this.onReorderTaskSelected,
     required this.onSectionTitleMenu,
     required this.onEditSection,
     required this.onDeleteSection,
@@ -723,7 +631,6 @@ class _FrameGrid extends StatelessWidget {
   final List<_ViewFrame> frames;
   final bool frameReorderMode;
   final bool taskReorderMode;
-  final int? selectedReorderTaskId;
   final AppState state;
   final void Function({
     required _ViewFrame frame,
@@ -732,7 +639,6 @@ class _FrameGrid extends StatelessWidget {
     required int indexInZone,
   }) onForeignDrop;
   final ValueChanged<bool> onTaskReorderModeChanged;
-  final ValueChanged<int?> onReorderTaskSelected;
   final Future<void> Function(Offset, ViewSectionDef) onSectionTitleMenu;
   final Future<void> Function(ViewSectionDef) onEditSection;
   final Future<void> Function(ViewSectionDef) onDeleteSection;
@@ -750,16 +656,15 @@ class _FrameGrid extends StatelessWidget {
       children: [
         for (final frame in frames)
           SizedBox(
+            key: ValueKey(frame.key),
             width: frameWidth,
             child: _DraggableFrame(
               frame: frame,
               frameReorderMode: frameReorderMode,
               taskReorderMode: taskReorderMode,
-              selectedReorderTaskId: selectedReorderTaskId,
               state: state,
               onForeignDrop: onForeignDrop,
               onTaskReorderModeChanged: onTaskReorderModeChanged,
-              onReorderTaskSelected: onReorderTaskSelected,
               onSectionTitleMenu: onSectionTitleMenu,
               onEditSection: onEditSection,
               onDeleteSection: onDeleteSection,
@@ -790,11 +695,9 @@ class _DraggableFrame extends StatelessWidget {
     required this.frame,
     required this.frameReorderMode,
     required this.taskReorderMode,
-    required this.selectedReorderTaskId,
     required this.state,
     required this.onForeignDrop,
     required this.onTaskReorderModeChanged,
-    required this.onReorderTaskSelected,
     required this.onSectionTitleMenu,
     required this.onEditSection,
     required this.onDeleteSection,
@@ -804,7 +707,6 @@ class _DraggableFrame extends StatelessWidget {
   final _ViewFrame frame;
   final bool frameReorderMode;
   final bool taskReorderMode;
-  final int? selectedReorderTaskId;
   final AppState state;
   final void Function({
     required _ViewFrame frame,
@@ -813,7 +715,6 @@ class _DraggableFrame extends StatelessWidget {
     required int indexInZone,
   }) onForeignDrop;
   final ValueChanged<bool> onTaskReorderModeChanged;
-  final ValueChanged<int?> onReorderTaskSelected;
   final Future<void> Function(Offset, ViewSectionDef) onSectionTitleMenu;
   final Future<void> Function(ViewSectionDef) onEditSection;
   final Future<void> Function(ViewSectionDef) onDeleteSection;
@@ -838,9 +739,7 @@ class _DraggableFrame extends StatelessWidget {
       isImportant: frame.isImportant,
       frameReorderMode: frameReorderMode,
       taskReorderMode: taskReorderMode,
-      selectedReorderTaskId: selectedReorderTaskId,
       onTaskReorderModeChanged: onTaskReorderModeChanged,
-      onReorderTaskSelected: onReorderTaskSelected,
       onForeignDrop: ({
         required payload,
         required targetDone,

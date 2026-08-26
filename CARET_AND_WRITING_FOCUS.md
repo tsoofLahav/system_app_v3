@@ -55,7 +55,7 @@ Info, tasks, and table cells are a Material `TextField` ([`FormattedTextField`](
 | Visual ←/→ via `Actions`; install `onKeyEvent` **once** | Re-wrap `onKeyEvent` on rebuild; reimplement arrows in `onKeyEvent` |
 | Keep-focus: **bottom menu** and the **open object** | Treat object chrome / padding as “outside” and kill the field |
 | One `DocumentTextFlow` **per object** (tasks / cells) | Mark across objects or into the file body |
-| Scroll a field only when it is off-screen | `ensureVisible` with `alignment: 0.15` on every focus |
+| Scroll a field only when it is completely off-screen | `ensureVisible` on every focus, or when the field is not laid out yet (new task / table row) |
 | Keyboard safety in [`NOTES.md`](NOTES.md#editor-keyboard-safety) | `notifyListeners` from a keystroke; remount the field while typing |
 
 Tap the **file canvas / body** (not another field): unfocus, hide the caret, **clear the mark**. Tap the open object’s frame: keep typing.

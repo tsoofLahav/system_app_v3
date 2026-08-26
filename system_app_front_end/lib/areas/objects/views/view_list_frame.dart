@@ -7,6 +7,7 @@ import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/note_widgets.dart';
 import '../data/task.dart';
+import '../tasks/task_drag_data.dart';
 import '../tasks/task_list_surface.dart';
 import './view_frame_task_list.dart';
 
@@ -27,9 +28,7 @@ class ViewListFrame extends StatelessWidget {
     this.isImportant = false,
     this.frameReorderMode = false,
     this.taskReorderMode = false,
-    this.selectedReorderTaskId,
     this.onTaskReorderModeChanged,
-    this.onReorderTaskSelected,
   });
 
   final AppState state;
@@ -47,13 +46,28 @@ class ViewListFrame extends StatelessWidget {
   final bool isImportant;
   final bool frameReorderMode;
   final bool taskReorderMode;
-  final int? selectedReorderTaskId;
   final ValueChanged<bool>? onTaskReorderModeChanged;
-  final ValueChanged<int?>? onReorderTaskSelected;
+
+  bool _acceptsTask(TaskDragPayload payload) =>
+      payload.sourceListId == state.selectedView?.id;
+
+  void _dropOnFrame(TaskDragPayload payload) {
+    final drop = onForeignDrop;
+    if (drop == null) return;
+    final targetDone = payload.sourceDone;
+    final indexInZone = tasks
+        .where((t) => t.isDone == targetDone && t.id != payload.task.id)
+        .length;
+    drop(
+      payload: payload,
+      targetDone: targetDone,
+      indexInZone: indexInZone,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final body = NoteCard(
+    final card = NoteCard(
       topicAccent: accent,
       fileId: accent == null ? null : tintSeed,
       child: Padding(
@@ -88,15 +102,16 @@ class ViewListFrame extends StatelessWidget {
             IgnorePointer(
               ignoring: frameReorderMode,
               child: ViewFrameTaskList(
+                key: ValueKey(
+                  'view-frame:${sectionName ?? ''}:${topicKey ?? ''}',
+                ),
                 state: state,
                 tasks: tasks,
                 sectionName: sectionName,
                 sectionFlag: sectionFlag,
                 topicKey: topicKey,
                 reorderMode: taskReorderMode,
-                selectedReorderTaskId: selectedReorderTaskId,
                 onReorderModeChanged: onTaskReorderModeChanged,
-                onReorderTaskSelected: onReorderTaskSelected,
                 onForeignDrop: onForeignDrop,
                 enabled: !frameReorderMode,
               ),
@@ -106,14 +121,37 @@ class ViewListFrame extends StatelessWidget {
       ),
     );
 
-    final framed = frameReorderMode
-        ? DragModeFrame(
-            padding: EdgeInsets.zero,
-            child: body,
-          )
-        : body;
+    Widget body = card;
+    if (taskReorderMode && !frameReorderMode && onForeignDrop != null) {
+      body = DragTarget<TaskDragPayload>(
+        onWillAcceptWithDetails: (d) => _acceptsTask(d.data),
+        onAcceptWithDetails: (d) => _dropOnFrame(d.data),
+        builder: (context, candidate, rejected) {
+          final hot = candidate.isNotEmpty;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 100),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: hot
+                  ? Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.45),
+                      width: 1.5,
+                    )
+                  : null,
+            ),
+            child: card,
+          );
+        },
+      );
+    }
 
-    return framed;
+    if (frameReorderMode) {
+      return DragModeFrame(
+        padding: EdgeInsets.zero,
+        child: body,
+      );
+    }
+    return body;
   }
 }
 

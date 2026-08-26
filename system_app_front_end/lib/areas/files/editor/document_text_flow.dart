@@ -8,7 +8,7 @@
 /// order and owns the caret and selection *across* them.
 ///
 /// Segment ids are built by [paragraphSegmentId], [listItemSegmentId],
-/// [tableCellSegmentId], [taskItemSegmentId] and [embedSegmentId] so that order
+/// [tableCellSegmentId], [taskIdSegmentId] and [embedSegmentId] so that order
 /// can be derived without the flow knowing anything about block types.
 library;
 
@@ -16,6 +16,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+
+import '../../../shared/utils/frame_safe_notifier.dart';
 
 String paragraphSegmentId(String blockId) => blockId;
 
@@ -38,8 +40,25 @@ String tableCellSegmentId(String blockId, int row, int column) =>
 }
 
 /// One task title inside a task-list embed — same role as a list bullet.
+///
+/// Slot-based (`#t{index}`). New task fields use [taskIdSegmentId] so a link
+/// or caret stays on that task when rows are inserted above it.
 String taskItemSegmentId(String blockId, int itemIndex) =>
     '$blockId#t$itemIndex';
+
+/// Stable task-title segment — follows `tasks.id`, not list position.
+String taskIdSegmentId(int taskId) => 'task:$taskId';
+
+int? parseTaskIdSegmentId(String segmentId) {
+  final match = RegExp(r'^task:(\d+)$').firstMatch(segmentId);
+  if (match == null) return null;
+  return int.parse(match.group(1)!);
+}
+
+bool isTaskRowSegmentId(String segmentId) =>
+    parseTaskIdSegmentId(segmentId) != null ||
+    parseTaskItemSegmentId(segmentId) != null ||
+    segmentId.startsWith('task:pending:');
 
 /// One graph cell — same role as a table cell (`row` is 0=label, 1=value).
 String graphCellSegmentId(String blockId, int row, int column) =>
@@ -154,7 +173,7 @@ class _SegmentBinding {
 /// tree). Widgets attach themselves with [register]. The two are deliberately
 /// separate: order must stay correct even for segments that are scrolled out of
 /// the tree and therefore not registered.
-class DocumentTextFlow extends ChangeNotifier {
+class DocumentTextFlow extends FrameSafeNotifier {
   final _order = <String>[];
   final _bindings = <String, _SegmentBinding>{};
 
@@ -192,7 +211,7 @@ class DocumentTextFlow extends ChangeNotifier {
             !_order.contains(current.focus.segmentId))) {
       _selection = null;
     }
-    notifyListeners();
+    notify();
   }
 
   /// Overrides up/down targets for segments where reading order is not the
@@ -322,7 +341,7 @@ class DocumentTextFlow extends ChangeNotifier {
   void _setSelection(DocumentTextSelection? next) {
     if (_selection == next) return;
     _selection = next;
-    notifyListeners();
+    notify();
   }
 
   /// Orders the two ends by document position, so callers can treat the result
@@ -391,8 +410,8 @@ class DocumentTextFlow extends ChangeNotifier {
     final current = _selection;
     if (current == null || current.isWithinOneSegment) return false;
     if (_tableRectIds(current) != null) return true;
-    return parseTaskItemSegmentId(current.anchor.segmentId) != null &&
-        parseTaskItemSegmentId(current.focus.segmentId) != null;
+    return isTaskRowSegmentId(current.anchor.segmentId) &&
+        isTaskRowSegmentId(current.focus.segmentId);
   }
 
   List<String>? _tableRectIds(DocumentTextSelection sel) {

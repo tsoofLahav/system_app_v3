@@ -116,7 +116,6 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget>
       onDeleteObject: widget.onDeleteObject,
       compactMode: moveMode,
       listTitleSegmentId: taskListTitleSegmentId(widget.blockId),
-      taskSegmentId: (index) => taskItemSegmentId(widget.blockId, index),
       documentBaseOffset: widget.documentBaseOffset,
       hostEmbed: widget.embed,
       climbToListTitleOnLastBackspace: true,

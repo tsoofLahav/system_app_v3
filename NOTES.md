@@ -49,7 +49,7 @@ This class of bug also comes back after embed/save/focus changes inside a file (
 
 Gathered in one place: [`CARET_AND_WRITING_FOCUS.md`](CARET_AND_WRITING_FOCUS.md). Detail and fluent-text rules: files [`AREA.md`](system_app_front_end/lib/areas/files/AREA.md) · [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md).
 
-**2026-08-26 — Object fields:** Material `TextField`. Native caret. Tap placement only (`embedCaretForTap`). Keep-focus on the open object and the bottom menu. Do not overlay-paint a caret or rewrite selection while typing. `onKeyEvent` once (Arrow Up stack-overflow). One `DocumentTextFlow` per object so Shift+arrows mark across tasks or cells in that object only. Do not `ensureVisible` a field that is already on screen.
+**2026-08-26 — Object fields:** Material `TextField`. Native caret. Tap placement only (`embedCaretForTap`). Keep-focus on the open object and the bottom menu. Do not overlay-paint a caret or rewrite selection while typing. `onKeyEvent` once (Arrow Up stack-overflow). One `DocumentTextFlow` per object so Shift+arrows mark across tasks or cells in that object only. Do not `ensureVisible` a field that is already on screen, not laid out yet, or has no size (Enter on a new task / table row). Description links open on double-click / double-tap, not a single click. Task rows must not change widget key when the new task’s id arrives — that remounts the field and drops focus after Enter.
 
 ---
 

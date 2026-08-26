@@ -36,6 +36,14 @@ def test_replace_memberships_writes_topic_order_index():
     assert "topic_order_index" in inspect.getsource(views_routes.create_view_task)
 
 
+def test_create_view_task_does_not_copy_after_task_placement():
+    source = inspect.getsource(views_routes.create_view_task)
+    assert "after_task_id" in source
+    assert "never copy the sibling" in source
+    assert "_blank_text" in inspect.getsource(views_routes)
+    assert "section_name = after" not in source
+
+
 def test_topic_order_index_falls_back_to_order_index():
     assert views_routes._topic_order_index({"order_index": 4}, 0) == 4
     assert views_routes._topic_order_index({"topic_order_index": 7, "order_index": 1}, 0) == 7

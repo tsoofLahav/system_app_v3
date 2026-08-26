@@ -85,9 +85,9 @@ class ViewService {
       'status': status,
       if (afterTaskId != null) 'after_task_id': afterTaskId,
       if (taskListId != null) 'task_list_id': taskListId,
-      if (sectionName != null) 'section_name': sectionName,
-      if (sectionFlag != null) 'section_flag': sectionFlag,
-      if (topicKey != null) 'topic_key': topicKey,
+      'section_name': sectionName,
+      'section_flag': sectionFlag,
+      'topic_key': topicKey,
     }) as Map<String, dynamic>;
     return Task.fromJson(data);
   }

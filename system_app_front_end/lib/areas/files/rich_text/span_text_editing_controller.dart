@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../../ui/app_colors.dart';
 import './format_range.dart';
@@ -18,6 +19,8 @@ class SpanTextEditingController extends TextEditingController {
 
   List<Map<String, dynamic>> _spans;
   List<({int start, int end})> _descriptionPaintRanges = const [];
+  var _paintNotifyQueued = false;
+  var _disposed = false;
   late String _previousText;
   bool _suppressSpanUpdates = false;
 
@@ -34,9 +37,21 @@ class SpanTextEditingController extends TextEditingController {
   void setDescriptionPaintRanges(List<({int start, int end})> ranges) {
     if (_samePaintRanges(_descriptionPaintRanges, ranges)) return;
     _descriptionPaintRanges = List<({int start, int end})>.from(ranges);
-    try {
-      notifyListeners();
-    } catch (_) {}
+    switch (SchedulerBinding.instance.schedulerPhase) {
+      case SchedulerPhase.idle:
+      case SchedulerPhase.postFrameCallbacks:
+        notifyListeners();
+      case SchedulerPhase.transientCallbacks:
+      case SchedulerPhase.midFrameMicrotasks:
+      case SchedulerPhase.persistentCallbacks:
+        if (_paintNotifyQueued) return;
+        _paintNotifyQueued = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _paintNotifyQueued = false;
+          if (_disposed) return;
+          notifyListeners();
+        });
+    }
   }
 
   set spans(List<Map<String, dynamic>> value) {
@@ -109,6 +124,7 @@ class SpanTextEditingController extends TextEditingController {
 
   @override
   void dispose() {
+    _disposed = true;
     removeListener(_onControllerTextChanged);
     super.dispose();
   }

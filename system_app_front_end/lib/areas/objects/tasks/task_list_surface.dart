@@ -51,14 +51,11 @@ class TaskListSurface extends StatefulWidget {
     this.onDeleteObject,
     this.compactMode = false,
     this.listTitleSegmentId,
-    this.taskSegmentId,
     this.documentBaseOffset = 0,
     this.extraMenuEntries,
     this.onExtraMenuAction,
     this.onForeignDrop,
     this.onReorderModeChanged,
-    this.selectedReorderTaskId,
-    this.onReorderTaskSelected,
     this.climbToListTitleOnLastBackspace = true,
     this.includeAssignView = true,
     this.onArrowExitAbove,
@@ -76,7 +73,6 @@ class TaskListSurface extends StatefulWidget {
   final VoidCallback? onDeleteObject;
   final bool compactMode;
   final String? listTitleSegmentId;
-  final String Function(int index)? taskSegmentId;
 
   /// Start of the host pointer/part in the marker-text buffer (in-file only).
   final int documentBaseOffset;
@@ -84,8 +80,6 @@ class TaskListSurface extends StatefulWidget {
   final Future<void> Function(String action, Task task)? onExtraMenuAction;
   final TaskListForeignDrop? onForeignDrop;
   final ValueChanged<bool>? onReorderModeChanged;
-  final int? selectedReorderTaskId;
-  final ValueChanged<int?>? onReorderTaskSelected;
   final bool climbToListTitleOnLastBackspace;
 
   /// When false, the host supplies its own Choose view entry (view frames).
@@ -116,6 +110,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   final _taskIds = <int?>[];
   final _done = <bool>[];
   final _saveTimers = <Timer?>[];
+  final _rowKeys = <Object>[];
   int? _pendingFocusIndex;
   var _ensuringSeed = false;
   var _persisting = false;
@@ -218,7 +213,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   @override
   void didUpdateWidget(TaskListSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_persisting || _pendingFocusIndex != null) return;
+    if (_persisting) return;
     if (!_titleFocus.hasFocus &&
         oldWidget.bridge.listTitle != _bridge.listTitle) {
       _titleController.text = _bridge.listTitle;
@@ -230,19 +225,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         return;
       }
     }
-    if (_localMatchesRemote()) return;
-    if (_focusNodes.any((f) => f.hasFocus) ||
-        HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
-      return;
-    }
-    final focusIdx =
-        _pendingFocusIndex ?? _focusNodes.indexWhere((f) => f.hasFocus);
-    _disposeRows();
-    _syncFromTasks(_displayTasks);
-    if (focusIdx >= 0 && focusIdx < _focusNodes.length) {
-      _pendingFocusIndex = focusIdx;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
-    }
+    final tasks = _displayTasks;
+    if (!_rowsNeedAdopt(tasks)) return;
+    _adoptTasks(tasks);
   }
 
   bool _idsMatch(List<Task> a, List<Task> b) {
@@ -253,19 +238,131 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     return true;
   }
 
-  bool _localMatchesRemote() {
-    final tasks = _displayTasks;
+  bool _rowsNeedAdopt(List<Task> tasks) {
     if (tasks.isEmpty) {
-      return _controllers.length == 1 &&
+      return !(_controllers.length == 1 &&
           _taskIds.length == 1 &&
-          _taskIds.first == null;
+          _taskIds.first == null);
     }
-    if (_controllers.length != tasks.length) return false;
+    if (_taskIds.whereType<int>().length != tasks.length) return true;
+    if (_taskIds.length != tasks.length) return true;
     for (var i = 0; i < tasks.length; i++) {
-      if (_taskIds[i] != tasks[i].id) return false;
-      if (_done[i] != tasks[i].isDone) return false;
+      if (_taskIds[i] != tasks[i].id) return true;
+      if (_done[i] != tasks[i].isDone) return true;
+      final focused = i < _focusNodes.length && _focusNodes[i].hasFocus;
+      if (!focused &&
+          imeVisibleText(_controllers[i].text) != tasks[i].title) {
+        return true;
+      }
     }
-    return true;
+    return false;
+  }
+
+  /// Reuse controllers / focus nodes by [Task.id] so an insert is a new row
+  /// and existing titles, carets, and links stay on their task.
+  void _adoptTasks(List<Task> tasks) {
+    if (tasks.isEmpty) {
+      if (_controllers.length == 1 &&
+          _taskIds.length == 1 &&
+          _taskIds.first == null) {
+        return;
+      }
+      final oldControllers = List<SpanTextEditingController>.from(_controllers);
+      final oldFocus = List<FocusNode>.from(_focusNodes);
+      final oldTimers = List<Timer?>.from(_saveTimers);
+      _controllers.clear();
+      _focusNodes.clear();
+      _taskIds.clear();
+      _done.clear();
+      _saveTimers.clear();
+      _rowKeys.clear();
+      _syncFromTasks(const []);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        for (final timer in oldTimers) {
+          timer?.cancel();
+        }
+        for (final c in oldControllers) {
+          c.dispose();
+        }
+        for (final f in oldFocus) {
+          f.dispose();
+        }
+      });
+      return;
+    }
+
+    final oldControllers = List<SpanTextEditingController>.from(_controllers);
+    final oldFocus = List<FocusNode>.from(_focusNodes);
+    final oldIds = List<int?>.from(_taskIds);
+    final oldTimers = List<Timer?>.from(_saveTimers);
+    final oldRowKeys = List<Object>.from(_rowKeys);
+    final byId = <int, int>{};
+    for (var i = 0; i < oldIds.length; i++) {
+      final id = oldIds[i];
+      if (id != null) byId[id] = i;
+    }
+
+    final nextControllers = <SpanTextEditingController>[];
+    final nextFocus = <FocusNode>[];
+    final nextIds = <int?>[];
+    final nextDone = <bool>[];
+    final nextTimers = <Timer?>[];
+    final nextRowKeys = <Object>[];
+
+    for (final task in tasks) {
+      final oldIndex = byId[task.id];
+      if (oldIndex != null) {
+        final focus = oldFocus[oldIndex];
+        final controller = oldControllers[oldIndex];
+        if (!focus.hasFocus &&
+            imeVisibleText(controller.text) != task.title) {
+          controller.text = task.title;
+        }
+        nextControllers.add(controller);
+        nextFocus.add(focus);
+        nextIds.add(task.id);
+        nextDone.add(task.isDone);
+        nextTimers.add(oldTimers[oldIndex]);
+        nextRowKeys.add(oldRowKeys[oldIndex]);
+      } else {
+        nextControllers.add(SpanTextEditingController(text: task.title));
+        nextFocus.add(_createRowFocus());
+        nextIds.add(task.id);
+        nextDone.add(task.isDone);
+        nextTimers.add(null);
+        nextRowKeys.add(Object());
+      }
+    }
+
+    final kept = {...nextControllers};
+    _controllers
+      ..clear()
+      ..addAll(nextControllers);
+    _focusNodes
+      ..clear()
+      ..addAll(nextFocus);
+    _taskIds
+      ..clear()
+      ..addAll(nextIds);
+    _done
+      ..clear()
+      ..addAll(nextDone);
+    _saveTimers
+      ..clear()
+      ..addAll(nextTimers);
+    _rowKeys
+      ..clear()
+      ..addAll(nextRowKeys);
+    _syncFlowOrder();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (var i = 0; i < oldControllers.length; i++) {
+        if (kept.contains(oldControllers[i])) continue;
+        oldTimers[i]?.cancel();
+        oldControllers[i].dispose();
+        oldFocus[i].dispose();
+      }
+    });
   }
 
   void _syncFromTasks(List<Task> tasks) {
@@ -275,6 +372,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       _taskIds.add(null);
       _done.add(false);
       _saveTimers.add(null);
+      _rowKeys.add(Object());
       _syncFlowOrder();
       return;
     }
@@ -284,6 +382,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       _taskIds.add(task.id);
       _done.add(task.isDone);
       _saveTimers.add(null);
+      _rowKeys.add(Object());
     }
     _syncFlowOrder();
   }
@@ -339,13 +438,13 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
   int? _taskIdFromSegment(String? segmentId) {
     if (segmentId == null) return null;
+    final byId = parseTaskIdSegmentId(segmentId);
+    if (byId != null) return byId;
     final parsed = parseTaskItemSegmentId(segmentId);
     if (parsed != null) {
       final i = parsed.$2;
       if (i >= 0 && i < _taskIds.length) return _taskIds[i];
     }
-    final standalone = RegExp(r'^task:(\d+)$').firstMatch(segmentId);
-    if (standalone != null) return int.parse(standalone.group(1)!);
     return null;
   }
 
@@ -387,6 +486,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     _taskIds.clear();
     _done.clear();
     _saveTimers.clear();
+    _rowKeys.clear();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       for (final c in controllers) {
         c.dispose();
@@ -462,12 +562,12 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
   Task? _taskById(int id) {
     for (final t in _displayTasks) {
-      if (t.id == id) return t;
+      if (t.id == id) return widget.state.hydrateTask(t);
     }
     for (final t in _bridge.remoteTasks) {
-      if (t.id == id) return t;
+      if (t.id == id) return widget.state.hydrateTask(t);
     }
-    return null;
+    return widget.state.taskById(id);
   }
 
   void _applyPendingFocus() {
@@ -497,6 +597,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
           _taskIds.add(created.id);
           _done.add(false);
           _saveTimers.add(null);
+          _rowKeys.add(Object());
         } else {
           _taskIds[0] = created.id;
         }
@@ -634,6 +735,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       _taskIds.insert(newIndex, null);
       _done.insert(newIndex, asDone);
       _saveTimers.insert(newIndex, null);
+      _rowKeys.insert(newIndex, Object());
     });
     _pendingFocusIndex = newIndex;
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
@@ -681,6 +783,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         _focusNodes.removeAt(index);
         _taskIds.removeAt(index);
         _done.removeAt(index);
+        _rowKeys.removeAt(index);
         _optimistic = _tasksFromLocalRows();
       });
       _syncFlowOrder();
@@ -758,23 +861,13 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       _optimistic = [
         for (final t in next.all) t.copyWith(title: titles[t.id] ?? t.title),
       ];
-      _disposeRows();
-      _syncFromTasks(_optimistic!);
-      for (var i = 0; i < _taskIds.length; i++) {
-        final id = _taskIds[i];
-        if (id != null && titles.containsKey(id)) {
-          _controllers[i].text = titles[id]!;
-        }
-      }
+      _adoptTasks(_optimistic!);
     });
     if (focusId != null) {
       final idx = _taskIds.indexOf(focusId);
       if (idx >= 0) {
         _pendingFocusIndex = idx;
-        _reorderResumeIndex = idx;
-        WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _applyPendingFocus(),
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
       }
     }
   }
@@ -889,7 +982,6 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     }
     widget.onReorderModeChanged?.call(value);
     if (!value) {
-      widget.onReorderTaskSelected?.call(null);
       final idx = _reorderResumeIndex;
       _reorderResumeIndex = null;
       if (!mounted) return;
@@ -915,22 +1007,12 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   List<DescriptionTextRange> _taskDescriptionRanges(int index) {
     final id = index >= 0 && index < _taskIds.length ? _taskIds[index] : null;
     final task = id == null ? null : _taskById(id);
-    final fromTask = descriptionRangesFromLinks(
-      task?.descriptionLinks ?? const [],
-    );
-    final seen = {for (final r in fromTask) r.link['id']};
-    return [
-      ...fromTask,
-      for (final r in _descriptionRanges(widget.taskSegmentId?.call(index)))
-        if (!seen.contains(r.link['id'])) r,
-    ];
+    return descriptionRangesFromLinks(task?.descriptionLinks ?? const []);
   }
 
   String _taskSegmentId(int index) {
-    final fromHost = widget.taskSegmentId?.call(index);
-    if (fromHost != null && fromHost.isNotEmpty) return fromHost;
     final id = index >= 0 && index < _taskIds.length ? _taskIds[index] : null;
-    if (id != null) return 'task:$id';
+    if (id != null) return taskIdSegmentId(id);
     return 'task:pending:$index';
   }
 
@@ -953,7 +1035,6 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       context: context,
       state: widget.state,
       taskId: id,
-      segmentId: _taskSegmentId(index),
       fileId: widget.hostEmbed?.fileId,
     );
     if (mounted) setState(() {});
@@ -966,7 +1047,6 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         ? const <AppContextMenuEntry>[]
         : (widget.extraMenuEntries?.call(task) ?? const []);
     final onReorderChanged = widget.onReorderModeChanged;
-    final onReorderSelected = widget.onReorderTaskSelected;
 
     await DocumentContextMenu.showTaskListMenu(
       context: context,
@@ -983,10 +1063,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         if (action == 'tasks:reorder_mode') {
           if (mounted) {
             _setReorderMode(true);
-            if (id != null) onReorderSelected?.call(id);
           } else {
             onReorderChanged?.call(true);
-            if (id != null) onReorderSelected?.call(id);
           }
           return;
         }
@@ -1093,23 +1171,17 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       ],
     );
     final chip = glass ? DragModeFrame.chip(child: body) : body;
-    final id = index >= 0 && index < _taskIds.length ? _taskIds[index] : null;
-    final selected = glass &&
-        id != null &&
-        widget.selectedReorderTaskId == id;
-    final painted = selected
-        ? DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: AppColors.primary.withValues(alpha: 0.75),
-                width: 1.5,
-              ),
-            ),
-            child: chip,
-          )
-        : chip;
-    return Align(alignment: AlignmentDirectional.centerStart, child: painted);
+    return Align(alignment: AlignmentDirectional.centerStart, child: chip);
+  }
+
+  Widget _keyedTaskRow(int index) {
+    if (index < 0 || index >= _rowKeys.length) {
+      return const SizedBox.shrink();
+    }
+    return KeyedSubtree(
+      key: ObjectKey(_rowKeys[index]),
+      child: _taskRow(index),
+    );
   }
 
   Widget _taskRow(int index) {
@@ -1162,14 +1234,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
                   child: _compactTaskChip(index, glass: true),
                 ),
                 childWhenDragging: Opacity(opacity: 0.28, child: framed),
-                child: GestureDetector(
-                  onTap: () {
-                    if (id != null) widget.onReorderTaskSelected?.call(id);
-                  },
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.grab,
-                    child: framed,
-                  ),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.grab,
+                  child: framed,
                 ),
               ),
             ],
@@ -1295,11 +1362,12 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         if (_bridge.showListTitle && !compact && !_reorderMode)
           const SizedBox(height: 4),
         if (showDoneHeader) _zoneLabel(s['tasksActive']),
-        for (var i = 0; i < activeCount; i++) _taskRow(i),
+        for (var i = 0; i < activeCount; i++) _keyedTaskRow(i),
         _dropGap(targetDone: false, indexInZone: activeCount),
         if (showDoneHeader) ...[
           _zoneLabel(s['tasksDone']),
-          for (var i = activeCount; i < _controllers.length; i++) _taskRow(i),
+          for (var i = activeCount; i < _controllers.length; i++)
+            _keyedTaskRow(i),
           _dropGap(targetDone: true, indexInZone: doneCount),
         ],
       ],

@@ -104,9 +104,13 @@ TOOL_WRITE_DEFAULTS: dict[str, WriteMode] = {
     "rewrite_file": "direct_apply",
     "create_object": "direct_apply",
     "create_file": "direct_apply",
+    "views": "direct_apply",
 }
 
-WRITE_TOOL_NAMES = frozenset(TOOL_WRITE_DEFAULTS)
+# File-body writes only. `views` is membership, dispatched separately.
+WRITE_TOOL_NAMES = frozenset(
+    name for name in TOOL_WRITE_DEFAULTS if name != "views"
+)
 
 
 def resolve_write_mode(tool_name: str, run_apply_mode: str) -> WriteMode:

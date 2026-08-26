@@ -99,12 +99,23 @@ def _task_dict_with_topic(task: Task) -> dict:
     return data
 
 
+def _blank_text(value):
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 @views_bp.route("/views/<int:view_id>/tasks", methods=["POST"])
 def create_view_task(view_id):
     """Create a task membership in this view.
 
     View-created tasks are orphans by default (``task_list_id`` null). Pass
     ``task_list_id`` only when placing into an existing home list.
+
+    Placement is only what this request sends: empty/null ``section_name`` is
+    Uncategorized, empty/null ``topic_key`` is No topic. ``after_task_id``
+    is insert order — never copy the sibling's section, topic, or list.
     """
     get_or_404(View, view_id)
     data = request.get_json(silent=True) or {}
@@ -114,9 +125,9 @@ def create_view_task(view_id):
         else str(data.get("title"))
     )
     status = data.get("status") or "active"
-    section_name = data.get("section_name")
-    section_flag = data.get("section_flag")
-    topic_key = data.get("topic_key")
+    section_name = _blank_text(data.get("section_name"))
+    section_flag = _blank_text(data.get("section_flag"))
+    topic_key = _blank_text(data.get("topic_key"))
     after_task_id = data.get("after_task_id")
     task_list_id = data.get("task_list_id")
     if task_list_id is not None:

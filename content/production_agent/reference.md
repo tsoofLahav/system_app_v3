@@ -208,6 +208,20 @@ Creates an empty file in that topic and returns `file_id`. Then `open_file` and 
 
 Creates the embed + pointer; returns `object_id`. Then `open_file` + `patch_file` to fill rows/tasks. For `image`, `body` is the picture to generate (required) and `title` is the caption — the tool stores the file. `after_line` `0` = end of file.
 
+### `views`
+
+```json
+{ "action": "list", "task_id": 0, "object_id": 0, "title": "", "view_id": 0, "section_name": "" }
+```
+
+Returns each view's `view_id`, `name`, and named `sections`. Uncategorized is the leftover bucket (no `section_name`), not a listed section.
+
+```json
+{ "action": "assign", "task_id": 0, "object_id": 42, "title": "Call clinic", "view_id": 3, "section_name": "Focus" }
+```
+
+Puts that task on view 3 in section Focus (one view per task). `section_name` `""` = Uncategorized. `view_id` `0` removes it from every view. Prefer `task_id` when you have it; otherwise `[TASK_LIST]` `object_id` + exact title.
+
 ### `reference`
 
 This help. `section`: `agent_text` | `tools` | `all`.

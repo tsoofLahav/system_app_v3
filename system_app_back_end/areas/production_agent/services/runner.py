@@ -35,6 +35,7 @@ from areas.production_agent.services.browse_tools import (
 )
 from areas.production_agent.services.create_file_tool import create_file
 from areas.production_agent.services.create_object_tool import create_object
+from areas.production_agent.services.views_tool import views_tool
 from areas.production_agent.services.pending_reviews import upsert_pending_from_proposals
 from areas.production_agent.services.write_tools import (
     WRITE_TOOL_NAMES,
@@ -245,6 +246,59 @@ TOOL_DEFS: list[dict[str, Any]] = [
     },
     {
         "type": "function",
+        "name": "views",
+        "description": (
+            "List workspace views and their sections, or assign a task to a view. "
+            "A task belongs to at most one view; assign replaces any previous one. "
+            "action=list: no other fields needed (pass 0 / \"\"). "
+            "action=assign: identify the task by task_id, or by object_id "
+            "(the [TASK_LIST] id from open_file) plus title. "
+            "view_id 0 removes the task from every view. "
+            "section_name \"\" is Uncategorized (not a named section). "
+            "Call list first when choosing a view or section yourself."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "list | assign",
+                },
+                "task_id": {
+                    "type": "integer",
+                    "description": "Task id; 0 if using object_id + title",
+                },
+                "object_id": {
+                    "type": "integer",
+                    "description": "[TASK_LIST] object id; 0 if using task_id",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Task title when using object_id; else \"\"",
+                },
+                "view_id": {
+                    "type": "integer",
+                    "description": "View id; 0 = list unused, or remove from views",
+                },
+                "section_name": {
+                    "type": "string",
+                    "description": "Named section from list; \"\" = Uncategorized",
+                },
+            },
+            "required": [
+                "action",
+                "task_id",
+                "object_id",
+                "title",
+                "view_id",
+                "section_name",
+            ],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
         "name": "reference",
         "description": (
             "Load format or tool-usage examples. Call when unsure how agent text "
@@ -419,6 +473,20 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
             body=str(args.get("body") or ""),
             after_line=after,
         )
+    if name == "views":
+        if not workspace_id:
+            return {"error": "workspace_id missing from run", "tool": "views"}
+        write_mode = resolve_write_mode("views", apply_mode)
+        return views_tool(
+            workspace_id=workspace_id,
+            action=str(args.get("action") or ""),
+            write_mode=write_mode,
+            task_id=_optional_id(args.get("task_id")),
+            object_id=_optional_id(args.get("object_id")),
+            title=str(args.get("title") or ""),
+            view_id=_optional_id(args.get("view_id")),
+            section_name=str(args.get("section_name") or ""),
+        )
     if name in WRITE_TOOL_NAMES or name == "update_file":
         # update_file kept as alias → patch_file for older prompts.
         tool_name = "patch_file" if name == "update_file" else name
@@ -591,6 +659,7 @@ def run_agent(
                         result_tool in WRITE_TOOL_NAMES
                         or name in WRITE_TOOL_NAMES
                         or name == "update_file"
+                        or result_tool == "views"
                     )
                     and (result.get("review") or result.get("applied"))
                 ):

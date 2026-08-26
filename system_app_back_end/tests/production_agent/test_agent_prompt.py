@@ -23,6 +23,7 @@ def test_load_prompt_file_is_short_standing_instructions():
     assert "find_object" in text
     assert "create_object" in text
     assert "create_file" in text
+    assert "views" in text
     assert "patch_file" in text
     assert "one `patch_file` call" in text
     assert "[SPACER" in text
@@ -47,6 +48,7 @@ def test_default_tool_allowlist():
     assert "list_archived" in DEFAULT_TOOL_ALLOWLIST
     assert "create_object" in DEFAULT_TOOL_ALLOWLIST
     assert "create_file" in DEFAULT_TOOL_ALLOWLIST
+    assert "views" in DEFAULT_TOOL_ALLOWLIST
     assert "search" not in DEFAULT_TOOL_ALLOWLIST
     assert "search_tasks" not in DEFAULT_TOOL_ALLOWLIST
 
@@ -65,6 +67,7 @@ def test_reference_sections():
     assert "list_archived" in tools
     assert "create_object" in tools
     assert "create_file" in tools
+    assert "views" in tools
     assert "search_tasks" not in tools
     assert "[BULLET_LIST]" not in tools
 

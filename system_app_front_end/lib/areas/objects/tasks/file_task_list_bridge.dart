@@ -18,7 +18,10 @@ class FileTaskListBridge extends TaskListBridge {
   int? get _listId => embed.taskListId;
 
   @override
-  List<Task> get remoteTasks => embed.tasks ?? const [];
+  List<Task> get remoteTasks => [
+        for (final task in embed.tasks ?? const [])
+          state.hydrateTask(task),
+      ];
 
   @override
   int get dragGroupId => _listId ?? 0;

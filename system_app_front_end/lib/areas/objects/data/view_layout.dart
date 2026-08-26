@@ -139,11 +139,30 @@ abstract final class ViewLayoutConfig {
     ];
   }
 
-  static List<String> _dedupeKeys(List<String> keys) {
+    static List<String> _dedupeKeys(List<String> keys) {
     final seen = <String>{};
     return [
       for (final k in keys)
         if (seen.add(k)) k,
     ];
+  }
+
+  /// Frame bucket for topic mode. A membership row with empty topic_key stays
+  /// in No topic — do not fall back to the home list's topic.
+  static String topicBucketKey({
+    required bool hasMembership,
+    String? membershipTopicKey,
+    String? taskTopicKey,
+    int? homeTopicId,
+  }) {
+    if (hasMembership) {
+      final key = membershipTopicKey?.trim();
+      if (key != null && key.isNotEmpty) return key;
+      return 'no_topic';
+    }
+    final fromTask = taskTopicKey?.trim();
+    if (fromTask != null && fromTask.isNotEmpty) return fromTask;
+    if (homeTopicId != null) return 'topic_$homeTopicId';
+    return 'no_topic';
   }
 }

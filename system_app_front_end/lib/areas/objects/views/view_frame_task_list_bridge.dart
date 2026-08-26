@@ -16,13 +16,15 @@ class ViewFrameTaskListBridge extends TaskListBridge {
 
   final AppState state;
   List<Task> frameTasks;
-  final String? sectionName;
-  final String? sectionFlag;
-  final String? topicKey;
+  String? sectionName;
+  String? sectionFlag;
+  String? topicKey;
   Future<bool> Function(Task task)? confirmDeleteFn;
 
   @override
-  List<Task> get remoteTasks => frameTasks;
+  List<Task> get remoteTasks => [
+        for (final task in frameTasks) state.hydrateTask(task),
+      ];
 
   @override
   int get dragGroupId => state.selectedView?.id ?? 0;

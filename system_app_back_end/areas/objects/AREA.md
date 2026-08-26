@@ -51,7 +51,7 @@ Views are membership and filtering only. **Never add per-view status columns** �
 
 **Membership GET enrichment.** Listing memberships includes the nested task plus home-topic fields (`topic_id`, `topic_name`, `topic_key`, `topic_color`) so the frontend can colour topic frames without extra round-trips.
 
-**Create task in a view.** `POST /views/:id/tasks` creates a real `tasks` row with **`task_list_id` null by default** (orphan — no home list). Optional `task_list_id` places it into an existing list. `tasks.task_list_id` is already nullable. Deleting a task with a home list should warn; orphans need no “original list” warning.
+**Create task in a view.** `POST /views/:id/tasks` creates a real `tasks` row with **`task_list_id` null by default** (orphan — no home list). Optional `task_list_id` places it into an existing list. Membership takes **only the frame it was added in**: `section_name` / `section_flag` / `topic_key` from that request (empty/null = Uncategorized / No topic). `after_task_id` is insert order only — do not copy the sibling’s section, topic, or home list. `tasks.task_list_id` is already nullable. Deleting a task with a home list should warn; orphans need no “original list” warning.
 
 **Task list header.** `task_lists.title` (migration `005`) is the list’s header — same role as info title. `PATCH /task-lists/:id` updates it. Membership/task payloads include `task_list_title` when the task has a home list. Agent text carries it as `title="…"` on `[TASK_LIST id="…"]` so `patch_file` can rename the list.
 
@@ -71,11 +71,11 @@ The `links` table is the workspace **object graph**, keyed by **`objects.id`** f
 | Kind | Shape | How it is created |
 |------|-------|-------------------|
 | **Related** | **info ↔ info** only | Object chrome or map node → Add connection |
-| **Description** | **Marked text → an info** | Field menu → Connect info… On a **task title**, stored on the task (`source_type=task`) so the same underline shows in the file and in views. On other objects, stored on the host object. Many spans per host are allowed. Self-links are rejected. |
+| **Description** | **Marked text → an info** | Field menu → Connect info… On a **task title**, stored on the task (`source_type=task`, `anchor.segment_id` = `task:{id}`) so the underline stays with that task. On other objects, stored on the host object. Many spans per host are allowed. Self-links are rejected. |
 
 If the marked text lives **inside an info**, creating the description **also upserts related** between those two infos so the objects map gets an edge. Text inside a task or table does not draw a map edge. Deleting one kind does **not** delete the other.
 
-Task title description links travel with the task row (`description_links` on task payloads and view memberships). `GET /files/:id/description-links` also returns task-hosted links whose home list lives in that file, so in-file underlines keep working. Older `task_list` + segment links still paint in the file only; new Connect info on a task uses the task id. `delete_task_cascade` drops those rows.
+Task title description links travel with the task row (`description_links` on task payloads and view memberships). `GET /files/:id/description-links` also returns task-hosted links whose home list lives in that file, so in-file underlines keep working. Older `task_list` + `#t{index}` links still paint only if looked up by that slot — new Connect info uses `task:{id}`. `delete_task_cascade` drops those rows.
 
 | Endpoint | Role |
 |----------|------|

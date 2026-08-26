@@ -121,6 +121,10 @@ class AppState extends ChangeNotifier {
   List<ViewMembership> viewMemberships = [];
   ViewDisplayMode viewDisplayMode = ViewDisplayMode.bySection;
 
+  /// Live task rows by id. File lists and views both read this map so a title,
+  /// done flag, or description link is the same task everywhere.
+  final Map<int, Task> tasksById = {};
+
   bool isArchiveMode = false;
   Topic? selectedArchiveTopic;
   ArchiveIndex archiveIndex = ArchiveIndex.empty;
@@ -498,7 +502,9 @@ class AppState extends ChangeNotifier {
     isArchiveMode = false;
     isDiagramMode = false;
     selectedViewType = viewType;
-    selectedView = userViews.where((v) => v.type == viewType).firstOrNull;
+    final next = userViews.where((v) => v.type == viewType).firstOrNull;
+    if (next?.id != selectedView?.id) viewMemberships = [];
+    selectedView = next;
     viewPaneReady = selectedView != null;
     if (selectedView != null) {
       viewDisplayMode = _displayModeFromConfig(selectedView!.layoutConfig);
@@ -507,7 +513,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       if (selectedView != null) {
-        viewMemberships = await _views.listMemberships(selectedView!.id);
+        await _refreshViewMemberships();
       }
     } catch (e) {
       error = e.toString();
@@ -1748,6 +1754,10 @@ class AppState extends ChangeNotifier {
   }) async {
     final embeds = await _objects.listForFile(fileId);
     embedsByFileId[fileId] = embeds;
+    _ingestTasks([
+      for (final embed in embeds)
+        ...?embed.tasks,
+    ]);
     try {
       descriptionLinksByFileId[fileId] = await _objects
           .listFileDescriptionLinks(fileId);
@@ -1902,6 +1912,7 @@ class AppState extends ChangeNotifier {
       title: title,
       status: status,
     );
+    _ingestTask(task);
     // Insert into the matching zone after [afterTaskId], then the other zone.
     final existing = await _tasks.listForTaskList(taskListId);
     final others = existing.where((t) => t.id != task.id).toList();
@@ -1954,9 +1965,8 @@ class AppState extends ChangeNotifier {
     bool notify = true,
   }) async {
     if (selectedView == null) return;
-    viewMemberships = await _views.replaceMemberships(
-      selectedView!.id,
-      memberships,
+    _applyViewMemberships(
+      await _views.replaceMemberships(selectedView!.id, memberships),
     );
     if (notify) notifyListeners();
   }
@@ -2034,7 +2044,7 @@ class AppState extends ChangeNotifier {
     if (isViewMode &&
         selectedView != null &&
         previousIds.contains(selectedView!.id)) {
-      viewMemberships = await _views.listMemberships(selectedView!.id);
+      await _refreshViewMemberships();
     }
     notifyListeners();
   }
@@ -2090,7 +2100,7 @@ class AppState extends ChangeNotifier {
     }
 
     if (isViewMode && selectedView != null) {
-      viewMemberships = await _views.listMemberships(selectedView!.id);
+      await _refreshViewMemberships();
     }
     notifyListeners();
   }
@@ -2176,6 +2186,10 @@ class AppState extends ChangeNotifier {
 
   Future<void> toggleTaskStatus(Task task, {bool notify = true}) async {
     await _api.post('/tasks/${task.id}/toggle', {});
+    _patchCachedTask(
+      task.id,
+      status: task.isDone ? 'active' : 'done',
+    );
     await _reloadEmbedsForOpenFiles(notify: notify);
   }
 
@@ -2210,26 +2224,93 @@ class AppState extends ChangeNotifier {
     }
     // Patch caches in place — never reload embeds mid-keystroke (that rebuilds
     // text fields and desyncs HardwareKeyboard: KeyDownEvent already pressed).
-    _patchCachedTaskTitle(task.id, title);
+    _patchCachedTask(task.id, title: title);
     if (notify) notifyListeners();
   }
 
-  void _patchCachedTaskTitle(int taskId, String title) {
+  Task? taskById(int id) => tasksById[id];
+
+  Task hydrateTask(Task task) => tasksById[task.id] ?? task;
+
+  Task? taskForMembership(ViewMembership membership) {
+    final id = membership.taskId;
+    if (id != null) {
+      final cached = tasksById[id];
+      if (cached != null) return cached;
+    }
+    if (membership.task != null) return Task.fromJson(membership.task!);
+    return null;
+  }
+
+  void _ingestTask(Task task) {
+    tasksById[task.id] = task;
+  }
+
+  void _ingestTasks(Iterable<Task> tasks) {
+    for (final task in tasks) {
+      _ingestTask(task);
+    }
+  }
+
+  void _dropCachedTask(int taskId) {
+    tasksById.remove(taskId);
+  }
+
+  void _ingestMembershipTasks() {
+    for (final membership in viewMemberships) {
+      if (membership.task == null) continue;
+      _ingestTask(Task.fromJson(membership.task!));
+    }
+  }
+
+  void _applyViewMemberships(List<ViewMembership> rows) {
+    viewMemberships = rows;
+    _ingestMembershipTasks();
+  }
+
+  Future<void> _refreshViewMemberships() async {
+    if (selectedView == null) return;
+    _applyViewMemberships(await _views.listMemberships(selectedView!.id));
+  }
+
+  void _patchCachedTask(
+    int taskId, {
+    String? title,
+    String? status,
+    List<Map<String, dynamic>>? descriptionLinks,
+    int? taskListId,
+    String? taskListTitle,
+  }) {
+    final prev = tasksById[taskId];
+    final next = (prev ??
+            Task(
+              id: taskId,
+              title: title ?? '',
+              status: status ?? 'active',
+            ))
+        .copyWith(
+          title: title,
+          status: status,
+          descriptionLinks: descriptionLinks,
+          taskListId: taskListId,
+          taskListTitle: taskListTitle,
+        );
+    _ingestTask(next);
     for (final entry in embedsByFileId.entries.toList()) {
       final embeds = entry.value;
       var changed = false;
-      final next = <ObjectEmbed>[];
+      final patched = <ObjectEmbed>[];
       for (final embed in embeds) {
         final tasks = embed.tasks;
         if (tasks == null) {
-          next.add(embed);
+          patched.add(embed);
           continue;
         }
-        final newTasks = <Task>[];
         var taskChanged = false;
+        final newTasks = <Task>[];
         for (final t in tasks) {
           if (t.id == taskId) {
-            newTasks.add(t.copyWith(title: title));
+            newTasks.add(hydrateTask(t));
             taskChanged = true;
           } else {
             newTasks.add(t);
@@ -2237,28 +2318,37 @@ class AppState extends ChangeNotifier {
         }
         if (taskChanged) {
           changed = true;
-          next.add(embed.copyWith(tasks: newTasks));
+          patched.add(embed.copyWith(tasks: newTasks));
         } else {
-          next.add(embed);
+          patched.add(embed);
         }
       }
-      if (changed) embedsByFileId[entry.key] = next;
+      if (changed) embedsByFileId[entry.key] = patched;
     }
-    if (isViewMode) {
-      viewMemberships = [
-        for (final m in viewMemberships)
-          if (m.taskId == taskId && m.task != null)
-            m.copyWith(task: {...m.task!, 'title': title})
-          else
-            m,
-      ];
-    }
+    viewMemberships = [
+      for (final m in viewMemberships)
+        if (m.taskId == taskId && m.task != null)
+          m.copyWith(
+            task: {
+              ...m.task!,
+              if (title != null) 'title': title,
+              if (status != null) 'status': status,
+              if (taskListId != null) 'task_list_id': taskListId,
+              if (taskListTitle != null) 'task_list_title': taskListTitle,
+              if (descriptionLinks != null)
+                'description_links': descriptionLinks,
+            },
+          )
+        else
+          m,
+    ];
   }
 
   Future<void> deleteTask(Task task, {bool notify = true}) async {
     await _tasks.deleteTask(task.id);
-    if (isViewMode && selectedView != null) {
-      viewMemberships = await _views.listMemberships(selectedView!.id);
+    _dropCachedTask(task.id);
+    if (selectedView != null) {
+      await _refreshViewMemberships();
     }
     await _reloadEmbedsForOpenFiles(notify: notify);
   }
@@ -2290,7 +2380,8 @@ class AppState extends ChangeNotifier {
       sectionFlag: sectionFlag,
       topicKey: topicKey,
     );
-    viewMemberships = await _views.listMemberships(selectedView!.id);
+    _ingestTask(task);
+    await _refreshViewMemberships();
     await _reloadEmbedsForOpenFiles(notify: notify);
     return task;
   }
@@ -2309,14 +2400,10 @@ class AppState extends ChangeNotifier {
           e.taskListId == taskListId ? e.copyWith(taskListTitle: title) : e,
       ];
     }
-    if (isViewMode && selectedView != null) {
-      viewMemberships = [
-        for (final m in viewMemberships)
-          if (m.task != null && m.task!['task_list_id'] == taskListId)
-            m.copyWith(task: {...m.task!, 'task_list_title': title})
-          else
-            m,
-      ];
+    for (final task in tasksById.values.toList()) {
+      if (task.taskListId == taskListId) {
+        _patchCachedTask(task.id, taskListTitle: title);
+      }
     }
     if (notify) notifyListeners();
   }
@@ -2337,7 +2424,7 @@ class AppState extends ChangeNotifier {
       await loadEmbedsForFile(file.id, notify: false);
     }
     if (isViewMode && selectedView != null) {
-      viewMemberships = await _views.listMemberships(selectedView!.id);
+      await _refreshViewMemberships();
     }
     if (notify) notifyListeners();
   }
@@ -2529,10 +2616,10 @@ class AppState extends ChangeNotifier {
   }
 
   List<Task> get viewTasks {
-    return viewMemberships
-        .where((m) => m.task != null)
-        .map((m) => Task.fromJson(m.task!))
-        .toList();
+    return [
+      for (final m in viewMemberships)
+        if (taskForMembership(m) case final task?) task,
+    ];
   }
 
   List<ViewSectionDef> sectionsForSelectedView() {
@@ -2620,9 +2707,11 @@ class AppState extends ChangeNotifier {
               : m.sectionFlag,
         },
     ];
-    viewMemberships = await _views.replaceMemberships(
-      selectedView!.id,
-      memberships,
+    _applyViewMemberships(
+      await _views.replaceMemberships(
+        selectedView!.id,
+        memberships,
+      ),
     );
     notifyListeners();
   }
@@ -2652,9 +2741,11 @@ class AppState extends ChangeNotifier {
             .copyWith(clearSection: m.sectionName == section)
             .toReplaceJson(),
     ];
-    viewMemberships = await _views.replaceMemberships(
-      selectedView!.id,
-      memberships,
+    _applyViewMemberships(
+      await _views.replaceMemberships(
+        selectedView!.id,
+        memberships,
+      ),
     );
     notifyListeners();
   }

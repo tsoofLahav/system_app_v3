@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../../../shared/utils/platform_text.dart';
@@ -296,6 +297,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       _editableKeyHandler = null;
     }
     _attachToFlow(_flow);
+    if (oldWidget.controller != widget.controller ||
+        oldWidget.segmentId != widget.segmentId) {
+      _hideDescriptionBubble();
+    }
     _syncDescriptionPaint();
     if (oldWidget.focusNode != widget.focusNode ||
         _focusNode.onKeyEvent != _installedKeyHandler) {
@@ -328,7 +333,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     widget.controller.removeListener(_noteSelectionForMenu);
     widget.controller.removeListener(_pinSentinelCaretIfNeeded);
     _focusNode.removeListener(_onFocusChanged);
-    _stripEmptyImeSentinel(rebuild: false);
+    // Do not write the controller here — value= notifies AnimatedBuilder
+    // while finalizeTree has the widget tree locked.
     BlockTextFocusRegistry.unregister(widget.controller);
     _hideDescriptionBubble();
     if (_ownsFocus) _focusNode.dispose();
@@ -382,8 +388,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         taskId: widget.taskId,
         flow: _flow,
       );
-      // File pane owns scrolling — keep the caret in view without letting each
-      // EditableText scroll as its own surface.
+      // File pane owns scrolling. Never jump a field that is already in view
+      // (Enter on a new task/row used to ensureVisible the whole page).
       _ensureVisibleInFilePane();
       _ensureEmptyImeSentinel();
     } else {
@@ -400,17 +406,29 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   void _ensureVisibleInFilePane() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_focusNode.hasFocus) return;
-      // Only scroll when this field is off-screen. Forcing alignment 0.15
-      // jumps a lower task/cell to the top of the file pane on every focus.
+      if (_fieldIsOnScreen()) return;
       Scrollable.ensureVisible(
         context,
         alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
       );
-      Scrollable.ensureVisible(
-        context,
-        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
-      );
     });
+  }
+
+  /// True when this field already overlaps the nearest scroll viewport, or
+  /// has not laid out yet — do not scroll in those cases.
+  bool _fieldIsOnScreen() {
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize || !box.attached) return true;
+    if (box.size.width <= 0 || box.size.height <= 0) return true;
+    final viewportBox = switch (RenderAbstractViewport.maybeOf(box)) {
+      final RenderBox b => b,
+      _ => null,
+    };
+    if (viewportBox == null || !viewportBox.hasSize) return true;
+    final field = box.localToGlobal(Offset.zero) & box.size;
+    final visible =
+        viewportBox.localToGlobal(Offset.zero) & viewportBox.size;
+    return visible.overlaps(field);
   }
 
   void _notifyChanged() {
@@ -921,10 +939,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       final hostBox = context.findRenderObject();
       if (hostBox is RenderBox) {
         final local = hostBox.globalToLocal(tapGlobal);
-        final hit = _descriptionAt(local);
-        if (hit != null) {
-          _activateDescription(hit);
-        } else {
+        // Description links open on double-click only (see onDoubleTapDown).
+        if (_descriptionAt(local) == null) {
           _openWebLinkAt(local);
         }
       }
@@ -1458,9 +1474,21 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   }
 
   void _hideDescriptionBubble({bool clearHover = true}) {
-    _descriptionBubble?.remove();
+    final entry = _descriptionBubble;
     _descriptionBubble = null;
     if (clearHover) _hoveredDescription = null;
+    if (entry == null) return;
+    switch (SchedulerBinding.instance.schedulerPhase) {
+      case SchedulerPhase.idle:
+      case SchedulerPhase.postFrameCallbacks:
+        entry.remove();
+      case SchedulerPhase.transientCallbacks:
+      case SchedulerPhase.midFrameMicrotasks:
+      case SchedulerPhase.persistentCallbacks:
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (entry.mounted) entry.remove();
+        });
+    }
   }
 
   /// ↑/↓/←/→ at a visual edge when this field is not in a flow (embed under

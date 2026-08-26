@@ -4,6 +4,7 @@ import '../../../core/app_state.dart';
 import '../../objects/data/object_embed.dart';
 import '../../objects/links/add_connection_dialog.dart';
 import '../editor/description_anchor.dart';
+import '../editor/document_text_flow.dart';
 import './block_text_focus.dart';
 import './formatted_text_field.dart';
 
@@ -105,16 +106,16 @@ Future<void> connectInfoFromTask({
   required BuildContext context,
   required AppState state,
   required int taskId,
-  String? segmentId,
   int? fileId,
 }) async {
   final mark = BlockTextFocusRegistry.resolveMark();
   final anchor = descriptionAnchorFromMark(
     mark,
-    segmentId: segmentId ?? 'task:$taskId',
+    segmentId: taskIdSegmentId(taskId),
     fileId: fileId,
   );
   if (anchor == null) return;
+  anchor['segment_id'] = taskIdSegmentId(taskId);
   if (!context.mounted) return;
 
   final pick = await showPickInfoObjectDialog(

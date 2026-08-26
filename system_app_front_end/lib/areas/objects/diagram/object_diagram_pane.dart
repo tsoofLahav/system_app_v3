@@ -1299,12 +1299,11 @@ class _LinkedSpanLayer extends StatelessWidget {
             boxes.add((box.toRect(), span.targetId));
           }
         }
-        return Listener(
+        return GestureDetector(
           behavior: HitTestBehavior.translucent,
-          onPointerDown: (event) {
-            if ((event.buttons & kPrimaryButton) == 0) return;
+          onDoubleTapDown: (details) {
             for (final (rect, targetId) in boxes) {
-              if (rect.inflate(2).contains(event.localPosition)) {
+              if (rect.inflate(2).contains(details.localPosition)) {
                 onJump(targetId);
                 return;
               }

@@ -18,9 +18,7 @@ class ViewFrameTaskList extends StatefulWidget {
     this.sectionFlag,
     this.topicKey,
     this.reorderMode = false,
-    this.selectedReorderTaskId,
     this.onReorderModeChanged,
-    this.onReorderTaskSelected,
     this.onForeignDrop,
     this.enabled = true,
   });
@@ -31,9 +29,7 @@ class ViewFrameTaskList extends StatefulWidget {
   final String? sectionFlag;
   final String? topicKey;
   final bool reorderMode;
-  final int? selectedReorderTaskId;
   final ValueChanged<bool>? onReorderModeChanged;
-  final ValueChanged<int?>? onReorderTaskSelected;
   final TaskListForeignDrop? onForeignDrop;
   final bool enabled;
 
@@ -55,6 +51,9 @@ class _ViewFrameTaskListState extends State<ViewFrameTaskList> {
   void didUpdateWidget(ViewFrameTaskList oldWidget) {
     super.didUpdateWidget(oldWidget);
     _bridge.frameTasks = widget.tasks;
+    _bridge.sectionName = widget.sectionName;
+    _bridge.sectionFlag = widget.sectionFlag;
+    _bridge.topicKey = widget.topicKey;
     if (oldWidget.reorderMode != widget.reorderMode) {
       _surfaceKey.currentState?.setReorderMode(widget.reorderMode);
     }
@@ -134,8 +133,6 @@ class _ViewFrameTaskListState extends State<ViewFrameTaskList> {
         onExtraMenuAction: _onExtraAction,
         onForeignDrop: widget.onForeignDrop,
         onReorderModeChanged: widget.onReorderModeChanged,
-        selectedReorderTaskId: widget.selectedReorderTaskId,
-        onReorderTaskSelected: widget.onReorderTaskSelected,
       ),
     );
   }

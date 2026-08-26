@@ -177,6 +177,8 @@ def upsert_pending_from_proposals(
             continue
         if change.get("tool") == "create_object":
             continue
+        if change.get("tool") == "views":
+            continue
         review = change.get("review")
         if not isinstance(review, dict):
             continue
