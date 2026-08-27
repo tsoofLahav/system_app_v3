@@ -30,6 +30,7 @@ from areas.objects.services.object_graph import (
     find_related_link,
     info_peer_dict,
     normalize_description_anchor,
+    patch_description_anchor,
     related_requires_info,
     tags_for_object,
 )
@@ -255,6 +256,31 @@ def create_object_link(object_id):
     db.session.add(link)
     db.session.commit()
     return jsonify(link.to_dict()), 201
+
+
+@objects_bp.route("/objects/<int:object_id>/links/<int:link_id>", methods=["PATCH"])
+def patch_object_link(object_id, link_id):
+    get_or_404(ObjectEmbed, object_id)
+    link = Link.query.filter_by(id=link_id).first()
+    if link is None:
+        return jsonify({"error": "not found"}), 404
+    touches = (
+        (link.source_type in OBJECT_LINK_TYPES and link.source_id == object_id)
+        or (
+            (link.kind or "related") == "description"
+            and link.source_type in OBJECT_LINK_TYPES
+            and link.source_id == object_id
+        )
+    )
+    if not touches:
+        return jsonify({"error": "not found"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        patch_description_anchor(link, data.get("anchor"))
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+    db.session.commit()
+    return jsonify(link.to_dict())
 
 
 @objects_bp.route("/objects/<int:object_id>/links/<int:link_id>", methods=["DELETE"])

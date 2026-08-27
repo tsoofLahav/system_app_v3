@@ -41,6 +41,19 @@ List<DescriptionTextRange> descriptionRangesForSegment({
   );
 }
 
+Future<void> persistRemappedDescriptionAnchors(
+  AppState state,
+  List<DescriptionTextRange> ranges,
+) async {
+  for (final range in ranges) {
+    await state.patchDescriptionLinkAnchor(
+      link: range.link,
+      start: range.start,
+      end: range.end,
+    );
+  }
+}
+
 int? descriptionTargetObjectId(Map<String, dynamic> link) {
   final fromLink = _asInt(link['target_id']);
   if (fromLink != null) return fromLink;

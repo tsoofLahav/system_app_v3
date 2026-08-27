@@ -228,6 +228,17 @@ class ObjectService {
         as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> patchLinkAnchor(
+    int objectId,
+    int linkId, {
+    required Map<String, dynamic> anchor,
+  }) async {
+    return await _api.patch('/objects/$objectId/links/$linkId', {
+          'anchor': anchor,
+        })
+        as Map<String, dynamic>;
+  }
+
   Future<void> deleteLink(int objectId, int linkId) async {
     await _api.delete('/objects/$objectId/links/$linkId');
   }

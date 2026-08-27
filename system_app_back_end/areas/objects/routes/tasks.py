@@ -10,6 +10,7 @@ from areas.objects.services.object_graph import (
     file_id_for_task,
     info_peer_dict,
     normalize_description_anchor,
+    patch_description_anchor,
     workspace_id_for_task,
 )
 
@@ -149,6 +150,26 @@ def create_task_description_link(task_id):
     data_out = link.to_dict()
     data_out["peer"] = info_peer_dict(target, target.id)
     return jsonify(data_out), 201
+
+
+@tasks_bp.route("/tasks/<int:task_id>/links/<int:link_id>", methods=["PATCH"])
+def patch_task_description_link(task_id, link_id):
+    get_or_404(Task, task_id)
+    link = Link.query.filter_by(id=link_id).first()
+    if link is None:
+        return jsonify({"error": "not found"}), 404
+    if link.source_type != TASK_LINK_TYPE or link.source_id != task_id:
+        return jsonify({"error": "not found"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        patch_description_anchor(link, data.get("anchor"))
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+    db.session.commit()
+    data_out = link.to_dict()
+    target = db.session.get(ObjectEmbed, link.target_id)
+    data_out["peer"] = info_peer_dict(target, link.target_id)
+    return jsonify(data_out)
 
 
 @tasks_bp.route("/tasks/<int:task_id>/links/<int:link_id>", methods=["DELETE"])

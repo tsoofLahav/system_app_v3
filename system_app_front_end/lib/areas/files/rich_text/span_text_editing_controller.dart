@@ -35,6 +35,7 @@ class SpanTextEditingController extends TextEditingController {
   );
 
   void setDescriptionPaintRanges(List<({int start, int end})> ranges) {
+    if (_disposed) return;
     if (_samePaintRanges(_descriptionPaintRanges, ranges)) return;
     _descriptionPaintRanges = List<({int start, int end})>.from(ranges);
     switch (SchedulerBinding.instance.schedulerPhase) {
@@ -118,12 +119,22 @@ class SpanTextEditingController extends TextEditingController {
     if (newText == oldText) return;
 
     _spans = remapSpansForTextEdit(_spans, oldText, newText);
+    _descriptionPaintRanges = [
+      for (final range in _descriptionPaintRanges)
+        ?remapOffsetRange(
+          start: range.start,
+          end: range.end,
+          oldText: oldText,
+          newText: newText,
+        ),
+    ];
 
     _previousText = newText;
   }
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     removeListener(_onControllerTextChanged);
     super.dispose();

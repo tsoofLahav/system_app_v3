@@ -135,6 +135,15 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
   void toggleReorderMode() => _setReorderMode(!_reorderMode);
 
+  Future<void> connectInfoFromShortcut() async {
+    if (_titleFocus.hasFocus) {
+      await _connectInfo(segmentId: widget.listTitleSegmentId);
+      return;
+    }
+    final index = _focusNodes.indexWhere((f) => f.hasFocus);
+    if (index >= 0) await _connectTaskInfo(index);
+  }
+
   bool get _hasTitleLine =>
       _bridge.showListTitle && !widget.compactMode && !_reorderMode;
 
@@ -751,7 +760,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   }
 
   Future<void> _dropFullyMarkedTasks(List<int> indices) async {
-    if (indices.isEmpty || !mounted) return;
+    if (indices.isEmpty || !mounted || _persisting) return;
     widget.onFocus?.call();
     final unique = indices.toSet().toList()..sort();
     final removingAll = unique.length >= _controllers.length;
@@ -764,6 +773,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     }
     if (drop.isEmpty) return;
 
+    _persisting = true;
     final descending = [...drop]..sort((a, b) => b.compareTo(a));
     final toDelete = <Task>[];
     for (final i in drop) {
@@ -826,7 +836,6 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       }
     });
 
-    _persisting = true;
     try {
       for (final task in toDelete) {
         await _bridge.delete(task);
@@ -839,6 +848,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   }
 
   Future<void> _handleBackspace(int index) async {
+    if (_persisting) return;
     widget.onFocus?.call();
     if (imeFieldLooksEmpty(_controllers[index].text)) {
       if (_controllers.length <= 1) {
@@ -850,17 +860,12 @@ class TaskListSurfaceState extends State<TaskListSurface> {
           _titleController.selection = TextSelection.collapsed(offset: len);
           return;
         }
-        // Last empty task + empty/absent title: delete the object from the
-        // file (fluent text). Enter on empty still uses [onExitBelow].
+        // Last empty task: delete the object. Cascade removes the task row —
+        // a prior DELETE /tasks/:id 404s because the object delete already
+        // took it.
         if (widget.onDeleteObject != null) {
-          final id = _taskIds[index];
-          if (id != null) {
-            final task = _taskById(id);
-            if (task != null) {
-              await _bridge.delete(task);
-            }
-          }
           if (!mounted) return;
+          _persisting = true;
           runAfterKeystroke(() {
             if (!mounted) return;
             widget.onDeleteObject!();
@@ -916,59 +921,61 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   }
 
   Future<void> _removeAt(int index) async {
+    if (_persisting) return;
     if (_controllers.length <= 1) {
       widget.onExitBelow?.call(_taskIds[index]);
       return;
     }
     final id = _taskIds[index];
     final known = id == null ? null : _taskById(id);
-    if (known != null) {
-      final ok = await _bridge.confirmDelete(known);
-      if (!ok || !mounted) return;
-    }
-    final removedFocus = _focusNodes[index];
-    final removedController = _controllers[index];
-
     _persisting = true;
-    void dropRow() {
-      if (!mounted) return;
-      _flow.clearSelection();
-      setState(() {
-        _saveTimers.removeAt(index)?.cancel();
-        _controllers.removeAt(index);
-        _focusNodes.removeAt(index);
-        _taskIds.removeAt(index);
-        _done.removeAt(index);
-        _rowKeys.removeAt(index);
-        _optimistic = _tasksFromLocalRows();
-      });
-      _syncFlowOrder();
-      final nextFocus = index > 0 ? index - 1 : 0;
-      if (nextFocus < _focusNodes.length) {
-        _focusNodes[nextFocus].requestFocus();
-        final controller = _controllers[nextFocus];
-        controller.selection = TextSelection.collapsed(
-          offset: controller.text.length,
-        );
-      }
-    }
-
-    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
-      final ready = Completer<void>();
-      runAfterKeystroke(() {
-        dropRow();
-        ready.complete();
-      });
-      await ready.future;
-    } else {
-      dropRow();
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      removedController.dispose();
-      removedFocus.dispose();
-    });
-
     try {
+      if (known != null) {
+        final ok = await _bridge.confirmDelete(known);
+        if (!ok || !mounted) return;
+      }
+      if (index < 0 || index >= _controllers.length) return;
+      final removedFocus = _focusNodes[index];
+      final removedController = _controllers[index];
+
+      void dropRow() {
+        if (!mounted) return;
+        _flow.clearSelection();
+        setState(() {
+          _saveTimers.removeAt(index)?.cancel();
+          _controllers.removeAt(index);
+          _focusNodes.removeAt(index);
+          _taskIds.removeAt(index);
+          _done.removeAt(index);
+          _rowKeys.removeAt(index);
+          _optimistic = _tasksFromLocalRows();
+        });
+        _syncFlowOrder();
+        final nextFocus = index > 0 ? index - 1 : 0;
+        if (nextFocus < _focusNodes.length) {
+          _focusNodes[nextFocus].requestFocus();
+          final controller = _controllers[nextFocus];
+          controller.selection = TextSelection.collapsed(
+            offset: controller.text.length,
+          );
+        }
+      }
+
+      if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+        final ready = Completer<void>();
+        runAfterKeystroke(() {
+          dropRow();
+          ready.complete();
+        });
+        await ready.future;
+      } else {
+        dropRow();
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        removedController.dispose();
+        removedFocus.dispose();
+      });
+
       if (id != null) {
         await _bridge.delete(
           known ?? Task(id: id, title: '', status: 'active'),
@@ -1443,6 +1450,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         descriptionRanges: _taskDescriptionRanges(index),
         onDescriptionActivate: (range) =>
             openDescriptionTarget(state: widget.state, link: range.link),
+        onDescriptionAnchorsChanged: (ranges) {
+          unawaited(persistRemappedDescriptionAnchors(widget.state, ranges));
+        },
         onArrowExitAbove: () =>
             _arrowFromLine(_hasTitleLine ? index + 1 : index, goingDown: false),
         onArrowExitBelow: () =>
@@ -1533,6 +1543,13 @@ class TaskListSurfaceState extends State<TaskListSurface> {
                     state: widget.state,
                     link: range.link,
                   ),
+            onDescriptionAnchorsChanged: widget.hostEmbed == null
+                ? null
+                : (ranges) {
+                    unawaited(
+                      persistRemappedDescriptionAnchors(widget.state, ranges),
+                    );
+                  },
             onArrowExitAbove: () => _arrowFromLine(0, goingDown: false),
             onArrowExitBelow: () => _arrowFromLine(0, goingDown: true),
           ),

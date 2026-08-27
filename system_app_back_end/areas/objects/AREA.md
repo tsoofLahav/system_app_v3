@@ -82,7 +82,8 @@ Task title description links travel with the task row (`description_links` on ta
 | `GET /objects/graph?workspace_id=` | Info nodes (title, body, topic_id/color, tag_ids, `diagram_x`/`diagram_y`) + related info↔info edges for the objects map (description edges skipped) |
 | `PUT /objects/graph/positions` | Batch-write map coordinates `{ workspace_id, positions: [{ object_id, x, y }] }` |
 | `GET/POST /objects/:id/links` | List / create connections. Related: `target_object_id` (info). Description: `target_object_id` (info) + `anchor` on **this** host |
-| `POST /tasks/:id/links` | Description only: `target_object_id` (info) + `anchor` on **this** task title. `DELETE /tasks/:id/links/:link_id` |
+| `PATCH /objects/:id/links/:link_id` | Description only: new `anchor` (start/end move with the host text) |
+| `POST /tasks/:id/links` | Description only: `target_object_id` (info) + `anchor` on **this** task title. `PATCH/DELETE /tasks/:id/links/:link_id` |
 | `GET /files/:id/description-links` | Description links whose **source object or task** lives in that file (peer = target info) |
 | `PUT /objects/:id/tags` | Replace object tags |
 | `PATCH /tags/:id` | Update tag name/color/icon |

@@ -73,13 +73,15 @@ Toggle semantics: bold/italic/underline flip independently per character in the 
 
 **Make link** finds `http(s)://` or `www.` in the mark (else caret line) and stores `link` on that span. No URL → no-op. Super Editor body links persist as markdown; embed-field links persist on object payload spans.
 
-Description-link colour (`AppColors.descriptionLink`) is paint-only for connected info: `SpanTextEditingController.setDescriptionPaintRanges` / `displaySpans`. Never write it into persisted `spans`. URL `link` is stored and paints the same teal underline.
+Description-link colour (`AppColors.descriptionLink`) is paint-only for connected info: `SpanTextEditingController.setDescriptionPaintRanges` / `displaySpans`. Never write it into persisted `spans`. URL `link` is stored and paints the same teal underline. Description paint ranges remap with the same text edit as format spans (`remapOffsetRange`) so the underline stays on the original glyphs; the field PATCHes the link `anchor` after a short debounce. While the field is focused, parent `descriptionRanges` must not overwrite those remapped offsets.
+
+The hover bubble stays open while the pointer is on the connected text **or** the bubble (so the bubble can scroll). It closes when the pointer is on neither.
 
 ## Regression checklist
 
 Before merging any rich-text PR:
 
-1. Run `flutter test test/span_shift_test.dart test/document_mark_test.dart test/continuous_text_test.dart test/rtl_paragraph_text_direction_test.dart test/rtl_empty_space_caret_test.dart`
+1. Run `flutter test test/span_shift_test.dart test/description_range_remap_test.dart test/document_mark_test.dart test/continuous_text_test.dart test/rtl_paragraph_text_direction_test.dart test/rtl_empty_space_caret_test.dart`
 2. Manual: bold a word → click after it → type (new text stays regular)
 3. Manual: mixed bold + regular lines → size up (bold stays bold, regular stays regular)
 4. Manual: select text → right-click → **one** highlight during menu, matching the selection (not selection + whole line)

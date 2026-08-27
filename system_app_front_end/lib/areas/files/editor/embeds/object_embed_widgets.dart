@@ -279,6 +279,13 @@ class InfoEmbedState extends State<InfoEmbed>
 
   Future<void> addConnectionFromShortcut() => _addConnection();
 
+  Future<void> connectInfoFromShortcut() => connectInfoFromMark(
+    context: context,
+    state: widget.state,
+    host: widget.embed,
+    segmentId: infoTextSegmentId(widget.blockId),
+  );
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -554,6 +561,11 @@ class InfoEmbedState extends State<InfoEmbed>
           ),
           onDescriptionActivate: (range) =>
               openDescriptionTarget(state: widget.state, link: range.link),
+          onDescriptionAnchorsChanged: (ranges) {
+            unawaited(
+              persistRemappedDescriptionAnchors(widget.state, ranges),
+            );
+          },
           onArrowExitAbove: () => navigateEmbedLine(
             lineIndex: 0,
             lineCount: lineCount,

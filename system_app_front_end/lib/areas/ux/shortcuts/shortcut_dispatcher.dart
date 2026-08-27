@@ -7,6 +7,7 @@ import '../../files/editor/editor_key_handoff.dart';
 import '../../files/editor/embeds/object_embed_widgets.dart';
 import '../../files/rich_text/block_text_actions.dart';
 import '../../files/rich_text/block_text_focus.dart';
+import '../../files/rich_text/rich_table_editor.dart';
 import '../../objects/tasks/task_list_surface.dart';
 import '../../objects/views/assign_task_view_dialog.dart';
 import '../../objects/views/view_chrome_menu.dart';
@@ -132,7 +133,17 @@ Future<void> dispatchShortcutAction(
     case ShortcutActionIds.addConnection:
       final info = InfoEmbedState.keyboardFocus;
       if (info != null) {
-        await info.addConnectionFromShortcut();
+        await info.connectInfoFromShortcut();
+        return;
+      }
+      final list = TaskListSurfaceState.keyboardFocus;
+      if (list != null) {
+        await list.connectInfoFromShortcut();
+        return;
+      }
+      final table = RichTableEditorState.keyboardFocus;
+      if (table != null) {
+        await table.connectInfoFromShortcut();
         return;
       }
       await DocumentEditorRegistry.active?.insertAtBlock('bullet_list');

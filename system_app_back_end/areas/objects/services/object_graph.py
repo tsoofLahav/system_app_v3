@@ -70,6 +70,20 @@ def find_related_link(workspace_id: int, a_id: int, b_id: int) -> Link | None:
     )
 
 
+def patch_description_anchor(link: Link, raw_anchor) -> dict:
+    """Replace a description link's span. Preserves file_id when the patch omits it."""
+    if (link.kind or "related") != "description":
+        raise ValueError("only description anchors can be patched")
+    anchor = normalize_description_anchor(raw_anchor)
+    previous = link.anchor if isinstance(link.anchor, dict) else {}
+    if "file_id" not in anchor and previous.get("file_id") is not None:
+        anchor["file_id"] = previous["file_id"]
+    if "block_id" not in anchor and previous.get("block_id") is not None:
+        anchor["block_id"] = previous["block_id"]
+    link.anchor = anchor
+    return anchor
+
+
 def ensure_related_info_link(
     workspace_id: int,
     source: ObjectEmbed,

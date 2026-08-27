@@ -222,6 +222,20 @@ Returns each view's `view_id`, `name`, and named `sections`. Uncategorized is th
 
 Puts that task on view 3 in section Focus (one view per task). `section_name` `""` = Uncategorized. `view_id` `0` removes it from every view. Prefer `task_id` when you have it; otherwise `[TASK_LIST]` `object_id` + exact title.
 
+### `connect`
+
+```json
+{ "action": "related", "source_object_id": 10, "source_task_id": 0, "target_object_id": 12, "text": "", "segment_id": "" }
+```
+
+Info↔info map edge.
+
+```json
+{ "action": "description", "source_object_id": 0, "source_task_id": 44, "target_object_id": 12, "text": "call the clinic", "segment_id": "" }
+```
+
+Underlines that phrase on the task title and points it at info 12. For text inside an info or table, pass `source_object_id` (the `[INFO]` / `[TABLE]` id) and the exact `text`. `segment_id` only when the same phrase is in more than one table cell (`embed:N#c0:1`). Description from an info also adds related.
+
 ### `reference`
 
 This help. `section`: `agent_text` | `tools` | `all`.

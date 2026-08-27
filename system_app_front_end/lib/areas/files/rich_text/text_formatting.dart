@@ -444,6 +444,47 @@ TextEditDiff textEditDiff(String oldText, String newText) {
   );
 }
 
+/// Shift a description-link (or any sticky) range with the same edit as
+/// [remapSpansForTextEdit]. Characters inserted immediately *before* the
+/// range stay outside it — the underline moves with the original glyphs.
+({int start, int end})? remapOffsetRange({
+  required int start,
+  required int end,
+  required String oldText,
+  required String newText,
+}) {
+  if (oldText == newText) {
+    if (end <= start) return null;
+    return (start: start, end: end);
+  }
+  return remapOffsetRangeWithDiff(
+    start: start,
+    end: end,
+    diff: textEditDiff(oldText, newText),
+  );
+}
+
+({int start, int end})? remapOffsetRangeWithDiff({
+  required int start,
+  required int end,
+  required TextEditDiff diff,
+}) {
+  final editStart = diff.replaceStart;
+  final editEnd = editStart + diff.removedLength;
+  final delta = diff.insertedLength - diff.removedLength;
+
+  int mapPoint(int offset, {required bool isEnd}) {
+    if (offset < editStart) return offset;
+    if (offset >= editEnd) return offset + delta;
+    return isEnd ? editStart + diff.insertedLength : editStart;
+  }
+
+  final newStart = mapPoint(start, isEnd: false);
+  final newEnd = mapPoint(end, isEnd: true);
+  if (newEnd <= newStart) return null;
+  return (start: newStart, end: newEnd);
+}
+
 List<Map<String, dynamic>> applyStyleToRange(
   List<Map<String, dynamic>> spans, {
   required int start,

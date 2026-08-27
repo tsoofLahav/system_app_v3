@@ -17,6 +17,7 @@ import './format_range.dart';
 import './frozen_selection_painter.dart';
 import './rtl/rtl.dart';
 import './span_text_editing_controller.dart';
+import './text_formatting.dart';
 import './text_links.dart';
 
 /// Text field that registers for block context-menu clipboard/format actions.
@@ -30,6 +31,18 @@ class DescriptionTextRange {
   final int start;
   final int end;
   final Map<String, dynamic> link;
+
+  DescriptionTextRange copyWith({
+    int? start,
+    int? end,
+    Map<String, dynamic>? link,
+  }) {
+    return DescriptionTextRange(
+      start: start ?? this.start,
+      end: end ?? this.end,
+      link: link ?? this.link,
+    );
+  }
 }
 
 /// Object inner text (info, tasks, table cells, captions): a Material
@@ -64,6 +77,7 @@ class FormattedTextField extends StatefulWidget {
     this.onDescriptionHover,
     this.onDescriptionDoubleTap,
     this.onDescriptionActivate,
+    this.onDescriptionAnchorsChanged,
     this.onArrowExitAbove,
     this.onArrowExitBelow,
     this.onArrowExitLeft,
@@ -123,6 +137,7 @@ class FormattedTextField extends StatefulWidget {
   final ValueChanged<DescriptionTextRange?>? onDescriptionHover;
   final ValueChanged<DescriptionTextRange>? onDescriptionDoubleTap;
   final ValueChanged<DescriptionTextRange>? onDescriptionActivate;
+  final ValueChanged<List<DescriptionTextRange>>? onDescriptionAnchorsChanged;
 
   @override
   State<FormattedTextField> createState() => _FormattedTextFieldState();
@@ -146,6 +161,12 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   bool _structureEnterArmed = true;
   OverlayEntry? _descriptionBubble;
   DescriptionTextRange? _hoveredDescription;
+  Timer? _descriptionBubbleHideTimer;
+  Timer? _descriptionAnchorSaveTimer;
+  var _pointerOnDescriptionSpan = false;
+  var _pointerOnDescriptionBubble = false;
+  List<DescriptionTextRange> _liveDescriptionRanges = const [];
+  String _descriptionHostText = '';
 
   @override
   void initState() {
@@ -165,8 +186,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     widget.controller.addListener(_syncParagraphDirection);
     widget.controller.addListener(_noteSelectionForMenu);
     widget.controller.addListener(_pinSentinelCaretIfNeeded);
+    widget.controller.addListener(_remapLiveDescriptions);
     _detectedDirection = detectParagraphTextDirection(widget.controller.text);
-    _syncDescriptionPaint();
+    _adoptParentDescriptionRanges();
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _ensureKeyHandlerChained(),
     );
@@ -270,11 +292,13 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       oldWidget.controller.removeListener(_syncParagraphDirection);
       oldWidget.controller.removeListener(_noteSelectionForMenu);
       oldWidget.controller.removeListener(_pinSentinelCaretIfNeeded);
+      oldWidget.controller.removeListener(_remapLiveDescriptions);
       widget.controller.addListener(_normalizeSelectionIfNeeded);
       widget.controller.addListener(_syncFlowFromLocalSelection);
       widget.controller.addListener(_syncParagraphDirection);
       widget.controller.addListener(_noteSelectionForMenu);
       widget.controller.addListener(_pinSentinelCaretIfNeeded);
+      widget.controller.addListener(_remapLiveDescriptions);
       _detectedDirection = detectParagraphTextDirection(widget.controller.text);
       final previousId = _registeredSegmentId;
       if (previousId != null)
@@ -303,7 +327,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         oldWidget.segmentId != widget.segmentId) {
       _hideDescriptionBubble();
     }
-    _syncDescriptionPaint();
+    _syncDescriptionRangesFromParent();
     if (oldWidget.focusNode != widget.focusNode ||
         _focusNode.onKeyEvent != _installedKeyHandler) {
       WidgetsBinding.instance.addPostFrameCallback(
@@ -312,13 +336,75 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     }
   }
 
-  void _syncDescriptionPaint() {
+  void _adoptParentDescriptionRanges() {
+    _liveDescriptionRanges = List.of(widget.descriptionRanges);
+    _descriptionHostText = widget.controller.text;
+    _applyDescriptionPaint();
+  }
+
+  void _syncDescriptionRangesFromParent() {
+    if (_focusNode.hasFocus &&
+        _sameDescriptionLinkIds(
+          _liveDescriptionRanges,
+          widget.descriptionRanges,
+        )) {
+      _applyDescriptionPaint();
+      return;
+    }
+    _adoptParentDescriptionRanges();
+  }
+
+  void _applyDescriptionPaint() {
     final controller = widget.controller;
     if (controller is! SpanTextEditingController) return;
     controller.setDescriptionPaintRanges([
-      for (final range in widget.descriptionRanges)
-        (start: range.start, end: range.end),
+      for (final range in _liveDescriptionRanges)
+        if (range.end > range.start) (start: range.start, end: range.end),
     ]);
+  }
+
+  void _remapLiveDescriptions() {
+    final newText = widget.controller.text;
+    if (!_focusNode.hasFocus) {
+      _descriptionHostText = newText;
+      return;
+    }
+    if (newText == _descriptionHostText) return;
+    final oldText = _descriptionHostText;
+    _descriptionHostText = newText;
+    if (_liveDescriptionRanges.isEmpty) return;
+    _liveDescriptionRanges = [
+      for (final range in _liveDescriptionRanges)
+        if (remapOffsetRange(
+              start: range.start,
+              end: range.end,
+              oldText: oldText,
+              newText: newText,
+            )
+            case final next?)
+          range.copyWith(start: next.start, end: next.end),
+    ];
+    _scheduleDescriptionAnchorSave();
+  }
+
+  void _scheduleDescriptionAnchorSave() {
+    _descriptionAnchorSaveTimer?.cancel();
+    _descriptionAnchorSaveTimer = Timer(const Duration(milliseconds: 400), () {
+      _descriptionAnchorSaveTimer = null;
+      widget.onDescriptionAnchorsChanged?.call(_liveDescriptionRanges);
+    });
+  }
+
+  bool _sameDescriptionLinkIds(
+    List<DescriptionTextRange> a,
+    List<DescriptionTextRange> b,
+  ) {
+    if (a.length != b.length) return false;
+    final ids = {for (final range in a) range.link['id']};
+    for (final range in b) {
+      if (!ids.contains(range.link['id'])) return false;
+    }
+    return true;
   }
 
   @override
@@ -334,10 +420,13 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     widget.controller.removeListener(_syncParagraphDirection);
     widget.controller.removeListener(_noteSelectionForMenu);
     widget.controller.removeListener(_pinSentinelCaretIfNeeded);
+    widget.controller.removeListener(_remapLiveDescriptions);
     _focusNode.removeListener(_onFocusChanged);
     // Do not write the controller here — value= notifies AnimatedBuilder
     // while finalizeTree has the widget tree locked.
     BlockTextFocusRegistry.unregister(widget.controller);
+    _descriptionBubbleHideTimer?.cancel();
+    _descriptionAnchorSaveTimer?.cancel();
     _hideDescriptionBubble();
     if (_ownsFocus) _focusNode.dispose();
     super.dispose();
@@ -1323,7 +1412,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
             ? null
             : (_) {
                 widget.onDescriptionHover?.call(null);
-                _hideDescriptionBubble();
+                _pointerOnDescriptionSpan = false;
+                _scheduleDescriptionBubbleHide();
               },
         child: GestureDetector(
           onDoubleTapDown: widget.descriptionRanges.isEmpty
@@ -1472,7 +1562,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       editable.localToGlobal(local),
     );
     final offset = position.offset;
-    for (final range in widget.descriptionRanges) {
+    for (final range in _liveDescriptionRanges) {
       if (offset >= range.start && offset < range.end) return range;
     }
     return null;
@@ -1481,6 +1571,13 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   void _handleDescriptionHover(Offset local) {
     final hit = _descriptionAt(local);
     widget.onDescriptionHover?.call(hit);
+    if (hit == null) {
+      _pointerOnDescriptionSpan = false;
+      _scheduleDescriptionBubbleHide();
+      return;
+    }
+    _pointerOnDescriptionSpan = true;
+    _cancelDescriptionBubbleHide();
     _syncDescriptionBubble(hit, local);
   }
 
@@ -1492,13 +1589,14 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
 
   void _syncDescriptionBubble(DescriptionTextRange? hit, Offset local) {
     if (hit == null) {
-      _hideDescriptionBubble();
+      _scheduleDescriptionBubbleHide();
       return;
     }
     if (_hoveredDescription != null &&
         identical(_hoveredDescription!.link, hit.link) &&
         _hoveredDescription!.start == hit.start &&
-        _hoveredDescription!.end == hit.end) {
+        _hoveredDescription!.end == hit.end &&
+        _descriptionBubble != null) {
       return;
     }
     _hoveredDescription = hit;
@@ -1516,9 +1614,20 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       builder: (ctx) {
         return Positioned(
           left: origin.dx,
-          top: origin.dy + 18,
-          child: IgnorePointer(
-            child: InfoDescriptionBubble(title: title, body: body),
+          top: origin.dy,
+          child: MouseRegion(
+            onEnter: (_) {
+              _pointerOnDescriptionBubble = true;
+              _cancelDescriptionBubbleHide();
+            },
+            onExit: (_) {
+              _pointerOnDescriptionBubble = false;
+              _scheduleDescriptionBubbleHide();
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(top: 18),
+              child: InfoDescriptionBubble(title: title, body: body),
+            ),
           ),
         );
       },
@@ -1526,7 +1635,24 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     overlay.insert(_descriptionBubble!);
   }
 
+  void _cancelDescriptionBubbleHide() {
+    _descriptionBubbleHideTimer?.cancel();
+    _descriptionBubbleHideTimer = null;
+  }
+
+  void _scheduleDescriptionBubbleHide() {
+    _cancelDescriptionBubbleHide();
+    _descriptionBubbleHideTimer = Timer(const Duration(milliseconds: 160), () {
+      _descriptionBubbleHideTimer = null;
+      if (!mounted) return;
+      if (_pointerOnDescriptionSpan || _pointerOnDescriptionBubble) return;
+      _hideDescriptionBubble();
+    });
+  }
+
   void _hideDescriptionBubble({bool clearHover = true}) {
+    _cancelDescriptionBubbleHide();
+    _pointerOnDescriptionBubble = false;
     final entry = _descriptionBubble;
     _descriptionBubble = null;
     if (clearHover) _hoveredDescription = null;

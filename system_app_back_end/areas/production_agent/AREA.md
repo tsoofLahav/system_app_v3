@@ -37,7 +37,7 @@ Reasoning models take `reasoning.effort` (env `OPENAI_REASONING_EFFORT`, default
 |-------|----------|
 | **instructions** | `agent_configs.system_prompt` + operational suffix (attached on each Responses turn) |
 | **First user input** | `prompt` + client `scope` (open topic/files as context) + optional tiny `hints` — **no file bodies** |
-| **Tools** | `list`, `list_archived`, `find_file`, `find_object`, `open_file`, `create_file`, `create_object`, `views`, `reference`, `patch_file`, `rewrite_file` |
+| **Tools** | `list`, `list_archived`, `find_file`, `find_object`, `open_file`, `create_file`, `create_object`, `views`, `connect`, `reference`, `patch_file`, `rewrite_file` |
 | **Follow-up input** | Tool results only (`function_call_output` items) |
 
 Tools authorize by **workspace membership** (run `workspace_id`), not the FE allow-list. Client `scope` / `hints` are preferred context (`focused_file_id`, open topic). Archived files stay read-only on writes.
@@ -74,13 +74,14 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 | `create_file` | Create an empty file in a topic (`name` + `topic_id`); returns `file_id`. Places it first in the topic. Then `open_file` + `patch_file` / `rewrite_file` to fill |
 | `create_object` | Create embed + pointer (`task_list` \| `info` \| `table` \| `graph` \| `image`); returns `object_id`. **Image:** `body` is the generation prompt; the tool writes PNG bytes to the upload folder and stores `payload.url` — an empty image object is a missing prompt, not a later patch |
 | `views` | `action=list` — views with named sections. `action=assign` — put a task on one view (or `view_id` 0 to remove). `section_name` `""` = Uncategorized. Task by `task_id` or `[TASK_LIST]` `object_id` + title. Membership write; typical outcome **apply**. Service: [`services/views_tool.py`](services/views_tool.py) |
+| `connect` | `action=related` — info↔info map edge (`source_object_id` + `target_object_id`). `action=description` — underline `text` on a host and point it at an info. Host is `source_task_id` (task title) or `source_object_id` (info / table / task-list title). `segment_id` when the same text appears in more than one table cell. Description from an info also upserts related. Typical outcome **apply**. Service: [`services/connect_tool.py`](services/connect_tool.py) |
 | `reference` | On-demand examples from `content/production_agent/reference.md` (`agent_text` / `tools` / `all`) |
 | `patch_file` | **Partial edits** with `op` add / remove / replace on `document_lines`; typical outcome **review** |
 | `rewrite_file` | Full new agent text for a true whole-file rewrite; typical outcome **apply** when run allows |
 
 **Everything the agent browses is keyed by topic name, never by a bare `topic_id`.** A file name on its own ("log", "plan") does not say what it is about, so `list files` / `list objects` / `list_archived` return `topics: [{topic_id, topic, topic_type, files: […]}]` and every `find_*` hit repeats its topic name and type. Choosing a topic is the first decision the agent makes; leaving it to guess from file names put a nutrition note in the wrong topic.
 
-Browse helpers: [`services/browse_tools.py`](services/browse_tools.py). Create file: [`services/create_file_tool.py`](services/create_file_tool.py) + [`areas/files/services/file_ops.py`](../files/services/file_ops.py). Create object: [`services/create_object_tool.py`](services/create_object_tool.py) + shared [`areas/objects/services/create_embed.py`](../objects/services/create_embed.py). Views: [`services/views_tool.py`](services/views_tool.py). `open_file` payload: [`services/open_file_tool.py`](services/open_file_tool.py). Writes: [`services/write_tools.py`](services/write_tools.py).
+Browse helpers: [`services/browse_tools.py`](services/browse_tools.py). Create file: [`services/create_file_tool.py`](services/create_file_tool.py) + [`areas/files/services/file_ops.py`](../files/services/file_ops.py). Create object: [`services/create_object_tool.py`](services/create_object_tool.py) + shared [`areas/objects/services/create_embed.py`](../objects/services/create_embed.py). Views: [`services/views_tool.py`](services/views_tool.py). Connect: [`services/connect_tool.py`](services/connect_tool.py). `open_file` payload: [`services/open_file_tool.py`](services/open_file_tool.py). Writes: [`services/write_tools.py`](services/write_tools.py).
 
 **Apply vs review:** the run’s `apply_mode` wins (`review` / `direct_apply` / `notify_only`). Defaults live in **one place**: [`shared/run_config.py`](../../shared/run_config.py) (`DEFAULT_MANUAL_APPLY_MODE`, `DEFAULT_AUTOMATION_APPLY_MODE`). Routes/runner/models import those — do not hardcode fallback strings. Manual **Consult** sends `apply_mode` from the FE toggle (default apply directly). A saved AI action stores its own mode. An automation `ai` step stores its own mode, default review — nobody is watching at 2am. The model does not choose the dialog.
 
@@ -145,6 +146,7 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 | [`services/create_file_tool.py`](services/create_file_tool.py) | Empty file in a topic, placed first |
 | [`services/create_object_tool.py`](services/create_object_tool.py) | Embed + pointer; image generation |
 | [`services/views_tool.py`](services/views_tool.py) | List views/sections; assign a task to one view (or remove) |
+| [`services/connect_tool.py`](services/connect_tool.py) | Related info↔info; description text→info |
 | [`services/prompt.py`](services/prompt.py) | Load/seed/sync the system prompt from the DB |
 | [`services/openai_service.py`](services/openai_service.py) | Responses conversation helpers + legacy chat/image helpers |
 | [`routes/agent.py`](routes/agent.py) | `POST /agent/run`; apply-agent-text; pending-review routes |

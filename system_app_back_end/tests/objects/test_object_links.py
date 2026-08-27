@@ -61,6 +61,19 @@ def test_description_create_is_host_to_info():
     assert "existing" not in desc_branch
 
 
+def test_patch_description_anchor_updates_span():
+    source = inspect.getsource(object_routes.patch_object_link)
+    assert "patch_description_anchor" in source
+    from areas.objects.routes import tasks as task_routes
+
+    task_source = inspect.getsource(task_routes.patch_task_description_link)
+    assert "patch_description_anchor" in task_source
+    from areas.objects.services import object_graph
+
+    helper = inspect.getsource(object_graph.patch_description_anchor)
+    assert "only description anchors can be patched" in helper
+
+
 def test_info_host_description_also_writes_related():
     source = inspect.getsource(object_routes.create_object_link)
     assert "if embed.type == \"info\":" in source

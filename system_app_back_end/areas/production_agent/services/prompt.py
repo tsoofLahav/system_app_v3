@@ -27,6 +27,7 @@ DEFAULT_TOOL_ALLOWLIST = [
     "create_object",
     "create_file",
     "views",
+    "connect",
 ]
 _HERE = Path(__file__).resolve()
 # Monorepo root (…/system_app) when services live under system_app_back_end/areas/…

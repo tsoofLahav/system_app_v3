@@ -867,6 +867,81 @@ class AppState extends ChangeNotifier {
     await refreshOpenTaskSurfaces(notify: true);
   }
 
+  /// Persist remapped description spans. Silent: do not notify (keystroke path).
+  Future<void> patchDescriptionLinkAnchor({
+    required Map<String, dynamic> link,
+    required int start,
+    required int end,
+  }) async {
+    if (end <= start) return;
+    final linkId = _jsonInt(link['id']);
+    final sourceId = _jsonInt(link['source_id']);
+    if (linkId == null || sourceId == null) return;
+    final sourceType = '${link['source_type'] ?? ''}';
+    final previous = link['anchor'];
+    final previousStart = previous is Map ? _jsonInt(previous['start']) : null;
+    final previousEnd = previous is Map ? _jsonInt(previous['end']) : null;
+    if (previousStart == start && previousEnd == end) return;
+    final anchor = <String, dynamic>{
+      if (previous is Map) ...Map<String, dynamic>.from(previous),
+      'start': start,
+      'end': end,
+    };
+    try {
+      if (sourceType == 'task') {
+        await _tasks.patchDescriptionLink(sourceId, linkId, anchor: anchor);
+      } else {
+        await _objects.patchLinkAnchor(sourceId, linkId, anchor: anchor);
+      }
+    } catch (_) {
+      return;
+    }
+    _applyDescriptionAnchorLocally(
+      linkId: linkId,
+      sourceType: sourceType,
+      sourceId: sourceId,
+      start: start,
+      end: end,
+    );
+  }
+
+  void _applyDescriptionAnchorLocally({
+    required int linkId,
+    required String sourceType,
+    required int sourceId,
+    required int start,
+    required int end,
+  }) {
+    Map<String, dynamic> patchLink(Map<String, dynamic> row) {
+      if (_jsonInt(row['id']) != linkId) return row;
+      final next = Map<String, dynamic>.from(row);
+      final anchor = row['anchor'];
+      next['anchor'] = {
+        if (anchor is Map) ...Map<String, dynamic>.from(anchor),
+        'start': start,
+        'end': end,
+      };
+      return next;
+    }
+
+    for (final fileId in descriptionLinksByFileId.keys.toList()) {
+      final links = descriptionLinksByFileId[fileId];
+      if (links == null) continue;
+      descriptionLinksByFileId[fileId] = [for (final row in links) patchLink(row)];
+    }
+    if (sourceType == 'task') {
+      final task = tasksById[sourceId];
+      if (task != null) {
+        _patchCachedTask(
+          sourceId,
+          descriptionLinks: [
+            for (final row in task.descriptionLinks) patchLink(row),
+          ],
+        );
+      }
+    }
+  }
+
   Future<void> removeDescriptionLink(Map<String, dynamic> link) async {
     final linkId = _jsonInt(link['id']);
     final sourceId = _jsonInt(link['source_id']);
@@ -2392,7 +2467,13 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteTask(Task task, {bool notify = true}) async {
-    await _tasks.deleteTask(task.id);
+    try {
+      await _tasks.deleteTask(task.id);
+    } on ApiException catch (e) {
+      // Already gone (empty Backspace can fire twice; object cascade
+      // also deletes remaining tasks).
+      if (e.statusCode != 404) rethrow;
+    }
     _dropCachedTask(task.id);
     if (selectedView != null) {
       await _refreshViewMemberships();

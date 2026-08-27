@@ -530,6 +530,11 @@ class TableEmbedState extends State<TableEmbed>
             ),
             onDescriptionActivate: (range) =>
                 openDescriptionTarget(state: widget.state, link: range.link),
+            onDescriptionAnchorsChanged: (ranges) {
+              unawaited(
+                persistRemappedDescriptionAnchors(widget.state, ranges),
+              );
+            },
           ),
         ],
       ),

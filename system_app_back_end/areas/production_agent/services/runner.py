@@ -36,6 +36,7 @@ from areas.production_agent.services.browse_tools import (
 from areas.production_agent.services.create_file_tool import create_file
 from areas.production_agent.services.create_object_tool import create_object
 from areas.production_agent.services.views_tool import views_tool
+from areas.production_agent.services.connect_tool import connect_tool
 from areas.production_agent.services.pending_reviews import upsert_pending_from_proposals
 from areas.production_agent.services.write_tools import (
     WRITE_TOOL_NAMES,
@@ -299,6 +300,61 @@ TOOL_DEFS: list[dict[str, Any]] = [
     },
     {
         "type": "function",
+        "name": "connect",
+        "description": (
+            "Connect an info object to text or to another info. "
+            "action=related: info↔info map edge. source_object_id and "
+            "target_object_id are both info objects. "
+            "action=description: underline text on a host and point it at "
+            "an info (target_object_id). Host is source_task_id (a task title) "
+            "or source_object_id (info / table / task-list title). "
+            "text is the exact span to find. segment_id is optional when the "
+            "host has one field, required when the same text appears in more "
+            "than one table cell. Unused fields are 0 / \"\". "
+            "Description from an info also adds the related map edge."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "related | description",
+                },
+                "source_object_id": {
+                    "type": "integer",
+                    "description": "Host or related source object; 0 if using source_task_id",
+                },
+                "source_task_id": {
+                    "type": "integer",
+                    "description": "Task id for a title span; 0 otherwise",
+                },
+                "target_object_id": {
+                    "type": "integer",
+                    "description": "Info object to connect to",
+                },
+                "text": {
+                    "type": "string",
+                    "description": "Exact span to underline; \"\" for related",
+                },
+                "segment_id": {
+                    "type": "string",
+                    "description": "Optional host segment (e.g. table cell); else \"\"",
+                },
+            },
+            "required": [
+                "action",
+                "source_object_id",
+                "source_task_id",
+                "target_object_id",
+                "text",
+                "segment_id",
+            ],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
         "name": "reference",
         "description": (
             "Load format or tool-usage examples. Call when unsure how agent text "
@@ -487,6 +543,20 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
             view_id=_optional_id(args.get("view_id")),
             section_name=str(args.get("section_name") or ""),
         )
+    if name == "connect":
+        if not workspace_id:
+            return {"error": "workspace_id missing from run", "tool": "connect"}
+        write_mode = resolve_write_mode("connect", apply_mode)
+        return connect_tool(
+            workspace_id=workspace_id,
+            action=str(args.get("action") or ""),
+            write_mode=write_mode,
+            source_object_id=_optional_id(args.get("source_object_id")),
+            source_task_id=_optional_id(args.get("source_task_id")),
+            target_object_id=_optional_id(args.get("target_object_id")),
+            text=str(args.get("text") or ""),
+            segment_id=str(args.get("segment_id") or ""),
+        )
     if name in WRITE_TOOL_NAMES or name == "update_file":
         # update_file kept as alias → patch_file for older prompts.
         tool_name = "patch_file" if name == "update_file" else name
@@ -660,6 +730,7 @@ def run_agent(
                         or name in WRITE_TOOL_NAMES
                         or name == "update_file"
                         or result_tool == "views"
+                        or result_tool == "connect"
                     )
                     and (result.get("review") or result.get("applied"))
                 ):

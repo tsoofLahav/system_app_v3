@@ -56,6 +56,7 @@ class RichTableEditor extends StatefulWidget {
     this.onDisconnectInfo,
     this.descriptionRangesForCell,
     this.onDescriptionActivate,
+    this.onDescriptionAnchorsChanged,
   });
 
   final TableNode node;
@@ -90,6 +91,7 @@ class RichTableEditor extends StatefulWidget {
   final List<DescriptionTextRange> Function(int row, int column)?
   descriptionRangesForCell;
   final ValueChanged<DescriptionTextRange>? onDescriptionActivate;
+  final ValueChanged<List<DescriptionTextRange>>? onDescriptionAnchorsChanged;
 
   @override
   State<RichTableEditor> createState() => RichTableEditorState();
@@ -106,6 +108,9 @@ class RichTableEditorState extends State<RichTableEditor> {
 
   TableReorderKind? _reorderKind;
   final _flow = DocumentTextFlow();
+
+  /// Cell that currently owns the caret — for the Connect info shortcut.
+  static RichTableEditorState? keyboardFocus;
 
   static const _defaultColumns = 2;
   static const _minCellHeight = 36.0;
@@ -315,10 +320,12 @@ class RichTableEditorState extends State<RichTableEditor> {
       for (var c = 0; c < _focusGrid[r].length; c++) {
         if (_focusGrid[r][c].hasFocus) {
           _lastCell = (r, c);
+          keyboardFocus = this;
           return;
         }
       }
     }
+    if (identical(keyboardFocus, this)) keyboardFocus = null;
   }
 
   /// Keep [_focusGrid] aligned with [_controllers] (create/dispose as needed).
@@ -360,8 +367,13 @@ class RichTableEditorState extends State<RichTableEditor> {
     _disposeFocusGrid();
   }
 
+  Future<void> connectInfoFromShortcut() async {
+    await widget.onConnectInfo?.call();
+  }
+
   @override
   void dispose() {
+    if (identical(keyboardFocus, this)) keyboardFocus = null;
     _disposeAll();
     _flow.onPruneStructures = null;
     _flow.dispose();
@@ -1054,6 +1066,8 @@ class RichTableEditorState extends State<RichTableEditor> {
                                 widget.descriptionRangesForCell?.call(r, c) ??
                                 const [],
                             onDescriptionActivate: widget.onDescriptionActivate,
+                            onDescriptionAnchorsChanged:
+                                widget.onDescriptionAnchorsChanged,
                             onArrowExitAbove: () => _moveOnGrid(
                               r,
                               c,

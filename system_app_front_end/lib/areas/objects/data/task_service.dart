@@ -86,6 +86,17 @@ class TaskService {
         as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> patchDescriptionLink(
+    int taskId,
+    int linkId, {
+    required Map<String, dynamic> anchor,
+  }) async {
+    return await _api.patch('/tasks/$taskId/links/$linkId', {
+          'anchor': anchor,
+        })
+        as Map<String, dynamic>;
+  }
+
   Future<void> deleteDescriptionLink(int taskId, int linkId) async {
     await _api.delete('/tasks/$taskId/links/$linkId');
   }
