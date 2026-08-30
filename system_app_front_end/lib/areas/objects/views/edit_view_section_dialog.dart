@@ -6,6 +6,7 @@ import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/color_dialog.dart';
+import '../../ui/app_segmented_toggle.dart';
 import '../../ui/dialog_field_style.dart';
 import '../data/view_layout.dart';
 import '../data/view_section_flags.dart';
@@ -58,6 +59,7 @@ class _ViewSectionDialog extends StatefulWidget {
 class _ViewSectionDialogState extends State<_ViewSectionDialog> {
   late final TextEditingController _name;
   late bool _important;
+  late String _cadence;
   String? _colorHex;
 
   bool get _isCreate => widget.section == null;
@@ -67,6 +69,7 @@ class _ViewSectionDialogState extends State<_ViewSectionDialog> {
     super.initState();
     _name = TextEditingController(text: widget.section?.name ?? '');
     _important = sectionFlagIsImportant(widget.section?.flag);
+    _cadence = widget.section?.cadence ?? ViewSectionCadence.routine;
     _colorHex = widget.section?.colorHex;
   }
 
@@ -98,6 +101,7 @@ class _ViewSectionDialogState extends State<_ViewSectionDialog> {
         clearFlag: !_important,
         colorHex: _colorHex,
         clearColor: _colorHex == null || _colorHex!.isEmpty,
+        cadence: _cadence,
       ),
     );
   }
@@ -135,6 +139,22 @@ class _ViewSectionDialogState extends State<_ViewSectionDialog> {
               decoration: DialogFieldStyle.decoration(),
               onSubmitted: (_) => _submit(),
             ),
+          ),
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          AppDialogChoiceField<String>(
+            label: s['sectionCadence'],
+            options: [
+              AppSegmentedOption(
+                value: ViewSectionCadence.routine,
+                label: s['sectionCadenceRoutine'],
+              ),
+              AppSegmentedOption(
+                value: ViewSectionCadence.oneTime,
+                label: s['sectionCadenceOneTime'],
+              ),
+            ],
+            selected: _cadence,
+            onSelected: (value) => setState(() => _cadence = value),
           ),
           const SizedBox(height: DialogFieldStyle.fieldGap),
           Row(

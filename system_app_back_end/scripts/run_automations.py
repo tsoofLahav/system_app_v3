@@ -19,6 +19,11 @@ from app import app
 from models import Automation, db
 from areas.automations.services.automation_schedule import plan_tick
 from areas.automations.services.run_automation import run_automation
+from areas.automations.services.section_windows import (
+    KIND_SECTION_WINDOW,
+    KIND_STANDARD,
+    tick_section_window,
+)
 from config import openai_api_key
 
 logger = logging.getLogger(__name__)
@@ -59,6 +64,38 @@ def tick(now: datetime | None = None) -> int:
                 f"schedule={row.schedule!r} tz={row.timezone} "
                 f"next_run_at={row.next_run_at} -> {planned_next}"
             )
+            kind = row.kind or KIND_STANDARD
+            if kind == KIND_SECTION_WINDOW:
+                tick_section_window(
+                    row, now=now, action=action, planned=planned_next
+                )
+                if action == "run":
+                    ran += 1
+                    _log(f"[automations] id={row.id} section-window {action}")
+                db.session.commit()
+                continue
+
+            # Locked to a section window: the clock is that window's, not this row's.
+            if row.view_id and row.section_key:
+                window = Automation.query.filter_by(
+                    kind=KIND_SECTION_WINDOW,
+                    view_id=row.view_id,
+                    section_key=row.section_key,
+                ).first()
+                if window is None or not window.enabled:
+                    _log(
+                        f"[automations] id={row.id} skip locked "
+                        f"(section window off)"
+                    )
+                    if action == "arm":
+                        row.next_run_at = planned_next
+                        db.session.commit()
+                    continue
+                if action == "arm":
+                    row.next_run_at = planned_next
+                    db.session.commit()
+                continue
+
             if action == "skip":
                 continue
 

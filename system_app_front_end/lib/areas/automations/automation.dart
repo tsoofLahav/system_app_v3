@@ -3,6 +3,11 @@
 /// Saved AI actions are a different thing — see
 /// `areas/production_agent/ai_action.dart`. They meet only here: one kind of
 /// step runs one of them.
+class AutomationKinds {
+  static const standard = 'standard';
+  static const sectionWindow = 'section_window';
+}
+
 class Automation {
   const Automation({
     required this.id,
@@ -17,6 +22,16 @@ class Automation {
     this.enabled = true,
     this.lastRunAt,
     this.nextRunAt,
+    this.kind = AutomationKinds.standard,
+    this.viewId,
+    this.sectionKey,
+    this.windowDurationMinutes,
+    this.windowOpenedAt,
+    this.windowClosesAt,
+    this.pendingClear,
+    this.pendingUserInput,
+    this.windowOpen = false,
+    this.attention = false,
   });
 
   final int id;
@@ -38,8 +53,22 @@ class Automation {
   final bool enabled;
   final DateTime? lastRunAt;
   final DateTime? nextRunAt;
+  final String kind;
+  final int? viewId;
+  final String? sectionKey;
+  final int? windowDurationMinutes;
+  final DateTime? windowOpenedAt;
+  final DateTime? windowClosesAt;
+  final Map<String, dynamic>? pendingClear;
+  final Map<String, dynamic>? pendingUserInput;
+  final bool windowOpen;
+  final bool attention;
 
   bool get isScheduled => (schedule ?? '').isNotEmpty;
+  bool get isSectionWindow => kind == AutomationKinds.sectionWindow;
+  bool get isLockedToSection =>
+      !isSectionWindow && viewId != null && (sectionKey ?? '').isNotEmpty;
+  bool get hasPendingClear => pendingClear != null;
 
   factory Automation.fromJson(Map<String, dynamic> json) {
     final trigger = json['trigger'];
@@ -63,7 +92,57 @@ class Automation {
       enabled: json['enabled'] as bool? ?? true,
       lastRunAt: DateTime.tryParse(json['last_run_at'] as String? ?? ''),
       nextRunAt: DateTime.tryParse(json['next_run_at'] as String? ?? ''),
+      kind: json['kind'] as String? ?? AutomationKinds.standard,
+      viewId: json['view_id'] as int?,
+      sectionKey: json['section_key'] as String?,
+      windowDurationMinutes: json['window_duration_minutes'] as int?,
+      windowOpenedAt: DateTime.tryParse(json['window_opened_at'] as String? ?? ''),
+      windowClosesAt: DateTime.tryParse(json['window_closes_at'] as String? ?? ''),
+      pendingClear: json['pending_clear'] is Map
+          ? Map<String, dynamic>.from(json['pending_clear'] as Map)
+          : null,
+      pendingUserInput: json['pending_user_input'] is Map
+          ? Map<String, dynamic>.from(json['pending_user_input'] as Map)
+          : null,
+      windowOpen: json['window_open'] as bool? ?? false,
+      attention: json['attention'] as bool? ?? false,
     );
+  }
+
+  static bool stepRequiresUserInput(
+    Map<String, dynamic> step, {
+    bool Function(int actionId)? actionRequiresInput,
+  }) {
+    if (step['kind'] != StepKinds.ai) return false;
+    if (step['requires_user_input'] == true) return true;
+    final actionId = step['action_id'];
+    if (actionId is int && actionRequiresInput != null) {
+      return actionRequiresInput(actionId);
+    }
+    return false;
+  }
+
+  static bool stepNeedsReview(Map<String, dynamic> step) {
+    if (step['kind'] != StepKinds.ai) return false;
+    return (step['apply_mode'] as String? ?? '') == 'review';
+  }
+
+  static bool needsComplimentaryPlacement(
+    List<Map<String, dynamic>> steps, {
+    bool Function(int actionId)? actionRequiresInput,
+    bool Function(int actionId)? actionNeedsReview,
+  }) {
+    for (final step in steps) {
+      if (stepRequiresUserInput(step, actionRequiresInput: actionRequiresInput)) {
+        return true;
+      }
+      if (stepNeedsReview(step)) return true;
+      final actionId = step['action_id'];
+      if (actionId is int && actionNeedsReview != null && actionNeedsReview(actionId)) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 

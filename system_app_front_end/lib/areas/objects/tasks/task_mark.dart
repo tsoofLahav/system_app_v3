@@ -9,14 +9,14 @@ class TaskMark extends StatelessWidget {
   const TaskMark({
     super.key,
     required this.done,
-    required this.onToggle,
+    this.onToggle,
     this.size = 14,
     this.compact = false,
     this.accent = false,
   });
 
   final bool done;
-  final VoidCallback onToggle;
+  final VoidCallback? onToggle;
   final double size;
   /// Tight tap target for dense rows — keeps a square hit box.
   final bool compact;

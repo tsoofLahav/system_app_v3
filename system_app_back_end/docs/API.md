@@ -195,11 +195,17 @@ A scope, a trigger, and an ordered series of steps. Saved AI actions are a diffe
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/automations` | List |
-| POST | `/automations` | Create — `name`, `scope`, `trigger`, `steps`, `schedule`, `timezone`, `enabled` |
+| GET | `/automations` | List (also backfills section-window rows) |
+| GET | `/automations/pending-clears` | Section windows waiting for leftover confirm |
+| POST | `/automations` | Create — plus `kind`, `view_id`, `section_key`, `window_duration_minutes` |
 | PATCH | `/automations/<id>` | Partial update of those fields |
-| DELETE | `/automations/<id>` | Delete (cascades runs) |
+| DELETE | `/automations/<id>` | Delete (cascades runs and complimentary tasks) |
 | POST | `/automations/<id>/run` | Run now on the **stored** scope — same walk the clock would do |
+| POST | `/automations/<id>/submit-input` | Store user input and run |
+| POST | `/automations/<id>/clear-leftovers` | Approve leftover recycle / archive |
+| GET | `/automations/<id>/review-status` | Pending review file ids for complimentary review |
+| POST | `/automations/<id>/complete-review` | Mark the review task done if nothing is pending |
+| GET | `/automations/<id>/input-topics` | Topics for the input dialog |
 
 `steps` is `[{ "kind": "ai" \| "create_file" \| "unmark_tasks" \| "archive_files", … }]`. An `ai` step is either `{ "action_id" }` or `{ "prompt", "apply_mode" }`.
 
@@ -212,7 +218,7 @@ A prompt on a button. No stored scope — the client sends live `scope` / `hints
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/ai-actions` | List |
-| POST | `/ai-actions` | Create — `icon`, `bar_slot` optional |
+| POST | `/ai-actions` | Create — `icon`, `bar_slot`, `requires_user_input`, `user_input_prompt` optional |
 | PATCH | `/ai-actions/<id>` | Update; `bar_slot` (1–6 or null) pins/unpins and frees the old holder |
 | PUT | `/ai-actions/bar-order` | `{"ordered_ids": [...]}` → first six take slots 1..6, the rest unpin |
 | DELETE | `/ai-actions/<id>` | Delete |

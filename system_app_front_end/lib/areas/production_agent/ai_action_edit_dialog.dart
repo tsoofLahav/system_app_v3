@@ -5,6 +5,7 @@ import '../../core/l10n/app_strings.dart';
 import '../ui/action_icon_picker.dart';
 import '../ui/action_icons.dart';
 import '../ui/adaptive_dialog.dart';
+import '../ui/app_switch.dart';
 import '../ui/app_icons.dart';
 import '../ui/app_segmented_toggle.dart';
 import '../ui/dialog_field_style.dart';
@@ -56,6 +57,8 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
   late _ActionScopeKind _scopeKind;
   int? _topicTypeId;
   int? _topicId;
+  late bool _requiresUserInput;
+  late final TextEditingController _userInputPrompt;
   var _saving = false;
 
   bool get _isCreate => widget.action == null;
@@ -67,6 +70,10 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
     _name = TextEditingController(text: existing?.name ?? '');
     _nameHe = TextEditingController(text: existing?.nameHe ?? '');
     _prompt = TextEditingController(text: existing?.prompt ?? '');
+    _requiresUserInput = existing?.requiresUserInput ?? false;
+    _userInputPrompt = TextEditingController(
+      text: existing?.userInputPrompt ?? '',
+    );
     _applyMode = existing?.applyMode ?? defaultConsultApplyMode;
     _iconKey = (existing == null || existing.icon.isEmpty)
         ? defaultActionIconKey
@@ -100,6 +107,7 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
     _name.dispose();
     _nameHe.dispose();
     _prompt.dispose();
+    _userInputPrompt.dispose();
     super.dispose();
   }
 
@@ -124,6 +132,8 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
           barSlot: _onBar ? widget.state.firstFreeAiBarSlot : null,
           topicTypeId: _scopeKind == _ActionScopeKind.type ? _topicTypeId : null,
           topicId: _scopeKind == _ActionScopeKind.topic ? _topicId : null,
+          requiresUserInput: _requiresUserInput,
+          userInputPrompt: _userInputPrompt.text.trim(),
         );
       } else {
         final existing = widget.action!;
@@ -138,6 +148,8 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
               _scopeKind == _ActionScopeKind.type ? _topicTypeId : null,
           if (_onBar != existing.isOnBar)
             'bar_slot': _onBar ? widget.state.firstFreeAiBarSlot : null,
+          'requires_user_input': _requiresUserInput,
+          'user_input_prompt': _userInputPrompt.text.trim(),
         });
         saved = widget.state.aiActions.firstWhere(
           (row) => row.id == existing.id,
@@ -224,6 +236,28 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
             selected: _applyMode,
             onSelected: (mode) => setState(() => _applyMode = mode),
           ),
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          Row(
+            children: [
+              Expanded(child: Text(s['requiresUserInput'])),
+              AppSwitch(
+                value: _requiresUserInput,
+                onChanged: (on) => setState(() => _requiresUserInput = on),
+              ),
+            ],
+          ),
+          if (_requiresUserInput) ...[
+            const SizedBox(height: DialogFieldStyle.fieldGap),
+            AppDialogField(
+              label: s['userInputPrompt'],
+              child: TextField(
+                controller: _userInputPrompt,
+                decoration: DialogFieldStyle.decoration(
+                  hintText: s['userInputPromptHint'],
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: DialogFieldStyle.fieldGap),
           ActionIconField(
             label: s['actionIcon'],

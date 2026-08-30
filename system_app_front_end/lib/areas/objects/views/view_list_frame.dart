@@ -26,6 +26,7 @@ class ViewListFrame extends StatelessWidget {
     this.accent,
     this.tintSeed = 1,
     this.isImportant = false,
+    this.attention = false,
     this.frameReorderMode = false,
     this.taskReorderMode = false,
     this.onTaskReorderModeChanged,
@@ -44,6 +45,7 @@ class ViewListFrame extends StatelessWidget {
   final Color? accent;
   final int tintSeed;
   final bool isImportant;
+  final bool attention;
   final bool frameReorderMode;
   final bool taskReorderMode;
   final ValueChanged<bool>? onTaskReorderModeChanged;
@@ -95,6 +97,18 @@ class ViewListFrame extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  if (attention)
+                    Tooltip(
+                      message: state.strings['sectionAttention'],
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: AppColors.destructive,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

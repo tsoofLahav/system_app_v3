@@ -22,6 +22,12 @@ Row in `automations` (migration [`011_ai_actions_split.sql`](../../migrations/01
 | `timezone` | Schedule is interpreted here, stored UTC. Default for new rows from the app: `Asia/Jerusalem`. |
 | `enabled` | Disabled automations never fire automatically |
 | `last_run_at`, `next_run_at` | Scheduling bookkeeping |
+| `kind` | `standard` (default) or `section_window` |
+| `view_id`, `section_key` | Section window target, or complimentary placement for a standard automation |
+| `window_duration_minutes` | How long after start a section window stays open |
+| `window_opened_at`, `window_closes_at`, `pending_clear` | Open window + leftover confirm payload |
+
+A **section window** has no steps. The minute cron opens it at the start, recycles complimentary / routine tasks, and at duration end either closes or writes `pending_clear`. Standard automations locked to a section copy that schedule and **do not fire on their own clock** if the window is off. If they need user input they wait for `POST /automations/:id/submit-input`; if they only need review they run at section start.
 
 A single-topic scope is also the **target**: a step that has to put something somewhere (create a file) uses it. Broader scope leaves the step to carry its own `topic_id`, except `create_file` with `template_slot`, which skeleton-clones that slot into **each** topic in a type scope.
 
@@ -65,7 +71,8 @@ A new `daily 08:00` saved at 10:00 is **armed**, not run — "daily at eight" me
 
 | Module | Role |
 |--------|------|
-| [`routes/automations.py`](routes/automations.py) | CRUD + `POST /automations/:id/run` |
+| [`routes/automations.py`](routes/automations.py) | CRUD + run, submit-input, pending-clears, clear-leftovers, review-status |
+| [`services/section_windows.py`](services/section_windows.py) | Auto-create/backfill windows, leftover clear, complimentary tasks |
 | [`services/steps.py`](services/steps.py) | Step vocabulary and save-time validation |
 | [`services/scope.py`](services/scope.py) | Kind → `{workspace_id, topic_ids, file_ids}` |
 | [`services/run_automation.py`](services/run_automation.py) | Walk the series, record the run |

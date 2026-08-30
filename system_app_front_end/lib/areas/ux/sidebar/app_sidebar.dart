@@ -383,6 +383,7 @@ class _ViewSection extends StatelessWidget {
               onEdit: () => _renameView(context, view),
               onDelete: () => _deleteView(context, view),
               strings: s,
+              attention: state.viewHasAttention(view.id),
             )
         else
           ReorderableListView.builder(
@@ -405,6 +406,7 @@ class _ViewSection extends StatelessWidget {
                 onDelete: () => _deleteView(context, view),
                 strings: s,
                 dragIndex: index,
+                attention: state.viewHasAttention(view.id),
               );
             },
           ),
@@ -424,6 +426,7 @@ class _ViewTile extends StatelessWidget {
     required this.onDelete,
     required this.strings,
     this.dragIndex,
+    this.attention = false,
   });
 
   final AppView view;
@@ -433,6 +436,7 @@ class _ViewTile extends StatelessWidget {
   final VoidCallback onDelete;
   final AppStrings strings;
   final int? dragIndex;
+  final bool attention;
 
   Future<void> _showContextMenu(
     BuildContext context,
@@ -481,6 +485,19 @@ class _ViewTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (attention)
+                Tooltip(
+                  message: strings['viewAttention'],
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    margin: const EdgeInsetsDirectional.only(end: 6),
+                    decoration: const BoxDecoration(
+                      color: AppColors.destructive,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
               if (dragIndex != null)
                 ReorderableDragStartListener(
                   index: dragIndex!,

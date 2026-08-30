@@ -49,7 +49,7 @@ After finish pending / direct apply, the topic reloads; open Super Editors pick 
 
 - **Consult** always sends `apply_mode`: `review` | `direct_apply` (dialog default = review).
 - If somehow omitted, backend [`DEFAULT_MANUAL_APPLY_MODE`](../../../../system_app_back_end/shared/run_config.py) applies.
-- Automations use a per-step `apply_mode`; create UI default is [`agent_run_defaults.dart`](agent_run_defaults.dart).
+- Automations use a per-step `apply_mode`; create UI default is [`agent_run_defaults.dart`](agent_run_defaults.dart). A saved action may set `requires_user_input` so an automation that uses it places complimentary input/review tasks.
 
 ## Presenting a run result
 

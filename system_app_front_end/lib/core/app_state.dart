@@ -351,6 +351,7 @@ class AppState extends ChangeNotifier {
       appReady = true;
       await loadAiActions();
       await loadAutomations();
+      _startSectionWindowPoll();
       if (selectedTopic == null && allTopics.isNotEmpty) {
         final home =
             allTopics.where((t) => t.isMain).firstOrNull ??
@@ -1516,6 +1517,8 @@ class AppState extends ChangeNotifier {
     int? barSlot,
     int? topicTypeId,
     int? topicId,
+    bool requiresUserInput = false,
+    String userInputPrompt = '',
   }) async {
     if (workspaceId == null) {
       throw StateError('workspace not ready');
@@ -1530,6 +1533,8 @@ class AppState extends ChangeNotifier {
       barSlot: barSlot,
       topicTypeId: topicTypeId,
       topicId: topicId,
+      requiresUserInput: requiresUserInput,
+      userInputPrompt: userInputPrompt,
     );
     // A new pin takes its slot from whoever had it, so reload rather than
     // append — the other rows changed too.
@@ -1630,6 +1635,63 @@ class AppState extends ChangeNotifier {
 
   // --- Automations: scope, trigger, a series of steps -----------------------
 
+  Timer? _sectionWindowPoll;
+
+  List<Automation> get standardAutomations => [
+    for (final a in automations)
+      if (!a.isSectionWindow) a,
+  ];
+
+  List<Automation> get sectionWindowAutomations => [
+    for (final a in automations)
+      if (a.isSectionWindow) a,
+  ];
+
+  List<Automation> get pendingClearWindows => [
+    for (final a in sectionWindowAutomations)
+      if (a.hasPendingClear) a,
+  ];
+
+  Automation? sectionWindowFor({required int viewId, required String sectionKey}) {
+    for (final a in sectionWindowAutomations) {
+      if (a.viewId == viewId && a.sectionKey == sectionKey) return a;
+    }
+    return null;
+  }
+
+  bool viewHasAttention(int viewId) => sectionWindowAutomations.any(
+    (a) => a.viewId == viewId && a.attention,
+  );
+
+  bool sectionHasAttention({required int viewId, String? sectionKey}) {
+    if (sectionKey == null || sectionKey.isEmpty) return false;
+    final window = sectionWindowFor(viewId: viewId, sectionKey: sectionKey);
+    return window?.attention ?? false;
+  }
+
+  void _startSectionWindowPoll() {
+    _sectionWindowPoll?.cancel();
+    _sectionWindowPoll = Timer.periodic(const Duration(seconds: 30), (_) {
+      unawaited(refreshSectionWindows(notifyIfChanged: true));
+    });
+  }
+
+  Future<void> refreshSectionWindows({bool notifyIfChanged = false}) async {
+    if (workspaceId == null) return;
+    final next = await _automations.list(workspaceId: workspaceId);
+    final changed = _automationAttentionSignature(next) !=
+        _automationAttentionSignature(automations);
+    automations = next;
+    if (changed || !notifyIfChanged) notifyListeners();
+  }
+
+  String _automationAttentionSignature(List<Automation> rows) {
+    return [
+      for (final a in rows)
+        '${a.id}:${a.attention}:${a.windowOpen}:${a.hasPendingClear}:${a.enabled}:${a.schedule}',
+    ].join('|');
+  }
+
   Future<void> loadAutomations() async {
     if (workspaceId == null) return;
     automations = await _automations.list(workspaceId: workspaceId);
@@ -1645,6 +1707,10 @@ class AppState extends ChangeNotifier {
     String? schedule,
     String timezone = 'UTC',
     bool enabled = true,
+    String kind = AutomationKinds.standard,
+    int? viewId,
+    String? sectionKey,
+    int? windowDurationMinutes,
   }) async {
     if (workspaceId == null) {
       throw StateError('workspace not ready');
@@ -1659,6 +1725,10 @@ class AppState extends ChangeNotifier {
       schedule: schedule,
       timezone: timezone,
       enabled: enabled,
+      kind: kind,
+      viewId: viewId,
+      sectionKey: sectionKey,
+      windowDurationMinutes: windowDurationMinutes,
     );
     automations = [...automations, automation];
     notifyListeners();
@@ -2785,6 +2855,8 @@ class AppState extends ChangeNotifier {
     String name, {
     String? flag,
     String? colorHex,
+    String? key,
+    String? cadence,
   }) async {
     final trimmed = name.trim();
     if (selectedView == null || trimmed.isEmpty) return;
@@ -2793,14 +2865,17 @@ class AppState extends ChangeNotifier {
     sections.add(
       ViewSectionDef(
         name: trimmed,
+        key: key,
         flag: flag,
         colorHex: colorHex,
         orderIndex: sections.length,
+        cadence: cadence ?? ViewSectionCadence.routine,
       ),
     );
     await _persistViewLayout(
       ViewLayoutConfig.withSections(selectedView!.layoutConfig, sections),
     );
+    await loadAutomations();
     notifyListeners();
   }
 
@@ -2830,6 +2905,7 @@ class AppState extends ChangeNotifier {
     _applyViewMemberships(
       await _views.replaceMemberships(selectedView!.id, memberships),
     );
+    await loadAutomations();
     notifyListeners();
   }
 
@@ -2859,6 +2935,7 @@ class AppState extends ChangeNotifier {
     _applyViewMemberships(
       await _views.replaceMemberships(selectedView!.id, memberships),
     );
+    await loadAutomations();
     notifyListeners();
   }
 
@@ -3120,8 +3197,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  dynamic get pendingTaskResetAcknowledgement => null;
-  Future<void> approveTaskResetAcknowledgement({bool approve = true}) async {}
+  Automation? get pendingTaskResetAcknowledgement =>
+      pendingClearWindows.firstOrNull;
+
+  Future<void> approveTaskResetAcknowledgement({bool approve = true}) async {
+    final window = pendingTaskResetAcknowledgement;
+    if (window == null || !approve) return;
+    await _automations.clearLeftovers(window.id);
+    await loadAutomations();
+    if (isViewMode) await refreshCurrentView();
+  }
   Future<void> refreshCurrentView() async {
     if (selectedViewType != null) await selectView(selectedViewType!);
   }
@@ -3165,7 +3250,33 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> completeAutomationCompanion(int id) async {}
+  Future<Map<String, dynamic>> complimentaryReviewStatus(int automationId) {
+    return _automations.reviewStatus(automationId);
+  }
+
+  Future<List<Map<String, dynamic>>> complimentaryInputTopics(int automationId) {
+    return _automations.inputTopics(automationId);
+  }
+
+  Future<Map<String, dynamic>> submitComplimentaryInput(
+    int automationId,
+    Map<String, dynamic> body,
+  ) async {
+    final result = await _automations.submitInput(automationId, body);
+    await loadAutomations();
+    if (isViewMode) await refreshCurrentView();
+    return result;
+  }
+
+  Future<Map<String, dynamic>> completeComplimentaryReview(int automationId) async {
+    final result = await _automations.completeReview(automationId);
+    if (isViewMode) await refreshCurrentView();
+    return result;
+  }
+
+  Future<void> completeAutomationCompanion(int id) async {
+    await completeComplimentaryReview(id);
+  }
   Future<void> submitProcessDocumentationInput({
     required int id,
     required String text,

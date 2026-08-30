@@ -10,6 +10,7 @@ import '../ui/confirm_dialog.dart';
 import '../ui/dialog_metrics.dart';
 import './automation.dart';
 import './automation_builder_dialog.dart';
+import './section_window_editor.dart';
 
 Future<void> showAutomationDialog({
   required BuildContext context,
@@ -49,11 +50,17 @@ class _AutomationDialogState extends State<_AutomationDialog> {
   }
 
   Future<void> _edit(Automation automation) async {
-    final saved = await showAutomationBuilderDialog(
-      context: context,
-      state: state,
-      automation: automation,
-    );
+    final saved = automation.isSectionWindow
+        ? await showSectionWindowEditor(
+            context: context,
+            state: state,
+            automation: automation,
+          )
+        : await showAutomationBuilderDialog(
+            context: context,
+            state: state,
+            automation: automation,
+          );
     if (saved && mounted) setState(() {});
   }
 
@@ -92,7 +99,8 @@ class _AutomationDialogState extends State<_AutomationDialog> {
   @override
   Widget build(BuildContext context) {
     final s = state.strings;
-    final items = state.automations;
+    final regular = state.standardAutomations;
+    final windows = state.sectionWindowAutomations;
 
     return AppAdaptiveDialogShell(
       title: Text(s['automations']),
@@ -108,56 +116,36 @@ class _AutomationDialogState extends State<_AutomationDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
-            height: 280,
-            child: items.isEmpty
-                ? Center(
+            height: 320,
+            child: ListView(
+              children: [
+                Text(s['automations'], style: AppTypography.metaStyle),
+                if (regular.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Text(
                       s['noAutomationsHint'],
                       textAlign: TextAlign.center,
                       style: AppTypography.metaStyle,
                     ),
                   )
-                : ListView.separated(
-                    itemCount: items.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      return ListTile(
-                        dense: true,
-                        onTap: () => _edit(item),
-                        title: Text(state.automationDisplayName(item)),
-                        subtitle: Text(
-                          _subtitle(item),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: s['edit'],
-                              icon: const AppIcon(AppIcons.edit, size: 18),
-                              onPressed: () => _edit(item),
-                            ),
-                            IconButton(
-                              tooltip: s['runNow'],
-                              icon: const AppIcon(AppIcons.runNow, size: 18),
-                              onPressed: () => _run(item),
-                            ),
-                            IconButton(
-                              tooltip: s['delete'],
-                              icon: const AppIcon(AppIcons.trash, size: 18),
-                              onPressed: () => _confirmDelete(item),
-                            ),
-                            AppSwitch(
-                              value: item.enabled,
-                              onChanged: (on) => _setEnabled(item, on),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                else
+                  for (final item in regular) _row(item, allowDelete: true),
+                const SizedBox(height: 16),
+                Text(s['sectionWindows'], style: AppTypography.metaStyle),
+                if (windows.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Text(
+                      s['noSectionWindowsHint'],
+                      textAlign: TextAlign.center,
+                      style: AppTypography.metaStyle,
+                    ),
+                  )
+                else
+                  for (final item in windows) _row(item, allowDelete: false),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
           Align(
@@ -173,10 +161,56 @@ class _AutomationDialogState extends State<_AutomationDialog> {
     );
   }
 
+  Widget _row(Automation item, {required bool allowDelete}) {
+    final s = state.strings;
+    return ListTile(
+      dense: true,
+      onTap: () => _edit(item),
+      title: Text(state.automationDisplayName(item)),
+      subtitle: Text(
+        _subtitle(item),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: s['edit'],
+            icon: const AppIcon(AppIcons.edit, size: 18),
+            onPressed: () => _edit(item),
+          ),
+          if (!item.isSectionWindow)
+            IconButton(
+              tooltip: s['runNow'],
+              icon: const AppIcon(AppIcons.runNow, size: 18),
+              onPressed: () => _run(item),
+            ),
+          if (allowDelete)
+            IconButton(
+              tooltip: s['delete'],
+              icon: const AppIcon(AppIcons.trash, size: 18),
+              onPressed: () => _confirmDelete(item),
+            ),
+          AppSwitch(
+            value: item.enabled,
+            onChanged: (on) => _setEnabled(item, on),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _subtitle(Automation item) {
     final schedule = item.schedule ?? '';
-    final n = item.steps.length;
-    return [schedule, '$n'].join(' · ');
+    if (item.isSectionWindow) {
+      final minutes = item.windowDurationMinutes;
+      return [
+        schedule,
+        if (minutes != null) '${minutes}m',
+      ].where((part) => part.isNotEmpty).join(' · ');
+    }
+    return [schedule, '${item.steps.length}'].join(' · ');
   }
 }
 

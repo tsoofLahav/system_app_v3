@@ -1,50 +1,71 @@
 import './view_section_flags.dart';
 
 /// Section definition stored on [AppView.layoutConfig].
+class ViewSectionCadence {
+  static const routine = 'routine';
+  static const oneTime = 'one_time';
+}
+
 class ViewSectionDef {
   const ViewSectionDef({
     required this.name,
+    this.key,
     this.flag,
     this.colorHex,
     this.orderIndex = 0,
+    this.cadence = ViewSectionCadence.routine,
   });
 
   final String name;
+  final String? key;
   final String? flag;
   final String? colorHex;
   final int orderIndex;
+  final String cadence;
 
   bool get isImportant => sectionFlagIsImportant(flag);
+  bool get isRoutine => cadence == ViewSectionCadence.routine;
 
   ViewSectionDef copyWith({
     String? name,
+    String? key,
     String? flag,
     String? colorHex,
     int? orderIndex,
+    String? cadence,
     bool clearFlag = false,
     bool clearColor = false,
   }) {
     return ViewSectionDef(
       name: name ?? this.name,
+      key: key ?? this.key,
       flag: clearFlag ? null : (flag ?? this.flag),
       colorHex: clearColor ? null : (colorHex ?? this.colorHex),
       orderIndex: orderIndex ?? this.orderIndex,
+      cadence: cadence ?? this.cadence,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'name': name,
+        if (key != null && key!.isNotEmpty) 'key': key,
         if (flag != null) 'flag': flag,
         if (colorHex != null) 'color': colorHex,
         'order': orderIndex,
+        'cadence': cadence,
       };
 
   factory ViewSectionDef.fromJson(Map<String, dynamic> json, int fallbackOrder) {
+    final cadence = '${json['cadence'] ?? ''}';
     return ViewSectionDef(
       name: '${json['name'] ?? ''}',
+      key: json['key'] as String?,
       flag: json['flag'] as String?,
       colorHex: json['color'] as String?,
       orderIndex: json['order'] as int? ?? fallbackOrder,
+      cadence: cadence == ViewSectionCadence.oneTime
+          ? ViewSectionCadence.oneTime
+          : ViewSectionCadence.routine,
     );
   }
 }

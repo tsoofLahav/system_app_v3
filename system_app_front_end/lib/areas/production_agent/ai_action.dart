@@ -17,6 +17,8 @@ class AiAction {
     this.barSlot,
     this.topicTypeId,
     this.topicId,
+    this.requiresUserInput = false,
+    this.userInputPrompt = '',
   });
 
   final int id;
@@ -38,6 +40,9 @@ class AiAction {
 
   /// Set = this topic only. Mutually exclusive with [topicTypeId].
   final int? topicId;
+
+  final bool requiresUserInput;
+  final String userInputPrompt;
 
   bool get isOnBar => barSlot != null;
 
@@ -70,5 +75,7 @@ class AiAction {
     barSlot: json['bar_slot'] as int?,
     topicTypeId: json['topic_type_id'] as int?,
     topicId: json['topic_id'] as int?,
+    requiresUserInput: json['requires_user_input'] as bool? ?? false,
+    userInputPrompt: json['user_input_prompt'] as String? ?? '',
   );
 }

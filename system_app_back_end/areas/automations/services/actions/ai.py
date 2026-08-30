@@ -38,6 +38,12 @@ def ai(*, workspace_id: int, resolved_scope: dict, params: dict, now: datetime):
     if not prompt:
         return {"error": "the AI step has no prompt"}
 
+    from areas.automations.services.section_windows import format_user_input_for_prompt
+
+    user_note = format_user_input_for_prompt(params.get("user_input"))
+    if user_note:
+        prompt = f"{prompt}\n\nUser input:\n{user_note}"
+
     result = run_agent(
         prompt=prompt,
         workspace_id=workspace_id,

@@ -17,7 +17,7 @@ APPLY_MODES = ("review", "direct_apply", "notify_only")
 # kind -> the keys it keeps. Anything else the client sends is dropped, so a
 # step never accumulates fields nobody reads.
 STEP_SPECS: dict[str, tuple[str, ...]] = {
-    "ai": ("action_id", "prompt", "apply_mode"),
+    "ai": ("action_id", "prompt", "apply_mode", "requires_user_input"),
     "create_file": ("name", "topic_id", "template_slot"),
     "unmark_tasks": ("task_list_id",),
     "archive_files": ("file_ids", "older_than_days", "template_slot"),

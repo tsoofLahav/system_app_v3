@@ -137,6 +137,10 @@ def delete_topic_cascade(topic_id: int) -> None:
 
 
 def delete_view_cascade(view_id: int) -> None:
+    from models import Automation
+
+    for automation in Automation.query.filter_by(view_id=view_id).all():
+        delete_automation_cascade(automation.id)
     ViewTaskMembership.query.filter_by(view_id=view_id).delete(
         synchronize_session=False
     )
@@ -146,6 +150,10 @@ def delete_view_cascade(view_id: int) -> None:
 
 
 def delete_automation_cascade(automation_id: int) -> None:
+    from models import Task
+
+    for task in Task.query.filter_by(source_automation_id=automation_id).all():
+        delete_task_cascade(task.id)
     AutomationRun.query.filter_by(automation_id=automation_id).delete(
         synchronize_session=False
     )

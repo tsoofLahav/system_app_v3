@@ -24,6 +24,8 @@ class AiActionService {
     int? barSlot,
     int? topicTypeId,
     int? topicId,
+    bool requiresUserInput = false,
+    String userInputPrompt = '',
   }) async {
     final data =
         await _api.post('/ai-actions', {
@@ -36,6 +38,8 @@ class AiActionService {
               'bar_slot': ?barSlot,
               'topic_type_id': ?topicTypeId,
               'topic_id': ?topicId,
+              'requires_user_input': requiresUserInput,
+              'user_input_prompt': userInputPrompt,
             })
             as Map<String, dynamic>;
     return AiAction.fromJson(data);

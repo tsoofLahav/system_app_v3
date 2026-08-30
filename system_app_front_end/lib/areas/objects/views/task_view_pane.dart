@@ -391,6 +391,8 @@ class _TaskViewPaneState extends State<TaskViewPane> {
       next.name,
       flag: next.flag,
       colorHex: next.colorHex,
+      key: next.key,
+      cadence: next.cadence,
     );
   }
 
@@ -737,6 +739,12 @@ class _DraggableFrame extends StatelessWidget {
       accent: frame.accent,
       tintSeed: frame.tintSeed,
       isImportant: frame.isImportant,
+      attention: frame.section != null &&
+          state.selectedView != null &&
+          state.sectionHasAttention(
+            viewId: state.selectedView!.id,
+            sectionKey: frame.section!.key,
+          ),
       frameReorderMode: frameReorderMode,
       taskReorderMode: taskReorderMode,
       onTaskReorderModeChanged: onTaskReorderModeChanged,

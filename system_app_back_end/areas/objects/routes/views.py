@@ -63,6 +63,10 @@ def update_view(view_id):
         {"name", "layout_config", "order_index", "archived_at"},
         datetime_fields={"archived_at"},
     )
+    if "layout_config" in data or "name" in data:
+        from areas.automations.services.section_windows import ensure_section_windows
+
+        ensure_section_windows(view.workspace_id)
     db.session.commit()
     return jsonify(view.to_dict())
 
@@ -142,6 +146,8 @@ def create_view_task(view_id):
         title=title,
         status=status,
         list_order_index=order_index,
+        source_automation_id=data.get("source_automation_id"),
+        complimentary_role=_blank_text(data.get("complimentary_role")),
     )
     db.session.add(task)
     db.session.flush()

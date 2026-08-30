@@ -6,6 +6,8 @@ import '../../core/l10n/app_strings.dart';
 import '../files/data/app_file.dart';
 import '../files/data/topic.dart';
 import '../files/data/topic_type.dart';
+import '../objects/data/app_view.dart';
+import '../objects/data/view_layout.dart';
 import '../production_agent/agent_run_defaults.dart';
 import '../production_agent/ai_action.dart';
 import '../production_agent/ai_action_edit_dialog.dart';
@@ -13,6 +15,7 @@ import '../ui/action_icons.dart';
 import '../ui/adaptive_dialog.dart';
 import '../ui/app_colors.dart';
 import '../ui/app_icons.dart';
+import '../ui/app_switch.dart';
 import '../ui/app_segmented_toggle.dart';
 import '../ui/app_typography.dart';
 import '../ui/dialog_field_style.dart';
@@ -67,6 +70,8 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   int? _topicTypeId;
   late AutomationSchedule _schedule;
   late List<Map<String, dynamic>> _steps;
+  int? _viewId;
+  String? _sectionKey;
   var _saving = false;
   var _addMenuOpen = false;
   List<AppFile> _templateFiles = const [];
@@ -90,6 +95,8 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     _topicTypeId =
         AutomationScope.typeIdOf(scope) ?? state.topicTypes.firstOrNull?.id;
     _schedule = AutomationSchedule.parse(existing?.schedule);
+    _viewId = existing?.viewId;
+    _sectionKey = existing?.sectionKey;
     _steps = [
       for (final step in existing?.steps ?? const <Map<String, dynamic>>[])
         Map<String, dynamic>.from(step),
@@ -123,6 +130,24 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     };
   }
 
+  AiAction? _actionById(int id) {
+    for (final action in state.aiActions) {
+      if (action.id == id) return action;
+    }
+    return null;
+  }
+
+  bool get _needsComplimentary => Automation.needsComplimentaryPlacement(
+    _steps,
+    actionRequiresInput: (id) => _actionById(id)?.requiresUserInput ?? false,
+    actionNeedsReview: (id) => _actionById(id)?.applyMode == 'review',
+  );
+
+  Automation? get _linkedWindow {
+    if (_viewId == null || (_sectionKey ?? '').isEmpty) return null;
+    return state.sectionWindowFor(viewId: _viewId!, sectionKey: _sectionKey!);
+  }
+
   bool get _canSave {
     if (_name.text.trim().isEmpty ||
         _nameHe.text.trim().isEmpty ||
@@ -131,6 +156,10 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     }
     if (_scopeKind == AutomationScope.topic && _topicId == null) return false;
     if (_scopeKind == AutomationScope.topicType && _topicTypeId == null) {
+      return false;
+    }
+    if (_needsComplimentary &&
+        (_viewId == null || (_sectionKey ?? '').isEmpty)) {
       return false;
     }
     return _steps.every(_stepIsReady);
@@ -215,9 +244,23 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     return s['pickTopicFile'];
   }
 
+  Map<String, dynamic> _placementFields() {
+    final window = _linkedWindow;
+    final schedule = _needsComplimentary
+        ? (window?.schedule ?? _schedule.toDsl())
+        : _schedule.toDsl();
+    return {
+      'view_id': _needsComplimentary ? _viewId : null,
+      'section_key': _needsComplimentary ? _sectionKey : null,
+      'schedule': schedule,
+      'timezone': AutomationSchedule.defaultTimezone,
+    };
+  }
+
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
+      final placement = _placementFields();
       if (_isEdit) {
         await state.updateAutomation(widget.automation!, {
           'name': _name.text.trim(),
@@ -225,8 +268,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
           'scope': _scope(),
           'trigger': {'type': 'schedule'},
           'steps': _steps,
-          'schedule': _schedule.toDsl(),
-          'timezone': AutomationSchedule.defaultTimezone,
+          ...placement,
         });
       } else {
         await state.createAutomation(
@@ -235,8 +277,11 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
           scope: _scope(),
           trigger: const {'type': 'schedule'},
           steps: _steps,
-          schedule: _schedule.toDsl(),
-          timezone: AutomationSchedule.defaultTimezone,
+          schedule: placement['schedule'] as String?,
+          timezone: placement['timezone'] as String? ??
+              AutomationSchedule.defaultTimezone,
+          viewId: placement['view_id'] as int?,
+          sectionKey: placement['section_key'] as String?,
         );
       }
       if (mounted) Navigator.pop(context, true);
@@ -264,6 +309,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
       'kind': StepKinds.ai,
       'action_id': action.id,
       'apply_mode': action.applyMode,
+      if (action.requiresUserInput) 'requires_user_input': true,
     });
   }
 
@@ -286,6 +332,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
       'kind': StepKinds.ai,
       'action_id': id,
       'apply_mode': picked?.applyMode ?? defaultAutomationApplyMode,
+      if (picked?.requiresUserInput == true) 'requires_user_input': true,
     });
   }
 
@@ -601,24 +648,13 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   }
 
   String _whenCaption() {
-    final dayKey = AutomationSchedule.weekdayKeys[_schedule.weekday]!;
-    if (_schedule.kind == 'weekly') return s.weeklyScheduleCaption(dayKey);
-    if (_schedule.kind == 'monthly') {
-      return s.monthlyScheduleCaption(_schedule.placement, dayKey);
+    final schedule = _lockedSchedule;
+    final dayKey = AutomationSchedule.weekdayKeys[schedule.weekday]!;
+    if (schedule.kind == 'weekly') return s.weeklyScheduleCaption(dayKey);
+    if (schedule.kind == 'monthly') {
+      return s.monthlyScheduleCaption(schedule.placement, dayKey);
     }
     return '';
-  }
-
-  Widget _compactTime() {
-    return AppCompactTimePicker(
-      title: s['time'],
-      value: timeOfDayFromHmm(_schedule.time),
-      onChanged: (picked) {
-        setState(
-          () => _schedule = _schedule.copyWith(time: hmmFromTimeOfDay(picked)),
-        );
-      },
-    );
   }
 
   @override
@@ -738,6 +774,24 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
           ),
         ],
         const SizedBox(height: DialogFieldStyle.fieldGap),
+        if (_needsComplimentary) ...[
+          AppDialogPickerField(
+            label: s['pickView'],
+            preview: const AppIcon(AppIcons.bringFile, size: 16),
+            valueLabel: _viewLabel(),
+            onTap: _pickView,
+          ),
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          if (_viewId != null) ...[
+            AppDialogPickerField(
+              label: s['pickRoutineSection'],
+              preview: const AppIcon(AppIcons.bringFile, size: 16),
+              valueLabel: _sectionLabel(),
+              onTap: _pickRoutineSection,
+            ),
+            const SizedBox(height: DialogFieldStyle.fieldGap),
+          ],
+        ],
         AppDialogChoiceField<String>(
           label: s['schedule'],
           options: [
@@ -745,17 +799,121 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
             AppSegmentedOption(value: 'weekly', label: s['onceAWeek']),
             AppSegmentedOption(value: 'monthly', label: s['onceAMonth']),
           ],
-          selected: _schedule.kind,
+          selected: _lockedSchedule.kind,
+          enabled: !_needsComplimentary,
           onSelected: (kind) =>
               setState(() => _schedule = _schedule.copyWith(kind: kind)),
         ),
+        if (_needsComplimentary) ...[
+          const SizedBox(height: 6),
+          Text(
+            _linkedWindow == null || !_linkedWindow!.enabled
+                ? s['sectionWindowOffHint']
+                : s['scheduleLockedToSection'],
+            style: AppTypography.metaStyle,
+          ),
+        ],
       ],
     );
   }
 
+  AutomationSchedule get _lockedSchedule {
+    if (!_needsComplimentary) return _schedule;
+    final window = _linkedWindow;
+    if (window?.schedule == null) return _schedule;
+    return AutomationSchedule.parse(window!.schedule);
+  }
+
+  String _viewLabel() {
+    if (_viewId == null) return s['pickView'];
+    for (final view in state.userViews) {
+      if (view.id == _viewId) return view.name;
+    }
+    return s['pickView'];
+  }
+
+  String _sectionLabel() {
+    if (_sectionKey == null) return s['pickRoutineSection'];
+    for (final view in state.userViews) {
+      if (view.id != _viewId) continue;
+      for (final section in ViewLayoutConfig.sections(view.layoutConfig)) {
+        if (section.key == _sectionKey) return section.name;
+      }
+    }
+    return s['pickRoutineSection'];
+  }
+
+  Future<void> _pickView() async {
+    final views = state.userViews;
+    if (views.isEmpty) return;
+    var initial = 0;
+    for (var i = 0; i < views.length; i++) {
+      if (views[i].id == _viewId) {
+        initial = i;
+        break;
+      }
+    }
+    final picked = await showAppChoiceDialog<AppView>(
+      context: context,
+      title: s['pickView'],
+      cancelLabel: s['cancel'],
+      items: views,
+      initialIndex: initial,
+      itemBuilder: (context, view, _) => DialogChoiceText(view.name),
+    );
+    if (picked == null) return;
+    setState(() {
+      _viewId = picked.id;
+      _sectionKey = null;
+    });
+  }
+
+  Future<void> _pickRoutineSection() async {
+    AppView? view;
+    for (final item in state.userViews) {
+      if (item.id == _viewId) view = item;
+    }
+    if (view == null) return;
+    final sections = [
+      for (final section in ViewLayoutConfig.sections(view.layoutConfig))
+        if (section.isRoutine) section,
+    ];
+    if (sections.isEmpty) return;
+    var initial = 0;
+    for (var i = 0; i < sections.length; i++) {
+      if (sections[i].key == _sectionKey) {
+        initial = i;
+        break;
+      }
+    }
+    final picked = await showAppChoiceDialog<ViewSectionDef>(
+      context: context,
+      title: s['pickRoutineSection'],
+      cancelLabel: s['cancel'],
+      items: sections,
+      initialIndex: initial,
+      itemBuilder: (context, section, _) => DialogChoiceText(section.name),
+    );
+    if (picked == null) return;
+    setState(() => _sectionKey = picked.key);
+  }
+
   Widget _whenFields() {
-    final time = _compactTime();
-    if (_schedule.kind == 'daily') return time;
+    final schedule = _lockedSchedule;
+    final locked = _needsComplimentary;
+    final time = AppCompactTimePicker(
+      title: s['time'],
+      value: timeOfDayFromHmm(schedule.time),
+      onChanged: locked
+          ? (_) {}
+          : (picked) {
+              setState(
+                () =>
+                    _schedule = _schedule.copyWith(time: hmmFromTimeOfDay(picked)),
+              );
+            },
+    );
+    if (schedule.kind == 'daily') return time;
     return Row(
       children: [
         Expanded(
@@ -763,11 +921,13 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
             title: s['chooseDay'],
             weekdayLabels: s.narrowWeekdaysSundayFirst,
             formatMonth: s.monthYear,
-            isMarked: _schedule.marksDate,
+            isMarked: schedule.marksDate,
             caption: _whenCaption(),
-            onDaySelected: (date) {
-              setState(() => _schedule = _schedule.applyingDate(date));
-            },
+            onDaySelected: locked
+                ? (_) {}
+                : (date) {
+                    setState(() => _schedule = _schedule.applyingDate(date));
+                  },
           ),
         ),
         const SizedBox(width: 8),
@@ -1182,6 +1342,17 @@ class _StepEditDialogState extends State<_StepEditDialog> {
           selected:
               (_step['apply_mode'] as String?) ?? defaultAutomationApplyMode,
           onSelected: (mode) => setState(() => _step['apply_mode'] = mode),
+        ),
+        const SizedBox(height: DialogFieldStyle.fieldGap),
+        Row(
+          children: [
+            Expanded(child: Text(s['requiresUserInput'])),
+            AppSwitch(
+              value: _step['requires_user_input'] == true,
+              onChanged: (on) =>
+                  setState(() => _step['requires_user_input'] = on),
+            ),
+          ],
         ),
       ],
     );

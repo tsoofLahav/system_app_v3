@@ -23,6 +23,9 @@ import '../../ui/glass_surface.dart';
 import '../../ux/widgets/app_context_menu.dart';
 import '../data/object_embed.dart';
 import '../data/task.dart';
+import '../../automations/automation.dart';
+import '../../automations/complimentary_input_dialog.dart';
+import '../../production_agent/pending_review_ui.dart';
 import '../views/assign_task_view_dialog.dart';
 import './task_drag_data.dart';
 import './task_list_bridge.dart';
@@ -1134,7 +1137,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final id = _taskIds[index];
     if (id == null) return;
     final task = _taskById(id);
-    if (task == null) return;
+    if (task == null || task.isComplimentaryTask) return;
     final targetDone = !_done[index];
     final zones = TaskZones.fromOrdered(_displayTasks);
     final next = zones.moved(
@@ -1565,15 +1568,15 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       decoration: _done[index] ? TextDecoration.lineThrough : null,
       color: _done[index] ? AppColors.textHint : null,
     );
+    final complimentary = task?.isComplimentaryTask ?? false;
     final mark = TaskMark(
       done: _done[index],
       compact: true,
-      onToggle: () => unawaited(_toggle(index)),
+      onToggle: complimentary ? null : () => unawaited(_toggle(index)),
     );
-
-    return _taskChrome(
-      mark: mark,
-      title: FormattedTextField(
+    final title = complimentary && task != null
+        ? _complimentaryTitle(task, titleStyle)
+        : FormattedTextField(
         controller: _controllers[index],
         focusNode: _focusNodes[index],
         segmentId: _taskSegmentId(index),
@@ -1600,8 +1603,75 @@ class TaskListSurfaceState extends State<TaskListSurface> {
             _arrowFromLine(_hasTitleLine ? index + 1 : index, goingDown: false),
         onArrowExitBelow: () =>
             _arrowFromLine(_hasTitleLine ? index + 1 : index, goingDown: true),
-      ),
-    );
+      );
+
+    return _taskChrome(mark: mark, title: title);
+  }
+
+  Widget _complimentaryTitle(Task task, TextStyle style) {
+    final s = widget.state.strings;
+    Automation? automation;
+    if (task.sourceAutomationId != null) {
+      for (final item in widget.state.automations) {
+        if (item.id == task.sourceAutomationId) automation = item;
+      }
+    }
+    final name = automation == null
+        ? task.title
+        : widget.state.automationDisplayName(automation);
+    final label = task.isReviewComplimentary
+        ? s.complimentaryReviewTitle(name)
+        : s.complimentaryInputTitle(name);
+    final clickable = task.isInputComplimentary
+        ? !task.isDone && !task.complimentaryInputReceived
+        : !task.isDone;
+    final tooltip = task.isInputComplimentary
+        ? (task.complimentaryInputReceived || task.isDone
+              ? s['inputAlreadyReceived']
+              : null)
+        : (task.isDone ? null : s['reviewInProcess']);
+    final text = Text(label, style: style);
+    final child = clickable
+        ? MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () => unawaited(_openComplimentary(task)),
+              child: text,
+            ),
+          )
+        : text;
+    return tooltip == null ? child : Tooltip(message: tooltip, child: child);
+  }
+
+  Future<void> _openComplimentary(Task task) async {
+    final automationId = task.sourceAutomationId;
+    if (automationId == null) return;
+    Automation? automation;
+    for (final item in widget.state.automations) {
+      if (item.id == automationId) automation = item;
+    }
+    if (automation == null) return;
+    if (task.isInputComplimentary) {
+      if (task.isDone || task.complimentaryInputReceived) return;
+      await showComplimentaryInputDialog(
+        context: context,
+        state: widget.state,
+        automation: automation,
+      );
+      return;
+    }
+    final status = await widget.state.complimentaryReviewStatus(automationId);
+    if (!mounted) return;
+    final fileIds = [
+      for (final id in status['file_ids'] as List? ?? const [])
+        if (id is int) id,
+    ];
+    if (fileIds.isEmpty) return;
+    for (final fileId in fileIds) {
+      if (!mounted) return;
+      await openPendingReviewForFile(context, widget.state, fileId);
+    }
+    await widget.state.completeComplimentaryReview(automationId);
   }
 
   @override

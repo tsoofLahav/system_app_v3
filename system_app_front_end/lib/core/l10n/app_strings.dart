@@ -207,6 +207,20 @@ class AppStrings {
   String bringFileFromTopicNamed(String topic) =>
       this['bringFileFromTopicNamed'].replaceAll('{topic}', topic);
 
+  String complimentaryInputTitle(String name) =>
+      this['complimentaryInputTitle'].replaceAll('{name}', name);
+
+  String complimentaryReviewTitle(String name) =>
+      this['complimentaryReviewTitle'].replaceAll('{name}', name);
+
+  String leftoverClearMessage(String view, String section) =>
+      this['leftoverClearBody']
+          .replaceAll('{view}', view)
+          .replaceAll('{section}', section);
+
+  String userInputForTopic(String topic) =>
+      this['userInputForTopic'].replaceAll('{topic}', topic);
+
   String newSectionTitle(String viewLabel) =>
       this['newSectionTitle'].replaceAll('{view}', viewLabel);
 
@@ -439,6 +453,38 @@ class AppStrings {
     'unmarkAllInScope': 'Every done task in this scope goes back to active.',
     'noAutomationsHint':
         'No automations yet.\nCreate one: a scope, a time, and the steps to run.',
+    'sectionWindows': 'Section windows',
+    'noSectionWindowsHint':
+        'Section windows appear when you add a section to a view.',
+    'windowDuration': 'Duration after start',
+    'durationHours': 'Hours',
+    'durationMinutes': 'Minutes',
+    'sectionCadence': 'Section type',
+    'sectionCadenceRoutine': 'Routine',
+    'sectionCadenceOneTime': 'One-time',
+    'requiresUserInput': 'Needs user input',
+    'userInputPrompt': 'Input prompt',
+    'userInputPromptHint': 'Shown above the text the user types',
+    'placeInSection': 'Place complimentary tasks',
+    'pickView': 'Choose a view',
+    'pickRoutineSection': 'Choose a routine section',
+    'scheduleLockedToSection':
+        'This clock follows the section window. Change it there.',
+    'sectionWindowOffHint':
+        'The section window is off, so this automation will not fire on the clock.',
+    'complimentaryInputTitle': '{name} automation task',
+    'complimentaryReviewTitle': '{name} review task',
+    'inputAlreadyReceived': 'User input was already received',
+    'reviewInProcess': 'Review is in process',
+    'leftoverClearTitle': 'Section window ended',
+    'leftoverClearBody':
+        '{view} / {section} still has unfinished tasks. Approve to recycle routine tasks and archive leftover one-time tasks.',
+    'leftoverClearApprove': 'Clear leftovers',
+    'userInputTitle': 'Automation input',
+    'userInputForTopic': 'Input for {topic}',
+    'submitInput': 'Submit and run',
+    'sectionAttention': 'This section still has unfinished tasks',
+    'viewAttention': 'A section window still has unfinished tasks',
     'editAutomationTitle': 'Editing {name}',
     'deleteAutomationBody': 'Delete "{name}"?',
     'automationFailed': 'The automation did not finish.',
@@ -1108,6 +1154,38 @@ class AppStrings {
     'unmarkAllInScope': 'כל משימה שסומנה בהיקף חוזרת לפעיל.',
     'noAutomationsHint':
         'אין עדיין אוטומציות.\nצרי אחת: היקף, זמן, והשלבים להרצה.',
+    'sectionWindows': 'חלונות מדור',
+    'noSectionWindowsHint':
+        'חלונות מדור נוצרים כשמוסיפים מדור לתצוגה.',
+    'windowDuration': 'משך אחרי ההתחלה',
+    'durationHours': 'שעות',
+    'durationMinutes': 'דקות',
+    'sectionCadence': 'סוג מדור',
+    'sectionCadenceRoutine': 'שגרתי',
+    'sectionCadenceOneTime': 'חד־פעמי',
+    'requiresUserInput': 'דורש קלט מהמשתמש',
+    'userInputPrompt': 'הנחיית קלט',
+    'userInputPromptHint': 'מוצג מעל הטקסט שהמשתמש מקליד',
+    'placeInSection': 'מקם משימות משלימות',
+    'pickView': 'בחר תצוגה',
+    'pickRoutineSection': 'בחר מדור שגרתי',
+    'scheduleLockedToSection':
+        'השעון הזה עוקב אחרי חלון המדור. שנו אותו שם.',
+    'sectionWindowOffHint':
+        'חלון המדור כבוי, ולכן האוטומציה לא תירוץ לפי השעון.',
+    'complimentaryInputTitle': '{name} משימת אוטומציה',
+    'complimentaryReviewTitle': '{name} משימת סקירה',
+    'inputAlreadyReceived': 'הקלט מהמשתמש כבר התקבל',
+    'reviewInProcess': 'הסקירה בתהליך',
+    'leftoverClearTitle': 'חלון המדור הסתיים',
+    'leftoverClearBody':
+        'ב־{view} / {section} נשארו משימות פתוחות. אישור יאפס משימות שגרתיות ויעביר חד־פעמיות לארכיון.',
+    'leftoverClearApprove': 'נקה שאריות',
+    'userInputTitle': 'קלט לאוטומציה',
+    'userInputForTopic': 'קלט עבור {topic}',
+    'submitInput': 'שלח והרץ',
+    'sectionAttention': 'במדור הזה נשארו משימות פתוחות',
+    'viewAttention': 'בחלון מדור נשארו משימות פתוחות',
     'editAutomationTitle': 'עריכת {name}',
     'deleteAutomationBody': 'למחוק את "{name}"?',
     'automationFailed': 'האוטומציה לא הסתיימה.',

@@ -30,6 +30,9 @@ class Task {
     this.isAutomationTrigger = false,
     this.pendingCompanionCount = 0,
     this.hasPendingCompanionFlow = false,
+    this.sourceAutomationId,
+    this.complimentaryRole,
+    this.complimentaryCycle = const {},
     this.descriptionLinks = const [],
   });
 
@@ -60,12 +63,27 @@ class Task {
   final bool isAutomationTrigger;
   final int pendingCompanionCount;
   final bool hasPendingCompanionFlow;
+  final int? sourceAutomationId;
+  final String? complimentaryRole;
+  final Map<String, dynamic> complimentaryCycle;
   final List<Map<String, dynamic>> descriptionLinks;
 
   bool get isDone => status == 'done';
 
+  bool get isComplimentaryTask =>
+      complimentaryRole == 'input' || complimentaryRole == 'review';
+
+  bool get isInputComplimentary => complimentaryRole == 'input';
+  bool get isReviewComplimentary => complimentaryRole == 'review';
+
+  bool get complimentaryInputReceived =>
+      complimentaryCycle['input_received'] == true;
+
   bool get isCompanionTask =>
-      hasPendingCompanionFlow || companionTaskId != null || flowKey != null;
+      isComplimentaryTask ||
+      hasPendingCompanionFlow ||
+      companionTaskId != null ||
+      flowKey != null;
 
   bool get isAutomationsTopic =>
       topicKey == ViewPaneKeys.automations ||
@@ -117,6 +135,9 @@ class Task {
     bool? isAutomationTrigger,
     int? pendingCompanionCount,
     bool? hasPendingCompanionFlow,
+    int? sourceAutomationId,
+    String? complimentaryRole,
+    Map<String, dynamic>? complimentaryCycle,
     List<Map<String, dynamic>>? descriptionLinks,
     bool clearSection = false,
     bool clearSectionFlag = false,
@@ -155,6 +176,9 @@ class Task {
           pendingCompanionCount ?? this.pendingCompanionCount,
       hasPendingCompanionFlow:
           hasPendingCompanionFlow ?? this.hasPendingCompanionFlow,
+      sourceAutomationId: sourceAutomationId ?? this.sourceAutomationId,
+      complimentaryRole: complimentaryRole ?? this.complimentaryRole,
+      complimentaryCycle: complimentaryCycle ?? this.complimentaryCycle,
       descriptionLinks: descriptionLinks ?? this.descriptionLinks,
     );
   }
@@ -193,6 +217,11 @@ class Task {
       pendingCompanionCount: json['pending_companion_count'] as int? ?? 0,
       hasPendingCompanionFlow:
           json['has_pending_companion_flow'] as bool? ?? false,
+      sourceAutomationId: json['source_automation_id'] as int?,
+      complimentaryRole: json['complimentary_role'] as String?,
+      complimentaryCycle: json['complimentary_cycle'] is Map
+          ? Map<String, dynamic>.from(json['complimentary_cycle'] as Map)
+          : const {},
       descriptionLinks: _mapsFromJson(json['description_links']),
     );
   }

@@ -145,6 +145,8 @@ def create_ai_action():
         prompt=data.get("prompt") or "",
         apply_mode=data.get("apply_mode") or DEFAULT_MANUAL_APPLY_MODE,
         icon=data.get("icon") or "",
+        requires_user_input=bool(data.get("requires_user_input", False)),
+        user_input_prompt=data.get("user_input_prompt") or "",
     )
     scope_error = _apply_scope(row, data, workspace_id)
     if scope_error:
@@ -196,7 +198,11 @@ def update_ai_action(action_id):
         row.name = name
         row.name_he = name_he
 
-    apply_updates(row, data, {"prompt", "apply_mode", "icon"})
+    apply_updates(
+        row,
+        data,
+        {"prompt", "apply_mode", "icon", "requires_user_input", "user_input_prompt"},
+    )
     db.session.commit()
     return jsonify(row.to_dict())
 

@@ -144,6 +144,9 @@ class Task(db.Model):
     list_order_index = db.Column(db.Integer, nullable=False, default=0)
     archived_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    source_automation_id = db.Column(db.Integer, db.ForeignKey("automations.id"))
+    complimentary_role = db.Column(db.Text)
+    complimentary_cycle = db.Column(JSONB, nullable=False, default=dict)
 
     def to_dict(self):
         from areas.objects.services.object_graph import description_link_dicts_for_task
@@ -157,6 +160,11 @@ class Task(db.Model):
             "list_order_index": self.list_order_index,
             "archived_at": _iso(self.archived_at),
             "created_at": _iso(self.created_at),
+            "source_automation_id": self.source_automation_id,
+            "complimentary_role": self.complimentary_role,
+            "complimentary_cycle": (
+                self.complimentary_cycle if self.complimentary_cycle is not None else {}
+            ),
             "description_links": description_link_dicts_for_task(self.id),
         }
 
@@ -369,6 +377,8 @@ class AiAction(db.Model):
     bar_slot = db.Column(db.Integer)
     topic_type_id = db.Column(db.Integer, db.ForeignKey("topic_types.id"))
     topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"))
+    requires_user_input = db.Column(db.Boolean, nullable=False, default=False)
+    user_input_prompt = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -386,6 +396,8 @@ class AiAction(db.Model):
             "bar_slot": self.bar_slot,
             "topic_type_id": self.topic_type_id,
             "topic_id": self.topic_id,
+            "requires_user_input": bool(self.requires_user_input),
+            "user_input_prompt": self.user_input_prompt or "",
             "created_at": _iso(self.created_at),
             "updated_at": _iso(self.updated_at),
         }
@@ -413,6 +425,14 @@ class Automation(db.Model):
     enabled = db.Column(db.Boolean, nullable=False, default=True)
     last_run_at = db.Column(db.DateTime)
     next_run_at = db.Column(db.DateTime)
+    kind = db.Column(db.Text, nullable=False, default="standard")
+    view_id = db.Column(db.Integer, db.ForeignKey("views.id"))
+    section_key = db.Column(db.Text)
+    window_duration_minutes = db.Column(db.Integer)
+    window_opened_at = db.Column(db.DateTime)
+    window_closes_at = db.Column(db.DateTime)
+    pending_clear = db.Column(JSONB)
+    pending_user_input = db.Column(JSONB)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -432,6 +452,16 @@ class Automation(db.Model):
             "enabled": self.enabled,
             "last_run_at": _iso(self.last_run_at),
             "next_run_at": _iso(self.next_run_at),
+            "kind": self.kind or "standard",
+            "view_id": self.view_id,
+            "section_key": self.section_key,
+            "window_duration_minutes": self.window_duration_minutes,
+            "window_opened_at": _iso(self.window_opened_at),
+            "window_closes_at": _iso(self.window_closes_at),
+            "pending_clear": self.pending_clear,
+            "pending_user_input": (
+                self.pending_user_input if self.pending_user_input is not None else None
+            ),
             "created_at": _iso(self.created_at),
             "updated_at": _iso(self.updated_at),
         }

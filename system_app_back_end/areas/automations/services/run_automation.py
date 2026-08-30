@@ -21,6 +21,7 @@ def run_steps(
     scope: dict | None,
     steps: list[dict],
     now: datetime | None = None,
+    user_input: dict | None = None,
 ) -> dict:
     """Execute a series and describe what happened, step by step."""
     now = now or datetime.utcnow()
@@ -35,6 +36,8 @@ def run_steps(
             break
 
         params = {k: v for k, v in step.items() if k != "kind"}
+        if user_input:
+            params = {**params, "user_input": user_input}
         try:
             outcome = action(
                 workspace_id=workspace_id,
@@ -58,30 +61,49 @@ def run_steps(
     }
 
 
-def run_automation(automation: Automation, *, trigger_source: str) -> AutomationRun:
+def run_automation(
+    automation: Automation,
+    *,
+    trigger_source: str,
+    user_input: dict | None = None,
+) -> AutomationRun:
     """Run it and record it. The caller commits."""
+    from areas.automations.services.section_windows import (
+        KIND_SECTION_WINDOW,
+        complete_review_if_clear,
+        mark_input_done,
+    )
+
     run = AutomationRun(
         automation_id=automation.id,
         status="running",
         trigger_source=trigger_source,
+        event_context={"user_input": user_input} if user_input else {},
     )
     db.session.add(run)
     db.session.flush()
 
     now = datetime.utcnow()
-    try:
-        result = run_steps(
-            workspace_id=automation.workspace_id,
-            scope=automation.scope,
-            steps=automation.steps or [],
-            now=now,
-        )
-    except Exception as error:
-        result = {"status": "failed", "error": str(error), "steps": []}
+    if (automation.kind or "standard") == KIND_SECTION_WINDOW:
+        result = {"status": "ok", "steps": [], "scope": {}}
+    else:
+        try:
+            result = run_steps(
+                workspace_id=automation.workspace_id,
+                scope=automation.scope,
+                steps=automation.steps or [],
+                now=now,
+                user_input=user_input or automation.pending_user_input,
+            )
+        except Exception as error:
+            result = {"status": "failed", "error": str(error), "steps": []}
 
     run.status = "completed" if result.get("status") == "ok" else "failed"
     run.result = result
     run.error = result.get("error")
     run.finished_at = datetime.utcnow()
     automation.last_run_at = run.finished_at
+    if (automation.kind or "standard") != KIND_SECTION_WINDOW and run.status == "completed":
+        mark_input_done(automation)
+        complete_review_if_clear(automation)
     return run
