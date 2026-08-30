@@ -1,14 +1,13 @@
 import '../../files/data/app_file.dart';
 import '../layout/topic_file_slots.dart';
-import '../shortcuts/main_file_cycle.dart';
 
 /// The uncommitted arrangement of a topic: one ordered list of files and the
 /// layout drawn over it.
 ///
 /// There is no second list of "additional" files. The layout's slots reach a
-/// certain distance down the order, and everything past that is off screen —
-/// so promoting a file is a move up the order, and demoting it is a move to the
-/// end. Nothing is written until the overlay is committed.
+/// certain distance down the order, and everything past that is off screen.
+/// Dragging a chip across that cut is how a file comes on or off screen.
+/// Nothing is written until the overlay is committed.
 class FileArrangeDraft {
   FileArrangeDraft({required List<AppFile> ordered, required this.layoutId})
       : ordered = List<AppFile>.from(ordered);
@@ -28,40 +27,18 @@ class FileArrangeDraft {
     layoutId = value;
   }
 
-  /// Makes a shown file the first one, keeping the others in order.
-  bool moveShownToFirst(int shownIndex) {
-    if (shownIndex <= 0 || shownIndex >= shownCount) return false;
-    ordered.insert(0, ordered.removeAt(shownIndex));
-    return true;
-  }
-
-  /// Brings a hidden file into the first slot, pushing the last shown file off.
-  bool show(int hiddenIndex) {
-    if (hiddenIndex < 0 || hiddenIndex >= hidden.length) return false;
-    if (shownCount <= 0) return false;
-    final file = hidden[hiddenIndex];
-    ordered.removeAt(ordered.indexWhere((f) => f.id == file.id));
-    ordered.insert(0, file);
-    return true;
-  }
-
-  /// Sends a shown file to the end of the order, off screen.
-  bool hide(int shownIndex) {
-    if (shownIndex < 0 || shownIndex >= shownCount) return false;
-    ordered.add(ordered.removeAt(shownIndex));
-    return true;
-  }
-
-  /// Cycles which file leads, so every shown file can reach the first slot with
-  /// the arrow keys alone. Only the shown files move; the hidden ones keep
-  /// their place at the end.
-  bool rotateShownLeft() => _rotate(rotateMainFilesLeft);
-
-  bool rotateShownRight() => _rotate(rotateMainFilesRight);
-
-  bool _rotate(List<AppFile> Function(List<AppFile>) rotation) {
-    if (shownCount < 2) return false;
-    ordered = [...rotation(shown), ...hidden];
+  /// Place the file at [from] so it occupies [to] in the resulting list.
+  ///
+  /// Both indices are in [ordered]. No-op when they match or [from] is out of
+  /// range. [to] is clamped to a valid final index.
+  bool move(int from, int to) {
+    final n = ordered.length;
+    if (n == 0) return false;
+    if (from < 0 || from >= n) return false;
+    final dest = to.clamp(0, n - 1);
+    if (from == dest) return false;
+    final file = ordered.removeAt(from);
+    ordered.insert(dest, file);
     return true;
   }
 }

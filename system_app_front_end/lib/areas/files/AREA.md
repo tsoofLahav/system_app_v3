@@ -155,7 +155,7 @@ Empty **Enter** still exits below a list/table/object without destroying it (con
 
 ### RTL / Hebrew
 
-Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed Hebrew+English) lives in one place: **[`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)** — embeds via `FormattedTextField`, file body via ambient-aware SE builders + visual ←/→ plugin. Do not add competing caret math outside that folder.
+Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed Hebrew+English) lives in one place: **[`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)** — embeds via `FormattedTextField`, file body via ambient-aware SE builders + visual ←/→ plugin. Do not add competing caret math outside that folder. Object-field double-click is the word only; another click is the sentence. Fields use `BoxWidthStyle.tight` (Flutter’s desktop default is `max`, which fills the line to the left in Hebrew) and `AppTypography.fieldStrut` so color-emoji fallbacks do not shift lines without emoji. A trailing `\n` from that tap is not part of the mark; Shift+arrows keep it so the mark can grow onto the next line. Emoji is a whole grapheme.
 
 ### Object inner text
 
@@ -163,7 +163,7 @@ Object fields are Flutter `TextField`s ([`FormattedTextField`](rich_text/formatt
 
 **One owner.** Click or right-click a paragraph → body owns writing and the object mark is forgotten. Click or right-click an inner field → that field owns writing and the Super Editor caret is cleared. Super Editor `hasFocus` is true for descendant fields; only **primary** focus means the body owns writing. Never paint both washes. A second right-click while a menu is open retargets the mark and menu to the new line.
 
-Each **multi-field** object (task list, table) owns one [`DocumentTextFlow`](editor/document_text_flow.dart) so Shift+arrows and Shift+click mark across **tasks or cells inside that object**. Info is one field and has no flow. Marks do not cross objects or into the Super Editor body. Choose view / ⌘J applies to every marked task in the list.
+Each **multi-field** object (task list, table) owns one [`DocumentTextFlow`](editor/document_text_flow.dart) so Shift+arrows and Shift+click mark across **tasks or cells inside that object**. Info is one field and has no flow. Marks do not cross objects or into the Super Editor body. Choose view / ⌘J applies to every marked task in the list. On the view page ⌘J opens Place… instead.
 
 ## One cursor across the whole file
 

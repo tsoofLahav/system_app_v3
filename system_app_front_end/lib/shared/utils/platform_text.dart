@@ -30,50 +30,31 @@ String sanitizePlatformText(String input) {
   return String.fromCharCodes(out);
 }
 
-/// Snaps a selection start out of the middle of a surrogate pair.
+/// Snaps a selection start out of the middle of a grapheme (emoji, ZWJ, …).
 int normalizeUtf16Start(String text, int offset) {
   final pos = offset.clamp(0, text.length);
-  if (pos >= text.length) return pos;
-
-  final units = text.codeUnits;
-  final unit = units[pos];
-
-  if (unit >= 0xDC00 && unit <= 0xDFFF) {
-    if (pos > 0 &&
-        units[pos - 1] >= 0xD800 &&
-        units[pos - 1] <= 0xDBFF) {
-      return pos - 1;
-    }
-    return pos + 1;
+  if (pos <= 0 || pos >= text.length) return pos;
+  var i = 0;
+  for (final g in text.characters) {
+    final next = i + g.length;
+    if (pos <= i) return pos;
+    if (pos < next) return i;
+    i = next;
   }
-
   return pos;
 }
 
-/// Snaps a selection end out of the middle of a surrogate pair.
+/// Snaps a selection end out of the middle of a grapheme (emoji, ZWJ, …).
 int normalizeUtf16End(String text, int offset) {
   final pos = offset.clamp(0, text.length);
-  if (pos <= 0) return pos;
-
-  final units = text.codeUnits;
-  if (pos < units.length &&
-      units[pos] >= 0xDC00 &&
-      units[pos] <= 0xDFFF &&
-      pos > 0 &&
-      units[pos - 1] >= 0xD800 &&
-      units[pos - 1] <= 0xDBFF) {
-    return pos + 1;
+  if (pos <= 0 || pos >= text.length) return pos;
+  var i = 0;
+  for (final g in text.characters) {
+    final next = i + g.length;
+    if (pos <= i) return pos;
+    if (pos < next) return next;
+    i = next;
   }
-
-  if (pos > 0 &&
-      units[pos - 1] >= 0xD800 &&
-      units[pos - 1] <= 0xDBFF &&
-      (pos >= units.length ||
-          units[pos] < 0xDC00 ||
-          units[pos] > 0xDFFF)) {
-    return pos - 1;
-  }
-
   return pos;
 }
 
@@ -93,16 +74,29 @@ int normalizeUtf16End(String text, int offset) {
 
 TextSelection normalizeTextSelection(String text, TextSelection selection) {
   if (!selection.isValid) return selection;
+  if (selection.isCollapsed) {
+    final caret = normalizeUtf16End(text, selection.extentOffset);
+    if (caret == selection.baseOffset && caret == selection.extentOffset) {
+      return selection;
+    }
+    return TextSelection.collapsed(offset: caret, affinity: selection.affinity);
+  }
   final (start, end) = normalizeUtf16Range(
     text,
     selection.start,
     selection.end,
   );
-  if (selection.isCollapsed) {
-    final caret = normalizeUtf16End(text, start);
-    return TextSelection.collapsed(offset: caret);
+  final forward = selection.baseOffset <= selection.extentOffset;
+  final base = forward ? start : end;
+  final extent = forward ? end : start;
+  if (base == selection.baseOffset && extent == selection.extentOffset) {
+    return selection;
   }
-  return TextSelection(baseOffset: start, extentOffset: end);
+  return TextSelection(
+    baseOffset: base,
+    extentOffset: extent,
+    affinity: selection.affinity,
+  );
 }
 
 String safeSubstring(String text, int start, int end) {

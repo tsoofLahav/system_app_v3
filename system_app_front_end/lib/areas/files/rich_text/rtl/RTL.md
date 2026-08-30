@@ -66,14 +66,21 @@ Full-width fields leave empty space beside glyphs (especially RTL). Flutter’s 
 | Extra cell/row padding above/below ink (tall cells, centered tasks) | Flutter — do not treat ink-bottom as the line |
 | Empty space under the whole file (outside every field) | `DocumentTextFlow` → logical end of last part |
 
-Correction runs in `FormattedTextField.onTap` **in the same event turn** (before paint). Never post-frame — that flashes wrong → right. Apply it on a **collapsed click** only. A drag, an existing mark, or Shift+click keeps Flutter’s selection — padding→line-end on mouse-up is the Hebrew “whole line immediately” bug.
+Correction runs in `FormattedTextField.onTap` **in the same event turn** (before paint). Never post-frame — that flashes wrong → right. Apply it on a **collapsed single click** only. A drag, an existing mark, Shift+click, or the 2nd/3rd click of a double/triple tap keeps Flutter's selection — padding→line-end on those is the Hebrew “whole line immediately” bug.
+
+Desktop Flutter paints selection with `BoxWidthStyle.max` (full paragraph width per line). In RTL the glyphs sit on the right, so that extra box is the trail to the left edge — even when the mark is only a word. Super Editor paints span-tight wash; object fields set `selectionWidthStyle: BoxWidthStyle.tight` so they match. Leave `selectionHeightStyle` at Flutter’s default — `tight` hugs the ink and sits off Hebrew lines that have extra leading. Color-emoji fallbacks need `AppTypography.fieldStrut` or they steal line metrics and the wash is right on emoji lines and wrong on the others. A trailing `\n` from **double/triple-click** is dropped so that extra line box does not appear; Shift+arrows keep the newline so the mark can step onto the next line. Internal newlines in a multi-line mark stay. Double-click = word, another click = sentence, no trail. Emoji must stay a whole grapheme.
 
 ## Wiring checklist (`FormattedTextField`)
 
 - [ ] `textDirection: resolveFieldTextDirection(text, ambient)`
 - [ ] `textAlign: TextAlign.start` (follows direction)
 - [ ] `wrapVisualCaretMotion(...)` always (identity actions when LTR)
-- [ ] Primary pointer down stores global position; `onTap` calls `embedCaretForTap` **only on a collapsed click** (not drag / mark / Shift+click)
+- [ ] Primary pointer down stores global position; `onTap` calls `embedCaretForTap` **only on a collapsed single click** (not drag / mark / Shift+click / double-tap)
+- [ ] `selectionWidthStyle: BoxWidthStyle.tight` (desktop default `max` fills the line to the left in Hebrew)
+- [ ] `strutStyle: AppTypography.fieldStrut` so color-emoji fallbacks do not shift lines without emoji
+- [ ] Double/triple-click drops a trailing `\n`; Shift+arrows do not (that newline is how the mark steps to the next line)
+- [ ] Object fields absorb `showOnScreen` so Shift+arrows do not hop the file pane
+- [ ] Shift+arrows that extend across tasks/cells do not `requestFocus` the next field
 - [ ] Cross-part arrow edge uses the **resolved** field direction, not only ambient locale
 - [ ] Horizontal arrows flip only on an RTL glyph run (not on numbers / Latin)
 
@@ -104,6 +111,7 @@ Embed fields (table cells, info, …) still use `FormattedTextField` + the three
 flutter test \
   test/rtl_paragraph_text_direction_test.dart \
   test/rtl_empty_space_caret_test.dart \
+  test/line_range_selection_test.dart \
   test/rtl_super_editor_direction_test.dart \
   test/document_text_flow_test.dart \
   test/files/table_grid_nav_test.dart \

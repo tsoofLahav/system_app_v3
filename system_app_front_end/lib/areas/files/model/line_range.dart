@@ -36,4 +36,37 @@ class LineRange {
     }
     return LineRange(start: lineStart, end: lineEnd);
   }
+
+  /// Flutter word / line select often includes a trailing `\n`. In RTL that
+  /// paints a highlight across the empty rest of the line. Super Editor does
+  /// not. Internal newlines (a multi-line mark) stay.
+  static TextSelection withoutEdgeNewlines(
+    String text,
+    TextSelection selection,
+  ) {
+    if (!selection.isValid || selection.isCollapsed) return selection;
+    var start = selection.start.clamp(0, text.length);
+    var end = selection.end.clamp(0, text.length);
+    if (end < start) {
+      final swap = start;
+      start = end;
+      end = swap;
+    }
+    while (start < end && _isNewline(text.codeUnitAt(start))) {
+      start++;
+    }
+    while (end > start && _isNewline(text.codeUnitAt(end - 1))) {
+      end--;
+    }
+    if (start == selection.start && end == selection.end) return selection;
+    if (start >= end) {
+      return TextSelection.collapsed(offset: selection.extentOffset);
+    }
+    if (selection.baseOffset <= selection.extentOffset) {
+      return TextSelection(baseOffset: start, extentOffset: end);
+    }
+    return TextSelection(baseOffset: end, extentOffset: start);
+  }
+
+  static bool _isNewline(int unit) => unit == 0x0A || unit == 0x0D;
 }

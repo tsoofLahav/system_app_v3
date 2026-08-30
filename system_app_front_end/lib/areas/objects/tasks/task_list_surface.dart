@@ -37,6 +37,22 @@ typedef TaskListForeignDrop =
       required int indexInZone,
     });
 
+/// Keep typed/pasted text instead of a stale refresh (empty create payload).
+bool keepLocalTaskTitle({
+  required String local,
+  required String incoming,
+  required bool focused,
+  required bool savePending,
+}) {
+  final localText = imeVisibleText(local);
+  final incomingText = imeVisibleText(incoming);
+  if (localText == incomingText) return true;
+  if (focused) return true;
+  if (savePending) return true;
+  if (localText.isNotEmpty && incomingText.isEmpty) return true;
+  return false;
+}
+
 /// Local-row task list engine shared by in-file embeds and view frames.
 ///
 /// Mutates controllers / optimistic order **before** awaiting the bridge API,
@@ -377,7 +393,14 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       if (oldIndex != null) {
         final focus = oldFocus[oldIndex];
         final controller = oldControllers[oldIndex];
-        if (!focus.hasFocus && imeVisibleText(controller.text) != task.title) {
+        final pending = oldTimers[oldIndex]?.isActive ?? false;
+        if (!keepLocalTaskTitle(
+              local: controller.text,
+              incoming: task.title,
+              focused: focus.hasFocus,
+              savePending: pending,
+            ) &&
+            imeVisibleText(controller.text) != task.title) {
           controller.text = task.title;
         }
         nextControllers.add(controller);
@@ -474,6 +497,26 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       if (id != null) return [id];
     }
     return const [];
+  }
+
+  List<Task> markedTasks() {
+    final ids = markedTaskIds();
+    if (ids.isEmpty) return const [];
+    final byId = {for (final t in _tasksFromLocalRows()) t.id: t};
+    return [
+      for (final id in ids)
+        if (byId[id] != null) byId[id]!,
+    ];
+  }
+
+  /// Marked / focused tasks on the view page for Place… (⌘J).
+  static List<Task> tasksForPlace(AppState state) {
+    final fromSurface = keyboardFocus?.markedTasks() ?? const [];
+    if (fromSurface.isNotEmpty) return fromSurface;
+    return [
+      for (final id in taskIdsForAssignView())
+        if (state.tasksById[id] != null) state.tasksById[id]!,
+    ];
   }
 
   /// Marked tasks in the list that currently owns the caret, else [fallback].
@@ -693,13 +736,20 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     if (!mounted) return;
     if (index < 0 || index >= _taskIds.length) return;
     if (_taskIds[index] == null) {
+      if (_persisting) {
+        _scheduleSave(index);
+        return;
+      }
       await _persistUnsavedRow(index);
       return;
     }
     final id = _taskIds[index]!;
-    final task = _taskById(id);
-    if (task == null) return;
     final title = imeVisibleText(_controllers[index].text);
+    final task = _taskById(id);
+    if (task == null) {
+      _scheduleSave(index);
+      return;
+    }
     if (task.title == title) return;
     try {
       await _bridge.updateTitle(task, title);
@@ -913,7 +963,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
           _taskIds[newIndex] = created.id;
           _optimistic = _tasksFromLocalRows();
         });
+        await _flushTitle(newIndex);
       }
+      if (!mounted) return;
       await _bridge.refresh();
     } finally {
       _persisting = false;

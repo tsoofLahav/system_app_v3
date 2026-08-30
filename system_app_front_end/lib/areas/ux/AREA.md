@@ -71,7 +71,9 @@ Arranging is a **mode**: the user opens it from the bottom bar (desktop) or the 
 | Dialog | Opens from | What it does |
 |--------|------------|--------------|
 | Layout picker | Bottom-bar layout icon, ⌘R | Four tiles above the bar. No darkened scrim. Tap applies immediately |
-| Arrange files | Bottom-bar arrange icon, ⌘⌥R | Shown files + off-screen strip. Writes `order_index` only |
+| Arrange files | Bottom-bar arrange icon, ⌘⌥R | One grid of file-preview cards, cut after the layout’s slots, drag to reorder. Writes `order_index` only on Done |
+
+Desktop arrange is a wrap of the same frosted preview cards as bring-file, with the document scaled down so more of the file is visible. The cards sit in the centre of the overlay. A full-width cut after the layout’s slots (1 / 2 / 3) marks what is on screen; grid layout hides the cut because every file is on screen. Dragging within a wrap reorders; dragging across the cut is how a file comes on or off screen. Layout stays on ⌘R.
 
 **Phone** has no layouts, so arrange is only the swipe row: a `ReorderableListView` of file names ([`arrange/phone_file_reorder_sheet.dart`](arrange/phone_file_reorder_sheet.dart)). Done calls `reorderTopicFiles` and does not change `file_layout`.
 
@@ -218,10 +220,10 @@ Heavy-use defaults are **two keys** (⌘ + letter) so they stay in muscle memory
 | Cycle files | ⌘[ ⌘] | Rotate **every live file in the topic** in a circle (not only the layout’s slots; not archived). Applies immediately — do not wait for KeyUp / `runAfterKeystroke` |
 | Add file / topic | ⌘F / ⌘N | The same dialogs as the chrome |
 | Add view | ⌘⇧W | Same as the sidebar + |
-| Assign task view | ⌘J | Assign dialog when a task has the caret |
+| Assign task view | ⌘J | In a file: Choose view… when a task has the caret. On the view page: Place… (view, section, topic, list) |
 | Reorder mode | ⌘O | Task-list caret: toggle task reorder. Else if a view is open: toggle that view’s task reorder. Otherwise: sidebar topics and views (handles appear until you press it again). View frames: the Reorder control on the view chrome still starts *frame* reorder |
 | Move object | ⌘⇧O | Toggle Move Mode for the caret / last-interacted embed. Also on every object chrome menu. Rebindable in Preferences. In Move Mode, arrows nudge the object; Enter / Esc end it (same as Done). |
-| Add connection / list | ⌘L | Inserts a bullet list at the caret. In an object field (info, task title, table cell), opens Connect info… (description; from info text this also adds the related map edge). Chrome **Add connection…** is still related-only. |
+| Add connection / list | ⌘L | Inserts a bullet list at the caret. In an object field (info, task title, table cell), opens Connect info… (description only). Chrome **Add connection…** is still related-only. |
 | Agent / slot keys | ⌘1… | Agent prompt, or the saved action in that bar seat |
 | Text (bold, italic, underline, Make link, cut/copy/paste, size) | ⌘B/I/U/X/C/V, ⌘⇧+/− | Mark, else the caret line — except **paste**, which inserts at the caret unless something is marked. Embed fields via `runBlockTextAction`; Super Editor via `DocumentEditorController.applyTextAction`. Super Editor’s own Cmd+B / Cmd+I / ⌘V are stripped so catalog toggles once and list paste keeps `-` / `1.` points. Copy/cut of lists include those prefixes. **Make link** is menu-only (⌘K is bring-file, ⌘L is connect-info); click / tap opens a persisted URL. **Make list** (menu, or insert list / ⌘L on marked text) gives each newline a point. |
 | Insert object | ⌘D info, ⌘T task, ⌘⌥T table, ⌘G graph, ⌘⇧I image, ⌘L list | Active file via `DocumentEditorRegistry`. ⌘L is a list unless the caret is in an object field (Connect info) |

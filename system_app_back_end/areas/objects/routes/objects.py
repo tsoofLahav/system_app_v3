@@ -26,7 +26,6 @@ from areas.objects.services.object_graph import (
     build_workspace_graph,
     connection_dicts_for_object,
     description_links_hosted_in_file,
-    ensure_related_info_link,
     find_related_link,
     info_peer_dict,
     normalize_description_anchor,
@@ -222,11 +221,6 @@ def create_object_link(object_id):
             label=data.get("label"),
         )
         db.session.add(link)
-        # Info text → info also draws a map edge. Other hosts stay file-only.
-        if embed.type == "info":
-            ensure_related_info_link(
-                workspace_id, embed, target, label=data.get("label")
-            )
         db.session.commit()
         return jsonify(link.to_dict()), 201
 

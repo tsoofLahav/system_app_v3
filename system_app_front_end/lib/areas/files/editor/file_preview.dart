@@ -71,12 +71,17 @@ class FilePreviewLoader extends StatefulWidget {
     required this.loadAgentText,
     this.mode = FilePreviewMode.clipped,
     this.placeholder,
+    this.builder,
   });
 
   final int fileId;
   final Future<String> Function(int fileId) loadAgentText;
   final FilePreviewMode mode;
   final Widget? placeholder;
+
+  /// If set, builds a subtree with the loaded agent text (null while loading).
+  /// Used when the same preview must appear in more than one place (drag).
+  final Widget Function(BuildContext context, String? agentText)? builder;
 
   @override
   State<FilePreviewLoader> createState() => _FilePreviewLoaderState();
@@ -118,6 +123,9 @@ class _FilePreviewLoaderState extends State<FilePreviewLoader> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.builder != null) {
+      return widget.builder!(context, _agentText);
+    }
     return FilePreview(
       agentText: _agentText,
       mode: widget.mode,

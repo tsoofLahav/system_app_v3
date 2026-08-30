@@ -23,50 +23,42 @@ void main() {
     expect(_draft([1, 2, 3, 4], FileLayouts.grid).hidden, isEmpty);
   });
 
-  test('tapping a shown file makes it the first one', () {
-    final draft = _draft([1, 2, 3], FileLayouts.hero);
-    expect(draft.moveShownToFirst(2), isTrue);
-    expect(_ids(draft.ordered), [3, 1, 2]);
-  });
-
-  test('the first file is already first', () {
-    final draft = _draft([1, 2, 3], FileLayouts.hero);
-    expect(draft.moveShownToFirst(0), isFalse);
-    expect(_ids(draft.ordered), [1, 2, 3]);
-  });
-
-  test('showing a hidden file puts it first and pushes the last shown off', () {
+  test('move places a file at the requested final index', () {
     final draft = _draft([1, 2, 3, 4], FileLayouts.hero);
+    expect(draft.move(3, 0), isTrue);
+    expect(_ids(draft.ordered), [4, 1, 2, 3]);
+  });
 
-    expect(draft.show(0), isTrue);
+  test('moving a hidden file above the cut makes it shown', () {
+    final draft = _draft([1, 2, 3, 4], FileLayouts.hero);
+    expect(_ids(draft.shown), [1, 2, 3]);
+    expect(_ids(draft.hidden), [4]);
 
-    expect(_ids(draft.shown), [4, 1, 2]);
+    expect(draft.move(3, 1), isTrue);
+
+    expect(_ids(draft.ordered), [1, 4, 2, 3]);
+    expect(_ids(draft.shown), [1, 4, 2]);
     expect(_ids(draft.hidden), [3]);
   });
 
-  test('hiding a shown file sends it to the end of the order', () {
+  test('moving a shown file past the cut takes it off screen', () {
     final draft = _draft([1, 2, 3, 4], FileLayouts.hero);
-
-    expect(draft.hide(0), isTrue);
-
+    expect(draft.move(0, 3), isTrue);
     expect(_ids(draft.shown), [2, 3, 4]);
     expect(_ids(draft.hidden), [1]);
   });
 
-  test('rotating cycles the shown files and leaves the hidden ones alone', () {
-    final draft = _draft([1, 2, 3, 4], FileLayouts.hero);
-
-    expect(draft.rotateShownLeft(), isTrue);
-    expect(_ids(draft.ordered), [2, 3, 1, 4]);
-
-    expect(draft.rotateShownRight(), isTrue);
-    expect(_ids(draft.ordered), [1, 2, 3, 4]);
+  test('move is a no-op when the index does not change', () {
+    final draft = _draft([1, 2, 3], FileLayouts.hero);
+    expect(draft.move(1, 1), isFalse);
+    expect(_ids(draft.ordered), [1, 2, 3]);
   });
 
-  test('one shown file has nothing to rotate', () {
-    final draft = _draft([1, 2, 3], FileLayouts.single);
-    expect(draft.rotateShownLeft(), isFalse);
-    expect(_ids(draft.ordered), [1, 2, 3]);
+  test('move rejects an out-of-range from index', () {
+    final draft = _draft([1, 2], FileLayouts.split);
+    expect(draft.move(-1, 0), isFalse);
+    expect(draft.move(2, 0), isFalse);
+    expect(_ids(draft.ordered), [1, 2]);
   });
 
   test('choosing a smaller layout pushes files off screen, not away', () {

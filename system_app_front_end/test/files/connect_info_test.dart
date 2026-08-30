@@ -28,10 +28,7 @@ void main() {
       node(7, 'info'),
       node(8, 'Info', body: 'has a body'),
     ];
-    expect(
-      namedInfoNodes(nodes).map((n) => n.objectId).toList(),
-      [1, 4, 5, 8],
-    );
+    expect(namedInfoNodes(nodes).map((n) => n.objectId).toList(), [1, 4, 5, 8]);
     expect(
       namedInfoNodes(nodes, query: 'alph').map((n) => n.objectId).toList(),
       [1, 4],
@@ -47,27 +44,16 @@ void main() {
     final controller = TextEditingController(text: 'hello world');
     addTearDown(controller.dispose);
     controller.selection = const TextSelection(baseOffset: 0, extentOffset: 5);
-    BlockTextFocusRegistry.register(
-      controller: controller,
-      changed: () {},
-    );
+    BlockTextFocusRegistry.register(controller: controller, changed: () {});
     addTearDown(() => BlockTextFocusRegistry.unregister(controller));
 
     final hit = descriptionRangeCoveringMark([
-      const DescriptionTextRange(
-        start: 0,
-        end: 5,
-        link: {'id': 9},
-      ),
+      const DescriptionTextRange(start: 0, end: 5, link: {'id': 9}),
     ]);
     expect(hit?.link['id'], 9);
     expect(
       descriptionRangeCoveringMark([
-        const DescriptionTextRange(
-          start: 8,
-          end: 11,
-          link: {'id': 2},
-        ),
+        const DescriptionTextRange(start: 8, end: 11, link: {'id': 2}),
       ]),
       isNull,
     );

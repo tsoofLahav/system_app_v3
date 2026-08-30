@@ -815,7 +815,6 @@ class AppState extends ChangeNotifier {
     required int targetObjectId,
     required Map<String, dynamic> anchor,
     String? label,
-    bool alsoRelated = false,
   }) async {
     await _objects.createDescriptionLink(
       hostObjectId,
@@ -823,12 +822,6 @@ class AppState extends ChangeNotifier {
       anchor: anchor,
       label: label,
     );
-    if (alsoRelated) {
-      await _objects.createRelatedLink(
-        hostObjectId,
-        targetObjectId: targetObjectId,
-      );
-    }
     final fileId = anchor['file_id'] as int?;
     if (fileId != null) {
       await loadDescriptionLinksForFile(fileId);
@@ -842,9 +835,6 @@ class AppState extends ChangeNotifier {
     }
     if (hostFileId != null) {
       await loadEmbedsForFile(hostFileId);
-    }
-    if (alsoRelated) {
-      await loadObjectGraph();
     }
   }
 
@@ -927,7 +917,9 @@ class AppState extends ChangeNotifier {
     for (final fileId in descriptionLinksByFileId.keys.toList()) {
       final links = descriptionLinksByFileId[fileId];
       if (links == null) continue;
-      descriptionLinksByFileId[fileId] = [for (final row in links) patchLink(row)];
+      descriptionLinksByFileId[fileId] = [
+        for (final row in links) patchLink(row),
+      ];
     }
     if (sourceType == 'task') {
       final task = tasksById[sourceId];

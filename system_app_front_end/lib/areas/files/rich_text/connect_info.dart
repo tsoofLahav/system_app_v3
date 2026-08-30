@@ -34,10 +34,7 @@ List<DescriptionTextRange> descriptionRangesForSegment({
   required String segmentId,
 }) {
   return descriptionRangesFromLinks(
-    state.descriptionLinksForSegment(
-      fileId: fileId,
-      segmentId: segmentId,
-    ),
+    state.descriptionLinksForSegment(fileId: fileId, segmentId: segmentId),
   );
 }
 
@@ -132,6 +129,8 @@ Future<void> connectInfoFromMark({
     context: context,
     state: state,
     excludeObjectIds: {host.id},
+    similarTo: mark.text,
+    topicId: topicIdForHost(state, host: host),
   );
   if (pick == null) return;
 
@@ -139,7 +138,6 @@ Future<void> connectInfoFromMark({
     hostObjectId: host.id,
     targetObjectId: pick.objectId,
     anchor: anchor,
-    alsoRelated: host.type == 'info' && !objectHasRelatedTo(host, pick.objectId),
   );
 }
 
@@ -162,6 +160,8 @@ Future<void> connectInfoFromTask({
   final pick = await showPickInfoObjectDialog(
     context: context,
     state: state,
+    similarTo: mark.text,
+    topicId: topicIdForHost(state, fileId: fileId, taskId: taskId),
   );
   if (pick == null) return;
 

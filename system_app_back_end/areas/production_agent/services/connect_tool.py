@@ -1,8 +1,8 @@
 """Agent `connect` tool — related info↔info, or description (text → info).
 
 Related is the objects-map edge. Description underlines a span on a host
-(info / task / table / task-list title) and, when the host is an info, also
-upserts related so the map gets that edge.
+(info / task / table / task-list title). The two kinds stay separate: a
+description never creates a related edge.
 """
 
 from __future__ import annotations
@@ -464,13 +464,7 @@ def _connect_description(
         anchor=anchor,
     )
     db.session.add(link)
-    related_id = None
-    if source.type == "info":
-        related = ensure_related_info_link(workspace_id, source, target)
-        db.session.flush()
-        related_id = related.id
-    else:
-        db.session.flush()
+    db.session.flush()
     return {
         "tool": "connect",
         "action": "description",
@@ -480,7 +474,6 @@ def _connect_description(
         "link_id": link.id,
         "kind": "description",
         "anchor": anchor,
-        "related_link_id": related_id,
     }
 
 

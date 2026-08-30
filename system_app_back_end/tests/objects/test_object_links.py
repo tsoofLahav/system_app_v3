@@ -50,7 +50,6 @@ def test_description_create_is_host_to_info():
     assert "anchor.file_id required for description" not in source
     assert "description links require an info target" in source
     assert "normalize_description_anchor" in source
-    assert "ensure_related_info_link" in source
     assert "related links require info endpoints" in source
     assert "find_related_link" in source
     # Many description spans per host: description rows are always inserted.
@@ -74,10 +73,12 @@ def test_patch_description_anchor_updates_span():
     assert "only description anchors can be patched" in helper
 
 
-def test_info_host_description_also_writes_related():
+def test_info_host_description_does_not_write_related():
     source = inspect.getsource(object_routes.create_object_link)
-    assert "if embed.type == \"info\":" in source
-    assert "ensure_related_info_link" in source
+    desc_branch = source.split('if kind == "description":', 1)[1].split(
+        "# related:", 1
+    )[0]
+    assert "ensure_related_info_link" not in desc_branch
 
 
 def test_patch_allows_info_payload():

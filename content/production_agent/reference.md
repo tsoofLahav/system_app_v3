@@ -234,7 +234,7 @@ Info↔info map edge.
 { "action": "description", "source_object_id": 0, "source_task_id": 44, "target_object_id": 12, "text": "call the clinic", "segment_id": "" }
 ```
 
-Underlines that phrase on the task title and points it at info 12. For text inside an info or table, pass `source_object_id` (the `[INFO]` / `[TABLE]` id) and the exact `text`. `segment_id` only when the same phrase is in more than one table cell (`embed:N#c0:1`). Description from an info also adds related.
+Underlines that phrase on the task title and points it at info 12. For text inside an info or table, pass `source_object_id` (the `[INFO]` / `[TABLE]` id) and the exact `text`. `segment_id` only when the same phrase is in more than one table cell (`embed:N#c0:1`). Description and related stay separate.
 
 ### `reference`
 

@@ -311,7 +311,8 @@ TOOL_DEFS: list[dict[str, Any]] = [
             "text is the exact span to find. segment_id is optional when the "
             "host has one field, required when the same text appears in more "
             "than one table cell. Unused fields are 0 / \"\". "
-            "Description from an info also adds the related map edge."
+            "Description and related stay separate — do not add a map edge "
+            "just because the span is inside an info."
         ),
         "strict": True,
         "parameters": {

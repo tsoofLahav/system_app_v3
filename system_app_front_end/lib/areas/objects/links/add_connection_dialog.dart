@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
+import '../../files/data/app_file.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/dialog_field_style.dart';
@@ -8,17 +9,20 @@ import '../../ui/dialog_metrics.dart';
 import '../../ux/dialogs/dialog_choice_list.dart';
 import '../data/object_embed.dart';
 import '../data/object_service.dart';
+import './info_pick_rank.dart';
 
 class ConnectionPick {
   const ConnectionPick({
     required this.objectId,
     required this.title,
     required this.type,
+    this.topicId,
   });
 
   final int objectId;
   final String title;
   final String type;
+  final int? topicId;
 }
 
 bool infoHasName(String title, {String body = ''}) {
@@ -39,19 +43,59 @@ List<ObjectGraphNode> namedInfoNodes(
   Iterable<ObjectGraphNode> nodes, {
   Set<int> excludeObjectIds = const {},
   String query = '',
+  String similarTo = '',
+  int? topicId,
 }) {
   final named = [
     for (final n in nodes)
       if (n.type == 'info' &&
           !excludeObjectIds.contains(n.objectId) &&
-          infoHasName(n.title, body: n.body) &&
-          infoNameMatches(n.title, query))
+          infoHasName(n.title, body: n.body))
         n,
   ];
-  named.sort(
-    (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+  return rankInfoPicks(
+    items: named,
+    titleOf: (n) => n.title,
+    topicOf: (n) => n.topicId,
+    query: query,
+    similarTo: similarTo,
+    topicId: topicId,
   );
-  return named;
+}
+
+int? topicIdForFile(AppState state, int fileId) {
+  for (final file in state.selectedDetail?.files ?? const <AppFile>[]) {
+    if (file.id == fileId) return file.topicId;
+  }
+  for (final file in state.broughtFiles) {
+    if (file.id == fileId) return file.topicId;
+  }
+  final node = state.objectGraph?.nodes
+      .where((n) => n.fileId == fileId && n.topicId != null)
+      .firstOrNull;
+  return node?.topicId;
+}
+
+int? topicIdForHost(
+  AppState state, {
+  ObjectEmbed? host,
+  int? fileId,
+  int? taskId,
+}) {
+  if (taskId != null) {
+    final topic = state.tasksById[taskId]?.topicId;
+    if (topic != null) return topic;
+  }
+  if (host != null) {
+    final fromGraph = state.objectGraph?.nodes
+        .where((n) => n.objectId == host.id)
+        .firstOrNull
+        ?.topicId;
+    if (fromGraph != null) return fromGraph;
+  }
+  final fid = fileId ?? host?.fileId;
+  if (fid == null) return null;
+  return topicIdForFile(state, fid);
 }
 
 Future<ConnectionPick?> showAddConnectionDialog({
@@ -59,6 +103,7 @@ Future<ConnectionPick?> showAddConnectionDialog({
   required AppState state,
   required ObjectEmbed source,
   bool infoOnly = true,
+  String similarTo = '',
 }) {
   return showAppDialog<ConnectionPick>(
     context: context,
@@ -66,6 +111,7 @@ Future<ConnectionPick?> showAddConnectionDialog({
       state: state,
       source: source,
       infoOnly: infoOnly,
+      similarTo: similarTo,
     ),
   );
 }
@@ -75,11 +121,13 @@ class _AddConnectionDialog extends StatefulWidget {
     required this.state,
     required this.source,
     this.infoOnly = true,
+    this.similarTo = '',
   });
 
   final AppState state;
   final ObjectEmbed source;
   final bool infoOnly;
+  final String similarTo;
 
   @override
   State<_AddConnectionDialog> createState() => _AddConnectionDialogState();
@@ -119,20 +167,21 @@ class _AddConnectionDialogState extends State<_AddConnectionDialog> {
             objectId: n.objectId,
             title: n.title,
             type: n.type,
+            topicId: n.topicId,
           ),
         );
       }
     }
 
-    for (final embeds in widget.state.embedsByFileId.values) {
-      for (final e in embeds) {
+    for (final entry in widget.state.embedsByFileId.entries) {
+      for (final e in entry.value) {
         if (seen.contains(e.id)) continue;
         if (widget.infoOnly && e.type != 'info') continue;
         final title = e.type == 'info'
             ? (e.information?['title'] as String? ?? '').trim()
             : e.taskListTitle.trim().isNotEmpty
-                ? e.taskListTitle
-                : e.type;
+            ? e.taskListTitle
+            : e.type;
         final body = e.type == 'info'
             ? (e.information?['body'] as String? ?? '')
             : '';
@@ -143,12 +192,11 @@ class _AddConnectionDialogState extends State<_AddConnectionDialog> {
             objectId: e.id,
             title: title.isEmpty ? e.type : title,
             type: e.type,
+            topicId: topicIdForFile(widget.state, entry.key),
           ),
         );
       }
     }
-
-    options.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
     if (!mounted) return;
     setState(() {
       _options
@@ -159,10 +207,14 @@ class _AddConnectionDialogState extends State<_AddConnectionDialog> {
   }
 
   List<ConnectionPick> get _visible {
-    return [
-      for (final o in _options)
-        if (infoNameMatches(o.title, _query.text)) o,
-    ];
+    return rankInfoPicks(
+      items: _options,
+      titleOf: (o) => o.title,
+      topicOf: (o) => o.topicId,
+      query: _query.text,
+      similarTo: widget.similarTo,
+      topicId: topicIdForHost(widget.state, host: widget.source),
+    );
   }
 
   @override
@@ -185,8 +237,9 @@ class _AddConnectionDialogState extends State<_AddConnectionDialog> {
             )
           : _InfoPickBody(
               searchLabel: s['searchInfo'],
-              emptyLabel:
-                  widget.infoOnly ? s['noInfoObjects'] : s['noObjectsToConnect'],
+              emptyLabel: widget.infoOnly
+                  ? s['noInfoObjects']
+                  : s['noObjectsToConnect'],
               query: _query,
               itemCount: visible.length,
               onActivate: (i) => Navigator.pop(context, visible[i]),
@@ -214,6 +267,8 @@ Future<ObjectGraphNode?> showPickInfoObjectDialog({
   required BuildContext context,
   required AppState state,
   Set<int> excludeObjectIds = const {},
+  String similarTo = '',
+  int? topicId,
 }) async {
   await state.loadObjectGraph();
   if (!context.mounted) return null;
@@ -222,6 +277,8 @@ Future<ObjectGraphNode?> showPickInfoObjectDialog({
     builder: (_) => _PickInfoObjectDialog(
       state: state,
       excludeObjectIds: excludeObjectIds,
+      similarTo: similarTo,
+      topicId: topicId,
     ),
   );
 }
@@ -230,10 +287,14 @@ class _PickInfoObjectDialog extends StatefulWidget {
   const _PickInfoObjectDialog({
     required this.state,
     required this.excludeObjectIds,
+    this.similarTo = '',
+    this.topicId,
   });
 
   final AppState state;
   final Set<int> excludeObjectIds;
+  final String similarTo;
+  final int? topicId;
 
   @override
   State<_PickInfoObjectDialog> createState() => _PickInfoObjectDialogState();
@@ -249,10 +310,12 @@ class _PickInfoObjectDialogState extends State<_PickInfoObjectDialog> {
   }
 
   List<ObjectGraphNode> get _nodes => namedInfoNodes(
-        widget.state.objectGraph?.nodes ?? const [],
-        excludeObjectIds: widget.excludeObjectIds,
-        query: _query.text,
-      );
+    widget.state.objectGraph?.nodes ?? const [],
+    excludeObjectIds: widget.excludeObjectIds,
+    query: _query.text,
+    similarTo: widget.similarTo,
+    topicId: widget.topicId,
+  );
 
   @override
   Widget build(BuildContext context) {

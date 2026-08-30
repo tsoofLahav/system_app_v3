@@ -84,6 +84,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(scrollController.offset, 0);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(scrollController.offset, 0);
   });
 
   test('embed caret correction is only for a collapsed click', () {
@@ -116,6 +125,15 @@ void main() {
         draggedBeyondSlop: false,
         selectionIsRange: false,
         shiftPressed: true,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldApplyEmbedCaretForTap(
+        draggedBeyondSlop: false,
+        selectionIsRange: false,
+        shiftPressed: false,
+        consecutiveTapCount: 2,
       ),
       isFalse,
     );

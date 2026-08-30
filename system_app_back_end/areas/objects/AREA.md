@@ -73,7 +73,7 @@ The `links` table is the workspace **object graph**, keyed by **`objects.id`** f
 | **Related** | **info ↔ info** only | Object chrome or map node → Add connection |
 | **Description** | **Marked text → an info** | Field menu → Connect info… On a **task title**, stored on the task (`source_type=task`, `anchor.segment_id` = `task:{id}`) so the underline stays with that task. On other objects, stored on the host object. Many spans per host are allowed. Self-links are rejected. |
 
-If the marked text lives **inside an info**, creating the description **also upserts related** between those two infos so the objects map gets an edge. Text inside a task or table does not draw a map edge. Deleting one kind does **not** delete the other.
+Description and related stay separate. Text inside an info does **not** create a map edge; chrome **Add connection…** (or `action=related`) does. Deleting one kind does **not** delete the other.
 
 Task title description links travel with the task row (`description_links` on task payloads and view memberships). `GET /files/:id/description-links` also returns task-hosted links whose home list lives in that file, so in-file underlines keep working. Older `task_list` + `#t{index}` links still paint only if looked up by that slot — new Connect info uses `task:{id}`. `delete_task_cascade` drops those rows.
 

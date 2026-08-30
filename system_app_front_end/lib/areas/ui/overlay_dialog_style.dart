@@ -5,6 +5,9 @@ abstract final class OverlayDialogStyle {
   /// Dark but not heavy — keeps frosted cards from looking muddy grey.
   static Color get barrierColor => Colors.black.withValues(alpha: 0.18);
 
+  /// A step darker than [barrierColor], so arrange preview cards lift off the canvas.
+  static Color get deepBarrierColor => Colors.black.withValues(alpha: 0.30);
+
   static const fileCardTintOpacity = 0.32;
   static const fileCardBorderRadius = 14.0;
 

@@ -56,7 +56,7 @@ Only **one** of those owns typing at a time (`DocumentCaretOwner.document` vs `e
 | Silent saves (`notify: false`); stable widget keys; skip reseed while the field is focused | Remount or `setRichState` a focused field (caret jumps to the end) |
 | `TextField.style` at least as large as the largest painted run | Body-sized field style under a larger title run (Hebrew hit-test treats glyphs as padding) |
 | One [`DocumentTextFlow`](system_app_front_end/lib/areas/files/editor/document_text_flow.dart) per **multi-field** object | A flow on a single-field object (info); marks across objects or into the file body |
-| Scroll a field only when it is completely off-screen | `ensureVisible` on every focus, or when the field is not laid out yet |
+| File pane owns scrolling; object fields never call `ensureVisible` and never propagate `showOnScreen` | `ensureVisible` / `showOnScreen` on focus or Shift+arrows (the text hops up then down) |
 | Install `onKeyEvent` **once**; visual ←/→ via `Actions` | Re-wrap `onKeyEvent` on rebuild; reimplement arrows in `onKeyEvent` |
 | Keyboard safety in [`NOTES.md`](NOTES.md#editor-keyboard-safety) | `notifyListeners` from a keystroke |
 

@@ -1,33 +1,5 @@
 import '../layout/file_layouts.dart';
 
-/// The bands of the arrange overlay: the files on screen, the files that
-/// are not, and cancel / done.
-enum ArrangeFocusZone { shown, hidden, actions }
-
-ArrangeFocusZone moveArrangeFocusUp({
-  required ArrangeFocusZone current,
-  required bool hasHidden,
-}) {
-  return switch (current) {
-    ArrangeFocusZone.actions =>
-      hasHidden ? ArrangeFocusZone.hidden : ArrangeFocusZone.shown,
-    ArrangeFocusZone.hidden => ArrangeFocusZone.shown,
-    ArrangeFocusZone.shown => ArrangeFocusZone.actions,
-  };
-}
-
-ArrangeFocusZone moveArrangeFocusDown({
-  required ArrangeFocusZone current,
-  required bool hasHidden,
-}) {
-  return switch (current) {
-    ArrangeFocusZone.shown =>
-      hasHidden ? ArrangeFocusZone.hidden : ArrangeFocusZone.actions,
-    ArrangeFocusZone.hidden => ArrangeFocusZone.actions,
-    ArrangeFocusZone.actions => ArrangeFocusZone.shown,
-  };
-}
-
 /// Layouts the topic can pick with this many files in total.
 ///
 /// Counted over every file, not just the shown ones: a layout with three slots

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show BoxWidthStyle;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../../../shared/utils/platform_text.dart';
 import '../../objects/links/info_description_bubble.dart';
+import '../../ui/app_typography.dart';
 import '../editor/document_secondary_tap.dart';
 import '../editor/document_text_flow.dart';
 import '../editor/embed_exit_scope.dart';
@@ -156,6 +158,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   TextDirection? _detectedDirection;
   Offset? _pendingTapGlobal;
   var _pointerMovedBeyondSlop = false;
+  DateTime? _lastTapAt;
+  var _consecutiveTapCount = 0;
   late final Map<Type, Action<Intent>> _rtlMotionActions;
   bool _mutatingImeSentinel = false;
   bool _structureEnterArmed = true;
@@ -167,6 +171,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   var _pointerOnDescriptionBubble = false;
   List<DescriptionTextRange> _liveDescriptionRanges = const [];
   String _descriptionHostText = '';
+  late final ScrollController _fieldScroll;
 
   @override
   void initState() {
@@ -180,6 +185,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     _rtlMotionActions = rtlCaretMotionActions(
       shouldFlip: _shouldFlipVisualArrows,
     );
+    _fieldScroll = ScrollController();
+    _fieldScroll.addListener(_lockFieldScroll);
     _focusNode.addListener(_onFocusChanged);
     widget.controller.addListener(_normalizeSelectionIfNeeded);
     widget.controller.addListener(_syncFlowFromLocalSelection);
@@ -429,7 +436,17 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     _descriptionAnchorSaveTimer?.cancel();
     _hideDescriptionBubble();
     if (_ownsFocus) _focusNode.dispose();
+    _fieldScroll.removeListener(_lockFieldScroll);
+    _fieldScroll.dispose();
     super.dispose();
+  }
+
+  /// The file pane owns scrolling. [EditableText.bringIntoView] still jumpTo's
+  /// this field's own controller; keep it pinned at 0.
+  void _lockFieldScroll() {
+    if (!_fieldScroll.hasClients) return;
+    if (_fieldScroll.offset == 0) return;
+    _fieldScroll.jumpTo(0);
   }
 
   /// Installs our handler in front of EditableText's **once**. Tear-offs of
@@ -479,9 +496,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         taskId: widget.taskId,
         flow: _flow,
       );
-      // File pane owns scrolling. Never jump a field that is already in view
-      // (Enter on a new task/row used to ensureVisible the whole page).
-      _ensureVisibleInFilePane();
       _ensureEmptyImeSentinel();
     } else {
       if ((BlockTextFocusRegistry.isInMenuSession ||
@@ -492,33 +506,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       _stripEmptyImeSentinel();
       BlockTextFocusRegistry.unregister(widget.controller);
     }
-  }
-
-  void _ensureVisibleInFilePane() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_focusNode.hasFocus) return;
-      if (_fieldIsOnScreen()) return;
-      Scrollable.ensureVisible(
-        context,
-        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-      );
-    });
-  }
-
-  /// True when this field already overlaps the nearest scroll viewport, or
-  /// has not laid out yet — do not scroll in those cases.
-  bool _fieldIsOnScreen() {
-    final box = context.findRenderObject();
-    if (box is! RenderBox || !box.hasSize || !box.attached) return true;
-    if (box.size.width <= 0 || box.size.height <= 0) return true;
-    final viewportBox = switch (RenderAbstractViewport.maybeOf(box)) {
-      final RenderBox b => b,
-      _ => null,
-    };
-    if (viewportBox == null || !viewportBox.hasSize) return true;
-    final field = box.localToGlobal(Offset.zero) & box.size;
-    final visible = viewportBox.localToGlobal(Offset.zero) & viewportBox.size;
-    return visible.overlaps(field);
   }
 
   void _notifyChanged() {
@@ -623,10 +610,12 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   void _normalizeSelectionIfNeeded() {
     if (_normalizingSelection) return;
     final controller = widget.controller;
-    final normalized = normalizeTextSelection(
-      controller.text,
-      controller.selection,
-    );
+    final utf16 = normalizeTextSelection(controller.text, controller.selection);
+    // Trailing `\n` from double/triple-click only. Shift+arrows use that
+    // newline to step onto the next line — stripping it hops the mark back.
+    final normalized = (_consecutiveTapCount >= 2 && !_pointerMovedBeyondSlop)
+        ? LineRange.withoutEdgeNewlines(controller.text, utf16)
+        : utf16;
     if (normalized == controller.selection) return;
     _normalizingSelection = true;
     controller.selection = normalized;
@@ -703,6 +692,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
           : KeyEventResult.ignored;
     }
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    _consecutiveTapCount = 0;
 
     if ((event.logicalKey == LogicalKeyboardKey.enter ||
             event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
@@ -1012,10 +1003,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   /// drops a selection that was covering several parts.
   ///
   /// RTL solution (`rtl/RTL.md`): padding beside the line → logical end **on
-  /// a click**; BiDi gaps snap to the nearest glyph; end-of-line taps keep
-  /// affinity on that line. Same turn, no post-frame. Drags, an existing
-  /// mark, and Shift+click keep Flutter's selection — [embedCaretForTap]
-  /// would collapse them to the line end (Hebrew whole-line mark).
+  /// a single click**; BiDi gaps snap to the nearest glyph. Drags, an existing
+  /// mark, Shift+click, and double/triple tap keep Flutter's selection —
+  /// [embedCaretForTap] would collapse them to the line end.
   void _handleTap() {
     final flow = _flow;
     final segmentId = _registeredSegmentId;
@@ -1023,6 +1013,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     final dragged = _pointerMovedBeyondSlop;
     _pendingTapGlobal = null;
     _pointerMovedBeyondSlop = false;
+    final tapCount = _consecutiveTapCount;
 
     final selection = widget.controller.selection;
     final hasRange = selection.isValid && !selection.isCollapsed;
@@ -1040,6 +1031,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
             draggedBeyondSlop: dragged,
             selectionIsRange: hasRange,
             shiftPressed: extending,
+            consecutiveTapCount: tapCount,
           )) {
         final next = embedCaretForTap(
           editable: editable,
@@ -1084,6 +1076,18 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         extend: false,
       );
     }
+  }
+
+  int _registerConsecutiveTap() {
+    final now = DateTime.now();
+    final last = _lastTapAt;
+    _lastTapAt = now;
+    if (last != null && now.difference(last) < kDoubleTapTimeout) {
+      _consecutiveTapCount += 1;
+    } else {
+      _consecutiveTapCount = 1;
+    }
+    return _consecutiveTapCount;
   }
 
   /// Deletes or replaces a selection that covers several parts, before the text
@@ -1263,7 +1267,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       final node = flow.focusNodeFor(target.segmentId);
       if (controller == null) return;
 
-      if (node != null && !node.hasFocus && node.canRequestFocus) {
+      // Do not move focus while extending — each requestFocus schedules
+      // showCaretOnScreen and hops the file pane. The field that started the
+      // mark still receives the keys; the overlay paints the other parts.
+      if (!extend && node != null && !node.hasFocus && node.canRequestFocus) {
         node.requestFocus();
       }
 
@@ -1353,185 +1360,196 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       if (widget.stripNewlines) StripNewlinesFormatter(),
     ];
 
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (event) {
-        if (event.buttons == kPrimaryButton) {
-          _pendingTapGlobal = event.position;
+    return _NoAncestorShowOnScreen(
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (event) {
+          if (event.buttons == kPrimaryButton) {
+            _pendingTapGlobal = event.position;
+            _pointerMovedBeyondSlop = false;
+            _registerConsecutiveTap();
+          }
+          final isSecondary = (event.buttons & kSecondaryMouseButton) != 0;
+          if (isSecondary) {
+            DocumentSecondaryTap.notePointer(event.pointer);
+            // New right-click retargets even while the previous menu is open.
+            BlockTextFocusRegistry.beginNewPointerAim();
+            // Claim writing before freeze — a right-click must move the caret
+            // into this field and drop the Super Editor caret/mark.
+            if (!_focusNode.hasFocus) {
+              _focusNode.requestFocus();
+            }
+            // Freeze what the action will hit before the menu can move focus or
+            // collapse the selection.
+            _capturePendingMark(event.position);
+            if (widget.onSecondaryTapDown != null) {
+              // Tell Super Editor's translucent secondary-tap handler to stand
+              // down — otherwise the document text menu opens on top and
+              // clobbers the frozen mark.
+              DocumentSecondaryTap.markEmbedHandled();
+              widget.onSecondaryTapDown!(
+                TapDownDetails(globalPosition: event.position),
+              );
+              return;
+            }
+            DocumentSecondaryTap.clearEmbedHandled();
+            if (_focusNode.hasFocus ||
+                BlockTextFocusRegistry.activeController == widget.controller) {
+              FormatRange.capturePending(
+                widget.controller.text,
+                widget.controller.selection,
+              );
+            }
+          }
+        },
+        onPointerMove: (event) {
+          final down = _pendingTapGlobal;
+          if (down == null) return;
+          if ((event.position - down).distance > kTouchSlop) {
+            _pointerMovedBeyondSlop = true;
+          }
+        },
+        onPointerCancel: (_) {
+          _pendingTapGlobal = null;
           _pointerMovedBeyondSlop = false;
-        }
-        final isSecondary = (event.buttons & kSecondaryMouseButton) != 0;
-        if (isSecondary) {
-          DocumentSecondaryTap.notePointer(event.pointer);
-          // New right-click retargets even while the previous menu is open.
-          BlockTextFocusRegistry.beginNewPointerAim();
-          // Claim writing before freeze — a right-click must move the caret
-          // into this field and drop the Super Editor caret/mark.
-          if (!_focusNode.hasFocus) {
-            _focusNode.requestFocus();
-          }
-          // Freeze what the action will hit before the menu can move focus or
-          // collapse the selection.
-          _capturePendingMark(event.position);
-          if (widget.onSecondaryTapDown != null) {
-            // Tell Super Editor's translucent secondary-tap handler to stand
-            // down — otherwise the document text menu opens on top and
-            // clobbers the frozen mark.
-            DocumentSecondaryTap.markEmbedHandled();
-            widget.onSecondaryTapDown!(
-              TapDownDetails(globalPosition: event.position),
-            );
-            return;
-          }
-          DocumentSecondaryTap.clearEmbedHandled();
-          if (_focusNode.hasFocus ||
-              BlockTextFocusRegistry.activeController == widget.controller) {
-            FormatRange.capturePending(
-              widget.controller.text,
-              widget.controller.selection,
-            );
-          }
-        }
-      },
-      onPointerMove: (event) {
-        final down = _pendingTapGlobal;
-        if (down == null) return;
-        if ((event.position - down).distance > kTouchSlop) {
-          _pointerMovedBeyondSlop = true;
-        }
-      },
-      onPointerCancel: (_) {
-        _pendingTapGlobal = null;
-        _pointerMovedBeyondSlop = false;
-      },
-      child: MouseRegion(
-        onHover: widget.descriptionRanges.isEmpty
-            ? null
-            : (event) => _handleDescriptionHover(event.localPosition),
-        onExit: widget.descriptionRanges.isEmpty
-            ? null
-            : (_) {
-                widget.onDescriptionHover?.call(null);
-                _pointerOnDescriptionSpan = false;
-                _scheduleDescriptionBubbleHide();
-              },
-        child: GestureDetector(
-          onDoubleTapDown: widget.descriptionRanges.isEmpty
+        },
+        child: MouseRegion(
+          onHover: widget.descriptionRanges.isEmpty
               ? null
-              : (details) {
-                  final hit = _descriptionAt(details.localPosition);
-                  if (hit != null) _activateDescription(hit);
+              : (event) => _handleDescriptionHover(event.localPosition),
+          onExit: widget.descriptionRanges.isEmpty
+              ? null
+              : (_) {
+                  widget.onDescriptionHover?.call(null);
+                  _pointerOnDescriptionSpan = false;
+                  _scheduleDescriptionBubbleHide();
                 },
-          child: AnimatedBuilder(
-            animation: Listenable.merge([
-              BlockTextFocusRegistry.menuSessionListenable,
-              ?_flow,
-            ]),
-            builder: (context, _) {
-              final inMenu = BlockTextFocusRegistry.isInMenuSession;
-              final theme = Theme.of(context);
-              final selectionColor =
-                  theme.textSelectionTheme.selectionColor ??
-                  theme.colorScheme.primary.withValues(alpha: 0.3);
-              // Overlay paints the mark (menu) or a multi-part selection — never
-              // stack that on top of the field's own selection wash.
-              final hideNativeSelection =
-                  inMenu || (_flow?.spansSegments ?? false);
+          child: GestureDetector(
+            onDoubleTapDown: widget.descriptionRanges.isEmpty
+                ? null
+                : (details) {
+                    final hit = _descriptionAt(details.localPosition);
+                    if (hit != null) _activateDescription(hit);
+                  },
+            child: AnimatedBuilder(
+              animation: Listenable.merge([
+                BlockTextFocusRegistry.menuSessionListenable,
+                ?_flow,
+              ]),
+              builder: (context, _) {
+                final inMenu = BlockTextFocusRegistry.isInMenuSession;
+                final theme = Theme.of(context);
+                final selectionColor =
+                    theme.textSelectionTheme.selectionColor ??
+                    theme.colorScheme.primary.withValues(alpha: 0.3);
+                // Overlay paints the mark (menu) or a multi-part selection — never
+                // stack that on top of the field's own selection wash.
+                final hideNativeSelection =
+                    inMenu || (_flow?.spansSegments ?? false);
 
-              // RTL solution — see rtl/RTL.md
-              final textDirection = _resolvedTextDirection(context);
-              final field = TextSelectionTheme(
-                data: TextSelectionThemeData(
-                  selectionColor: hideNativeSelection
-                      ? Colors.transparent
-                      : selectionColor,
-                  cursorColor: style.color,
-                ),
-                child: TextField(
-                  controller: widget.controller,
-                  focusNode: _focusNode,
-                  style: style,
-                  textDirection: textDirection,
-                  textAlign: TextAlign.start,
-                  textAlignVertical: widget.textAlignVertical,
-                  maxLines: widget.maxLines,
-                  minLines: widget.minLines,
-                  // One scroll owner: the file pane's SingleChildScrollView.
-                  scrollPhysics: const NeverScrollableScrollPhysics(),
-                  scrollPadding: EdgeInsets.zero,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    border: InputBorder.none,
-                    hintText:
-                        (_usesEmptyImeSentinel &&
-                            widget.controller.text == imeEmptySentinel)
-                        ? null
-                        : widget.hintText,
-                    hintStyle: style.copyWith(
-                      color: style.color?.withValues(alpha: 0.35),
-                    ),
-                    contentPadding: EdgeInsets.zero,
+                // RTL solution — see rtl/RTL.md
+                final textDirection = _resolvedTextDirection(context);
+                final field = TextSelectionTheme(
+                  data: TextSelectionThemeData(
+                    selectionColor: hideNativeSelection
+                        ? Colors.transparent
+                        : selectionColor,
+                    cursorColor: style.color,
                   ),
-                  textInputAction: _handlesStructureEnter
-                      ? TextInputAction.newline
-                      : widget.textInputAction,
-                  onChanged: (_) => _notifyChanged(),
-                  onSubmitted: (value) {
-                    if (_handlesStructureEnter) {
-                      _invokeStructureEnter();
-                      return;
-                    }
-                    widget.onSubmitted?.call(value);
-                  },
-                  onTap: () {
-                    _onFocusChanged();
-                    _handleTap();
-                  },
-                  inputFormatters: formatters.isEmpty ? null : formatters,
-                  contextMenuBuilder: (context, editableTextState) {
-                    return const SizedBox.shrink();
-                  },
-                ),
-              );
+                  child: TextField(
+                    controller: widget.controller,
+                    focusNode: _focusNode,
+                    style: style,
+                    textDirection: textDirection,
+                    textAlign: TextAlign.start,
+                    textAlignVertical: widget.textAlignVertical,
+                    // Desktop Flutter defaults to BoxWidthStyle.max, which pads
+                    // each line's wash to the paragraph width — in RTL that is
+                    // the trail to the left edge. Tight matches Super Editor.
+                    selectionWidthStyle: BoxWidthStyle.tight,
+                    // Color-emoji in the type fallback must not steal line
+                    // metrics (that shifts the wash on lines with no emoji).
+                    strutStyle: AppTypography.fieldStrut(style),
+                    maxLines: widget.maxLines,
+                    minLines: widget.minLines,
+                    // One scroll owner: the file pane's SingleChildScrollView.
+                    scrollPhysics: const NeverScrollableScrollPhysics(),
+                    scrollPadding: EdgeInsets.zero,
+                    scrollController: _fieldScroll,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: InputBorder.none,
+                      hintText:
+                          (_usesEmptyImeSentinel &&
+                              widget.controller.text == imeEmptySentinel)
+                          ? null
+                          : widget.hintText,
+                      hintStyle: style.copyWith(
+                        color: style.color?.withValues(alpha: 0.35),
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    textInputAction: _handlesStructureEnter
+                        ? TextInputAction.newline
+                        : widget.textInputAction,
+                    onChanged: (_) => _notifyChanged(),
+                    onSubmitted: (value) {
+                      if (_handlesStructureEnter) {
+                        _invokeStructureEnter();
+                        return;
+                      }
+                      widget.onSubmitted?.call(value);
+                    },
+                    onTap: () {
+                      _onFocusChanged();
+                      _handleTap();
+                    },
+                    inputFormatters: formatters.isEmpty ? null : formatters,
+                    contextMenuBuilder: (context, editableTextState) {
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                );
 
-              var body = _withFlowVerticalIntents(
-                wrapVisualCaretMotion(
-                  textDirection: textDirection,
-                  actions: _rtlMotionActions,
-                  child: _withCrossSegmentHighlight(field),
-                ),
-              );
-              if (_usesEmptyImeSentinel && widget.hintText != null) {
-                final showHint = imeFieldLooksEmpty(widget.controller.text);
-                body = Stack(
-                  children: [
-                    body,
-                    IgnorePointer(
-                      child: Opacity(
-                        opacity: showHint ? 1 : 0,
-                        child: Text(
-                          widget.hintText!,
-                          style: style.copyWith(
-                            color: style.color?.withValues(alpha: 0.35),
+                var body = _withFlowVerticalIntents(
+                  wrapVisualCaretMotion(
+                    textDirection: textDirection,
+                    actions: _rtlMotionActions,
+                    child: _withCrossSegmentHighlight(field),
+                  ),
+                );
+                if (_usesEmptyImeSentinel && widget.hintText != null) {
+                  final showHint = imeFieldLooksEmpty(widget.controller.text);
+                  body = Stack(
+                    children: [
+                      body,
+                      IgnorePointer(
+                        child: Opacity(
+                          opacity: showHint ? 1 : 0,
+                          child: Text(
+                            widget.hintText!,
+                            style: style.copyWith(
+                              color: style.color?.withValues(alpha: 0.35),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  );
+                }
+
+                if (!inMenu) return body;
+
+                final range = _frozenMarkRange();
+                if (range == null) return body;
+
+                return _FrozenSelectionOverlay(
+                  selection: range,
+                  selectionColor: selectionColor,
+                  child: body,
                 );
-              }
-
-              if (!inMenu) return body;
-
-              final range = _frozenMarkRange();
-              if (range == null) return body;
-
-              return _FrozenSelectionOverlay(
-                selection: range,
-                selectionColor: selectionColor,
-                child: body,
-              );
-            },
+              },
+            ),
           ),
         ),
       ),
@@ -2042,16 +2060,21 @@ bool imeDeletedEmptySentinel(String previous, String next) {
   return previous == imeEmptySentinel && next.isEmpty;
 }
 
-/// Click caret correction ([embedCaretForTap]) is for a collapsed click.
-/// Drags, an existing mark, and Shift+click keep Flutter's selection so a
-/// Hebrew padding hit does not expand to the whole visual line.
+/// Click caret correction ([embedCaretForTap]) is for a collapsed single click.
+/// Drags, an existing mark, Shift+click, and the 2nd/3rd click of a double/triple
+/// tap keep Flutter's selection so a Hebrew padding hit does not expand to the
+/// whole visual line (and so double-click can stay a word, like Super Editor).
 @visibleForTesting
 bool shouldApplyEmbedCaretForTap({
   required bool draggedBeyondSlop,
   required bool selectionIsRange,
   required bool shiftPressed,
+  int consecutiveTapCount = 1,
 }) {
-  return !draggedBeyondSlop && !selectionIsRange && !shiftPressed;
+  return !draggedBeyondSlop &&
+      !selectionIsRange &&
+      !shiftPressed &&
+      consecutiveTapCount < 2;
 }
 
 class StripNewlinesFormatter extends TextInputFormatter {
@@ -2123,4 +2146,28 @@ class _StandaloneHorizontalEdgeAction
 
   @override
   bool consumesKey(ExtendSelectionByCharacterIntent intent) => true;
+}
+
+/// Stops [RenderObject.showOnScreen] from walking up to the file pane.
+///
+/// [EditableText] still inflates the caret by handle padding (~48px) and asks
+/// ancestors to reveal it on Shift+arrows. That is the leftover hop after
+/// object fields stopped calling [Scrollable.ensureVisible].
+class _NoAncestorShowOnScreen extends SingleChildRenderObjectWidget {
+  const _NoAncestorShowOnScreen({required Widget child}) : super(child: child);
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderNoAncestorShowOnScreen();
+  }
+}
+
+class _RenderNoAncestorShowOnScreen extends RenderProxyBox {
+  @override
+  void showOnScreen({
+    RenderObject? descendant,
+    Rect? rect,
+    Duration duration = Duration.zero,
+    Curve curve = Curves.ease,
+  }) {}
 }

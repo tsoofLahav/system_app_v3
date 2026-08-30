@@ -10,6 +10,7 @@ import '../../files/rich_text/block_text_focus.dart';
 import '../../files/rich_text/rich_table_editor.dart';
 import '../../objects/tasks/task_list_surface.dart';
 import '../../objects/views/assign_task_view_dialog.dart';
+import '../../objects/views/place_task_dialog.dart';
 import '../../objects/views/view_chrome_menu.dart';
 import '../../../core/platform/app_form_factor.dart';
 import '../arrange/file_arrange_overlay.dart';
@@ -104,6 +105,12 @@ Future<void> dispatchShortcutAction(
       await state.addFile(topic: topic, name: fileResult.name);
       return;
     case ShortcutActionIds.assignTaskView:
+      if (state.isViewMode) {
+        final tasks = TaskListSurfaceState.tasksForPlace(state);
+        if (tasks.isEmpty || !context.mounted) return;
+        await showPlaceTaskDialog(context: context, state: state, tasks: tasks);
+        return;
+      }
       final taskIds = TaskListSurfaceState.taskIdsForAssignView();
       if (taskIds.isEmpty || !context.mounted) return;
       await showAssignTaskViewDialog(

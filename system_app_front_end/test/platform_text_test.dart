@@ -1,3 +1,5 @@
+import 'package:characters/characters.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/shared/utils/platform_text.dart';
 
@@ -14,10 +16,28 @@ void main() {
     });
   });
 
+  group('normalizeTextSelection', () {
+    test('keeps a reverse range so Shift+arrows do not flip the caret', () {
+      const text = 'hello world';
+      const reverse = TextSelection(baseOffset: 11, extentOffset: 6);
+      expect(normalizeTextSelection(text, reverse), reverse);
+    });
+
+    test('expands a range that splits a ZWJ emoji', () {
+      const text = 'a\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}b';
+      final start = 1;
+      final grapheme = text.characters.elementAt(1);
+      final next = normalizeTextSelection(
+        text,
+        TextSelection(baseOffset: start, extentOffset: start + 1),
+      );
+      expect(text.substring(next.start, next.end), grapheme);
+    });
+  });
+
   group('safeSubstring', () {
     test('expands partial emoji selection to full emoji', () {
       const text = 'a🔥b';
-      final units = text.codeUnits;
       final emojiStart = text.indexOf('🔥');
       final partialEnd = emojiStart + 1;
       expect(safeSubstring(text, emojiStart, partialEnd), '🔥');

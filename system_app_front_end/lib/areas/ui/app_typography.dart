@@ -14,6 +14,14 @@ abstract final class AppTypography {
     language = appLanguage;
   }
 
+  /// Color-emoji faces last so layout and paint share the same emoji metrics.
+  /// Without this, a Hebrew/Inter run + emoji shifts the selection wash.
+  static const List<String> _emojiFallback = [
+    'Apple Color Emoji',
+    'Noto Color Emoji',
+    'Segoe UI Emoji',
+  ];
+
   static TextStyle _style({
     required double size,
     Color? color,
@@ -34,6 +42,7 @@ abstract final class AppTypography {
           'Arial Hebrew',
           'Noto Sans Hebrew',
           'Helvetica Neue',
+          ..._emojiFallback,
         ],
         fontSize: size,
         fontWeight: fontWeight ?? weight,
@@ -44,13 +53,16 @@ abstract final class AppTypography {
       );
     }
 
-    return GoogleFonts.inter(
+    final inter = GoogleFonts.inter(
       fontSize: size,
       fontWeight: fontWeight ?? weight,
       color: color ?? AppColors.text,
       height: height,
       letterSpacing: letterSpacing,
       decoration: decoration,
+    );
+    return inter.copyWith(
+      fontFamilyFallback: [...?inter.fontFamilyFallback, ..._emojiFallback],
     );
   }
 
@@ -102,6 +114,12 @@ abstract final class AppTypography {
   static double get taskRowLineHeight {
     final style = taskRowStyle;
     return (style.fontSize ?? 12.5) * (style.height ?? 1.38);
+  }
+
+  /// Locks line height to [style] so color-emoji fallbacks do not shift
+  /// lines that have no emoji (selection wash would sit off the glyphs).
+  static StrutStyle fieldStrut(TextStyle style) {
+    return StrutStyle.fromTextStyle(style, forceStrutHeight: true);
   }
 
   /// Secondary labels (sidebar sections, meta).

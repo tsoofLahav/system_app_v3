@@ -2,32 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/ux/arrange/file_arrange_keyboard.dart';
 
 void main() {
-  test('moveArrangeFocusUp walks actions to shown through hidden', () {
-    expect(
-      moveArrangeFocusUp(current: ArrangeFocusZone.actions, hasHidden: true),
-      ArrangeFocusZone.hidden,
-    );
-    expect(
-      moveArrangeFocusUp(current: ArrangeFocusZone.hidden, hasHidden: true),
-      ArrangeFocusZone.shown,
-    );
-    expect(
-      moveArrangeFocusUp(current: ArrangeFocusZone.shown, hasHidden: true),
-      ArrangeFocusZone.actions,
-    );
-  });
-
-  test('moveArrangeFocusDown skips the hidden band when nothing is hidden', () {
-    expect(
-      moveArrangeFocusDown(current: ArrangeFocusZone.shown, hasHidden: false),
-      ArrangeFocusZone.actions,
-    );
-    expect(
-      moveArrangeFocusUp(current: ArrangeFocusZone.actions, hasHidden: false),
-      ArrangeFocusZone.shown,
-    );
-  });
-
   test('stepLayoutFocusIndex wraps around enabled layouts', () {
     expect(stepLayoutFocusIndex(currentIndex: 0, layoutCount: 3, delta: -1), 2);
     expect(stepLayoutFocusIndex(currentIndex: 2, layoutCount: 3, delta: 1), 0);

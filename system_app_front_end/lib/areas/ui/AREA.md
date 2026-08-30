@@ -71,6 +71,7 @@ Most variation comes from alpha over the tokens above, not from more tokens. The
 | 0.38–0.55 | Disabled |
 | 0.08–0.22 | Hover and pressed fills |
 | ~0.18 | Modal scrim (`OverlayDialogStyle.barrierColor`) |
+| ~0.30 | Arrange overlay scrim (`OverlayDialogStyle.deepBarrierColor`) |
 
 ### Topic colour on files
 
@@ -106,7 +107,7 @@ All of it comes from [`app_typography.dart`](app_typography.dart). One family, f
 
 Weights are only **w400 / w500 / w600**. Bold is something the user applies to their own text, not something the interface does to itself.
 
-**Font by language, not by content:** English gets Inter (`google_fonts`); Hebrew gets **SF Hebrew** with system fallbacks (`.SF Hebrew`, `Arial Hebrew`, `Noto Sans Hebrew`), and letter spacing forced to 0 because negative tracking mangles Hebrew. `AppTypography.configure` is called when the language changes. Document styles must be **read per build**, never cached as `static final`, or a language switch leaves Inter under Hebrew text.
+**Font by language, not by content:** English gets Inter (`google_fonts`); Hebrew gets **SF Hebrew** with system fallbacks (`.SF Hebrew`, `Arial Hebrew`, `Noto Sans Hebrew`), and letter spacing forced to 0 because negative tracking mangles Hebrew. Both lists end with color-emoji faces (`Apple Color Emoji`, `Noto Color Emoji`, `Segoe UI Emoji`) so an emoji uses the same metrics for layout and paint. Object fields then lock line height with [`AppTypography.fieldStrut`](app_typography.dart) — without that, the emoji faces steal ascent on **every** line and the selection wash sits off the glyphs. `AppTypography.configure` is called when the language changes. Document styles must be **read per build**, never cached as `static final`, or a language switch leaves Inter under Hebrew text.
 
 Chrome under 12px exists, but only for labels that must not be read as content: context menu rows at 11.5, popup menus and sidebar items at 11, the `AI` badge at 9.
 
@@ -182,7 +183,7 @@ The preferences dialog is the **reference** glass dialog. Every other dialog use
 | Extra-wide dialog | same shell + `extraWideWidth` | 460 — automation builder (calendar + clock) |
 | File-editor dialog | `AppGlassDialog` + `fileEditorWidth` | 520 — fill-file snippet (hosts `DocumentPane`) |
 | Confirm | `showAppConfirmDialog` | Same shell; destructive answers use amber-brown text |
-| Full-screen overlay | `OverlayDialogShell` + `OverlayDialogStyle` | Scrim black 18%, cards radius 14 |
+| Full-screen overlay | `OverlayDialogShell` + `OverlayDialogStyle` | Scrim black 18% (arrange 30%), cards radius 14 |
 | Context menu (right-click **and** file `⋯`) | `../ux/widgets/app_context_menu.dart` | Bubble radius 12, rows 28 high, 11.5px labels, `menuTint` frost, highlight in `primary`; compact width 128 + downward caret for anchored create menus |
 | Hover bubble | `../ux/widgets/details_hover_bubble.dart` | Radius 10, blur 18, white 82%, max 320×240 |
 | Native popup menu | Avoid — use `AppContextMenu` | — |
