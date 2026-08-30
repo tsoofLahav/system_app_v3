@@ -2,6 +2,9 @@
 
 from unittest.mock import patch
 
+import inspect
+
+from areas.automations.services import scope as scope_mod
 from areas.automations.services.scope import describe, resolve_scope, target_topic_id
 
 
@@ -52,6 +55,13 @@ def test_several_topics_are_not_a_destination():
     """"Somewhere in these five" is not a place to put a new file."""
     assert target_topic_id({"workspace_id": 1, "topic_ids": [3, 4]}) is None
     assert target_topic_id({"workspace_id": 1}) is None
+
+
+def test_type_and_tag_scope_skip_template_topics():
+    assert "_live_topic_filter" in inspect.getsource(scope_mod.topic_ids_for_type)
+    assert "_live_topic_filter" in inspect.getsource(scope_mod.topic_ids_for_tag)
+    assert "is_template" in inspect.getsource(scope_mod._live_topic_filter)
+    assert "_live_topic_filter" in inspect.getsource(scope_mod.live_topic_ids)
 
 
 def test_describe_reads_like_a_sentence():

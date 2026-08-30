@@ -1572,7 +1572,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final mark = TaskMark(
       done: _done[index],
       compact: true,
-      onToggle: complimentary ? null : () => unawaited(_toggle(index)),
+      onToggle: () => unawaited(_toggle(index)),
     );
     final title = complimentary && task != null
         ? _complimentaryTitle(task, titleStyle)

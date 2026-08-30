@@ -22,7 +22,7 @@ While a run is in flight, the bottom bar keeps the spinner and **Running…**, p
 
 ### Keeping an ask
 
-The prompt dialog opens small. **Save as action…** grows it into English and Hebrew names, an icon grid and a seat choice, and the footer becomes Cancel / Save and run / Save — naming and placing something is only interesting once the user has decided to keep it. Saving writes an `ai_actions` row ([`ai_action.dart`](ai_action.dart)) scoped to the current topic by default; it is not an automation.
+The prompt dialog opens small. **Save as action…** grows it into English and Hebrew names, **Needs user input** (Yes/No, plus an optional input prompt), an icon grid and a seat choice, and the footer becomes Cancel / Save and run / Save — naming and placing something is only interesting once the user has decided to keep it. Saving writes an `ai_actions` row ([`ai_action.dart`](ai_action.dart)) scoped to the current topic by default; it is not an automation. Yes on user input stores `requires_user_input` so an automation that uses the action places complimentary input/review tasks.
 
 A saved action runs through `runSavedAgentAction` and ends the same way a typed prompt does — review dialog, undo toast, or summary — unless the user cancelled, in which case that ending is skipped.
 
@@ -79,7 +79,7 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 | [`ai_running_status.dart`](ai_running_status.dart) | Spinner + Running… / Cancel / Canceling the action… |
 | [`agent_prompt_dialog.dart`](agent_prompt_dialog.dart) | Prompt + apply toggle + save-as-action, run orchestration |
 | [`ai_action.dart`](ai_action.dart) / [`ai_action_service.dart`](ai_action_service.dart) | Saved-action model and `/ai-actions`. English `name` + Hebrew `name_he`. Scope: `topicId` xor `topicTypeId` xor neither (all) |
-| [`ai_action_edit_dialog.dart`](ai_action_edit_dialog.dart) | Create/rewrite: both names, All / type / topic picker (create defaults to the current topic) |
+| [`ai_action_edit_dialog.dart`](ai_action_edit_dialog.dart) | Create/rewrite: both names, apply mode, **Needs user input**, All / type / topic picker (create defaults to the current topic). Topic choices are live topics only — no templates |
 | [`agent_result_ui.dart`](agent_result_ui.dart) | Result → dialog or snackbar; runs a saved action; cancelled runs are discarded |
 | [`agent_message_snackbar.dart`](agent_message_snackbar.dart) | Agent summary / error snackbar (~10s, **X**) |
 | [`pending_review_ui.dart`](pending_review_ui.dart) | Shared open-pending helper (anti double-open) |

@@ -5,22 +5,18 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from models import File, Topic, TopicType, db
-from areas.automations.services.scope import target_topic_id
+from areas.automations.services.scope import live_topic_ids, target_topic_id
 from areas.automations.services.steps import expand_name_tokens
 from areas.files.services import file_ops
 from areas.files.services.clone_topic_skeleton import clone_slot_into_topic
 
 
 def _topics_in_scope(resolved: dict) -> list[int]:
+    workspace_id = int(resolved["workspace_id"])
     topic_ids = resolved.get("topic_ids")
     if topic_ids:
-        return [int(i) for i in topic_ids]
-    rows = (
-        db.session.query(Topic.id)
-        .filter(Topic.workspace_id == int(resolved["workspace_id"]))
-        .all()
-    )
-    return [row[0] for row in rows]
+        return live_topic_ids(workspace_id, topic_ids)
+    return live_topic_ids(workspace_id)
 
 
 def files_in_scope(resolved: dict, *, older_than: datetime | None = None):

@@ -15,7 +15,7 @@ Row in `automations` (migration [`011_ai_actions_split.sql`](../../migrations/01
 | Field | Meaning |
 |-------|---------|
 | `name`, `name_he` | Shown in the automations dialog; UI language picks which |
-| `scope` | `{"kind": "all"}` / `{"kind": "topic", "topic_id"}` / `{"kind": "topic_type", "topic_type_id"}`. One-release fallback still reads `"tag": "process"`. Legacy `{topic_ids, file_ids}` still resolves. |
+| `scope` | `{"kind": "all"}` / `{"kind": "topic", "topic_id"}` / `{"kind": "topic_type", "topic_type_id"}`. One-release fallback still reads `"tag": "process"`. Legacy `{topic_ids, file_ids}` still resolves. Template topics (`is_template`) are never in scope. |
 | `trigger` | `{"type": "schedule"}` today. Event types are stored but not dispatched. |
 | `steps` | `[{ "kind": …, …params }]` — the work, in order |
 | `schedule` | `daily HH:MM`, `weekly DAY HH:MM`, `monthly PLACEMENT DAY HH:MM` |

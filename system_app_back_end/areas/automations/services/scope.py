@@ -27,6 +27,23 @@ TOPIC_TYPE = "topic_type"
 SCOPE_KINDS = (ALL, TOPIC, TOPIC_TYPE)
 
 
+def _live_topic_filter():
+    return (
+        Topic.archived_at.is_(None),
+        Topic.is_template.is_(False),
+    )
+
+
+def live_topic_ids(workspace_id: int, ids=None) -> list[int]:
+    query = Topic.query.filter(
+        Topic.workspace_id == int(workspace_id),
+        *_live_topic_filter(),
+    )
+    if ids is not None:
+        query = query.filter(Topic.id.in_([int(i) for i in ids]))
+    return [row.id for row in query.order_by(Topic.order_index, Topic.id).all()]
+
+
 def topic_ids_for_tag(workspace_id: int, tag_name: str) -> list[int]:
     rows = (
         db.session.query(Topic.id)
@@ -36,7 +53,7 @@ def topic_ids_for_tag(workspace_id: int, tag_name: str) -> list[int]:
             EntityTag.entity_type == "topic",
             Tag.name == tag_name,
             Topic.workspace_id == workspace_id,
-            Topic.archived_at.is_(None),
+            *_live_topic_filter(),
         )
         .order_by(Topic.id)
         .all()
@@ -50,7 +67,7 @@ def topic_ids_for_type(workspace_id: int, type_id: int) -> list[int]:
         .filter(
             Topic.workspace_id == workspace_id,
             Topic.topic_type_id == int(type_id),
-            Topic.archived_at.is_(None),
+            *_live_topic_filter(),
         )
         .order_by(Topic.id)
         .all()

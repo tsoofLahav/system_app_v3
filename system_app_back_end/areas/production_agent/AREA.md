@@ -150,7 +150,7 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 | [`services/prompt.py`](services/prompt.py) | Load/seed/sync the system prompt from the DB |
 | [`services/openai_service.py`](services/openai_service.py) | Responses conversation helpers + legacy chat/image helpers |
 | [`routes/agent.py`](routes/agent.py) | `POST /agent/run`; apply-agent-text; pending-review routes |
-| [`routes/ai_actions.py`](routes/ai_actions.py) | Saved AI actions: CRUD, bar order, run on live scope. English `name` + Hebrew `name_he` (both required). Optional `requires_user_input` / `user_input_prompt` so an automation that uses the action places complimentary input/review tasks. Scope: `topic_id` xor `topic_type_id` xor neither (all). Visiting files on Home are a frontend visibility union — the run still uses live `scope` / `hints` |
+| [`routes/ai_actions.py`](routes/ai_actions.py) | Saved AI actions: CRUD, bar order, run on live scope. English `name` + Hebrew `name_he` (both required). Optional `requires_user_input` / `user_input_prompt` so an automation that uses the action places complimentary input/review tasks. Scope: `topic_id` xor `topic_type_id` xor neither (all). Template topics are never in that scope. Visiting files on Home are a frontend visibility union — the run still uses live `scope` / `hints` |
 | [`services/action_bar.py`](services/action_bar.py) | Slot rules (1–6); a seat is also a keyboard shortcut |
 
 ## Rules

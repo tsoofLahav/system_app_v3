@@ -495,20 +495,17 @@ def pending_clears(workspace_id: int) -> list[dict]:
 def input_topics(automation: Automation) -> list[dict]:
     resolved = resolve_scope(automation.scope, workspace_id=automation.workspace_id)
     ids = resolved.get("topic_ids") or []
-    if not ids:
-        rows = (
-            Topic.query.filter_by(workspace_id=automation.workspace_id)
-            .filter(Topic.archived_at.is_(None))
-            .order_by(Topic.order_index, Topic.id)
-            .all()
-        )
-        return [{"id": t.id, "name": t.name} for t in rows]
-    topics = (
-        Topic.query.filter(Topic.id.in_([int(i) for i in ids]))
-        .order_by(Topic.order_index, Topic.id)
-        .all()
+    query = Topic.query.filter(
+        Topic.workspace_id == automation.workspace_id,
+        Topic.archived_at.is_(None),
+        Topic.is_template.is_(False),
     )
-    return [{"id": t.id, "name": t.name} for t in topics]
+    if ids:
+        query = query.filter(Topic.id.in_([int(i) for i in ids]))
+    return [
+        {"id": t.id, "name": t.name, "color": t.color}
+        for t in query.order_by(Topic.order_index, Topic.id).all()
+    ]
 
 
 def store_user_input(automation: Automation, payload: dict) -> dict:

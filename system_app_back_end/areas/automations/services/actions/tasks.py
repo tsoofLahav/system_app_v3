@@ -18,6 +18,8 @@ def task_list_ids_in_scope(resolved: dict) -> list[int]:
             ObjectEmbed.task_list_id.isnot(None),
             File.archived_at.is_(None),
             Topic.workspace_id == int(resolved["workspace_id"]),
+            Topic.archived_at.is_(None),
+            Topic.is_template.is_(False),
         )
     )
     if resolved.get("topic_ids"):

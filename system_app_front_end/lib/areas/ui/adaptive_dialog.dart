@@ -35,12 +35,16 @@ class AppAdaptiveDialogShell extends StatelessWidget {
     required this.child,
     this.actions = const [],
     this.width = AppDialogMetrics.maxWidth,
+    this.headerAccent,
+    this.headerAccentIsMain = false,
   });
 
   final Widget title;
   final Widget child;
   final List<Widget> actions;
   final double width;
+  final Color? headerAccent;
+  final bool headerAccentIsMain;
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +61,8 @@ class AppAdaptiveDialogShell extends StatelessWidget {
           child: GlassSurface(
             borderRadius: BorderRadius.circular(16),
             tintOpacity: 0.94,
+            headerAccent: headerAccent,
+            headerAccentIsMain: headerAccentIsMain,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -92,6 +98,8 @@ class AppAdaptiveDialogShell extends StatelessWidget {
       title: title,
       actions: actions,
       width: width,
+      headerAccent: headerAccent,
+      headerAccentIsMain: headerAccentIsMain,
       child: child,
     );
   }

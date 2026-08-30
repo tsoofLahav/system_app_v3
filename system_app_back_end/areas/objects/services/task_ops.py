@@ -18,8 +18,6 @@ def set_task_status(task: Task, *, done: bool) -> Task:
 
 
 def toggle_task(task: Task) -> Task:
-    if task.complimentary_role:
-        raise ValueError("complimentary tasks are completed by their automation, not the checkbox")
     return set_task_status(task, done=task.status != DONE)
 
 

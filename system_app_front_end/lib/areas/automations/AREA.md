@@ -50,7 +50,9 @@ A regular automation whose AI steps need **user input** or **review** must pick 
 | Input | an AI step `requires_user_input` | `{name} automation task` | `{name} משימת אוטומציה` |
 | Review | an AI step `apply_mode` is review | `{name} review task` | `{name} משימת סקירה` |
 
-Press the **title** (not the checkbox) to open the input or review dialog. The checkbox cannot complete these. Input is clickable until submitted; then hover “user input was already received”. Review stays silent and unclickable until a pending review exists — only then hover “review is in process”. Both recycle at the next section start.
+Press the **title** to open the input or review dialog. The pipeline still marks the row when input is submitted or review finishes. The checkbox works like any other task: mark it to give up that round, unmark to take it back. Input is clickable until submitted; then hover “user input was already received”. Review stays silent and unclickable until a pending review exists — only then hover “review is in process”. Both recycle at the next section start.
+
+When input covers several topics, the dialog shows **one topic at a time**. The header uses that topic’s colour ombre (same veil as the topic page). Template topics are never in automation or AI-action scope.
 
 The section-window duration is **hours** and **minutes**, each labelled above the field (not as a disappearing hint).
 

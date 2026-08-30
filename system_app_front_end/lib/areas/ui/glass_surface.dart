@@ -120,6 +120,8 @@ class GlassSurface extends StatelessWidget {
     this.elevation = 0,
     this.opaqueChrome = false,
     this.boxShadow,
+    this.headerAccent,
+    this.headerAccentIsMain = false,
   });
 
   factory GlassSurface.styled({
@@ -131,6 +133,8 @@ class GlassSurface extends StatelessWidget {
     bool? showTopHighlight,
     double? elevation,
     List<BoxShadow>? boxShadow,
+    Color? headerAccent,
+    bool headerAccentIsMain = false,
   }) {
     return GlassSurface(
       borderRadius: borderRadius,
@@ -143,6 +147,8 @@ class GlassSurface extends StatelessWidget {
       elevation: elevation ?? style.elevation,
       opaqueChrome: style.opaqueChrome,
       boxShadow: boxShadow,
+      headerAccent: headerAccent,
+      headerAccentIsMain: headerAccentIsMain,
       child: child,
     );
   }
@@ -159,6 +165,8 @@ class GlassSurface extends StatelessWidget {
   final double elevation;
   final bool opaqueChrome;
   final List<BoxShadow>? boxShadow;
+  final Color? headerAccent;
+  final bool headerAccentIsMain;
 
   static List<BoxShadow> get _opaqueChromeShadow => [
         BoxShadow(
@@ -237,6 +245,23 @@ class GlassSurface extends StatelessWidget {
                           Colors.transparent,
                         ],
                         stops: const [0, 0.35, 1],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (headerAccent != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                height: 140,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: AppColors.topicTopVeil(
+                        accent: headerAccent!,
+                        isMainTopic: headerAccentIsMain,
                       ),
                     ),
                   ),
@@ -531,6 +556,8 @@ class AppGlassDialog extends StatelessWidget {
     this.actions = const [],
     this.width = AppDialogMetrics.maxWidth,
     this.scrollable = true,
+    this.headerAccent,
+    this.headerAccentIsMain = false,
   });
 
   final Widget title;
@@ -538,6 +565,8 @@ class AppGlassDialog extends StatelessWidget {
   final List<Widget> actions;
   final double width;
   final bool scrollable;
+  final Color? headerAccent;
+  final bool headerAccentIsMain;
 
   @override
   Widget build(BuildContext context) {
@@ -565,6 +594,8 @@ class AppGlassDialog extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppGlassStyle.dialogRadius),
           border: AppGlassStyle._dialogBorder,
           padding: AppDialogMetrics.padding,
+          headerAccent: headerAccent,
+          headerAccentIsMain: headerAccentIsMain,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

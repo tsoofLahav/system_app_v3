@@ -103,14 +103,12 @@ def test_window_is_open_accepts_aware_timestamptz():
     assert windows.window_is_open(open_window, after) is False
 
 
-def test_toggle_refuses_complimentary_tasks():
+def test_toggle_allows_complimentary_tasks():
     task = Task(title="x", status="active", complimentary_role="input")
-    try:
-        task_ops.toggle_task(task)
-    except ValueError as error:
-        assert "complimentary" in str(error)
-    else:
-        raise AssertionError("expected complimentary toggle to fail")
+    task_ops.toggle_task(task)
+    assert task.status == "done"
+    task_ops.toggle_task(task)
+    assert task.status == "active"
 
 
 def test_routes_expose_window_endpoints():
@@ -163,6 +161,7 @@ def test_input_topics_uses_resolved_scope():
     source = inspect.getsource(windows.input_topics)
     assert "resolve_scope" in source
     assert "topic_ids" in source
+    assert "is_template" in source
 
 
 def test_review_status_is_gated_on_pending_reviews():

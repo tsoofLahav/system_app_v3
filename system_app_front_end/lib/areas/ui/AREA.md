@@ -177,7 +177,7 @@ The preferences dialog is the **reference** glass dialog. Every other dialog use
 
 | Kind | Widget | Shape |
 |------|--------|-------|
-| Standard dialog | `AppAdaptiveDialogShell` → `AppGlassDialog` | Max width 280, radius 16, padding 12/10/12/8, tight hairline dividers |
+| Standard dialog | `AppAdaptiveDialogShell` → `AppGlassDialog` | Max width 280, radius 16, padding 12/10/12/8, tight hairline dividers. Optional `headerAccent` paints the same topic-page ombre behind the title (complimentary input) |
 | Phone dialog | `AppAdaptiveDialogShell` | Radius 16, inset 14×16, tint 0.94, matching tight padding |
 | Wide dialog | same shell + `wideWidth` | 400 — colour/emoji pickers, shortcut list, automations list |
 | Extra-wide dialog | same shell + `extraWideWidth` | 460 — automation builder (calendar + clock) |
