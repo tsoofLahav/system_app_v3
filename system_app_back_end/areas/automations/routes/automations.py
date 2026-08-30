@@ -16,6 +16,7 @@ from areas.automations.services.section_windows import (
     KIND_SECTION_WINDOW,
     KIND_STANDARD,
     apply_leftover_clear,
+    clear_section_window_state,
     complete_review_if_clear,
     enrich_automation,
     ensure_complimentary_tasks,
@@ -141,6 +142,17 @@ def update_automation(automation_id):
     if "schedule" in data or "timezone" in data:
         data = {**data, "next_run_at": None}
 
+    clock_changed = False
+    if (row.kind or KIND_STANDARD) == KIND_SECTION_WINDOW:
+        if "schedule" in data and data.get("schedule") != row.schedule:
+            clock_changed = True
+        if "timezone" in data and data.get("timezone") != row.timezone:
+            clock_changed = True
+        if "window_duration_minutes" in data:
+            incoming = data.get("window_duration_minutes")
+            if incoming != row.window_duration_minutes:
+                clock_changed = True
+
     apply_updates(
         row,
         data,
@@ -175,6 +187,8 @@ def update_automation(automation_id):
         if (row.kind or KIND_STANDARD) == KIND_STANDARD:
             ensure_complimentary_tasks(row)
         if (row.kind or KIND_STANDARD) == KIND_SECTION_WINDOW:
+            if clock_changed:
+                clear_section_window_state(row)
             sync_linked_schedules(row)
     except ValueError as error:
         db.session.rollback()

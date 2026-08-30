@@ -1137,7 +1137,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final id = _taskIds[index];
     if (id == null) return;
     final task = _taskById(id);
-    if (task == null || task.isComplimentaryTask) return;
+    if (task == null) return;
     final targetDone = !_done[index];
     final zones = TaskZones.fromOrdered(_displayTasks);
     final next = zones.moved(

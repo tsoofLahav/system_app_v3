@@ -136,6 +136,22 @@ def test_leftover_clear_archives_one_time_and_unmarks_routine():
     assert "CADENCE_ROUTINE" in source
 
 
+def test_clean_duration_end_unmarks_without_confirm():
+    source = inspect.getsource(windows.close_window_or_pending)
+    assert "leftover_active_tasks" in source
+    assert "clear_section_window_state" in source
+    reset = inspect.getsource(windows.clear_section_window_state)
+    assert "recycle_complimentary" in reset
+    assert "_recycle_routine_section" in reset
+    assert "pending_clear = None" in reset
+
+
+def test_patch_clears_window_when_clock_changes():
+    source = inspect.getsource(automations_routes.update_automation)
+    assert "clock_changed" in source
+    assert "clear_section_window_state" in source
+
+
 def test_complimentary_placement_requires_routine():
     source = inspect.getsource(windows.ensure_complimentary_tasks)
     assert "routine section" in source

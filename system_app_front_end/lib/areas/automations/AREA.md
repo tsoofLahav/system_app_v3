@@ -41,7 +41,7 @@ A single-topic scope is also the target for a "create a file" step. Broader scop
 
 ## Section windows and complimentary tasks
 
-Every named view section gets a `section_window` automation (created off). Start + duration open a window: attention dots on the **sidebar view** and **section header** until the section is fully done or the duration ends. If active leftovers remain at the end, a blocking confirm (any screen) recycles **routine** done tasks and archives leftover **one-time** tasks.
+Every named view section gets a `section_window` automation (created off). Start + duration open a window: attention dots on the **sidebar view** and **section header** until the section is fully done or the duration ends. When the duration ends with **nothing missed**, routine (and complimentary) tasks unmark immediately — no dialog. If any task is still active, a blocking confirm (any screen) must approve before leftover **one-time** tasks are archived and the rest recycle. Changing the window’s start or duration clears that cycle: all section tasks go active and the attention dot goes off.
 
 A regular automation whose AI steps need **user input** or **review** must pick a **routine** view + section. Its clock is a read-only copy of that section window. If the window is off, it does not fire on the clock. On save it places **only the complimentary tasks those steps need**:
 

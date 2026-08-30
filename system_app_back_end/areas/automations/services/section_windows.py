@@ -360,6 +360,19 @@ def _recycle_routine_section(view: View, section_key: str) -> None:
             set_task_status(task, done=False)
 
 
+def clear_section_window_state(automation: Automation) -> None:
+    """Close the window, drop leftover confirm, unmark the section, no attention."""
+    view = db.session.get(View, automation.view_id) if automation.view_id else None
+    if view is not None and automation.section_key:
+        for linked in linked_standard_automations(view.id, automation.section_key):
+            recycle_complimentary(linked)
+        _recycle_routine_section(view, automation.section_key)
+    automation.window_opened_at = None
+    automation.window_closes_at = None
+    automation.pending_clear = None
+    automation.next_run_at = None
+
+
 def sync_linked_schedules(window: Automation) -> None:
     if not window.view_id or not window.section_key:
         return
@@ -434,9 +447,7 @@ def close_window_or_pending(automation: Automation, now: datetime) -> None:
             ],
         }
         return
-    automation.window_opened_at = None
-    automation.window_closes_at = None
-    automation.pending_clear = None
+    clear_section_window_state(automation)
 
 
 def apply_leftover_clear(automation: Automation) -> dict:
