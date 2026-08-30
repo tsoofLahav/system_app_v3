@@ -15,6 +15,7 @@ Future<void> runBlockTextAction(String action) async {
     case 'text:bold':
     case 'text:italic':
     case 'text:underline':
+    case 'text:strikethrough':
     case 'text:size_up':
     case 'text:size_down':
     case 'text:make_link':

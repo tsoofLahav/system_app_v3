@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
 import '../../../core/platform/app_form_factor.dart';
+import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/glass_surface.dart';
+import '../rich_text/text_emoji_picker.dart';
 import './document_editor_controller.dart';
 import '../../ux/shell/app_bottom_bar.dart';
 import '../../ux/shortcuts/app_shortcuts.dart';
@@ -25,7 +27,10 @@ class DocumentInsertBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: DocumentEditorRegistry.notifier,
+      listenable: Listenable.merge([
+        DocumentEditorRegistry.notifier,
+        TextEmojiPalette.open,
+      ]),
       builder: (context, _) {
         final controller = DocumentEditorRegistry.active;
         if (controller == null) return const SizedBox.shrink();
@@ -40,7 +45,13 @@ class DocumentInsertBar extends StatelessWidget {
             children: [
               // No paragraph button — a file is free text, so a plain line is
               // always one keystroke away. The bar is for what typing cannot
-              // make: a list, and the objects.
+              // make: emoji, a list, and the objects.
+              _InsertButton(
+                icon: AppIcons.smiley,
+                tooltip: s['insertEmoji'],
+                selected: TextEmojiPalette.isOpen,
+                onPressed: () => TextEmojiPalette.toggle(context, s),
+              ),
               // One list option only. Points vs numbers is a property of
               // an existing list, switched from its right-click menu.
               _InsertButton(
@@ -106,11 +117,13 @@ class _InsertButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onPressed,
+    this.selected = false,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onPressed;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +132,11 @@ class _InsertButton extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
       onPressed: onPressed,
-      icon: AppIcon(icon, size: 20),
+      icon: AppIcon(
+        icon,
+        size: 20,
+        color: selected ? AppColors.primary : null,
+      ),
     );
   }
 }

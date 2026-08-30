@@ -25,7 +25,7 @@ A bullet, a table row, and an **embed block** count as **one line** of the docum
 | ↑/↓ in document text | Moves through paragraphs and **object blocks** as atomic units |
 | Tab on an object block | (does not open — Shift+Enter does) |
 | Shift+Enter on an object block | Opens the object (first inner field); click also works |
-| Enter on an object block | New paragraph **below** the object (keep writing) |
+| Enter on an object block | New paragraph **above** the object when the caret is on its leading edge (upstream / before), **below** when it is on the trailing edge |
 | Shift+Enter inside an object | SE caret **after** the object (downstream / empty paragraph below) so typing continues under it. Phone: leave icon on the first bottom-bar pill |
 | Click / right-click a paragraph | Body owns writing; object mark and caret are forgotten. One mark only |
 | Click / right-click an inner field | Field owns writing; Super Editor caret is cleared. Right-click focuses the field first |
@@ -33,7 +33,7 @@ A bullet, a table row, and an **embed block** count as **one line** of the docum
 | ↑/↓ inside an open object | Moves between that object’s lines only (does not leave). Shift+arrows mark across tasks, or a **rectangle of cells** (Shift+↑/↓ and Shift+←/→). Coming from below lands at the end of the line (fluent text). Phone: keep the keyboard up across inner fields |
 | Delete a marked object | Object goes, like deleting a marked line |
 | Delete a fully marked task / table row | The task or row is removed, not left empty. If every inner part is marked, one empty part stays — delete the object from chrome or empty Backspace on the last unit |
-| Paste inside an object | Inserts at the caret. A marking still replaces |
+| Paste inside an object | Inserts at the caret. A marking still replaces. **Task titles:** a multi-line paste (newlines or `;`) becomes one task per line — first line stays in the focused row, the rest are created after it |
 
 ## Three principles
 
@@ -55,7 +55,7 @@ Mechanism ([`embed_caret_bridge.dart`](embed_caret_bridge.dart) + [`document_car
 
 1. SE selection on `ObjectEmbedNode` = “on this object” (block wash).
 2. **Shift+Enter** → open object ([`runNextFrame`](editor_key_handoff.dart)). Clicking a field also opens it.
-3. **Enter** on the block → normal SE newline below the object.
+3. **Enter** on the block → empty paragraph before the object when the caret is upstream, after it when downstream (same as Super Editor’s binary-node newline).
 4. **Shift+Enter** inside → unfocus the embed field, place SE caret on a **TextNode after** the embed (insert empty paragraph if needed), then `requestFocus` on the next frame so SuperIme opens only against a live node.
 5. While an inner field is focused, SE selection and SE focus stay cleared (`adoptEmbed` unfocuses the editor; `openImeOnNonPrimaryFocusGain: false`). Insert must not `notifyListeners` mid-handoff or the IME dies after one character.
 6. Silent document reload that **replaces** `Editor` must remount `SuperEditor` (`ValueKey` epoch). SE recreates `DocumentImeInputClient` on `editContext` change without disposing the old client; the orphan keeps the dead `Document` while the shared composer selection points at new node ids → `selectUpstreamPosition` null-check crash on Escape/IME open.

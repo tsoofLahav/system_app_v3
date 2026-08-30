@@ -165,6 +165,8 @@ def _normalize_spans(raw: Any) -> list[dict[str, Any]]:
             span["italic"] = True
         if item.get("underline"):
             span["underline"] = True
+        if item.get("strikethrough"):
+            span["strikethrough"] = True
         if item.get("size") is not None:
             span["size"] = item["size"]
         if item.get("link"):

@@ -49,8 +49,12 @@ class TextSpanBuilder {
     if (span['italic'] == true) {
       style = style.copyWith(fontStyle: FontStyle.italic);
     }
+    final decorations = <TextDecoration>[];
     if (span['underline'] == true) {
-      style = style.copyWith(decoration: TextDecoration.underline);
+      decorations.add(TextDecoration.underline);
+    }
+    if (span['strikethrough'] == true) {
+      decorations.add(TextDecoration.lineThrough);
     }
     final size = span['size'];
     if (size is num) style = style.copyWith(fontSize: size.toDouble());
@@ -63,12 +67,17 @@ class TextSpanBuilder {
     }
     if (span['descriptionLink'] == true ||
         (span['link'] is String && (span['link'] as String).isNotEmpty)) {
+      if (!decorations.contains(TextDecoration.underline)) {
+        decorations.add(TextDecoration.underline);
+      }
       style = style.copyWith(
         color: AppColors.descriptionLink,
-        decoration: TextDecoration.underline,
         decorationColor: AppColors.descriptionLink,
         decorationThickness: 1.0,
       );
+    }
+    if (decorations.isNotEmpty) {
+      style = style.copyWith(decoration: TextDecoration.combine(decorations));
     }
     return style;
   }
@@ -149,6 +158,9 @@ Map<String, dynamic> _spanStyleFromParchment(Map<dynamic, dynamic> attrs) {
   if (attrs['b'] == true) span['bold'] = true;
   if (attrs['i'] == true) span['italic'] = true;
   if (attrs['u'] == true) span['underline'] = true;
+  if (attrs['s'] == true || attrs['strike'] == true) {
+    span['strikethrough'] = true;
+  }
   return span;
 }
 
@@ -190,6 +202,7 @@ bool _spanHasStyle(Map<String, dynamic> span) {
   return span['bold'] == true ||
       span['italic'] == true ||
       span['underline'] == true ||
+      span['strikethrough'] == true ||
       span['descriptionLink'] == true ||
       (span['link'] is String && (span['link'] as String).isNotEmpty) ||
       span['size'] is num ||
@@ -268,6 +281,7 @@ Map<String, dynamic> _markFromSpan(Map<String, dynamic> span) {
   if (span['bold'] == true) mark['bold'] = true;
   if (span['italic'] == true) mark['italic'] = true;
   if (span['underline'] == true) mark['underline'] = true;
+  if (span['strikethrough'] == true) mark['strikethrough'] = true;
   if (span['descriptionLink'] == true) mark['descriptionLink'] = true;
   if (span['link'] is String && (span['link'] as String).isNotEmpty) {
     mark['link'] = span['link'];
@@ -311,6 +325,7 @@ bool _marksEqual(Map<String, dynamic> a, Map<String, dynamic> b) {
   return a['bold'] == b['bold'] &&
       a['italic'] == b['italic'] &&
       a['underline'] == b['underline'] &&
+      a['strikethrough'] == b['strikethrough'] &&
       a['descriptionLink'] == b['descriptionLink'] &&
       a['link'] == b['link'] &&
       a['size'] == b['size'] &&
@@ -547,6 +562,12 @@ void applyActionToMark(
       } else {
         mark['underline'] = true;
       }
+    case 'text:strikethrough':
+      if (mark['strikethrough'] == true) {
+        mark.remove('strikethrough');
+      } else {
+        mark['strikethrough'] = true;
+      }
     case 'text:size_up':
       final current = (mark['size'] as num?)?.toDouble() ?? baseFontSize;
       final next = current + 1;
@@ -625,6 +646,7 @@ Map<String, dynamic> styleForRange(
     if (span['bold'] == true) merged['bold'] = true;
     if (span['italic'] == true) merged['italic'] = true;
     if (span['underline'] == true) merged['underline'] = true;
+    if (span['strikethrough'] == true) merged['strikethrough'] = true;
     if (span['size'] is num) merged['size'] = span['size'];
   }
   return merged;
@@ -655,6 +677,7 @@ bool _sameStyle(Map<String, dynamic> a, Map<String, dynamic> b) {
   return a['bold'] == b['bold'] &&
       a['italic'] == b['italic'] &&
       a['underline'] == b['underline'] &&
+      a['strikethrough'] == b['strikethrough'] &&
       a['descriptionLink'] == b['descriptionLink'] &&
       a['link'] == b['link'] &&
       a['size'] == b['size'] &&

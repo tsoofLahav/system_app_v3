@@ -413,13 +413,13 @@ class BlockTextFocusRegistry {
     _emojiPickerSessionDepth++;
   }
 
-  static void endEmojiPickerSession() {
+  static void endEmojiPickerSession({bool restoreFocus = true}) {
     if (_emojiPickerSessionDepth > 0) _emojiPickerSessionDepth--;
     if (_emojiPickerSessionDepth > 0) return;
 
     final target = _emojiPickerTarget;
     _emojiPickerTarget = null;
-    if (target == null) return;
+    if (target == null || !restoreFocus) return;
 
     final restoreController = target.controller;
     final restoreNode = target.focusNode;
@@ -531,10 +531,17 @@ class BlockTextFocusRegistry {
     await setClipboardText(mark.text);
   }
 
+  /// Task-list rows: multi-line paste creates one task per line.
+  static Future<bool> Function(String text)? pasteOverride;
+
   static Future<void> paste() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text;
     if (text == null) return;
+    final override = pasteOverride;
+    if (override != null && await override(sanitizePlatformText(text))) {
+      return;
+    }
     final mark = resolveMark();
     if (mark.fromMarking) {
       if (mark.spans.isEmpty) return;
@@ -577,10 +584,18 @@ class BlockTextFocusRegistry {
     final changed = target?.onChanged ?? onChanged;
     if (controller == null || changed == null) return;
 
-    final selection = target?.selection ?? controller.selection;
+    final fieldFocused = target?.focusNode?.hasFocus == true ||
+        (identical(controller, activeController) &&
+            activeFocusNode?.hasFocus == true);
+    final selection = fieldFocused
+        ? controller.selection
+        : (target?.selection ?? controller.selection);
     final start = selection.start.clamp(0, controller.text.length);
     final end = selection.end.clamp(0, controller.text.length);
     _applyInsert(controller, changed, start, end, text);
+    if (target != null) {
+      target.selection = controller.selection;
+    }
   }
 
   /// Text an action will run on: what is marked, or the caret's line.
@@ -695,7 +710,7 @@ class BlockTextFocusRegistry {
 }
 
 class _EmojiPickerTarget {
-  const _EmojiPickerTarget({
+  _EmojiPickerTarget({
     required this.controller,
     required this.onChanged,
     required this.focusNode,
@@ -705,7 +720,7 @@ class _EmojiPickerTarget {
   final TextEditingController controller;
   final VoidCallback onChanged;
   final FocusNode? focusNode;
-  final TextSelection selection;
+  TextSelection selection;
 }
 
 class _RecentTextTarget {

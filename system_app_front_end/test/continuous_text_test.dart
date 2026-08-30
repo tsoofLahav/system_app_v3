@@ -334,6 +334,31 @@ void main() {
     ]);
   });
 
+  testWidgets('shift+down keeps marking past the second task', (tester) async {
+    final flow = DocumentTextFlow();
+    final segments = {
+      taskItemSegmentId('list', 0): 'one',
+      taskItemSegmentId('list', 1): 'two',
+      taskItemSegmentId('list', 2): 'three',
+    };
+    final state = await _pump(tester, flow, segments);
+    await _placeCaret(tester, state, taskItemSegmentId('list', 0), 0);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+
+    expect(flow.spansSegments, isTrue);
+    expect(flow.segmentsInSelection(), [
+      taskItemSegmentId('list', 0),
+      taskItemSegmentId('list', 1),
+      taskItemSegmentId('list', 2),
+    ]);
+  });
+
   testWidgets('down arrow in a table cell moves by column, not reading order', (
     tester,
   ) async {

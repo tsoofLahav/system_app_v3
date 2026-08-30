@@ -5,6 +5,7 @@ class TextSpanMark {
     this.bold = false,
     this.italic = false,
     this.underline = false,
+    this.strikethrough = false,
     this.size,
     this.color,
     this.link,
@@ -15,6 +16,7 @@ class TextSpanMark {
   final bool bold;
   final bool italic;
   final bool underline;
+  final bool strikethrough;
   final double? size;
   final String? color;
   final String? link;
@@ -25,6 +27,7 @@ class TextSpanMark {
     bool? bold,
     bool? italic,
     bool? underline,
+    bool? strikethrough,
     double? size,
     String? color,
     String? link,
@@ -35,6 +38,7 @@ class TextSpanMark {
       bold: bold ?? this.bold,
       italic: italic ?? this.italic,
       underline: underline ?? this.underline,
+      strikethrough: strikethrough ?? this.strikethrough,
       size: size ?? this.size,
       color: color ?? this.color,
       link: link ?? this.link,
@@ -47,6 +51,7 @@ class TextSpanMark {
     if (bold) 'bold': true,
     if (italic) 'italic': true,
     if (underline) 'underline': true,
+    if (strikethrough) 'strikethrough': true,
     if (size != null) 'size': size,
     if (color != null && color!.isNotEmpty) 'color': color,
     if (link != null) 'link': link,
@@ -59,6 +64,7 @@ class TextSpanMark {
       bold: json['bold'] as bool? ?? false,
       italic: json['italic'] as bool? ?? false,
       underline: json['underline'] as bool? ?? false,
+      strikethrough: json['strikethrough'] as bool? ?? false,
       size: (json['size'] as num?)?.toDouble(),
       color: json['color'] as String?,
       link: json['link'] as String?,

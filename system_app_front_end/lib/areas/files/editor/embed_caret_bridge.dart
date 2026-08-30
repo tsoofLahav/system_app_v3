@@ -1,5 +1,6 @@
 /// Atomic object blocks: SE owns the caret on the embed; Shift+Enter opens it
-/// and also leaves back to the SE block caret. Enter inserts a line under the object.
+/// and also leaves back to the SE block caret. Enter / typing insert a line
+/// before the object when the caret is on its leading edge, after it otherwise.
 library;
 
 import 'package:flutter/services.dart';
@@ -42,6 +43,15 @@ abstract class EmbedCaretGateway {
 
   /// Phone arrow pad — stay inside this object (edges are no-ops).
   void nudgeInner(AxisDirection direction) {}
+}
+
+/// True when Super Editor's caret sits on the leading edge of a block embed.
+@visibleForTesting
+bool embedInsertGoesBefore(DocumentSelection? selection) {
+  if (selection == null || !selection.isCollapsed) return false;
+  final pos = selection.extent.nodePosition;
+  return pos is UpstreamDownstreamNodePosition &&
+      pos.affinity == TextAffinity.upstream;
 }
 
 mixin EmbedLineGatewayMixin implements EmbedCaretGateway {
@@ -199,7 +209,7 @@ class EmbedCaretPlugin extends SuperEditorPlugin {
           tryEnterObject(ctx);
           return;
         }
-        if (!tryInsertLineBelowObject(ctx)) {
+        if (!tryInsertLineBesideObject(ctx)) {
           insertNewLine(ctx);
         }
       },
@@ -230,17 +240,27 @@ class EmbedCaretPlugin extends SuperEditorPlugin {
     return true;
   }
 
-  /// Enter on an object block → empty paragraph underneath (keep writing).
-  bool tryInsertLineBelowObject(SuperEditorContext editContext) {
+  /// Enter / IME newline on an object block.
+  ///
+  /// Caret on the leading edge (upstream) → empty paragraph **above**.
+  /// Caret on the trailing edge → empty paragraph **below**.
+  bool tryInsertLineBesideObject(SuperEditorContext editContext) {
     final node = _embedAtCaret(editContext);
     if (node == null) return false;
 
     final id = Editor.createNodeId();
+    final paragraph = ParagraphNode(id: id, text: AttributedText());
     editContext.editor.execute([
-      InsertNodeAfterNodeRequest(
-        existingNodeId: node.id,
-        newNode: ParagraphNode(id: id, text: AttributedText()),
-      ),
+      if (embedInsertGoesBefore(editContext.composer.selection))
+        InsertNodeBeforeNodeRequest(
+          existingNodeId: node.id,
+          newNode: paragraph,
+        )
+      else
+        InsertNodeAfterNodeRequest(
+          existingNodeId: node.id,
+          newNode: paragraph,
+        ),
       ChangeSelectionRequest(
         DocumentSelection.collapsed(
           position: DocumentPosition(
@@ -271,7 +291,7 @@ class EmbedCaretPlugin extends SuperEditorPlugin {
           ? ExecutionInstruction.haltExecution
           : ExecutionInstruction.continueExecution;
     }
-    return tryInsertLineBelowObject(editContext)
+    return tryInsertLineBesideObject(editContext)
         ? ExecutionInstruction.haltExecution
         : ExecutionInstruction.continueExecution;
   }

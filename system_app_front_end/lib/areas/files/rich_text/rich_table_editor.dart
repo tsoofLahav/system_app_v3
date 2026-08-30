@@ -124,7 +124,19 @@ class RichTableEditorState extends State<RichTableEditor> {
 
   void beginReorderColumns() => _enterReorder(TableReorderKind.columns);
 
+  /// ⌘O while a cell (or this table's reorder chrome) has the caret.
+  void toggleReorderMode() {
+    if (_reorderKind != null) {
+      _exitReorder();
+      return;
+    }
+    _enterReorder(
+      _isChart ? TableReorderKind.columns : TableReorderKind.rows,
+    );
+  }
+
   void _enterReorder(TableReorderKind kind) {
+    keyboardFocus = this;
     if (_reorderKind == kind) return;
     setState(() => _reorderKind = kind);
     FocusManager.instance.primaryFocus?.unfocus();
@@ -325,6 +337,7 @@ class RichTableEditorState extends State<RichTableEditor> {
         }
       }
     }
+    if (_reorderKind != null) return;
     if (identical(keyboardFocus, this)) keyboardFocus = null;
   }
 

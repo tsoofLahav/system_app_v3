@@ -29,6 +29,10 @@ class DocumentContextMenu {
       label: strings['underline'] ?? 'Underline',
     ),
     AppContextMenuItem(
+      value: 'text:strikethrough',
+      label: strings['strikethrough'] ?? 'Strikethrough',
+    ),
+    AppContextMenuItem(
       value: 'text:make_link',
       label: strings['makeLink'] ?? 'Make link',
     ),

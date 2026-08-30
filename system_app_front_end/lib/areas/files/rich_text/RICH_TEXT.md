@@ -1,6 +1,6 @@
 # Rich text in blocks
 
-Inline formatting (bold, italic, underline, size) for text/header/summary blocks.
+Inline formatting (bold, italic, underline, strikethrough, size) for text/header/summary blocks.
 
 ## Rules (do not break these)
 
@@ -65,11 +65,11 @@ Formatting always affects an existing character range. Newly typed characters ar
 
 ### 7. Per-property format actions
 
-Each menu action (`text:bold`, `text:italic`, `text:underline`, `text:make_link`, `text:size_up`, `text:size_down`, `text:color:…`) mutates **one** style attribute per character in the format range via `applyActionToMark` inside `applyFormatActionToRange` (Make link writes `link` only on the URL span). Never merge the selection with `styleForRange` and apply one style over the whole range — that leaks bold onto regular text when only size changes.
+Each menu action (`text:bold`, `text:italic`, `text:underline`, `text:strikethrough`, `text:make_link`, `text:size_up`, `text:size_down`, `text:color:…`) mutates **one** style attribute per character in the format range via `applyActionToMark` inside `applyFormatActionToRange` (Make link writes `link` only on the URL span). Never merge the selection with `styleForRange` and apply one style over the whole range — that leaks bold onto regular text when only size changes.
 
 Text colour: the context menu offers **Choose color** → `showAppColorDialog` (menu session stays open so the mark stays frozen) → `text:color:#RRGGBB`, plus **Clear color**. No hardcoded red/blue/green menu rows.
 
-Toggle semantics: bold/italic/underline flip independently per character in the range.
+Toggle semantics: bold/italic/underline/strikethrough flip independently per character in the range. Underline and strikethrough can both be on — they combine as Flutter decorations.
 
 **Make link** finds `http(s)://` or `www.` in the mark (else caret line) and stores `link` on that span. No URL → no-op. Super Editor body links persist as markdown; embed-field links persist on object payload spans.
 
@@ -101,7 +101,9 @@ Before merging any rich-text PR:
 | `text_formatting.dart` | Pure span math + `TextSpan` rendering |
 | `text_links.dart` | Detect `http(s)` / `www.` for Make link |
 | `span_text_editing_controller.dart` | `TextEditingController` + spans + `handleTextChange` |
-| `block_text_focus.dart` | Active field + frozen menu range + menu actions |
+| `block_text_focus.dart` | Active field + frozen menu range + menu actions. Emoji-palette session freezes the embed caret and advances it after each insert |
+| `text_emoji_insert.dart` | Routes an insert-bar emoji to the live field, frozen field, or Super Editor body |
+| `text_emoji_picker.dart` | Desktop movable overlay / phone keyboard panel (not a blocking dialog) |
 | `formatted_text_field.dart` | `TextField` wrapper, focus registration, `_FrozenSelectionOverlay`; wires the [RTL solution](rtl/RTL.md) |
 | [`rtl/`](rtl/RTL.md) | **RTL solution** — base direction, visual arrows, empty-padding caret (see `RTL.md`) |
 | `document_context_menu.dart` | Text, list, and table-cell menu entries |
@@ -114,7 +116,7 @@ Before merging any rich-text PR:
 Block content fields:
 
 - `text` — plain string
-- `spans` — `[{start, end, bold?, italic?, underline?, size?, color?, link?}]` (half-open ranges). `link` is a web URL; description-link paint is not stored.
+- `spans` — `[{start, end, bold?, italic?, underline?, strikethrough?, size?, color?, link?}]` (half-open ranges). `link` is a web URL; description-link paint is not stored.
 - `compose_style`, `parchment`, `text_style` — legacy; cleared on save
 
 ## Tests

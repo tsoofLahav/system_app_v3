@@ -18,6 +18,9 @@ class IconCategoryPicker extends StatelessWidget {
     required this.onSelected,
     this.searchHint = 'Search emoji',
     this.keyboardHint,
+    this.height = 280,
+    this.columns = 8,
+    this.autofocusGrid = true,
   });
 
   /// Selected emoji string (stored on topic.icon).
@@ -27,6 +30,13 @@ class IconCategoryPicker extends StatelessWidget {
 
   /// Shown under the picker so Tab between grid and sections is discoverable.
   final String? keyboardHint;
+
+  final double height;
+  final int columns;
+
+  /// Topic dialog wants the grid keyed immediately. The text palette does
+  /// not — the document must keep the keyboard so the user can type.
+  final bool autofocusGrid;
 
   @override
   Widget build(BuildContext context) {
@@ -54,11 +64,12 @@ class IconCategoryPicker extends StatelessWidget {
                   config,
                   state,
                   showSearchBar,
+                  autofocusGrid: autofocusGrid,
                   key: const ValueKey('keyboard-emoji-view'),
                 );
               },
               config: Config(
-                height: 280,
+                height: height,
                 checkPlatformCompatibility: !isApple,
                 viewOrderConfig: const ViewOrderConfig(
                   top: EmojiPickerItem.searchBar,
@@ -66,7 +77,7 @@ class IconCategoryPicker extends StatelessWidget {
                   bottom: EmojiPickerItem.categoryBar,
                 ),
                 emojiViewConfig: EmojiViewConfig(
-                  columns: 8,
+                  columns: columns,
                   emojiSizeMax: isApple ? 28 * 1.15 : 28,
                   backgroundColor: AppColors.noteTop,
                   buttonMode: ButtonMode.MATERIAL,
@@ -123,7 +134,10 @@ class _KeyboardEmojiPickerView extends EmojiPickerView {
     super.state,
     super.showSearchBar, {
     super.key,
+    this.autofocusGrid = true,
   });
+
+  final bool autofocusGrid;
 
   @override
   State<_KeyboardEmojiPickerView> createState() =>
@@ -359,7 +373,7 @@ class _KeyboardEmojiPickerViewState extends State<_KeyboardEmojiPickerView>
   Widget _buildEmojiPane(double emojiSize, double emojiBoxSize) {
     return Focus(
       focusNode: _emojisFocus,
-      autofocus: true,
+      autofocus: widget.autofocusGrid,
       onKeyEvent: _onEmojisKey,
       child: ExcludeFocus(
         child: AnimatedContainer(

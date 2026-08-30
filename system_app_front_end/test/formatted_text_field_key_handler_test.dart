@@ -138,4 +138,54 @@ void main() {
       isFalse,
     );
   });
+
+  test('insertedTextBetween reads a multi-line paste over the caret', () {
+    expect(
+      insertedTextBetween(
+        const TextEditingValue(
+          text: 'Hello',
+          selection: TextSelection.collapsed(offset: 5),
+        ),
+        const TextEditingValue(
+          text: 'HelloA\nB\nC',
+          selection: TextSelection.collapsed(offset: 11),
+        ),
+      ),
+      'A\nB\nC',
+    );
+    expect(
+      insertedTextBetween(
+        const TextEditingValue(
+          text: 'keep',
+          selection: TextSelection.collapsed(offset: 4),
+        ),
+        const TextEditingValue(
+          text: 'keep',
+          selection: TextSelection.collapsed(offset: 4),
+        ),
+      ),
+      isNull,
+    );
+  });
+
+  test('insertedTextBetween sees a paste that replaced the empty sentinel', () {
+    expect(
+      insertedTextBetween(
+        const TextEditingValue(
+          text: imeEmptySentinel,
+          selection: TextSelection.collapsed(offset: 1),
+        ),
+        const TextEditingValue(
+          text: 'one\ntwo',
+          selection: TextSelection.collapsed(offset: 7),
+        ),
+      ),
+      'one\ntwo',
+    );
+  });
+
+  test('inferInsertedText finds a mid-field multi-line paste', () {
+    expect(inferInsertedText('hello', 'hela\nblo'), 'a\nb');
+    expect(inferInsertedText('', 'one\ntwo'), 'one\ntwo');
+  });
 }

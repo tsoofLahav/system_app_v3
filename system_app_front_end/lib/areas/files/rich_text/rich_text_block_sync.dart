@@ -47,6 +47,7 @@ bool _spansEqual(
         left['bold'] != right['bold'] ||
         left['italic'] != right['italic'] ||
         left['underline'] != right['underline'] ||
+        left['strikethrough'] != right['strikethrough'] ||
         left['size'] != right['size']) {
       return false;
     }

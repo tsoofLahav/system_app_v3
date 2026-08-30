@@ -161,6 +161,14 @@ Future<void> dispatchShortcutAction(
         list.toggleReorderMode();
         return;
       }
+      final table = RichTableEditorState.keyboardFocus;
+      if (table != null) {
+        table.toggleReorderMode();
+        return;
+      }
+      if (DocumentEditorRegistry.active?.toggleEmbedReorder?.call() == true) {
+        return;
+      }
       final viewChrome = ViewChromeRegistry.active;
       if (viewChrome != null) {
         viewChrome.onToggleTaskReorder();

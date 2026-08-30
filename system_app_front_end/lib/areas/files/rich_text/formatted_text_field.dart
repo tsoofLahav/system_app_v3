@@ -16,6 +16,7 @@ import '../editor/embed_exit_scope.dart';
 import '../model/line_range.dart';
 import './block_text_focus.dart';
 import './format_range.dart';
+import './list_text_parse.dart';
 import './frozen_selection_painter.dart';
 import './rtl/rtl.dart';
 import './span_text_editing_controller.dart';
@@ -1199,16 +1200,26 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         ? selection.extentOffset
         : (movingBackward ? selection.start : selection.end);
 
-    final here = DocumentTextPosition(segmentId, caret);
+    // Extending does not move focus (avoids a scroll hop), so later
+    // Shift+arrows still arrive on the field that started the mark.
+    // Walk from the flow's focus end — not this field's segment — or
+    // every Shift+↓ from task 1 only ever reaches task 2.
+    final here = extending && flow.selection != null
+        ? flow.selection!.focus
+        : DocumentTextPosition(segmentId, caret);
+    final originElsewhere = here.segmentId != segmentId;
 
     // While extending, every horizontal step is driven here rather than by the
     // text field, so the document selection keeps tracking the moving end even
     // after it has crossed into another part.
     if (isHorizontal && extending) {
-      if (flow.selection == null) flow.collapseTo(here);
+      if (flow.selection == null) {
+        flow.collapseTo(DocumentTextPosition(segmentId, caret));
+      }
+      final origin = flow.selection?.focus ?? here;
       final target = movingBackward
-          ? flow.positionBefore(here)
-          : flow.positionAfter(here);
+          ? flow.positionBefore(origin)
+          : flow.positionAfter(origin);
       if (target == null) return true;
       _applyFlowSelection(flow, target, extend: true);
       return true;
@@ -1222,14 +1233,14 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       if (caret < text.length) return false;
       target = flow.positionAfter(here);
     } else if (key == LogicalKeyboardKey.arrowUp) {
-      if (!_caretOnFirstLine(caret)) return false;
+      if (!originElsewhere && !_caretOnFirstLine(caret)) return false;
       target = flow.positionAbove(
         here,
         preferredOffset: _caretColumn(caret),
         caretX: _caretGlobalX(caret),
       );
     } else {
-      if (!_caretOnLastLine(caret)) return false;
+      if (!originElsewhere && !_caretOnLastLine(caret)) return false;
       target = flow.positionBelow(
         here,
         preferredOffset: _caretColumn(caret),
@@ -1987,6 +1998,17 @@ class _ImeStructureKeyFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
+    final pasted = insertedTextBetween(oldValue, newValue);
+    final pasteOverride = BlockTextFocusRegistry.pasteOverride;
+    if (pasteOverride != null &&
+        pasted != null &&
+        parsePastedListText(pasted).length >= 2) {
+      scheduleMicrotask(
+        () => unawaited(pasteOverride(sanitizePlatformText(pasted))),
+      );
+      return oldValue;
+    }
+
     if (wantEnter && imeInsertedSingleNewline(oldValue.text, newValue.text)) {
       scheduleMicrotask(onEnter);
       if (holdEmptySentinel && imeFieldLooksEmpty(oldValue.text)) {
@@ -2041,6 +2063,74 @@ const imeEmptySentinel = '\u200B';
 String imeVisibleText(String text) => text.replaceAll(imeEmptySentinel, '');
 
 bool imeFieldLooksEmpty(String text) => imeVisibleText(text).isEmpty;
+
+/// Text that [newValue] added over [oldValue]'s selection, if it is a
+/// straightforward replace (IME / toolbar paste).
+///
+/// Also infers the insert when the IME replaces an empty-field sentinel
+/// instead of inserting after it — that is the usual empty-task paste.
+@visibleForTesting
+String? insertedTextBetween(
+  TextEditingValue oldValue,
+  TextEditingValue newValue,
+) {
+  if (newValue.text == oldValue.text) return null;
+  final fromSelection = _insertedOverSelection(oldValue, newValue);
+  if (fromSelection != null) {
+    return normalizePasteLineBreaks(imeVisibleText(fromSelection));
+  }
+  final inferred = inferInsertedText(
+    imeVisibleText(oldValue.text),
+    imeVisibleText(newValue.text),
+  );
+  if (inferred == null) return null;
+  return normalizePasteLineBreaks(inferred);
+}
+
+String? _insertedOverSelection(
+  TextEditingValue oldValue,
+  TextEditingValue newValue,
+) {
+  final oldText = oldValue.text;
+  final start = oldValue.selection.isValid
+      ? oldValue.selection.start.clamp(0, oldText.length)
+      : 0;
+  final end = oldValue.selection.isValid
+      ? oldValue.selection.end.clamp(0, oldText.length)
+      : start;
+  if (start > end) return null;
+  final prefix = oldText.substring(0, start);
+  final suffix = oldText.substring(end);
+  if (!newValue.text.startsWith(prefix)) return null;
+  if (suffix.isNotEmpty && !newValue.text.endsWith(suffix)) return null;
+  final insertedEnd = newValue.text.length - suffix.length;
+  if (insertedEnd < prefix.length) return null;
+  return newValue.text.substring(prefix.length, insertedEnd);
+}
+
+/// Common-prefix / common-suffix insert (IME replaced the field, not the sel).
+@visibleForTesting
+String? inferInsertedText(String previous, String next) {
+  if (next == previous) return null;
+  if (previous.isEmpty) return next.isEmpty ? null : next;
+  var prefix = 0;
+  while (prefix < previous.length &&
+      prefix < next.length &&
+      previous.codeUnitAt(prefix) == next.codeUnitAt(prefix)) {
+    prefix++;
+  }
+  var previousEnd = previous.length;
+  var nextEnd = next.length;
+  while (previousEnd > prefix &&
+      nextEnd > prefix &&
+      previous.codeUnitAt(previousEnd - 1) == next.codeUnitAt(nextEnd - 1)) {
+    previousEnd--;
+    nextEnd--;
+  }
+  if (nextEnd < prefix) return null;
+  final inserted = next.substring(prefix, nextEnd);
+  return inserted.isEmpty ? null : inserted;
+}
 
 @visibleForTesting
 bool imeInsertedSingleNewline(String previous, String next) {

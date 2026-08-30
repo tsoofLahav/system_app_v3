@@ -15,6 +15,7 @@ import '../../files/rich_text/block_text_focus.dart';
 import '../../files/rich_text/connect_info.dart';
 import '../../files/rich_text/document_context_menu.dart';
 import '../../files/rich_text/formatted_text_field.dart';
+import '../../files/rich_text/list_text_parse.dart';
 import '../../files/rich_text/span_text_editing_controller.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
@@ -128,6 +129,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   final _saveTimers = <Timer?>[];
   final _rowKeys = <Object>[];
   int? _pendingFocusIndex;
+  int? _pasteTargetIndex;
   var _ensuringSeed = false;
   var _persisting = false;
   var _reorderMode = false;
@@ -605,6 +607,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   @override
   void dispose() {
     if (identical(keyboardFocus, this)) keyboardFocus = null;
+    if (identical(BlockTextFocusRegistry.pasteOverride, tryPasteAsTasks)) {
+      BlockTextFocusRegistry.pasteOverride = null;
+    }
     _titleSaveTimer?.cancel();
     unawaited(_flushTitleHeader().catchError((_) {}));
     for (final timer in _saveTimers) {
@@ -625,11 +630,19 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   void _onFieldFocus() {
     if (_anyFieldFocused) {
       keyboardFocus = this;
+      final taskIndex = _focusNodes.indexWhere((f) => f.hasFocus);
+      if (taskIndex >= 0) _pasteTargetIndex = taskIndex;
+      BlockTextFocusRegistry.pasteOverride =
+          taskIndex >= 0 ? tryPasteAsTasks : null;
       return;
     }
+    if (identical(BlockTextFocusRegistry.pasteOverride, tryPasteAsTasks)) {
+      BlockTextFocusRegistry.pasteOverride = null;
+    }
+    if (_reorderMode) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_anyFieldFocused) return;
+      if (_anyFieldFocused || _reorderMode) return;
       if (identical(keyboardFocus, this)) keyboardFocus = null;
     });
   }
@@ -929,6 +942,83 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     }
   }
 
+  /// Multi-line paste on a task title → one task per line.
+  ///
+  /// First line stays in the focused row (at the caret / replacing a mark).
+  /// The rest are created after it. A mark that already spans several tasks
+  /// keeps the default replace path.
+  Future<bool> tryPasteAsTasks(String raw) async {
+    final lines = parsePastedListText(raw);
+    if (lines.length < 2) return false;
+    var index = _focusNodes.indexWhere((f) => f.hasFocus);
+    if (index < 0) index = _pasteTargetIndex ?? -1;
+    if (index < 0 || index >= _controllers.length) return false;
+    final mark = BlockTextFocusRegistry.resolveMark();
+    if (mark.fromMarking && mark.spansParts) return false;
+
+    widget.onFocus?.call();
+    if (mark.fromMarking) {
+      mark.replaceWith(lines.first);
+    } else {
+      BlockTextFocusRegistry.insertText(lines.first);
+    }
+    _scheduleSave(index);
+    await _insertTasksAfter(index, lines.sublist(1));
+    return true;
+  }
+
+  Future<void> _insertTasksAfter(int index, List<String> titles) async {
+    if (titles.isEmpty) return;
+    if (index < 0 || index >= _taskIds.length) return;
+    if (_taskIds[index] == null) {
+      await _persistUnsavedRow(index);
+      if (!mounted || _taskIds[index] == null) return;
+    }
+    final asDone = _done[index];
+    var afterId = _taskIds[index];
+    final start = index + 1;
+
+    _persisting = true;
+    setState(() {
+      for (var i = 0; i < titles.length; i++) {
+        final at = start + i;
+        _controllers.insert(at, SpanTextEditingController(text: titles[i]));
+        _focusNodes.insert(at, _createRowFocus());
+        _taskIds.insert(at, null);
+        _done.insert(at, asDone);
+        _saveTimers.insert(at, null);
+        _rowKeys.insert(at, Object());
+      }
+      _optimistic = _tasksFromLocalRows();
+    });
+    _syncFlowOrder();
+    _pendingFocusIndex = start + titles.length - 1;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
+
+    try {
+      for (var i = 0; i < titles.length; i++) {
+        final at = start + i;
+        final created = await _bridge.createAfter(
+          title: titles[i],
+          afterTaskId: afterId,
+          status: asDone ? 'done' : 'active',
+        );
+        if (!mounted) return;
+        if (at < _taskIds.length) {
+          setState(() {
+            _taskIds[at] = created.id;
+            _optimistic = _tasksFromLocalRows();
+          });
+        }
+        afterId = created.id;
+      }
+      if (!mounted) return;
+      await _bridge.refresh();
+    } finally {
+      _persisting = false;
+    }
+  }
+
   Future<void> _insertAfter(int index) async {
     if (index < 0 || index >= _taskIds.length) return;
     if (_taskIds[index] == null) {
@@ -1189,6 +1279,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   void _setReorderMode(bool value) {
     if (_reorderMode == value) return;
     if (value) {
+      keyboardFocus = this;
       final fi = _focusNodes.indexWhere((f) => f.hasFocus);
       _reorderResumeIndex = fi >= 0 ? fi : _reorderResumeIndex;
       FocusManager.instance.primaryFocus?.unfocus();

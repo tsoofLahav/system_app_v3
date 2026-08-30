@@ -223,6 +223,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           markedTextForAgent: _markedTextForAgent,
           applyTextAction: _handleTextMenuAction,
           toggleMoveMode: _toggleMoveModeFromShortcut,
+          toggleEmbedReorder: _toggleEmbedReorderFromShortcut,
           restoreWritingFocus: _restoreWritingFocus,
           dismissLiveMark: _dismissLiveMark,
           isFocused: () => _focusNode.hasFocus,
@@ -1931,6 +1932,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         _docOps.toggleAttributionsOnSelection({italicsAttribution});
       case 'text:underline':
         _docOps.toggleAttributionsOnSelection({underlineAttribution});
+      case 'text:strikethrough':
+        _docOps.toggleAttributionsOnSelection({strikethroughAttribution});
       case 'text:make_link':
         _makeLinkOnSelection();
       case 'text:size_up':
@@ -1982,6 +1985,32 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         SelectionReason.userInteraction,
       ),
     ]);
+  }
+
+  /// ⌘O when the Super Editor caret sits on a task list or table block.
+  bool _toggleEmbedReorderFromShortcut() {
+    final selection = _composer.selection;
+    if (selection == null || !selection.isCollapsed) return false;
+    final node = _doc.getNodeById(selection.extent.nodeId);
+    if (node is! ObjectEmbedNode) return false;
+    final gateway = _embedCaretRegistry[node.id];
+    if (gateway == null) return false;
+    if (node.objectType == 'task_list') {
+      gateway.beginTaskReorderMode();
+      return true;
+    }
+    if (node.objectType == 'table' || node.objectType == 'graph') {
+      final embed = _lookup(node.objectId);
+      final chart = embed != null &&
+          TableObjectPayload.chartEnabled(embed.payload);
+      if (chart) {
+        gateway.beginTableReorderColumns();
+      } else {
+        gateway.beginTableReorderRows();
+      }
+      return true;
+    }
+    return false;
   }
 
   void _toggleMoveModeFromShortcut() {

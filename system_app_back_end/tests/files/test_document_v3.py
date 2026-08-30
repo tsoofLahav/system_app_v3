@@ -28,7 +28,14 @@ def test_paragraph_round_trip():
                     "id": "b1",
                     "type": "paragraph",
                     "text": "Hello",
-                    "spans": [{"start": 0, "end": 5, "bold": True}],
+                    "spans": [
+                        {
+                            "start": 0,
+                            "end": 5,
+                            "bold": True,
+                            "strikethrough": True,
+                        }
+                    ],
                 }
             ],
         }
@@ -36,6 +43,7 @@ def test_paragraph_round_trip():
     doc = parse_document(body)
     assert doc["blocks"][0]["text"] == "Hello"
     assert doc["blocks"][0]["spans"][0]["bold"] is True
+    assert doc["blocks"][0]["spans"][0]["strikethrough"] is True
 
 
 def test_insert_embed_block():

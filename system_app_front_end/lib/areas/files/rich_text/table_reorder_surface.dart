@@ -90,19 +90,56 @@ class TableReorderSurface extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              if (kind == TableReorderKind.rows)
-                _ReorderRows(
-                  cells: cells,
-                  onMove: onMoveRow,
-                )
-              else
-                _ReorderColumns(
-                  cells: cells,
-                  onMove: onMoveColumn,
-                ),
+              // Local overlay + clip so the drag ghost stays inside the
+              // table (Draggable otherwise paints in the app overlay).
+              _ClippedTableDragOverlay(
+                child: kind == TableReorderKind.rows
+                    ? _ReorderRows(
+                        cells: cells,
+                        onMove: onMoveRow,
+                      )
+                    : _ReorderColumns(
+                        cells: cells,
+                        onMove: onMoveColumn,
+                      ),
+              ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Hosts drag feedback in a clipped overlay sized to the table, not the pane.
+class _ClippedTableDragOverlay extends StatefulWidget {
+  const _ClippedTableDragOverlay({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_ClippedTableDragOverlay> createState() =>
+      _ClippedTableDragOverlayState();
+}
+
+class _ClippedTableDragOverlayState extends State<_ClippedTableDragOverlay> {
+  late final OverlayEntry _entry = OverlayEntry(
+    canSizeOverlay: true,
+    builder: (context) => widget.child,
+  );
+
+  @override
+  void didUpdateWidget(_ClippedTableDragOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _entry.markNeedsBuild();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: Overlay(
+        clipBehavior: Clip.hardEdge,
+        initialEntries: [_entry],
       ),
     );
   }
@@ -116,46 +153,51 @@ class _ReorderRows extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var r = 0; r < cells.length; r++) ...[
-          if (r > 0) const SizedBox(height: 6),
-          DragTarget<_RowDrag>(
-            onWillAcceptWithDetails: (d) => d.data.index != r,
-            onAcceptWithDetails: (d) => onMove(d.data.index, r),
-            builder: (context, candidate, _) {
-              final body = _glassGrab(
-                highlight: candidate.isNotEmpty,
-                child: Row(
-                  children: [
-                    for (var c = 0; c < cells[r].length; c++) ...[
-                      if (c > 0) const SizedBox(width: 4),
-                      Expanded(child: _cellLabel(cells[r][c])),
-                    ],
-                  ],
-                ),
-              );
-              return Draggable<_RowDrag>(
-                data: _RowDrag(r),
-                feedback: Material(
-                  color: Colors.transparent,
-                  child: SizedBox(
-                    width: MediaQuery.sizeOf(context).width * 0.72,
-                    child: body,
-                  ),
-                ),
-                childWhenDragging: Opacity(opacity: 0.28, child: body),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.grab,
-                  child: body,
-                ),
-              );
-            },
-          ),
-        ],
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 280.0;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var r = 0; r < cells.length; r++) ...[
+              if (r > 0) const SizedBox(height: 6),
+              DragTarget<_RowDrag>(
+                onWillAcceptWithDetails: (d) => d.data.index != r,
+                onAcceptWithDetails: (d) => onMove(d.data.index, r),
+                builder: (context, candidate, _) {
+                  Widget row() => _glassGrab(
+                    highlight: candidate.isNotEmpty,
+                    child: Row(
+                      children: [
+                        for (var c = 0; c < cells[r].length; c++) ...[
+                          if (c > 0) const SizedBox(width: 4),
+                          Expanded(child: _cellLabel(cells[r][c])),
+                        ],
+                      ],
+                    ),
+                  );
+                  return Draggable<_RowDrag>(
+                    data: _RowDrag(r),
+                    rootOverlay: false,
+                    feedback: Material(
+                      color: Colors.transparent,
+                      child: SizedBox(width: width, child: row()),
+                    ),
+                    childWhenDragging: Opacity(opacity: 0.28, child: row()),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.grab,
+                      child: row(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -179,7 +221,7 @@ class _ReorderColumns extends StatelessWidget {
               onWillAcceptWithDetails: (d) => d.data.index != c,
               onAcceptWithDetails: (d) => onMove(d.data.index, c),
               builder: (context, candidate, _) {
-                final body = _glassGrab(
+                Widget column() => _glassGrab(
                   highlight: candidate.isNotEmpty,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -194,14 +236,15 @@ class _ReorderColumns extends StatelessWidget {
                 );
                 return Draggable<_ColDrag>(
                   data: _ColDrag(c),
+                  rootOverlay: false,
                   feedback: Material(
                     color: Colors.transparent,
-                    child: SizedBox(width: 140, child: body),
+                    child: column(),
                   ),
-                  childWhenDragging: Opacity(opacity: 0.28, child: body),
+                  childWhenDragging: Opacity(opacity: 0.28, child: column()),
                   child: MouseRegion(
                     cursor: SystemMouseCursors.grab,
-                    child: body,
+                    child: column(),
                   ),
                 );
               },

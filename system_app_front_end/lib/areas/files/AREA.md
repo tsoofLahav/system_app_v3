@@ -31,7 +31,7 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | [`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md) | Fluent-text principles for embeds |
 | [`editor/embeds/`](editor/embeds/) | In-file presentation of objects (task list, info, image, graph, table) |
 | [`editor/object_embed_component.dart`](editor/object_embed_component.dart) | SE `ComponentBuilder` wrapping embed UIs |
-| [`rich_text/`](rich_text/) | Span formatting used inside embeds (tables, info, …) |
+| [`rich_text/`](rich_text/) | Span formatting used inside embeds (tables, info, …). Insert-bar emoji palette: [`text_emoji_picker.dart`](rich_text/text_emoji_picker.dart) |
 | [`rich_text/rtl/`](rich_text/rtl/RTL.md) | **RTL solution** — Hebrew/BiDi direction helpers |
 | [`data/`](data/) | File, topic, and topic-type models + API services. `files.meta.template_slot` is the stable key automations use |
 
@@ -71,7 +71,7 @@ Each file pane scrolls its document in a local `CustomScrollView` with `SuperEdi
 | Gap between blocks | `AppSpacing.blockGap` (3) — Enter = new paragraph with that top gap |
 | Selection | Opaque teal wash on note surface + span `backgroundColor` via [`selection_background_phase.dart`](editor/selection_background_phase.dart) (SE's beneath-layer highlight alone misses RTL/Hebrew) |
 | Text align | `TextAlign.start` (follows paragraph direction — see [`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)) |
-| Right-click | `DocumentContextMenu` (bold/italic/cut/copy/paste; list style switch on list items) |
+| Right-click | `DocumentContextMenu` (bold/italic/underline/strikethrough/cut/copy/paste; list style switch on list items) |
 
 ## Node types
 
@@ -115,7 +115,9 @@ A newly inserted list or table gets the caret in its first bullet or its top-lef
 
 The insert bar offers **one** list button, not two. Points vs numbers is a property of a list that already exists, switched from its right-click menu, so the user chooses "a list" and then how it looks. Insert list / ⌘L / **Make list** on marked text (or the caret line) turns each newline-separated part into a point. Paste of lines that already have `-` / `1.` prefixes inserts list items, not plain paragraphs.
 
-It offers no paragraph button either: the file is free text, so a plain line is always one keystroke away. The bar is only for what typing cannot make — a list, and the objects.
+It offers no paragraph button either: the file is free text, so a plain line is always one keystroke away. The bar is only for what typing cannot make — emoji, a list, and the objects.
+
+**Emoji** sits on that same insert bar ([`rich_text/text_emoji_picker.dart`](rich_text/text_emoji_picker.dart)). Choosing one inserts at the caret and leaves the palette open so several can go in a row. Desktop: a movable glass overlay (no scrim) — drag it aside and keep typing; close with Done, Escape, or the smiley again. Phone: a keyboard-height panel above the tool pills (not a floating dialog); Done or the smiley puts the writing keyboard back. Search and categories are the same picker as topic icons; the grid stays LTR in Hebrew. Taps on the palette do not dismiss editor focus (`KeepEditorFocus`). Do not use a blocking dialog here — that would stop typing.
 
 Insertion goes where the caret is, blank lines included: press Enter a few times and the object lands in the gap, not back up under the last paragraph. That holds because the save keeps those empty lines ([`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md) § A blank line is text).
 
@@ -248,7 +250,7 @@ Everything an action needs is on the mark, so no action re-derives ranges:
 | `text` | Copy, cut, and the text handed to AI |
 | `delete()` | Cut, backspace, typing over a marking |
 | `replaceWith()` | Paste **over a marking** |
-| `applyFormat()` | Bold, italic, underline, size, color |
+| `applyFormat()` | Bold, italic, underline, strikethrough, size, color |
 
 ### Freezing
 
@@ -265,7 +267,7 @@ Right-clicking *outside* an existing marking places the caret at the pointer fir
 
 ## Rich text
 
-Inline bold, italic, underline, size, and color are **spans** — ranges over a node's `text`. Span invariants live in [`rich_text/RICH_TEXT.md`](rich_text/RICH_TEXT.md).
+Inline bold, italic, underline, strikethrough, size, and color are **spans** — ranges over a node's `text`. Span invariants live in [`rich_text/RICH_TEXT.md`](rich_text/RICH_TEXT.md).
 
 `SpanTextEditingController` keeps text and spans in sync; formatting actions operate on the current selection through `block_text_actions.dart`.
 
@@ -308,7 +310,7 @@ Deleting an embed (empty Backspace, or selecting the block / cutting it out of t
 
 ### Object enter / exit
 
-Objects are atomic SE blocks. ↑/↓ move onto the block; **Shift+Enter** (or click) opens it; **Shift+Enter** again places the caret after the object; **Enter** inserts a line below. On phone the first bottom-bar pill is **arrows + enter/leave** (no Shift+Enter key). Arrows inside an object stay inside; on the block they move to the next/previous block. Inside an object, phone Return and empty delete are the same structure keys as desktop Enter / empty Backspace (`FormattedTextField` maps the IME — iOS will not send those as `KeyEvent`s). Insert, delete, and add-part must keep the writing session (no Super Editor remount on payload refresh). Insert bar and **Insert object** shortcuts create an object then put the caret in its first field without a shell-wide notify (so Hebrew/Latin IME keeps working).
+Objects are atomic SE blocks. ↑/↓ move onto the block; **Shift+Enter** (or click) opens it; **Shift+Enter** again places the caret after the object; **Enter** (and typing) insert a line **above** the object when the caret is on its leading edge, **below** when it is on the trailing edge. On phone the first bottom-bar pill is **arrows + enter/leave** (no Shift+Enter key). Arrows inside an object stay inside; on the block they move to the next/previous block. Inside an object, phone Return and empty delete are the same structure keys as desktop Enter / empty Backspace (`FormattedTextField` maps the IME — iOS will not send those as `KeyEvent`s). Insert, delete, and add-part must keep the writing session (no Super Editor remount on payload refresh). Insert bar and **Insert object** shortcuts create an object then put the caret in its first field without a shell-wide notify (so Hebrew/Latin IME keeps working).
 
 ### In-file behaviour by type (presentation only)
 
@@ -335,7 +337,7 @@ One object type `table` (`payload.rows` + optional `payload.chart`). UI: [`table
 | Tab | Next cell | Same |
 | Shift+Enter | Leave to SE block caret | Same |
 | Add row / column | **Immediately after the right-clicked cell** (storage index + 1; in RTL that is visually left of the cell). Anchor is the click, not a drifting “end” | Add **column** only (same anchor rule) |
-| Reorder | Separate **Reorder rows…** / **Reorder columns…**; grab the glass row/column (no handles) | **Reorder columns…** only; series colors move with the column |
+| Reorder | Separate **Reorder rows…** / **Reorder columns…**; grab the glass row/column (no handles). The drag ghost stays table-width (not the pane). ⌘O while a cell or the table block has the caret toggles row reorder (chart: column reorder) | **Reorder columns…** only; series colors move with the column. ⌘O toggles column reorder |
 | Exit reorder | Tap outside / Escape / Done | Same |
 | Right-click | Text + Connect info + add/reorder + **Design…**; block caret is add/reorder + **Design…** | Chart chrome **or** cell → **Design…** (look samples, chart type, colour-set samples); columns reorder; cells still get Connect info |
 

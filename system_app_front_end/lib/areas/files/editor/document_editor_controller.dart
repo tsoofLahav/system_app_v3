@@ -14,6 +14,7 @@ class DocumentEditorController {
     this.markedTextForAgent,
     this.applyTextAction,
     this.toggleMoveMode,
+    this.toggleEmbedReorder,
     this.restoreWritingFocus,
     this.dismissLiveMark,
     this.isFocused,
@@ -40,6 +41,10 @@ class DocumentEditorController {
 
   /// Toggle object Move Mode for the caret / last-interacted embed.
   final VoidCallback? toggleMoveMode;
+
+  /// ⌘O while the Super Editor caret is on a task list or table block.
+  /// Returns true when that embed handled the shortcut.
+  final bool Function()? toggleEmbedReorder;
 
   /// Put the keyboard back after chrome (arrange, reorder, Move Mode) stole it.
   final VoidCallback? restoreWritingFocus;

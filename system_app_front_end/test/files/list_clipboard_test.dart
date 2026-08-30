@@ -50,4 +50,28 @@ void main() {
       ['milk', 'eggs'],
     );
   });
+
+  test('splitPastedTaskLines turns a paragraph into first + following tasks', () {
+    final split = splitPastedTaskLines('Buy milk\nEggs\nBread');
+    expect(split, isNotNull);
+    expect(split!.first, 'Buy milk');
+    expect(split.following, ['Eggs', 'Bread']);
+    expect(splitPastedTaskLines('just one line'), isNull);
+    expect(splitPastedTaskLines('- one\n- two'), isNotNull);
+    expect(splitPastedTaskLines('- one\n- two')!.following, ['two']);
+  });
+
+  test('plain lines split even without list prefixes or Unix newlines', () {
+    expect(parsePastedListText('one\ntwo\nthree'), ['one', 'two', 'three']);
+    expect(parsePastedListText('one\rtwo\rthree'), ['one', 'two', 'three']);
+    expect(parsePastedListText('one\r\ntwo'), ['one', 'two']);
+    expect(parsePastedListText('one\u2028two\u2029three'), [
+      'one',
+      'two',
+      'three',
+    ]);
+    final split = splitPastedTaskLines('one\ntwo');
+    expect(split?.first, 'one');
+    expect(split?.following, ['two']);
+  });
 }

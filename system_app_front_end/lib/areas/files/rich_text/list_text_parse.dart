@@ -2,9 +2,18 @@ final _bulletPrefix = RegExp(r'^\s*(?:[•\-\*]|\d+[\.\)])\s*');
 final _listClipboardLine = RegExp(r'^\s*(?:[•\-\*]|\d+[\.\)])\s+');
 final _orderedClipboardLine = RegExp(r'^\s*\d+[\.\)]\s+');
 
+/// Notes / Word / old Mac often use `\r` or Unicode separators, not `\n`.
+String normalizePasteLineBreaks(String raw) {
+  return raw
+      .replaceAll('\r\n', '\n')
+      .replaceAll('\r', '\n')
+      .replaceAll('\u2028', '\n')
+      .replaceAll('\u2029', '\n');
+}
+
 List<String> _nonEmptyClipboardLines(String raw) {
   return [
-    for (final line in raw.replaceAll('\r\n', '\n').split('\n'))
+    for (final line in normalizePasteLineBreaks(raw).split('\n'))
       if (line.trim().isNotEmpty) line,
   ];
 }
@@ -25,7 +34,7 @@ bool clipboardLooksLikeOrderedList(String raw) {
 /// One list item per newline. Strips an existing `-` / `1.` prefix if present.
 List<String> listItemTextsFromMarkedText(String raw) {
   return [
-    for (final line in raw.replaceAll('\r\n', '\n').split('\n'))
+    for (final line in normalizePasteLineBreaks(raw).split('\n'))
       line.replaceFirst(_bulletPrefix, '').trim(),
   ].where((s) => s.isNotEmpty).toList();
 }
@@ -44,9 +53,17 @@ String clipboardListAsMarkerBody(String raw, {required bool ordered}) {
   return buffer.toString();
 }
 
+/// First line stays in the focused task; the rest become new tasks after it.
+/// `null` when the paste is a single line (or empty).
+({String first, List<String> following})? splitPastedTaskLines(String raw) {
+  final lines = parsePastedListText(raw);
+  if (lines.length < 2) return null;
+  return (first: lines.first, following: lines.sublist(1));
+}
+
 /// Splits pasted plain text into list/task lines (bullets, numbers, newlines, `;`).
 List<String> parsePastedListText(String raw) {
-  final normalized = raw.replaceAll('\r\n', '\n').trim();
+  final normalized = normalizePasteLineBreaks(raw).trim();
   if (normalized.isEmpty) return [];
 
   final List<String> lines;
