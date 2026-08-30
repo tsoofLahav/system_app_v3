@@ -1678,11 +1678,15 @@ class AppState extends ChangeNotifier {
 
   Future<void> refreshSectionWindows({bool notifyIfChanged = false}) async {
     if (workspaceId == null) return;
-    final next = await _automations.list(workspaceId: workspaceId);
-    final changed = _automationAttentionSignature(next) !=
-        _automationAttentionSignature(automations);
-    automations = next;
-    if (changed || !notifyIfChanged) notifyListeners();
+    try {
+      final next = await _automations.list(workspaceId: workspaceId);
+      final changed = _automationAttentionSignature(next) !=
+          _automationAttentionSignature(automations);
+      automations = next;
+      if (changed || !notifyIfChanged) notifyListeners();
+    } catch (_) {
+      // A poll must not take the app down; the next tick retries.
+    }
   }
 
   String _automationAttentionSignature(List<Automation> rows) {

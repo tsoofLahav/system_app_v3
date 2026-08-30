@@ -21,6 +21,7 @@ from models import (
     ViewTaskMembership,
     db,
 )
+from areas.automations.services.automation_schedule import as_utc_naive
 from areas.automations.services.scope import resolve_scope
 from areas.objects.services.task_ops import ACTIVE, DONE, set_task_status
 
@@ -99,9 +100,9 @@ def window_is_open(automation: Automation, now: datetime | None = None) -> bool:
         return False
     if automation.pending_clear:
         return False
-    now = now or datetime.utcnow()
-    closes = automation.window_closes_at
-    if closes is not None and now >= closes:
+    now = as_utc_naive(now or datetime.utcnow())
+    closes = as_utc_naive(automation.window_closes_at)
+    if now is not None and closes is not None and now >= closes:
         return False
     return True
 
@@ -636,8 +637,6 @@ def ensure_section_windows(workspace_id: int) -> list[Automation]:
 
 def tick_section_window(automation: Automation, *, now: datetime, action: str, planned) -> None:
     """Advance one section window. `action` is plan_tick's start decision."""
-    from areas.automations.services.automation_schedule import as_utc_naive
-
     now = as_utc_naive(now) or now
     if window_is_open(automation, now) and automation.window_closes_at:
         closes = as_utc_naive(automation.window_closes_at) or automation.window_closes_at

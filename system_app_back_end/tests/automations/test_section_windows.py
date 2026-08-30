@@ -1,6 +1,7 @@
 """Section windows, leftover cadence, and complimentary placement rules."""
 
 import inspect
+from datetime import datetime, timezone
 
 from models import Automation, Task, AiAction
 from areas.automations.routes import automations as automations_routes
@@ -88,6 +89,18 @@ def test_ai_step_keeps_requires_user_input():
         ]
     )
     assert steps[0]["requires_user_input"] is True
+
+
+def test_window_is_open_accepts_aware_timestamptz():
+    now = datetime(2026, 8, 30, 12, 0, 0)
+    open_window = Automation(
+        kind=windows.KIND_SECTION_WINDOW,
+        window_opened_at=datetime(2026, 8, 30, 11, 0, 0, tzinfo=timezone.utc),
+        window_closes_at=datetime(2026, 8, 30, 13, 0, 0, tzinfo=timezone.utc),
+    )
+    assert windows.window_is_open(open_window, now) is True
+    after = datetime(2026, 8, 30, 14, 0, 0)
+    assert windows.window_is_open(open_window, after) is False
 
 
 def test_toggle_refuses_complimentary_tasks():
