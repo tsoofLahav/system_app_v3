@@ -1692,7 +1692,7 @@ class AppState extends ChangeNotifier {
   String _automationAttentionSignature(List<Automation> rows) {
     return [
       for (final a in rows)
-        '${a.id}:${a.attention}:${a.windowOpen}:${a.hasPendingClear}:${a.enabled}:${a.schedule}',
+        '${a.id}:${a.attention}:${a.windowOpen}:${a.hasPendingClear}:${a.hasPendingReview}:${a.enabled}:${a.schedule}',
     ].join('|');
   }
 

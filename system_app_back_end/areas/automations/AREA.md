@@ -27,7 +27,7 @@ Row in `automations` (migration [`011_ai_actions_split.sql`](../../migrations/01
 | `window_duration_minutes` | How long after start a section window stays open |
 | `window_opened_at`, `window_closes_at`, `pending_clear` | Open window + leftover confirm payload |
 
-A **section window** has no steps. The minute cron opens it at the start, recycles complimentary / routine tasks, and at duration end either closes or writes `pending_clear`. Standard automations locked to a section copy that schedule and **do not fire on their own clock** if the window is off. If they need user input they wait for `POST /automations/:id/submit-input`; if they only need review they run at section start.
+A **section window** has no steps. The minute cron opens it at the start, recycles complimentary / routine tasks, and at duration end either closes or writes `pending_clear`. Standard automations locked to a section copy that schedule and **do not fire on their own clock** if the window is off. If they need user input they wait for `POST /automations/:id/submit-input`; if they only need review they run at section start. Complimentary tasks are created **only for the roles the steps need** — input when `requires_user_input`, review when `apply_mode` is review — never a spare review row on an input-only automation. `GET /automations` prunes leftover roles. List payload includes `has_pending_review` so the review hover is silent until a pending review exists.
 
 A single-topic scope is also the **target**: a step that has to put something somewhere (create a file) uses it. Broader scope leaves the step to carry its own `topic_id`, except `create_file` with `template_slot`, which skeleton-clones that slot into **each** topic in a type scope.
 

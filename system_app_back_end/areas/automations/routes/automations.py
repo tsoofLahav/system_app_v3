@@ -172,9 +172,7 @@ def update_automation(automation_id):
                 {"error": "a section window needs a start time and a duration"}
             ), 400
     try:
-        if (row.kind or KIND_STANDARD) == KIND_STANDARD and needs_complimentary_placement(
-            row
-        ):
+        if (row.kind or KIND_STANDARD) == KIND_STANDARD:
             ensure_complimentary_tasks(row)
         if (row.kind or KIND_STANDARD) == KIND_SECTION_WINDOW:
             sync_linked_schedules(row)

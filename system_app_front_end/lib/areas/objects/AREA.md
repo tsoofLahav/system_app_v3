@@ -51,7 +51,7 @@ files (presentation) ──thin overlay──► objects (data + type logic)
 
 **Section cadence.** Each named section is `routine` or `one_time` (`layout_config.sections[].cadence`, plus a stable `key`). Complimentary automation tasks may only sit in a **routine** section. Creating a section also creates an off **section window** automation (see automations `AREA.md`).
 
-**Complimentary tasks.** Rows with `source_automation_id` + `complimentary_role` (`input` / `review`) are completed by the automation pipeline, not the checkbox. Press the title to open input or review. They recycle (unmark) at the next section-window start.
+**Complimentary tasks.** Rows with `source_automation_id` + `complimentary_role` (`input` / `review`) are completed by the automation pipeline, not the checkbox. Only the roles the automation needs are created. Press the title to open input or review. Review hover is empty until a pending review exists. They recycle (unmark) at the next section-window start.
 
 **Views.** A user-made list a task can appear in without being copied. **A task belongs to at most one view** — choosing a view replaces any previous one (`setTaskView`). Create from the sidebar **+**; rename via right-click → Edit on a view; delete via right-click → Delete (memberships go, tasks stay). Reorder views in sidebar reorder mode (⌘O, or Preferences). Assign from a task’s right-click **Choose view…** in a **file** (or ⌘J). On the **view page**, ⌘J opens **Place…** (view / section / topic / list) instead of that view-only menu. If several tasks in the **same list** are marked, the chosen placement applies to all of them. UI: [`views/assign_task_view_dialog.dart`](views/assign_task_view_dialog.dart), [`views/place_task_dialog.dart`](views/place_task_dialog.dart).
 

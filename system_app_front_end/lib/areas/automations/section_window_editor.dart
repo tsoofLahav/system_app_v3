@@ -165,26 +165,28 @@ class _SectionWindowEditorState extends State<_SectionWindowEditor> {
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _hours,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: DialogFieldStyle.decoration(
-                      hintText: s['durationHours'],
+                  child: AppDialogField(
+                    label: s['durationHours'],
+                    child: TextField(
+                      controller: _hours,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: DialogFieldStyle.decoration(),
+                      onChanged: (_) => setState(() {}),
                     ),
-                    onChanged: (_) => setState(() {}),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: TextField(
-                    controller: _minutes,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: DialogFieldStyle.decoration(
-                      hintText: s['durationMinutes'],
+                  child: AppDialogField(
+                    label: s['durationMinutes'],
+                    child: TextField(
+                      controller: _minutes,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: DialogFieldStyle.decoration(),
+                      onChanged: (_) => setState(() {}),
                     ),
-                    onChanged: (_) => setState(() {}),
                   ),
                 ),
               ],

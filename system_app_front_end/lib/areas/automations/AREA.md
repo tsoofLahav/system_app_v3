@@ -43,14 +43,16 @@ A single-topic scope is also the target for a "create a file" step. Broader scop
 
 Every named view section gets a `section_window` automation (created off). Start + duration open a window: attention dots on the **sidebar view** and **section header** until the section is fully done or the duration ends. If active leftovers remain at the end, a blocking confirm (any screen) recycles **routine** done tasks and archives leftover **one-time** tasks.
 
-A regular automation whose AI steps need **user input** or **review** must pick a **routine** view + section. Its clock is a read-only copy of that section window. If the window is off, it does not fire on the clock. On save it places two complimentary tasks in that section:
+A regular automation whose AI steps need **user input** or **review** must pick a **routine** view + section. Its clock is a read-only copy of that section window. If the window is off, it does not fire on the clock. On save it places **only the complimentary tasks those steps need**:
 
-| Role | EN | HE |
-|------|----|----|
-| Input | `{name} automation task` | `{name} משימת אוטומציה` |
-| Review | `{name} review task` | `{name} משימת סקירה` |
+| Role | When | EN | HE |
+|------|------|----|----|
+| Input | an AI step `requires_user_input` | `{name} automation task` | `{name} משימת אוטומציה` |
+| Review | an AI step `apply_mode` is review | `{name} review task` | `{name} משימת סקירה` |
 
-Press the **title** (not the checkbox) to open the input or review dialog. The checkbox cannot complete these. Input is clickable until submitted; then hover “user input was already received”. Review is unclickable until a pending review exists (hover “review is in process”). Both recycle at the next section start.
+Press the **title** (not the checkbox) to open the input or review dialog. The checkbox cannot complete these. Input is clickable until submitted; then hover “user input was already received”. Review stays silent and unclickable until a pending review exists — only then hover “review is in process”. Both recycle at the next section start.
+
+The section-window duration is **hours** and **minutes**, each labelled above the field (not as a disappearing hint).
 
 Timing uses locked structured controls rather than free text, so an invalid schedule string cannot be produced. The builder is three framed sections: details (name, scope, daily/weekly/monthly), when (a compact calendar beside a matching 24-hour numbered dial with typed hour and minute, both in this dialog), and steps (a horizontal strip of frames; long-press drag reorders them — the run walks that array in order). Frequency stays in details. Weekly marks that weekday every week; monthly infers first / second / third / last from the tapped date (a fourth-of-five that is not the last maps to third). Flip months to see where it falls later. Daily shows only the clock. `+` under the strip adds a new AI action (the regular create dialog), a saved AI action, or a system step. Choosing **Add to a file** opens the real file editor on a scratch file; Save stores that snippet on the step (appended onto the target at run). Tap a frame to edit it. Remove a step with the corner x on its frame, not from inside the step editor. Enabled is a switch on the automations **list** (outermost after edit / run / delete), not in the builder. Create sits under the list. The string sent is `daily 08:00`, never `0 8 * * *`.
 

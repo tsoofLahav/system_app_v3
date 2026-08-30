@@ -96,6 +96,7 @@ void main() {
       'window_duration_minutes': 90,
       'window_open': true,
       'attention': true,
+      'has_pending_review': false,
       'pending_clear': {
         'section_name': 'Focus',
         'leftovers': [
@@ -106,6 +107,25 @@ void main() {
     expect(automation.isSectionWindow, isTrue);
     expect(automation.attention, isTrue);
     expect(automation.hasPendingClear, isTrue);
+    expect(automation.hasPendingReview, isFalse);
     expect(automation.windowDurationMinutes, 90);
+  });
+
+  test('review hover flag is off until a pending review exists', () {
+    final waiting = Automation.fromJson({
+      'id': 8,
+      'workspace_id': 1,
+      'name': 'Daily docs',
+      'kind': 'standard',
+    });
+    expect(waiting.hasPendingReview, isFalse);
+    final pending = Automation.fromJson({
+      'id': 8,
+      'workspace_id': 1,
+      'name': 'Daily docs',
+      'kind': 'standard',
+      'has_pending_review': true,
+    });
+    expect(pending.hasPendingReview, isTrue);
   });
 }

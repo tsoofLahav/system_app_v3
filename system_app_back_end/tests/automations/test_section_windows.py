@@ -141,6 +141,14 @@ def test_leftover_clear_archives_one_time_and_unmarks_routine():
 def test_complimentary_placement_requires_routine():
     source = inspect.getsource(windows.ensure_complimentary_tasks)
     assert "routine section" in source
+    assert "wanted_complimentary_roles" in source
+    assert "for role in roles" in source
+
+
+def test_wanted_complimentary_roles_are_independent():
+    source = inspect.getsource(windows.wanted_complimentary_roles)
+    assert "automation_requires_user_input" in source
+    assert "automation_needs_review" in source
     assert "ROLE_INPUT" in source
     assert "ROLE_REVIEW" in source
 

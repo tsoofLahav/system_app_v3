@@ -152,6 +152,12 @@ def enrich_automation(automation: Automation, now: datetime | None = None) -> di
     now = now or datetime.utcnow()
     data["window_open"] = window_is_open(automation, now)
     data["attention"] = attention_for_window(automation, now)
+    data["has_pending_review"] = False
+    if (automation.kind or KIND_STANDARD) == KIND_STANDARD:
+        if complimentary_task(automation.id, ROLE_REVIEW) is not None:
+            data["has_pending_review"] = bool(
+                review_status(automation).get("has_pending_review")
+            )
     return data
 
 
@@ -207,10 +213,17 @@ def automation_needs_review(automation: Automation) -> bool:
     return any(_step_needs_review(step) for step in (automation.steps or []))
 
 
+def wanted_complimentary_roles(automation: Automation) -> list[str]:
+    roles = []
+    if automation_requires_user_input(automation):
+        roles.append(ROLE_INPUT)
+    if automation_needs_review(automation):
+        roles.append(ROLE_REVIEW)
+    return roles
+
+
 def needs_complimentary_placement(automation: Automation) -> bool:
-    return automation_requires_user_input(automation) or automation_needs_review(
-        automation
-    )
+    return bool(wanted_complimentary_roles(automation))
 
 
 def complimentary_titles(automation: Automation) -> dict[str, str]:
@@ -267,11 +280,21 @@ def _place_task_in_section(task: Task, view: View, section: dict) -> None:
     )
 
 
+def _delete_complimentary(task: Task) -> None:
+    from areas.objects.services.delete_cascade import delete_task_cascade
+
+    delete_task_cascade(task.id)
+
+
 def ensure_complimentary_tasks(automation: Automation) -> list[Task]:
     if (automation.kind or KIND_STANDARD) != KIND_STANDARD:
         return []
-    if not needs_complimentary_placement(automation):
-        return complimentary_tasks_for(automation.id)
+    roles = wanted_complimentary_roles(automation)
+    existing = complimentary_tasks_for(automation.id)
+    if not roles:
+        for task in existing:
+            _delete_complimentary(task)
+        return []
     if not automation.view_id or not automation.section_key:
         raise ValueError("this automation needs a routine view section")
     view = db.session.get(View, automation.view_id)
@@ -285,7 +308,7 @@ def ensure_complimentary_tasks(automation: Automation) -> list[Task]:
 
     titles = complimentary_titles(automation)
     created = []
-    for role in (ROLE_INPUT, ROLE_REVIEW):
+    for role in roles:
         task = complimentary_task(automation.id, role)
         if task is None:
             task = Task(
@@ -302,6 +325,9 @@ def ensure_complimentary_tasks(automation: Automation) -> list[Task]:
             task.title = titles[role]
         _place_task_in_section(task, view, section)
         created.append(task)
+    for task in complimentary_tasks_for(automation.id):
+        if task.complimentary_role not in roles:
+            _delete_complimentary(task)
     db.session.flush()
     return created
 
@@ -631,6 +657,17 @@ def ensure_section_windows(workspace_id: int) -> list[Automation]:
         from areas.objects.services.delete_cascade import delete_automation_cascade
 
         delete_automation_cascade(row.id)
+    for automation in Automation.query.filter_by(
+        workspace_id=workspace_id, kind=KIND_STANDARD
+    ).all():
+        if complimentary_tasks_for(automation.id):
+            try:
+                ensure_complimentary_tasks(automation)
+            except ValueError:
+                roles = wanted_complimentary_roles(automation)
+                for task in complimentary_tasks_for(automation.id):
+                    if task.complimentary_role not in roles:
+                        _delete_complimentary(task)
     db.session.flush()
     return created
 

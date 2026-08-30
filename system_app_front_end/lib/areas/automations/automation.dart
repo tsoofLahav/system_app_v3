@@ -32,6 +32,7 @@ class Automation {
     this.pendingUserInput,
     this.windowOpen = false,
     this.attention = false,
+    this.hasPendingReview = false,
   });
 
   final int id;
@@ -63,6 +64,7 @@ class Automation {
   final Map<String, dynamic>? pendingUserInput;
   final bool windowOpen;
   final bool attention;
+  final bool hasPendingReview;
 
   bool get isScheduled => (schedule ?? '').isNotEmpty;
   bool get isSectionWindow => kind == AutomationKinds.sectionWindow;
@@ -106,6 +108,7 @@ class Automation {
           : null,
       windowOpen: json['window_open'] as bool? ?? false,
       attention: json['attention'] as bool? ?? false,
+      hasPendingReview: json['has_pending_review'] as bool? ?? false,
     );
   }
 

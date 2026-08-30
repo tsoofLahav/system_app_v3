@@ -1622,14 +1622,15 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final label = task.isReviewComplimentary
         ? s.complimentaryReviewTitle(name)
         : s.complimentaryInputTitle(name);
+    final reviewPending = automation?.hasPendingReview ?? false;
     final clickable = task.isInputComplimentary
         ? !task.isDone && !task.complimentaryInputReceived
-        : !task.isDone;
+        : reviewPending && !task.isDone;
     final tooltip = task.isInputComplimentary
         ? (task.complimentaryInputReceived || task.isDone
               ? s['inputAlreadyReceived']
               : null)
-        : (task.isDone ? null : s['reviewInProcess']);
+        : (reviewPending && !task.isDone ? s['reviewInProcess'] : null);
     final text = Text(label, style: style);
     final child = clickable
         ? MouseRegion(
