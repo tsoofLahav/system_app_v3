@@ -373,7 +373,9 @@ class AiAction(db.Model):
     prompt = db.Column(db.Text, nullable=False, default="")
     apply_mode = db.Column(db.Text, nullable=False, default=DEFAULT_MANUAL_APPLY_MODE)
     icon = db.Column(db.Text, nullable=False, default="")
-    # 1..6 = a seat on the AI bar (unique per workspace), NULL = actions menu.
+    # 1..7 = fixed AI-bar seat (unique among non-topic actions; keys ⌘2–⌘8).
+    # 9..10 = extra seats unique per topic (⌘9 / ⌘0). NULL = actions menu.
+    # extra seats unique per topic. NULL = actions menu.
     bar_slot = db.Column(db.Integer)
     topic_type_id = db.Column(db.Integer, db.ForeignKey("topic_types.id"))
     topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"))

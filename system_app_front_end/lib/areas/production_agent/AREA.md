@@ -11,7 +11,7 @@ Lives in the bottom bar ([`ai_tool_bar.dart`](ai_tool_bar.dart)), in reading ord
 | Control | Behavior |
 |---------|----------|
 | **Agent button** | Opens the prompt dialog ([`agent_prompt_dialog.dart`](agent_prompt_dialog.dart)) for a one-off request, with **Review changes (diff)** vs **Apply directly** (opens on apply directly — a one-off ask is lighter with the undo toast than with a diff). An action is also born here. |
-| **Pinned actions** | Up to six saved actions in slot order, each with its icon and its own key (⌘2…⌘7). Pressing one runs it on what is open. An action shows when its scope matches the open topic, **or** (on Home) when any visiting file’s source topic or that topic’s type matches (union). Globals always show. A scoped bar pin simply hides when out of scope; slots stay unique per workspace. |
+| **Pinned actions** | The agent is always seat 1 (⌘1). Up to seven saved actions fill the rest of the eight-spot row (⌘2…⌘8). A topic may add **two more** that only appear on that topic (⌘9 / ⌘0). Pressing one runs it on what is open. An action shows when its scope matches the open topic, **or** (on Home) when any visiting file’s source topic or that topic’s type matches (union). Globals always show. A scoped bar pin simply hides when out of scope. Fixed seats 1–7 stay unique per workspace; extra seats 9–10 are unique per topic. |
 | **⋯** | Opens the AI actions dialog ([`ai_actions_dialog.dart`](../automations/ai_actions_dialog.dart)) — the same filter as the bar, each with pin, edit, run and delete. |
 
 Each icon uses the same 34px tap slot as the other bottom-bar buttons, so the AI pill is not tighter than insert or chrome.
@@ -22,9 +22,11 @@ While a run is in flight, the bottom bar keeps the spinner and **Running…**, p
 
 ### Keeping an ask
 
-The prompt dialog opens small. **Save as action…** grows it into English and Hebrew names, **Needs user input** (Yes/No, plus an optional input prompt), an icon grid and a seat choice, and the footer becomes Cancel / Save and run / Save — naming and placing something is only interesting once the user has decided to keep it. Saving writes an `ai_actions` row ([`ai_action.dart`](ai_action.dart)) scoped to the current topic by default; it is not an automation. Yes on user input stores `requires_user_input` so an automation that uses the action places complimentary input/review tasks.
+The prompt dialog opens small. **Save as action…** grows it into English and Hebrew names, **Needs user input**, an icon, **Shown on** (every topic / a type / a topic), a seat choice, and the footer becomes Cancel / Save and run / Save — naming and placing something is only interesting once the user has decided to keep it. Saving writes an `ai_actions` row ([`ai_action.dart`](ai_action.dart)); it is not an automation. Create defaults to the current topic when that topic still has an extra seat. Yes on user input stores `requires_user_input` so an automation that uses the action places complimentary input/review tasks.
 
 A saved action runs through `runSavedAgentAction` and ends the same way a typed prompt does — review dialog, undo toast, or summary — unless the user cancelled, in which case that ending is skipped.
+
+Saving scoped to the current topic takes one of that topic’s two extra bar spots (⌘9 / ⌘0, not a fixed ⌘2–⌘8 seat). A topic that already has two specific actions cannot take a third — the scope picker omits those topics, and the API rejects the write. Type-scoped and global actions still use the seven fixed seats.
 
 ## Scope and hints come from what is open
 
@@ -79,7 +81,8 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 | [`ai_running_status.dart`](ai_running_status.dart) | Spinner + Running… / Cancel / Canceling the action… |
 | [`agent_prompt_dialog.dart`](agent_prompt_dialog.dart) | Prompt + apply toggle + save-as-action, run orchestration |
 | [`ai_action.dart`](ai_action.dart) / [`ai_action_service.dart`](ai_action_service.dart) | Saved-action model and `/ai-actions`. English `name` + Hebrew `name_he`. Scope: `topicId` xor `topicTypeId` xor neither (all) |
-| [`ai_action_edit_dialog.dart`](ai_action_edit_dialog.dart) | Create/rewrite: both names, apply mode, **Needs user input**, All / type / topic picker (create defaults to the current topic). Topic choices are live topics only — no templates |
+| [`ai_action_bar.dart`](ai_action_bar.dart) | Fixed seats 1–7 (⌘2–⌘8, agent is ⌘1) vs per-topic extras 9–10 (⌘9 / ⌘0); at most two topic-scoped actions per topic |
+| [`ai_action_edit_dialog.dart`](ai_action_edit_dialog.dart) | Create/rewrite: both names, apply mode, **Needs user input**, All / type / topic picker (create defaults to the current topic, or All when that topic’s two extras are taken). Topic choices are live topics only — no templates. Topics that already have two specific actions are omitted. |
 | [`agent_result_ui.dart`](agent_result_ui.dart) | Result → dialog or snackbar; runs a saved action; cancelled runs are discarded |
 | [`agent_message_snackbar.dart`](agent_message_snackbar.dart) | Agent summary / error snackbar (~10s, **X**) |
 | [`pending_review_ui.dart`](pending_review_ui.dart) | Shared open-pending helper (anti double-open) |

@@ -6,11 +6,15 @@ import '../files/editor/document_editor_controller.dart';
 import '../ui/action_icon_picker.dart';
 import '../ui/action_icons.dart';
 import '../ui/adaptive_dialog.dart';
+import '../ui/app_colors.dart';
+import '../ui/app_icons.dart';
 import '../ui/app_segmented_toggle.dart';
+import '../ui/app_typography.dart';
 import '../ui/dialog_field_style.dart';
 import '../ux/shortcuts/shortcut_catalog.dart';
 import './agent_result_ui.dart';
 import './agent_run_defaults.dart';
+import './ai_action_scope.dart';
 
 /// What the user asked the dialog for.
 enum AgentPromptOutcome { run, save, saveAndRun }
@@ -26,6 +30,10 @@ class AgentPromptRequest {
     this.nameHe = '',
     this.iconKey = defaultActionIconKey,
     this.barSlot,
+    this.topicId,
+    this.topicTypeId,
+    this.requiresUserInput = false,
+    this.userInputPrompt = '',
   });
 
   final String prompt;
@@ -35,8 +43,13 @@ class AgentPromptRequest {
   final String nameHe;
   final String iconKey;
 
-  /// 1..6 to give the action a seat on the AI bar, null to leave it in the menu.
+  /// 1..7 to give the action a fixed AI-bar seat, null to leave it in the menu
+  /// (topic-scoped saves ignore this and take an extra seat).
   final int? barSlot;
+  final int? topicId;
+  final int? topicTypeId;
+  final bool requiresUserInput;
+  final String userInputPrompt;
 
   bool get saves => outcome != AgentPromptOutcome.run;
   bool get runs => outcome != AgentPromptOutcome.save;
@@ -46,9 +59,9 @@ class AgentPromptRequest {
 Future<void> runAgentPrompt(BuildContext context, AppState state) async {
   final s = state.strings;
   if (!state.hasAiContext || state.aiRunning) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(s['aiNoContext'])),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(s['aiNoContext'])));
     return;
   }
 
@@ -69,14 +82,17 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
         prompt: request.prompt,
         applyMode: request.applyMode,
         icon: request.iconKey,
-        barSlot: request.barSlot,
-        topicId: state.selectedTopic?.id,
+        barSlot: request.topicId != null ? null : request.barSlot,
+        topicId: request.topicId,
+        topicTypeId: request.topicTypeId,
+        requiresUserInput: request.requiresUserInput,
+        userInputPrompt: request.userInputPrompt,
       );
       if (!context.mounted) return;
       if (!request.runs) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s['actionSaved'])),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s['actionSaved'])));
         return;
       }
     }
@@ -125,6 +141,11 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
   var _saving = false;
   var _iconKey = defaultActionIconKey;
   int? _barSlot;
+  var _scopeKind = AiActionScopeKind.all;
+  int? _topicId;
+  int? _topicTypeId;
+  var _requiresUserInput = false;
+  final _userInputPrompt = TextEditingController();
 
   @override
   void initState() {
@@ -132,6 +153,10 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
     _prompt.addListener(_onTextChanged);
     _name.addListener(_onTextChanged);
     _nameHe.addListener(_onTextChanged);
+    final initial = defaultAiActionScope(widget.state);
+    _scopeKind = initial.kind;
+    _topicId = initial.topicId;
+    _topicTypeId = initial.typeId;
     _barSlot = widget.state.firstFreeAiBarSlot;
   }
 
@@ -140,6 +165,7 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
     _prompt.dispose();
     _name.dispose();
     _nameHe.dispose();
+    _userInputPrompt.dispose();
     super.dispose();
   }
 
@@ -147,9 +173,7 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
 
   bool get _canRun => _prompt.text.trim().isNotEmpty;
   bool get _canSave =>
-      _canRun &&
-      _name.text.trim().isNotEmpty &&
-      _nameHe.text.trim().isNotEmpty;
+      _canRun && _name.text.trim().isNotEmpty && _nameHe.text.trim().isNotEmpty;
 
   AgentPromptRequest _request(AgentPromptOutcome outcome) => AgentPromptRequest(
     prompt: _prompt.text.trim(),
@@ -158,7 +182,11 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
     name: _name.text.trim(),
     nameHe: _nameHe.text.trim(),
     iconKey: _iconKey,
-    barSlot: _barSlot,
+    barSlot: _scopeKind == AiActionScopeKind.topic ? null : _barSlot,
+    topicId: _topicId,
+    topicTypeId: _topicTypeId,
+    requiresUserInput: _requiresUserInput,
+    userInputPrompt: _userInputPrompt.text.trim(),
   );
 
   void _close(AgentPromptOutcome outcome) =>
@@ -174,7 +202,7 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
 
   String? _placeHint(AppStrings s) {
     if (_barSlot == null) return s['actionPlaceHint'];
-    final taken = widget.state.aiActionInSlot(_barSlot!);
+    final taken = widget.state.aiActionInFixedSlot(_barSlot!);
     return taken == null
         ? s['actionPlaceHint']
         : s.actionReplaces(widget.state.aiActionDisplayName(taken));
@@ -263,6 +291,35 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
               ),
             ),
             const SizedBox(height: DialogFieldStyle.fieldGap),
+            AppDialogChoiceField<bool>(
+              label: s['requiresUserInput'],
+              options: [
+                AppSegmentedOption(
+                  value: true,
+                  label: s['requiresUserInputYes'],
+                ),
+                AppSegmentedOption(
+                  value: false,
+                  label: s['requiresUserInputNo'],
+                ),
+              ],
+              selected: _requiresUserInput,
+              onSelected: (needed) =>
+                  setState(() => _requiresUserInput = needed),
+            ),
+            if (_requiresUserInput) ...[
+              const SizedBox(height: DialogFieldStyle.fieldGap),
+              AppDialogField(
+                label: s['userInputPrompt'],
+                child: TextField(
+                  controller: _userInputPrompt,
+                  decoration: DialogFieldStyle.decoration(
+                    hintText: s['userInputPromptHint'],
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: DialogFieldStyle.fieldGap),
             ActionIconField(
               label: s['actionIcon'],
               valueLabel: s['actionIconChoose'],
@@ -271,28 +328,74 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
               onChanged: (key) => setState(() => _iconKey = key),
             ),
             const SizedBox(height: DialogFieldStyle.fieldGap),
-            AppDialogField(
-              label: s['actionPlace'],
-              hint: _placeHint(s),
-              child: Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: AppSegmentedToggle<int>(
-                  // 0 stands for the menu: a toggle needs a value per choice,
-                  // and null is what "no slot" means downstream.
-                  options: [
-                    AppSegmentedOption(value: 0, label: s['actionPlaceMenu']),
-                    for (var slot = 1; slot <= aiBarSlotCount; slot++)
-                      AppSegmentedOption(value: slot, label: _slotLabel(slot)),
-                  ],
-                  selected: _barSlot ?? 0,
-                  onSelected: (value) =>
-                      setState(() => _barSlot = value == 0 ? null : value),
+            AppDialogPickerField(
+              label: s['actionAppliesTo'],
+              preview: const AppIcon(AppIcons.bringFile, size: 16),
+              valueLabel: aiActionScopeLabel(
+                widget.state,
+                kind: _scopeKind,
+                topicId: _topicId,
+                typeId: _topicTypeId,
+              ),
+              onTap: _pickScope,
+            ),
+            if (_scopeKind == AiActionScopeKind.topic) ...[
+              const SizedBox(height: DialogFieldStyle.fieldGap),
+              Text(
+                s['actionPlaceTopicHint'],
+                style: AppTypography.metaStyle.copyWith(
+                  color: AppColors.textHint,
                 ),
               ),
-            ),
+            ] else ...[
+              const SizedBox(height: DialogFieldStyle.fieldGap),
+              AppDialogField(
+                label: s['actionPlace'],
+                hint: _placeHint(s),
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: AppSegmentedToggle<int>(
+                    // 0 stands for the menu: a toggle needs a value per choice,
+                    // and null is what "no slot" means downstream.
+                    options: [
+                      AppSegmentedOption(value: 0, label: s['actionPlaceMenu']),
+                      for (var slot = 1; slot <= aiBarSlotCount; slot++)
+                        AppSegmentedOption(
+                          value: slot,
+                          label: _slotLabel(slot),
+                        ),
+                    ],
+                    selected: _barSlot ?? 0,
+                    onSelected: (value) =>
+                        setState(() => _barSlot = value == 0 ? null : value),
+                  ),
+                ),
+              ),
+            ],
           ],
         ],
       ),
     );
+  }
+
+  Future<void> _pickScope() async {
+    final picked = await pickAiActionScope(
+      context: context,
+      state: widget.state,
+      kind: _scopeKind,
+      topicId: _topicId,
+      typeId: _topicTypeId,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _scopeKind = picked.kind;
+      _topicId = picked.topicId;
+      _topicTypeId = picked.typeId;
+      if (_scopeKind == AiActionScopeKind.topic) {
+        _barSlot = null;
+      } else {
+        _barSlot ??= widget.state.firstFreeAiBarSlot;
+      }
+    });
   }
 }

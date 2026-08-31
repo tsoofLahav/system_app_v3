@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_state.dart';
 import '../production_agent/agent_result_ui.dart';
 import '../production_agent/ai_action.dart';
+import '../production_agent/ai_action_bar.dart';
 import '../production_agent/ai_action_edit_dialog.dart';
 import '../ui/action_icons.dart';
 import '../ui/adaptive_dialog.dart';
@@ -54,6 +55,23 @@ class _AiActionsDialogState extends State<_AiActionsDialog> {
   }
 
   Future<void> _togglePin(AiAction action) async {
+    if (action.topicId != null) {
+      if (action.isOnBar) {
+        await state.setAiActionSlot(action, slot: null);
+      } else {
+        final extra = firstFreeTopicExtraSlot(state.aiActions, action.topicId!);
+        if (extra == null) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.strings['actionTopicSlotsFull'])),
+          );
+          return;
+        }
+        await state.setAiActionSlot(action, slot: extra);
+      }
+      if (mounted) setState(() {});
+      return;
+    }
     if (!action.isOnBar && state.firstFreeAiBarSlot == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(state.strings['aiBarFull'])),

@@ -47,6 +47,7 @@ abstract final class ShortcutActionIds {
   static const bringFile = 'bring_file';
   static const openArrange = 'open_arrange';
   static const openFileLayout = 'open_file_layout';
+  static const toggleGridFileLayout = 'toggle_grid_file_layout';
   static const cycleMainFiles = 'cycle_main_files';
   static const cycleMainFilesBack = 'cycle_main_files_back';
   static const addFile = 'add_file';
@@ -89,15 +90,18 @@ abstract final class ShortcutActionIds {
 
 final _aiActionSlotRe = RegExp(r'^ai_action_(\d+)$');
 
-/// Cmd+2 .. Cmd+7 — the digit is the slot plus one, because
-/// Cmd+1 belongs to the agent button that is always on the bar.
-const _aiActionSlotKeys = [
-  LogicalKeyboardKey.digit2,
-  LogicalKeyboardKey.digit3,
-  LogicalKeyboardKey.digit4,
-  LogicalKeyboardKey.digit5,
-  LogicalKeyboardKey.digit6,
-  LogicalKeyboardKey.digit7,
+/// Cmd+2 .. Cmd+8 — digit is the seat index including the agent as 1.
+/// Extra topic seats 9 and 10 are Cmd+9 and Cmd+0.
+const _aiActionSlotBindings = <(int, LogicalKeyboardKey)>[
+  (1, LogicalKeyboardKey.digit2),
+  (2, LogicalKeyboardKey.digit3),
+  (3, LogicalKeyboardKey.digit4),
+  (4, LogicalKeyboardKey.digit5),
+  (5, LogicalKeyboardKey.digit6),
+  (6, LogicalKeyboardKey.digit7),
+  (7, LogicalKeyboardKey.digit8),
+  (9, LogicalKeyboardKey.digit9),
+  (10, LogicalKeyboardKey.digit0),
 ];
 
 ShortcutBinding _m(
@@ -139,6 +143,13 @@ final List<ShortcutAction> kShortcutCatalog = [
     category: ShortcutCategory.navigation,
     labelKey: 'shortcutOpenFileLayout',
     defaultBinding: _m(LogicalKeyboardKey.keyR),
+    context: ShortcutContextRequirement.topicMode,
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.toggleGridFileLayout,
+    category: ShortcutCategory.navigation,
+    labelKey: 'shortcutToggleGridFileLayout',
+    defaultBinding: _m(LogicalKeyboardKey.period),
     context: ShortcutContextRequirement.topicMode,
   ),
   ShortcutAction(
@@ -187,12 +198,12 @@ final List<ShortcutAction> kShortcutCatalog = [
     defaultBinding: _m(LogicalKeyboardKey.digit1),
     context: ShortcutContextRequirement.aiContext,
   ),
-  for (var slot = 1; slot <= _aiActionSlotKeys.length; slot++)
+  for (final (slot, key) in _aiActionSlotBindings)
     ShortcutAction(
       id: ShortcutActionIds.aiActionSlot(slot),
       category: ShortcutCategory.ai,
       labelKey: 'aiActionSlot$slot',
-      defaultBinding: _m(_aiActionSlotKeys[slot - 1]),
+      defaultBinding: _m(key),
       context: ShortcutContextRequirement.aiContext,
     ),
   ShortcutAction(

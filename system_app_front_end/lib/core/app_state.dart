@@ -19,9 +19,9 @@ import '../areas/objects/data/task.dart';
 import '../areas/files/data/topic.dart';
 import '../areas/files/data/topic_type.dart';
 import '../areas/automations/automation_service.dart';
-import '../areas/production_agent/agent_run_defaults.dart';
 import '../areas/production_agent/agent_service.dart';
 import '../areas/production_agent/ai_action.dart';
+import '../areas/production_agent/ai_action_bar.dart';
 import '../areas/production_agent/ai_action_service.dart';
 import '../areas/production_agent/agent_time_hints.dart';
 import '../areas/production_agent/pending_review_service.dart';
@@ -41,6 +41,7 @@ import '../areas/objects/data/view_service.dart';
 import '../areas/ux/bring_file/bring_file_catalog.dart';
 import '../areas/ux/bring_file/brought_file_store.dart';
 import '../areas/ux/layout/file_layouts.dart';
+import '../areas/ux/layout/grid_layout_toggle.dart';
 import '../areas/ux/layout/topic_file_slots.dart';
 import '../areas/ux/shortcuts/shortcut_binding.dart';
 import '../areas/ux/shortcuts/shortcut_bindings_store.dart';
@@ -163,6 +164,7 @@ class AppState extends ChangeNotifier {
   bool archiveDeleteMode = false;
   final Set<int> archiveDeleteSelection = {};
   Map<String, dynamic>? pendingAgentReview;
+  final Set<int> complimentaryProcessingIds = {};
   _TypeTemplateEdit? _typeTemplateEdit;
 
   /// Files visiting Home — still belong to their source topics, not Home.
@@ -173,6 +175,9 @@ class AppState extends ChangeNotifier {
   /// Mixed Home canvas order (visits interleaved with Home files). Empty when
   /// there are no visits.
   List<int> homeCanvasOrderIds = [];
+
+  /// ⌘. peek: previous stored layout for this topic page only. Not persisted.
+  final GridLayoutPeek _gridLayoutPeek = GridLayoutPeek();
   final BroughtFileStore broughtFileStore = BroughtFileStore();
 
   /// File id whose lookalike pending dialog is currently open (anti double-open).
@@ -478,6 +483,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> selectTopic(Topic topic) async {
+    _gridLayoutPeek.forgetIfLeft(topic.id);
     if (_typeTemplateEdit != null && topic.id != _typeTemplateEdit!.topicId) {
       _typeTemplateEdit = null;
     }
@@ -502,6 +508,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> selectView(String viewType) async {
+    _gridLayoutPeek.forget();
     isViewMode = true;
     isArchiveMode = false;
     isDiagramMode = false;
@@ -544,6 +551,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> selectArchiveTopic(Topic topic) async {
+    _gridLayoutPeek.forget();
     isArchiveMode = true;
     isViewMode = false;
     isDiagramMode = false;
@@ -650,6 +658,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> openDiagram() async {
+    _gridLayoutPeek.forget();
     isDiagramMode = true;
     isViewMode = false;
     isArchiveMode = false;
@@ -1163,7 +1172,36 @@ class AppState extends ChangeNotifier {
 
   String layoutFor(Topic topic) => topic.fileLayout;
 
+  /// Picker / explicit pick. Forgets the ⌘. peek so a chosen tile is the layout.
   Future<void> setLayoutForTopic(Topic topic, String layoutId) async {
+    _gridLayoutPeek.forget();
+    await _applyFileLayout(topic, layoutId);
+  }
+
+  /// Grid if another layout is showing; otherwise the layout this shortcut
+  /// left, or the count default when there is no peek (left the page, or
+  /// grid was picked from the picker).
+  Future<void> toggleGridFileLayout() async {
+    if (isPhoneLayout) return;
+    final topic = selectedTopic;
+    if (topic == null) return;
+    if (isViewMode || isArchiveMode || isDiagramMode) return;
+    final files = selectedDetail?.topic.id == topic.id
+        ? selectedDetail!.files
+        : const <AppFile>[];
+    final fileCount = orderedFilesFor(topic, files).length;
+    if (fileCount < 1) return;
+    final stored = topic.fileLayout;
+    final shown = effectiveLayoutId(stored, fileCount);
+    final next = _gridLayoutPeek.take(
+      topicId: topic.id,
+      storedLayout: stored,
+      shownLayout: shown,
+    );
+    await _applyFileLayout(topic, next);
+  }
+
+  Future<void> _applyFileLayout(Topic topic, String layoutId) async {
     final fileCount = orderedFilesFor(
       topic,
       selectedDetail?.topic.id == topic.id
@@ -1438,18 +1476,13 @@ class AppState extends ChangeNotifier {
   /// Actions with a seat on the AI bar, in slot order, for what is open.
   List<AiAction> get barAiActions {
     final visits = _aiActionVisitIds;
-    final pinned = [
-      for (final action in aiActions)
-        if (action.isOnBar &&
-            action.visibleIn(
-              openTopicId: selectedTopic?.id,
-              openTypeId: selectedTopic?.topicTypeId,
-              visitingTopicIds: visits.topicIds,
-              visitingTypeIds: visits.typeIds,
-            ))
-          action,
-    ]..sort((a, b) => a.barSlot!.compareTo(b.barSlot!));
-    return pinned;
+    return composeBarAiActions(
+      actions: aiActions,
+      openTopicId: selectedTopic?.id,
+      openTypeId: selectedTopic?.topicTypeId,
+      visitingTopicIds: visits.topicIds,
+      visitingTypeIds: visits.typeIds,
+    );
   }
 
   /// Globals plus actions matching the open topic, its type, or a visiting file.
@@ -1484,23 +1517,25 @@ class AppState extends ChangeNotifier {
   }
 
   AiAction? aiActionInSlot(int slot) {
-    for (final action in aiActions) {
+    for (final action in barAiActions) {
       if (action.barSlot == slot) return action;
     }
     return null;
   }
 
-  /// The lowest bar slot nobody holds, or null when all six are taken.
-  int? get firstFreeAiBarSlot {
-    final taken = {
-      for (final action in aiActions)
-        if (action.isOnBar) action.barSlot!,
-    };
-    for (var slot = 1; slot <= aiBarSlotCount; slot++) {
-      if (!taken.contains(slot)) return slot;
+  /// Workspace-wide holder of a fixed 1–7 seat (not the per-topic extras).
+  AiAction? aiActionInFixedSlot(int slot) {
+    for (final action in aiActions) {
+      if (action.topicId == null && action.barSlot == slot) return action;
     }
     return null;
   }
+
+  /// The lowest fixed bar slot nobody holds, or null when all seven are taken.
+  int? get firstFreeAiBarSlot => firstFreeFixedAiBarSlot(aiActions);
+
+  bool topicAiActionsFull(int topicId, {int? excludeId}) =>
+      topicAiActionSlotsFull(aiActions, topicId, excludeId: excludeId);
 
   Future<void> loadAiActions() async {
     if (workspaceId == null) return;
@@ -3262,14 +3297,24 @@ class AppState extends ChangeNotifier {
     return _automations.inputTopics(automationId);
   }
 
+  bool isComplimentaryProcessing(int automationId) =>
+      complimentaryProcessingIds.contains(automationId);
+
   Future<Map<String, dynamic>> submitComplimentaryInput(
     int automationId,
     Map<String, dynamic> body,
   ) async {
-    final result = await _automations.submitInput(automationId, body);
-    await loadAutomations();
-    if (isViewMode) await refreshCurrentView();
-    return result;
+    complimentaryProcessingIds.add(automationId);
+    notifyListeners();
+    try {
+      final result = await _automations.submitInput(automationId, body);
+      await loadAutomations();
+      if (isViewMode) await refreshCurrentView();
+      return result;
+    } finally {
+      complimentaryProcessingIds.remove(automationId);
+      notifyListeners();
+    }
   }
 
   Future<Map<String, dynamic>> completeComplimentaryReview(int automationId) async {

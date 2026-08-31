@@ -218,9 +218,9 @@ A prompt on a button. No stored scope — the client sends live `scope` / `hints
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/ai-actions` | List |
-| POST | `/ai-actions` | Create — `icon`, `bar_slot`, `requires_user_input`, `user_input_prompt` optional |
-| PATCH | `/ai-actions/<id>` | Update; `bar_slot` (1–6 or null) pins/unpins and frees the old holder |
-| PUT | `/ai-actions/bar-order` | `{"ordered_ids": [...]}` → first six take slots 1..6, the rest unpin |
+| POST | `/ai-actions` | Create — `icon`, `bar_slot`, `requires_user_input`, `user_input_prompt` optional. Topic-scoped rows take extra seats 9–10 (max two per topic) |
+| PATCH | `/ai-actions/<id>` | Update; `bar_slot` (1–7 or null) pins/unpins a fixed seat; topic extras use 9–10 |
+| PUT | `/ai-actions/bar-order` | `{"ordered_ids": [...]}` → first seven non-topic actions take slots 1..7; topic extras stay |
 | DELETE | `/ai-actions/<id>` | Delete |
 | POST | `/ai-actions/<id>/run` | Run on optional live `scope` / `hints` |
 

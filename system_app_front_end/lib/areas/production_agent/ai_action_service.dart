@@ -51,7 +51,7 @@ class AiActionService {
     return AiAction.fromJson(data);
   }
 
-  /// Replaces the AI bar: the first six ids take slots 1..6, the rest unpin.
+  /// Replaces the fixed AI bar: the first seven non-topic ids take slots 1..7.
   Future<List<AiAction>> setBarOrder({
     required int workspaceId,
     required List<int> orderedIds,

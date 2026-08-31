@@ -4,6 +4,7 @@ import 'package:system_app_front_end/areas/automations/automation.dart';
 import 'package:system_app_front_end/areas/automations/schedule_format.dart';
 import 'package:system_app_front_end/areas/production_agent/agent_run_defaults.dart';
 import 'package:system_app_front_end/areas/production_agent/ai_action.dart';
+import 'package:system_app_front_end/areas/production_agent/ai_action_bar.dart';
 import 'package:system_app_front_end/areas/ui/action_icons.dart';
 import 'package:system_app_front_end/areas/ux/shortcuts/shortcut_catalog.dart';
 
@@ -263,7 +264,9 @@ void main() {
 
   group('a slot is also a keyboard shortcut', () {
     test('slot ids round-trip', () {
-      for (var slot = 1; slot <= aiBarSlotCount; slot++) {
+      for (var slot = 1;
+          slot <= aiBarSlotCount + aiTopicExtraSlotCount;
+          slot++) {
         final id = ShortcutActionIds.aiActionSlot(slot);
         expect(ShortcutActionIds.slotOfAiAction(id), slot);
       }
@@ -276,11 +279,11 @@ void main() {
           isNull);
     });
 
-    test('the six slots default to Cmd+2 through 7', () {
+    test('the seven fixed slots default to Cmd+2 through 8', () {
       final slotActions = kShortcutCatalog
           .where((a) => ShortcutActionIds.slotOfAiAction(a.id) != null)
           .toList();
-      expect(slotActions.length, aiBarSlotCount);
+      expect(slotActions.length, aiBarSlotCount + aiTopicExtraSlotCount);
 
       const digits = [
         LogicalKeyboardKey.digit2,
@@ -289,6 +292,7 @@ void main() {
         LogicalKeyboardKey.digit5,
         LogicalKeyboardKey.digit6,
         LogicalKeyboardKey.digit7,
+        LogicalKeyboardKey.digit8,
       ];
       for (var slot = 1; slot <= aiBarSlotCount; slot++) {
         final binding = slotActions[slot - 1].defaultBinding;
@@ -296,6 +300,16 @@ void main() {
         expect(binding.meta, isTrue);
         expect(binding.shift, isFalse);
       }
+      expect(ShortcutActionIds.slotOfAiAction(slotActions[7].id), 9);
+      expect(
+        slotActions[7].defaultBinding.keyId,
+        LogicalKeyboardKey.digit9.keyId,
+      );
+      expect(ShortcutActionIds.slotOfAiAction(slotActions[8].id), 10);
+      expect(
+        slotActions[8].defaultBinding.keyId,
+        LogicalKeyboardKey.digit0.keyId,
+      );
     });
 
     test('agent keeps Cmd+1 — it is always on the bar', () {
@@ -312,6 +326,77 @@ void main() {
         final label = action.defaultBinding.displayLabel();
         expect(seen.add('$label'), isTrue, reason: '$label is claimed twice');
       }
+    });
+  });
+
+  group('the bar is seven saved seats plus two extras for the open topic', () {
+    AiAction action({
+      required int id,
+      int? barSlot,
+      int? topicId,
+      int? topicTypeId,
+    }) =>
+        AiAction.fromJson({
+          'id': id,
+          'workspace_id': 1,
+          'name': 'A$id',
+          'prompt': 'go',
+          if (barSlot != null) 'bar_slot': barSlot,
+          if (topicId != null) 'topic_id': topicId,
+          if (topicTypeId != null) 'topic_type_id': topicTypeId,
+        });
+
+    test('a topic may have two specific actions and no more', () {
+      final actions = [
+        action(id: 1, topicId: 4, barSlot: 9),
+        action(id: 2, topicId: 4, barSlot: 10),
+        action(id: 3, topicId: 5, barSlot: 9),
+      ];
+      expect(topicAiActionSlotsFull(actions, 4), isTrue);
+      expect(topicAiActionSlotsFull(actions, 5), isFalse);
+      expect(topicAiActionSlotsFull(actions, 4, excludeId: 1), isFalse);
+    });
+
+    test('extras catch a spot only on their topic; another topic reuses 9–10', () {
+      final actions = [
+        action(id: 1, barSlot: 1),
+        action(id: 2, topicId: 4, barSlot: 9),
+        action(id: 3, topicId: 4, barSlot: 10),
+        action(id: 4, topicId: 8, barSlot: 9),
+      ];
+      final onFour = composeBarAiActions(
+        actions: actions,
+        openTopicId: 4,
+        openTypeId: null,
+        visitingTopicIds: const {},
+        visitingTypeIds: const {},
+      );
+      expect(onFour.map((a) => a.id), [1, 2, 3]);
+
+      final onEight = composeBarAiActions(
+        actions: actions,
+        openTopicId: 8,
+        openTypeId: null,
+        visitingTopicIds: const {},
+        visitingTypeIds: const {},
+      );
+      expect(onEight.map((a) => a.id), [1, 4]);
+    });
+
+    test('Home visits fill leftover extra spots after the open topic', () {
+      final actions = [
+        action(id: 1, topicId: 4, barSlot: 9),
+        action(id: 2, topicId: 8, barSlot: 9),
+        action(id: 3, topicId: 8, barSlot: 10),
+      ];
+      final bar = composeBarAiActions(
+        actions: actions,
+        openTopicId: 4,
+        openTypeId: null,
+        visitingTopicIds: {8},
+        visitingTypeIds: const {},
+      );
+      expect(bar.map((a) => a.id), [1, 2]);
     });
   });
 }

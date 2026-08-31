@@ -61,7 +61,7 @@ Future<void> dispatchShortcutAction(
 
   switch (actionId) {
     case ShortcutActionIds.goHome:
-      runAfterKeystroke(() {
+      runWhenKeyboardIdle(() {
         if (!context.mounted) return;
         state.goHome();
       });
@@ -80,6 +80,15 @@ Future<void> dispatchShortcutAction(
     case ShortcutActionIds.openFileLayout:
       if (!context.mounted || isPhoneLayout) return;
       await showFileLayoutPicker(context, state);
+      return;
+    case ShortcutActionIds.toggleGridFileLayout:
+      if (!context.mounted || isPhoneLayout) return;
+      // Remounts the file board. Wait until keys are up so editors are not
+      // disposed mid-KeyDown (NOTES.md — Editor keyboard safety).
+      runWhenKeyboardIdle(() {
+        if (!context.mounted) return;
+        state.toggleGridFileLayout();
+      });
       return;
     case ShortcutActionIds.cycleMainFiles:
       await _cycleTopicFiles(context, state);
@@ -126,13 +135,13 @@ Future<void> dispatchShortcutAction(
       final next = state.viewDisplayMode == ViewDisplayMode.byTopic
           ? ViewDisplayMode.bySection
           : ViewDisplayMode.byTopic;
-      runAfterKeystroke(() {
+      runWhenKeyboardIdle(() {
         if (!context.mounted) return;
         state.setViewDisplayMode(next);
       });
       return;
     case ShortcutActionIds.toggleLanguage:
-      runAfterKeystroke(() {
+      runWhenKeyboardIdle(() {
         if (!context.mounted) return;
         state.toggleLanguage();
       });
@@ -239,7 +248,7 @@ Future<void> _cycleTopicFiles(
     reverse: reverse,
   );
   if (next == null) return;
-  // Chrome, not a text action. Waiting for KeyUp (`runAfterKeystroke`) stalls
+  // Chrome, not a text action. Waiting for KeyUp (`runWhenKeyboardIdle`) stalls
   // up to 500ms when no field is focused — Cmd stays "pressed" with no IME.
   await state.reorderTopicFiles(topic, ordered: next);
 }

@@ -4,9 +4,13 @@ import pytest
 
 from areas.production_agent.services.action_bar import (
     AI_BAR_SLOTS,
+    AI_TOPIC_EXTRA_FIRST,
+    AI_TOPIC_EXTRA_LAST,
     first_free_slot,
+    first_free_topic_extra,
     slots_after_claim,
     slots_from_order,
+    topic_extra_after_claim,
 )
 
 
@@ -14,10 +18,10 @@ def test_slots_from_order_numbers_from_one():
     assert slots_from_order([7, 3, 9]) == {7: 1, 3: 2, 9: 3}
 
 
-def test_slots_from_order_stops_at_the_sixth():
-    slots = slots_from_order(list(range(1, 10)))
+def test_slots_from_order_stops_at_the_seventh():
+    slots = slots_from_order(list(range(1, 12)))
     assert len(slots) == AI_BAR_SLOTS
-    assert 7 not in slots
+    assert 8 not in slots
 
 
 def test_slots_from_order_rejects_duplicates():
@@ -49,3 +53,18 @@ def test_first_free_slot_fills_gaps_then_gives_up():
     assert first_free_slot({}) == 1
     full = {i: i for i in range(1, AI_BAR_SLOTS + 1)}
     assert first_free_slot(full) is None
+
+
+def test_topic_extras_are_9_and_10_and_unique_per_topic_map():
+    assert topic_extra_after_claim({}, 4, 9) == {4: 9}
+    assert topic_extra_after_claim({4: 9}, 5, 10) == {4: 9, 5: 10}
+    claimed = topic_extra_after_claim({4: 9}, 7, 9)
+    assert claimed == {7: 9}
+    with pytest.raises(ValueError):
+        topic_extra_after_claim({}, 1, 1)
+
+
+def test_first_free_topic_extra():
+    assert first_free_topic_extra({}) == AI_TOPIC_EXTRA_FIRST
+    assert first_free_topic_extra({1: 9}) == AI_TOPIC_EXTRA_LAST
+    assert first_free_topic_extra({1: 9, 2: 10}) is None

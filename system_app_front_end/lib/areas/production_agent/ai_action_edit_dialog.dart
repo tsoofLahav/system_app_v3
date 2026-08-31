@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
-import '../../core/l10n/app_strings.dart';
 import '../ui/action_icon_picker.dart';
 import '../ui/action_icons.dart';
 import '../ui/adaptive_dialog.dart';
-import '../ui/app_switch.dart';
 import '../ui/app_icons.dart';
 import '../ui/app_segmented_toggle.dart';
+import '../ui/app_typography.dart';
+import '../ui/app_colors.dart';
 import '../ui/dialog_field_style.dart';
-import '../ux/dialogs/dialog_choice_list.dart';
 import './agent_run_defaults.dart';
 import './ai_action.dart';
+import './ai_action_scope.dart';
 
 /// Create or rewrite a saved AI action: name, prompt, apply mode, icon, seat.
 ///
@@ -54,7 +54,7 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
   late String _applyMode;
   late String _iconKey;
   late bool _onBar;
-  late _ActionScopeKind _scopeKind;
+  late AiActionScopeKind _scopeKind;
   int? _topicTypeId;
   int? _topicId;
   late bool _requiresUserInput;
@@ -81,21 +81,23 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
     _onBar = existing?.isOnBar ?? false;
     if (existing != null) {
       if (existing.topicId != null) {
-        _scopeKind = _ActionScopeKind.topic;
+        _scopeKind = AiActionScopeKind.topic;
         _topicId = existing.topicId;
         _topicTypeId = existing.topicTypeId;
       } else if (existing.topicTypeId != null) {
-        _scopeKind = _ActionScopeKind.type;
+        _scopeKind = AiActionScopeKind.type;
         _topicTypeId = existing.topicTypeId;
       } else {
-        _scopeKind = _ActionScopeKind.all;
+        _scopeKind = AiActionScopeKind.all;
       }
-    } else if (widget.initialTopicTypeId != null) {
-      _scopeKind = _ActionScopeKind.type;
-      _topicTypeId = widget.initialTopicTypeId;
     } else {
-      _scopeKind = _ActionScopeKind.topic;
-      _topicId = widget.state.selectedTopic?.id;
+      final initial = defaultAiActionScope(
+        widget.state,
+        initialTopicTypeId: widget.initialTopicTypeId,
+      );
+      _scopeKind = initial.kind;
+      _topicId = initial.topicId;
+      _topicTypeId = initial.typeId;
     }
     _name.addListener(() => setState(() {}));
     _nameHe.addListener(() => setState(() {}));
@@ -129,24 +131,32 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
           prompt: _prompt.text.trim(),
           applyMode: _applyMode,
           icon: _iconKey,
-          barSlot: _onBar ? widget.state.firstFreeAiBarSlot : null,
-          topicTypeId: _scopeKind == _ActionScopeKind.type ? _topicTypeId : null,
-          topicId: _scopeKind == _ActionScopeKind.topic ? _topicId : null,
+          barSlot: _scopeKind == AiActionScopeKind.topic
+              ? null
+              : (_onBar ? widget.state.firstFreeAiBarSlot : null),
+          topicTypeId: _scopeKind == AiActionScopeKind.type
+              ? _topicTypeId
+              : null,
+          topicId: _scopeKind == AiActionScopeKind.topic ? _topicId : null,
           requiresUserInput: _requiresUserInput,
           userInputPrompt: _userInputPrompt.text.trim(),
         );
       } else {
         final existing = widget.action!;
+        final leavingTopic =
+            existing.topicId != null && _scopeKind != AiActionScopeKind.topic;
         await widget.state.updateAiAction(existing, {
           'name': _name.text.trim(),
           'name_he': _nameHe.text.trim(),
           'prompt': _prompt.text.trim(),
           'apply_mode': _applyMode,
           'icon': _iconKey,
-          'topic_id': _scopeKind == _ActionScopeKind.topic ? _topicId : null,
-          'topic_type_id':
-              _scopeKind == _ActionScopeKind.type ? _topicTypeId : null,
-          if (_onBar != existing.isOnBar)
+          'topic_id': _scopeKind == AiActionScopeKind.topic ? _topicId : null,
+          'topic_type_id': _scopeKind == AiActionScopeKind.type
+              ? _topicTypeId
+              : null,
+          if (_scopeKind != AiActionScopeKind.topic &&
+              (_onBar != existing.isOnBar || leavingTopic))
             'bar_slot': _onBar ? widget.state.firstFreeAiBarSlot : null,
           'requires_user_input': _requiresUserInput,
           'user_input_prompt': _userInputPrompt.text.trim(),
@@ -174,7 +184,9 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
       title: Text(
         _isCreate
             ? s['createAiAction']
-            : s.editActionTitle(widget.state.aiActionDisplayName(widget.action!)),
+            : s.editActionTitle(
+                widget.state.aiActionDisplayName(widget.action!),
+              ),
       ),
       actions: [
         TextButton(
@@ -237,14 +249,14 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
             onSelected: (mode) => setState(() => _applyMode = mode),
           ),
           const SizedBox(height: DialogFieldStyle.fieldGap),
-          Row(
-            children: [
-              Expanded(child: Text(s['requiresUserInput'])),
-              AppSwitch(
-                value: _requiresUserInput,
-                onChanged: (on) => setState(() => _requiresUserInput = on),
-              ),
+          AppDialogChoiceField<bool>(
+            label: s['requiresUserInput'],
+            options: [
+              AppSegmentedOption(value: true, label: s['requiresUserInputYes']),
+              AppSegmentedOption(value: false, label: s['requiresUserInputNo']),
             ],
+            selected: _requiresUserInput,
+            onSelected: (needed) => setState(() => _requiresUserInput = needed),
           ),
           if (_requiresUserInput) ...[
             const SizedBox(height: DialogFieldStyle.fieldGap),
@@ -268,86 +280,61 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
           ),
           const SizedBox(height: DialogFieldStyle.fieldGap),
           AppDialogPickerField(
-              label: s['actionAppliesTo'],
-              preview: const AppIcon(AppIcons.bringFile, size: 16),
-              valueLabel: _scopeLabel(),
-              onTap: _pickScope,
+            label: s['actionAppliesTo'],
+            preview: const AppIcon(AppIcons.bringFile, size: 16),
+            valueLabel: aiActionScopeLabel(
+              widget.state,
+              kind: _scopeKind,
+              topicId: _topicId,
+              typeId: _topicTypeId,
             ),
-          const SizedBox(height: DialogFieldStyle.fieldGap),
-          AppDialogField(
-            label: s['actionPlace'],
-            hint: _barIsFull && !_onBar ? s['aiBarFull'] : s['actionPlaceHint'],
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: AppSegmentedToggle<bool>(
-                options: [
-                  AppSegmentedOption(value: false, label: s['actionPlaceMenu']),
-                  AppSegmentedOption(value: true, label: s['putOnBar']),
-                ],
-                selected: _onBar,
-                enabled: !_barIsFull || _onBar,
-                onSelected: (onBar) => setState(() => _onBar = onBar),
+            onTap: _pickScope,
+          ),
+          if (_scopeKind == AiActionScopeKind.topic) ...[
+            const SizedBox(height: DialogFieldStyle.fieldGap),
+            Text(
+              s['actionPlaceTopicHint'],
+              style: AppTypography.metaStyle.copyWith(
+                color: AppColors.textHint,
               ),
             ),
-          ),
+          ] else ...[
+            const SizedBox(height: DialogFieldStyle.fieldGap),
+            AppDialogField(
+              label: s['actionPlace'],
+              hint: _barIsFull && !_onBar
+                  ? s['aiBarFull']
+                  : s['actionPlaceHint'],
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: AppSegmentedToggle<bool>(
+                  options: [
+                    AppSegmentedOption(
+                      value: false,
+                      label: s['actionPlaceMenu'],
+                    ),
+                    AppSegmentedOption(value: true, label: s['putOnBar']),
+                  ],
+                  selected: _onBar,
+                  enabled: !_barIsFull || _onBar,
+                  onSelected: (onBar) => setState(() => _onBar = onBar),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  String _scopeLabel() {
-    final s = widget.state.strings;
-    switch (_scopeKind) {
-      case _ActionScopeKind.all:
-        return s['actionAppliesEveryTopic'];
-      case _ActionScopeKind.type:
-        final type = widget.state.topicTypeById(_topicTypeId);
-        return type == null
-            ? s['scopeTopicType']
-            : widget.state.topicTypeDisplayName(type);
-      case _ActionScopeKind.topic:
-        final topic = widget.state.allTopics
-            .where((t) => t.id == _topicId)
-            .firstOrNull;
-        if (topic == null) return s['actionAppliesThisTopic'];
-        return widget.state.topicDisplayName(topic);
-    }
-  }
-
   Future<void> _pickScope() async {
-    final s = widget.state.strings;
-    final rows = <_ScopeChoice>[
-      const _ScopeChoice(
-        kind: _ActionScopeKind.all,
-        labelKey: 'actionAppliesEveryTopic',
-      ),
-      for (final type in widget.state.topicTypes)
-        _ScopeChoice(
-          kind: _ActionScopeKind.type,
-          typeId: type.id,
-          label: widget.state.topicTypeDisplayName(type),
-        ),
-      for (final topic in widget.state.activeTopics)
-          _ScopeChoice(
-            kind: _ActionScopeKind.topic,
-            topicId: topic.id,
-            label: widget.state.topicDisplayName(topic),
-          ),
-    ];
-    var initial = 0;
-    for (var i = 0; i < rows.length; i++) {
-      if (rows[i].matches(_scopeKind, _topicId, _topicTypeId)) {
-        initial = i;
-        break;
-      }
-    }
-    final picked = await showAppChoiceDialog<_ScopeChoice>(
+    final picked = await pickAiActionScope(
       context: context,
-      title: s['actionAppliesTo'],
-      cancelLabel: s['cancel'],
-      items: rows,
-      initialIndex: initial,
-      itemBuilder: (context, row, _) => DialogChoiceText(row.title(s)),
+      state: widget.state,
+      kind: _scopeKind,
+      topicId: _topicId,
+      typeId: _topicTypeId,
+      excludeActionId: widget.action?.id,
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -357,32 +344,3 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
     });
   }
 }
-
-enum _ActionScopeKind { all, type, topic }
-
-class _ScopeChoice {
-  const _ScopeChoice({
-    required this.kind,
-    this.typeId,
-    this.topicId,
-    this.label,
-    this.labelKey,
-  });
-
-  final _ActionScopeKind kind;
-  final int? typeId;
-  final int? topicId;
-  final String? label;
-  final String? labelKey;
-
-  bool matches(_ActionScopeKind kind, int? topicId, int? typeId) {
-    if (this.kind != kind) return false;
-    if (kind == _ActionScopeKind.topic) return this.topicId == topicId;
-    if (kind == _ActionScopeKind.type) return this.typeId == typeId;
-    return true;
-  }
-
-  String title(AppStrings strings) =>
-      label ?? (labelKey != null ? strings[labelKey!] : '');
-}
-

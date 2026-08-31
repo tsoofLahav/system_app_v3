@@ -72,6 +72,7 @@ void main() {
     }
 
     expectCmd(ShortcutActionIds.openFileLayout, LogicalKeyboardKey.keyR);
+    expectCmd(ShortcutActionIds.toggleGridFileLayout, LogicalKeyboardKey.period);
     expectCmd(ShortcutActionIds.addFile, LogicalKeyboardKey.keyF);
     expectCmd(ShortcutActionIds.addTopic, LogicalKeyboardKey.keyN);
     expectCmd(ShortcutActionIds.insertInfo, LogicalKeyboardKey.keyD);
@@ -101,5 +102,15 @@ void main() {
     expect(arrange.defaultBinding.meta, isTrue);
     expect(arrange.defaultBinding.shift, isFalse);
     expect(arrange.defaultBinding.alt, isTrue);
+  });
+
+  test('grid layout toggle defaults to Cmd+.', () {
+    final action = shortcutActionById(ShortcutActionIds.toggleGridFileLayout)!;
+    expect(action.defaultBinding.keyId, LogicalKeyboardKey.period.keyId);
+    expect(action.defaultBinding.meta, isTrue);
+    expect(action.defaultBinding.shift, isFalse);
+    expect(action.defaultBinding.alt, isFalse);
+    expect(action.context, ShortcutContextRequirement.topicMode);
+    expect(action.category, ShortcutCategory.navigation);
   });
 }

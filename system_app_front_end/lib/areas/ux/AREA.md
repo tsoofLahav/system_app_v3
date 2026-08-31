@@ -52,6 +52,7 @@ A file being "the important one" is a fact about the topic's arrangement, not ab
 - **A new file is added first**, so it is always on screen. Every layout has at least one slot, and a file you just created that you cannot see would be a bug you could not diagnose. The caret lands in that new file.
 - **A hidden file is never lost.** Deleting and archiving are explicit actions with their own UI; being off screen is neither.
 - **Choosing a smaller layout hides files, it does not reorder them.** Switching back shows the same files in the same places.
+- **⌘. is a peek, not a history.** From any layout other than grid it writes grid and remembers the *stored* id (`auto` stays `auto`). Pressed again on grid it restores that id and forgets. Leaving the topic page (another topic, view, archive, diagram) or picking a tile in the layout picker clears the peek. There is no stack and nothing is persisted. [`layout/grid_layout_toggle.dart`](layout/grid_layout_toggle.dart).
 - **Phone shows every file of the topic**, one at a time, in order. There are no layouts on phone — a file hidden on desktop is still in the swipe row. Position (`n / total`) is only in the reorder sheet. The **screen structure is locked** — see [Phone screen structure](#phone-screen-structure).
 
 | Concern | Files |
@@ -60,6 +61,7 @@ A file being "the important one" is a fact about the topic's arrangement, not ab
 | Which files a layout reaches | [`layout/topic_file_slots.dart`](layout/topic_file_slots.dart) |
 | Drawing them | [`layout/file_layout_board.dart`](layout/file_layout_board.dart) |
 | Choosing a layout | [`layout/file_layout_picker.dart`](layout/file_layout_picker.dart) — glass strip above the bottom bar, no scrim |
+| Grid peek shortcut | [`layout/grid_layout_toggle.dart`](layout/grid_layout_toggle.dart) — ⌘.; in-memory, this page only |
 | Rearranging files | [`arrange/`](arrange/) — desktop overlay (files only); phone reorder sheet |
 
 ### Arranging
@@ -209,7 +211,7 @@ Shortcuts are user-rebindable. [`shortcuts/`](shortcuts/) owns the catalog of av
 
 **Insert object** (not “blocks”): catalog category `objects` inserts into the **active** file via `DocumentEditorRegistry` — info, task list, table, graph (chart table), image. After insert, the caret enters the new object (first inner field); images with no field keep the block caret. ⌘L inserts a bullet list (document structure, not an object) unless the caret is in an object field, where it opens Connect info…. Marked paragraph text (or the caret line) becomes points — one per newline. A paragraph has no button anywhere — it is what typing already does. The insert bar also has **emoji** (not an object, no shortcut): desktop opens a movable overlay you can park beside the text; phone opens a keyboard-style panel above the pills. Selecting an emoji inserts and stays open.
 
-Heavy-use defaults are **two keys** (⌘ + letter) so they stay in muscle memory. Letters still follow the English name (`D`etails, `T`ask, `G`raph). The OS already owns some of those letters for text (⌘A select-all, ⌘C/V/X clipboard, ⌘Z undo, ⌘B/I/U format) and a few window actions (⌘W close, ⌘M minimize, ⌘Q quit, ⌘H hide — Home already uses ⌘H). Flutter intercepts catalog keys while this window is focused, so ⌘N / ⌘T / ⌘F / ⌘G / ⌘D / ⌘L / ⌘R / ⌘O do **not** leak to Finder or Chrome; they are safe here because this is a desktop document window, not a browser. **Keep the extra modifier only where the 2-key letter is already a text or window key:** table ⌘⌥T (task took ⌘T), image ⌘⇧I (italic took ⌘I), add view ⌘⇧W (close window), layout toggle ⌘⇧M (minimize), arrange files ⌘⌥R (file layout took ⌘R). Preferences can rebind any of them.
+Heavy-use defaults are **two keys** (⌘ + letter) so they stay in muscle memory. Letters still follow the English name (`D`etails, `T`ask, `G`raph). The OS already owns some of those letters for text (⌘A select-all, ⌘C/V/X clipboard, ⌘Z undo, ⌘B/I/U format) and a few window actions (⌘W close, ⌘M minimize, ⌘Q quit, ⌘H hide — Home already uses ⌘H). Flutter intercepts catalog keys while this window is focused, so ⌘N / ⌘T / ⌘F / ⌘G / ⌘D / ⌘L / ⌘R / ⌘O do **not** leak to Finder or Chrome; they are safe here because this is a desktop document window, not a browser. **Keep the extra modifier only where the 2-key letter is already a text or window key:** table ⌘⌥T (task took ⌘T), image ⌘⇧I (italic took ⌘I), add view ⌘⇧W (close window), layout toggle ⌘⇧M (minimize), arrange files ⌘⌥R (file layout took ⌘R). Grid files is ⌘. (period is easier than a taken letter). Preferences can rebind any of them.
 
 | Catalog | Default | Does |
 |---------|---------|------|
@@ -217,20 +219,21 @@ Heavy-use defaults are **two keys** (⌘ + letter) so they stay in muscle memory
 | Bring file | ⌘K | Search overlay of files from other topics; choosing one **visits** it on Home in the layout (same document, still owned by its topic). Repeat to visit more. Arrange and cycle include those visits. |
 | Arrange | ⌘⌥R | File arrange overlay (topic page) |
 | File layout | ⌘R | Layout picker (topic page, desktop). Phone has no layouts. |
-| Cycle files | ⌘[ ⌘] | Rotate **every live file in the topic** in a circle (not only the layout’s slots; not archived). Applies immediately — do not wait for KeyUp / `runAfterKeystroke` |
+| Toggle grid layout | ⌘. | Topic page, desktop: any other layout → grid; grid → the layout this shortcut left. Remembered only for this shortcut, only while you stay on this topic page — not in the database, and forgotten if you leave or pick a layout from ⌘R. Phone has no layouts. |
+| Cycle files | ⌘[ ⌘] | Rotate **every live file in the topic** in a circle (not only the layout’s slots; not archived). Applies immediately — do not wait for KeyUp / `runWhenKeyboardIdle` |
 | Add file / topic | ⌘F / ⌘N | The same dialogs as the chrome |
 | Add view | ⌘⇧W | Same as the sidebar + |
 | Assign task view | ⌘J | In a file: Choose view… when a task has the caret. On the view page: Place… (view, section, topic, list) |
 | Reorder mode | ⌘O | Task-list caret: toggle task reorder. Table cell or table block caret: toggle table-row reorder (chart: columns). Else if a view is open: toggle that view’s task reorder. Otherwise: sidebar topics and views (handles appear until you press it again). View frames: the Reorder control on the view chrome still starts *frame* reorder |
 | Move object | ⌘⇧O | Toggle Move Mode for the caret / last-interacted embed. Also on every object chrome menu. Rebindable in Preferences. In Move Mode, arrows nudge the object; Enter / Esc end it (same as Done). |
 | Add connection / list | ⌘L | Inserts a bullet list at the caret. In an object field (info, task title, table cell), opens Connect info… (description only). Chrome **Add connection…** is still related-only. |
-| Agent / slot keys | ⌘1… | Agent prompt, or the saved action in that bar seat |
+| Agent / slot keys | ⌘1…⌘9, ⌘0 | Agent prompt (⌘1), seven fixed saved-action seats (⌘2…⌘8), two extra spots for the open topic (⌘9 / ⌘0) |
 | Text (bold, italic, underline, strikethrough, Make link, cut/copy/paste, size) | ⌘B/I/U/X/C/V, ⌘⇧+/− | Mark, else the caret line — except **paste**, which inserts at the caret unless something is marked. Embed fields via `runBlockTextAction`; Super Editor via `DocumentEditorController.applyTextAction`. Super Editor’s own Cmd+B / Cmd+I / ⌘V are stripped so catalog toggles once and list paste keeps `-` / `1.` points. Copy/cut of lists include those prefixes. **Make link** and **Strikethrough** are menu-only (⌘K is bring-file, ⌘L is connect-info); click / tap opens a persisted URL. **Make list** (menu, or insert list / ⌘L on marked text) gives each newline a point. |
 | Insert object | ⌘D info, ⌘T task, ⌘⌥T table, ⌘G graph, ⌘⇧I image, ⌘L list | Active file via `DocumentEditorRegistry`. ⌘L is a list unless the caret is in an object field (Connect info) |
 | Layout toggle | ⌘⇧M | View page: sections ↔ topics |
 | Language | ⌘E | English ↔ Hebrew (after the keystroke, so the editor is not remounted mid-KeyDown) |
 
-**AI keys belong to the seat, not the action.** ⌘1 is the agent; ⌘2…⌘7 fire whatever saved action sits in bar slots 1–6, and do nothing while a seat is empty. Moving an action to another seat moves its key with it, so there is no shortcut to pick when creating one. Rebinding a seat works like any other action and now survives a restart — `ShortcutBindingsStore.restore()` runs during `AppState.initialize()`.
+**AI keys belong to the seat, not the action.** ⌘1 is the agent; ⌘2…⌘8 fire whatever saved action sits in fixed bar slots 1–7, and do nothing while a seat is empty. ⌘9 and ⌘0 fire the two extra spots for the open topic (topic-scoped actions). Moving an action to another fixed seat moves its key with it, so there is no shortcut to pick when creating one. Rebinding a seat works like any other action and now survives a restart — `ShortcutBindingsStore.restore()` runs during `AppState.initialize()`.
 
 List dialogs (connect, choose view, place task, tags, move-file topic, topic type, and the nested pickers on create-topic / automations / AI actions) are walked with **↑/↓, Enter, Escape** via [`dialogs/dialog_choice_list.dart`](dialogs/dialog_choice_list.dart) (`showAppChoiceDialog`). Form dialogs keep autofocus + Enter to submit. Picker fields (type, colour, emoji) are in the tab order and open with Enter or Space. Confirmations accept Enter for the confirm answer. Colour pickers: Tab walks presets / spectrum / hex, arrows move inside the focused pane, Enter chooses. Preset swatches and the emoji grid/section bar are locked LTR — they are not language, so ←/→ never mirror in Hebrew. Emoji pickers: Tab switches the grid and the section bar (each draws a focus ring); arrows move inside the focused pane; Enter chooses. Topic-icon pick still pops on select. The insert-bar text palette stays open and does not steal writing focus on desktop.
 

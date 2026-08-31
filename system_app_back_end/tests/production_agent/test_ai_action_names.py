@@ -22,6 +22,13 @@ def test_create_ai_action_requires_both_names():
     assert "name and name_he are required" in patch
 
 
+def test_a_topic_may_only_have_two_specific_actions():
+    source = inspect.getsource(action_routes.create_ai_action)
+    assert "this topic already has 2 specific actions" in source
+    patch = inspect.getsource(action_routes.update_ai_action)
+    assert "this topic already has 2 specific actions" in patch
+
+
 def test_ai_action_scope_is_topic_xor_type_xor_all():
     source = inspect.getsource(action_routes._apply_scope)
     assert "topic_id" in source
