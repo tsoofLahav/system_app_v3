@@ -6,11 +6,15 @@ import '../ui/adaptive_dialog.dart';
 import '../ui/app_icons.dart';
 import '../ui/app_switch.dart';
 import '../ui/app_typography.dart';
+import '../ui/app_segmented_toggle.dart';
 import '../ui/confirm_dialog.dart';
+import '../ui/dialog_field_style.dart';
 import '../ui/dialog_metrics.dart';
 import './automation.dart';
 import './automation_builder_dialog.dart';
 import './section_window_editor.dart';
+
+enum _AutomationPage { regular, sectionWindows }
 
 Future<void> showAutomationDialog({
   required BuildContext context,
@@ -33,12 +37,21 @@ class _AutomationDialog extends StatefulWidget {
 
 class _AutomationDialogState extends State<_AutomationDialog> {
   AppState get state => widget.state;
+  var _page = _AutomationPage.regular;
+  final _query = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _query.addListener(() => setState(() {}));
     state.loadAutomations();
     state.loadAiActions();
+  }
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
   }
 
   Future<void> _create() async {
@@ -69,7 +82,9 @@ class _AutomationDialogState extends State<_AutomationDialog> {
     final confirmed = await showAppConfirmDialog(
       context: context,
       title: s['delete'],
-      message: s.deleteAutomationMessage(state.automationDisplayName(automation)),
+      message: s.deleteAutomationMessage(
+        state.automationDisplayName(automation),
+      ),
       confirmLabel: s['delete'],
       cancelLabel: s['cancel'],
       destructive: true,
@@ -85,9 +100,9 @@ class _AutomationDialogState extends State<_AutomationDialog> {
       if (mounted) setState(() {});
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -96,14 +111,35 @@ class _AutomationDialogState extends State<_AutomationDialog> {
     await presentAutomationRun(context, state, automation);
   }
 
+  bool _matchesName(Automation item) {
+    final q = _query.text.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    return state.automationDisplayName(item).toLowerCase().contains(q) ||
+        item.name.toLowerCase().contains(q) ||
+        item.nameHe.toLowerCase().contains(q);
+  }
+
+  List<Automation> get _visible {
+    final source = _page == _AutomationPage.regular
+        ? state.standardAutomations
+        : state.sectionWindowAutomations;
+    return [
+      for (final item in source)
+        if (_matchesName(item)) item,
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = state.strings;
-    final regular = state.standardAutomations;
-    final windows = state.sectionWindowAutomations;
+    final onRegular = _page == _AutomationPage.regular;
+    final items = _visible;
+    final emptyHint = _query.text.trim().isNotEmpty
+        ? s['noMatchingAutomations']
+        : (onRegular ? s['noAutomationsHint'] : s['noSectionWindowsHint']);
 
     return AppAdaptiveDialogShell(
-      title: Text(s['automations']),
+      title: Text(onRegular ? s['automations'] : s['sectionWindows']),
       width: AppDialogMetrics.wideWidth,
       actions: [
         TextButton(
@@ -115,47 +151,64 @@ class _AutomationDialogState extends State<_AutomationDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          AppDialogChoiceField<_AutomationPage>(
+            label: s['automationList'],
+            options: [
+              AppSegmentedOption(
+                value: _AutomationPage.regular,
+                label: s['automations'],
+              ),
+              AppSegmentedOption(
+                value: _AutomationPage.sectionWindows,
+                label: s['sectionWindows'],
+              ),
+            ],
+            selected: _page,
+            onSelected: (page) => setState(() {
+              _page = page;
+              _query.clear();
+            }),
+          ),
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          AppDialogField(
+            label: s['searchByName'],
+            child: TextField(
+              controller: _query,
+              decoration: DialogFieldStyle.decoration(
+                hintText: s['searchByNameHint'],
+              ),
+            ),
+          ),
+          const SizedBox(height: DialogFieldStyle.fieldGap),
           SizedBox(
-            height: 320,
-            child: ListView(
-              children: [
-                Text(s['automations'], style: AppTypography.metaStyle),
-                if (regular.isEmpty)
-                  Padding(
+            height: 280,
+            child: items.isEmpty
+                ? Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Text(
-                      s['noAutomationsHint'],
+                      emptyHint,
                       textAlign: TextAlign.center,
                       style: AppTypography.metaStyle,
                     ),
                   )
-                else
-                  for (final item in regular) _row(item, allowDelete: true),
-                const SizedBox(height: 16),
-                Text(s['sectionWindows'], style: AppTypography.metaStyle),
-                if (windows.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Text(
-                      s['noSectionWindowsHint'],
-                      textAlign: TextAlign.center,
-                      style: AppTypography.metaStyle,
-                    ),
-                  )
-                else
-                  for (final item in windows) _row(item, allowDelete: false),
-              ],
-            ),
+                : ListView(
+                    children: [
+                      for (final item in items)
+                        _row(item, allowDelete: onRegular),
+                    ],
+                  ),
           ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: FilledButton.icon(
-              onPressed: _create,
-              icon: const AppIcon(AppIcons.add, size: 16),
-              label: Text(s['createAutomation']),
+          if (onRegular) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: FilledButton.icon(
+                onPressed: _create,
+                icon: const AppIcon(AppIcons.add, size: 16),
+                label: Text(s['createAutomation']),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -235,8 +288,8 @@ Future<void> presentAutomationRun(
       return;
     }
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(e.toString())),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(e.toString())));
   }
 }

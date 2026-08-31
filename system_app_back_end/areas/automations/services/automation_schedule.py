@@ -96,35 +96,30 @@ def in_current_slot(schedule, now_utc, timezone=UTC.key):
 
 
 def _this_occurrence_local(schedule, after_local, tz):
-    kind, *parts = schedule.split()
-    kind = kind.lower()
+    parsed = _parse_schedule(schedule)
+    if parsed is None:
+        return None
+    kind, _interval, placement, weekday, hour, minute = parsed
     if kind == "daily":
-        hour, minute = _parse_time(parts[0] if parts else "00:00")
         return after_local.replace(
             hour=hour, minute=minute, second=0, microsecond=0
         )
     if kind == "weekly":
-        weekday = WEEKDAYS.get((parts[0] if parts else "mon").lower(), 0)
-        hour, minute = _parse_time(parts[1] if len(parts) > 1 else "00:00")
         candidate = after_local.replace(
             hour=hour, minute=minute, second=0, microsecond=0
         )
         days = (weekday - candidate.weekday()) % 7
         return candidate + timedelta(days=days)
-    if kind == "monthly":
-        placement = (parts[0] if parts else "first").lower()
-        weekday = WEEKDAYS.get((parts[1] if len(parts) > 1 else "mon").lower(), 0)
-        hour, minute = _parse_time(parts[2] if len(parts) > 2 else "00:00")
-        return _monthly_candidate_local(
-            after_local.year,
-            after_local.month,
-            placement,
-            weekday,
-            hour,
-            minute,
-            tz,
-        )
-    return None
+    candidate = _monthly_candidate_local(
+        after_local.year,
+        after_local.month,
+        placement,
+        weekday,
+        hour,
+        minute,
+        tz,
+    )
+    return candidate
 
 
 def next_run_after(schedule, after_utc, timezone=UTC.key):
@@ -134,10 +129,16 @@ def next_run_after(schedule, after_utc, timezone=UTC.key):
     tz = resolve_timezone(timezone)
     after_local = utc_naive_to_local(after_utc, tz)
 
-    kind, *parts = schedule.split()
-    kind = kind.lower()
+    parsed = _parse_schedule(schedule)
+    if parsed is None:
+        raise ValueError(
+            "schedule must be 'daily HH:MM', 'weekly DAY HH:MM', "
+            "'monthly PLACEMENT DAY HH:MM', "
+            "'monthly N PLACEMENT DAY HH:MM' (every N months), or "
+            "'quarterly INTERVAL PLACEMENT DAY HH:MM'"
+        )
+    kind, interval, placement, weekday, hour, minute = parsed
     if kind == "daily":
-        hour, minute = _parse_time(parts[0] if parts else "00:00")
         candidate = after_local.replace(
             hour=hour, minute=minute, second=0, microsecond=0
         )
@@ -146,8 +147,6 @@ def next_run_after(schedule, after_utc, timezone=UTC.key):
         return local_to_utc_naive(candidate)
 
     if kind == "weekly":
-        weekday = WEEKDAYS.get((parts[0] if parts else "mon").lower(), 0)
-        hour, minute = _parse_time(parts[1] if len(parts) > 1 else "00:00")
         candidate = after_local.replace(
             hour=hour, minute=minute, second=0, microsecond=0
         )
@@ -157,47 +156,21 @@ def next_run_after(schedule, after_utc, timezone=UTC.key):
             candidate += timedelta(days=7)
         return local_to_utc_naive(candidate)
 
-    if kind == "monthly":
-        placement = (parts[0] if parts else "first").lower()
-        weekday = WEEKDAYS.get((parts[1] if len(parts) > 1 else "mon").lower(), 0)
-        hour, minute = _parse_time(parts[2] if len(parts) > 2 else "00:00")
-        candidate = _monthly_candidate_local(
-            after_local.year,
-            after_local.month,
-            placement,
-            weekday,
-            hour,
-            minute,
-            tz,
-        )
-        if candidate <= after_local:
-            year, month = _next_month(after_local.year, after_local.month)
-            candidate = _monthly_candidate_local(
-                year, month, placement, weekday, hour, minute, tz
-            )
-        return local_to_utc_naive(candidate)
-
-    if kind == "quarterly":
-        interval = _parse_month_interval(parts[0] if parts else "3")
-        placement = (parts[1] if len(parts) > 1 else "first").lower()
-        weekday = WEEKDAYS.get((parts[2] if len(parts) > 2 else "mon").lower(), 0)
-        hour, minute = _parse_time(parts[3] if len(parts) > 3 else "00:00")
-        candidate = _interval_month_candidate_local(
-            after_local,
-            interval,
-            placement,
-            weekday,
-            hour,
-            minute,
-            tz,
-        )
-        return local_to_utc_naive(candidate)
-
-    raise ValueError(
-        "schedule must be 'daily HH:MM', 'weekly DAY HH:MM', "
-        "'monthly PLACEMENT DAY HH:MM', or "
-        "'quarterly INTERVAL PLACEMENT DAY HH:MM'"
+    candidate = _monthly_candidate_local(
+        after_local.year,
+        after_local.month,
+        placement,
+        weekday,
+        hour,
+        minute,
+        tz,
     )
+    if candidate <= after_local:
+        year, month = _add_months(after_local.year, after_local.month, interval)
+        candidate = _monthly_candidate_local(
+            year, month, placement, weekday, hour, minute, tz
+        )
+    return local_to_utc_naive(candidate)
 
 
 def _parse_time(value):
@@ -208,10 +181,43 @@ def _parse_time(value):
     return hour, minute
 
 
+def _parse_schedule(schedule):
+    """(kind, interval, placement, weekday, hour, minute) or None."""
+    kind, *parts = schedule.split()
+    kind = kind.lower()
+    if kind == "daily":
+        hour, minute = _parse_time(parts[0] if parts else "00:00")
+        return kind, 1, "first", 0, hour, minute
+    if kind == "weekly":
+        weekday = WEEKDAYS.get((parts[0] if parts else "mon").lower(), 0)
+        hour, minute = _parse_time(parts[1] if len(parts) > 1 else "00:00")
+        return kind, 1, "first", weekday, hour, minute
+    if kind == "monthly":
+        if parts and parts[0].isdigit():
+            interval = int(parts[0])
+            rest = parts[1:]
+        else:
+            interval = 1
+            rest = parts
+        if interval < 1 or interval > 12:
+            raise ValueError("month interval must be between 1 and 12")
+        placement = (rest[0] if rest else "first").lower()
+        weekday = WEEKDAYS.get((rest[1] if len(rest) > 1 else "mon").lower(), 0)
+        hour, minute = _parse_time(rest[2] if len(rest) > 2 else "00:00")
+        return "monthly", interval, placement, weekday, hour, minute
+    if kind == "quarterly":
+        interval = _parse_month_interval(parts[0] if parts else "3")
+        placement = (parts[1] if len(parts) > 1 else "first").lower()
+        weekday = WEEKDAYS.get((parts[2] if len(parts) > 2 else "mon").lower(), 0)
+        hour, minute = _parse_time(parts[3] if len(parts) > 3 else "00:00")
+        return "monthly", interval, placement, weekday, hour, minute
+    return None
+
+
 def _parse_month_interval(value):
     interval = int(value)
-    if interval not in {3, 4}:
-        raise ValueError("quarterly interval must be 3 or 4 months")
+    if interval < 2 or interval > 12:
+        raise ValueError("quarterly interval must be 2 to 12 months")
     return interval
 
 
@@ -230,34 +236,8 @@ def _monthly_candidate_local(year, month, placement, weekday, hour, minute, tz):
     return datetime(year, month, day, hour, minute, tzinfo=tz)
 
 
-def _interval_month_candidate_local(
-    after_local,
-    interval,
-    placement,
-    weekday,
-    hour,
-    minute,
-    tz,
-):
-    year, month = after_local.year, after_local.month
-    for _ in range(0, 24):
-        if (month - 1) % interval == 0:
-            candidate = _monthly_candidate_local(
-                year,
-                month,
-                placement,
-                weekday,
-                hour,
-                minute,
-                tz,
-            )
-            if candidate > after_local:
-                return candidate
-        year, month = _next_month(year, month)
-    raise ValueError("could not find next quarterly candidate")
-
-
-def _next_month(year, month):
-    if month == 12:
-        return year + 1, 1
-    return year, month + 1
+def _add_months(year, month, n):
+    month += n
+    year += (month - 1) // 12
+    month = (month - 1) % 12 + 1
+    return year, month

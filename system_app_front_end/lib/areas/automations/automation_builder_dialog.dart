@@ -27,6 +27,7 @@ import '../ux/widgets/topic_emoji.dart';
 import './automation.dart';
 import './fill_file_snippet_dialog.dart';
 import './schedule_format.dart';
+import './schedule_kind_field.dart';
 
 /// Create or rewrite an automation: scope, when it fires, and what it does.
 Future<bool> showAutomationBuilderDialog({
@@ -278,7 +279,8 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
           trigger: const {'type': 'schedule'},
           steps: _steps,
           schedule: placement['schedule'] as String?,
-          timezone: placement['timezone'] as String? ??
+          timezone:
+              placement['timezone'] as String? ??
               AutomationSchedule.defaultTimezone,
           viewId: placement['view_id'] as int?,
           sectionKey: placement['section_key'] as String?,
@@ -650,8 +652,17 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   String _whenCaption() {
     final schedule = _lockedSchedule;
     final dayKey = AutomationSchedule.weekdayKeys[schedule.weekday]!;
-    if (schedule.kind == 'weekly') return s.weeklyScheduleCaption(dayKey);
-    if (schedule.kind == 'monthly') {
+    if (schedule.kind == AutomationSchedule.weekly) {
+      return s.weeklyScheduleCaption(dayKey);
+    }
+    if (schedule.isEveryNMonths) {
+      return s.everyNMonthsCaption(
+        schedule.uiMonthInterval,
+        schedule.placement,
+        dayKey,
+      );
+    }
+    if (schedule.kind == AutomationSchedule.monthly) {
       return s.monthlyScheduleCaption(schedule.placement, dayKey);
     }
     return '';
@@ -792,17 +803,11 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
             const SizedBox(height: DialogFieldStyle.fieldGap),
           ],
         ],
-        AppDialogChoiceField<String>(
-          label: s['schedule'],
-          options: [
-            AppSegmentedOption(value: 'daily', label: s['onceADay']),
-            AppSegmentedOption(value: 'weekly', label: s['onceAWeek']),
-            AppSegmentedOption(value: 'monthly', label: s['onceAMonth']),
-          ],
-          selected: _lockedSchedule.kind,
+        AutomationScheduleKindField(
+          schedule: _lockedSchedule,
+          strings: s,
           enabled: !_needsComplimentary,
-          onSelected: (kind) =>
-              setState(() => _schedule = _schedule.copyWith(kind: kind)),
+          onChanged: (next) => setState(() => _schedule = next),
         ),
         if (_needsComplimentary) ...[
           const SizedBox(height: 6),
@@ -908,12 +913,13 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
           ? (_) {}
           : (picked) {
               setState(
-                () =>
-                    _schedule = _schedule.copyWith(time: hmmFromTimeOfDay(picked)),
+                () => _schedule = _schedule.copyWith(
+                  time: hmmFromTimeOfDay(picked),
+                ),
               );
             },
     );
-    if (schedule.kind == 'daily') return time;
+    if (schedule.uiKind == AutomationSchedule.daily) return time;
     return Row(
       children: [
         Expanded(

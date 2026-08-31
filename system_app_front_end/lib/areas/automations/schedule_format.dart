@@ -1,21 +1,27 @@
 /// The schedule string the backend's `next_run_after()` reads.
 ///
-/// Daily / weekly / monthly, never a cron line. The create form used to send
-/// `0 8 * * *` at a parser that only knows `daily 08:00`, which is why a
-/// scheduled automation could never have fired on time.
+/// Daily / weekly / monthly / every N months, never a cron line. The create
+/// form used to send `0 8 * * *` at a parser that only knows `daily 08:00`,
+/// which is why a scheduled automation could never have fired on time.
 class AutomationSchedule {
   const AutomationSchedule({
     required this.kind,
     this.time = '08:00',
     this.weekday = 'mon',
     this.placement = 'first',
+    this.monthInterval = 1,
   });
 
   /// Twin of `DEFAULT_AUTOMATION_TIMEZONE` in
   /// `areas/automations/services/automation_schedule.py`.
   static const defaultTimezone = 'Asia/Jerusalem';
 
-  static const kinds = ['daily', 'weekly', 'monthly'];
+  static const daily = 'daily';
+  static const weekly = 'weekly';
+  static const monthly = 'monthly';
+  static const everyNMonths = 'every_n_months';
+
+  static const kinds = [daily, weekly, monthly, everyNMonths];
   static const weekdays = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
   static const placements = ['first', 'second', 'third', 'last'];
 
@@ -34,11 +40,23 @@ class AutomationSchedule {
   final String weekday;
   final String placement;
 
+  /// 1 = every month. 2–12 = once every N months (`monthly N …` in the DSL).
+  final int monthInterval;
+
+  bool get isEveryNMonths =>
+      kind == everyNMonths || (kind == monthly && monthInterval > 1);
+
+  /// Kind the schedule chips show — every-N-months is its own chip.
+  String get uiKind => isEveryNMonths ? everyNMonths : kind;
+
+  int get uiMonthInterval => monthInterval < 2 ? 2 : monthInterval.clamp(2, 12);
+
   String toDsl() {
     final clock = _normaliseTime(time);
-    return switch (kind) {
-      'weekly' => 'weekly $weekday $clock',
-      'monthly' => 'monthly $placement $weekday $clock',
+    return switch (uiKind) {
+      weekly => 'weekly $weekday $clock',
+      monthly => 'monthly $placement $weekday $clock',
+      everyNMonths => 'monthly $uiMonthInterval $placement $weekday $clock',
       _ => 'daily $clock',
     };
   }
@@ -48,12 +66,14 @@ class AutomationSchedule {
     String? time,
     String? weekday,
     String? placement,
+    int? monthInterval,
   }) {
     return AutomationSchedule(
       kind: kind ?? this.kind,
       time: time ?? this.time,
       weekday: weekday ?? this.weekday,
       placement: placement ?? this.placement,
+      monthInterval: monthInterval ?? this.monthInterval,
     );
   }
 
@@ -65,30 +85,38 @@ class AutomationSchedule {
       return const AutomationSchedule(kind: 'daily');
     }
     final kind = parts.first;
-    if (kind == 'weekly') {
+    if (kind == weekly) {
       return AutomationSchedule(
-        kind: 'weekly',
+        kind: weekly,
         weekday: _weekday(parts.length > 1 ? parts[1] : 'mon'),
         time: _normaliseTime(parts.length > 2 ? parts[2] : '08:00'),
       );
     }
-    if (kind == 'monthly') {
+    if (kind == monthly || kind == 'quarterly') {
+      var i = 1;
+      var interval = kind == 'quarterly' ? 3 : 1;
+      if (parts.length > i && int.tryParse(parts[i]) != null) {
+        interval = int.parse(parts[i]).clamp(1, 12);
+        i += 1;
+      }
+      final placement = placements.contains(parts.length > i ? parts[i] : '')
+          ? parts[i]
+          : 'first';
       return AutomationSchedule(
-        kind: 'monthly',
-        placement: placements.contains(parts.length > 1 ? parts[1] : '')
-            ? parts[1]
-            : 'first',
-        weekday: _weekday(parts.length > 2 ? parts[2] : 'mon'),
-        time: _normaliseTime(parts.length > 3 ? parts[3] : '08:00'),
+        kind: interval > 1 ? everyNMonths : monthly,
+        monthInterval: interval,
+        placement: placement,
+        weekday: _weekday(parts.length > i + 1 ? parts[i + 1] : 'mon'),
+        time: _normaliseTime(parts.length > i + 2 ? parts[i + 2] : '08:00'),
       );
     }
-    if (kind == 'daily') {
+    if (kind == daily) {
       return AutomationSchedule(
-        kind: 'daily',
+        kind: daily,
         time: _normaliseTime(parts.length > 1 ? parts[1] : '08:00'),
       );
     }
-    return const AutomationSchedule(kind: 'daily');
+    return const AutomationSchedule(kind: daily);
   }
 
   static String weekdayFromDart(int dartWeekday) {
@@ -110,23 +138,23 @@ class AutomationSchedule {
     return placements[index.clamp(0, placements.length - 2)];
   }
 
-  /// Weekly takes the weekday; monthly also infers first / second / third / last.
+  /// Weekly takes the weekday; monthly / every N months also infer placement.
   AutomationSchedule applyingDate(DateTime date) {
     final day = weekdayFromDart(date.weekday);
-    if (kind == 'monthly') {
+    if (kind == monthly || kind == everyNMonths) {
       return copyWith(weekday: day, placement: placementFromDate(date));
     }
-    if (kind == 'weekly') {
+    if (kind == weekly) {
       return copyWith(weekday: day);
     }
     return this;
   }
 
   /// Which days in [month] this schedule would fire (weekly: every matching
-  /// weekday; monthly: the inferred placement).
+  /// weekday; monthly / every N months: the inferred placement).
   bool marksDate(DateTime date) {
-    if (kind == 'weekly') return date.weekday == dartWeekday;
-    if (kind == 'monthly') {
+    if (kind == weekly) return date.weekday == dartWeekday;
+    if (kind == monthly || kind == everyNMonths) {
       final day = occurrenceDay(date.year, date.month);
       return day != null && date.day == day;
     }

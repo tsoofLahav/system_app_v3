@@ -155,6 +155,15 @@ class AppStrings {
         .replaceAll('{day}', this[dayKey]);
   }
 
+  String everyNMonthsCaption(int n, String placementKey, String dayKey) {
+    var placement = this[placementKey];
+    if (language == AppLanguage.en) placement = placement.toLowerCase();
+    return this['everyNMonthsCaption']
+        .replaceAll('{n}', '$n')
+        .replaceAll('{placement}', placement)
+        .replaceAll('{day}', this[dayKey]);
+  }
+
   static const _monthKeys = [
     'monthJan',
     'monthFeb',
@@ -456,6 +465,10 @@ class AppStrings {
     'noAutomationsHint':
         'No automations yet.\nCreate one: a scope, a time, and the steps to run.',
     'sectionWindows': 'Section windows',
+    'automationList': 'Which list',
+    'searchByName': 'Search by name',
+    'searchByNameHint': 'Name',
+    'noMatchingAutomations': 'No names match that search.',
     'noSectionWindowsHint':
         'Section windows appear when you add a section to a view.',
     'windowDuration': 'Duration after start',
@@ -535,6 +548,8 @@ class AppStrings {
     'changeTopic': 'Choose topic…',
     'sectionImportant': 'Important',
     'editSection': 'Edit section',
+    'openSectionAutomation': 'Open automation',
+    'sectionAutomationMissing': 'This section has no automation yet.',
     'deleteSection': 'Delete section',
     'deleteSectionTitle': 'Delete section?',
     'deleteSectionBody':
@@ -858,10 +873,13 @@ class AppStrings {
     'onceADay': 'Once a day',
     'onceAWeek': 'Once a week',
     'onceAMonth': 'Once a month',
+    'onceInMonths': 'Once in months',
+    'onceInMonthsCount': 'Every how many months',
     'time': 'Time',
     'chooseDay': 'Choose day',
     'weeklyScheduleCaption': 'Every {day}',
     'monthlyScheduleCaption': 'The {placement} {day} of each month',
+    'everyNMonthsCaption': 'Every {n} months, the {placement} {day}',
     'narrowSun': 'S',
     'narrowMon': 'M',
     'narrowTue': 'T',
@@ -1167,6 +1185,10 @@ class AppStrings {
     'noAutomationsHint':
         'אין עדיין אוטומציות.\nצרי אחת: היקף, זמן, והשלבים להרצה.',
     'sectionWindows': 'חלונות מדור',
+    'automationList': 'איזה רשימה',
+    'searchByName': 'חיפוש לפי שם',
+    'searchByNameHint': 'שם',
+    'noMatchingAutomations': 'אין שמות שמתאימים לחיפוש.',
     'noSectionWindowsHint':
         'חלונות מדור נוצרים כשמוסיפים מדור לתצוגה.',
     'windowDuration': 'משך אחרי ההתחלה',
@@ -1246,6 +1268,8 @@ class AppStrings {
     'changeTopic': 'בחר נושא…',
     'sectionImportant': 'חשוב',
     'editSection': 'עריכת מדור',
+    'openSectionAutomation': 'פתח אוטומציה',
+    'sectionAutomationMissing': 'למדור הזה אין עדיין אוטומציה.',
     'deleteSection': 'מחק מדור',
     'deleteSectionTitle': 'למחוק את המדור?',
     'deleteSectionBody':
@@ -1565,10 +1589,13 @@ class AppStrings {
     'onceADay': 'פעם ביום',
     'onceAWeek': 'פעם בשבוע',
     'onceAMonth': 'פעם בחודש',
+    'onceInMonths': 'פעם בכמה חודשים',
+    'onceInMonthsCount': 'כל כמה חודשים',
     'time': 'שעה',
     'chooseDay': 'בחר יום',
     'weeklyScheduleCaption': 'כל {day}',
     'monthlyScheduleCaption': 'יום {day} ה{placement} בכל חודש',
+    'everyNMonthsCaption': 'כל {n} חודשים, יום {day} ה{placement}',
     'narrowSun': 'א',
     'narrowMon': 'ב',
     'narrowTue': 'ג',

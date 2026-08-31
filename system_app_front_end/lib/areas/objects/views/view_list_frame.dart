@@ -40,7 +40,7 @@ class ViewListFrame extends StatelessWidget {
   final String? sectionFlag;
   final String? topicKey;
 
-  /// Right-click on the title only (edit / delete section).
+  /// Right-click on the title only (edit / automation / delete section).
   final GestureTapDownCallback? onSectionTitleMenu;
   final Color? accent;
   final int tintSeed;

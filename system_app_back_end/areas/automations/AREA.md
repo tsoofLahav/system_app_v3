@@ -18,7 +18,7 @@ Row in `automations` (migration [`011_ai_actions_split.sql`](../../migrations/01
 | `scope` | `{"kind": "all"}` / `{"kind": "topic", "topic_id"}` / `{"kind": "topic_type", "topic_type_id"}`. One-release fallback still reads `"tag": "process"`. Legacy `{topic_ids, file_ids}` still resolves. Template topics (`is_template`) are never in scope. |
 | `trigger` | `{"type": "schedule"}` today. Event types are stored but not dispatched. |
 | `steps` | `[{ "kind": …, …params }]` — the work, in order |
-| `schedule` | `daily HH:MM`, `weekly DAY HH:MM`, `monthly PLACEMENT DAY HH:MM` |
+| `schedule` | `daily HH:MM`, `weekly DAY HH:MM`, `monthly PLACEMENT DAY HH:MM`, or `monthly N PLACEMENT DAY HH:MM` (every N months, 2–12). Legacy `quarterly N …` still parses. |
 | `timezone` | Schedule is interpreted here, stored UTC. Default for new rows from the app: `Asia/Jerusalem`. |
 | `enabled` | Disabled automations never fire automatically |
 | `last_run_at`, `next_run_at` | Scheduling bookkeeping |
@@ -89,7 +89,7 @@ File and task mutations used by the actions live next to their HTTP routes: [`ar
 - `plan_tick` compares naive UTC. Postgres may return `next_run_at` timezone-aware; strip that before comparing, or the cron dies. The same strip (`as_utc_naive`) applies to `window_opened_at` / `window_closes_at` — listing automations calls `window_is_open`, so a mixed-aware compare 500s the whole list.
 - Cron prints one line per automation every minute (`skip` / `arm` / `run`) to stdout, so Render logs show the decision. `logger.info` alone is silent there.
 - The cron process must have `OPENAI_API_KEY` as an **environment variable** on that Cron Job (Secret Files are not `os.environ`). Each tick logs `openai_key=yes/no` and the `OPENAI*` env names, never the secret.
-- Never send a cron line; the parser only reads the DSL above.
+- Never send a cron line; the parser only reads the DSL above (`daily` / `weekly` / `monthly`, including `monthly N` for every N months).
 - Automations must respect `scope` the same way agent tools do (`file_allowed` after resolve).
 - An `ai` step's `apply_mode` is its own. `review` produces proposals; it must not write files directly.
 

@@ -3,12 +3,12 @@ import 'package:flutter/services.dart';
 
 import '../../core/app_state.dart';
 import '../ui/adaptive_dialog.dart';
-import '../ui/app_segmented_toggle.dart';
 import '../ui/compact_calendar.dart';
 import '../ui/dialog_field_style.dart';
 import '../ui/time_picker_dialog.dart';
 import './automation.dart';
 import './schedule_format.dart';
+import './schedule_kind_field.dart';
 
 Future<bool> showSectionWindowEditor({
   required BuildContext context,
@@ -17,19 +17,14 @@ Future<bool> showSectionWindowEditor({
 }) async {
   final saved = await showAppDialog<bool>(
     context: context,
-    builder: (ctx) => _SectionWindowEditor(
-      state: state,
-      automation: automation,
-    ),
+    builder: (ctx) =>
+        _SectionWindowEditor(state: state, automation: automation),
   );
   return saved ?? false;
 }
 
 class _SectionWindowEditor extends StatefulWidget {
-  const _SectionWindowEditor({
-    required this.state,
-    required this.automation,
-  });
+  const _SectionWindowEditor({required this.state, required this.automation});
 
   final AppState state;
   final Automation automation;
@@ -90,8 +85,17 @@ class _SectionWindowEditorState extends State<_SectionWindowEditor> {
   String _whenCaption() {
     final s = widget.state.strings;
     final dayKey = AutomationSchedule.weekdayKeys[_schedule.weekday]!;
-    if (_schedule.kind == 'weekly') return s.weeklyScheduleCaption(dayKey);
-    if (_schedule.kind == 'monthly') {
+    if (_schedule.kind == AutomationSchedule.weekly) {
+      return s.weeklyScheduleCaption(dayKey);
+    }
+    if (_schedule.isEveryNMonths) {
+      return s.everyNMonthsCaption(
+        _schedule.uiMonthInterval,
+        _schedule.placement,
+        dayKey,
+      );
+    }
+    if (_schedule.kind == AutomationSchedule.monthly) {
       return s.monthlyScheduleCaption(_schedule.placement, dayKey);
     }
     return '';
@@ -126,19 +130,13 @@ class _SectionWindowEditorState extends State<_SectionWindowEditor> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AppDialogChoiceField<String>(
-            label: s['schedule'],
-            options: [
-              AppSegmentedOption(value: 'daily', label: s['onceADay']),
-              AppSegmentedOption(value: 'weekly', label: s['onceAWeek']),
-              AppSegmentedOption(value: 'monthly', label: s['onceAMonth']),
-            ],
-            selected: _schedule.kind,
-            onSelected: (kind) =>
-                setState(() => _schedule = _schedule.copyWith(kind: kind)),
+          AutomationScheduleKindField(
+            schedule: _schedule,
+            strings: s,
+            onChanged: (next) => setState(() => _schedule = next),
           ),
           const SizedBox(height: DialogFieldStyle.fieldGap),
-          if (_schedule.kind == 'daily')
+          if (_schedule.uiKind == AutomationSchedule.daily)
             time
           else
             Row(

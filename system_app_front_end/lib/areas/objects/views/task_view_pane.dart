@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
 import '../../../core/platform/app_form_factor.dart';
+import '../../automations/section_window_editor.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/confirm_dialog.dart';
@@ -300,9 +301,9 @@ class _TaskViewPaneState extends State<TaskViewPane> {
           tintSeed: key == 'no_topic'
               ? 1
               : ((byTopic[key]?.isNotEmpty ?? false)
-                  ? byTopic[key]!.first.topicId
-                  : null) ??
-                  _stableSeed(key),
+                        ? byTopic[key]!.first.topicId
+                        : null) ??
+                    _stableSeed(key),
         ),
     ];
   }
@@ -342,11 +343,9 @@ class _TaskViewPaneState extends State<TaskViewPane> {
         for (final t in frame.tasks)
           if (t.id != moved.id) t,
       ];
-      final next = TaskZones.fromOrdered(others).inserted(
-        task: moved,
-        targetDone: targetDone,
-        indexInZone: indexInZone,
-      );
+      final next = TaskZones.fromOrdered(
+        others,
+      ).inserted(task: moved, targetDone: targetDone, indexInZone: indexInZone);
       final frameOrdered = next.orderedIds;
       final frameIndex = {
         for (var i = 0; i < frameOrdered.length; i++) frameOrdered[i]: i,
@@ -370,9 +369,9 @@ class _TaskViewPaneState extends State<TaskViewPane> {
       await state.refreshOpenTaskSurfaces(notify: true);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(content: Text(state.strings['reorderFailed'])),
-      );
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text(state.strings['reorderFailed'])));
       await state.refreshOpenTaskSurfaces(notify: true);
     }
   }
@@ -418,6 +417,10 @@ class _TaskViewPaneState extends State<TaskViewPane> {
       entries: [
         AppContextMenuItem(value: 'edit', label: s['editSection']),
         AppContextMenuItem(
+          value: 'automation',
+          label: s['openSectionAutomation'],
+        ),
+        AppContextMenuItem(
           value: 'delete',
           label: s['deleteSection'],
           destructive: true,
@@ -429,9 +432,33 @@ class _TaskViewPaneState extends State<TaskViewPane> {
       await _editSection(section);
       return;
     }
+    if (action == 'automation') {
+      await _openSectionAutomation(section);
+      return;
+    }
     if (action == 'delete') {
       await _deleteSection(section);
     }
+  }
+
+  Future<void> _openSectionAutomation(ViewSectionDef section) async {
+    final view = state.selectedView;
+    final key = section.key;
+    if (view == null || key == null || key.isEmpty) return;
+    await state.loadAutomations();
+    if (!mounted) return;
+    final window = state.sectionWindowFor(viewId: view.id, sectionKey: key);
+    if (window == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(state.strings['sectionAutomationMissing'])),
+      );
+      return;
+    }
+    await showSectionWindowEditor(
+      context: context,
+      state: state,
+      automation: window,
+    );
   }
 
   Future<void> _deleteSection(ViewSectionDef section) async {
@@ -515,8 +542,9 @@ class _TaskViewPaneState extends State<TaskViewPane> {
         final label = state.viewLabel(viewType);
         final tasks = _membershipTasks;
         final byTopic = state.viewDisplayMode == ViewDisplayMode.byTopic;
-        final frames =
-            byTopic ? _framesForTopics(tasks) : _framesForSections(tasks);
+        final frames = byTopic
+            ? _framesForTopics(tasks)
+            : _framesForSections(tasks);
 
         Widget grid = _FrameGrid(
           frames: frames,
@@ -639,7 +667,8 @@ class _FrameGrid extends StatelessWidget {
     required TaskDragPayload payload,
     required bool targetDone,
     required int indexInZone,
-  }) onForeignDrop;
+  })
+  onForeignDrop;
   final ValueChanged<bool> onTaskReorderModeChanged;
   final Future<void> Function(Offset, ViewSectionDef) onSectionTitleMenu;
   final Future<void> Function(ViewSectionDef) onEditSection;
@@ -715,7 +744,8 @@ class _DraggableFrame extends StatelessWidget {
     required TaskDragPayload payload,
     required bool targetDone,
     required int indexInZone,
-  }) onForeignDrop;
+  })
+  onForeignDrop;
   final ValueChanged<bool> onTaskReorderModeChanged;
   final Future<void> Function(Offset, ViewSectionDef) onSectionTitleMenu;
   final Future<void> Function(ViewSectionDef) onEditSection;
@@ -739,7 +769,8 @@ class _DraggableFrame extends StatelessWidget {
       accent: frame.accent,
       tintSeed: frame.tintSeed,
       isImportant: frame.isImportant,
-      attention: frame.section != null &&
+      attention:
+          frame.section != null &&
           state.selectedView != null &&
           state.sectionHasAttention(
             viewId: state.selectedView!.id,
@@ -748,17 +779,14 @@ class _DraggableFrame extends StatelessWidget {
       frameReorderMode: frameReorderMode,
       taskReorderMode: taskReorderMode,
       onTaskReorderModeChanged: onTaskReorderModeChanged,
-      onForeignDrop: ({
-        required payload,
-        required targetDone,
-        required indexInZone,
-      }) =>
-          onForeignDrop(
-            frame: frame,
-            payload: payload,
-            targetDone: targetDone,
-            indexInZone: indexInZone,
-          ),
+      onForeignDrop:
+          ({required payload, required targetDone, required indexInZone}) =>
+              onForeignDrop(
+                frame: frame,
+                payload: payload,
+                targetDone: targetDone,
+                indexInZone: indexInZone,
+              ),
     );
 
     if (!frameReorderMode) return card;
@@ -791,10 +819,7 @@ class _DraggableFrame extends StatelessWidget {
               ),
             ),
             childWhenDragging: Opacity(opacity: 0.3, child: card),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.grab,
-              child: card,
-            ),
+            child: MouseRegion(cursor: SystemMouseCursors.grab, child: card),
           ),
         );
       },

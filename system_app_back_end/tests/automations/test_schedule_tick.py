@@ -88,3 +88,22 @@ def test_first_sight_during_the_due_minute_still_runs():
     )
     assert action == "run"
     assert next_run_at == datetime(2026, 8, 25, 10, 10)
+
+
+def test_every_three_months_skips_the_months_in_between():
+    """`monthly 3 last fri 08:00` after August's slot is November, not September."""
+    now = datetime(2026, 8, 18, 9, 0)
+    assert next_run_after("monthly 3 last fri 08:00", now, "UTC") == datetime(
+        2026, 8, 28, 8, 0
+    )
+    after = datetime(2026, 8, 28, 9, 0)
+    assert next_run_after("monthly 3 last fri 08:00", after, "UTC") == datetime(
+        2026, 11, 27, 8, 0
+    )
+
+
+def test_plain_monthly_is_still_the_next_month():
+    now = datetime(2026, 8, 28, 9, 0)
+    assert next_run_after("monthly last fri 08:00", now, "UTC") == datetime(
+        2026, 9, 25, 8, 0
+    )

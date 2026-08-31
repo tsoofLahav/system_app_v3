@@ -183,6 +183,16 @@ void main() {
         ).toDsl(),
         'monthly last fri 18:00',
       );
+      expect(
+        const AutomationSchedule(
+          kind: AutomationSchedule.everyNMonths,
+          monthInterval: 3,
+          placement: 'last',
+          weekday: 'fri',
+          time: '18:00',
+        ).toDsl(),
+        'monthly 3 last fri 18:00',
+      );
     });
 
     test('an old cron line becomes a daily eight oclock', () {
@@ -196,6 +206,20 @@ void main() {
       expect(parsed.kind, 'weekly');
       expect(parsed.weekday, 'mon');
       expect(parsed.time, '09:30');
+    });
+
+    test('every N months is monthly with an interval', () {
+      final parsed = AutomationSchedule.parse('monthly 3 last fri 18:00');
+      expect(parsed.kind, AutomationSchedule.everyNMonths);
+      expect(parsed.monthInterval, 3);
+      expect(parsed.placement, 'last');
+      expect(parsed.weekday, 'fri');
+      expect(parsed.toDsl(), 'monthly 3 last fri 18:00');
+
+      final quarterly = AutomationSchedule.parse('quarterly 3 first mon 08:00');
+      expect(quarterly.kind, AutomationSchedule.everyNMonths);
+      expect(quarterly.monthInterval, 3);
+      expect(quarterly.toDsl(), 'monthly 3 first mon 08:00');
     });
 
     test('a calendar tap infers weekday and monthly placement', () {

@@ -14,7 +14,7 @@ An automation is a **scope**, a **trigger**, and an ordered **series of steps**.
 |-------|-----|
 | Name | English and Hebrew, both required; the list follows the UI language |
 | Scope | All topics / one topic / a topic type (loaded from `topic_types`) |
-| Schedule | Once a day / week / month. Weekly and monthly use a calendar next to a matching 24-hour numbered dial (typed hour and minute under the dial); daily is the clock alone |
+| Schedule | Once a day / week / month, or once every N months (2–12). Weekly, monthly, and every-N-months use a calendar next to a matching 24-hour numbered dial (typed hour and minute under the dial); daily is the clock alone |
 | Enabled | Switch on the **end** of each automations-list row (after edit, run, delete) — off means it never fires automatically |
 | Steps | Horizontal frames. Drag to reorder (run order is the array order). Add from `+`, tap a frame to edit. Delete a step with the small x on the frame — the step editor has no trash. |
 
@@ -34,7 +34,7 @@ A single-topic scope is also the target for a "create a file" step. Broader scop
 
 | Surface | What it is for |
 |---------|----------------|
-| [`automation_dialog.dart`](automation_dialog.dart) (bottom bar) | Two lists: regular automations and **section windows**. Regular: create, edit, run now, delete, on/off. Section windows are auto-created with a view section (off until start + duration are set); edit opens the window editor, no delete |
+| [`automation_dialog.dart`](automation_dialog.dart) (bottom bar) | Two pages: regular automations and **section windows**, each searchable by name. Regular: create, edit, run now, delete, on/off. Section windows are auto-created with a view section (off until start + duration are set); edit opens the window editor, no delete |
 | [`automation_builder_dialog.dart`](automation_builder_dialog.dart) | Regular automations — create and rewrite |
 | [`section_window_editor.dart`](section_window_editor.dart) | Start time + duration for a section window |
 | Agent dialog / AI bar ⋯ | Saved **actions**, not automations |
@@ -50,13 +50,13 @@ A regular automation whose AI steps need **user input** or **review** must pick 
 | Input | an AI step `requires_user_input` | `{name} automation task` | `{name} משימת אוטומציה` |
 | Review | an AI step `apply_mode` is review | `{name} review task` | `{name} משימת סקירה` |
 
-Press the **title** to open the input or review dialog. The pipeline still marks the row when input is submitted or review finishes. The checkbox works like any other task: mark it to give up that round, unmark to take it back. Input is clickable until submitted; then hover “user input was already received”. Review stays silent and unclickable until a pending review exists — only then hover “review is in process”. Both recycle at the next section start.
+Press the **title** to open the input or review dialog. The title is pressable (dark-teal underline, same mark as connected text used to use) only **while the section window is open** and the row still needs work — input until submitted, review only when a pending review exists. Connected (description-linked) task text is the quieter mark: italic dark teal, and it keeps strikethrough when the task is done. The pipeline still marks the row when input is submitted or review finishes. The checkbox works like any other task: mark it to give up that round, unmark to take it back. Input hover after submit: “user input was already received”. Review stays silent until a pending review exists — only then hover “review is in process”. Both recycle at the next section start.
 
-When input covers several topics, the dialog shows **one topic at a time**. The header uses that topic’s colour ombre (same veil as the topic page). Template topics are never in automation or AI-action scope.
+When input covers several topics, the dialog shows **one topic at a time**. Shift+Enter advances to the next topic (caret in that field) and on the last topic submits. The dialog **closes immediately**; a small spinner sits next to the complimentary title while the run is in flight. The header uses a stronger topic-colour ombre than the topic page (`AppColors.topicDialogVeilAlpha`). Template topics are never in automation or AI-action scope.
 
 The section-window duration is **hours** and **minutes**, each labelled above the field (not as a disappearing hint).
 
-Timing uses locked structured controls rather than free text, so an invalid schedule string cannot be produced. The builder is three framed sections: details (name, scope, daily/weekly/monthly), when (a compact calendar beside a matching 24-hour numbered dial with typed hour and minute, both in this dialog), and steps (a horizontal strip of frames; long-press drag reorders them — the run walks that array in order). Frequency stays in details. Weekly marks that weekday every week; monthly infers first / second / third / last from the tapped date (a fourth-of-five that is not the last maps to third). Flip months to see where it falls later. Daily shows only the clock. `+` under the strip adds a new AI action (the regular create dialog), a saved AI action, or a system step. Choosing **Add to a file** opens the real file editor on a scratch file; Save stores that snippet on the step (appended onto the target at run). Tap a frame to edit it. Remove a step with the corner x on its frame, not from inside the step editor. Enabled is a switch on the automations **list** (outermost after edit / run / delete), not in the builder. Create sits under the list. The string sent is `daily 08:00`, never `0 8 * * *`.
+Timing uses locked structured controls rather than free text, so an invalid schedule string cannot be produced. The builder is three framed sections: details (name, scope, daily/weekly/monthly/every N months), when (a compact calendar beside a matching 24-hour numbered dial with typed hour and minute, both in this dialog), and steps (a horizontal strip of frames; long-press drag reorders them — the run walks that array in order). Frequency stays in details. Weekly marks that weekday every week; monthly infers first / second / third / last from the tapped date (a fourth-of-five that is not the last maps to third). Every N months uses that same day, then skips N−1 months. Flip months to see where it falls later. Daily shows only the clock. `+` under the strip adds a new AI action (the regular create dialog), a saved AI action, or a system step. Choosing **Add to a file** opens the real file editor on a scratch file; Save stores that snippet on the step (appended onto the target at run). Tap a frame to edit it. Remove a step with the corner x on its frame, not from inside the step editor. Enabled is a switch on the automations **list** (outermost after edit / run / delete), not in the builder. Create sits under the regular list. The string sent is `daily 08:00`, never `0 8 * * *`. Every N months is `monthly 3 last fri 18:00`.
 
 ## Running
 
@@ -69,13 +69,14 @@ Results: each AI step goes through `presentAgentRunResult`; other steps snackbar
 
 | File | Role |
 |------|------|
-| [`automation_dialog.dart`](automation_dialog.dart) | Regular + section-window lists |
+| [`automation_dialog.dart`](automation_dialog.dart) | Regular and section-window pages, each with name search |
 | [`automation_builder_dialog.dart`](automation_builder_dialog.dart) | Scope, schedule, steps, complimentary section |
 | [`section_window_editor.dart`](section_window_editor.dart) | Section window start + duration |
 | [`complimentary_input_dialog.dart`](complimentary_input_dialog.dart) | Per-topic (or one) user input, then run |
 | [`leftover_clear_dialog.dart`](leftover_clear_dialog.dart) | Blocking leftover confirm |
 | [`fill_file_snippet_dialog.dart`](fill_file_snippet_dialog.dart) | Real file editor for a `fill_file` snippet |
-| [`schedule_format.dart`](schedule_format.dart) | DSL parse / format |
+| [`schedule_format.dart`](schedule_format.dart) | DSL parse / format (`daily` / `weekly` / `monthly` / `monthly N …`) |
+| [`schedule_kind_field.dart`](schedule_kind_field.dart) | Once a day / week / month / every N months chips |
 | [`automation_service.dart`](automation_service.dart) | Automations API |
 | [`automation.dart`](automation.dart) | Model, scope kinds, step kinds |
 

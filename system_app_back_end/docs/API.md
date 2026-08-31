@@ -209,7 +209,7 @@ A scope, a trigger, and an ordered series of steps. Saved AI actions are a diffe
 
 `steps` is `[{ "kind": "ai" \| "create_file" \| "unmark_tasks" \| "archive_files", … }]`. An `ai` step is either `{ "action_id" }` or `{ "prompt", "apply_mode" }`.
 
-`schedule` is `daily HH:MM` / `weekly DAY HH:MM` / `monthly PLACEMENT DAY HH:MM`, not a cron line.
+`schedule` is `daily HH:MM` / `weekly DAY HH:MM` / `monthly PLACEMENT DAY HH:MM` / `monthly N PLACEMENT DAY HH:MM` (every N months), not a cron line.
 
 ## Saved AI actions
 
