@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
+import '../files/rich_text/dialog_formatted_field.dart';
 import '../ui/action_icon_picker.dart';
 import '../ui/action_icons.dart';
 import '../ui/adaptive_dialog.dart';
@@ -224,11 +225,11 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
           const SizedBox(height: DialogFieldStyle.fieldGap),
           AppDialogField(
             label: s['automationPrompt'],
-            child: TextField(
+            child: DialogFormattedField(
               controller: _prompt,
+              strings: s,
               minLines: 2,
-              maxLines: 4,
-              decoration: DialogFieldStyle.decoration(),
+              maxLines: 8,
             ),
           ),
           const SizedBox(height: DialogFieldStyle.fieldGap),
@@ -262,11 +263,12 @@ class _AiActionEditDialogState extends State<_AiActionEditDialog> {
             const SizedBox(height: DialogFieldStyle.fieldGap),
             AppDialogField(
               label: s['userInputPrompt'],
-              child: TextField(
+              child: DialogFormattedField(
                 controller: _userInputPrompt,
-                decoration: DialogFieldStyle.decoration(
-                  hintText: s['userInputPromptHint'],
-                ),
+                strings: s,
+                minLines: 2,
+                maxLines: 6,
+                hintText: s['userInputPromptHint'],
               ),
             ),
           ],

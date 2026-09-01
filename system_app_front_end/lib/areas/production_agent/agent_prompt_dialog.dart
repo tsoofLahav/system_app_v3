@@ -10,6 +10,7 @@ import '../ui/app_colors.dart';
 import '../ui/app_icons.dart';
 import '../ui/app_segmented_toggle.dart';
 import '../ui/app_typography.dart';
+import '../files/rich_text/dialog_formatted_field.dart';
 import '../ui/dialog_field_style.dart';
 import '../ux/shortcuts/shortcut_catalog.dart';
 import './agent_result_ui.dart';
@@ -135,6 +136,7 @@ class AgentPromptDialog extends StatefulWidget {
 
 class _AgentPromptDialogState extends State<AgentPromptDialog> {
   final _prompt = TextEditingController();
+  final _promptFocus = FocusNode();
   final _name = TextEditingController();
   final _nameHe = TextEditingController();
   var _applyMode = 'direct_apply';
@@ -158,11 +160,15 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
     _topicId = initial.topicId;
     _topicTypeId = initial.typeId;
     _barSlot = widget.state.firstFreeAiBarSlot;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _promptFocus.requestFocus();
+    });
   }
 
   @override
   void dispose() {
     _prompt.dispose();
+    _promptFocus.dispose();
     _name.dispose();
     _nameHe.dispose();
     _userInputPrompt.dispose();
@@ -247,11 +253,12 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
         children: [
           AppDialogField(
             label: s['aiAgentPromptHint'],
-            child: TextField(
+            child: DialogFormattedField(
               controller: _prompt,
-              autofocus: true,
-              maxLines: 4,
-              decoration: DialogFieldStyle.decoration(),
+              focusNode: _promptFocus,
+              strings: s,
+              minLines: 3,
+              maxLines: 8,
             ),
           ),
           const SizedBox(height: DialogFieldStyle.fieldGap),
@@ -311,11 +318,12 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
               const SizedBox(height: DialogFieldStyle.fieldGap),
               AppDialogField(
                 label: s['userInputPrompt'],
-                child: TextField(
+                child: DialogFormattedField(
                   controller: _userInputPrompt,
-                  decoration: DialogFieldStyle.decoration(
-                    hintText: s['userInputPromptHint'],
-                  ),
+                  strings: s,
+                  minLines: 2,
+                  maxLines: 6,
+                  hintText: s['userInputPromptHint'],
                 ),
               ),
             ],

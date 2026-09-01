@@ -6,6 +6,7 @@ import '../../core/l10n/app_strings.dart';
 import '../files/data/app_file.dart';
 import '../files/data/topic.dart';
 import '../files/data/topic_type.dart';
+import '../files/rich_text/dialog_formatted_field.dart';
 import '../objects/data/app_view.dart';
 import '../objects/data/view_layout.dart';
 import '../production_agent/agent_run_defaults.dart';
@@ -1330,8 +1331,9 @@ class _StepEditDialogState extends State<_StepEditDialog> {
             label: s['automationPrompt'],
             child: _KeepTextField(
               value: _step['prompt'] as String? ?? '',
+              strings: s,
               minLines: 2,
-              maxLines: 4,
+              maxLines: 8,
               onChanged: (value) => _step['prompt'] = value,
             ),
           ),
@@ -1621,11 +1623,12 @@ class _StepEditDialogState extends State<_StepEditDialog> {
 }
 
 /// A text field that keeps its own controller so typing does not rebuild it
-/// out from under the caret.
+/// out from under the caret. Multiline uses the object-field editor.
 class _KeepTextField extends StatefulWidget {
   const _KeepTextField({
     required this.value,
     required this.onChanged,
+    this.strings,
     this.minLines = 1,
     this.maxLines = 1,
     this.keyboardType,
@@ -1633,6 +1636,7 @@ class _KeepTextField extends StatefulWidget {
 
   final String value;
   final ValueChanged<String> onChanged;
+  final AppStrings? strings;
   final int minLines;
   final int maxLines;
   final TextInputType? keyboardType;
@@ -1643,6 +1647,8 @@ class _KeepTextField extends StatefulWidget {
 
 class _KeepTextFieldState extends State<_KeepTextField> {
   late final TextEditingController _controller;
+
+  bool get _multiline => widget.maxLines != 1 || widget.minLines > 1;
 
   @override
   void initState() {
@@ -1666,6 +1672,15 @@ class _KeepTextFieldState extends State<_KeepTextField> {
 
   @override
   Widget build(BuildContext context) {
+    if (_multiline && widget.strings != null) {
+      return DialogFormattedField(
+        controller: _controller,
+        strings: widget.strings!,
+        minLines: widget.minLines,
+        maxLines: widget.maxLines,
+        onChanged: widget.onChanged,
+      );
+    }
     return TextField(
       controller: _controller,
       minLines: widget.minLines,

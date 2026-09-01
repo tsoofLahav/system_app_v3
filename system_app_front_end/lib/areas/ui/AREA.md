@@ -51,7 +51,7 @@ There is no black and no pure grey. Warm charcoal on warm off-white is what keep
 |-------|-------|---------|
 | `primary` | `#37899E` | The app's own accent: selections, key actions, menu highlight |
 | `primaryLight` | `#51A0B0` | Softer variant |
-| `descriptionLink` | `#2A6B7C` | Darker primary: connected (description-linked) text and its thin underline |
+| `descriptionLink` | `#2A6B7C` | Darker primary: connected text (italic) and pressable complimentary titles (underline) |
 | `primaryBright` | `#58C4D8` | Fills on active controls and toggles |
 | `aiCyan` | `#00D4FF` | AI, and only AI — the one place the app is allowed to glow |
 | `destructive` | `#B45309` | Delete and discard. Amber-brown, never red |
@@ -177,11 +177,11 @@ The preferences dialog is the **reference** glass dialog. Every other dialog use
 
 | Kind | Widget | Shape |
 |------|--------|-------|
-| Standard dialog | `AppAdaptiveDialogShell` → `AppGlassDialog` | Max width 280, radius 16, padding 12/10/12/8, tight hairline dividers. Optional `headerAccent` paints the same topic-page ombre behind the title (complimentary input) |
+| Standard dialog | `AppAdaptiveDialogShell` → `AppGlassDialog` | Max width 280, radius 16, padding 12/10/12/8, tight hairline dividers. Optional `headerAccent` paints the topic-page ombre behind the title; complimentary input uses `headerAccentTintAlpha: topicDialogVeilAlpha` (0.22) so the topic colour is readable |
 | Phone dialog | `AppAdaptiveDialogShell` | Radius 16, inset 14×16, tint 0.94, matching tight padding |
 | Wide dialog | same shell + `wideWidth` | 400 — colour/emoji pickers, shortcut list, automations list |
 | Extra-wide dialog | same shell + `extraWideWidth` | 460 — automation builder (calendar + clock) |
-| File-editor dialog | `AppGlassDialog` + `fileEditorWidth` | 520 — fill-file snippet (hosts `DocumentPane`) |
+| File-editor dialog | `AppGlassDialog` + `fileEditorWidth` | 520 — fill-file snippet (hosts `DocumentPane` + insert bar) |
 | Confirm | `showAppConfirmDialog` | Same shell; destructive answers use amber-brown text |
 | Full-screen overlay | `OverlayDialogShell` + `OverlayDialogStyle` | Scrim black 18% (arrange 30%), cards radius 14 |
 | Context menu (right-click **and** file `⋯`) | `../ux/widgets/app_context_menu.dart` | Bubble radius 12, rows 28 high, 11.5px labels, `menuTint` frost, highlight in `primary`; compact width 128 + downward caret for anchored create menus |

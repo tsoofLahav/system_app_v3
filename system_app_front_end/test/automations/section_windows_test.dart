@@ -1,7 +1,10 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/automations/automation.dart';
 import 'package:system_app_front_end/areas/objects/data/task.dart';
 import 'package:system_app_front_end/areas/objects/data/view_layout.dart';
+import 'package:system_app_front_end/areas/objects/tasks/task_list_surface.dart';
+import 'package:system_app_front_end/areas/ui/app_colors.dart';
 import 'package:system_app_front_end/core/l10n/app_strings.dart';
 
 void main() {
@@ -14,9 +17,11 @@ void main() {
     final json = section.toJson();
     expect(json['key'], 'abc');
     expect(json['cadence'], 'routine');
+    expect(json.containsKey('default'), isFalse);
     final restored = ViewSectionDef.fromJson(json, 0);
     expect(restored.key, 'abc');
     expect(restored.isRoutine, isTrue);
+    expect(restored.isDefault, isFalse);
   });
 
   test('missing cadence defaults to routine and one_time is kept', () {
@@ -127,5 +132,69 @@ void main() {
       'has_pending_review': true,
     });
     expect(pending.hasPendingReview, isTrue);
+  });
+
+  test('complimentary title is pressable only in an open section window', () {
+    final input = Task.fromJson({
+      'id': 1,
+      'title': 'Weekly brief automation task',
+      'status': 'active',
+      'source_automation_id': 9,
+      'complimentary_role': 'input',
+    });
+    expect(
+      complimentaryTaskPressable(
+        task: input,
+        automation: null,
+        windowOpen: true,
+        processing: false,
+      ),
+      isTrue,
+    );
+    expect(
+      complimentaryTaskPressable(
+        task: input,
+        automation: null,
+        windowOpen: false,
+        processing: false,
+      ),
+      isFalse,
+    );
+    expect(
+      complimentaryTaskPressable(
+        task: input.copyWith(status: 'done'),
+        automation: null,
+        windowOpen: true,
+        processing: false,
+      ),
+      isFalse,
+    );
+    expect(
+      complimentaryTaskPressable(
+        task: input,
+        automation: null,
+        windowOpen: true,
+        processing: true,
+      ),
+      isFalse,
+    );
+  });
+
+  test('pressable complimentary title underlines without dropping strikethrough', () {
+    final style = complimentaryTitleStyle(
+      base: const TextStyle(
+        decoration: TextDecoration.lineThrough,
+        color: Color(0xFF9D988F),
+      ),
+      pressable: true,
+    );
+    expect(style.color, AppColors.descriptionLink);
+    expect(
+      style.decoration,
+      TextDecoration.combine([
+        TextDecoration.underline,
+        TextDecoration.lineThrough,
+      ]),
+    );
   });
 }

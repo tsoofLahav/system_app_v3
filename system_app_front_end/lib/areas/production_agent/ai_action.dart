@@ -3,8 +3,8 @@ import './agent_run_defaults.dart';
 /// A prompt on a button.
 ///
 /// Not an automation: nothing schedules it. It runs when the user presses it,
-/// on whatever they have open. Scope only decides whether the button is
-/// offered.
+/// on whatever they have open. Scope only decides whether it sits on the bar;
+/// every saved action is in the ⋯ menu.
 class AiAction {
   const AiAction({
     required this.id,

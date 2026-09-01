@@ -15,7 +15,8 @@ import '../ui/dialog_metrics.dart';
 
 /// The saved AI actions, and nothing else.
 ///
-/// Opened from the ⋯ beside the AI bar. An action is born in the agent
+/// Opened from the ⋯ beside the AI bar. Lists every saved action; scope is
+/// only for which of them also sit on the bar. An action is born in the agent
 /// dialog; automations live in their own dialog.
 Future<void> showAiActionsDialog({
   required BuildContext context,

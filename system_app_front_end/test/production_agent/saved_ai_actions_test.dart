@@ -70,7 +70,7 @@ void main() {
       expect(action.visibleOnTopicType(null), isFalse);
     });
 
-    test('visibility is open topic, type, or a visiting file on Home', () {
+    test('bar visibility is open topic, type, or a visiting file on Home', () {
       final global = AiAction.fromJson({
         'id': 1,
         'workspace_id': 1,

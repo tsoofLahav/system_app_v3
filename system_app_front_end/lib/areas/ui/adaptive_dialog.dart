@@ -37,6 +37,7 @@ class AppAdaptiveDialogShell extends StatelessWidget {
     this.width = AppDialogMetrics.maxWidth,
     this.headerAccent,
     this.headerAccentIsMain = false,
+    this.headerAccentTintAlpha,
   });
 
   final Widget title;
@@ -45,6 +46,7 @@ class AppAdaptiveDialogShell extends StatelessWidget {
   final double width;
   final Color? headerAccent;
   final bool headerAccentIsMain;
+  final double? headerAccentTintAlpha;
 
   @override
   Widget build(BuildContext context) {
@@ -63,6 +65,7 @@ class AppAdaptiveDialogShell extends StatelessWidget {
             tintOpacity: 0.94,
             headerAccent: headerAccent,
             headerAccentIsMain: headerAccentIsMain,
+            headerAccentTintAlpha: headerAccentTintAlpha,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -100,6 +103,7 @@ class AppAdaptiveDialogShell extends StatelessWidget {
       width: width,
       headerAccent: headerAccent,
       headerAccentIsMain: headerAccentIsMain,
+      headerAccentTintAlpha: headerAccentTintAlpha,
       child: child,
     );
   }

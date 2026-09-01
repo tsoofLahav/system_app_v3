@@ -35,8 +35,13 @@ abstract final class AppColors {
   static const primary = Color(0xFF37899E);
   static const primaryLight = Color(0xFF51A0B0);
 
-  /// Darker teal for description-linked text (glyphs + 1px underline).
+  /// Darker teal for description-linked text (italic glyphs) and pressable
+  /// complimentary titles (underline).
   static const descriptionLink = Color(0xFF2A6B7C);
+
+  /// Topic wash on a dialog header — stronger than the page veil so the
+  /// topic colour is readable in a small panel.
+  static const topicDialogVeilAlpha = 0.22;
 
   /// Brighter teal fill for segmented toggles and active controls.
   static const primaryBright = Color(0xFF58C4D8);
@@ -67,10 +72,11 @@ abstract final class AppColors {
   static LinearGradient topicTopVeil({
     required Color accent,
     required bool isMainTopic,
+    double? tintAlpha,
   }) {
     final tint = Color.alphaBlend(
       (isMainTopic ? text : accent).withValues(
-        alpha: isMainTopic ? 0.02 : 0.08,
+        alpha: tintAlpha ?? (isMainTopic ? 0.02 : 0.08),
       ),
       Colors.white,
     );

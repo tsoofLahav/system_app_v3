@@ -12,7 +12,7 @@ Lives in the bottom bar ([`ai_tool_bar.dart`](ai_tool_bar.dart)), in reading ord
 |---------|----------|
 | **Agent button** | Opens the prompt dialog ([`agent_prompt_dialog.dart`](agent_prompt_dialog.dart)) for a one-off request, with **Review changes (diff)** vs **Apply directly** (opens on apply directly — a one-off ask is lighter with the undo toast than with a diff). An action is also born here. |
 | **Pinned actions** | The agent is always seat 1 (⌘1). Up to seven saved actions fill the rest of the eight-spot row (⌘2…⌘8). A topic may add **two more** that only appear on that topic (⌘9 / ⌘0). Pressing one runs it on what is open. An action shows when its scope matches the open topic, **or** (on Home) when any visiting file’s source topic or that topic’s type matches (union). Globals always show. A scoped bar pin simply hides when out of scope. Fixed seats 1–7 stay unique per workspace; extra seats 9–10 are unique per topic. |
-| **⋯** | Opens the AI actions dialog ([`ai_actions_dialog.dart`](../automations/ai_actions_dialog.dart)) — the same filter as the bar, each with pin, edit, run and delete. |
+| **⋯** | Opens the AI actions dialog ([`ai_actions_dialog.dart`](../automations/ai_actions_dialog.dart)) — **every** saved action, regardless of scope, each with pin, edit, run and delete. Scope only decides which of those also sit on the bar. |
 
 Each icon uses the same 34px tap slot as the other bottom-bar buttons, so the AI pill is not tighter than insert or chrome.
 
@@ -22,7 +22,7 @@ While a run is in flight, the bottom bar keeps the spinner and **Running…**, p
 
 ### Keeping an ask
 
-The prompt dialog opens small. **Save as action…** grows it into English and Hebrew names, **Needs user input**, an icon, **Shown on** (every topic / a type / a topic), a seat choice, and the footer becomes Cancel / Save and run / Save — naming and placing something is only interesting once the user has decided to keep it. Saving writes an `ai_actions` row ([`ai_action.dart`](ai_action.dart)); it is not an automation. Create defaults to the current topic when that topic still has an extra seat. Yes on user input stores `requires_user_input` so an automation that uses the action places complimentary input/review tasks.
+The prompt dialog opens small. The prompt field is the same editor as object text ([`dialog_formatted_field.dart`](../files/rich_text/dialog_formatted_field.dart) → [`FormattedTextField`](../files/rich_text/formatted_text_field.dart)): click places the caret, drag and Shift+arrows mark, RTL motion matches info/task fields. **Save as action…** grows it into English and Hebrew names, **Needs user input**, an icon, **Shown on** (every topic / a type / a topic), a seat choice, and the footer becomes Cancel / Save and run / Save — naming and placing something is only interesting once the user has decided to keep it. Saving writes an `ai_actions` row ([`ai_action.dart`](ai_action.dart)); it is not an automation. Create defaults to the current topic when that topic still has an extra seat. Yes on user input stores `requires_user_input` so an automation that uses the action places complimentary input/review tasks.
 
 A saved action runs through `runSavedAgentAction` and ends the same way a typed prompt does — review dialog, undo toast, or summary — unless the user cancelled, in which case that ending is skipped.
 

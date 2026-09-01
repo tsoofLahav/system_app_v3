@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import '../../core/app_state.dart';
 import '../files/data/app_file.dart';
 import '../files/data/topic.dart';
+import '../files/editor/document_insert_bar.dart';
 import '../files/editor/document_pane.dart';
 import '../ui/adaptive_dialog.dart';
 import '../ui/app_typography.dart';
 import '../ui/dialog_metrics.dart';
 import '../ui/glass_surface.dart';
+import '../ux/shell/dismiss_focus_on_outside_tap.dart';
 import '../ux/topic/topic_appearance.dart';
 
 /// Host the real file editor so an automation step can save a snippet.
@@ -154,14 +156,27 @@ class _FillFileSnippetDialogState extends State<_FillFileSnippetDialog> {
         ),
       );
     }
-    return DocumentPane(
-      topic: widget.topic,
-      file: _file!,
-      state: state,
-      accent: TopicAppearance.accentFor(widget.topic),
-      autoOpenPendingReview: false,
-      showFileMenu: false,
-      onDelete: () => _finish(save: false),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: DocumentPane(
+            topic: widget.topic,
+            file: _file!,
+            state: state,
+            accent: TopicAppearance.accentFor(widget.topic),
+            autoOpenPendingReview: false,
+            showFileMenu: false,
+            onDelete: () => _finish(save: false),
+          ),
+        ),
+        const SizedBox(height: 8),
+        KeepEditorFocus(
+          child: Center(
+            child: DocumentInsertBar(state: state, embedded: true),
+          ),
+        ),
+      ],
     );
   }
 }

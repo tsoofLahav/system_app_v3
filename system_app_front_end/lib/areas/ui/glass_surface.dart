@@ -122,6 +122,7 @@ class GlassSurface extends StatelessWidget {
     this.boxShadow,
     this.headerAccent,
     this.headerAccentIsMain = false,
+    this.headerAccentTintAlpha,
   });
 
   factory GlassSurface.styled({
@@ -135,6 +136,7 @@ class GlassSurface extends StatelessWidget {
     List<BoxShadow>? boxShadow,
     Color? headerAccent,
     bool headerAccentIsMain = false,
+    double? headerAccentTintAlpha,
   }) {
     return GlassSurface(
       borderRadius: borderRadius,
@@ -149,6 +151,7 @@ class GlassSurface extends StatelessWidget {
       boxShadow: boxShadow,
       headerAccent: headerAccent,
       headerAccentIsMain: headerAccentIsMain,
+      headerAccentTintAlpha: headerAccentTintAlpha,
       child: child,
     );
   }
@@ -167,6 +170,7 @@ class GlassSurface extends StatelessWidget {
   final List<BoxShadow>? boxShadow;
   final Color? headerAccent;
   final bool headerAccentIsMain;
+  final double? headerAccentTintAlpha;
 
   static List<BoxShadow> get _opaqueChromeShadow => [
         BoxShadow(
@@ -262,6 +266,7 @@ class GlassSurface extends StatelessWidget {
                       gradient: AppColors.topicTopVeil(
                         accent: headerAccent!,
                         isMainTopic: headerAccentIsMain,
+                        tintAlpha: headerAccentTintAlpha,
                       ),
                     ),
                   ),
@@ -558,6 +563,7 @@ class AppGlassDialog extends StatelessWidget {
     this.scrollable = true,
     this.headerAccent,
     this.headerAccentIsMain = false,
+    this.headerAccentTintAlpha,
   });
 
   final Widget title;
@@ -567,6 +573,7 @@ class AppGlassDialog extends StatelessWidget {
   final bool scrollable;
   final Color? headerAccent;
   final bool headerAccentIsMain;
+  final double? headerAccentTintAlpha;
 
   @override
   Widget build(BuildContext context) {
@@ -596,6 +603,7 @@ class AppGlassDialog extends StatelessWidget {
           padding: AppDialogMetrics.padding,
           headerAccent: headerAccent,
           headerAccentIsMain: headerAccentIsMain,
+          headerAccentTintAlpha: headerAccentTintAlpha,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

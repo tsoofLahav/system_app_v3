@@ -61,6 +61,7 @@ int? firstFreeTopicExtraSlot(List<AiAction> actions, int topicId) {
 }
 
 /// Fixed seats in slot order, then up to two extras (open topic first).
+/// Scope filters this list; the ⋯ menu uses every saved action.
 List<AiAction> composeBarAiActions({
   required List<AiAction> actions,
   required int? openTopicId,
