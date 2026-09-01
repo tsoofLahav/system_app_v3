@@ -4,7 +4,9 @@ The full **pre-rewrite** codebase (blocks, file types, registries, old automatio
 
 **[`legacy/v1`](https://github.com/tsoofLahav/system_app_v3/tree/legacy/v1)** — frozen at commit `488ed25`
 
-`main` is the v2 document-model rewrite (`355bb65` and later).
+`main` is the current rewrite (called **v3** in [`DEVELOPMENT.md`](DEVELOPMENT.md); file bodies are **v4 marker text**). `legacy/v1` is the frozen pre-rewrite app.
+
+Do not merge `legacy/v1` into `main` wholesale — use it as read-only reference.
 
 ## Browse or compare
 
@@ -24,6 +26,4 @@ git worktree add ../system_app-v1-reference legacy/v1
 - Block/file-type architecture (`features/blocks/`, registries)
 - Hardcoded views and automation definitions
 - Unit-based diff / `change_review_dialog`
-- Migrations `002`–`017` (not v2 `001_v2_schema.sql`)
-
-Do not merge `legacy/v1` into `main` wholesale — use it as read-only reference while fixing v2.
+- Migrations `002`–`017` (not this rewrite's `001_v2_schema.sql`)

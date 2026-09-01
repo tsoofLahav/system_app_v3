@@ -109,11 +109,11 @@ Embed fields (table cells, info, …) still use `FormattedTextField` + the three
 
 ```bash
 flutter test \
-  test/rtl_paragraph_text_direction_test.dart \
-  test/rtl_empty_space_caret_test.dart \
-  test/line_range_selection_test.dart \
-  test/rtl_super_editor_direction_test.dart \
-  test/document_text_flow_test.dart \
+  test/files/rtl_paragraph_text_direction_test.dart \
+  test/files/rtl_empty_space_caret_test.dart \
+  test/files/line_range_selection_test.dart \
+  test/files/rtl_super_editor_direction_test.dart \
+  test/files/document_text_flow_test.dart \
   test/files/table_grid_nav_test.dart \
   test/files/table_cell_session_test.dart \
   test/ux/object_arrow_pad_test.dart

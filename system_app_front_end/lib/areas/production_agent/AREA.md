@@ -109,3 +109,4 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 - Undo for `create_object` alone / long-lived DB undo
 - Per-hunk review of `create_object` (stays direct_apply)
 - Multi-file single combined lookalike dialog (each file still has its own dialog, queued)
+- Delete unused `text_diff_dialog.dart` / `change_review_dialog.dart` (BACKLOG C4)

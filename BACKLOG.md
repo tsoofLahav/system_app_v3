@@ -4,7 +4,7 @@ Everything here is a real, confirmed problem. Nothing here is speculative.
 
 **Grouped by area so one area can be cleared at a time.** Inside each area, worst first.
 
-Source: full-codebase review on 2026-07-27, after the area reorganization. None of these were caused by that reorganization — all predate it.
+Source: full-codebase review on 2026-07-27, after the area reorganization. Reconciled 2026-09-01 (wrap-up) against shipped lookalike review, Super Editor, inactive/pending tasks, and emoji insert. None of the original items were caused by that reorganization — all predate it.
 
 Severity key: **P1** breaks or corrupts data · **P2** wrong behavior the user will hit · **P3** cleanup and robustness.
 
@@ -53,7 +53,7 @@ Code: [`areas/files/`](system_app_front_end/lib/areas/files/)
 | E8 | **P3** | Deleting across parts does not merge the first and last part into one. Both survive with their remaining text, where a word processor would join them. |
 | E9 | **P3** | Cmd+arrow and Home/End still use the platform's logical direction, so in Hebrew they move against the arrow. Plain and Alt+arrow are fixed via intent overrides; line-break motion is shared with Home/End, so flipping it would break those. |
 | E10 | **P3** | Text direction comes from the UI language, not from the text. A Hebrew paragraph in an English-UI file gets LTR caret behavior. Matches the app-wide rule in [`BILINGUAL.md`](system_app_front_end/lib/core/l10n/BILINGUAL.md); revisit if files become genuinely mixed. |
-| E11 | **P3** | `BlockDocumentEditor.build` calls `_flow.setOrder`, which notifies from inside build. Harmless today because every listener is a descendant that has not been built yet this frame, but a listener added anywhere else would throw *markNeedsBuild during build*. |
+| ~~E11~~ | — | ~~`BlockDocumentEditor.build` notifies from inside build.~~ **Done / obsolete.** `BlockDocumentEditor` was removed (Super Editor). |
 | E2 | **P3** | `RichListEditor._localStateMatchesNode` compares text only, not spans, so an external span-only change (undo, remote sync) does not resync controllers. |
 | E3 | **P3** | `RichTableEditor._focusNodes` grows via `_focusAt` and is never pruned when rows or columns shrink. Minor leak until the block is disposed. |
 
@@ -90,8 +90,9 @@ Code: [`areas/production_agent/`](system_app_back_end/areas/production_agent/)
 
 | # | Sev | Issue |
 |---|-----|-------|
-| P1 | **P2** | Review/diff is half-wired: the frontend reads `diff_hunks` off the agent response but never calls `POST /files/:id/diff` or `GET /files/:id/versions`. There is no version-history UI. |
+| ~~P1~~ | — | ~~Review/diff is half-wired.~~ **Done** as the product path: pending rows + lookalike dialog on file open (`POST /files/:id/pending-review/finish`). `POST /files/:id/diff` and `GET /files/:id/versions` still exist and have no UI (see C4). |
 | P2 | **P3** | `ensure_agent_config` calls `load_prompt_file()` for a new workspace with no fallback. If `content/production_agent/system_prompt.md` is missing at runtime, bootstrap and `/agent/run` raise. |
+| P3 | **P3** | Standing prompt polish (trim, sync to DB, smoke-test a few actions) was left open when the interaction plan closed. |
 
 ---
 
@@ -104,10 +105,10 @@ The spec says every visual constant lives in `areas/ui/`. These are the places t
 | # | Sev | Issue |
 |---|-----|-------|
 | U1 | **P3** | `app_context_menu.dart` and `details_hover_bubble.dart` keep their own visual language: local blur and tint values instead of an `AppGlassStyle` preset, and their own shadow stacks. |
-| U2 | **P3** | `change_review_dialog.dart` and `text_diff_dialog.dart` bypass `AppGlassDialog` and `AppTypography` — raw `TextStyle(fontSize: 18)`, `fontFamily: 'monospace'`, own max sizes. (The pending-review dialog is done: it is on `AppGlassStyle.dialog`; only the legacy shell and diff remain.) |
-| U3 | **P3** | Document heading sizes are computed inline as `24 - level * 2` in `block_document_editor.dart` instead of being named styles in `AppTypography`. |
+| U2 | **P3** | Unused leftover shells: `change_review_dialog.dart` and `text_diff_dialog.dart` bypass `AppGlassDialog` / `AppTypography`. The live review UI is [`lookalike_review_dialog.dart`](system_app_front_end/lib/areas/production_agent/lookalike_review_dialog.dart). Delete the leftovers (see C4). |
+| ~~U3~~ | — | ~~Heading sizes in `block_document_editor.dart`.~~ **Obsolete** — that editor is gone. Super Editor stylesheet owns heading sizes. |
 | U4 | **P3** | Material `Icons.*` still appear among the Lucide set (`task_mark`, `task_row`, `task_view_pane`, `automation_dialog`, `ai_tool_bar`), so stroke weights do not match. |
-| U5 | **P3** | `AppSwitch` is defined and themed but no widget uses it; `BILINGUAL.md` describes it as standard. Either adopt it or drop it. |
+| ~~U5~~ | — | ~~`AppSwitch` unused.~~ **Done** — used on automations enable and the default-section switch. |
 
 ---
 
@@ -115,9 +116,30 @@ The spec says every visual constant lives in `areas/ui/`. These are the places t
 
 | # | Sev | Issue |
 |---|-----|-------|
-| C1 | **P3** | ~30 Dart files under `lib/` are unreachable from `main.dart` — leftovers from v1 (`part.dart`, `brought_file_snapshot.dart`, and more). Old `list_block_widget` / `table_block_widget` / `document_undo_stack` / `document_body.py` removed in the post-v4 cleanup. |
+| C1 | **P3** | v1 leftovers still in `lib/core/models/`: `part.dart` (no imports), `brought_file_snapshot.dart`, and `block.dart` (still imported by `AppState.taskRowBlockInFile` returning null and `details_hover_bubble.dart`). Old `list_block_widget` / `table_block_widget` / `document_undo_stack` / `document_body.py` already deleted. |
 | ~~C2~~ | — | ~~`document_body.py` dead re-export.~~ **Done** — deleted. |
-| C3 | **P3** | 35 analyzer warnings, all `dead_null_aware_expression` / `dead_code` from `??` applied to non-nullable `AppStrings` getters. |
+| C3 | **P3** | Analyzer warnings: `dead_null_aware_expression` / `dead_code` from `??` on non-nullable `AppStrings` getters (count drifts; re-run the analyzer). |
+| C4 | **P3** | Dead review shells: `text_diff_dialog.dart` / `change_review_dialog.dart` have no callers. `POST /files/:id/diff` and `GET /files/:id/versions` have no product UI. `scripts/document_encoding_spike.py` is a leftover spike. |
+
+---
+
+## Wrap-up findings (2026-09-01)
+
+Organization debt we **did not** fix in this stop. Incomplete areas are expected ([`DEVELOPMENT.md`](DEVELOPMENT.md)); this list is so the next session does not rediscover the shape.
+
+Do **not** start these as drive-by refactors. Pick one when that area is the task.
+
+| Shape | Where | Why leave it |
+|-------|--------|----------------|
+| God-object `AppState` | [`app_state.dart`](system_app_front_end/lib/core/app_state.dart) (~3500 lines) | Central coordination; splitting it remounts the editor if notify paths go wrong |
+| Dual writing stacks | Super Editor body vs `FormattedTextField` in objects | Product design, not a leftover. Glue: `document_text_flow.dart`, `block_text_focus.dart`, embed caret files |
+| Caret / keyboard modules | `document_caret_session`, `embed_caret_bridge`, `editor_key_handoff`, `hardware_keyboard_guard` (in `shared/` though it is editor-domain) | Many files, one job. NOTES § Editor keyboard safety is the checklist |
+| v4 disk vs v3 in-memory | `document_json` marker text vs `RichDocument` / [`document_v3.py`](system_app_back_end/areas/files/services/document_v3.py) | Session SoT vs persist SoT; unifying is a project |
+| Two shortcut paths | Catalog in `ux/shortcuts/` plus local `Shortcuts` widgets in menus, pickers, embeds | Catalog owns app actions; local widgets own in-widget arrows |
+| Domain in `lib/core/` | `tag.dart`, archive pages, leftover `block.dart` | Belongs in objects / files / ux; move with the feature that next touches them |
+| One SQLAlchemy file | [`models.py`](system_app_back_end/models.py) | Areas own routes/services; schema stays shared until a real split |
+| Huge widgets | `formatted_text_field.dart`, `super_document_editor.dart`, `task_list_surface.dart`, `automation_builder_dialog.dart` | Split when that file is the change, not as hygiene |
+| Tests still at `test/` root | `widget_test.dart`, `platform_text_test.dart`, `hardware_keyboard_guard_test.dart`, `frame_safe_notifier_test.dart` | Shared / app-level on purpose. Area tests now live under `test/files/`, `test/objects/`, `test/ux/` |
 
 ---
 

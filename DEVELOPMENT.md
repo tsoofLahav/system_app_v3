@@ -75,7 +75,6 @@ Area maps: [backend](system_app_back_end/areas/README.md) · [frontend](system_a
 | [`CONSTITUTION.md`](CONSTITUTION.md) | Product purpose and principles — read-only, never edit |
 | [`LEGACY.md`](LEGACY.md) | How to browse and compare the pre-rewrite `legacy/v1` branch |
 | [`README.md`](README.md) | Repo layout for a human arriving fresh |
-| [`working on the agent interaction.md`](working%20on%20the%20agent%20interaction.md) | Live plan and status for the agent-interaction work |
 
 ### Per project
 

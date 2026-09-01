@@ -4,7 +4,7 @@ The runtime AI that reads and edits the user's files. Frontend counterpart: [`sy
 
 **Not the coding agent.** Cursor/dev-agent guidance lives in [`DEVELOPMENT.md`](../../../DEVELOPMENT.md).
 
-Interaction plan: [`working on the agent interaction.md`](../../../working%20on%20the%20agent%20interaction.md).
+Settled product decisions (do not reopen unless the product changes): Responses API + one conversation per run; agent text with fences, never raw `document_json`; scope/hints are context not a tool allow-list; archive files readable, never writable; review vs apply is action config; pending reviews live in `agent_pending_reviews` and open as the lookalike UI. Details below.
 
 ## The agent has its own markdown file
 

@@ -81,7 +81,7 @@ The hover bubble stays open while the pointer is on the connected text **or** th
 
 Before merging any rich-text PR:
 
-1. Run `flutter test test/span_shift_test.dart test/description_range_remap_test.dart test/document_mark_test.dart test/continuous_text_test.dart test/rtl_paragraph_text_direction_test.dart test/rtl_empty_space_caret_test.dart`
+1. Run `flutter test test/files/description_range_remap_test.dart test/files/document_mark_test.dart test/files/continuous_text_test.dart test/files/rtl_paragraph_text_direction_test.dart test/files/rtl_empty_space_caret_test.dart`
 2. Manual: bold a word → click after it → type (new text stays regular)
 3. Manual: mixed bold + regular lines → size up (bold stays bold, regular stays regular)
 4. Manual: select text → right-click → **one** highlight during menu, matching the selection (not selection + whole line)
@@ -122,4 +122,4 @@ Block content fields:
 
 ## Tests
 
-Run `flutter test test/span_shift_test.dart` after any change to span shifting, format application, or selection overlay.
+Run `flutter test test/files/description_range_remap_test.dart` after any change to span shifting, format application, or selection overlay.

@@ -8,7 +8,7 @@ When the user says “remember this”, add the note here under the matching sec
 
 ## Editor keyboard safety
 
-**Read before changing** `SuperDocumentEditor`, embeds, `AppState` notify paths, `app.dart`, the shells, or any in-document `TextField`.
+**Read before changing** `SuperDocumentEditor`, embeds, `AppState` notify paths, `app.dart`, the shells, or any in-document `TextField`. MUST / MUST NOT for remount and IME live **here**. Who owns typing: [`CARET_AND_WRITING_FOCUS.md`](CARET_AND_WRITING_FOCUS.md). Product caret/embed rules: [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md). Edit the checklist in this section; do not copy it into those files.
 
 Flutter desyncs when a `TextField` / `FocusNode` is disposed, remounted, or loses/gains focus **while a physical key is still down**. Symptom: looping console errors
 
@@ -110,7 +110,7 @@ Gathered in one place: [`CARET_AND_WRITING_FOCUS.md`](CARET_AND_WRITING_FOCUS.md
 - **2026-08-07** — Agent/automation **run defaults** (`apply_mode`, etc.) live in [`shared/run_config.py`](system_app_back_end/shared/run_config.py). Call sites import them; do not re-hardcode fallbacks in routes, runner, or FE services. Consult sends `apply_mode` from the FE toggle; if omitted, backend `DEFAULT_MANUAL_APPLY_MODE` wins. FE automation create keeps a twin in `agent_run_defaults.dart`.
 - **2026-08-16** — Pending agent reviews: the lookalike review opens on file mount; Finish archives a deep-copied old file then applies the merged agent text.
 - **2026-08-07** — Production-agent **writing/editing guidance** must be written as short, structured **instructions** (numbered steps, MUST / MUST NOT), not tip-style prose. The model already gets a lot of context; soft advice gets ignored. Scenario-specific jobs (e.g. “notes → update plan”) belong in topic/automation prompts, not in generic tool descriptions.
-- **2026-07-31** — Agent interaction plan wrapped (after objects): [`working on the agent interaction.md`](working%20on%20the%20agent%20interaction.md). Responses API + per-flow conversation; scope + hints (file/date/…); tools `patch_file` / `rewrite_file`; pending reviews in DB; archive files read-only.
+- **2026-07-31** — Agent interaction (Responses API + per-flow conversation; scope + hints; `patch_file` / `rewrite_file`; pending reviews; archive files read-only) is settled in the production-agent [`AREA.md`](system_app_front_end/lib/areas/production_agent/AREA.md) files. Remaining prompt polish is BACKLOG P3.
 
 ---
 
