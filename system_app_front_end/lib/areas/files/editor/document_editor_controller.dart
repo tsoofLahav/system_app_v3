@@ -18,6 +18,7 @@ class DocumentEditorController {
     this.restoreWritingFocus,
     this.dismissLiveMark,
     this.isFocused,
+    this.isPrimaryFocused,
     this.canEnterObject,
     this.canLeaveObject,
     this.enterObject,
@@ -52,8 +53,14 @@ class DocumentEditorController {
   /// Tap-outside: drop the live mark so it does not stay painted without focus.
   final VoidCallback? dismissLiveMark;
 
-  /// True while this file's Super Editor focus node owns the keyboard.
+  /// True while this file's Super Editor focus node owns the keyboard
+  /// (including when a descendant object field has it).
   final bool Function()? isFocused;
+
+  /// True only when Super Editor itself is the primary focus — not an
+  /// inner object field. Emoji insert uses this so `hasFocus` on the
+  /// parent does not steal inserts from the open object.
+  final bool Function()? isPrimaryFocused;
 
   /// Phone: Shift+Enter has no key. The bottom bar offers these instead.
   final bool Function()? canEnterObject;
@@ -101,9 +108,9 @@ class DocumentEditorRegistry {
     notifier.notify();
   }
 
-  /// After a dialog or mode that stole the keyboard — next frame, not KeyUp wait.
+  /// After a dialog or mode that stole the keyboard — wait until keys are up.
   static void restoreActiveWritingFocus() {
-    runNextFrame(() {
+    runWhenKeyboardIdle(() {
       final target = active ?? (_byFile.isEmpty ? null : _byFile.values.first);
       target?.restoreWritingFocus?.call();
     });

@@ -39,6 +39,22 @@ void main() {
       expect(target, const DocumentTextPosition('b', 0));
     });
 
+    test('skips a whole emoji instead of landing between its UTF-16 units', () {
+      const text = 'a😀b';
+      final flow = _flowWith({'a': text});
+      final emojiStart = text.indexOf('😀');
+      final afterEmoji = emojiStart + '😀'.length;
+
+      expect(
+        flow.positionAfter(DocumentTextPosition('a', emojiStart)),
+        DocumentTextPosition('a', afterEmoji),
+      );
+      expect(
+        flow.positionBefore(DocumentTextPosition('a', afterEmoji)),
+        DocumentTextPosition('a', emojiStart),
+      );
+    });
+
     test('stays inside the segment when not at a boundary', () {
       final flow = _flowWith({'a': 'one', 'b': 'two'});
 

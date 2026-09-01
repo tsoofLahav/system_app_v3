@@ -32,7 +32,10 @@ abstract final class TextEmojiPalette {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return;
 
-    BlockTextFocusRegistry.beginEmojiPickerSession();
+    BlockTextFocusRegistry.beginEmojiPickerSession(
+      allowUnfocusedRecent:
+          DocumentEditorRegistry.active?.canLeaveObject?.call() == true,
+    );
     if (isPhoneLayout) {
       FocusManager.instance.primaryFocus?.unfocus();
     }

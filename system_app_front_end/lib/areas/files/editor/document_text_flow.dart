@@ -18,6 +18,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../shared/utils/frame_safe_notifier.dart';
+import '../../../shared/utils/platform_text.dart';
 
 String paragraphSegmentId(String blockId) => blockId;
 
@@ -431,7 +432,14 @@ class DocumentTextFlow extends FrameSafeNotifier {
     final from = index == startIndex ? start.offset.clamp(0, length) : 0;
     final to = index == endIndex ? end.offset.clamp(0, length) : length;
     if (from == to) return null;
-    return TextSelection(baseOffset: from, extentOffset: to);
+    final text = _bindings[id]?.controller.text;
+    if (text == null || text.isEmpty) {
+      return TextSelection(baseOffset: from, extentOffset: to);
+    }
+    return normalizeTextSelection(
+      text,
+      TextSelection(baseOffset: from, extentOffset: to),
+    );
   }
 
   /// Segment ids the selection touches, in document order.
@@ -495,12 +503,7 @@ class DocumentTextFlow extends FrameSafeNotifier {
         continue;
       }
       final text = controller.text;
-      parts.add(
-        text.substring(
-          range.start.clamp(0, text.length),
-          range.end.clamp(0, text.length),
-        ),
-      );
+      parts.add(safeSubstring(text, range.start, range.end));
     }
     return parts.join('\n');
   }
@@ -715,7 +718,11 @@ class DocumentTextFlow extends FrameSafeNotifier {
   /// segment when already at the start of this one. Null at the document start.
   DocumentTextPosition? positionBefore(DocumentTextPosition position) {
     if (position.offset > 0) {
-      return DocumentTextPosition(position.segmentId, position.offset - 1);
+      final text = _bindings[position.segmentId]?.controller.text;
+      final next = text == null
+          ? position.offset - 1
+          : graphemeOffsetBefore(text, position.offset);
+      return DocumentTextPosition(position.segmentId, next);
     }
     final previous = segmentBefore(position.segmentId);
     if (previous == null) return null;
@@ -727,7 +734,11 @@ class DocumentTextFlow extends FrameSafeNotifier {
   DocumentTextPosition? positionAfter(DocumentTextPosition position) {
     final length = lengthOf(position.segmentId);
     if (length != null && position.offset < length) {
-      return DocumentTextPosition(position.segmentId, position.offset + 1);
+      final text = _bindings[position.segmentId]?.controller.text;
+      final next = text == null
+          ? position.offset + 1
+          : graphemeOffsetAfter(text, position.offset);
+      return DocumentTextPosition(position.segmentId, next);
     }
     final next = segmentAfter(position.segmentId);
     if (next == null) return null;
@@ -836,7 +847,10 @@ class DocumentTextFlow extends FrameSafeNotifier {
     // Rebuild can leave a stale binding whose controller was already disposed.
     if (binding.focusNode.context == null) return;
     final length = binding.controller.text.length;
-    final offset = position.offset.clamp(0, length);
+    final offset = normalizeUtf16End(
+      binding.controller.text,
+      position.offset.clamp(0, length),
+    );
 
     if (!binding.focusNode.hasFocus && binding.focusNode.canRequestFocus) {
       binding.focusNode.requestFocus();

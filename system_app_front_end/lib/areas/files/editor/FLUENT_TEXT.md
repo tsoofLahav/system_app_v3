@@ -26,7 +26,10 @@ A bullet, a table row, and an **embed block** count as **one line** of the docum
 | Tab on an object block | (does not open — Shift+Enter does) |
 | Shift+Enter on an object block | Opens the object (first inner field); click also works |
 | Enter on an object block | New paragraph **above** the object when the caret is on its leading edge (upstream / before), **below** when it is on the trailing edge |
-| Shift+Enter inside an object | SE caret **after** the object (downstream / empty paragraph below) so typing continues under it. Phone: leave icon on the first bottom-bar pill |
+| Shift+Enter inside an object | Newline in the field |
+| Escape inside an object | Leaves to the line after the object. Phone: leave icon on the first bottom-bar pill |
+| Enter inside an object | Info: leave. Tasks / lists / table cells: new item / next cell. Phone IME Return is the same structure key |
+| ⌘Enter / Ctrl+Enter inside an object | Newline in the field (captions that strip newlines swallow it) |
 | Click / right-click a paragraph | Body owns writing; object mark and caret are forgotten. One mark only |
 | Click / right-click an inner field | Field owns writing; Super Editor caret is cleared. Right-click focuses the field first |
 | Right-click while a menu is already open | Retarget: mark the new line and open **its** menu (`beginNewPointerAim`). Not nested on the old freeze |
@@ -54,16 +57,16 @@ Objects are **one Super Editor block**. The document caret never auto-enters via
 Mechanism ([`embed_caret_bridge.dart`](embed_caret_bridge.dart) + [`document_caret_session.dart`](document_caret_session.dart)):
 
 1. SE selection on `ObjectEmbedNode` = “on this object” (block wash).
-2. **Shift+Enter** → open object ([`runNextFrame`](editor_key_handoff.dart)). Clicking a field also opens it.
+2. **Shift+Enter** → open object ([`runWhenKeyboardIdle`](editor_key_handoff.dart), then one layout frame). Clicking a field also opens it.
 3. **Enter** on the block → empty paragraph before the object when the caret is upstream, after it when downstream (same as Super Editor’s binary-node newline).
-4. **Shift+Enter** inside → unfocus the embed field, place SE caret on a **TextNode after** the embed (insert empty paragraph if needed), then `requestFocus` on the next frame so SuperIme opens only against a live node.
+4. **Escape** inside any inner field (and **Enter** inside info / empty structure units) leaves: unfocus the embed field, place SE caret on a **TextNode after** the embed (insert empty paragraph if needed), then `requestFocus` on the next frame so SuperIme opens only against a live node. **Shift+Enter** / **⌘Enter** inside insert a newline.
 5. While an inner field is focused, SE selection and SE focus stay cleared (`adoptEmbed` unfocuses the editor; `openImeOnNonPrimaryFocusGain: false`). Insert must not `notifyListeners` mid-handoff or the IME dies after one character.
 6. Silent document reload that **replaces** `Editor` must remount `SuperEditor` (`ValueKey` epoch). SE recreates `DocumentImeInputClient` on `editContext` change without disposing the old client; the orphan keeps the dead `Document` while the shared composer selection points at new node ids → `selectUpstreamPosition` null-check crash on Escape/IME open.
 7. Inner ↑/↓ only move between embed lines; edges do not leave the object.
 
 | Embed | Inner lines (after Shift+Enter) |
 |-------|---------------------------|
-| Info | one field — first line is title (API/diagrams); rest is body. Native Enter = newline. Do not reseed while focused. Caret/mark: [`CARET_AND_WRITING_FOCUS.md`](../../../../../CARET_AND_WRITING_FOCUS.md) § Writing in objects |
+| Info | one field — first line is title (API/diagrams); rest is body. **Escape** or **Enter** leaves the object; **Shift+Enter** / **⌘Enter** / Ctrl+Enter inserts a newline. Do not reseed while focused. Caret/mark: [`CARET_AND_WRITING_FOCUS.md`](../../../../../CARET_AND_WRITING_FOCUS.md) § Writing in objects |
 | Task list | list title → each task |
 | Table / chart grid | Physical 2D cells. Product rules (Enter, add-after, reorder, empty Backspace): files [`AREA.md` § Tables & charts](../AREA.md#tables--charts). Caret: [`table_grid_nav.dart`](../rich_text/table_grid_nav.dart) is the only physical→visual cell move (pad + hardware + edge exit). Hebrew UI flips columns; the phone pad does not. Landing is the visual edge entered from, converted with the destination cell’s first-strong direction (RTL visual-right = logical start). Empty Backspace steps to the previous cell; first cell of an empty row removes the row. One `FocusNode` per cell. Document enter/exit still uses row-major `focusLine` |
 | Image | optional captions (`FormattedTextField`, strip newlines); picture is block-only |
@@ -71,10 +74,10 @@ Mechanism ([`embed_caret_bridge.dart`](embed_caret_bridge.dart) + [`document_car
 
 ### Keystroke handoff
 
-- **Shift+Enter** focus moves use `runNextFrame` (one frame).
-- **Destructive** structure changes (empty Backspace deletes object/row) still use `runAfterKeystroke` so HardwareKeyboard can finish KeyUp.
-- **Phone IME:** Return inserts a newline (iOS ignores `textInputAction` on multiline fields) and empty-field delete is a no-op in the engine. [`FormattedTextField`](../rich_text/formatted_text_field.dart) treats a single IME newline as Enter, and holds an invisible sentinel so a second delete on an empty unit is empty Backspace. Same task / list / table / info rules as desktop.
-- Mid-keystroke remounts (AppState notify, embed list reload, disposing cell `FocusNode`s) cause `KeyDownEvent … already pressed`. Full MUST / MUST NOT checklist: [`NOTES.md` § Editor keyboard safety](../../../../../../NOTES.md#editor-keyboard-safety) and files [`AREA.md`](../AREA.md#keyboard--focus-safety-recurring-bug-class).
+- **Anything that remounts, unfocuses, `requestFocus`es, disposes, or notifies a focused editor** must go through [`runWhenKeyboardIdle`](editor_key_handoff.dart). If no physical key is down it runs now; if a key is down it waits for KeyUp. Shift+Enter enter, Escape leave, empty Backspace deletes, embed structure rebuilds, and restoring writing focus all use it.
+- **Layout / IME wiring** after keys are already idle may still use `runNextFrame` (one frame so SuperIme opens against a live node).
+- **Phone IME:** Return inserts a newline (iOS ignores `textInputAction` on multiline fields) and empty-field delete is a no-op in the engine. [`FormattedTextField`](../rich_text/formatted_text_field.dart) treats a single IME newline as Enter, and holds an invisible sentinel so a second delete on an empty unit is empty Backspace. Same task / list / table / info rules as desktop. iOS reports no physical keys, so `runWhenKeyboardIdle` runs immediately — do not remount a `TextField` on IME.
+- Mid-keystroke remounts (AppState notify, embed list reload, disposing cell `FocusNode`s) cause `KeyDownEvent … already pressed` / `KeyUpEvent … not pressed`. Full MUST / MUST NOT checklist: [`NOTES.md` § Editor keyboard safety](../../../../../../NOTES.md#editor-keyboard-safety) and files [`AREA.md`](../AREA.md#keyboard--focus-safety-recurring-bug-class).
 
 ### Object right-click menus
 

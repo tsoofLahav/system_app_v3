@@ -35,6 +35,16 @@ void main() {
     });
   });
 
+  group('grapheme steps', () {
+    test('arrow over emoji jumps both UTF-16 units', () {
+      const text = 'a😀b';
+      final start = text.indexOf('😀');
+      final after = start + '😀'.length;
+      expect(graphemeOffsetAfter(text, start), after);
+      expect(graphemeOffsetBefore(text, after), start);
+    });
+  });
+
   group('safeSubstring', () {
     test('expands partial emoji selection to full emoji', () {
       const text = 'a🔥b';

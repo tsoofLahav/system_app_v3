@@ -5,6 +5,10 @@ import 'package:flutter/services.dart';
 /// (`syncKeyboardState`). The next [KeyDownEvent] for those keys then asserts
 /// `physical key is already pressed` and loops.
 ///
+/// Editor mutations (remount / unfocus / requestFocus / dispose / notify)
+/// use `runWhenKeyboardIdle` in `editor_key_handoff.dart` — this file is only
+/// the launch / leftover-assertion backstop.
+///
 /// Do **not** call [HardwareKeyboard.clearState] — that also wipes key
 /// handlers (shortcuts, link clicks). Synthesize KeyUp instead.
 ///

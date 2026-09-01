@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../../core/app_state.dart';
 import '../../../../core/l10n/app_strings.dart';
@@ -79,7 +78,7 @@ class TableEmbedState extends State<TableEmbed>
   bool get _editorBusy =>
       (_editorKey.currentState?.hasInnerFocus ?? false) ||
       (_editorKey.currentState?.reorderMode ?? false) ||
-      HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty;
+      hardwareKeysAreDown();
 
   @override
   void initState() {
@@ -191,14 +190,13 @@ class TableEmbedState extends State<TableEmbed>
     _baseline = inbound;
     void paint() {
       if (!mounted) return;
-      if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
-        runAfterKeystroke(paint);
-        return;
-      }
-      setState(() {});
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      runWhenKeyboardIdle(() {
         if (!mounted) return;
-        _editorKey.currentState?.syncFromNode(force: true);
+        setState(() {});
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _editorKey.currentState?.syncFromNode(force: true);
+        });
       });
     }
 
@@ -223,11 +221,9 @@ class TableEmbedState extends State<TableEmbed>
       _applyRemote(inbound);
     }
 
-    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
-      runAfterKeystroke(run);
-      return;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) => run());
+    runWhenKeyboardIdle(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) => run());
+    });
   }
 
   TableNode _nodeFromPayload() {
@@ -448,7 +444,8 @@ class TableEmbedState extends State<TableEmbed>
   }
 
   void _onExitTable(int _) {
-    // Shift+Enter leaves via EmbedEditScope; empty Enter exits via host leave path.
+    // Escape leaves via EmbedExitScope; empty Enter exits via host leave path.
+    // Shift+Enter / ⌘Enter / Ctrl+Enter inserts a newline in the cell.
   }
 
   @override

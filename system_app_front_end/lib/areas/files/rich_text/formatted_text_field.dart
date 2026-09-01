@@ -52,6 +52,33 @@ class DescriptionTextRange {
 /// [TextField]. Flutter paints the caret. Click placement is
 /// [embedCaretForTap] only — not drags, not an existing mark, not Shift+click.
 /// See `CARET_AND_WRITING_FOCUS.md` § Writing in objects.
+///
+/// Enter advances (new item / leave info). Shift+Enter / ⌘Enter / Ctrl+Enter
+/// inserts a newline. Escape leaves the object.
+
+bool isHardwareEnterKey(LogicalKeyboardKey key) =>
+    key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter;
+
+/// ⌘Enter / Ctrl+Enter / Shift+Enter is a newline; plain Enter is leave / next.
+bool hardwareEnterInsertsNewline() {
+  final keyboard = HardwareKeyboard.instance;
+  if (keyboard.isMetaPressed ||
+      keyboard.isControlPressed ||
+      keyboard.isShiftPressed) {
+    return true;
+  }
+  final pressed = keyboard.logicalKeysPressed;
+  return pressed.contains(LogicalKeyboardKey.meta) ||
+      pressed.contains(LogicalKeyboardKey.metaLeft) ||
+      pressed.contains(LogicalKeyboardKey.metaRight) ||
+      pressed.contains(LogicalKeyboardKey.control) ||
+      pressed.contains(LogicalKeyboardKey.controlLeft) ||
+      pressed.contains(LogicalKeyboardKey.controlRight) ||
+      pressed.contains(LogicalKeyboardKey.shift) ||
+      pressed.contains(LogicalKeyboardKey.shiftLeft) ||
+      pressed.contains(LogicalKeyboardKey.shiftRight);
+}
+
 class FormattedTextField extends StatefulWidget {
   const FormattedTextField({
     super.key,
@@ -214,6 +241,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
 
   void _noteSelectionForMenu() {
     BlockTextFocusRegistry.noteLiveSelection(widget.controller);
+    BlockTextFocusRegistry.noteEmojiPickerCaret(widget.controller);
   }
 
   TextDirection _resolvedTextDirection(BuildContext context) {
@@ -471,6 +499,13 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   }
 
   KeyEventResult _chainedKeyHandler(FocusNode node, KeyEvent event) {
+    // Modifier+Enter is a newline. Hosts (table cells) must not steal it
+    // for “next row / next column”.
+    if (event is KeyDownEvent &&
+        isHardwareEnterKey(event.logicalKey) &&
+        hardwareEnterInsertsNewline()) {
+      return _onFocusKeyEvent(node, event);
+    }
     final host = widget.hostKeyEvent;
     if (host != null) {
       final hosted = host(node, event);
@@ -681,6 +716,31 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     _notifyChanged();
   }
 
+  void _insertNewline() {
+    _stripEmptyImeSentinel();
+    final controller = widget.controller;
+    var selection = controller.selection;
+    if (!selection.isValid) {
+      selection = TextSelection.collapsed(offset: controller.text.length);
+    }
+    final lo = selection.start < selection.end
+        ? selection.start
+        : selection.end;
+    final hi = selection.start < selection.end
+        ? selection.end
+        : selection.start;
+    final text = controller.text;
+    final next = sanitizePlatformText(
+      '${safeSubstring(text, 0, lo)}\n${safeSubstring(text, hi, text.length)}',
+    );
+    controller.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: lo + 1),
+      composing: TextRange.empty,
+    );
+    _notifyChanged();
+  }
+
   KeyEventResult _onFocusKeyEvent(FocusNode node, KeyEvent event) {
     if (!_focusNode.hasFocus) return KeyEventResult.ignored;
 
@@ -696,14 +756,22 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
 
     _consecutiveTapCount = 0;
 
-    if ((event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
-        HardwareKeyboard.instance.isShiftPressed) {
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
       final exit = EmbedExitScope.maybeOf(context);
       if (exit != null) {
         exit.onExit(exit.nodeId);
         return KeyEventResult.handled;
       }
+    }
+
+    if (isHardwareEnterKey(event.logicalKey) && hardwareEnterInsertsNewline()) {
+      if (widget.stripNewlines) return KeyEventResult.handled;
+      final flow = _flow;
+      if (flow != null && flow.spansSegments) {
+        flow.deleteSelection(keepFirstPart: true);
+      }
+      _insertNewline();
+      return KeyEventResult.handled;
     }
 
     final isMeta = HardwareKeyboard.instance.isMetaPressed;
@@ -741,11 +809,17 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
 
     if (_handleFlowArrowKey(event)) return KeyEventResult.handled;
 
-    if (event.logicalKey == LogicalKeyboardKey.enter &&
-        !HardwareKeyboard.instance.isShiftPressed &&
-        _handlesStructureEnter) {
-      _invokeStructureEnter();
-      return KeyEventResult.handled;
+    if (isHardwareEnterKey(event.logicalKey) &&
+        !hardwareEnterInsertsNewline()) {
+      if (_handlesStructureEnter) {
+        _invokeStructureEnter();
+        return KeyEventResult.handled;
+      }
+      final exit = EmbedExitScope.maybeOf(context);
+      if (exit != null) {
+        exit.onExit(exit.nodeId);
+        return KeyEventResult.handled;
+      }
     }
 
     if ((event.logicalKey == LogicalKeyboardKey.backspace ||
@@ -1103,7 +1177,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.backspace ||
         key == LogicalKeyboardKey.delete ||
-        key == LogicalKeyboardKey.enter) {
+        isHardwareEnterKey(key)) {
       flow.deleteSelection();
       return true;
     }
@@ -1286,14 +1360,18 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       }
 
       final length = controller.text.length;
-      final offset = target.offset.clamp(0, length);
+      final offset = normalizeUtf16End(
+        controller.text,
+        target.offset.clamp(0, length),
+      );
       final range = extend ? flow.selectionWithin(target.segmentId) : null;
-      controller.selection = range == null
+      final next = range == null
           ? TextSelection.collapsed(offset: offset)
           : TextSelection(
               baseOffset: range.start == offset ? range.end : range.start,
               extentOffset: offset,
             );
+      controller.selection = normalizeTextSelection(controller.text, next);
     } finally {
       _applyingFlowSelection = false;
     }
@@ -1505,6 +1583,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                         : widget.textInputAction,
                     onChanged: (_) => _notifyChanged(),
                     onSubmitted: (value) {
+                      if (hardwareEnterInsertsNewline()) return;
                       if (_handlesStructureEnter) {
                         _invokeStructureEnter();
                         return;
@@ -2010,6 +2089,7 @@ class _ImeStructureKeyFormatter extends TextInputFormatter {
     }
 
     if (wantEnter && imeInsertedSingleNewline(oldValue.text, newValue.text)) {
+      if (hardwareEnterInsertsNewline()) return newValue;
       scheduleMicrotask(onEnter);
       if (holdEmptySentinel && imeFieldLooksEmpty(oldValue.text)) {
         return const TextEditingValue(

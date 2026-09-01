@@ -18,6 +18,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../shared/utils/platform_text.dart';
 import '../model/line_range.dart';
 import '../rich_text/format_range.dart';
 import '../rich_text/span_text_editing_controller.dart';
@@ -55,7 +56,7 @@ class MarkedSpan {
   String get text {
     final from = safeStart;
     final to = safeEnd;
-    return to <= from ? '' : controller.text.substring(from, to);
+    return to <= from ? '' : safeSubstring(controller.text, from, to);
   }
 
   SpanTextEditingController? get spanController {

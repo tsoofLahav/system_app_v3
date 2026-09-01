@@ -28,19 +28,20 @@ void main() {
     expect(agent.defaultBinding.shift, isFalse);
   });
 
-  test('language defaults to Cmd+E', () {
+  test('emoji defaults to Cmd+E', () {
+    final action = shortcutActionById(ShortcutActionIds.insertEmoji)!;
+    expect(action.defaultBinding.keyId, LogicalKeyboardKey.keyE.keyId);
+    expect(action.defaultBinding.meta, isTrue);
+    expect(action.defaultBinding.shift, isFalse);
+    expect(action.context, ShortcutContextRequirement.insertObject);
+  });
+
+  test('language defaults to Cmd+Shift+E', () {
     final language = kShortcutCatalog
         .firstWhere((a) => a.id == ShortcutActionIds.toggleLanguage);
     expect(language.defaultBinding.keyId, LogicalKeyboardKey.keyE.keyId);
     expect(language.defaultBinding.meta, isTrue);
-    expect(language.defaultBinding.shift, isFalse);
-  });
-
-  test('emoji is not a catalog shortcut', () {
-    expect(
-      kShortcutCatalog.any((a) => a.id.contains('emoji')),
-      isFalse,
-    );
+    expect(language.defaultBinding.shift, isTrue);
   });
 
   test('assign task view is not a text-format action', () {
@@ -78,6 +79,7 @@ void main() {
     expectCmd(ShortcutActionIds.insertInfo, LogicalKeyboardKey.keyD);
     expectCmd(ShortcutActionIds.insertTaskList, LogicalKeyboardKey.keyT);
     expectCmd(ShortcutActionIds.insertGraph, LogicalKeyboardKey.keyG);
+    expectCmd(ShortcutActionIds.insertEmoji, LogicalKeyboardKey.keyE);
     expectCmd(ShortcutActionIds.addConnection, LogicalKeyboardKey.keyL);
     expectCmd(ShortcutActionIds.toggleReorderMode, LogicalKeyboardKey.keyO);
   });

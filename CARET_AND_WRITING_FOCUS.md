@@ -71,14 +71,15 @@ Only **one** surface owns writing, and only **one** mark is painted. Super Edito
 | Click or right-click a **paragraph / list line** | Super Editor body | Object mark and caret are forgotten (collapsed, not frozen into the body menu). Right-click expands to that body line for the action. |
 | Click or right-click an **inner field** | That field | Super Editor caret and mark are cleared (`adoptEmbed`). Right-click focuses the field first, then freezes the mark or caret line. |
 | Right-click **object chrome** (not text) | Block / chrome menu | Whole-object menu. Inner-field mark is not the target. |
-| **Shift+Enter** on the block / inside | Enter or leave the object | Same as §4. |
+| **Shift+Enter** on the block | Opens the object | Same as §4. |
+| **Enter** inside | Leave (info) or next item; Escape leaves from any field; Shift+Enter / ⌘Enter is a newline | Same as §4. |
 | Tap **canvas / empty padding** | Nobody | Hide caret, clear every mark. |
 
 Never paint an object-field wash and a Super Editor line wash at the same time. Opening the body menu must not freeze a leftover object mark (`releaseLiveMark` before `openMenuSession`).
 
 A **new** right-click, anywhere, retargets even while the previous right-click menu is still open: close that freeze (`beginNewPointerAim`), mark the new line, open the new menu. The first menu’s `openMenuSession` completing later must not keep the old freeze or restore the old caret.
 
-Enter inside info is a native newline (the field is multiline). Shift+Enter still leaves the object (Super Editor embed path). Tasks / table cells keep structural Enter.
+Enter inside info leaves the object. **Escape** leaves from any inner field. **Shift+Enter** / **⌘Enter** / Ctrl+Enter inserts a newline. Tasks / table cells keep structural Enter; those same modifiers insert a newline in that field. Shift+Enter on the object **block** still opens it.
 
 ### Per type
 
@@ -122,18 +123,20 @@ Objects are **atomic Super Editor blocks**. Arrows do **not** auto-enter or auto
 | Click / right-click a paragraph | Body owns writing; object mark and caret are forgotten |
 | Right-click an inner field | Field owns writing (focus + caret at the pointer); Super Editor caret is cleared |
 | **Enter** on the block | New paragraph **below** the object |
-| **Shift+Enter** inside | Unfocus the field; place Super Editor caret on a text node **after** the object (insert an empty paragraph if needed); `requestFocus` next frame |
+| **Enter** inside info | Unfocus the field; place Super Editor caret on a text node **after** the object (insert an empty paragraph if needed); `requestFocus` next frame |
+| **Escape** inside | Same leave as info Enter, from any inner field (tasks, cells, captions) |
+| **Shift+Enter** / **⌘Enter** inside | Newline in the field |
 | ↑/↓ inside an open object | Stay inside that object’s lines |
 | Image | Captions are inner fields; the picture is block only |
 
-**Phone** has no Shift+Enter key. The first bottom-bar pill is arrows plus enter/leave. Those arrow **icons** never mirror in Hebrew (physical left stays left). Table **cells** still flip with the Hebrew UI.
+**Phone** has no Shift+Enter or Escape key. The first bottom-bar pill is arrows plus enter/leave. Those arrow **icons** never mirror in Hebrew (physical left stays left). Table **cells** still flip with the Hebrew UI.
 
 After insert, the caret enters the new object’s first inner field. Images without a caption keep the block caret. Insert bar and **Insert object** shortcuts must do this **without** a shell-wide `notifyListeners`.
 
 Timing:
 
-- **Shift+Enter** enter/leave → `runNextFrame` (one frame). Waiting for keys to clear stalls.
-- **Destructive** structure (empty Backspace deletes a row/object) → `runAfterKeystroke` so HardwareKeyboard can finish KeyUp.
+- **Anything that changes the focused editor** (Shift+Enter enter, Escape leave, empty Backspace deletes, remount, restore writing focus) → `runWhenKeyboardIdle`.
+- **Layout / IME wiring** after keys are already idle → `runNextFrame` (one frame).
 
 Phone IME: iOS will not send Enter / empty Backspace as `KeyEvent`s. `FormattedTextField` maps a single IME newline to Enter, and a second delete on an empty unit to empty Backspace — same structure rules as desktop. Keep the keyboard up when moving between inner fields.
 
@@ -161,7 +164,9 @@ While a menu is open there is never a second wash (native selection + line-at-ca
 
 Flutter desyncs when a `TextField` / `FocusNode` is disposed or the editor remounts **while a physical key is still down**.
 
-Symptom: looping `KeyDownEvent is dispatched, but the state shows that the physical key is already pressed`.
+Symptom: looping `KeyDownEvent is dispatched, but the state shows that the physical key is already pressed` or `KeyUpEvent … physical key is not pressed`.
+
+**The gate:** [`runWhenKeyboardIdle`](system_app_front_end/lib/areas/files/editor/editor_key_handoff.dart). Every remount / unfocus / `requestFocus` / dispose / notify of a focused editor must use it. Do not check `physicalKeysPressed` ad hoc. `runAfterKeystroke` is an alias. `runNextFrame` is layout/IME only after keys are idle. Cycle-files chrome is the exception.
 
 **Structure:** chrome may rebuild; the **open document stays mounted**. Incoming body / embed updates apply **into** the open editor. Do not wrap `DocumentEditor` / `SuperDocumentEditor` in `ListenableBuilder(listenable: appState)`. Do not rebuild `MaterialApp` or the topic canvas on every `AppState` notify.
 
@@ -182,11 +187,11 @@ Symptom: looping `KeyDownEvent is dispatched, but the state shows that the physi
 1. Silent saves: document + object payload/title patches use `notify: false` (or patch cache in place).
 2. Debounce embed PATCHes (~400ms). Never hit the network on every character without a timer.
 3. Patch cache **before** `await` so a remount cannot re-seed empty content mid-flight.
-4. Rebuild Super Editor only for **structural** embed changes (id / type / order). If a structural rebuild is required and keys are down, `runAfterKeystroke`.
+4. Rebuild Super Editor only for **structural** embed changes (id / type / order). If a structural rebuild is required, `runWhenKeyboardIdle`.
 5. Stable embed identities (`embed:<objectId>`, `GlobalKey` where State must survive parent rebuilds).
 6. Registries bump through [`FrameSafeNotifier`](system_app_front_end/lib/shared/utils/frame_safe_notifier.dart): notify now when the tree is free; wait for end of frame when it is locked. Waiting always is wrong — post-frame callbacks do not schedule a frame, so an idle bump would never arrive.
 7. `wrapVisualCaretMotion` always keeps an `Actions` parent (same tree shape so an IME language switch does not remount the field). `TableEmbed` must not `setState` on text-only emits.
-8. After arrange / reorder / Move Mode, restore writing focus with `runNextFrame` — never `runAfterKeystroke`.
+8. After arrange / reorder / Move Mode, restore writing focus with `runWhenKeyboardIdle`.
 9. On launch / hot restart, drop engine-seeded pressed keys while the loading pane is showing (`hardware_keyboard_guard.dart`). Never `HardwareKeyboard.clearState` (it wipes handlers).
 
 ### Who rebuilds (chrome vs document)
@@ -200,7 +205,7 @@ Symptom: looping `KeyDownEvent is dispatched, but the state shows that the physi
 
 ### Smoke-check after editor edits
 
-Type quickly in: paragraph, info body, task title, table cell, chart-table cell. Shift+Enter into an object, type, Shift+Enter out, type below. If the assertion appears: **full restart** (hot reload can leave keys stuck), then fix the remount/notify path.
+Type quickly in: paragraph, info body, task title, table cell, chart-table cell. Shift+Enter into an object, type, Escape out, type below. If the assertion appears: **full restart** (hot reload can leave keys stuck), then fix the remount/notify path.
 
 ---
 
@@ -225,7 +230,7 @@ A newly inserted list or table gets the caret in its first bullet or top-left ce
 
 **New file:** added first so it is on screen; the caret lands in it.
 
-**Cycle files (⌘[ ⌘]):** rotates every live file in the topic. Applies immediately — do **not** wait for KeyUp / `runAfterKeystroke` (that stall is for destructive editor handoff, not chrome).
+**Cycle files (⌘[ ⌘]):** rotates every live file in the topic. Applies immediately — do **not** wait for KeyUp / `runWhenKeyboardIdle` (that stall is for editor mutations, not chrome).
 
 **Shortcuts:** non-text shortcuts are taken at the hardware keyboard (work without a caret; the editor cannot swallow them). Text shortcuts still need a caret. A press fires once: ignore a second delivery until KeyUp (size up/down may repeat).
 

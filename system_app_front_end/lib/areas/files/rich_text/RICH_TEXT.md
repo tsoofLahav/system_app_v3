@@ -73,7 +73,7 @@ Toggle semantics: bold/italic/underline/strikethrough flip independently per cha
 
 **Make link** finds `http(s)://` or `www.` in the mark (else caret line) and stores `link` on that span. No URL → no-op. Super Editor body links persist as markdown; embed-field links persist on object payload spans.
 
-Description-link colour (`AppColors.descriptionLink`) is paint-only for connected info: `SpanTextEditingController.setDescriptionPaintRanges` / `displaySpans`. Never write it into persisted `spans`. URL `link` is stored and paints the same teal underline. Description paint ranges remap with the same text edit as format spans (`remapOffsetRange`) so the underline stays on the original glyphs; the field PATCHes the link `anchor` after a short debounce. While the field is focused, parent `descriptionRanges` must not overwrite those remapped offsets.
+Description-link colour (`AppColors.descriptionLink`) is paint-only for connected info: `SpanTextEditingController.setDescriptionPaintRanges` / `displaySpans`. Never write it into persisted `spans`. Connected text paints as italic dark teal (no underline) and **combines** with the field’s strikethrough when a task is done — `TextSpanBuilder` must not replace `base.decoration`. URL `link` is stored and paints teal underline. Description paint ranges remap with the same text edit as format spans (`remapOffsetRange`) so the paint stays on the original glyphs; the field PATCHes the link `anchor` after a short debounce. While the field is focused, parent `descriptionRanges` must not overwrite those remapped offsets.
 
 The hover bubble stays open while the pointer is on the connected text **or** the bubble (so the bubble can scroll). It closes when the pointer is on neither.
 
@@ -101,10 +101,11 @@ Before merging any rich-text PR:
 | `text_formatting.dart` | Pure span math + `TextSpan` rendering |
 | `text_links.dart` | Detect `http(s)` / `www.` for Make link |
 | `span_text_editing_controller.dart` | `TextEditingController` + spans + `handleTextChange` |
-| `block_text_focus.dart` | Active field + frozen menu range + menu actions. Emoji-palette session freezes the embed caret and advances it after each insert |
-| `text_emoji_insert.dart` | Routes an insert-bar emoji to the live field, frozen field, or Super Editor body |
+| `block_text_focus.dart` | Active field + frozen menu range + menu actions. Emoji-palette session freezes the embed caret (and retargets when another field or the body takes it) and advances it after each insert |
+| `text_emoji_insert.dart` | Routes an insert-bar emoji to the live field, frozen field, or Super Editor body (body only when Super Editor has **primary** focus) |
 | `text_emoji_picker.dart` | Desktop movable overlay / phone keyboard panel (not a blocking dialog) |
 | `formatted_text_field.dart` | `TextField` wrapper, focus registration, `_FrozenSelectionOverlay`; wires the [RTL solution](rtl/RTL.md) |
+| `dialog_formatted_field.dart` | Same field in dialogs (agent prompt, saved-action prompt, complimentary input) |
 | [`rtl/`](rtl/RTL.md) | **RTL solution** — base direction, visual arrows, empty-padding caret (see `RTL.md`) |
 | `document_context_menu.dart` | Text, list, and table-cell menu entries |
 | `frozen_selection_painter.dart` | Paints precomputed selection rects during menu |

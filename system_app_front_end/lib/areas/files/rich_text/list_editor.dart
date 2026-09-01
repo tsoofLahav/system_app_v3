@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../core/l10n/app_strings.dart';
 import '../../ui/app_typography.dart';
 import '../editor/document_text_flow.dart';
+import '../editor/editor_key_handoff.dart';
 import '../model/document_codec.dart';
 import '../model/document_model.dart';
 import './block_text_actions.dart';
@@ -78,8 +78,21 @@ class _RichListEditorState extends State<RichListEditor> {
       return;
     }
     if (_localStateMatchesNode()) return;
-    if (_focusNodes.any((f) => f.hasFocus) ||
-        HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
+    if (_focusNodes.any((f) => f.hasFocus)) {
+      return;
+    }
+    if (hardwareKeysAreDown()) {
+      runWhenKeyboardIdle(() {
+        if (!mounted) return;
+        if (_localStateMatchesNode()) return;
+        final focusIdx = _pendingFocusIndex;
+        _disposeControllers();
+        _syncFromNode();
+        if (focusIdx != null && focusIdx >= 0 && focusIdx < _focusNodes.length) {
+          _pendingFocusIndex = focusIdx;
+          _applyPendingFocus();
+        }
+      });
       return;
     }
     final focusIdx = _pendingFocusIndex ?? _focusNodes.indexWhere((f) => f.hasFocus);
@@ -92,13 +105,15 @@ class _RichListEditorState extends State<RichListEditor> {
   }
 
   void _applyPendingFocus() {
-    if (!mounted) return;
-    final idx = _pendingFocusIndex;
-    if (idx == null || idx < 0 || idx >= _focusNodes.length) return;
-    _pendingFocusIndex = null;
-    _focusNodes[idx].requestFocus();
-    final controller = _controllers[idx];
-    controller.selection = TextSelection.collapsed(offset: controller.text.length);
+    runWhenKeyboardIdle(() {
+      if (!mounted) return;
+      final idx = _pendingFocusIndex;
+      if (idx == null || idx < 0 || idx >= _focusNodes.length) return;
+      _pendingFocusIndex = null;
+      _focusNodes[idx].requestFocus();
+      final controller = _controllers[idx];
+      controller.selection = TextSelection.collapsed(offset: controller.text.length);
+    });
   }
 
   void _syncFromNode() {

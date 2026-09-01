@@ -1,10 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-/// One frame later — default for Shift+Enter object enter/leave handoffs.
+/// True while Flutter is tracking at least one physical key as down.
 ///
-/// Prefer this over [runAfterKeystroke] when the key does not delete structure
-/// mid-KeyDown. Waiting for keys to clear can stall up to 500ms.
+/// The HardwareKeyboard assertions are about **physical** keys, not logical.
+bool hardwareKeysAreDown() =>
+    HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty;
+
+/// One frame later — layout / IME wiring after the tree has already settled.
+///
+/// Do **not** use this to mutate a focused editor while a key may still be
+/// down. That is [runWhenKeyboardIdle]. Chrome that must not wait for KeyUp
+/// (cycle files) runs immediately, not here.
 void runNextFrame(VoidCallback action) {
   WidgetsBinding.instance.addPostFrameCallback((_) => action());
   // A post-frame callback does not schedule a frame. Enter/Esc with no
@@ -12,52 +21,70 @@ void runNextFrame(VoidCallback action) {
   WidgetsBinding.instance.scheduleFrame();
 }
 
-/// Runs [action] only after the current keystroke has fully settled.
+/// The one gate for anything that can remount, unfocus, [FocusNode.requestFocus],
+/// dispose, or notify a focused editor.
 ///
-/// Flutter's [HardwareKeyboard] asserts if a new [KeyDownEvent] arrives while
-/// it still thinks that physical key is pressed. That desync happens when we
-/// **unfocus / move caret / rebuild the editor mid-KeyDown** (Backspace that
-/// deletes a structure, etc.): the field dies before the matching KeyUp is
-/// delivered cleanly.
+/// Flutter asserts when a KeyDown/KeyUp arrives and its pressed-key map
+/// disagrees — usually because the focused [TextField] / [FocusNode] died or
+/// focus moved **while a physical key was still down**.
 ///
-/// Use for destructive structure changes. For Shift+Enter focus handoff, use
-/// [runNextFrame] instead.
+/// - No physical key down → runs [action] now.
+/// - A key is down → waits until every physical key is up, then one frame,
+///   then [action]. If KeyUp is lost, waits at most 500ms.
 ///
-/// See [`FLUENT_TEXT.md`](FLUENT_TEXT.md) § "Keystroke handoff".
-/// Startup leftover keys: `shared/utils/hardware_keyboard_guard.dart`.
-void runAfterKeystroke(VoidCallback action) {
+/// Phone IME reports no physical keys, so this runs immediately. Do not remount
+/// a [TextField] on IME; this helper cannot catch that.
+///
+/// **Every** path that can cause that desync must go through this function.
+/// Exceptions: cycle-files chrome; layout-only [runNextFrame] IME wiring after
+/// keys are already idle. Launch leftover keys:
+/// `shared/utils/hardware_keyboard_guard.dart`.
+void runWhenKeyboardIdle(VoidCallback action) {
+  if (!hardwareKeysAreDown()) {
+    action();
+    return;
+  }
+  // Finish the current KeyDown dispatch before we arm the KeyUp wait.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!hardwareKeysAreDown()) {
+      action();
+      return;
+    }
+    _runAfterPhysicalKeysClear(action);
+  });
+  WidgetsBinding.instance.scheduleFrame();
+}
+
+/// Completes when [runWhenKeyboardIdle] would run its callback.
+Future<void> whenKeyboardIdle() {
+  if (!hardwareKeysAreDown()) return Future<void>.value();
+  final ready = Completer<void>();
+  runWhenKeyboardIdle(ready.complete);
+  return ready.future;
+}
+
+/// Same as [runWhenKeyboardIdle]. Prefer that name in new code.
+void runAfterKeystroke(VoidCallback action) => runWhenKeyboardIdle(action);
+
+void _runAfterPhysicalKeysClear(VoidCallback action) {
   var finished = false;
+  late final KeyEventCallback handler;
+  Timer? timeout;
 
   void finish() {
     if (finished) return;
     finished = true;
-    // One more frame so Focus/IME finish the KeyUp path before we hand off.
-    WidgetsBinding.instance.addPostFrameCallback((_) => action());
+    timeout?.cancel();
+    HardwareKeyboard.instance.removeHandler(handler);
+    runNextFrame(action);
   }
 
-  void armWhenKeysClear() {
-    if (HardwareKeyboard.instance.logicalKeysPressed.isEmpty) {
-      finish();
-      return;
-    }
+  handler = (KeyEvent event) {
+    if (!hardwareKeysAreDown()) finish();
+    return false;
+  };
+  HardwareKeyboard.instance.addHandler(handler);
 
-    late final KeyEventCallback handler;
-    handler = (KeyEvent event) {
-      if (HardwareKeyboard.instance.logicalKeysPressed.isEmpty) {
-        HardwareKeyboard.instance.removeHandler(handler);
-        finish();
-      }
-      return false;
-    };
-    HardwareKeyboard.instance.addHandler(handler);
-
-    // Lost KeyUp (hot reload / platform glitch) — don't hang forever.
-    Future<void>.delayed(const Duration(milliseconds: 500), () {
-      HardwareKeyboard.instance.removeHandler(handler);
-      finish();
-    });
-  }
-
-  // Let the current KeyDown finish dispatching first.
-  WidgetsBinding.instance.addPostFrameCallback((_) => armWhenKeysClear());
+  // Lost KeyUp (hot reload / platform glitch) — don't hang forever.
+  timeout = Timer(const Duration(milliseconds: 500), finish);
 }

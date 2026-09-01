@@ -129,11 +129,7 @@ class _PhoneTopicViewState extends State<PhoneTopicView> {
         AppBottomBarMetrics.phoneBarHeight,
       ),
       child: DocumentPane(
-        key: ValueKey(
-          state.isBroughtFileOnCanvas(widget.topic, file.id)
-              ? 'brought-${file.id}'
-              : file.id,
-        ),
+        key: ValueKey(file.id),
         topic: paneTopic,
         file: file,
         state: state,

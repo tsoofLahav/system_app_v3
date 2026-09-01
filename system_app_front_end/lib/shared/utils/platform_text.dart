@@ -105,6 +105,21 @@ String safeSubstring(String text, int start, int end) {
   return sanitizePlatformText(text.substring(rangeStart, rangeEnd));
 }
 
+/// One grapheme before [offset], or 0. Used by Shift+arrows so a mark
+/// cannot land between the two UTF-16 units of an emoji.
+int graphemeOffsetBefore(String text, int offset) {
+  final pos = offset.clamp(0, text.length);
+  if (pos <= 0) return 0;
+  return normalizeUtf16Start(text, pos - 1);
+}
+
+/// One grapheme after [offset], or [text.length].
+int graphemeOffsetAfter(String text, int offset) {
+  final pos = offset.clamp(0, text.length);
+  if (pos >= text.length) return text.length;
+  return normalizeUtf16End(text, pos + 1);
+}
+
 Future<void> setClipboardText(String text) async {
   final safe = sanitizePlatformText(text);
   if (safe.isEmpty) return;

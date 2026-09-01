@@ -130,9 +130,7 @@ class RichTableEditorState extends State<RichTableEditor> {
       _exitReorder();
       return;
     }
-    _enterReorder(
-      _isChart ? TableReorderKind.columns : TableReorderKind.rows,
-    );
+    _enterReorder(_isChart ? TableReorderKind.columns : TableReorderKind.rows);
   }
 
   void _enterReorder(TableReorderKind kind) {
@@ -146,7 +144,7 @@ class RichTableEditorState extends State<RichTableEditor> {
     if (_reorderKind == null) return;
     setState(() => _reorderKind = null);
     final cell = _lastCell;
-    runNextFrame(() {
+    runWhenKeyboardIdle(() {
       if (!mounted) return;
       if (cell != null) {
         _focusCell(cell.$1, cell.$2);
@@ -200,7 +198,13 @@ class RichTableEditorState extends State<RichTableEditor> {
   /// is down — never remount cells mid-KeyDown.
   void syncFromNode({required bool force}) {
     if (_localStateMatchesNode()) return;
-    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) return;
+    if (hardwareKeysAreDown()) {
+      runWhenKeyboardIdle(() {
+        if (!mounted) return;
+        syncFromNode(force: force);
+      });
+      return;
+    }
     if (!force && hasInnerFocus) return;
     if (_sameControllerShape()) {
       _applyIncomingCellText();
@@ -507,7 +511,7 @@ class RichTableEditorState extends State<RichTableEditor> {
       _ensureFocusGrid();
     });
     _emit();
-    runNextFrame(() {
+    runWhenKeyboardIdle(() {
       if (!mounted) return;
       _focusCell(row + 1, 0);
     });
@@ -622,11 +626,7 @@ class RichTableEditorState extends State<RichTableEditor> {
   }
 
   void _afterKeystroke(VoidCallback fn) {
-    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
-      runAfterKeystroke(fn);
-    } else {
-      fn();
-    }
+    runWhenKeyboardIdle(fn);
   }
 
   void _dropRows(List<int> rows) {
@@ -657,7 +657,7 @@ class RichTableEditorState extends State<RichTableEditor> {
       _rebuildFocusGrid();
     });
     _emit();
-    runNextFrame(() {
+    runWhenKeyboardIdle(() {
       if (!mounted) return;
       _focusCell(focusRow.clamp(0, _controllers.length - 1), 0);
     });
@@ -694,7 +694,7 @@ class RichTableEditorState extends State<RichTableEditor> {
       }
     });
     _emit();
-    runNextFrame(() {
+    runWhenKeyboardIdle(() {
       if (!mounted) return;
       _unfocusAllCells();
       _focusCell(
@@ -744,48 +744,49 @@ class RichTableEditorState extends State<RichTableEditor> {
     widget.onFocus?.call();
     if (row < 0 || row >= _controllers.length) return;
     if (!_rowIsEmpty(row)) return;
-    if (_controllers.length <= 1) {
-      (widget.onDeleteTable ?? () => widget.onExitTable?.call(row))();
-      return;
-    }
-    setState(() {
-      _unfocusAllCells();
-      for (final c in _controllers.removeAt(row)) {
-        c.dispose();
-      }
-      _rebuildFocusGrid();
-    });
-    _emit();
-    final focusRow = (row > 0 ? row - 1 : 0).clamp(0, _controllers.length - 1);
-    runNextFrame(() {
+    runWhenKeyboardIdle(() {
       if (!mounted) return;
+      if (row < 0 || row >= _controllers.length) return;
+      if (_controllers.length <= 1) {
+        (widget.onDeleteTable ?? () => widget.onExitTable?.call(row))();
+        return;
+      }
+      setState(() {
+        _unfocusAllCells();
+        for (final c in _controllers.removeAt(row)) {
+          c.dispose();
+        }
+        _rebuildFocusGrid();
+      });
+      _emit();
+      final focusRow = (row > 0 ? row - 1 : 0).clamp(
+        0,
+        _controllers.length - 1,
+      );
       _focusCell(focusRow, 0);
     });
   }
 
   void _removeColumnAt(int col, {required int focusRow}) {
     widget.onFocus?.call();
-    if (_columnCount <= 1) {
-      runAfterKeystroke(() {
-        if (!mounted) return;
-        (widget.onDeleteTable ?? () => widget.onExitTable?.call(col))();
-      });
-      return;
-    }
-    setState(() {
-      _unfocusAllCells();
-      _ensureFocusGrid();
-      for (var r = 0; r < _controllers.length; r++) {
-        _controllers[r].removeAt(col).dispose();
-        if (r < _focusGrid.length && col < _focusGrid[r].length) {
-          _focusGrid[r].removeAt(col).dispose();
-        }
-      }
-    });
-    _emit();
-    final nextCol = col.clamp(0, _columnCount - 1);
-    runAfterKeystroke(() {
+    runWhenKeyboardIdle(() {
       if (!mounted) return;
+      if (_columnCount <= 1) {
+        (widget.onDeleteTable ?? () => widget.onExitTable?.call(col))();
+        return;
+      }
+      setState(() {
+        _unfocusAllCells();
+        _ensureFocusGrid();
+        for (var r = 0; r < _controllers.length; r++) {
+          _controllers[r].removeAt(col).dispose();
+          if (r < _focusGrid.length && col < _focusGrid[r].length) {
+            _focusGrid[r].removeAt(col).dispose();
+          }
+        }
+      });
+      _emit();
+      final nextCol = col.clamp(0, _columnCount - 1);
       _unfocusAllCells();
       _focusCell(focusRow.clamp(0, _controllers.length - 1), nextCol);
     });
@@ -858,8 +859,7 @@ class RichTableEditorState extends State<RichTableEditor> {
 
     if (!isDown) return KeyEventResult.ignored;
 
-    if (key == LogicalKeyboardKey.enter &&
-        !HardwareKeyboard.instance.isShiftPressed) {
+    if (isHardwareEnterKey(key) && !hardwareEnterInsertsNewline()) {
       widget.onFocus?.call();
       if (_isChart) {
         if (_columnIsEmpty(col)) {
@@ -923,7 +923,8 @@ class RichTableEditorState extends State<RichTableEditor> {
       includeReorderColumns: true,
       extraEntries: widget.extraMenuEntries,
       includeConnectInfo: widget.onConnectInfo != null,
-      includeDisconnectInfo: widget.onDisconnectInfo != null &&
+      includeDisconnectInfo:
+          widget.onDisconnectInfo != null &&
           descriptionRangeCoveringMark(
                 widget.descriptionRangesForCell?.call(row, col) ?? const [],
               ) !=

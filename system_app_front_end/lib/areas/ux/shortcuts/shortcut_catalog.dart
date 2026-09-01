@@ -81,6 +81,7 @@ abstract final class ShortcutActionIds {
   static const insertTable = 'insert_table';
   static const insertGraph = 'insert_graph';
   static const insertTaskList = 'insert_task_list';
+  static const insertEmoji = 'insert_emoji';
   static const toggleLayoutMode = 'toggle_layout_mode';
   static const toggleLanguage = 'toggle_language';
   static const addConnection = 'add_connection';
@@ -312,6 +313,14 @@ final List<ShortcutAction> kShortcutCatalog = [
     context: ShortcutContextRequirement.insertObject,
     insertType: 'image',
   ),
+  // Emoji is the heavy-use E; language keeps E with Shift.
+  ShortcutAction(
+    id: ShortcutActionIds.insertEmoji,
+    category: ShortcutCategory.objects,
+    labelKey: 'shortcutInsertEmoji',
+    defaultBinding: _m(LogicalKeyboardKey.keyE),
+    context: ShortcutContextRequirement.insertObject,
+  ),
   ShortcutAction(
     id: ShortcutActionIds.toggleLayoutMode,
     category: ShortcutCategory.navigation,
@@ -323,7 +332,7 @@ final List<ShortcutAction> kShortcutCatalog = [
     id: ShortcutActionIds.toggleLanguage,
     category: ShortcutCategory.navigation,
     labelKey: 'shortcutToggleLanguage',
-    defaultBinding: _m(LogicalKeyboardKey.keyE),
+    defaultBinding: _m(LogicalKeyboardKey.keyE, shift: true),
   ),
   ShortcutAction(
     id: ShortcutActionIds.addConnection,

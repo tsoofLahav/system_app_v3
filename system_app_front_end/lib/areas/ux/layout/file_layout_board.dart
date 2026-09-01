@@ -42,11 +42,7 @@ class FileLayoutBoard extends StatelessWidget {
       for (final file in files)
         SizedBox.expand(
           child: DocumentPane(
-            key: ValueKey(
-              state.isBroughtFileOnCanvas(topic, file.id)
-                  ? 'brought-${file.id}'
-                  : file.id,
-            ),
+            key: ValueKey(file.id),
             topic: state.canvasTopicFor(topic, file),
             file: file,
             state: state,

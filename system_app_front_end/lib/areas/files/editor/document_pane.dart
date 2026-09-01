@@ -154,10 +154,7 @@ class _DocumentPaneState extends State<DocumentPane> {
       isRtl: isRtl,
       entries: [
         if (widget.isBrought)
-          AppContextMenuItem(
-            value: 'dismiss',
-            label: s['bringFileDismiss'],
-          ),
+          AppContextMenuItem(value: 'dismiss', label: s['bringFileDismiss']),
         if (widget.isBrought) const AppContextMenuDivider(),
         AppContextMenuItem(value: 'archive', label: s['archiveFile']),
         const AppContextMenuDivider(),
@@ -180,61 +177,53 @@ class _DocumentPaneState extends State<DocumentPane> {
 
   @override
   Widget build(BuildContext context) {
-    final file = widget.isBrought
-        ? (widget.state.broughtFileById(widget.file.id) ?? widget.file)
-        : widget.state.selectedDetail?.files
-                .where((f) => f.id == widget.file.id)
-                .firstOrNull ??
-            widget.file;
+    final file = widget.state.fileById(widget.file.id) ?? widget.file;
 
     final body = Padding(
       padding: AppSpacing.notePadding,
       child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (widget.isBrought) ...[
-              Text(
-                widget.state.broughtFileOriginLabel(widget.topic),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.metaStyle,
-              ),
-              const SizedBox(height: 4),
-            ],
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _titleController,
-                    focusNode: _titleFocus,
-                    style: AppTypography.noteTitleStyle.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                    decoration: AppTypography.noteInputDecoration(),
-                    // Clicking into the document is how a rename usually ends,
-                    // so leaving the field has to save it, not only Enter.
-                    onSubmitted: (_) => _titleFocus.unfocus(),
-                  ),
-                ),
-                if (widget.showFileMenu)
-                  _FileMenuButton(
-                    buttonKey: _menuButtonKey,
-                    tooltip: widget.state.strings['fileMenu'],
-                    onPressed: _showFileMenu,
-                  ),
-              ],
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.isBrought) ...[
+            Text(
+              widget.state.broughtFileOriginLabel(widget.topic),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.metaStyle,
             ),
-            const SizedBox(height: AppSpacing.xs),
-            // Pane height is fixed by the topic layout (or the phone page).
-            // Super Editor owns scrolling inside this slot.
-            Expanded(
-              child: DocumentEditor(
-                file: file,
-                state: widget.state,
-              ),
-            ),
+            const SizedBox(height: 4),
           ],
-        ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _titleController,
+                  focusNode: _titleFocus,
+                  style: AppTypography.noteTitleStyle.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                  decoration: AppTypography.noteInputDecoration(),
+                  // Clicking into the document is how a rename usually ends,
+                  // so leaving the field has to save it, not only Enter.
+                  onSubmitted: (_) => _titleFocus.unfocus(),
+                ),
+              ),
+              if (widget.showFileMenu)
+                _FileMenuButton(
+                  buttonKey: _menuButtonKey,
+                  tooltip: widget.state.strings['fileMenu'],
+                  onPressed: _showFileMenu,
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          // Pane height is fixed by the topic layout (or the phone page).
+          // Super Editor owns scrolling inside this slot.
+          Expanded(
+            child: DocumentEditor(file: file, state: widget.state),
+          ),
+        ],
+      ),
     );
 
     if (!widget.framed) {
@@ -305,13 +294,5 @@ class _FileMenuButtonState extends State<_FileMenuButton> {
         ),
       ),
     );
-  }
-}
-
-extension _FirstOrNull<E> on Iterable<E> {
-  E? get firstOrNull {
-    final it = iterator;
-    if (!it.moveNext()) return null;
-    return it.current;
   }
 }

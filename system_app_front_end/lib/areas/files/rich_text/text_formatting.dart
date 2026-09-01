@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../ui/app_colors.dart';
+import '../../../shared/utils/platform_text.dart';
 import './format_range.dart';
 import './text_links.dart';
 
@@ -11,7 +12,7 @@ class TextSpanBuilder {
     required TextStyle baseStyle,
     List<dynamic>? spans,
   }) {
-    final normalized = normalizeSpans(spans, text.length);
+    final normalized = normalizeSpans(spans, text.length, text: text);
     if (normalized.isEmpty) {
       return TextSpan(text: text, style: baseStyle);
     }
@@ -22,13 +23,13 @@ class TextSpanBuilder {
       final end = span['end'] as int;
       if (start > cursor) {
         children.add(
-          TextSpan(text: text.substring(cursor, start), style: baseStyle),
+          TextSpan(text: safeSubstring(text, cursor, start), style: baseStyle),
         );
       }
       if (end > start && end <= text.length) {
         children.add(
           TextSpan(
-            text: text.substring(start, end),
+            text: safeSubstring(text, start, end),
             style: _styleForSpan(baseStyle, span),
           ),
         );
@@ -36,7 +37,9 @@ class TextSpanBuilder {
       }
     }
     if (cursor < text.length) {
-      children.add(TextSpan(text: text.substring(cursor), style: baseStyle));
+      children.add(
+        TextSpan(text: safeSubstring(text, cursor, text.length), style: baseStyle),
+      );
     }
     return TextSpan(children: children);
   }
@@ -50,6 +53,9 @@ class TextSpanBuilder {
       style = style.copyWith(fontStyle: FontStyle.italic);
     }
     final decorations = <TextDecoration>[];
+    if (base.decoration != null && base.decoration != TextDecoration.none) {
+      decorations.add(base.decoration!);
+    }
     if (span['underline'] == true) {
       decorations.add(TextDecoration.underline);
     }
@@ -65,11 +71,17 @@ class TextSpanBuilder {
         style = style.copyWith(color: Color(int.parse('FF$hex', radix: 16)));
       }
     }
-    if (span['descriptionLink'] == true ||
-        (span['link'] is String && (span['link'] as String).isNotEmpty)) {
-      if (!decorations.contains(TextDecoration.underline)) {
-        decorations.add(TextDecoration.underline);
-      }
+    final isDescription = span['descriptionLink'] == true;
+    final isUrl =
+        span['link'] is String && (span['link'] as String).isNotEmpty;
+    if (isDescription) {
+      style = style.copyWith(
+        color: AppColors.descriptionLink,
+        fontStyle: FontStyle.italic,
+        decorationColor: AppColors.descriptionLink,
+      );
+    } else if (isUrl) {
+      decorations.add(TextDecoration.underline);
       style = style.copyWith(
         color: AppColors.descriptionLink,
         decorationColor: AppColors.descriptionLink,
@@ -181,15 +193,21 @@ Map<String, dynamic> spanContentPatch(
 
 List<Map<String, dynamic>> normalizeSpans(
   List<dynamic>? spans,
-  int textLength,
-) {
+  int textLength, {
+  String? text,
+}) {
   if (spans == null || spans.isEmpty) return [];
   final cleaned = <Map<String, dynamic>>[];
   for (final raw in spans) {
     if (raw is! Map) continue;
     final span = Map<String, dynamic>.from(raw);
-    final start = (span['start'] as int? ?? 0).clamp(0, textLength);
-    final end = (span['end'] as int? ?? 0).clamp(0, textLength);
+    var start = (span['start'] as int? ?? 0).clamp(0, textLength);
+    var end = (span['end'] as int? ?? 0).clamp(0, textLength);
+    if (text != null) {
+      final snapped = normalizeUtf16Range(text, start, end);
+      start = snapped.$1;
+      end = snapped.$2;
+    }
     if (end <= start) continue;
     if (!_spanHasStyle(span)) continue;
     cleaned.add({...span, 'start': start, 'end': end});
@@ -607,14 +625,19 @@ List<Map<String, dynamic>> applyFormatActionToRange(
 }) {
   if (end <= start) return spans;
 
-  final clampedStart = start.clamp(0, textLength);
-  final clampedEnd = end.clamp(0, textLength);
+  var clampedStart = start.clamp(0, textLength);
+  var clampedEnd = end.clamp(0, textLength);
+  if (sourceText != null) {
+    final snapped = normalizeUtf16Range(sourceText, clampedStart, clampedEnd);
+    clampedStart = snapped.$1;
+    clampedEnd = snapped.$2;
+  }
   if (clampedEnd <= clampedStart) return spans;
 
   if (action == 'text:make_link') {
     final text = sourceText ?? '';
     if (text.isEmpty || clampedEnd > text.length) return spans;
-    final hit = firstUrlIn(text.substring(clampedStart, clampedEnd));
+    final hit = firstUrlIn(safeSubstring(text, clampedStart, clampedEnd));
     if (hit == null) return spans;
     final absStart = clampedStart + hit.start;
     final absEnd = clampedStart + hit.end;

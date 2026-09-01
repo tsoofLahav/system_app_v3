@@ -26,7 +26,10 @@ void main() {
 
   test('save empty clears visiting file ids', () async {
     final store = BroughtFileStore();
-    await store.save(1, const BroughtFileLayout(visitIds: [42], order: [42, 1]));
+    await store.save(
+      1,
+      const BroughtFileLayout(visitIds: [42], order: [42, 1]),
+    );
     await store.save(1, const BroughtFileLayout());
     expect((await store.load(1)).isEmpty, isTrue);
   });
@@ -82,9 +85,7 @@ void main() {
       AppFile(id: 1, topicId: 1, name: 'Daily', orderIndex: 0),
       AppFile(id: 2, topicId: 1, name: 'Inbox', orderIndex: 1),
     ];
-    final visiting = [
-      AppFile(id: 99, topicId: 2, name: 'Plan'),
-    ];
+    final visiting = [AppFile(id: 99, topicId: 2, name: 'Plan')];
 
     expect(
       mergeHomeCanvasFiles(
@@ -94,5 +95,20 @@ void main() {
       ).map((f) => f.id),
       [1, 99, 2],
     );
+  });
+
+  test('canvas merge keeps the visit as the same AppFile instance', () {
+    final visit = AppFile(
+      id: 99,
+      topicId: 2,
+      name: 'Plan',
+      documentJson: '%%system_app_document v4\nHello',
+    );
+    final merged = mergeHomeCanvasFiles(
+      homeFiles: [AppFile(id: 1, topicId: 1, name: 'Daily')],
+      visits: [visit],
+    );
+    expect(identical(merged.first, visit), isTrue);
+    expect(merged.first.documentJson, visit.documentJson);
   });
 }

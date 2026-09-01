@@ -76,14 +76,18 @@ class _AppShortcutsScopeState extends State<AppShortcutsScope> {
       return false;
     }
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
-    final route = ModalRoute.of(context);
-    if (route != null && !route.isCurrent) return false;
-
     final actionId =
         widget.state.shortcutBindings.actionIdMatchingHardware(event);
     if (actionId == null) return false;
     final action = shortcutActionById(actionId);
     if (action == null) return false;
+
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) {
+      // A dialog sits above the shell. Insert / text / list still apply to
+      // the focused editor inside that dialog (fill-file snippet, prompts).
+      if (!_allowedBehindModal(action)) return false;
+    }
 
     final sizeRepeat = action.textAction == 'text:size_up' ||
         action.textAction == 'text:size_down';
@@ -100,6 +104,18 @@ class _AppShortcutsScopeState extends State<AppShortcutsScope> {
 
     _dispatchOnce(actionId, allowRepeat: event is KeyRepeatEvent && sizeRepeat);
     return true;
+  }
+
+  bool _allowedBehindModal(ShortcutAction action) {
+    switch (action.context) {
+      case ShortcutContextRequirement.insertObject:
+      case ShortcutContextRequirement.textFocus:
+        return true;
+      default:
+        return action.id == ShortcutActionIds.addConnection ||
+            action.id == ShortcutActionIds.toggleEmbedMoveMode ||
+            action.id == ShortcutActionIds.toggleReorderMode;
+    }
   }
 
   /// Hardware intercept and [Shortcuts] both see the same key. Fire once per

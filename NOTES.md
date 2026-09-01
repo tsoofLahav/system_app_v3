@@ -10,9 +10,13 @@ When the user says “remember this”, add the note here under the matching sec
 
 **Read before changing** `SuperDocumentEditor`, embeds, `AppState` notify paths, `app.dart`, the shells, or any in-document `TextField`.
 
-Flutter desyncs when a `TextField` / `FocusNode` is disposed or the editor tree remounts **while a physical key is still down**. Symptom: looping console errors
+Flutter desyncs when a `TextField` / `FocusNode` is disposed, remounted, or loses/gains focus **while a physical key is still down**. Symptom: looping console errors
 
 `KeyDownEvent is dispatched, but the state shows that the physical key is already pressed`
+
+or
+
+`KeyUpEvent is dispatched, but the state shows that the physical key is not pressed`
 
 **Structure (do this):** the typing surface stays mounted. Chrome may rebuild; the open document is not thrown away and created again for unrelated `notifyListeners`. Incoming file-body / embed updates apply **into** the open editor ([`SuperDocumentEditor`](system_app_front_end/lib/areas/files/editor/super_document_editor.dart) listens itself). Who listens where: UX [`AREA.md`](system_app_front_end/lib/areas/ux/AREA.md) § Who rebuilds.
 
@@ -26,7 +30,7 @@ This class of bug also comes back after embed/save/focus changes inside a file (
 
 1. Rebuild `MaterialApp`, `AppShell`, or the topic canvas on every `notifyListeners`, or wrap `DocumentEditor` / `SuperDocumentEditor` in `ListenableBuilder(listenable: appState)`.
 2. Call `notifyListeners()` / `loadEmbedsForFile(notify: true)` / `_reloadEmbedsForOpenFiles` **from a keystroke path** (cell/title/body `onChanged`, every character).
-3. `setState` the Super Editor (or replace `Editor` / remount embeds) while `HardwareKeyboard.instance.physicalKeysPressed` is non-empty — unless the change is purely visual and keeps the same `FocusNode`s.
+3. `setState` the Super Editor (or replace `Editor` / remount embeds / change focus) while keys are down. Gate that work with `runWhenKeyboardIdle` — do not check `physicalKeysPressed` ad hoc.
 4. Dispose or recreate cell/task/info `FocusNode`s / controllers in `didUpdateWidget` while those fields have focus or keys are down.
 5. Overwrite live controller text from a stale embed cache while the user is typing in that embed (dirty). A **clean** embed must take a newer inbound payload (after keys are up) — do not ignore inbound just because a cell is focused, and do not flush old payload on dispose over that inbound.
 6. **Notify listeners from a registry's `dispose`.** Flutter locks the tree while unmounting, so a listener rebuilding then throws *setState() called when widget tree was locked* — once per listener, which buries the console.
@@ -36,8 +40,8 @@ This class of bug also comes back after embed/save/focus changes inside a file (
 1. **Silent saves:** document + object payload/title patches use `notify: false` (or patch cache in place with no notify).
 2. **Debounce** embed field PATCHes (info / table / tasks already do ~400ms) — never hit the network on every character without a timer.
 3. **Patch cache before await** on embed writes so a remount cannot re-seed empty content mid-flight.
-4. On `AppState` embed-list changes, rebuild Super Editor only for **structural** changes (id / type / order). Payload-only list replacements must not `setState` the editor. If a structural rebuild is required and keys are down, use `runAfterKeystroke` ([`editor_key_handoff.dart`](system_app_front_end/lib/areas/files/editor/editor_key_handoff.dart)).
-5. **Shift+Enter** focus handoff → `runNextFrame`. **Destructive** deletes (empty Backspace removing a row/object) → `runAfterKeystroke`.
+4. On `AppState` embed-list changes, rebuild Super Editor only for **structural** changes (id / type / order). Payload-only list replacements must not `setState` the editor. If a structural rebuild is required and keys are down, use `runWhenKeyboardIdle` ([`editor_key_handoff.dart`](system_app_front_end/lib/areas/files/editor/editor_key_handoff.dart)).
+5. **Any** remount, unfocus, `requestFocus`, dispose, or notify that can change the focused editor must go through `runWhenKeyboardIdle`. That includes Shift+Enter enter and Escape leave. Layout-only IME wiring after keys are already idle may still use `runNextFrame`. Cycle-files chrome is the exception (runs immediately — Cmd stays down with no IME).
 6. Keep stable embed identities (`embed:<objectId>`, `GlobalKey` where State must survive parent rebuilds).
 7. Registries bump through [`FrameSafeNotifier`](system_app_front_end/lib/shared/utils/frame_safe_notifier.dart), which notifies immediately when the tree is free and waits for the end of the frame when it is not. Waiting always is not an option: post-frame callbacks do not schedule a frame, so a bump made while idle would never arrive.
 8. **Launch / hot restart:** Flutter seeds `HardwareKeyboard` from the engine (`syncKeyboardState`) and the next KeyDown for those keys loops the assertion. While [`MainPaneLoader`](system_app_front_end/lib/areas/ux/widgets/main_pane_loader.dart) is on screen, drop tracked keys (`releaseTrackedHardwareKeys`). [`settleHardwareKeyboardForLaunch`](system_app_front_end/lib/shared/utils/hardware_keyboard_guard.dart) runs before `appReady`. [`installHardwareKeyboardGuard`](system_app_front_end/lib/shared/utils/hardware_keyboard_guard.dart) in `main` catches a leftover assertion so it cannot loop. Never call `HardwareKeyboard.clearState` — it wipes key handlers.
@@ -45,10 +49,12 @@ This class of bug also comes back after embed/save/focus changes inside a file (
 ### After you change editor code — smoke-check
 
 - Type quickly in: paragraph, info body, task title, table cell, chart-table cell.
-- Shift+Enter into an object, type, Shift+Enter out, type in the paragraph below.
+- Shift+Enter into an object, type, Escape out, type in the paragraph below.
 - If the assertion appears: **full restart** the app (hot reload can leave keys stuck); then fix the remount/notify path — do not ignore it. After a restart the loading pane should have dropped engine-seeded keys; if it still loops while typing, that is a remount/notify bug, not a leftover seed.
 
 Gathered in one place: [`CARET_AND_WRITING_FOCUS.md`](CARET_AND_WRITING_FOCUS.md). Detail and fluent-text rules: files [`AREA.md`](system_app_front_end/lib/areas/files/AREA.md) · [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md).
+
+**2026-08-31 — One keyboard-idle gate:** `runWhenKeyboardIdle` in [`editor_key_handoff.dart`](system_app_front_end/lib/areas/files/editor/editor_key_handoff.dart) is the only helper for remount / unfocus / `requestFocus` / dispose / notify of a focused editor. If a path can cause the KeyDown/KeyUp assertion, it must go through that function. `runAfterKeystroke` is an alias. `runNextFrame` is layout/IME only, after keys are already idle. Cycle-files chrome is the exception.
 
 **2026-08-26 — Launch keyboard seed:** After restart the engine still reports keys as down; Flutter copies that into `_pressedKeys`, then the first real KeyDown for `D` (or any leftover key) asserts and loops. The loading pane is the window where the user cannot type — that is when we drop the seed. The error guard is a backstop if a seed still leaks.
 
@@ -67,7 +73,8 @@ Gathered in one place: [`CARET_AND_WRITING_FOCUS.md`](CARET_AND_WRITING_FOCUS.md
 - **2026-07-27** — A list has one style; points vs numbers is switched on the existing list from its right-click menu, never offered as two things to insert.
 - **2026-08-09** — Fluent text with embeds: [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md) — a blank line the user typed is text and is saved, move/delete leave none behind, edge landing, stable embed remount.
 - **2026-08-07** — **RTL solution** for the file editor is gathered under [`system_app_front_end/lib/areas/files/rich_text/rtl/`](system_app_front_end/lib/areas/files/rich_text/rtl/RTL.md) (`RTL.md` + `rtl.dart`). Do not invent caret/direction policy outside that folder.
-- **2026-08-30** — **Insert-bar emoji:** desktop is a movable overlay (no scrim) so typing continues; phone is a keyboard panel above the pills. Selecting an emoji inserts and stays open. Do not use a blocking dialog. Search must not steal the insert target — freeze the embed caret (`beginEmojiPickerSession`) and advance that selection after each insert.
+- **2026-08-30** — **Insert-bar emoji:** desktop is a movable overlay (no scrim) so typing continues; phone is a keyboard panel above the pills. Selecting an emoji inserts at the caret (body or open object) and stays open. ⌘E toggles the palette; language is ⌘⇧E. Do not use a blocking dialog. Search must not steal the insert target — freeze the embed caret (`beginEmojiPickerSession`) and advance that selection after each insert. Clicking another object field (or the body) retargets. Super Editor `hasFocus` is true for descendant fields; insert routing uses **primary** focus so an open object is not treated as the body.
+- **2026-08-30** — **Marking through emoji:** never slice or extend a mark by one UTF-16 unit. Snap Super Editor and object-field selections to grapheme edges (`snapDocumentSelection`, `graphemeOffsetBefore` / `After`) or layout throws `string is not well-formed UTF-16`.
 
 ---
 
@@ -75,7 +82,7 @@ Gathered in one place: [`CARET_AND_WRITING_FOCUS.md`](CARET_AND_WRITING_FOCUS.md
 
 - **2026-07-31** — **Files vs objects split:** in-file embed widgets live under [`files/editor/embeds/`](system_app_front_end/lib/areas/files/editor/embeds/) (presentation, flow, menus, Move Mode). Objects owns data + special qualities — **tasks/views**, **info links**, payloads (e.g. `tasks.status`). Thin overlay: embeds call object services/controls; they do not own those fields. See both [`AREA.md`](system_app_front_end/lib/areas/files/AREA.md) files.
 - **2026-07-27** — **Objects in a file** are top-level embed blocks. The document owns position; the object owns data. Move Mode is the object chrome menu and **⌘⇧O** (double-click selects a word in inner fields). Enter on an empty final task / info line / graph column exits below without destroying the object.
-- **2026-08-10** — **Atomic object blocks:** SE caret treats embeds as one block. **Shift+Enter**/click opens; **Shift+Enter** returns to the block; **Enter** / typing insert a line above when the caret is on the object’s leading edge, below when it is on the trailing edge. Shift+Enter uses `runNextFrame`; destructive deletes still use `runAfterKeystroke`. Info is one text field (first line = title). No arrow auto-enter/exit. Rules: [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md).
+- **2026-08-10** — **Atomic object blocks:** SE caret treats embeds as one block. **Shift+Enter**/click opens; **Escape** returns to the block; **Enter** / typing insert a line above when the caret is on the object’s leading edge, below when it is on the trailing edge. Shift+Enter and destructive deletes use `runWhenKeyboardIdle`. Info is one text field (first line = title). No arrow auto-enter/exit. Rules: [`FLUENT_TEXT.md`](system_app_front_end/lib/areas/files/editor/FLUENT_TEXT.md).
 - **2026-08-11** — **Tables + charts:** one object type `table` (`payload.rows` + optional `payload.chart`). `[GRAPH id]` is sugar for chart-on tables. Shared UI: [`table_embed.dart`](system_app_front_end/lib/areas/files/editor/embeds/table_embed.dart) + [`RichTableEditor`](system_app_front_end/lib/areas/files/rich_text/rich_table_editor.dart).
 - **2026-08-26** — Object **Design…** is its own dialog with samples, not a right-click submenu. Looks: glass, lines-only, fill-only, plus type extras. Graph type and colour sets live there too.
 

@@ -1,6 +1,7 @@
-/// Atomic object blocks: SE owns the caret on the embed; Shift+Enter opens it
-/// and also leaves back to the SE block caret. Enter / typing insert a line
-/// before the object when the caret is on its leading edge, after it otherwise.
+/// Atomic object blocks: SE owns the caret on the embed; Shift+Enter opens it.
+/// Enter inside an object leaves (info) or advances (task / cell). Escape
+/// leaves from any inner field. Enter on the block inserts a line before/after
+/// it. Shift+Enter / ⌘Enter inside insert a newline in the field.
 library;
 
 import 'package:flutter/services.dart';
@@ -89,7 +90,7 @@ mixin EmbedLineGatewayMixin implements EmbedCaretGateway {
   void nudgeInner(AxisDirection direction) {}
 }
 
-/// ↑/↓ within an embed only. At the first/last line, do nothing (Shift+Enter leaves).
+/// ↑/↓ within an embed only. At the first/last line, do nothing (Escape leaves).
 void navigateEmbedLine({
   required int lineIndex,
   required int lineCount,
@@ -154,7 +155,7 @@ class EmbedCaretRegistry extends ChangeNotifier {
   EmbedCaretGateway? operator [](String nodeId) => _gateways[nodeId];
 }
 
-/// Registry + Shift+Enter leave → SE block caret.
+/// Registry + Escape leave → SE block caret.
 class EmbedCaretScope extends InheritedWidget {
   const EmbedCaretScope({
     super.key,
@@ -179,10 +180,8 @@ class EmbedCaretScope extends InheritedWidget {
 
 /// Shift+Enter opens an object; Enter on an object inserts a paragraph below it.
 class EmbedCaretPlugin extends SuperEditorPlugin {
-  EmbedCaretPlugin({
-    required this.registry,
-    required this.caretSession,
-  }) : _tapDelegate = _EmbedAwareTapDelegate(caretSession);
+  EmbedCaretPlugin({required this.registry, required this.caretSession})
+    : _tapDelegate = _EmbedAwareTapDelegate(caretSession);
 
   final EmbedCaretRegistry registry;
   final DocumentCaretSession caretSession;
@@ -231,11 +230,11 @@ class EmbedCaretPlugin extends SuperEditorPlugin {
     if (gateway == null) return false;
 
     caretSession.adoptEmbed(node.id);
-    // Next frame only — enter/leave is a distinct key from inner typing; waiting
-    // for keys-clear (runAfterKeystroke) felt like a half-second stall.
-    runNextFrame(() {
-      caretSession.adoptEmbed(node.id);
-      gateway.enterFromAbove();
+    runWhenKeyboardIdle(() {
+      runNextFrame(() {
+        caretSession.adoptEmbed(node.id);
+        gateway.enterFromAbove();
+      });
     });
     return true;
   }
@@ -252,15 +251,9 @@ class EmbedCaretPlugin extends SuperEditorPlugin {
     final paragraph = ParagraphNode(id: id, text: AttributedText());
     editContext.editor.execute([
       if (embedInsertGoesBefore(editContext.composer.selection))
-        InsertNodeBeforeNodeRequest(
-          existingNodeId: node.id,
-          newNode: paragraph,
-        )
+        InsertNodeBeforeNodeRequest(existingNodeId: node.id, newNode: paragraph)
       else
-        InsertNodeAfterNodeRequest(
-          existingNodeId: node.id,
-          newNode: paragraph,
-        ),
+        InsertNodeAfterNodeRequest(existingNodeId: node.id, newNode: paragraph),
       ChangeSelectionRequest(
         DocumentSelection.collapsed(
           position: DocumentPosition(
@@ -297,13 +290,9 @@ class EmbedCaretPlugin extends SuperEditorPlugin {
   }
 }
 
-/// Wraps embed content: Shift+Enter returns to the SE caret on this object.
+/// Wraps embed content so Escape (and Enter in info) can leave to the SE caret.
 class EmbedEditScope extends StatelessWidget {
-  const EmbedEditScope({
-    super.key,
-    required this.nodeId,
-    required this.child,
-  });
+  const EmbedEditScope({super.key, required this.nodeId, required this.child});
 
   final String nodeId;
   final Widget child;
@@ -320,10 +309,7 @@ class EmbedEditScope extends StatelessWidget {
         onExit: (_) => exit(),
         child: Shortcuts(
           shortcuts: const {
-            SingleActivator(LogicalKeyboardKey.enter, shift: true):
-                _ExitObjectIntent(),
-            SingleActivator(LogicalKeyboardKey.numpadEnter, shift: true):
-                _ExitObjectIntent(),
+            SingleActivator(LogicalKeyboardKey.escape): _ExitObjectIntent(),
           },
           child: Actions(
             actions: {
@@ -356,8 +342,9 @@ class _EmbedAwareTapDelegate extends ContentTapDelegate {
     if (caretSession.owner == DocumentCaretOwner.embed) {
       return TapHandlingInstruction.halt;
     }
-    final pos = details.documentLayout
-        .getDocumentPositionNearestToOffset(details.layoutOffset);
+    final pos = details.documentLayout.getDocumentPositionNearestToOffset(
+      details.layoutOffset,
+    );
     if (pos != null && caretSession.isObjectEmbed(pos.nodeId)) {
       return TapHandlingInstruction.halt;
     }

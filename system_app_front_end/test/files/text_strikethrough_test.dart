@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/files/rich_text/text_formatting.dart';
+import 'package:system_app_front_end/areas/ui/app_colors.dart';
 
 void main() {
   test('strikethrough toggles on the marked range only', () {
@@ -60,5 +61,28 @@ void main() {
       TextDecoration.underline,
       TextDecoration.lineThrough,
     ]));
+  });
+
+  test('description-linked glyphs are italic teal and keep strikethrough', () {
+    const text = 'hello';
+    final span = TextSpanBuilder.build(
+      text: text,
+      baseStyle: const TextStyle(
+        decoration: TextDecoration.lineThrough,
+        color: Color(0xFF9D988F),
+      ),
+      spans: [
+        {'start': 0, 'end': text.length, 'descriptionLink': true},
+      ],
+    );
+    final style = span.children!.single.style!;
+    expect(style.fontStyle, FontStyle.italic);
+    expect(style.color, AppColors.descriptionLink);
+    expect(style.decoration, TextDecoration.lineThrough);
+    expect(style.decoration, isNot(TextDecoration.underline));
+    expect(
+      style.decoration?.contains(TextDecoration.underline) ?? false,
+      isFalse,
+    );
   });
 }

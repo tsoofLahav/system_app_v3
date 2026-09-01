@@ -1,7 +1,8 @@
 import 'package:flutter/widgets.dart';
 
-/// Inner fields read this so Shift+Enter can leave the object (a TextField
-/// would otherwise insert a newline and never bubble to [Shortcuts]).
+/// Inner fields read this so Escape (and Enter in info) can leave the object
+/// instead of inserting a newline. Shift+Enter / ⌘Enter / Ctrl+Enter still
+/// insert a line.
 class EmbedExitScope extends InheritedWidget {
   const EmbedExitScope({
     super.key,

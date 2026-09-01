@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/utils/platform_text.dart';
+
 /// Character range for the current selection or caret line (until newline).
 class LineRange {
   const LineRange({required this.start, required this.end});
@@ -19,8 +21,11 @@ class LineRange {
     }
 
     if (!selection.isCollapsed) {
-      final start = selection.start.clamp(0, text.length);
-      final end = selection.end.clamp(0, text.length);
+      final (start, end) = normalizeUtf16Range(
+        text,
+        selection.start,
+        selection.end,
+      );
       if (end > start) {
         return LineRange(start: start, end: end);
       }

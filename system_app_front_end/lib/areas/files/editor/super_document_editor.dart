@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:super_editor/super_editor.dart';
 
 import '../../../core/app_state.dart';
@@ -122,6 +121,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   var _conflictOpen = false;
   String? _lastSavedJson;
   var _applyingRemote = false;
+  var _snappingComposerGraphemes = false;
 
   /// Object ids currently present as embed nodes — used to cascade-delete
   /// when Super Editor removes a pointer without going through [_deleteObject].
@@ -159,10 +159,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   );
 
   AppFile get _currentFile =>
-      widget.state.selectedDetail?.files
-          .where((f) => f.id == widget.file.id)
-          .firstOrNull ??
-      widget.file;
+      widget.state.fileById(widget.file.id) ?? widget.file;
 
   List<ObjectEmbed> get _embeds =>
       widget.state.embedsByFileId[widget.file.id] ??
@@ -227,6 +224,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           restoreWritingFocus: _restoreWritingFocus,
           dismissLiveMark: _dismissLiveMark,
           isFocused: () => _focusNode.hasFocus,
+          isPrimaryFocused: () => _focusNode.hasPrimaryFocus,
           canEnterObject: _canEnterObject,
           canLeaveObject: _canLeaveObject,
           enterObject: _enterObjectFromPhone,
@@ -266,6 +264,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         BlockTextFocusRegistry.releaseLiveMark();
         _caretSession.adoptDocument();
       }
+      BlockTextFocusRegistry.noteEmojiPickerDocumentFocus();
     }
     _syncCaretVisibility();
     _bumpPhoneObjectGate();
@@ -277,7 +276,20 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     if (wasEmbed && _caretSession.owner == DocumentCaretOwner.document) {
       BlockTextFocusRegistry.releaseLiveMark();
     }
+    _snapComposerGraphemes();
     _bumpPhoneObjectGate();
+  }
+
+  /// A mark that splits an emoji surrogate pair crashes Super Editor layout.
+  void _snapComposerGraphemes() {
+    if (_snappingComposerGraphemes) return;
+    final sel = _composer.selection;
+    if (sel == null) return;
+    final next = snapDocumentSelection(_doc, sel);
+    if (next == sel) return;
+    _snappingComposerGraphemes = true;
+    _composer.setSelectionWithReason(next, SelectionReason.userInteraction);
+    _snappingComposerGraphemes = false;
   }
 
   void _bumpPhoneObjectGate() {
@@ -302,10 +314,12 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     final gateway = _embedCaretRegistry[nodeId];
     if (gateway == null) return;
     _caretSession.adoptEmbed(nodeId);
-    runNextFrame(() {
-      _caretSession.adoptEmbed(nodeId);
-      gateway.enterFromAbove();
-      _bumpPhoneObjectGate();
+    runWhenKeyboardIdle(() {
+      runNextFrame(() {
+        _caretSession.adoptEmbed(nodeId);
+        gateway.enterFromAbove();
+        _bumpPhoneObjectGate();
+      });
     });
   }
 
@@ -487,11 +501,9 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       _scheduleRemoteDocumentReload(remote);
     }
 
-    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
-      runAfterKeystroke(run);
-      return;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) => run());
+    runWhenKeyboardIdle(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) => run());
+    });
   }
 
   void _scheduleRemoteDocumentReload(String? json) {
@@ -503,11 +515,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       _reloadFromStored(latest);
     }
 
-    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
-      runAfterKeystroke(apply);
-      return;
-    }
-    apply();
+    runWhenKeyboardIdle(apply);
   }
 
   /// Ids/types/order changed — not mere payload/title text patches.
@@ -527,14 +535,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   void _scheduleEmbedStructureRebuild() {
     if (!mounted) return;
-    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
-      runAfterKeystroke(() {
-        if (!mounted) return;
-        setState(() {});
-      });
-      return;
-    }
-    setState(() {});
+    runWhenKeyboardIdle(() {
+      if (!mounted) return;
+      setState(() {});
+    });
   }
 
   Future<void> _loadEmbedsQuietly() async {
@@ -569,27 +573,29 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     final pending = widget.state.pendingFocusFileId;
     if (pending == null || pending != widget.file.id) return;
     widget.state.takePendingFocusFileId();
-    runNextFrame(() {
-      if (!mounted) return;
-      DocumentEditorRegistry.claim(widget.file.id);
-      if (_doc.nodeCount > 0) {
-        final node = _doc.getNodeAt(0);
-        if (node != null) {
-          _editor.execute([
-            ChangeSelectionRequest(
-              DocumentSelection.collapsed(
-                position: DocumentPosition(
-                  nodeId: node.id,
-                  nodePosition: node.beginningPosition,
+    runWhenKeyboardIdle(() {
+      runNextFrame(() {
+        if (!mounted) return;
+        DocumentEditorRegistry.claim(widget.file.id);
+        if (_doc.nodeCount > 0) {
+          final node = _doc.getNodeAt(0);
+          if (node != null) {
+            _editor.execute([
+              ChangeSelectionRequest(
+                DocumentSelection.collapsed(
+                  position: DocumentPosition(
+                    nodeId: node.id,
+                    nodePosition: node.beginningPosition,
+                  ),
                 ),
+                SelectionChangeType.placeCaret,
+                SelectionReason.userInteraction,
               ),
-              SelectionChangeType.placeCaret,
-              SelectionReason.userInteraction,
-            ),
-          ]);
+            ]);
+          }
         }
-      }
-      _focusNode.requestFocus();
+        _focusNode.requestFocus();
+      });
     });
   }
 
@@ -931,28 +937,30 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   void _enterNewObject(String nodeId) {
-    bool tryEnter(EmbedCaretGateway gateway) {
-      if (gateway.lineCount <= 0) return false;
-      _caretSession.adoptEmbed(nodeId);
-      gateway.enterFromAbove();
-      return true;
-    }
+    runWhenKeyboardIdle(() {
+      bool tryEnter(EmbedCaretGateway gateway) {
+        if (gateway.lineCount <= 0) return false;
+        _caretSession.adoptEmbed(nodeId);
+        gateway.enterFromAbove();
+        return true;
+      }
 
-    final gateway = _embedCaretRegistry[nodeId];
-    if (gateway != null && tryEnter(gateway)) {
-      _bumpPhoneObjectGate();
-      return;
-    }
-    // Task-list surface may register one frame later than the embed host.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final late = _embedCaretRegistry[nodeId];
-      if (late != null && tryEnter(late)) {
+      final gateway = _embedCaretRegistry[nodeId];
+      if (gateway != null && tryEnter(gateway)) {
         _bumpPhoneObjectGate();
         return;
       }
-      _caretSession.placeOnObjectLine(nodeId);
-      _bumpPhoneObjectGate();
+      // Task-list surface may register one frame later than the embed host.
+      runNextFrame(() {
+        if (!mounted) return;
+        final late = _embedCaretRegistry[nodeId];
+        if (late != null && tryEnter(late)) {
+          _bumpPhoneObjectGate();
+          return;
+        }
+        _caretSession.placeOnObjectLine(nodeId);
+        _bumpPhoneObjectGate();
+      });
     });
   }
 
@@ -1076,8 +1084,9 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _caretSession.activeEmbedNodeId = null;
     // Embed list notify remounts remaining objects next frame — land the
     // document caret after that so the keyboard stays a writing session.
-    runNextFrame(() {
+    runWhenKeyboardIdle(() {
       runNextFrame(() {
+        runNextFrame(() {
         if (!mounted) return;
         final id = resumeId;
         if (id == null || _doc.getNodeById(id) == null) {
@@ -1100,6 +1109,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         ]);
         _focusNode.requestFocus();
         _bumpPhoneObjectGate();
+        });
       });
     });
   }
@@ -1179,20 +1189,16 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
     // Arrow-key nudge fires while a key is down. Rebuilding Super Editor
     // mid-KeyDown desyncs HardwareKeyboard.
-    if (HardwareKeyboard.instance.physicalKeysPressed.isEmpty) {
-      apply();
-    } else {
-      runNextFrame(apply);
-    }
+    runWhenKeyboardIdle(apply);
   }
 
   void _endMoveMode() {
     if (_moveModeNodeId == null) return;
     final movedId = _moveModeNodeId!;
     _moveModeNodeId = null;
-    // Drop the bubble after this key/pointer finishes so its FocusNode is
-    // not disposed mid-KeyDown (Enter / Esc).
-    runNextFrame(() {
+    // Drop the bubble after keys are up so its FocusNode is not disposed
+    // mid-KeyDown (Enter / Esc).
+    runWhenKeyboardIdle(() {
       if (!mounted) return;
       _removeMoveBubble();
       setState(() {});
@@ -1217,15 +1223,17 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   void _restoreWritingFocus() {
-    DocumentEditorRegistry.claim(widget.file.id);
-    final embedFocus = BlockTextFocusRegistry.activeFocusNode;
-    if (embedFocus != null &&
-        embedFocus.canRequestFocus &&
-        embedFocus.context != null) {
-      embedFocus.requestFocus();
-      return;
-    }
-    _focusNode.requestFocus();
+    runWhenKeyboardIdle(() {
+      DocumentEditorRegistry.claim(widget.file.id);
+      final embedFocus = BlockTextFocusRegistry.activeFocusNode;
+      if (embedFocus != null &&
+          embedFocus.canRequestFocus &&
+          embedFocus.context != null) {
+        embedFocus.requestFocus();
+        return;
+      }
+      _focusNode.requestFocus();
+    });
   }
 
   /// Tap-outside: hide the caret and drop the live mark (body + object fields).
@@ -1336,6 +1344,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     final gen = _embedFocusGen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || gen != _embedFocusGen) return;
+      if (BlockTextFocusRegistry.isInEmojiPickerSession) return;
       _caretSession.embedBlurred();
       if (!BlockTextFocusRegistry.isInMenuSession) {
         BlockTextFocusRegistry.releaseLiveMark();
@@ -2064,10 +2073,11 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         start = 0;
         end = plain.length;
       }
-      start = start.clamp(0, plain.length);
-      end = end.clamp(0, plain.length);
+      final snapped = normalizeUtf16Range(plain, start, end);
+      start = snapped.$1;
+      end = snapped.$2;
       if (end <= start) continue;
-      final slice = plain.substring(start, end);
+      final slice = safeSubstring(plain, start, end);
       final hit = firstUrlIn(slice);
       if (hit == null) continue;
       final uri = Uri.tryParse(hit.url);

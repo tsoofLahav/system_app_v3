@@ -10,7 +10,10 @@ void main() {
     expect(imeInsertedSingleNewline('Buy milk', 'Buy milk\n'), isTrue);
     expect(imeInsertedSingleNewline('hel', 'hel\nlo'), isFalse);
     expect(imeInsertedSingleNewline('', '\n'), isTrue);
-    expect(imeInsertedSingleNewline(imeEmptySentinel, '$imeEmptySentinel\n'), isTrue);
+    expect(
+      imeInsertedSingleNewline(imeEmptySentinel, '$imeEmptySentinel\n'),
+      isTrue,
+    );
     expect(imeInsertedSingleNewline(imeEmptySentinel, '\n'), isTrue);
     expect(imeInsertedSingleNewline('a', 'a\nb'), isFalse);
   });
@@ -19,7 +22,13 @@ void main() {
     expect(imeDeletedEmptySentinel(imeEmptySentinel, ''), isTrue);
     expect(imeDeletedEmptySentinel('a', ''), isFalse);
     expect(imeFieldLooksEmpty(imeEmptySentinel), isTrue);
-    expect(imeVisibleText('$imeEmptySentinel' 'task'), 'task');
+    expect(
+      imeVisibleText(
+        '$imeEmptySentinel'
+        'task',
+      ),
+      'task',
+    );
   });
 
   test('enter / leave object icons are Lucide, not text', () {
@@ -28,33 +37,37 @@ void main() {
     expect(AppIcons.enterObject, isNot(equals(AppIcons.leaveObject)));
   });
 
-  testWidgets('IME Return on a task-like field calls onEnter and keeps the line',
-      (tester) async {
-    var enters = 0;
-    final controller = TextEditingController(text: 'Buy milk');
-    addTearDown(controller.dispose);
+  testWidgets(
+    'IME Return on a task-like field calls onEnter and keeps the line',
+    (tester) async {
+      var enters = 0;
+      final controller = TextEditingController(text: 'Buy milk');
+      addTearDown(controller.dispose);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: FormattedTextField(
-            controller: controller,
-            style: const TextStyle(fontSize: 14),
-            maxLines: null,
-            onEnter: () => enters++,
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: FormattedTextField(
+              controller: controller,
+              style: const TextStyle(fontSize: 14),
+              maxLines: null,
+              onEnter: () => enters++,
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.enterText(find.byType(TextField), 'Buy milk\n');
-    await tester.pump();
+      await tester.enterText(find.byType(TextField), 'Buy milk\n');
+      await tester.pump();
 
-    expect(enters, 1);
-    expect(controller.text, 'Buy milk');
-  });
+      expect(enters, 1);
+      expect(controller.text, 'Buy milk');
+    },
+  );
 
-  testWidgets('first letter in an empty object field keeps focus', (tester) async {
+  testWidgets('first letter in an empty object field keeps focus', (
+    tester,
+  ) async {
     final focus = FocusNode();
     final controller = TextEditingController();
     addTearDown(focus.dispose);
@@ -121,7 +134,9 @@ void main() {
     expect(backs, 1);
   });
 
-  testWidgets('empty-field IME delete calls onBackspaceAtStart', (tester) async {
+  testWidgets('empty-field IME delete calls onBackspaceAtStart', (
+    tester,
+  ) async {
     var backs = 0;
     final controller = TextEditingController();
     addTearDown(controller.dispose);
@@ -149,8 +164,77 @@ void main() {
     expect(backs, 1);
   });
 
-  testWidgets('Shift+Enter inside an object leaves instead of inserting a newline',
-      (tester) async {
+  testWidgets(
+    'Shift+Enter inside an object inserts a newline instead of leaving',
+    (tester) async {
+      var left = 0;
+      var enters = 0;
+      final controller = TextEditingController(text: 'hello');
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EmbedExitScope(
+              nodeId: 'embed:1',
+              onExit: (_) => left++,
+              child: FormattedTextField(
+                controller: controller,
+                style: const TextStyle(fontSize: 14),
+                maxLines: null,
+                onEnter: () => enters++,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+
+      expect(left, 0);
+      expect(enters, 0);
+      expect(controller.text, 'hello\n');
+    },
+  );
+
+  testWidgets('Enter inside an object without onEnter leaves', (tester) async {
+    var left = 0;
+    final controller = TextEditingController(text: 'hello');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EmbedExitScope(
+            nodeId: 'embed:1',
+            onExit: (_) => left++,
+            child: FormattedTextField(
+              controller: controller,
+              style: const TextStyle(fontSize: 14),
+              maxLines: null,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(left, 1);
+    expect(controller.text, 'hello');
+  });
+
+  testWidgets('Escape inside an object leaves without changing the text', (
+    tester,
+  ) async {
     var left = 0;
     final controller = TextEditingController(text: 'hello');
     addTearDown(controller.dispose);
@@ -174,12 +258,70 @@ void main() {
 
     await tester.tap(find.byType(TextField));
     await tester.pump();
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
 
     expect(left, 1);
     expect(controller.text, 'hello');
+  });
+
+  testWidgets('⌘Enter inserts a newline instead of calling onEnter', (
+    tester,
+  ) async {
+    var enters = 0;
+    final controller = TextEditingController(text: 'hello');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FormattedTextField(
+            controller: controller,
+            style: const TextStyle(fontSize: 14),
+            maxLines: null,
+            onEnter: () => enters++,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pump();
+
+    expect(enters, 0);
+    expect(controller.text, 'hello\n');
+  });
+
+  testWidgets('IME newline while ⌘ is down stays a newline', (tester) async {
+    var enters = 0;
+    final controller = TextEditingController(text: 'Buy milk');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FormattedTextField(
+            controller: controller,
+            style: const TextStyle(fontSize: 14),
+            maxLines: null,
+            onEnter: () => enters++,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.enterText(find.byType(TextField), 'Buy milk\n');
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pump();
+
+    expect(enters, 0);
+    expect(controller.text, 'Buy milk\n');
   });
 }

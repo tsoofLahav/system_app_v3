@@ -46,6 +46,7 @@ class BlockTextFocusRegistry {
 
   static int _emojiPickerSessionDepth = 0;
   static _EmojiPickerTarget? _emojiPickerTarget;
+  static bool _emojiPickerPrefersDocument = false;
 
   static int _aiInsertSessionDepth = 0;
   static _AiInsertTarget? _aiInsertTarget;
@@ -78,6 +79,7 @@ class BlockTextFocusRegistry {
 
   static bool get isInEmojiPickerSession => _emojiPickerSessionDepth > 0;
   static bool get hasEmojiPickerTarget => _emojiPickerTarget != null;
+  static bool get emojiPickerPrefersDocument => _emojiPickerPrefersDocument;
   static FormatRange? get frozenFormatRange => _frozenRange;
 
   /// True when the live/recent embed field is inside [owns].
@@ -255,7 +257,49 @@ class BlockTextFocusRegistry {
       onChanged: changed,
       focusNode: focusNode,
     );
+    _retargetEmojiPickerIfOpen(
+      controller: controller,
+      onChanged: changed,
+      focusNode: focusNode,
+    );
     _bumpFocus();
+  }
+
+  /// Palette search must not steal the insert target, but a new object field
+  /// that took the caret should — same as clicking the body retargets.
+  static void _retargetEmojiPickerIfOpen({
+    required TextEditingController controller,
+    required VoidCallback onChanged,
+    FocusNode? focusNode,
+  }) {
+    if (_emojiPickerSessionDepth <= 0) return;
+    _emojiPickerPrefersDocument = false;
+    _emojiPickerTarget = _EmojiPickerTarget(
+      controller: controller,
+      onChanged: onChanged,
+      focusNode: focusNode,
+      selection: controller.selection,
+    );
+  }
+
+  /// Keep the freeze on the last caret the user placed while the field still
+  /// had focus. Search / the emoji grid can unfocus the field and collapse
+  /// the live selection before the insert runs.
+  static void noteEmojiPickerCaret(TextEditingController controller) {
+    if (_emojiPickerSessionDepth <= 0) return;
+    final target = _emojiPickerTarget;
+    if (target == null || !identical(target.controller, controller)) return;
+    final node = target.focusNode;
+    if (node != null && !node.hasFocus) return;
+    final sel = controller.selection;
+    if (!sel.isValid) return;
+    target.selection = sel;
+  }
+
+  /// Super Editor took the writing caret while the palette is open.
+  static void noteEmojiPickerDocumentFocus() {
+    if (_emojiPickerSessionDepth <= 0) return;
+    _emojiPickerPrefersDocument = true;
   }
 
   static void _bumpFocus() {
@@ -397,19 +441,31 @@ class BlockTextFocusRegistry {
     });
   }
 
-  static void beginEmojiPickerSession() {
+  /// Freeze the field that owns writing. [allowUnfocusedRecent] covers the
+  /// insert-bar tap: the button can take focus a moment before the palette
+  /// opens, while the object is still open.
+  ///
+  /// Always starts a session, even when the caret is in the file body, so a
+  /// later click into an object can still freeze that field.
+  static void beginEmojiPickerSession({bool allowUnfocusedRecent = false}) {
     if (_emojiPickerSessionDepth == 0) {
-      final controller = activeController;
-      final changed = onChanged;
-      if (controller == null || changed == null) return;
-      _emojiPickerTarget = _EmojiPickerTarget(
-        controller: controller,
-        onChanged: changed,
-        focusNode: activeFocusNode,
-        selection: controller.selection,
-      );
+      final controller = activeController ??
+          (allowUnfocusedRecent ? _recentTarget?.controller : null);
+      final changed = onChanged ??
+          (allowUnfocusedRecent ? _recentTarget?.onChanged : null);
+      if (controller != null && changed != null) {
+        _emojiPickerTarget = _EmojiPickerTarget(
+          controller: controller,
+          onChanged: changed,
+          focusNode: activeFocusNode ?? _recentTarget?.focusNode,
+          selection: controller.selection,
+        );
+        _emojiPickerPrefersDocument = false;
+      } else {
+        _emojiPickerTarget = null;
+        _emojiPickerPrefersDocument = true;
+      }
     }
-    if (_emojiPickerTarget == null) return;
     _emojiPickerSessionDepth++;
   }
 
@@ -417,6 +473,7 @@ class BlockTextFocusRegistry {
     if (_emojiPickerSessionDepth > 0) _emojiPickerSessionDepth--;
     if (_emojiPickerSessionDepth > 0) return;
 
+    _emojiPickerPrefersDocument = false;
     final target = _emojiPickerTarget;
     _emojiPickerTarget = null;
     if (target == null || !restoreFocus) return;
@@ -580,21 +637,39 @@ class BlockTextFocusRegistry {
     if (text.isEmpty) return;
 
     final target = _emojiPickerTarget;
-    final controller = target?.controller ?? activeController;
-    final changed = target?.onChanged ?? onChanged;
+    final liveOwnsWriting = activeController != null &&
+        onChanged != null &&
+        activeFocusNode?.hasFocus == true;
+    final controller = liveOwnsWriting
+        ? activeController!
+        : (target?.controller ?? activeController);
+    final changed = liveOwnsWriting
+        ? onChanged!
+        : (target?.onChanged ?? onChanged);
     if (controller == null || changed == null) return;
 
-    final fieldFocused = target?.focusNode?.hasFocus == true ||
-        (identical(controller, activeController) &&
-            activeFocusNode?.hasFocus == true);
+    if (liveOwnsWriting &&
+        target != null &&
+        !identical(target.controller, controller)) {
+      _emojiPickerTarget = _EmojiPickerTarget(
+        controller: controller,
+        onChanged: changed,
+        focusNode: activeFocusNode,
+        selection: controller.selection,
+      );
+    }
+
+    final fieldFocused = liveOwnsWriting ||
+        target?.focusNode?.hasFocus == true;
     final selection = fieldFocused
         ? controller.selection
         : (target?.selection ?? controller.selection);
     final start = selection.start.clamp(0, controller.text.length);
     final end = selection.end.clamp(0, controller.text.length);
     _applyInsert(controller, changed, start, end, text);
-    if (target != null) {
-      target.selection = controller.selection;
+    final freeze = _emojiPickerTarget;
+    if (freeze != null && identical(freeze.controller, controller)) {
+      freeze.selection = controller.selection;
     }
   }
 

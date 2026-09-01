@@ -10,8 +10,9 @@ enum DocumentCaretOwner { document, embed, transferring }
 /// Enter/exit for atomic object blocks.
 ///
 /// Default: SE caret sits on the embed as one block. Shift+Enter opens the
-/// object; Shift+Enter again places the SE caret **after** the object. Enter
-/// inserts a line under the object (normal SE behavior).
+/// object. Enter inside leaves (info) or advances; Escape leaves from any
+/// inner field. Shift+Enter / ⌘Enter inside insert a newline. Enter on the
+/// block inserts a line beside it.
 class DocumentCaretSession {
   DocumentCaretSession({
     required Editor editor,
@@ -114,26 +115,25 @@ class DocumentCaretSession {
     if (id == null) return;
     owner = DocumentCaretOwner.transferring;
 
-    // Drop the embed field first so Flutter's TextField IME closes before SE
-    // opens SuperIme against the document selection.
-    final primary = FocusManager.instance.primaryFocus;
-    if (primary != null && primary != _editorFocus) {
-      primary.unfocus();
-    }
+    runWhenKeyboardIdle(() {
+      final primary = FocusManager.instance.primaryFocus;
+      if (primary != null && primary != _editorFocus) {
+        primary.unfocus();
+      }
 
-    // Next frame — Shift+Enter handoff; avoid runAfterKeystroke's keys-clear wait.
-    runNextFrame(() {
-      if (_liveDoc.getNodeById(id) == null) {
+      runNextFrame(() {
+        if (_liveDoc.getNodeById(id) == null) {
+          owner = DocumentCaretOwner.document;
+          activeEmbedNodeId = null;
+          return;
+        }
         owner = DocumentCaretOwner.document;
         activeEmbedNodeId = null;
-        return;
-      }
-      owner = DocumentCaretOwner.document;
-      activeEmbedNodeId = null;
 
-      final afterId = _ensureParagraphAfter(id);
-      if (!_selectTextNode(afterId)) return;
-      _requestEditorFocusWhenSelectionIsLive(afterId);
+        final afterId = _ensureParagraphAfter(id);
+        if (!_selectTextNode(afterId)) return;
+        _requestEditorFocusWhenSelectionIsLive(afterId);
+      });
     });
   }
 

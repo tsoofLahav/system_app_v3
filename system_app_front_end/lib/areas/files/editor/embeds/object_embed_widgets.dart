@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../../config/api_config.dart';
 import '../../../../core/app_state.dart';
@@ -406,13 +405,12 @@ class InfoEmbedState extends State<InfoEmbed>
     _setDirty(false);
     void paint() {
       if (!mounted) return;
-      if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
-        runAfterKeystroke(paint);
-        return;
-      }
-      _seedFromEmbed(inbound, preserveSelection: _focus.hasFocus);
-      _baselineKey = infoSnapshotFromEmbed(inbound);
-      setState(() {});
+      runWhenKeyboardIdle(() {
+        if (!mounted) return;
+        _seedFromEmbed(inbound, preserveSelection: _focus.hasFocus);
+        _baselineKey = infoSnapshotFromEmbed(inbound);
+        setState(() {});
+      });
     }
 
     paint();
@@ -436,11 +434,9 @@ class InfoEmbedState extends State<InfoEmbed>
       _applyRemote(inbound);
     }
 
-    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
-      runAfterKeystroke(run);
-      return;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) => run());
+    runWhenKeyboardIdle(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) => run());
+    });
   }
 
   void _scheduleSave() {
@@ -486,7 +482,7 @@ class InfoEmbedState extends State<InfoEmbed>
   Future<void> _onBackspaceAtStart() async {
     widget.onFocus?.call();
     if (_isEmptyObject) {
-      runAfterKeystroke(() => widget.onDeleteObject?.call());
+      runWhenKeyboardIdle(() => widget.onDeleteObject?.call());
     }
   }
 

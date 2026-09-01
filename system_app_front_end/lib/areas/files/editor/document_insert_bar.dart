@@ -48,7 +48,11 @@ class DocumentInsertBar extends StatelessWidget {
               // make: emoji, a list, and the objects.
               _InsertButton(
                 icon: AppIcons.smiley,
-                tooltip: s['insertEmoji'],
+                tooltip: _tooltip(
+                  state,
+                  s['insertEmoji'],
+                  ShortcutActionIds.insertEmoji,
+                ),
                 selected: TextEmojiPalette.isOpen,
                 onPressed: () => TextEmojiPalette.toggle(context, s),
               ),
@@ -127,15 +131,20 @@ class _InsertButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: tooltip,
-      padding: const EdgeInsets.all(4),
-      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-      onPressed: onPressed,
-      icon: AppIcon(
-        icon,
-        size: 20,
-        color: selected ? AppColors.primary : null,
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      descendantsAreFocusable: false,
+      child: IconButton(
+        tooltip: tooltip,
+        padding: const EdgeInsets.all(4),
+        constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+        onPressed: onPressed,
+        icon: AppIcon(
+          icon,
+          size: 20,
+          color: selected ? AppColors.primary : null,
+        ),
       ),
     );
   }

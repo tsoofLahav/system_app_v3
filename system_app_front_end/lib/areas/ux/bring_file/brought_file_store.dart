@@ -7,13 +7,11 @@ import '../layout/topic_file_slots.dart';
 
 /// Local persist for files visiting Home, plus the mixed Home canvas order.
 ///
-/// Visiting files stay on their own topics. The canvas order is this device's
-/// arrangement of visits among Home's files; it is not `order_index`.
+/// Visiting files stay on their own topics. Home and the source topic show
+/// the same [AppFile] record (`AppState.filesById`). The canvas order is this
+/// device's arrangement of visits among Home's files; it is not `order_index`.
 class BroughtFileLayout {
-  const BroughtFileLayout({
-    this.visitIds = const [],
-    this.order = const [],
-  });
+  const BroughtFileLayout({this.visitIds = const [], this.order = const []});
 
   /// Files currently visiting Home, in canvas order.
   final List<int> visitIds;
@@ -99,10 +97,7 @@ class BroughtFileStore {
     }
     await prefs.setString(
       key,
-      jsonEncode({
-        'visitIds': layout.visitIds,
-        'order': layout.order,
-      }),
+      jsonEncode({'visitIds': layout.visitIds, 'order': layout.order}),
     );
   }
 
@@ -110,10 +105,7 @@ class BroughtFileStore {
     if (decoded is! List) return null;
     return [
       for (final value in decoded)
-        if (value is int)
-          value
-        else if (value is num)
-          value.toInt(),
+        if (value is int) value else if (value is num) value.toInt(),
     ];
   }
 }

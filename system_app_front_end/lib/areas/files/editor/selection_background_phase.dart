@@ -9,6 +9,8 @@ library;
 import 'package:flutter/painting.dart';
 import 'package:super_editor/super_editor.dart';
 
+import '../../../shared/utils/platform_text.dart';
+
 /// Appends a post-selection style phase that fills the selected span.
 class VisibleSelectionPlugin extends SuperEditorPlugin {
   VisibleSelectionPlugin({required Color color}) : _phase = _SelectionBackgroundPhase(color);
@@ -44,11 +46,12 @@ class _SelectionBackgroundPhase extends SingleColumnLayoutStylePhase {
     final sel = vm.selection;
     if (sel == null || sel.isCollapsed) return vm;
 
-    final start = sel.start;
-    final end = sel.end;
-    if (end <= start || vm.text.isEmpty) return vm;
+    final plain = vm.text.toPlainText();
+    if (plain.isEmpty) return vm;
+    final (start, end) = normalizeUtf16Range(plain, sel.start, sel.end);
+    if (end <= start) return vm;
 
-    final last = (end - 1).clamp(0, vm.text.length - 1);
+    final last = (end - 1).clamp(0, plain.length - 1);
     if (last < start) return vm;
 
     vm.text = vm.text.copy()
