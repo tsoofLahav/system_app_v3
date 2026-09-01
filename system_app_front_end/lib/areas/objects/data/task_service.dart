@@ -15,7 +15,7 @@ class TaskService {
   Future<Task> createInList({
     required int taskListId,
     required String title,
-    String status = 'active',
+    String status = 'inactive',
     int? listOrderIndex,
   }) async {
     final data = await _api.post('/task-lists/$taskListId/tasks', {

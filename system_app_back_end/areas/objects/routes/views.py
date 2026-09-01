@@ -188,6 +188,10 @@ def create_view_task(view_id):
             topic_key=topic_key,
         )
     )
+    db.session.flush()
+    from areas.objects.services.task_ops import sync_status_with_memberships
+
+    sync_status_with_memberships(task)
     db.session.commit()
     return jsonify(_task_dict_with_topic(task)), 201
 

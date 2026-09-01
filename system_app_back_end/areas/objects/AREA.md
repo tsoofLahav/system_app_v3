@@ -12,7 +12,7 @@ Objects live in the `objects` table and appear inside a file through an `embed` 
 
 | Type | Backing storage | Special quality |
 |------|-----------------|-----------------|
-| `task_list` | `task_lists` + `tasks` | Ordering, done/active, views |
+| `task_list` | `task_lists` + `tasks` | Ordering, active/done/inactive/pending, views |
 | `info` | `information_pieces` | Linkable into the object graph (links map) |
 | `image` | `objects.payload` | Uploaded asset reference + caption. Agent `create_object` generates the picture and stores `/images/…`; the insert bar still creates an empty slot for the user to pick a file |
 | `table` | `objects.payload` | Grid (`payload.rows`); optional **chart** quality (`payload.chart`) — pointer `[TABLE id]` or `[GRAPH id]` when chart is on |
@@ -36,13 +36,15 @@ Tasks are the richest object type — a sub-part of this area, not a separate on
 
 **Order.** Every task carries `list_order_index` within its `task_list`. Users reorder freely; order is explicit, not derived from creation time. Reordering rewrites indices for the whole list so they stay dense (`active` ids then `done` ids). Views keep **two** membership orders: `order_index` for section mode and `topic_order_index` for topic mode (`view_task_memberships`). List order, view-by-section, and view-by-topic are independent.
 
-**Done / active toggle.** `tasks.status` is `active` or `done`. A task exists **once**. Marking it done anywhere updates the single row and is reflected everywhere it appears. List queries and the UI show Active then Done zones; `POST /tasks/:id/move` can place a task into a zone (including the same list).
+**Done / active / inactive / pending.** `tasks.status` is `active`, `done`, `inactive`, or `pending`. A task exists **once**. Marking it done anywhere updates the single row and is reflected everywhere it appears. List queries and the UI show Active then Done zones; inactive and pending sit with Active. `POST /tasks/:id/move` can place a task into a zone (including the same list) without wiping pending/inactive when the drop stays in the non-done zone.
+
+A task **without a view is inactive** (grey filled mark, not toggleable) until it is assigned one — file-list creates default to `inactive`; view-frame creates default to `active`. Assigning a view turns inactive → active; removing the view turns active/pending → inactive (`done` stays done). **Pending** requires a view: the membership is kept, `due_date` is the activate-on day, and the task is hidden on the view page until then. The minute cron calls `activate_due_pending_tasks` (date ≤ today in `Asia/Jerusalem`) so pending becomes active without a user automation. Toggle is a no-op for inactive and pending.
 
 **Empty titles.** `POST /task-lists/:id/tasks` accepts `title: ""` (blank row). Only a missing title key may default; never coerce empty string to `"New task"`.
 
-**Section cadence and windows.** `views.layout_config.sections[]` may include `key` (stable) and `cadence` (`routine` / `one_time`). PATCH of `layout_config` backfills keys and creates matching `section_window` automations (automations area). Complimentary tasks (`tasks.source_automation_id`, `complimentary_role`) are marked by the pipeline when the work finishes; the checkbox still toggles like any other task (giving up that round). Only the roles the automation needs are stored.
+**Section cadence and windows.** `views.layout_config.sections[]` may include `key` (stable), `cadence` (`routine` / `one_time`), and `default` (at most one section). PATCH of `layout_config` backfills keys and creates matching `section_window` automations (automations area). Complimentary tasks (`tasks.source_automation_id`, `complimentary_role`) are marked by the pipeline when the work finishes; the checkbox still toggles like any other task (giving up that round). Only the roles the automation needs are stored.
 
-**Views.** A view is a user-made list that a task can appear in without being copied. Membership lives in `view_task_memberships`, with its own ordering per view **and per display mode**. **Product rule: a task belongs to at most one view at a time** (the client replaces memberships rather than stacking them). Section definitions, display mode (`by_section` / `by_topic`), and topic-frame order live in `views.layout_config` (JSON) — not separate tables. Memberships still carry `section_name` / `section_flag` for which section a task sits in, plus `order_index` (section mode) and `topic_order_index` (topic mode). Putting a task in a view page uses **Place…** on the client, which lists that topic’s task-list objects via `GET /topics/:id/task-lists` (live files only).
+**Views.** A view is a user-made list that a task can appear in without being copied. Membership lives in `view_task_memberships`, with its own ordering per view **and per display mode**. **Product rule: a task belongs to at most one view at a time** (the client replaces memberships rather than stacking them). Section definitions (including optional `default: true` on one section), display mode (`by_section` / `by_topic`), and topic-frame order live in `views.layout_config` (JSON) — not separate tables. Memberships still carry `section_name` / `section_flag` for which section a task sits in, plus `order_index` (section mode) and `topic_order_index` (topic mode). Assigning a view from a task that already has a home topic should store that topic on the membership (`topic_key`); an empty key is **No topic** only for tasks created in a view frame with no topic. Topic/list placement on the client lists that topic’s task-list objects via `GET /topics/:id/task-lists` (live files only) and does not rewrite view or section.
 
 ```
 tasks ──< view_task_memberships >── views
@@ -128,7 +130,7 @@ Deleting anything that contains objects must cascade, or the database keeps orph
 | [`routes/information.py`](routes/information.py) | Info pieces |
 | [`routes/views.py`](routes/views.py) | Views and memberships |
 | [`services/task_list_order.py`](services/task_list_order.py) | Canonical ordering within a list |
-| [`services/task_ops.py`](services/task_ops.py) | Toggle / unmark without a request — used by automations and by the HTTP routes |
+| [`services/task_ops.py`](services/task_ops.py) | Toggle / unmark / pending → active — used by automations, cron, and HTTP routes |
 | [`services/delete_cascade.py`](services/delete_cascade.py) | Cascade rules for every container |
 
 ## Rules

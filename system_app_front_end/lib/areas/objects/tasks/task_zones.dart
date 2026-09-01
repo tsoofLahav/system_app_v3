@@ -71,7 +71,13 @@ class TaskZones {
       }
     }
     if (moving == null) return this;
-    final placed = moving.copyWith(status: targetDone ? 'done' : 'active');
+    final placed = moving.copyWith(
+      status: targetDone
+          ? 'done'
+          : moving.isDone
+              ? 'active'
+              : moving.status,
+    );
     final zone = targetDone ? nextDone : nextActive;
     var at = indexInZone;
     if (sourceDone == targetDone && sourceIndex >= 0 && sourceIndex < at) {
@@ -90,7 +96,13 @@ class TaskZones {
   }) {
     final nextActive = [for (final t in active) if (t.id != task.id) t];
     final nextDone = [for (final t in done) if (t.id != task.id) t];
-    final placed = task.copyWith(status: targetDone ? 'done' : 'active');
+    final placed = task.copyWith(
+      status: targetDone
+          ? 'done'
+          : task.isDone
+              ? 'active'
+              : task.status,
+    );
     final zone = targetDone ? nextDone : nextActive;
     final at = indexInZone.clamp(0, zone.length);
     zone.insert(at, placed);

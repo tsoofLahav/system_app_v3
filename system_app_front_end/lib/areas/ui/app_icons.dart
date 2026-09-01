@@ -55,6 +55,7 @@ abstract final class AppIcons {
   static const search = LucideIcons.search200;
   static const colorWheel = LucideIcons.palette200;
   static const calendar = LucideIcons.calendar200;
+  static const pending = LucideIcons.clock200;
 
   // Emoji picker categories
   static const recent = LucideIcons.clock200;

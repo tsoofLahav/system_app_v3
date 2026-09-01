@@ -48,6 +48,10 @@ def update_task(task_id):
         {"title", "status", "due_date", "list_order_index", "archived_at", "task_list_id"},
         datetime_fields={"due_date", "archived_at"},
     )
+    if data.get("status") == task_ops.PENDING and not task_ops.task_has_view(task):
+        raise ValueError("pending tasks need a view")
+    if "status" in data:
+        task_ops.sync_status_with_memberships(task)
     db.session.commit()
     return jsonify(task.to_dict())
 
@@ -80,7 +84,7 @@ def list_task_memberships(task_id):
 
 @tasks_bp.route("/tasks/<int:task_id>/memberships", methods=["PUT"])
 def replace_task_memberships(task_id):
-    get_or_404(Task, task_id)
+    task = get_or_404(Task, task_id)
     data = request.get_json(silent=True) or {}
     memberships = data.get("memberships") or []
 
@@ -98,6 +102,8 @@ def replace_task_memberships(task_id):
             topic_key=item.get("topic_key"),
         )
         db.session.add(row)
+    db.session.flush()
+    task_ops.sync_status_with_memberships(task)
     db.session.commit()
     return list_task_memberships(task_id)
 

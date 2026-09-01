@@ -70,6 +70,18 @@ class Task {
 
   bool get isDone => status == 'done';
 
+  bool get isInactive => status == 'inactive';
+
+  bool get isPending => status == 'pending';
+
+  bool get isActive => status == 'active';
+
+  /// Checkbox only toggles active ↔ done.
+  bool get canToggleMark => isActive || isDone;
+
+  /// Membership is kept, but pending rows stay off the view page.
+  bool get appearsInView => isActive || isDone;
+
   bool get isComplimentaryTask =>
       complimentaryRole == 'input' || complimentaryRole == 'review';
 
@@ -142,6 +154,7 @@ class Task {
     bool clearSection = false,
     bool clearSectionFlag = false,
     bool clearDetailsBlock = false,
+    bool clearDueDate = false,
   }) {
     return Task(
       id: id ?? this.id,
@@ -153,7 +166,7 @@ class Task {
       detailsBlockId: clearDetailsBlock
           ? null
           : (detailsBlockId ?? this.detailsBlockId),
-      dueDate: dueDate ?? this.dueDate,
+      dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
       archivedAt: archivedAt ?? this.archivedAt,
       createdAt: createdAt ?? this.createdAt,
       taskViewId: taskViewId ?? this.taskViewId,

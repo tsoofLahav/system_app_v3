@@ -44,6 +44,27 @@ def test_document_to_agent_text_task_list():
     assert "- [x] Find phone" in text
 
 
+def test_document_to_agent_text_pending_and_inactive():
+    text = document_to_agent_text(
+        _sample_doc_with_embed(),
+        objects_by_id={
+            42: {
+                "type": "task_list",
+                "tasks": [
+                    {"title": "Now", "status": "active", "list_order_index": 0},
+                    {"title": "Later", "status": "pending", "list_order_index": 1},
+                    {"title": "Parked", "status": "inactive", "list_order_index": 2},
+                ],
+            }
+        },
+    )
+    assert "PENDING:" in text
+    assert "INACTIVE:" in text
+    parsed = parse_agent_text(text)
+    by_title = {t["title"]: t["status"] for t in parsed["object_updates"][42]["tasks"]}
+    assert by_title == {"Now": "active", "Later": "pending", "Parked": "inactive"}
+
+
 def test_task_list_title_round_trip():
     text = document_to_agent_text(
         _sample_doc_with_embed(),

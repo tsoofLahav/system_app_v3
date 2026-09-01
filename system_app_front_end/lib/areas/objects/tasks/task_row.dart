@@ -104,11 +104,13 @@ class _TaskRowState extends State<TaskRow> {
             // Nudge the compact mark down to the first-line text center.
             padding: const EdgeInsets.only(top: 2),
             child: TaskMark(
-              done: done,
+              status: widget.task.status,
               compact: true,
-              onToggle: widget.toggleEnabled && !widget.readOnly
+              onToggle: widget.toggleEnabled &&
+                      !widget.readOnly &&
+                      widget.task.canToggleMark
                   ? widget.onToggle
-                  : () {},
+                  : null,
             ),
           ),
           Expanded(

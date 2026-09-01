@@ -101,6 +101,7 @@ class FileTaskListBridge extends TaskListBridge {
   Future<void> markAll({required bool done}) async {
     for (final task in remoteTasks) {
       if (task.isDone == done) continue;
+      if (!task.canToggleMark) continue;
       await state.toggleTaskStatus(task, notify: false);
     }
   }

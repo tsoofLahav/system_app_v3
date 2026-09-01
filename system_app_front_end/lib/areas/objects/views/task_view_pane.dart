@@ -105,7 +105,8 @@ class _TaskViewPaneState extends State<TaskViewPane> {
   List<Task> get _membershipTasks {
     return [
       for (final m in state.viewMemberships)
-        if (state.taskForMembership(m) case final task?) task,
+        if (state.taskForMembership(m) case final task?)
+          if (task.appearsInView) task,
     ];
   }
 
@@ -392,6 +393,7 @@ class _TaskViewPaneState extends State<TaskViewPane> {
       colorHex: next.colorHex,
       key: next.key,
       cadence: next.cadence,
+      isDefault: next.isDefault,
     );
   }
 

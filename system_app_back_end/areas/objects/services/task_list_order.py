@@ -100,7 +100,13 @@ def move_task_to_list(
 
     source_task_list_id = task.task_list_id
     task.task_list_id = target_task_list_id
-    task.status = "done" if target_done else "active"
+    if target_done:
+        task.status = "done"
+    elif task.status == "done":
+        from areas.objects.services.task_ops import unmarked_status_for
+
+        task.status = unmarked_status_for(task)
+    # Reorder within the non-done zone keeps pending / inactive / active.
 
     target_tasks = [
         t for t in tasks_for_list(target_task_list_id) if t.id != task.id

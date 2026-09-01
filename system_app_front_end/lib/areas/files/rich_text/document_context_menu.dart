@@ -429,6 +429,10 @@ class DocumentContextMenu {
             label: strings['assignTaskViews'],
           ),
         AppContextMenuItem(
+          value: 'tasks:set_pending',
+          label: strings['taskPending'],
+        ),
+        AppContextMenuItem(
           value: 'tasks:reorder_mode',
           label: strings['reorderTasks'],
         ),

@@ -167,10 +167,20 @@ class AppState extends ChangeNotifier {
   final Set<int> complimentaryProcessingIds = {};
   _TypeTemplateEdit? _typeTemplateEdit;
 
-  /// Files visiting Home — still belong to their source topics, not Home.
-  /// Order among Home files is [homeCanvasOrderIds], not this list alone.
-  List<AppFile> broughtFiles = [];
+  /// Live file records by id. Topic lists and Home visits are views of this —
+  /// a projected file is the same [AppFile] as on its source topic.
+  final Map<int, AppFile> filesById = {};
+
+  /// Visit ids on Home, in canvas order among themselves. Bodies live in
+  /// [filesById], not a second copy.
+  List<int> _broughtFileIds = [];
   final Map<int, Topic> broughtTopics = {};
+
+  /// Files visiting Home — same records as on their source topics.
+  List<AppFile> get broughtFiles => [
+    for (final id in _broughtFileIds)
+      if (filesById[id] != null) filesById[id]!,
+  ];
 
   /// Mixed Home canvas order (visits interleaved with Home files). Empty when
   /// there are no visits.
@@ -496,11 +506,18 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       final files = await _files.listFilesForTopic(topic.id);
-      selectedDetail = TopicDetail(topic: topic, files: files);
+      for (final file in files) {
+        _rememberFile(file);
+      }
+      selectedDetail = TopicDetail(
+        topic: topic,
+        files: [for (final file in files) filesById[file.id]!],
+      );
       topicDetailStale = false;
       for (final file in files) {
         await loadEmbedsForFile(file.id);
       }
+      if (topic.isMain) await _refreshVisitFiles();
     } catch (e) {
       error = e.toString();
     }
@@ -1157,8 +1174,7 @@ class AppState extends ChangeNotifier {
   List<AppFile> hiddenFilesFor(Topic topic, List<AppFile> files) =>
       hiddenFiles(orderedFilesFor(topic, files), layoutFor(topic));
 
-  bool isBroughtFile(int fileId) =>
-      broughtFiles.any((file) => file.id == fileId);
+  bool isBroughtFile(int fileId) => _broughtFileIds.contains(fileId);
 
   /// Visiting panes only exist on Home. The same file on its own topic is not a visit.
   bool isBroughtFileOnCanvas(Topic topic, int fileId) =>
@@ -1167,8 +1183,10 @@ class AppState extends ChangeNotifier {
   Topic canvasTopicFor(Topic openTopic, AppFile file) =>
       broughtTopics[file.id] ?? openTopic;
 
+  AppFile? fileById(int fileId) => filesById[fileId];
+
   AppFile? broughtFileById(int fileId) =>
-      broughtFiles.where((file) => file.id == fileId).firstOrNull;
+      isBroughtFile(fileId) ? filesById[fileId] : null;
 
   String layoutFor(Topic topic) => topic.fileLayout;
 
@@ -1485,20 +1503,9 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  /// Globals plus actions matching the open topic, its type, or a visiting file.
-  List<AiAction> get visibleAiActions {
-    final visits = _aiActionVisitIds;
-    return [
-      for (final action in aiActions)
-        if (action.visibleIn(
-          openTopicId: selectedTopic?.id,
-          openTypeId: selectedTopic?.topicTypeId,
-          visitingTopicIds: visits.topicIds,
-          visitingTypeIds: visits.typeIds,
-        ))
-          action,
-    ];
-  }
+  /// Globals, type-scoped, and topic-scoped — the ⋯ menu lists every saved
+  /// action. Scope only decides what sits on the bar.
+  List<AiAction> get visibleAiActions => List<AiAction>.from(aiActions);
 
   ({Set<int> topicIds, Set<int> typeIds}) get _aiActionVisitIds {
     final open = selectedTopic;
@@ -1687,16 +1694,18 @@ class AppState extends ChangeNotifier {
       if (a.hasPendingClear) a,
   ];
 
-  Automation? sectionWindowFor({required int viewId, required String sectionKey}) {
+  Automation? sectionWindowFor({
+    required int viewId,
+    required String sectionKey,
+  }) {
     for (final a in sectionWindowAutomations) {
       if (a.viewId == viewId && a.sectionKey == sectionKey) return a;
     }
     return null;
   }
 
-  bool viewHasAttention(int viewId) => sectionWindowAutomations.any(
-    (a) => a.viewId == viewId && a.attention,
-  );
+  bool viewHasAttention(int viewId) =>
+      sectionWindowAutomations.any((a) => a.viewId == viewId && a.attention);
 
   bool sectionHasAttention({required int viewId, String? sectionKey}) {
     if (sectionKey == null || sectionKey.isEmpty) return false;
@@ -1715,7 +1724,8 @@ class AppState extends ChangeNotifier {
     if (workspaceId == null) return;
     try {
       final next = await _automations.list(workspaceId: workspaceId);
-      final changed = _automationAttentionSignature(next) !=
+      final changed =
+          _automationAttentionSignature(next) !=
           _automationAttentionSignature(automations);
       automations = next;
       if (changed || !notifyIfChanged) notifyListeners();
@@ -1812,6 +1822,7 @@ class AppState extends ChangeNotifier {
       name: name,
       orderIndex: 0,
     );
+    _rememberFile(file);
     for (var i = 0; i < existing.length; i++) {
       await _files.updateFile(existing[i].id, {'order_index': i + 1});
     }
@@ -1832,14 +1843,7 @@ class AppState extends ChangeNotifier {
     bool notify = true,
   }) async {
     final updated = await _files.updateFile(file.id, body);
-    _patchFileInDetail(updated);
-    final broughtIndex = broughtFiles.indexWhere((f) => f.id == updated.id);
-    if (broughtIndex >= 0) {
-      broughtFiles = [
-        for (var i = 0; i < broughtFiles.length; i++)
-          i == broughtIndex ? updated : broughtFiles[i],
-      ];
-    }
+    _putFile(updated);
     // Silent document autosaves must not notify — MaterialApp's Consumer and
     // other listeners rebuilding mid-keystroke desync HardwareKeyboard.
     if (notify) notifyListeners();
@@ -1860,6 +1864,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> deleteFile(AppFile file) async {
     await _files.deleteFile(file.id);
+    filesById.remove(file.id);
     if (isBroughtFile(file.id)) {
       await dismissBroughtFile(file.id);
     }
@@ -1880,6 +1885,7 @@ class AppState extends ChangeNotifier {
       orderIndex: 9999,
       meta: const {'automation_scratch': true},
     );
+    _rememberFile(file);
     await loadEmbedsForFile(file.id, notify: false);
     pendingFocusFileId = file.id;
     return file;
@@ -1902,6 +1908,7 @@ class AppState extends ChangeNotifier {
       append: append,
     );
     await loadEmbedsForFile(file.id, notify: false);
+    _putFile(file);
     return file;
   }
 
@@ -1921,6 +1928,7 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
     embedsByFileId.remove(fileId);
     descriptionLinksByFileId.remove(fileId);
+    filesById.remove(fileId);
   }
 
   Map<String, dynamic> _automationObjectSnapshot(ObjectEmbed embed) {
@@ -1955,9 +1963,25 @@ class AppState extends ChangeNotifier {
         allTopics.where((t) => t.id == topic.id).firstOrNull ??
         (selectedDetail?.topic.id == topic.id ? selectedDetail!.topic : null) ??
         topic;
-    selectedDetail = TopicDetail(topic: fresh, files: files);
+    for (final file in files) {
+      _rememberFile(file);
+    }
+    selectedDetail = TopicDetail(
+      topic: fresh,
+      files: [for (final file in files) filesById[file.id]!],
+    );
     if (selectedTopic?.id == fresh.id) selectedTopic = fresh;
     notifyListeners();
+  }
+
+  void _rememberFile(AppFile file) {
+    filesById[file.id] = file;
+  }
+
+  /// Point every in-memory view of this file at [file].
+  void _putFile(AppFile file) {
+    _rememberFile(file);
+    _patchFileInDetail(file);
   }
 
   void _patchFileInDetail(AppFile file) {
@@ -1965,9 +1989,48 @@ class AppState extends ChangeNotifier {
     selectedDetail = TopicDetail(
       topic: selectedDetail!.topic,
       files: selectedDetail!.files
-          .map((f) => f.id == file.id ? file : f)
+          .map((f) => f.id == file.id ? filesById[file.id]! : f)
           .toList(),
     );
+  }
+
+  /// Files on the open canvas, including Home visits.
+  List<AppFile> get _openCanvasFiles {
+    final detail = selectedDetail;
+    if (detail == null) return const [];
+    return orderedFilesFor(detail.topic, detail.files);
+  }
+
+  /// Re-read visiting files so Home shows the same bodies as their topics.
+  Future<void> _refreshVisitFiles({bool notify = false}) async {
+    if (_broughtFileIds.isEmpty) return;
+    final nextIds = <int>[];
+    for (final fileId in List<int>.from(_broughtFileIds)) {
+      try {
+        final file = await _files.getFile(fileId);
+        final topic = allTopics.where((t) => t.id == file.topicId).firstOrNull;
+        if (file.isArchived ||
+            topic == null ||
+            topic.isArchived ||
+            topic.isMain) {
+          broughtTopics.remove(fileId);
+          continue;
+        }
+        _rememberFile(file);
+        broughtTopics[file.id] = topic;
+        nextIds.add(file.id);
+        await loadEmbedsForFile(file.id, notify: false);
+      } catch (_) {
+        broughtTopics.remove(fileId);
+      }
+    }
+    if (nextIds.length != _broughtFileIds.length ||
+        !_sameIds(nextIds, _broughtFileIds)) {
+      _broughtFileIds = nextIds;
+      if (_broughtFileIds.isEmpty) homeCanvasOrderIds = [];
+      await _persistBroughtFileLayout();
+    }
+    if (notify) notifyListeners();
   }
 
   void setEditingFileId(int? fileId, {bool notify = true}) {
@@ -1995,7 +2058,7 @@ class AppState extends ChangeNotifier {
 
   Future<AppFile> reloadFile(int fileId, {bool notify = true}) async {
     final updated = await _files.getFile(fileId);
-    _patchFileInDetail(updated);
+    _putFile(updated);
     if (notify) notifyListeners();
     return updated;
   }
@@ -2071,7 +2134,7 @@ class AppState extends ChangeNotifier {
       blockIndex: blockIndex ?? index ?? offset,
     );
     final updated = await _files.getFile(file.id);
-    _patchFileInDetail(updated);
+    _putFile(updated);
     // Silent — the file editor reloads the document and focuses the new
     // object itself. Notifying here rebuilds Super Editor mid-handoff and
     // breaks the IME (one letter then stuck).
@@ -2129,7 +2192,7 @@ class AppState extends ChangeNotifier {
     int taskListId, {
     String title = '',
     int? afterTaskId,
-    String status = 'active',
+    String status = 'inactive',
     bool notify = true,
   }) async {
     final task = await _tasks.createInList(
@@ -2232,15 +2295,36 @@ class AppState extends ChangeNotifier {
   }
 
   /// A task belongs to at most one view — [viewId] replaces any previous one.
+  /// New memberships inherit the task's home topic (topics mode) and the
+  /// view's default section when one is set.
   Future<void> setTaskView(int taskId, int? viewId) =>
-      setTaskViews([taskId], viewId);
+      setTaskViewPlacement(taskIds: [taskId], viewId: viewId);
 
   /// Same as [setTaskView] for every id; one notify at the end.
-  Future<void> setTaskViews(Iterable<int> taskIds, int? viewId) async {
+  Future<void> setTaskViews(Iterable<int> taskIds, int? viewId) =>
+      setTaskViewPlacement(taskIds: [...taskIds], viewId: viewId);
+
+  /// View + section only. Each task keeps its own topic and home list.
+  Future<void> setTaskViewPlacement({
+    required List<int> taskIds,
+    required int? viewId,
+    String? sectionName,
+    String? sectionFlag,
+    bool uncategorized = false,
+    bool sectionChosen = false,
+  }) async {
     final ids = <int>{...taskIds};
     if (ids.isEmpty) return;
     final previousIds = <int>{};
     var wrote = false;
+    AppView? targetView;
+    if (viewId != null) {
+      targetView = userViews.where((v) => v.id == viewId).firstOrNull;
+    }
+    final defaultSection = targetView == null
+        ? null
+        : ViewLayoutConfig.defaultSection(targetView.layoutConfig);
+
     for (final taskId in ids) {
       final existing = await loadTaskMemberships(taskId);
       previousIds.addAll(existing.map((m) => m.viewId));
@@ -2250,22 +2334,47 @@ class AppState extends ChangeNotifier {
         wrote = true;
         continue;
       }
-      final keep = existing.where((m) => m.viewId == viewId).firstOrNull;
-      if (existing.length == 1 && keep != null) continue;
+      final keep = existing.where((m) => m.viewId == viewId).firstOrNull ??
+          existing.firstOrNull;
+      final topicKey = ViewLayoutConfig.topicKeyForAssign(
+        existingMembershipKey: keep?.topicKey,
+        homeTopicKey: homeTopicKeyForTask(taskId),
+        homeTopicId: tasksById[taskId]?.topicId,
+      );
+      String? nextSection = keep?.sectionName;
+      String? nextFlag = keep?.sectionFlag;
+      if (sectionChosen) {
+        nextSection = uncategorized ? null : sectionName;
+        nextFlag = uncategorized ? null : sectionFlag;
+      } else if (keep == null || keep.viewId != viewId) {
+        nextSection = defaultSection?.name;
+        nextFlag = defaultSection?.flag;
+      }
       await _tasks.replaceTaskMemberships(taskId, [
         {
           'view_id': viewId,
-          'section_name': keep?.sectionName,
+          'section_name': nextSection,
           'order_index': keep?.orderIndex ?? 0,
           'topic_order_index': keep?.topicOrderIndex ?? 0,
-          'section_flag': keep?.sectionFlag,
-          'topic_key': keep?.topicKey,
+          'section_flag': nextFlag,
+          'topic_key': topicKey,
         },
       ]);
       previousIds.add(viewId);
       wrote = true;
     }
     if (!wrote) return;
+    for (final taskId in ids) {
+      final prev = tasksById[taskId];
+      if (prev == null) continue;
+      if (viewId == null) {
+        if (!prev.isDone) {
+          _patchCachedTask(taskId, status: 'inactive');
+        }
+      } else if (prev.isInactive) {
+        _patchCachedTask(taskId, status: 'active');
+      }
+    }
     if (isViewMode &&
         selectedView != null &&
         previousIds.contains(selectedView!.id)) {
@@ -2274,13 +2383,25 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Apply view → section → topic → list on the view page Place dialog.
-  Future<void> placeViewTasks({
+  String? homeTopicKeyForTask(int taskId) {
+    final task = tasksById[taskId];
+    if (task == null) return null;
+    if (task.topicId != null) return 'topic_${task.topicId}';
+    final fromTask = task.topicKey?.trim();
+    if (fromTask != null && fromTask.isNotEmpty) return fromTask;
+    final listId = task.taskListId;
+    if (listId == null) return null;
+    for (final entry in embedsByFileId.entries) {
+      if (!entry.value.any((e) => e.taskListId == listId)) continue;
+      final file = filesById[entry.key];
+      if (file != null) return 'topic_${file.topicId}';
+    }
+    return null;
+  }
+
+  /// Topic + list only. Each task keeps its own view and section.
+  Future<void> setTaskTopicAndList({
     required List<int> taskIds,
-    required int? viewId,
-    String? sectionName,
-    String? sectionFlag,
-    bool uncategorized = false,
     String? topicKey,
     bool noTopic = false,
     int? taskListId,
@@ -2288,28 +2409,27 @@ class AppState extends ChangeNotifier {
   }) async {
     final ids = [...taskIds];
     if (ids.isEmpty) return;
+    final nextKey = noTopic ? null : topicKey;
 
-    await setTaskViews(ids, viewId);
-    if (viewId != null) {
-      for (final taskId in ids) {
-        final existing = await loadTaskMemberships(taskId);
-        final keep = existing.where((m) => m.viewId == viewId).firstOrNull;
-        if (keep == null) continue;
-        await _tasks.replaceTaskMemberships(taskId, [
-          {
-            'view_id': viewId,
-            'section_name': uncategorized ? null : sectionName,
-            'order_index': keep.orderIndex,
-            'topic_order_index': keep.topicOrderIndex,
-            'section_flag': uncategorized ? null : sectionFlag,
-            'topic_key': noTopic ? null : topicKey,
-          },
-        ]);
-      }
+    for (final taskId in ids) {
+      final existing = await loadTaskMemberships(taskId);
+      if (existing.isEmpty) continue;
+      final keep = existing.first;
+      await _tasks.replaceTaskMemberships(taskId, [
+        {
+          'view_id': keep.viewId,
+          'section_name': keep.sectionName,
+          'order_index': keep.orderIndex,
+          'topic_order_index': keep.topicOrderIndex,
+          'section_flag': keep.sectionFlag,
+          'topic_key': nextKey,
+        },
+      ]);
     }
 
     for (final taskId in ids) {
-      final current = viewTasks.where((t) => t.id == taskId).firstOrNull;
+      final current = tasksById[taskId] ??
+          viewTasks.where((t) => t.id == taskId).firstOrNull;
       if (noList || noTopic) {
         if (current?.taskListId != null) {
           await clearTaskHomeList(taskId);
@@ -2328,6 +2448,35 @@ class AppState extends ChangeNotifier {
       await _refreshViewMemberships();
     }
     notifyListeners();
+  }
+
+  /// Apply view → section → topic → list. Prefer the split helpers.
+  Future<void> placeViewTasks({
+    required List<int> taskIds,
+    required int? viewId,
+    String? sectionName,
+    String? sectionFlag,
+    bool uncategorized = false,
+    String? topicKey,
+    bool noTopic = false,
+    int? taskListId,
+    bool noList = false,
+  }) async {
+    await setTaskViewPlacement(
+      taskIds: taskIds,
+      viewId: viewId,
+      sectionName: sectionName,
+      sectionFlag: sectionFlag,
+      uncategorized: uncategorized,
+      sectionChosen: true,
+    );
+    await setTaskTopicAndList(
+      taskIds: taskIds,
+      topicKey: topicKey,
+      noTopic: noTopic,
+      taskListId: taskListId,
+      noList: noList,
+    );
   }
 
   Future<void> assignTaskToView(int taskId, int viewId) =>
@@ -2410,9 +2559,37 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> toggleTaskStatus(Task task, {bool notify = true}) async {
-    await _api.post('/tasks/${task.id}/toggle', {});
-    _patchCachedTask(task.id, status: task.isDone ? 'active' : 'done');
+    if (!task.canToggleMark) return;
+    final data =
+        await _api.post('/tasks/${task.id}/toggle', {}) as Map<String, dynamic>;
+    final next = Task.fromJson(data);
+    _patchCachedTask(task.id, status: next.status, dueDate: next.dueDate);
     await _reloadEmbedsForOpenFiles(notify: notify);
+  }
+
+  Future<void> setTasksPending(
+    List<int> taskIds, {
+    required DateTime activateOn,
+  }) async {
+    final day = DateTime(activateOn.year, activateOn.month, activateOn.day);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final iso =
+        '${day.year.toString().padLeft(4, '0')}-'
+        '${day.month.toString().padLeft(2, '0')}-'
+        '${day.day.toString().padLeft(2, '0')}';
+    final status = day.isAfter(today) ? 'pending' : 'active';
+    for (final id in taskIds) {
+      final next = await _tasks.updateTask(id, {
+        'status': status,
+        'due_date': '${iso}T00:00:00',
+      });
+      _patchCachedTask(id, status: next.status, dueDate: next.dueDate);
+    }
+    if (isViewMode && selectedView != null) {
+      await _refreshViewMemberships();
+    }
+    await _reloadEmbedsForOpenFiles(notify: true);
   }
 
   /// Place [task] at [insertIndexInZone] in the Active/Done zone of its list.
@@ -2499,6 +2676,7 @@ class AppState extends ChangeNotifier {
     int taskId, {
     String? title,
     String? status,
+    String? dueDate,
     List<Map<String, dynamic>>? descriptionLinks,
     int? taskListId,
     String? taskListTitle,
@@ -2514,6 +2692,7 @@ class AppState extends ChangeNotifier {
             .copyWith(
               title: title,
               status: status,
+              dueDate: dueDate,
               descriptionLinks: descriptionLinks,
               taskListId: taskListId,
               taskListTitle: taskListTitle,
@@ -2621,10 +2800,9 @@ class AppState extends ChangeNotifier {
     bool notify = false,
   }) async {
     await _api.patch('/task-lists/$taskListId', {'title': title});
-    for (final file in selectedDetail?.files ?? const <AppFile>[]) {
-      final embeds = embedsByFileId[file.id];
-      if (embeds == null) continue;
-      embedsByFileId[file.id] = [
+    for (final entry in embedsByFileId.entries.toList()) {
+      final embeds = entry.value;
+      embedsByFileId[entry.key] = [
         for (final e in embeds)
           e.taskListId == taskListId ? e.copyWith(taskListTitle: title) : e,
       ];
@@ -2649,7 +2827,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _reloadEmbedsForOpenFiles({bool notify = true}) async {
-    for (final file in selectedDetail?.files ?? const <AppFile>[]) {
+    for (final file in _openCanvasFiles) {
       await loadEmbedsForFile(file.id, notify: false);
     }
     if (isViewMode && selectedView != null) {
@@ -2671,7 +2849,7 @@ class AppState extends ChangeNotifier {
     Topic topic, {
     required List<AppFile> ordered,
   }) async {
-    final visitIds = {for (final file in broughtFiles) file.id};
+    final visitIds = {for (final id in _broughtFileIds) id};
     final owned = [
       for (final file in ordered)
         if (!topic.isMain || !visitIds.contains(file.id)) file,
@@ -2680,11 +2858,11 @@ class AppState extends ChangeNotifier {
       await _files.updateFile(owned[index].id, {'order_index': index});
     }
     if (topic.isMain) {
-      broughtFiles = [
+      _broughtFileIds = [
         for (final file in ordered)
-          if (visitIds.contains(file.id)) file,
+          if (visitIds.contains(file.id)) file.id,
       ];
-      homeCanvasOrderIds = broughtFiles.isEmpty
+      homeCanvasOrderIds = _broughtFileIds.isEmpty
           ? const []
           : [for (final file in ordered) file.id];
       await _persistBroughtFileLayout();
@@ -2702,12 +2880,13 @@ class AppState extends ChangeNotifier {
       topics: allTopics,
       files: files,
       mainTopic: allTopics.where((t) => t.isMain).firstOrNull,
-      excludeFileIds: {for (final file in broughtFiles) file.id},
+      excludeFileIds: {for (final id in _broughtFileIds) id},
     );
   }
 
   Future<void> setBroughtFile(BrowseFileEntry entry) async {
     final live = await _files.getFile(entry.file.id);
+    _putFile(live);
     final topic =
         allTopics.where((t) => t.id == live.topicId).firstOrNull ?? entry.topic;
     final home = allTopics.where((t) => t.isMain).firstOrNull;
@@ -2717,10 +2896,10 @@ class AppState extends ChangeNotifier {
     final canvas = home == null
         ? <AppFile>[live]
         : orderedFilesFor(home, homeFiles);
-    broughtFiles = [
-      live,
-      for (final file in broughtFiles)
-        if (file.id != live.id) file,
+    _broughtFileIds = [
+      live.id,
+      for (final id in _broughtFileIds)
+        if (id != live.id) id,
     ];
     broughtTopics
       ..removeWhere((id, _) => id == live.id)
@@ -2743,12 +2922,12 @@ class AppState extends ChangeNotifier {
     final canvas = home == null
         ? broughtFiles
         : orderedFilesFor(home, homeFiles);
-    broughtFiles = [
-      for (final file in broughtFiles)
-        if (file.id != fileId) file,
+    _broughtFileIds = [
+      for (final id in _broughtFileIds)
+        if (id != fileId) id,
     ];
     broughtTopics.remove(fileId);
-    homeCanvasOrderIds = broughtFiles.isEmpty
+    homeCanvasOrderIds = _broughtFileIds.isEmpty
         ? const []
         : [
             for (final file in canvas)
@@ -2764,7 +2943,7 @@ class AppState extends ChangeNotifier {
     await broughtFileStore.save(
       id,
       BroughtFileLayout(
-        visitIds: [for (final file in broughtFiles) file.id],
+        visitIds: List<int>.from(_broughtFileIds),
         order: homeCanvasOrderIds,
       ),
     );
@@ -2775,7 +2954,7 @@ class AppState extends ChangeNotifier {
     if (id == null) return;
     final stored = await broughtFileStore.load(id);
     if (stored.isEmpty) {
-      broughtFiles = [];
+      _broughtFileIds = [];
       broughtTopics.clear();
       homeCanvasOrderIds = [];
       return;
@@ -2794,6 +2973,7 @@ class AppState extends ChangeNotifier {
             (home != null && file.topicId == home.id)) {
           continue;
         }
+        _rememberFile(file);
         byId[file.id] = file;
         nextTopics[file.id] = topic;
         await loadEmbedsForFile(file.id, notify: false);
@@ -2806,6 +2986,9 @@ class AppState extends ChangeNotifier {
         : selectedDetail?.topic.id == home.id
         ? selectedDetail!.files
         : await _files.listFilesForTopic(home.id);
+    for (final file in homeFiles) {
+      _rememberFile(file);
+    }
     final visits = [
       for (final fileId in stored.visitIds)
         if (byId[fileId] != null) byId[fileId]!,
@@ -2815,17 +2998,17 @@ class AppState extends ChangeNotifier {
       visits: visits,
       storedOrder: stored.order,
     );
-    broughtFiles = [
+    _broughtFileIds = [
       for (final file in canvas)
-        if (byId.containsKey(file.id)) file,
+        if (byId.containsKey(file.id)) file.id,
     ];
     broughtTopics
       ..clear()
       ..addAll(nextTopics);
-    homeCanvasOrderIds = broughtFiles.isEmpty
+    homeCanvasOrderIds = _broughtFileIds.isEmpty
         ? const []
         : [for (final file in canvas) file.id];
-    final nextIds = [for (final file in broughtFiles) file.id];
+    final nextIds = List<int>.from(_broughtFileIds);
     final orderChanged =
         homeCanvasOrderIds.length != stored.order.length ||
         !_sameIds(homeCanvasOrderIds, stored.order);
@@ -2896,6 +3079,7 @@ class AppState extends ChangeNotifier {
     String? colorHex,
     String? key,
     String? cadence,
+    bool isDefault = false,
   }) async {
     final trimmed = name.trim();
     if (selectedView == null || trimmed.isEmpty) return;
@@ -2909,10 +3093,14 @@ class AppState extends ChangeNotifier {
         colorHex: colorHex,
         orderIndex: sections.length,
         cadence: cadence ?? ViewSectionCadence.routine,
+        isDefault: isDefault,
       ),
     );
+    final next = isDefault
+        ? ViewLayoutConfig.withSingleDefault(sections, defaultName: trimmed)
+        : sections;
     await _persistViewLayout(
-      ViewLayoutConfig.withSections(selectedView!.layoutConfig, sections),
+      ViewLayoutConfig.withSections(selectedView!.layoutConfig, next),
     );
     await loadAutomations();
     notifyListeners();
@@ -2924,7 +3112,10 @@ class AppState extends ChangeNotifier {
   }) async {
     if (selectedView == null) return;
     final sections = [
-      for (final s in sectionsForSelectedView()) s.name == oldName ? next : s,
+      for (final s in sectionsForSelectedView())
+        s.name == oldName
+            ? next
+            : (next.isDefault ? s.copyWith(isDefault: false) : s),
     ];
     await _persistViewLayout(
       ViewLayoutConfig.withSections(selectedView!.layoutConfig, sections),
@@ -3126,11 +3317,14 @@ class AppState extends ChangeNotifier {
   }
 
   /// The topic and files the run should look at first.
-  Map<String, dynamic> agentRunScope() => {
-    if (selectedTopic != null) 'topic_ids': [selectedTopic!.id],
-    if (selectedDetail != null)
-      'file_ids': selectedDetail!.files.map((f) => f.id).toList(),
-  };
+  Map<String, dynamic> agentRunScope() {
+    final topic = selectedTopic;
+    final files = _openCanvasFiles;
+    return {
+      if (topic != null) 'topic_ids': [topic.id],
+      if (files.isNotEmpty) 'file_ids': [for (final file in files) file.id],
+    };
+  }
 
   /// Pointers into what is open: the clock, the file being edited, the mark.
   ///
@@ -3246,6 +3440,7 @@ class AppState extends ChangeNotifier {
     await loadAutomations();
     if (isViewMode) await refreshCurrentView();
   }
+
   Future<void> refreshCurrentView() async {
     if (selectedViewType != null) await selectView(selectedViewType!);
   }
@@ -3293,7 +3488,9 @@ class AppState extends ChangeNotifier {
     return _automations.reviewStatus(automationId);
   }
 
-  Future<List<Map<String, dynamic>>> complimentaryInputTopics(int automationId) {
+  Future<List<Map<String, dynamic>>> complimentaryInputTopics(
+    int automationId,
+  ) {
     return _automations.inputTopics(automationId);
   }
 
@@ -3317,7 +3514,9 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>> completeComplimentaryReview(int automationId) async {
+  Future<Map<String, dynamic>> completeComplimentaryReview(
+    int automationId,
+  ) async {
     final result = await _automations.completeReview(automationId);
     if (isViewMode) await refreshCurrentView();
     return result;
@@ -3326,6 +3525,7 @@ class AppState extends ChangeNotifier {
   Future<void> completeAutomationCompanion(int id) async {
     await completeComplimentaryReview(id);
   }
+
   Future<void> submitProcessDocumentationInput({
     required int id,
     required String text,

@@ -233,6 +233,9 @@ class AppStrings {
   String newSectionTitle(String viewLabel) =>
       this['newSectionTitle'].replaceAll('{view}', viewLabel);
 
+  String sectionWithDefault(String name) =>
+      this['sectionWithDefault'].replaceAll('{name}', name);
+
   String noTasksInView(String viewLabel) =>
       this['noTasksInView'].replaceAll('{view}', viewLabel);
 
@@ -336,16 +339,29 @@ class AppStrings {
     'editView': 'Edit view',
     'newViewHint': 'View name',
     'assignTaskViews': 'Choose view…',
+    'assignTaskViewsTitle': 'Choose view',
     'chooseViewHint':
-        'A task belongs to one view. Choosing another replaces the current one. Marked tasks in the same list all get the chosen view.',
+        'A task belongs to one view. After you pick a view, pick a section. Marked tasks all get that view and section; each keeps its own topic and list.',
+    'taskPending': 'Pending…',
+    'taskPendingTitle': 'Pending',
+    'taskPendingDate': 'Activate on',
+    'taskPendingHint':
+        'Keeps its view, but stays off that page until this date.',
     'noViewsYet': 'No views yet — create one from the sidebar.',
     'noView': 'No view',
+    'mixedValues': 'Mixed',
     'placeTask': 'Place…',
     'placeTaskTitle': 'Place',
+    'placeTopicList': 'Topic and list…',
+    'placeTopicListTitle': 'Topic and list',
     'topicField': 'Topic',
     'listField': 'List',
     'viewField': 'View',
     'sectionField': 'Section',
+    'defaultSection': 'Default section',
+    'defaultSectionHint':
+        'Tasks added to this view go here unless another section is chosen.',
+    'sectionWithDefault': '{name} (default)',
     'noList': 'No list',
     'searchTopics': 'Search',
     'leaveHomeListTitle': 'Leave original list?',
@@ -818,7 +834,7 @@ class AppStrings {
     'shortcutAddFile': 'Add file',
     'shortcutAddTopic': 'Add topic',
     'shortcutAddView': 'Add view',
-    'shortcutAssignTaskView': 'Choose view / Place on the view page',
+    'shortcutAssignTaskView': 'Choose view and section',
     'shortcutToggleLayoutMode': 'Toggle flip / view layout',
     'shortcutToggleLanguage': 'Switch language',
     'shortcutAddConnection': 'Connect info / list',
@@ -1058,16 +1074,29 @@ class AppStrings {
     'editView': 'עריכת תצוגה',
     'newViewHint': 'שם התצוגה',
     'assignTaskViews': 'בחר תצוגה…',
+    'assignTaskViewsTitle': 'בחירת תצוגה',
     'chooseViewHint':
-        'משימה שייכת לתצוגה אחת. בחירה אחרת מחליפה את התצוגה הנוכחית. משימות מסומנות באותה רשימה מקבלות כולן את התצוגה שנבחרה.',
+        'משימה שייכת לתצוגה אחת. אחרי בחירת תצוגה יש לבחור מדור. משימות מסומנות מקבלות כולן את אותה תצוגה ומדור; כל אחת שומרת על הנושא והרשימה שלה.',
+    'taskPending': 'ממתין…',
+    'taskPendingTitle': 'ממתין',
+    'taskPendingDate': 'הפעלה בתאריך',
+    'taskPendingHint':
+        'נשארת בתצוגה, אבל לא מופיעה שם עד לתאריך זה.',
     'noViewsYet': 'אין תצוגות עדיין — צרו אחת מהתפריט הצדדי.',
     'noView': 'ללא תצוגה',
+    'mixedValues': 'מעורב',
     'placeTask': 'מקם…',
     'placeTaskTitle': 'מיקום',
+    'placeTopicList': 'נושא ורשימה…',
+    'placeTopicListTitle': 'נושא ורשימה',
     'topicField': 'נושא',
     'listField': 'רשימה',
     'viewField': 'תצוגה',
     'sectionField': 'מדור',
+    'defaultSection': 'מדור ברירת מחדל',
+    'defaultSectionHint':
+        'משימות שנוספות לתצוגה זו נכנסות לכאן אלא אם נבחר מדור אחר.',
+    'sectionWithDefault': '{name} (ברירת מחדל)',
     'noList': 'ללא רשימה',
     'searchTopics': 'חיפוש',
     'leaveHomeListTitle': 'לעזוב את הרשימה המקורית?',
@@ -1535,7 +1564,7 @@ class AppStrings {
     'shortcutAddFile': 'הוסף קובץ',
     'shortcutAddTopic': 'נושא חדש',
     'shortcutAddView': 'תצוגה חדשה',
-    'shortcutAssignTaskView': 'בחר תצוגה / הצב בעמוד התצוגה',
+    'shortcutAssignTaskView': 'בחר תצוגה ומדור',
     'shortcutToggleLayoutMode': 'החלפת תצוגת משימות / מדורים',
     'shortcutToggleLanguage': 'החלפת שפה',
     'shortcutAddConnection': 'חבר למידע / רשימה',

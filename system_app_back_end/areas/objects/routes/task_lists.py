@@ -43,7 +43,7 @@ def create_task(task_list_id):
     data = request.get_json(silent=True) or {}
     # Empty string is allowed (blank row to type into); only missing title defaults.
     title = "" if "title" not in data or data.get("title") is None else str(data.get("title"))
-    status = data.get("status") or "active"
+    status = data.get("status") or "inactive"
     order_index = data.get("list_order_index")
     if order_index is None:
         order_index = next_list_order_index(task_list_id)

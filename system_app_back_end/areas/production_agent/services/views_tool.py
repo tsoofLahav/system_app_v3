@@ -202,6 +202,9 @@ def assign_view(
         )
 
     db.session.flush()
+    from areas.objects.services.task_ops import sync_status_with_memberships
+
+    sync_status_with_memberships(task)
     return {
         "tool": "views",
         "action": "assign",

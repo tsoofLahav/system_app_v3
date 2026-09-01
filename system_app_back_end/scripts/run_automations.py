@@ -24,6 +24,7 @@ from areas.automations.services.section_windows import (
     KIND_STANDARD,
     tick_section_window,
 )
+from areas.objects.services.task_ops import activate_due_pending_tasks
 from config import openai_api_key
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,16 @@ def _log(message: str) -> None:
 def tick(now: datetime | None = None) -> int:
     """Returns how many automations ran."""
     now = now or datetime.now(dt_timezone.utc)
+    try:
+        activated = activate_due_pending_tasks(now=now)
+        if activated:
+            db.session.commit()
+            _log(f"[automations] pending→active count={len(activated)}")
+    except Exception:
+        logger.exception("pending activate failed")
+        print("[automations] pending activate failed", flush=True)
+        db.session.rollback()
+
     rows = Automation.query.filter(
         Automation.enabled.is_(True),
         Automation.schedule.isnot(None),

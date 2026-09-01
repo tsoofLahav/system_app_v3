@@ -137,13 +137,24 @@ def delete_topic_cascade(topic_id: int) -> None:
 
 
 def delete_view_cascade(view_id: int) -> None:
-    from models import Automation
+    from models import Automation, Task
+    from areas.objects.services.task_ops import sync_status_with_memberships
 
     for automation in Automation.query.filter_by(view_id=view_id).all():
         delete_automation_cascade(automation.id)
+    member_ids = [
+        row.task_id
+        for row in ViewTaskMembership.query.filter_by(view_id=view_id).all()
+        if row.task_id
+    ]
     ViewTaskMembership.query.filter_by(view_id=view_id).delete(
         synchronize_session=False
     )
+    db.session.flush()
+    for task_id in member_ids:
+        task = db.session.get(Task, task_id)
+        if task is not None:
+            sync_status_with_memberships(task)
     view = db.session.get(View, view_id)
     if view:
         db.session.delete(view)

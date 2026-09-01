@@ -16,6 +16,9 @@ abstract class TaskListBridge {
   /// `list_order_index`.
   bool get sortRemoteByListOrder => true;
 
+  /// New rows in this host: file lists start inactive; view frames start active.
+  String get createStatus => 'inactive';
+
   Future<void> refresh();
 
   Future<Task> createAfter({

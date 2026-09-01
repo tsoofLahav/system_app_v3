@@ -36,6 +36,9 @@ class ViewFrameTaskListBridge extends TaskListBridge {
   bool get sortRemoteByListOrder => false;
 
   @override
+  String get createStatus => 'active';
+
+  @override
   String get listTitle => '';
 
   @override
@@ -106,6 +109,7 @@ class ViewFrameTaskListBridge extends TaskListBridge {
   Future<void> markAll({required bool done}) async {
     for (final task in List<Task>.of(remoteTasks)) {
       if (task.isDone == done) continue;
+      if (!task.canToggleMark) continue;
       await state.toggleTaskStatus(task, notify: false);
     }
   }

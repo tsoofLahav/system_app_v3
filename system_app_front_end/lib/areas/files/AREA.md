@@ -52,7 +52,7 @@ The header of a pane ([`editor/document_pane.dart`](editor/document_pane.dart)) 
 - Compare the typed text against the name **as shown**, not as stored. Built-in files are displayed translated (`Daily` reads `יומי`), so comparing against the stored name would rename a file to its own translation the first time focus passed through.
 - A rename arriving from elsewhere (agent, reload) refreshes the field only while it is not focused — never on top of what is being typed.
 
-A pane with `isBrought` is a file **visiting Home** from another topic (UX bring-file). It occupies a layout slot like any other file and can be rearranged with them. Edits save to that file; the ⋯ menu can dismiss that visit without archiving or deleting it. `showFileMenu: false` hides that menu for throwaway hosts (the fill-file snippet dialog).
+A pane with `isBrought` is a file **visiting Home** from another topic (UX bring-file). It is the **same file** as on its source topic — one `files` row, one live record in `AppState.filesById`, shown in both places. It occupies a layout slot like any other file and can be rearranged with them. Edits save to that file; the ⋯ menu can dismiss that visit without archiving or deleting it. `showFileMenu: false` hides that menu for throwaway hosts (the fill-file snippet dialog).
 
 The user never sees marker/editor text. Every read-only surface uses the same preview: `GET /files/:id/agent-text` (or already-expanded agent text) → `parseAgentTextBlocks` → [`FilePreview`](editor/file_preview.dart) → [`ReadOnlyDocumentView`](editor/read_only_document_view.dart). That is the AI diff, archive spotlight, arrange overlay cards, and bring-file cards. None of them mount `SuperDocumentEditor`, and none of them paint `document_json`. The archive list itself never downloads `document_json`; cards use id, name, and `archived_at`.
 
@@ -117,7 +117,7 @@ The insert bar offers **one** list button, not two. Points vs numbers is a prope
 
 It offers no paragraph button either: the file is free text, so a plain line is always one keystroke away. The bar is only for what typing cannot make — emoji, a list, and the objects.
 
-**Emoji** sits on that same insert bar ([`rich_text/text_emoji_picker.dart`](rich_text/text_emoji_picker.dart)). Choosing one inserts at the caret and leaves the palette open so several can go in a row. Desktop: a movable glass overlay (no scrim) — drag it aside and keep typing; close with Done, Escape, or the smiley again. Phone: a keyboard-height panel above the tool pills (not a floating dialog); Done or the smiley puts the writing keyboard back. Search and categories are the same picker as topic icons; the grid stays LTR in Hebrew. Taps on the palette do not dismiss editor focus (`KeepEditorFocus`). Do not use a blocking dialog here — that would stop typing.
+**Emoji** sits on that same insert bar ([`rich_text/text_emoji_picker.dart`](rich_text/text_emoji_picker.dart)). Choosing one inserts at the caret — body or an open object field — and leaves the palette open so several can go in a row. Desktop: a movable glass overlay (no scrim) — drag it aside and keep typing; close with Done, Escape, the smiley again, or ⌘⇧E. Phone: a keyboard-height panel above the tool pills (not a floating dialog); Done or the smiley puts the writing keyboard back. Search and categories are the same picker as topic icons; the grid stays LTR in Hebrew. Taps on the palette and the insert bar do not dismiss editor focus (`KeepEditorFocus`; insert buttons do not take focus). Do not use a blocking dialog here — that would stop typing.
 
 Insertion goes where the caret is, blank lines included: press Enter a few times and the object lands in the gap, not back up under the last paragraph. That holds because the save keeps those empty lines ([`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md) § A blank line is text).
 
@@ -157,7 +157,7 @@ Empty **Enter** still exits below a list/table/object without destroying it (con
 
 ### RTL / Hebrew
 
-Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed Hebrew+English) lives in one place: **[`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)** — embeds via `FormattedTextField`, file body via ambient-aware SE builders + visual ←/→ plugin. Do not add competing caret math outside that folder. Object-field double-click is the word only; another click is the sentence. Fields use `BoxWidthStyle.tight` (Flutter’s desktop default is `max`, which fills the line to the left in Hebrew) and `AppTypography.fieldStrut` so color-emoji fallbacks do not shift lines without emoji. A trailing `\n` from that tap is not part of the mark; Shift+arrows keep it so the mark can grow onto the next line. Emoji is a whole grapheme.
+Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed Hebrew+English) lives in one place: **[`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)** — embeds via `FormattedTextField`, file body via ambient-aware SE builders + visual ←/→ plugin. Do not add competing caret math outside that folder. Object-field double-click is the word only; another click is the sentence. Fields use `BoxWidthStyle.tight` (Flutter’s desktop default is `max`, which fills the line to the left in Hebrew) and `AppTypography.fieldStrut` so color-emoji fallbacks do not shift lines without emoji. A trailing `\n` from that tap is not part of the mark; Shift+arrows keep it so the mark can grow onto the next line. Emoji is a whole grapheme — Shift+arrows, Super Editor marks, and span paint snap to grapheme edges so a mark cannot split a surrogate pair (`string is not well-formed UTF-16`).
 
 ### Object inner text
 
@@ -165,7 +165,7 @@ Object fields are Flutter `TextField`s ([`FormattedTextField`](rich_text/formatt
 
 **One owner.** Click or right-click a paragraph → body owns writing and the object mark is forgotten. Click or right-click an inner field → that field owns writing and the Super Editor caret is cleared. Super Editor `hasFocus` is true for descendant fields; only **primary** focus means the body owns writing. Never paint both washes. A second right-click while a menu is open retargets the mark and menu to the new line.
 
-Each **multi-field** object (task list, table) owns one [`DocumentTextFlow`](editor/document_text_flow.dart) so Shift+arrows and Shift+click mark across **tasks or cells inside that object**. Info is one field and has no flow. Marks do not cross objects or into the Super Editor body. Choose view / ⌘J applies to every marked task in the list. On the view page ⌘J opens Place… instead.
+Each **multi-field** object (task list, table) owns one [`DocumentTextFlow`](editor/document_text_flow.dart) so Shift+arrows and Shift+click mark across **tasks or cells inside that object**. Info is one field and has no flow. Marks do not cross objects or into the Super Editor body. Choose view / ⌘J applies to every marked task in the list (view then section; each task keeps its topic and list).
 
 ## One cursor across the whole file
 
@@ -275,7 +275,7 @@ Inline bold, italic, underline, strikethrough, size, and color are **spans** —
 
 An embedded object is a top-level block with an `object_id`. **This area** owns where it sits, how it joins the caret/mark, menus, frames, and Move Mode. **[Objects](../objects/AREA.md)** owns the backing data and special qualities (task **views**, info **links**, payloads).
 
-Embed widgets live here and call into objects through a **thin overlay** (models/services + controls for object fields, e.g. the done toggle). Task done/active is **`tasks.status` in objects**, not a files-only UI detail. Embeds must not grow into the home of views logic or the link graph.
+Embed widgets live here and call into objects through a **thin overlay** (models/services + controls for object fields, e.g. the task mark). Task status (`active` / `done` / `inactive` / `pending`) is **`tasks.status` in objects**, not a files-only UI detail. Embeds must not grow into the home of views logic or the link graph.
 
 | Embed | Widget | Flow role |
 |-------|--------|-----------|
@@ -293,10 +293,10 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Between blocks only | Never inside a list item or table cell |
 | Create at the caret | Inserts go to the **last-claimed** file. Mid-paragraph / mid-heading **splits** at the caret (`before \| new \| after`); caret at the start inserts before that block; at the end, after it. List / table / embed carets insert after the containing block. |
 | Marker buffer is source of truth | Position is top-level parts in buffer text (view = `blocks[]`); the object row holds data, not placement |
-| Right-click on embed text | Same text menu as paragraphs (`DocumentMark`) plus **Connect info…** on object fields (info / task / table) and **Make link**. The picker searches by name and hides infos with no title (including empty ones the graph used to send as `Info`). A connected span also gets **Remove connection**. Connected spans and URL `link` spans paint in `AppColors.descriptionLink` (dark teal glyphs + 1px underline). The hover bubble stays open while the pointer is on the connected text or the bubble (the bubble scrolls); it closes when the pointer is on neither. Typing before a connected span moves the underline with those glyphs. Description-link colour is paint-only; URL `link` is stored on the field span. Double-click / double-tap a description span opens the target info in its file; a single click only places the caret. Click / tap still opens a web URL. Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Tables/charts: see **[Tables & charts](#tables--charts)**. Task lists add **Add to view…** and **Reorder tasks**. Info **chrome** (not a field) is **Design…** / Add tag / Add connection / **Move object**. Image and table/graph chrome also have **Design…** (look samples; graphs add chart type and colour-set samples). Super Editor body paragraphs do not offer Connect info. |
+| Right-click on embed text | Same text menu as paragraphs (`DocumentMark`) plus **Connect info…** on object fields (info / task / table) and **Make link**. The picker searches by name and hides infos with no title (including empty ones the graph used to send as `Info`). A connected span also gets **Remove connection**. Connected spans paint in `AppColors.descriptionLink` (dark teal italic glyphs, no underline; strikethrough from a done task still combines). URL `link` spans keep the same teal plus a 1px underline. The hover bubble stays open while the pointer is on the connected text or the bubble (the bubble scrolls); it closes when the pointer is on neither. Typing before a connected span moves the paint with those glyphs. Description-link colour is paint-only; URL `link` is stored on the field span. Double-click / double-tap a description span opens the target info in its file; a single click only places the caret. Click / tap still opens a web URL. Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Tables/charts: see **[Tables & charts](#tables--charts)**. Task lists add **Add to view…** and **Reorder tasks**. Info **chrome** (not a field) is **Design…** / Add tag / Add connection / **Move object**. Image and table/graph chrome also have **Design…** (look samples; graphs add chart type and colour-set samples). Super Editor body paragraphs do not offer Connect info. |
 | Move Mode | Object chrome menu **Move object**, or **⌘⇧O** when the caret / last-interacted embed is an object → glass frame on the object + floating glass bubble ([`embed_move_bubble.dart`](editor/embed_move_bubble.dart), no scrim; drag to reposition). Double-click selects a word in inner fields, like body text. Arrows (↑/← previous, ↓/→ next; hold to repeat) and the bubble arrows nudge the object and **stay in Move Mode**; Done, Enter, Esc, or tap outside the bubble ends it and restores writing focus on that object. After move/delete, adjacent paragraphs **coalesce** (blank/`\n`-only stubs dropped, including next to embeds). |
 | Empty object + Backspace | Same fluent rule as an empty list bullet / table row: last empty unit + Backspace **removes the object** (cascade-delete). |
-| Object block + Shift+Enter | Opens the object (first inner field). **Shift+Enter** inside lands **after** the object so typing continues below. On phone, those keys are not on the keyboard — the first bottom-bar pill is arrows plus enter/leave. **Enter** inserts a paragraph below. Arrows do not auto-enter/leave objects. Phone long-press / secondary tap opens the object chrome menu (Move Mode lives there). |
+| Object block + Shift+Enter | Opens the object (first inner field). **Escape** inside leaves to the line after the object. **Enter** inside info also leaves; in tasks / cells it advances. **Shift+Enter** / **⌘Enter** inside insert a newline. On phone, those keys are not on the keyboard — the first bottom-bar pill is arrows plus enter/leave. **Enter** on the block inserts a paragraph below. Arrows do not auto-enter/leave objects. Phone long-press / secondary tap opens the object chrome menu (Move Mode lives there). |
 | Task Reorder Mode | Owned by `TaskListSurface` (objects): right-click → Reorder tasks → glass per task; **tap outside the list** ends it |
 
 ### Segment id
@@ -310,14 +310,14 @@ Deleting an embed (empty Backspace, or selecting the block / cutting it out of t
 
 ### Object enter / exit
 
-Objects are atomic SE blocks. ↑/↓ move onto the block; **Shift+Enter** (or click) opens it; **Shift+Enter** again places the caret after the object; **Enter** (and typing) insert a line **above** the object when the caret is on its leading edge, **below** when it is on the trailing edge. On phone the first bottom-bar pill is **arrows + enter/leave** (no Shift+Enter key). Arrows inside an object stay inside; on the block they move to the next/previous block. Inside an object, phone Return and empty delete are the same structure keys as desktop Enter / empty Backspace (`FormattedTextField` maps the IME — iOS will not send those as `KeyEvent`s). Insert, delete, and add-part must keep the writing session (no Super Editor remount on payload refresh). Insert bar and **Insert object** shortcuts create an object then put the caret in its first field without a shell-wide notify (so Hebrew/Latin IME keeps working).
+Objects are atomic SE blocks. ↑/↓ move onto the block; **Shift+Enter** (or click) opens it; **Escape** (any inner field) or **Enter** inside info places the caret after the object; **Enter** (and typing) on the block insert a line **above** the object when the caret is on its leading edge, **below** when it is on the trailing edge. **Shift+Enter** / **⌘Enter** inside insert a newline. On phone the first bottom-bar pill is **arrows + enter/leave** (no Escape / Shift+Enter key). Arrows inside an object stay inside; on the block they move to the next/previous block. Inside an object, phone Return and empty delete are the same structure keys as desktop Enter / empty Backspace (`FormattedTextField` maps the IME — iOS will not send those as `KeyEvent`s). Insert, delete, and add-part must keep the writing session (no Super Editor remount on payload refresh). Insert bar and **Insert object** shortcuts create an object then put the caret in its first field without a shell-wide notify (so Hebrew/Latin IME keeps working).
 
 ### In-file behaviour by type (presentation only)
 
 | Type | In the document |
 |------|-----------------|
-| Task list | Active then Done; Enter adds in the same zone; **insert lands on the list header** (then tasks); Shift+Enter leaves to SE block; right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title stays blank |
-| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); Enter adds lines; Shift+Enter leaves to SE block; field right-click → text + Connect info / Remove connection; chrome → **Design…** / Add tag / Add connection (⌘L in the field is Connect info; otherwise ⌘L inserts a list) |
+| Task list | Active then Done; Enter adds in the same zone; **Escape** leaves the object; **Shift+Enter** / **⌘Enter** / Ctrl+Enter inserts a newline in the title; **insert lands on the list header** (then tasks); right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title stays blank |
+| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); **Escape** or **Enter** leaves to SE block; **Shift+Enter** / **⌘Enter** / Ctrl+Enter adds lines; field right-click → text + Connect info / Remove connection; chrome → **Design…** / Add tag / Add connection (⌘L in the field is Connect info; otherwise ⌘L inserts a list) |
 | Table / chart | See **[Tables & charts](#tables--charts)** |
 | Image | Display + caption; chrome **Design…** (card / glass / lines / fill / plain, plus greyscale); **Merge with next** when the following Super Editor node is also an image (folds it into `payload.images` and cascade-deletes the second object — Super Editor cannot put two image blocks on one line). Right-click **Make smaller / larger** (steps of 10% of the pane) or **Tiny / Quarter / Half / Full size** (size is the row as a whole). Width is `payload.width` 0–1 of the file pane; aspect ratio stays (`BoxFit.contain`) |
 
@@ -328,14 +328,14 @@ One object type `table` (`payload.rows` + optional `payload.chart`). UI: [`table
 | | Plain table | Chart table |
 |--|-------------|-------------|
 | Shape | N×M grid | Fixed 2 rows (labels / values); max **8** columns |
-| Enter | Cell below; add row on last filled row | Next column; add column on last |
+| Enter | Cell below; add row on last filled row. **Shift+Enter** / **⌘Enter** / Ctrl+Enter inserts a newline in the cell | Next column; add column on last. **Shift+Enter** / **⌘Enter** / Ctrl+Enter inserts a newline in the cell |
 | Empty Enter | Drop that row; keep table; continue below | (column exit path) |
 | Empty Backspace | Empty cell → previous cell (reading order, land at end). First cell of an **empty row** removes that row; last empty row removes the table | Empty cell → previous cell; empty column still removes the column; last removes object |
 | Mark whole row / column + delete | Every cell of a row marked end to end → row is removed. Every row marked → keep one empty row (object stays). Empty Backspace on the last empty row / chrome still removes the table | Every cell of a column → column is removed. Every column marked → keep one empty column. Last empty column + empty Backspace / chrome still removes the object |
 | Phone | Same Enter / empty Backspace, via the IME map in `FormattedTextField` (no hardware keys). Moving between cells/tasks keeps the keyboard up (no unfocus gap). Arrow pad order: left, down, up, right — pad icons never mirror. The typing session never remounts a cell on IME language switch or clearing one cell | Same |
 | Arrows | One owner: [`table_grid_nav.dart`](rich_text/table_grid_nav.dart). Physical ←/→ (pad and hardware) move to the cell that is visually left/right. Hebrew **UI** paints col 0 on the right, so physical left is a higher column. In-cell caret is first-strong (`rtl/`), not grid RTL. Landing is the **visual** edge entered from: visual-right of an RTL cell is logical start. From below → end; from above → start. Phone edges stay inside the table | Same grid rules |
 | Tab | Next cell | Same |
-| Shift+Enter | Leave to SE block caret | Same |
+| Shift+Enter | Newline in the cell | Same |
 | Add row / column | **Immediately after the right-clicked cell** (storage index + 1; in RTL that is visually left of the cell). Anchor is the click, not a drifting “end” | Add **column** only (same anchor rule) |
 | Reorder | Separate **Reorder rows…** / **Reorder columns…**; grab the glass row/column (no handles). The drag ghost stays table-width (not the pane). ⌘O while a cell or the table block has the caret toggles row reorder (chart: column reorder) | **Reorder columns…** only; series colors move with the column. ⌘O toggles column reorder |
 | Exit reorder | Tap outside / Escape / Done | Same |
@@ -368,9 +368,11 @@ In-session undo/redo uses Super Editor’s history stack.
 
 ## Keyboard / focus safety (recurring bug class)
 
-Symptom: `KeyDownEvent … physical key is already pressed` (often loops on one letter). Cause: remounting Super Editor or disposing embed `FocusNode`s / `TextField`s while a key is still down.
+Symptom: `KeyDownEvent … physical key is already pressed` or `KeyUpEvent … physical key is not pressed` (often loops on one letter). Cause: remounting Super Editor, disposing embed `FocusNode`s / `TextField`s, or moving focus **while a key is still down**.
 
 **Coding-agent checklist (canonical):** [`NOTES.md` § Editor keyboard safety](../../../../../NOTES.md#editor-keyboard-safety).
+
+**The gate:** [`runWhenKeyboardIdle`](editor/editor_key_handoff.dart). Every remount / unfocus / `requestFocus` / dispose / notify of a focused editor goes through it. Do not invent a second helper or check `physicalKeysPressed` ad hoc. `runAfterKeystroke` is an alias. `runNextFrame` is layout/IME only after keys are idle. Cycle-files chrome is the exception.
 
 In this area specifically:
 
@@ -379,15 +381,15 @@ In this area specifically:
 | Keep the open editor mounted; apply remote body/embed updates into it | Rebuild `MaterialApp` or the topic canvas on every `AppState` notify; wrap `DocumentEditor` in `ListenableBuilder(listenable: appState)` |
 | `updateFile` / `updateObjectPayload` / task+info title saves with `notify: false` | `notifyListeners` from a keystroke / `onChanged` path |
 | Debounce embed PATCHes; patch cache **before** `await` | PATCH + `notifyListeners` / full embed reload on every `onChanged` |
-| Super Editor `setState` only when embed **id/type/order** changes; defer with `runAfterKeystroke` if keys are down. Phone IME has no keys-down — payload refresh must not remount | Treat every new embeds-list identity as a reason to remount; remount a `TextField` after the first letter |
+| Super Editor `setState` only when embed **id/type/order** changes; defer with `runWhenKeyboardIdle`. Phone IME has no keys-down — payload refresh must not remount | Treat every new embeds-list identity as a reason to remount; remount a `TextField` after the first letter |
 | Drop engine-seeded keys while [`MainPaneLoader`](../ux/widgets/main_pane_loader.dart) is showing; `settleHardwareKeyboardForLaunch` before `appReady` | Call `HardwareKeyboard.clearState` (wipes shortcut handlers) |
 | Keep controllers as SoT while **dirty**; take inbound when not dirty (after keys are up). If the same object (or the file body) is dirty on both sides, ask. Different objects do not. Dispose must not PATCH a payload that is older than the cache | Overwrite live cells from a stale cache while typing; flush old graph/info on dispose over an agent write; dispose cell/task/info focus nodes mid-KeyDown |
-| Shift+Enter → `runNextFrame`; empty-structure Backspace → `runAfterKeystroke` | Sync `unfocus` / delete structure on the KeyDown frame |
+| Shift+Enter, empty-structure Backspace, restore writing focus → `runWhenKeyboardIdle` | Sync `unfocus` / delete structure / `requestFocus` on the KeyDown frame |
 | Install `FormattedTextField` `onKeyEvent` **once** (stored tear-off) | Re-wrap `FocusNode.onKeyEvent` on every rebuild — tear-offs are not `==`, so Arrow Up stack-overflows |
 | Tap outside the focused editor (canvas / empty padding) unfocuses, closes the keyboard, and **clears the mark**. Bottom menus and the open object do not. | Leave Super Editor focused when the tap is not on another field; keep the mark painted after tap-outside |
 | Remount `SuperEditor` (`ValueKey` epoch) when replacing `Editor` after silent reload | Swap `Editor` in place and keep a stale `DocumentImeInputClient` (Escape IME crash) |
 
-Smoke after edits: type fast in paragraph + info + task + table/chart cell; Shift+Enter into object, type, Shift+Enter out, keep typing.
+Smoke after edits: type fast in paragraph + info + task + table/chart cell; Shift+Enter into object, type, Escape out, keep typing.
 
 ## Rules
 

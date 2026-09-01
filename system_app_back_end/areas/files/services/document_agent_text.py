@@ -442,8 +442,16 @@ def _table_section_normalized(object_id: int, payload: dict[str, Any]) -> str:
 
 def _task_list_section(object_id: int, obj: dict[str, Any]) -> str:
     tasks = obj.get("tasks") or []
-    active = [t for t in tasks if t.get("status") != "done"]
+    active = [t for t in tasks if t.get("status") == "active"]
+    pending = [t for t in tasks if t.get("status") == "pending"]
+    inactive = [t for t in tasks if t.get("status") == "inactive"]
     done = [t for t in tasks if t.get("status") == "done"]
+    other = [
+        t
+        for t in tasks
+        if t.get("status") not in {"active", "pending", "inactive", "done"}
+    ]
+    active = active + other
     task_list = obj.get("task_list") if isinstance(obj.get("task_list"), dict) else {}
     title = str(task_list.get("title") or obj.get("title") or "")
     open_tag = f'[TASK_LIST id="{object_id}"'
@@ -453,6 +461,14 @@ def _task_list_section(object_id: int, obj: dict[str, Any]) -> str:
     lines = [open_tag, "ACTIVE:"]
     for task in sorted(active, key=lambda t: (t.get("list_order_index", 0), t.get("id", 0))):
         lines.append(f"- [ ] {task.get('title', '')}")
+    if pending:
+        lines.append("PENDING:")
+        for task in sorted(pending, key=lambda t: (t.get("list_order_index", 0), t.get("id", 0))):
+            lines.append(f"- [ ] {task.get('title', '')}")
+    if inactive:
+        lines.append("INACTIVE:")
+        for task in sorted(inactive, key=lambda t: (t.get("list_order_index", 0), t.get("id", 0))):
+            lines.append(f"- [ ] {task.get('title', '')}")
     lines.append("DONE:")
     for task in sorted(done, key=lambda t: (t.get("list_order_index", 0), t.get("id", 0))):
         lines.append(f"- [x] {task.get('title', '')}")
@@ -870,6 +886,12 @@ def _parse_task_list(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
         if upper == "ACTIVE:":
             section = "active"
             continue
+        if upper == "PENDING:":
+            section = "pending"
+            continue
+        if upper == "INACTIVE:":
+            section = "inactive"
+            continue
         if upper == "DONE:":
             section = "done"
             continue
@@ -880,7 +902,7 @@ def _parse_task_list(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
         tasks.append(
             {
                 "title": task_match.group(2),
-                "status": "done" if checked else "active",
+                "status": "done" if checked else section,
                 "list_order_index": order,
             }
         )

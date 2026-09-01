@@ -55,6 +55,7 @@ Render runs a **Cron Job service** separate from the web service:
 
 ```
 every minute
+  → activate pending tasks whose date has arrived (Asia/Jerusalem)
   → load enabled automations that have a schedule
   → plan_tick: arm (first sight), run (due), or skip
   → run_automation → walk steps → automation_runs row
@@ -80,7 +81,7 @@ A new `daily 08:00` saved at 10:00 is **armed**, not run — "daily at eight" me
 | [`services/automation_schedule.py`](services/automation_schedule.py) | `next_run_after()` / `plan_tick()` |
 | [`../../scripts/run_automations.py`](../../scripts/run_automations.py) | Cron entry point |
 
-File and task mutations used by the actions live next to their HTTP routes: [`areas/files/services/file_ops.py`](../files/services/file_ops.py), [`areas/objects/services/task_ops.py`](../objects/services/task_ops.py).
+File and task mutations used by the actions live next to their HTTP routes: [`areas/files/services/file_ops.py`](../files/services/file_ops.py), [`areas/objects/services/task_ops.py`](../objects/services/task_ops.py) (including daily pending → active).
 
 ## Rules
 

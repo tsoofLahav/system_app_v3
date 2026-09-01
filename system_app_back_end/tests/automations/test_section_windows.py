@@ -126,6 +126,7 @@ def test_cron_handles_section_windows_and_locked_clocks():
     assert "tick_section_window" in source
     assert "section window off" in source
     assert "KIND_SECTION_WINDOW" in source
+    assert "activate_due_pending_tasks" in source
 
 
 def test_leftover_clear_archives_one_time_and_unmarks_routine():

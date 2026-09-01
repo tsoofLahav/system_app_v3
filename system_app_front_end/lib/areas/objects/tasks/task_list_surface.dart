@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../core/app_state.dart';
 import '../../files/editor/document_editor_controller.dart';
@@ -27,6 +26,7 @@ import '../../automations/automation.dart';
 import '../../automations/complimentary_input_dialog.dart';
 import '../../production_agent/pending_review_ui.dart';
 import '../views/assign_task_view_dialog.dart';
+import './pending_task_dialog.dart';
 import './task_drag_data.dart';
 import './task_list_bridge.dart';
 import './task_mark.dart';
@@ -55,6 +55,45 @@ bool keepLocalTaskTitle({
   if (savePending) return true;
   if (localText.isNotEmpty && incomingText.isEmpty) return true;
   return false;
+}
+
+bool complimentarySectionWindowOpen(AppState state, Automation? automation) {
+  if (automation == null || !automation.isLockedToSection) return false;
+  return state
+          .sectionWindowFor(
+            viewId: automation.viewId!,
+            sectionKey: automation.sectionKey!,
+          )
+          ?.windowOpen ??
+      false;
+}
+
+bool complimentaryTaskPressable({
+  required Task task,
+  required Automation? automation,
+  required bool windowOpen,
+  required bool processing,
+}) {
+  if (task.isDone || processing || !windowOpen) return false;
+  if (task.isInputComplimentary) return !task.complimentaryInputReceived;
+  return automation?.hasPendingReview ?? false;
+}
+
+TextStyle complimentaryTitleStyle({
+  required TextStyle base,
+  required bool pressable,
+}) {
+  if (!pressable) return base;
+  final decorations = <TextDecoration>[TextDecoration.underline];
+  if (base.decoration != null && base.decoration != TextDecoration.none) {
+    decorations.add(base.decoration!);
+  }
+  return base.copyWith(
+    color: AppColors.descriptionLink,
+    decoration: TextDecoration.combine(decorations),
+    decorationColor: AppColors.descriptionLink,
+    decorationThickness: 1.0,
+  );
 }
 
 /// Local-row task list engine shared by in-file embeds and view frames.
@@ -302,6 +341,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     for (var i = 0; i < tasks.length; i++) {
       if (_taskIds[i] != tasks[i].id) return true;
       if (_done[i] != tasks[i].isDone) return true;
+      if (!_done[i] && _rowStatus(i) != tasks[i].status) return true;
       final focused = i < _focusNodes.length && _focusNodes[i].hasFocus;
       if (!focused && imeVisibleText(_controllers[i].text) != tasks[i].title) {
         return true;
@@ -514,7 +554,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     ];
   }
 
-  /// Marked / focused tasks on the view page for Place… (⌘J).
+  /// Marked / focused tasks on the view page for Choose view… (⌘J).
   static List<Task> tasksForPlace(AppState state) {
     final fromSurface = keyboardFocus?.markedTasks() ?? const [];
     if (fromSurface.isNotEmpty) return fromSurface;
@@ -569,12 +609,12 @@ class TaskListSurfaceState extends State<TaskListSurface> {
                 Task(
                   id: id,
                   title: imeVisibleText(_controllers[i].text),
-                  status: _done[i] ? 'done' : 'active',
+                  status: _rowStatus(i),
                   listOrderIndex: i,
                 ))
             .copyWith(
               title: imeVisibleText(_controllers[i].text),
-              status: _done[i] ? 'done' : 'active',
+              status: _rowStatus(i),
               listOrderIndex: i,
             ),
       );
@@ -682,6 +722,19 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
   }
 
+  String _createStatus({required bool done}) =>
+      done ? 'done' : _bridge.createStatus;
+
+  String _rowStatus(int index) {
+    if (index < 0 || index >= _done.length) return _bridge.createStatus;
+    if (_done[index]) return 'done';
+    final id = index < _taskIds.length ? _taskIds[index] : null;
+    final task = id == null ? null : _taskById(id);
+    if (task == null) return _bridge.createStatus;
+    if (task.isDone) return 'active';
+    return task.status;
+  }
+
   Task? _taskById(int id) {
     for (final t in _displayTasks) {
       if (t.id == id) return widget.state.hydrateTask(t);
@@ -693,15 +746,17 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   }
 
   void _applyPendingFocus() {
-    if (!mounted) return;
-    final idx = _pendingFocusIndex;
-    if (idx == null || idx < 0 || idx >= _focusNodes.length) return;
-    _pendingFocusIndex = null;
-    _focusNodes[idx].requestFocus();
-    final controller = _controllers[idx];
-    controller.selection = TextSelection.collapsed(
-      offset: controller.text.length,
-    );
+    runWhenKeyboardIdle(() {
+      if (!mounted) return;
+      final idx = _pendingFocusIndex;
+      if (idx == null || idx < 0 || idx >= _focusNodes.length) return;
+      _pendingFocusIndex = null;
+      _focusNodes[idx].requestFocus();
+      final controller = _controllers[idx];
+      controller.selection = TextSelection.collapsed(
+        offset: controller.text.length,
+      );
+    });
   }
 
   Future<void> _ensureSeedTask() async {
@@ -783,7 +838,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     try {
       final created = await _bridge.createAfter(
         title: title,
-        status: _done[index] ? 'done' : 'active',
+        status: _createStatus(done: _done[index]),
         afterTaskId: index > 0 ? _taskIds[index - 1] : null,
       );
       if (!mounted) return;
@@ -805,7 +860,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final text = _controllers[index].text;
     if (imeFieldLooksEmpty(text)) {
       final emptyId = _taskIds[index];
-      // No sync unfocus mid-Enter — document handoff waits for KeyUp.
+      await whenKeyboardIdle();
+      if (!mounted) return;
       widget.onExitBelow?.call(emptyId);
       return;
     }
@@ -882,16 +938,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       }
     }
 
-    if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
-      final ready = Completer<void>();
-      runAfterKeystroke(() {
-        dropRows();
-        ready.complete();
-      });
-      await ready.future;
-    } else {
-      dropRows();
-    }
+    await whenKeyboardIdle();
+    dropRows();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       for (final c in removedControllers) {
@@ -921,6 +969,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         if (widget.climbToListTitleOnLastBackspace &&
             _bridge.showListTitle &&
             !imeFieldLooksEmpty(_titleController.text)) {
+          await whenKeyboardIdle();
+          if (!mounted) return;
           _titleFocus.requestFocus();
           final len = _titleController.text.length;
           _titleController.selection = TextSelection.collapsed(offset: len);
@@ -932,7 +982,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         if (widget.onDeleteObject != null) {
           if (!mounted) return;
           _persisting = true;
-          runAfterKeystroke(() {
+          runWhenKeyboardIdle(() {
             if (!mounted) return;
             widget.onDeleteObject!();
           });
@@ -1004,7 +1054,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         final created = await _bridge.createAfter(
           title: titles[i],
           afterTaskId: afterId,
-          status: asDone ? 'done' : 'active',
+          status: _createStatus(done: asDone),
         );
         if (!mounted) return;
         if (at < _taskIds.length) {
@@ -1048,7 +1098,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       final created = await _bridge.createAfter(
         title: '',
         afterTaskId: afterId,
-        status: asDone ? 'done' : 'active',
+        status: _createStatus(done: asDone),
       );
       if (!mounted) return;
       if (newIndex < _taskIds.length) {
@@ -1106,16 +1156,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         }
       }
 
-      if (HardwareKeyboard.instance.physicalKeysPressed.isNotEmpty) {
-        final ready = Completer<void>();
-        runAfterKeystroke(() {
-          dropRow();
-          ready.complete();
-        });
-        await ready.future;
-      } else {
-        dropRow();
-      }
+      await whenKeyboardIdle();
+      dropRow();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         removedController.dispose();
         removedFocus.dispose();
@@ -1137,7 +1179,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final id = _taskIds[index];
     if (id == null) return;
     final task = _taskById(id);
-    if (task == null) return;
+    if (task == null || !task.canToggleMark) return;
     final targetDone = !_done[index];
     final zones = TaskZones.fromOrdered(_displayTasks);
     final next = zones.moved(
@@ -1299,7 +1341,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       if (!mounted) return;
       if (idx != null && idx >= 0 && idx < _focusNodes.length) {
         _pendingFocusIndex = idx;
-        runNextFrame(_applyPendingFocus);
+        runWhenKeyboardIdle(_applyPendingFocus);
       } else {
         DocumentEditorRegistry.restoreActiveWritingFocus();
       }
@@ -1352,6 +1394,39 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _setPending(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final missing = <int>[];
+    for (final id in ids) {
+      final rows = await widget.state.loadTaskMemberships(id);
+      if (rows.isEmpty) missing.add(id);
+    }
+    if (missing.isNotEmpty) {
+      final assigned = await showAssignTaskViewDialog(
+        context: context,
+        state: widget.state,
+        taskIds: missing,
+      );
+      if (!assigned || !mounted) return;
+      for (final id in ids) {
+        final rows = await widget.state.loadTaskMemberships(id);
+        if (rows.isEmpty) return;
+      }
+    }
+    DateTime? initial;
+    if (ids.length == 1) {
+      final due = _taskById(ids.first)?.dueDate;
+      if (due != null) initial = DateTime.tryParse(due);
+    }
+    final date = await showPendingActivateDateDialog(
+      context: context,
+      state: widget.state,
+      initial: initial,
+    );
+    if (date == null || !mounted) return;
+    await widget.state.setTasksPending(ids, activateOn: date);
+  }
+
   Future<void> _showTaskMenu(TapDownDetails details, int index) async {
     final id = index >= 0 && index < _taskIds.length ? _taskIds[index] : null;
     final task = id == null ? null : _taskById(id);
@@ -1396,6 +1471,15 @@ class TaskListSurfaceState extends State<TaskListSurface> {
             state: widget.state,
             taskIds: ids,
           );
+          if (mounted) setState(() {});
+          return;
+        }
+        if (action == 'tasks:set_pending') {
+          var ids = markedTaskIds();
+          if (ids.isEmpty && id != null) ids = [id];
+          if (ids.isEmpty || !mounted) return;
+          await _setPending(ids);
+          if (mounted) setState(() {});
           return;
         }
         if (action == 'delete' && index >= 0) {
@@ -1456,13 +1540,24 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     );
   }
 
-  Widget _taskChrome({required Widget mark, required Widget title}) {
+  Widget _taskChrome({
+    required Widget mark,
+    required Widget title,
+    bool alignCenter = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: alignCenter
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
         children: [
-          Padding(padding: const EdgeInsets.only(top: 2), child: mark),
+          Padding(
+            padding: alignCenter
+                ? EdgeInsets.zero
+                : const EdgeInsets.only(top: 2),
+            child: mark,
+          ),
           Expanded(child: title),
         ],
       ),
@@ -1475,22 +1570,39 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       color: _done[index] ? AppColors.textHint : null,
     );
     final titleText = _controllers[index].text.trim();
-    final mark = TaskMark(done: _done[index], compact: true, onToggle: () {});
-    final maxChipWidth = MediaQuery.sizeOf(context).width * 0.72;
+    final mark = TaskMark(
+      status: _rowStatus(index),
+      compact: true,
+      onToggle: null,
+    );
+    // Fit the host (file pane / view frame). A window-based text cap overflowed
+    // when the title was wider than the slot but narrower than 72% of the window.
     final body = Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         mark,
         const SizedBox(width: 8),
-        ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxChipWidth - 52),
-          child: Text(titleText, style: titleStyle),
+        Flexible(
+          child: Text(
+            titleText,
+            style: titleStyle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
     final chip = glass ? DragModeFrame.chip(child: body) : body;
-    return Align(alignment: AlignmentDirectional.centerStart, child: chip);
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.72,
+        ),
+        child: chip,
+      ),
+    );
   }
 
   Widget _keyedTaskRow(int index) {
@@ -1570,12 +1682,17 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     );
     final complimentary = task?.isComplimentaryTask ?? false;
     final mark = TaskMark(
-      done: _done[index],
+      status: _rowStatus(index),
       compact: true,
-      onToggle: () => unawaited(_toggle(index)),
+      onToggle: (task?.canToggleMark ?? false)
+          ? () => unawaited(_toggle(index))
+          : null,
     );
     final title = complimentary && task != null
-        ? _complimentaryTitle(task, titleStyle)
+        ? ListenableBuilder(
+            listenable: widget.state,
+            builder: (context, _) => _complimentaryTitle(task, titleStyle),
+          )
         : FormattedTextField(
         controller: _controllers[index],
         focusNode: _focusNodes[index],
@@ -1605,7 +1722,11 @@ class TaskListSurfaceState extends State<TaskListSurface> {
             _arrowFromLine(_hasTitleLine ? index + 1 : index, goingDown: true),
       );
 
-    return _taskChrome(mark: mark, title: title);
+    return _taskChrome(
+      mark: mark,
+      title: title,
+      alignCenter: complimentary,
+    );
   }
 
   Widget _complimentaryTitle(Task task, TextStyle style) {
@@ -1622,26 +1743,60 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final label = task.isReviewComplimentary
         ? s.complimentaryReviewTitle(name)
         : s.complimentaryInputTitle(name);
+    final processing = task.sourceAutomationId != null &&
+        widget.state.isComplimentaryProcessing(task.sourceAutomationId!);
+    final pressable = complimentaryTaskPressable(
+      task: task,
+      automation: automation,
+      windowOpen: complimentarySectionWindowOpen(widget.state, automation),
+      processing: processing,
+    );
     final reviewPending = automation?.hasPendingReview ?? false;
-    final clickable = task.isInputComplimentary
-        ? !task.isDone && !task.complimentaryInputReceived
-        : reviewPending && !task.isDone;
     final tooltip = task.isInputComplimentary
         ? (task.complimentaryInputReceived || task.isDone
               ? s['inputAlreadyReceived']
               : null)
         : (reviewPending && !task.isDone ? s['reviewInProcess'] : null);
-    final text = Text(label, style: style);
-    final child = clickable
-        ? MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: () => unawaited(_openComplimentary(task)),
-              child: text,
-            ),
-          )
-        : text;
-    return tooltip == null ? child : Tooltip(message: tooltip, child: child);
+    final painted = complimentaryTitleStyle(base: style, pressable: pressable);
+    final text = Text(
+      label,
+      style: painted,
+      strutStyle: AppTypography.fieldStrut(painted),
+    );
+    Widget row = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 22),
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(child: text),
+            if (processing)
+              const Padding(
+                padding: EdgeInsetsDirectional.only(start: 8),
+                child: SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (pressable) {
+      row = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () => unawaited(_openComplimentary(task)),
+          child: row,
+        ),
+      );
+    }
+    return tooltip == null ? row : Tooltip(message: tooltip, child: row);
   }
 
   Future<void> _openComplimentary(Task task) async {
@@ -1653,12 +1808,25 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     }
     if (automation == null) return;
     if (task.isInputComplimentary) {
-      if (task.isDone || task.complimentaryInputReceived) return;
-      await showComplimentaryInputDialog(
+      if (task.isDone ||
+          task.complimentaryInputReceived ||
+          widget.state.isComplimentaryProcessing(automationId)) {
+        return;
+      }
+      final body = await showComplimentaryInputDialog(
         context: context,
         state: widget.state,
         automation: automation,
       );
+      if (body == null || !mounted) return;
+      try {
+        await widget.state.submitComplimentaryInput(automationId, body);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      }
       return;
     }
     final status = await widget.state.complimentaryReviewStatus(automationId);
