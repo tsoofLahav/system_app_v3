@@ -150,7 +150,7 @@ Opening a topic under **Archive** replaces the main pane with [`archive/archive_
 | File ⋯ / right-click | Unarchive (file returns first in its topic) or delete |
 | Bottom-bar trash | Delete mode: multi-select cards, then confirm a real cascade delete |
 
-Archived files are not editable. The live topic canvas is unchanged.
+Archived files are not editable. The live topic canvas is unchanged. Finishing an AI review also places a dated deep-copy of the **previous file** here — that is the Archive the review dialog creates. Tasks that disappear from a list are not archived; they are updated in place or deleted.
 
 ### Task view page
 

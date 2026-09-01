@@ -7,13 +7,14 @@ pointers with live object payloads. See document_marker_text.py / DOCUMENT_TEXT.
 from __future__ import annotations
 
 import re
-from datetime import datetime
 from typing import Any
 
 from models import InformationPiece, ObjectEmbed, Task, TaskList, db
 from areas.files.services import document_marker_text as marker_text
 from areas.files.services.document_v3 import new_id, parse_document, serialize_document
+from areas.objects.services.delete_cascade import delete_task_cascade
 from areas.objects.services.task_list_order import tasks_for_list
+from areas.objects.services.task_ops import PENDING
 
 # Shared marker emit helpers (single home: document_marker_text).
 SPACER_N_MIN = marker_text.SPACER_N_MIN
@@ -655,6 +656,35 @@ def apply_object_updates(
     return errors
 
 
+def pair_task_list_updates(
+    existing: list[Any],
+    incoming: list[dict[str, Any]],
+) -> tuple[list[tuple[Any, dict[str, Any]]], list[dict[str, Any]], list[Any]]:
+    """Match incoming fence lines to live task rows.
+
+    Title match first (so a reorder keeps the same ids), then leftover lines
+    pair in order (a full rewrite updates those same rows). Extra incoming
+    lines are creates; extra existing rows are deletes.
+    """
+    unused = list(existing)
+    updates: list[tuple[Any, dict[str, Any]]] = []
+    assigned: set[int] = set()
+    for index, item in enumerate(incoming):
+        key = str(item.get("title") or "").strip()
+        for unused_index, task in enumerate(unused):
+            if str(getattr(task, "title", "") or "").strip() != key:
+                continue
+            updates.append((task, item))
+            unused.pop(unused_index)
+            assigned.add(index)
+            break
+    leftover = [item for index, item in enumerate(incoming) if index not in assigned]
+    paired = min(len(leftover), len(unused))
+    for item, task in zip(leftover[:paired], unused[:paired]):
+        updates.append((task, item))
+    return updates, leftover[paired:], unused[paired:]
+
+
 def _sync_task_list(
     embed: ObjectEmbed,
     tasks_data: list[dict[str, Any]],
@@ -668,18 +698,25 @@ def _sync_task_list(
         if task_list is not None:
             task_list.title = str(title)
     existing = tasks_for_list(embed.task_list_id)
-    now = datetime.utcnow()
-    for task in existing:
-        task.archived_at = now
-    for i, item in enumerate(tasks_data):
+    updates, creates, deletes = pair_task_list_updates(existing, tasks_data)
+    for task, item in updates:
+        new_status = str(item.get("status") or "active")
+        if task.status == PENDING and new_status != PENDING:
+            task.due_date = None
+        task.title = str(item.get("title") or "")
+        task.status = new_status
+        task.list_order_index = int(item.get("list_order_index", task.list_order_index))
+    for index, item in enumerate(creates):
         db.session.add(
             Task(
                 task_list_id=embed.task_list_id,
                 title=str(item.get("title") or ""),
                 status=str(item.get("status") or "active"),
-                list_order_index=int(item.get("list_order_index", i)),
+                list_order_index=int(item.get("list_order_index", index)),
             )
         )
+    for task in deletes:
+        delete_task_cascade(task.id)
 
 
 def _sync_info(embed: ObjectEmbed, update: dict[str, Any]) -> None:

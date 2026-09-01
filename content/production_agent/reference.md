@@ -75,6 +75,8 @@ DONE:
 
 `title="…"` on the opener is the list header (the line above the tasks). Change it with `replace` on that opening line. `title=""` clears it. A fence with no `title` attribute leaves the stored header unchanged.
 
+Writing this fence updates the existing task rows. Keep a checkbox line to keep that task (and its view). Drop a line only to delete that task.
+
 ### Info embed
 
 ```text
@@ -234,7 +236,7 @@ Info↔info map edge.
 { "action": "description", "source_object_id": 0, "source_task_id": 44, "target_object_id": 12, "text": "call the clinic", "segment_id": "" }
 ```
 
-Underlines that phrase on the task title and points it at info 12. For text inside an info or table, pass `source_object_id` (the `[INFO]` / `[TABLE]` id) and the exact `text`. `segment_id` only when the same phrase is in more than one table cell (`embed:N#c0:1`). Description and related stay separate.
+Underlines that phrase on the task title and points it at info 12. For text inside an info or table, pass `source_object_id` (the `[INFO]` / `[TABLE]` id) and the exact `text`. `segment_id` only when the same phrase is in more than one table cell (`embed:N#c0:1`). Description and related stay separate. Links stay on the host when you edit its fence — do not recreate an object to change its wording.
 
 ### `reference`
 

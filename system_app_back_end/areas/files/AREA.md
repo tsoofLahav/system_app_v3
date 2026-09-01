@@ -136,11 +136,12 @@ Agent text round-trip is not yet lossless. Open issues, worst first:
 | `run_agent` commits without checking tool errors after `applied` | A failed later tool can still leave earlier writes committed |
 | `_escape_cell` escapes `\` and in-cell tab; rows join with visible `\t` | A newline in a table cell becomes an extra row on read |
 | Unmatched fence markers in plain text advance one char without emitting it | Text like `Hello [TABLE] world` loses characters |
-| `_sync_task_list` archives every task and inserts new rows | Task ids churn on each apply; `view_task_memberships` point at archived tasks |
 | Malformed list/task lines are skipped with `continue` | Items vanish with no error |
 | Spans not in v4 editor text yet | Migrate/agent paths drop inline formatting until span encoding ships |
 
 Agent write path: `commit_agent_file_apply` promotes legacy embeds, versions the file, writes v4 `document_json`, applies `object_updates`, then purges unreferenced embeds. Review proposals include `object_updates`; Accept uses `POST /files/:id/apply-agent-text` (not a bare document PATCH). Id-less `[TABLE]` fences are rejected on write.
+
+`_sync_task_list` updates live `tasks` rows in place: exact title match first, then leftover lines pair in order. Extra incoming lines insert new rows; extra existing rows go through `delete_task_cascade` (view memberships and that task's description links). Apply never soft-archives a task — Archive is archived **files**, including the deep-copy Finish makes of the previous file.
 
 ### Markers are rejected, not degraded
 

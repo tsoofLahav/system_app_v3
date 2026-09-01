@@ -44,7 +44,7 @@ A task **without a view is inactive** (grey filled mark, not toggleable) until i
 
 **Section cadence and windows.** `views.layout_config.sections[]` may include `key` (stable), `cadence` (`routine` / `one_time`), and `default` (at most one section). PATCH of `layout_config` backfills keys and creates matching `section_window` automations (automations area). Complimentary tasks (`tasks.source_automation_id`, `complimentary_role`) are marked by the pipeline when the work finishes; the checkbox still toggles like any other task (giving up that round). Only the roles the automation needs are stored.
 
-**Views.** A view is a user-made list that a task can appear in without being copied. Membership lives in `view_task_memberships`, with its own ordering per view **and per display mode**. **Product rule: a task belongs to at most one view at a time** (the client replaces memberships rather than stacking them). Section definitions (including optional `default: true` on one section), display mode (`by_section` / `by_topic`), and topic-frame order live in `views.layout_config` (JSON) — not separate tables. Memberships still carry `section_name` / `section_flag` for which section a task sits in, plus `order_index` (section mode) and `topic_order_index` (topic mode). Assigning a view from a task that already has a home topic should store that topic on the membership (`topic_key`); an empty key is **No topic** only for tasks created in a view frame with no topic. Topic/list placement on the client lists that topic’s task-list objects via `GET /topics/:id/task-lists` (live files only) and does not rewrite view or section.
+**Views.** A view is a user-made list that a task can appear in without being copied. Membership lives in `view_task_memberships`, with its own ordering per view **and per display mode**. **Product rule: a task belongs to at most one view at a time** (the client replaces memberships rather than stacking them). Agent `[TASK_LIST]` writes update those same `tasks` rows (title/status); memberships stay because the id does not change. A removed checkbox line is `delete_task_cascade` — membership and that task's description links go with it. Soft-archive is not how apply removes a task, and those rows are not what the Archive page shows. Section definitions (including optional `default: true` on one section), display mode (`by_section` / `by_topic`), and topic-frame order live in `views.layout_config` (JSON) — not separate tables. Memberships still carry `section_name` / `section_flag` for which section a task sits in, plus `order_index` (section mode) and `topic_order_index` (topic mode). Assigning a view from a task that already has a home topic should store that topic on the membership (`topic_key`); an empty key is **No topic** only for tasks created in a view frame with no topic. Topic/list placement on the client lists that topic’s task-list objects via `GET /topics/:id/task-lists` (live files only) and does not rewrite view or section.
 
 ```
 tasks ──< view_task_memberships >── views
@@ -79,7 +79,7 @@ The `links` table is the workspace **object graph**, keyed by **`objects.id`** f
 
 Description and related stay separate. Text inside an info does **not** create a map edge; chrome **Add connection…** (or `action=related`) does. Deleting one kind does **not** delete the other.
 
-Task title description links travel with the task row (`description_links` on task payloads and view memberships). `GET /files/:id/description-links` also returns task-hosted links whose home list lives in that file, so in-file underlines keep working. Older `task_list` + `#t{index}` links still paint only if looked up by that slot — new Connect info uses `task:{id}`. `delete_task_cascade` drops those rows.
+Task title description links travel with the task row (`description_links` on task payloads and view memberships). `GET /files/:id/description-links` also returns task-hosted links whose home list lives in that file, so in-file underlines keep working. Older `task_list` + `#t{index}` links still paint only if looked up by that slot — new Connect info uses `task:{id}`. `delete_task_cascade` drops those rows. Agent edits of a fence update that same host (`_sync_info` / `_sync_task_list` / table payload merge) and leave related + description links on its id; dropping the pointer is what cascade-deletes the object and its connections.
 
 | Endpoint | Role |
 |----------|------|
@@ -135,9 +135,9 @@ Deleting anything that contains objects must cascade, or the database keeps orph
 
 ## Rules
 
-- A task exists once. Views reference it; they never copy it.
+- A task exists once. Views reference it; they never copy it. Agent `[TASK_LIST]` apply updates those rows in place.
 - Topic types are not tags. Tags stay on objects (and leftover topic tag rows). Classification lives in `topic_types`.
 - Ordering is explicit (`list_order_index`), never implied by id.
 - Creating an object via `POST /files/:id/objects` must also insert its embed block — an object with no block is invisible.
 - Never delete a container without its cascade.
-- Related links are info ↔ info only. Description links are host object → info (any host type), or **task → info** for a title span.
+- Related links are info ↔ info only. Description links are host object → info (any host type), or **task → info** for a title span. Agent edits of a host update that row and leave its links; deleting the host (or a task checkbox line) is what cascade-removes them.

@@ -117,7 +117,7 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 
 ## Rules
 
-- A task exists once. Views reference it — never copy task state into a view.
+- A task exists once. Views reference it — never copy task state into a view. Agent `[TASK_LIST]` writes update those same rows; they do not replace task identity.
 - Toggling done anywhere updates the one canonical row everywhere. Inactive and pending marks do not toggle.
 - Ordering is explicit and persisted.
 - Creating an object must also place its embed block (API), or it is invisible in the file.

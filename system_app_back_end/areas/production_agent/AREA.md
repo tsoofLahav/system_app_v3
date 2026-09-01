@@ -115,7 +115,9 @@ Table `agent_pending_reviews` (one open row per `file_id`; newest run replaces).
 | POST | `/files/:id/pending-review/finish` | Per-hunk decisions → archive deep-copy of old file → apply merged agent text → delete pending |
 | DELETE | `/files/:id/pending-review` | Discard |
 
-Finish archives as `"{name} {created_at date}"` (the live file's creation date, `YYYY-MM-DD`) with deep-copied embeds, then `apply_agent_text` on the live file. `create_object` proposals are not queued for line-merge pending (direct_apply only this pass).
+Finish archives as `"{name} {created_at date}"` (the live file's creation date, `YYYY-MM-DD`) with deep-copied embeds, then `apply_agent_text` on the live file. That archived row is a **file** on the topic Archive page (`list_archived`) — not a removed task. `create_object` proposals are not queued for line-merge pending (direct_apply only this pass).
+
+Standing prompt facts the model cannot discover: a `[TASK_LIST]` write updates the same task rows (views stay); only an omitted checkbox line deletes that task (membership + its description links); connections stay on the same object/task ids when a fence is edited; Archive is files only.
 
 Hunks come from agent-text `SequenceMatcher`, with **adjacent delete+insert coalesced into replace** so an edit never applies as “keep old + insert new”, then **split to one line each** so the reviewer decides per line. Merge walks the same normalized opcodes: add inserts, remove deletes, change replaces.
 

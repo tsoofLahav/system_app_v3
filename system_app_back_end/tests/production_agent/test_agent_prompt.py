@@ -35,6 +35,14 @@ def test_load_prompt_file_is_short_standing_instructions():
     assert "```" not in text
 
 
+def test_prompt_states_task_identity_connections_and_file_archive():
+    text = load_prompt_file()
+    assert "A **task** exists once" in text
+    assert "**Connections** stay when you edit" in text
+    assert "archived **files**" in text
+    assert "Finishes a review" in text
+
+
 def test_prompt_treats_scope_and_hints_as_context_only():
     """Where the user stands must never read as where the edit has to happen."""
     text = load_prompt_file()
@@ -60,8 +68,10 @@ def test_reference_sections():
     assert "## tools" not in agent_text
 
     assert "A new row goes after the last row" in agent_text
+    assert "updates the existing task rows" in agent_text
 
     tools = load_reference_section("tools")
+    assert "do not recreate an object" in tools
     assert "patch_file" in tools
     assert "find_file" in tools
     assert "list_archived" in tools

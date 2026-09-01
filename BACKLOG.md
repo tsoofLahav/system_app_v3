@@ -20,7 +20,7 @@ Spec: [`content/production_agent/system_prompt.md`](content/production_agent/sys
 | F2 | **P1** | Legacy embeds (`object_id` null) serialize to `[IMAGE url="…"]` / `[GRAPH]`, which the parser cannot read, and the agent path never calls `promote_legacy_embeds`. Those blocks are silently dropped on apply. |
 | F3 | **P1** | `_escape_cell` escapes `\` and `\t` but not `\n`. A newline inside a table cell becomes an extra row on read. |
 | F4 | **P1** | An unmatched fence marker in ordinary text advances one character without emitting it, so `Hello [TABLE] world` loses characters. Affects `[TASK_LIST`, `[INFO`, `[IMAGE`, `[GRAPH`, `[BULLET_LIST`, `[ORDERED_LIST`, `[TABLE]`. |
-| F5 | **P1** | `_sync_task_list` archives every existing task and inserts new rows. Task ids churn on each apply and `view_task_memberships` end up pointing at archived tasks. Contradicts "a task exists once". |
+| ~~F5~~ | — | ~~`_sync_task_list` archives every existing task and inserts new rows.~~ **Done.** Apply matches by title, then leftover order; extra rows `delete_task_cascade`. |
 | F6 | **P2** | Malformed list/task lines are skipped with `continue`. `* [ ]` or `- []` vanish and the apply reports success. |
 | F7 | **P2** | Spans are dropped on parse, so any agent edit clears inline formatting across the whole file, not just edited blocks. Intentional today, but it is real data loss — needs a merge strategy. |
 | F8 | **P2** | Duplicate `[TASK_LIST id="42"]` pointer lines are not rejected; both stay in editor text and the last object update wins. |
@@ -35,7 +35,7 @@ Spec: [`content/production_agent/system_prompt.md`](content/production_agent/sys
 | F17 | **P3** | `_dispatch_tool` has no try/except; `int(args["file_id"])` on a missing key becomes a generic 500. |
 | F18 | **P3** | Part/view ids are regenerated when folding agent apply through parse (not persisted in v4 text). Fine only while nothing keys off them. |
 
-**Test gaps:** no coverage for ordered-list round-trip, nested lists, newlines in cells, span survival, legacy embeds, duplicate embeds, malformed task lines, quotes in captions, `direct_apply` rollback, or task-id preservation.
+**Test gaps:** no coverage for ordered-list round-trip, nested lists, newlines in cells, span survival, legacy embeds, duplicate embeds, malformed task lines, quotes in captions, or `direct_apply` rollback.
 
 ---
 
@@ -75,7 +75,7 @@ Code: [`areas/objects/`](system_app_back_end/areas/objects/) · Frontend data/vi
 
 | # | Sev | Issue |
 |---|-----|-------|
-| O1 | **P1** | Task identity is destroyed by agent applies (see F5). `view_task_memberships` survive pointing at archived tasks. Fixing F5 fixes this. |
+| ~~O1~~ | — | ~~Task identity is destroyed by agent applies (see F5).~~ **Done** with F5 — memberships stay on the same task ids. |
 | O2 | — | ~~Tag mutation is unreachable… Tags are the v3 replacement for hardcoded topic types.~~ **Done** — types are their own table (`topic_types`); tags stay for objects. |
 | ~~O3~~ | — | ~~Nested caret inside object fields is not yet linked to `DocumentTextFlow`.~~ **Done** inside one object: each task list / table owns a flow so Shift+arrows mark across tasks or cells. Marks do not cross objects (by design). |
 | O4 | **P2** | Convert selected text → Info / list → Task list helpers exist in `AppState` but have no UI entry. |

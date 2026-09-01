@@ -8,7 +8,9 @@ from areas.files.services.document_agent_text import (
     apply_agent_text,
     apply_agent_text_to_file,
     document_to_agent_text,
+    pair_task_list_updates,
     parse_agent_text,
+    _sync_task_list,
 )
 from areas.files.services.document_v3 import serialize_document
 
@@ -96,6 +98,124 @@ def test_task_list_empty_title_attr_clears_header():
         '[TASK_LIST id="42" title=""]\nACTIVE:\nDONE:\n[/TASK_LIST]'
     )
     assert parsed["object_updates"][42]["title"] == ""
+
+
+class _Row:
+    def __init__(self, title, *, status="active", task_id=None, due_date="keep"):
+        self.id = task_id
+        self.title = title
+        self.status = status
+        self.due_date = due_date
+        self.list_order_index = 0
+        self.archived_at = None
+
+
+def test_pair_task_list_updates_title_match_survives_reorder():
+    existing = [_Row("A", task_id=1), _Row("B", task_id=2), _Row("C", task_id=3)]
+    incoming = [
+        {"title": "C", "status": "active", "list_order_index": 0},
+        {"title": "A", "status": "active", "list_order_index": 1},
+        {"title": "B", "status": "done", "list_order_index": 2},
+    ]
+    updates, creates, deletes = pair_task_list_updates(existing, incoming)
+    assert {task.id for task, _ in updates} == {1, 2, 3}
+    by_id = {task.id: item["title"] for task, item in updates}
+    assert by_id == {1: "A", 2: "B", 3: "C"}
+    assert creates == []
+    assert deletes == []
+
+
+def test_pair_task_list_updates_full_rewrite_keeps_rows_in_order():
+    existing = [_Row("Old A", task_id=11), _Row("Old B", task_id=12)]
+    incoming = [
+        {"title": "New A", "status": "active", "list_order_index": 0},
+        {"title": "New B", "status": "active", "list_order_index": 1},
+    ]
+    updates, creates, deletes = pair_task_list_updates(existing, incoming)
+    assert [task.id for task, _ in updates] == [11, 12]
+    assert [item["title"] for _, item in updates] == ["New A", "New B"]
+    assert creates == []
+    assert deletes == []
+
+
+def test_pair_task_list_updates_extra_line_creates_and_missing_line_deletes():
+    existing = [_Row("Keep", task_id=1), _Row("Drop", task_id=2)]
+    incoming = [
+        {"title": "Keep", "status": "active", "list_order_index": 0},
+        {"title": "Added", "status": "inactive", "list_order_index": 1},
+    ]
+    updates, creates, deletes = pair_task_list_updates(existing, incoming)
+    assert [task.id for task, item in updates] == [1, 2]
+    assert [item["title"] for _, item in updates] == ["Keep", "Added"]
+    assert creates == []
+    assert deletes == []
+
+    only_keep = [{"title": "Keep", "status": "active", "list_order_index": 0}]
+    updates, creates, deletes = pair_task_list_updates(existing, only_keep)
+    assert [task.id for task, _ in updates] == [1]
+    assert creates == []
+    assert [task.id for task in deletes] == [2]
+
+    with_extra = only_keep + [
+        {"title": "Drop", "status": "active", "list_order_index": 1},
+        {"title": "New", "status": "inactive", "list_order_index": 2},
+    ]
+    updates, creates, deletes = pair_task_list_updates(existing, with_extra)
+    assert {task.id for task, _ in updates} == {1, 2}
+    assert [item["title"] for item in creates] == ["New"]
+    assert deletes == []
+
+
+def test_sync_task_list_updates_in_place(monkeypatch):
+    from areas.files.services import document_agent_text as dat
+
+    keep = _Row("Call clinic", task_id=11, status="pending", due_date="2026-09-10")
+    drop = _Row("Find phone", task_id=12)
+    created = []
+    deleted = []
+
+    class Embed:
+        task_list_id = 5
+
+    class FakeSession:
+        def get(self, _model, _id):
+            return None
+
+        def add(self, row):
+            created.append(row)
+
+    monkeypatch.setattr(dat, "tasks_for_list", lambda _id: [keep, drop])
+    monkeypatch.setattr(dat, "delete_task_cascade", deleted.append)
+    monkeypatch.setattr(dat, "db", type("DB", (), {"session": FakeSession()})())
+
+    _sync_task_list(
+        Embed(),
+        [
+            {"title": "Call doctor", "status": "active", "list_order_index": 0},
+        ],
+    )
+    assert keep.title == "Call doctor"
+    assert keep.status == "active"
+    assert keep.due_date is None
+    assert keep.archived_at is None
+    assert deleted == [12]
+    assert created == []
+
+    deleted.clear()
+    monkeypatch.setattr(dat, "tasks_for_list", lambda _id: [keep])
+    _sync_task_list(
+        Embed(),
+        [
+            {"title": "Call doctor", "status": "active", "list_order_index": 0},
+            {"title": "Buy stamps", "status": "inactive", "list_order_index": 1},
+        ],
+    )
+    assert keep.title == "Call doctor"
+    assert deleted == []
+    assert len(created) == 1
+    assert created[0].title == "Buy stamps"
+    assert created[0].status == "inactive"
+    assert created[0].task_list_id == 5
 
 
 def test_document_to_agent_text_lists_and_table():

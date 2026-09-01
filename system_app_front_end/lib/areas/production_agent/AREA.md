@@ -73,7 +73,7 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 - One bubble in the gutter between the panes carries `n / m` and Accept | Reject. Deciding advances it to the next undecided change and scrolls both panes there. Enter accepts, Backspace rejects, Up/Down walk the changes.
 - On phone the same dialog is full-width with a Current / Suggested toggle and Accept | Reject docked at the bottom (no gutter bubble). It is still not dismissible until Finish or Discard.
 - On the last decision the bubble disappears and Finish lights up, so attention moves to the one thing left to do. Clicking any change brings the bubble back to flip that choice.
-- Finish (disabled until all decided) → `POST /files/:id/pending-review/finish` (archive copy + merge apply); Discard → `DELETE /files/:id/pending-review`.
+- Finish (disabled until all decided) → `POST /files/:id/pending-review/finish` (deep-copy the **old file** into the topic Archive — same list as user-archived files — then merge-apply the live file); Discard → `DELETE /files/:id/pending-review`. Removed or rewritten tasks are not Archive entries.
 
 | File | Role |
 |------|------|
