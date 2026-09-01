@@ -14,6 +14,7 @@ class ViewSectionDef {
     this.colorHex,
     this.orderIndex = 0,
     this.cadence = ViewSectionCadence.routine,
+    this.isDefault = false,
   });
 
   final String name;
@@ -22,6 +23,7 @@ class ViewSectionDef {
   final String? colorHex;
   final int orderIndex;
   final String cadence;
+  final bool isDefault;
 
   bool get isImportant => sectionFlagIsImportant(flag);
   bool get isRoutine => cadence == ViewSectionCadence.routine;
@@ -33,6 +35,7 @@ class ViewSectionDef {
     String? colorHex,
     int? orderIndex,
     String? cadence,
+    bool? isDefault,
     bool clearFlag = false,
     bool clearColor = false,
   }) {
@@ -43,6 +46,7 @@ class ViewSectionDef {
       colorHex: clearColor ? null : (colorHex ?? this.colorHex),
       orderIndex: orderIndex ?? this.orderIndex,
       cadence: cadence ?? this.cadence,
+      isDefault: isDefault ?? this.isDefault,
     );
   }
 
@@ -53,6 +57,7 @@ class ViewSectionDef {
         if (colorHex != null) 'color': colorHex,
         'order': orderIndex,
         'cadence': cadence,
+        if (isDefault) 'default': true,
       };
 
   factory ViewSectionDef.fromJson(Map<String, dynamic> json, int fallbackOrder) {
@@ -66,6 +71,7 @@ class ViewSectionDef {
       cadence: cadence == ViewSectionCadence.oneTime
           ? ViewSectionCadence.oneTime
           : ViewSectionCadence.routine,
+      isDefault: json['default'] == true,
     );
   }
 }
@@ -113,6 +119,42 @@ abstract final class ViewLayoutConfig {
     }
     out.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
     return out;
+  }
+
+  static ViewSectionDef? defaultSection(Map<String, dynamic> config) {
+    for (final section in sections(config)) {
+      if (section.isDefault) return section;
+    }
+    return null;
+  }
+
+  static List<ViewSectionDef> withSingleDefault(
+    List<ViewSectionDef> sections, {
+    String? defaultName,
+  }) {
+    return [
+      for (final section in sections)
+        section.copyWith(
+          isDefault:
+              defaultName != null && section.name == defaultName,
+        ),
+    ];
+  }
+
+  /// Topic key to store when assigning a view from a task that already has a
+  /// home topic. Empty membership keys stay No topic only for tasks created
+  /// in a view frame with no topic.
+  static String? topicKeyForAssign({
+    String? existingMembershipKey,
+    String? homeTopicKey,
+    int? homeTopicId,
+  }) {
+    final existing = existingMembershipKey?.trim();
+    if (existing != null && existing.isNotEmpty) return existing;
+    final fromTask = homeTopicKey?.trim();
+    if (fromTask != null && fromTask.isNotEmpty) return fromTask;
+    if (homeTopicId != null) return 'topic_$homeTopicId';
+    return null;
   }
 
   static Map<String, dynamic> withSections(

@@ -12,51 +12,45 @@ import '../../ui/confirm_dialog.dart';
 import '../../ui/dialog_field_style.dart';
 import '../../ui/dialog_metrics.dart';
 import '../../ux/dialogs/dialog_choice_list.dart';
-import '../data/app_view.dart';
 import '../data/task.dart';
-import '../data/view_layout.dart';
 
-var _placeTaskDialogOpen = false;
+var _placeTaskTopicListDialogOpen = false;
 
-/// View-page placement: topic (searchable), that topic's lists, view, section.
-Future<void> showPlaceTaskDialog({
+/// Topic + list only. Does not change view or section.
+Future<void> showPlaceTaskTopicListDialog({
   required BuildContext context,
   required AppState state,
   required List<Task> tasks,
 }) async {
   if (tasks.isEmpty) return;
-  if (_placeTaskDialogOpen) return;
-  _placeTaskDialogOpen = true;
+  if (_placeTaskTopicListDialogOpen) return;
+  _placeTaskTopicListDialogOpen = true;
   try {
     await showAppDialog<void>(
       context: context,
-      builder: (_) => _PlaceTaskDialog(state: state, tasks: tasks),
+      builder: (_) => _PlaceTaskTopicListDialog(state: state, tasks: tasks),
     );
   } finally {
-    _placeTaskDialogOpen = false;
+    _placeTaskTopicListDialogOpen = false;
   }
 }
 
-class _PlaceTaskDialog extends StatefulWidget {
-  const _PlaceTaskDialog({required this.state, required this.tasks});
+class _PlaceTaskTopicListDialog extends StatefulWidget {
+  const _PlaceTaskTopicListDialog({required this.state, required this.tasks});
 
   final AppState state;
   final List<Task> tasks;
 
   @override
-  State<_PlaceTaskDialog> createState() => _PlaceTaskDialogState();
+  State<_PlaceTaskTopicListDialog> createState() =>
+      _PlaceTaskTopicListDialogState();
 }
 
-class _PlaceTaskDialogState extends State<_PlaceTaskDialog> {
+class _PlaceTaskTopicListDialogState extends State<_PlaceTaskTopicListDialog> {
   Topic? _topic;
   var _noTopic = false;
   int? _listId;
   var _noList = false;
-  AppView? _view;
-  var _noView = false;
-  String? _sectionName;
-  String? _sectionFlag;
-  var _uncategorized = false;
   var _listsLoading = false;
   List<TopicTaskList> _lists = const [];
   var _applying = false;
@@ -85,36 +79,6 @@ class _PlaceTaskDialogState extends State<_PlaceTaskDialog> {
     _noTopic = _topic == null;
     _listId = task.taskListId;
     _noList = task.taskListId == null;
-    final viewId = _viewIdFor(task);
-    _view = viewId == null
-        ? null
-        : state.userViews.where((v) => v.id == viewId).firstOrNull;
-    _noView = _view == null;
-    final section = (_sectionNameFor(task) ?? '').trim();
-    _sectionName = section.isEmpty ? null : section;
-    _sectionFlag = _sectionFlagFor(task);
-    _uncategorized = section.isEmpty;
-  }
-
-  int? _viewIdFor(Task task) {
-    for (final m in state.viewMemberships) {
-      if (m.taskId == task.id) return m.viewId;
-    }
-    return state.selectedView?.id;
-  }
-
-  String? _sectionNameFor(Task task) {
-    for (final m in state.viewMemberships) {
-      if (m.taskId == task.id) return m.sectionName;
-    }
-    return task.sectionName;
-  }
-
-  String? _sectionFlagFor(Task task) {
-    for (final m in state.viewMemberships) {
-      if (m.taskId == task.id) return m.sectionFlag;
-    }
-    return task.sectionFlag;
   }
 
   Future<void> _loadLists(int topicId) async {
@@ -139,12 +103,6 @@ class _PlaceTaskDialogState extends State<_PlaceTaskDialog> {
     }
   }
 
-  List<ViewSectionDef> get _sections {
-    final view = _view;
-    if (view == null) return const [];
-    return ViewLayoutConfig.sections(view.layoutConfig);
-  }
-
   String get _topicLabel {
     if (_noTopic || _topic == null) return state.strings['noTopic'];
     return state.topicDisplayName(_topic!);
@@ -159,18 +117,6 @@ class _PlaceTaskDialogState extends State<_PlaceTaskDialog> {
       }
     }
     return state.strings['noList'];
-  }
-
-  String get _viewLabel {
-    if (_noView || _view == null) return state.strings['noView'];
-    return _view!.name;
-  }
-
-  String get _sectionLabel {
-    if (_uncategorized || (_sectionName ?? '').isEmpty) {
-      return state.strings['uncategorized'];
-    }
-    return _sectionName!;
   }
 
   Future<void> _pickTopic() async {
@@ -222,76 +168,6 @@ class _PlaceTaskDialogState extends State<_PlaceTaskDialog> {
     });
   }
 
-  Future<void> _pickView() async {
-    final s = state.strings;
-    final items = <_ViewChoice>[
-      const _ViewChoice(view: null),
-      for (final v in state.userViews) _ViewChoice(view: v),
-    ];
-    final current = _noView || _view == null
-        ? 0
-        : items.indexWhere((c) => c.view?.id == _view?.id);
-    final picked = await showAppChoiceDialog<_ViewChoice>(
-      context: context,
-      title: s['viewField'],
-      cancelLabel: s['cancel'],
-      items: items,
-      initialIndex: (current < 0 ? 0 : current).clamp(0, items.length - 1),
-      itemBuilder: (context, item, _) =>
-          DialogChoiceText(item.view?.name ?? s['noView']),
-    );
-    if (!mounted || picked == null) return;
-    setState(() {
-      _view = picked.view;
-      _noView = picked.view == null;
-      if (picked.view == null) {
-        _sectionName = null;
-        _sectionFlag = null;
-        _uncategorized = true;
-      } else {
-        final names = {
-          for (final section
-              in ViewLayoutConfig.sections(picked.view!.layoutConfig))
-            section.name,
-        };
-        if (_sectionName == null || !names.contains(_sectionName)) {
-          _sectionName = null;
-          _sectionFlag = null;
-          _uncategorized = true;
-        }
-      }
-    });
-  }
-
-  Future<void> _pickSection() async {
-    if (_noView || _view == null) return;
-    final s = state.strings;
-    final defs = _sections;
-    final items = <_SectionChoice>[
-      const _SectionChoice(),
-      for (final d in defs) _SectionChoice(name: d.name, flag: d.flag),
-    ];
-    final current = _uncategorized || (_sectionName ?? '').isEmpty
-        ? 0
-        : items.indexWhere((c) => c.name == _sectionName);
-    final picked = await showAppChoiceDialog<_SectionChoice>(
-      context: context,
-      title: s['sectionField'],
-      cancelLabel: s['cancel'],
-      items: items,
-      initialIndex: (current < 0 ? 0 : current).clamp(0, items.length - 1),
-      itemBuilder: (context, item, _) => DialogChoiceText(
-        (item.name ?? '').isEmpty ? s['uncategorized'] : item.name!,
-      ),
-    );
-    if (!mounted || picked == null) return;
-    setState(() {
-      _sectionName = picked.name;
-      _sectionFlag = picked.flag;
-      _uncategorized = (picked.name ?? '').isEmpty;
-    });
-  }
-
   int? _topicIdOf(Task task) {
     if (task.topicId != null) return task.topicId;
     final key = task.topicKey;
@@ -330,12 +206,8 @@ class _PlaceTaskDialogState extends State<_PlaceTaskDialog> {
     }
     setState(() => _applying = true);
     try {
-      await state.placeViewTasks(
+      await state.setTaskTopicAndList(
         taskIds: [for (final t in widget.tasks) t.id],
-        viewId: _noView ? null : _view?.id,
-        sectionName: _sectionName,
-        sectionFlag: _sectionFlag,
-        uncategorized: _uncategorized || _noView,
         topicKey: _noTopic || _topic == null ? null : 'topic_${_topic!.id}',
         noTopic: _noTopic || _topic == null,
         taskListId: _listId,
@@ -351,10 +223,9 @@ class _PlaceTaskDialogState extends State<_PlaceTaskDialog> {
   Widget build(BuildContext context) {
     final s = state.strings;
     final listEnabled = !_noTopic && _topic != null && !_listsLoading;
-    final sectionEnabled = !_noView && _view != null;
 
     return AppAdaptiveDialogShell(
-      title: Text(s['placeTaskTitle']),
+      title: Text(s['placeTopicListTitle']),
       width: AppDialogMetrics.wideWidth,
       actions: [
         TextButton(
@@ -393,30 +264,6 @@ class _PlaceTaskDialogState extends State<_PlaceTaskDialog> {
               ),
             ),
           ),
-          const SizedBox(height: DialogFieldStyle.fieldGap),
-          AppDialogPickerField(
-            label: s['viewField'],
-            preview: AppIcon(AppIcons.layout, size: 16, color: AppColors.textHint),
-            valueLabel: _viewLabel,
-            onTap: _pickView,
-          ),
-          const SizedBox(height: DialogFieldStyle.fieldGap),
-          IgnorePointer(
-            ignoring: !sectionEnabled,
-            child: Opacity(
-              opacity: sectionEnabled ? 1 : 0.45,
-              child: AppDialogPickerField(
-                label: s['sectionField'],
-                preview: AppIcon(
-                  AppIcons.arrange,
-                  size: 16,
-                  color: AppColors.textHint,
-                ),
-                valueLabel: _sectionLabel,
-                onTap: _pickSection,
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -427,17 +274,6 @@ class _ListChoice {
   const _ListChoice({required this.id, this.title = ''});
   final int? id;
   final String title;
-}
-
-class _ViewChoice {
-  const _ViewChoice({required this.view});
-  final AppView? view;
-}
-
-class _SectionChoice {
-  const _SectionChoice({this.name, this.flag});
-  final String? name;
-  final String? flag;
 }
 
 class _TopicPick {

@@ -5,6 +5,7 @@ import '../../ui/confirm_dialog.dart';
 import '../../ux/widgets/app_context_menu.dart';
 import '../data/task.dart';
 import '../tasks/task_list_surface.dart';
+import './assign_task_view_dialog.dart';
 import './place_task_dialog.dart';
 import './view_frame_task_list_bridge.dart';
 
@@ -105,7 +106,8 @@ class _ViewFrameTaskListState extends State<ViewFrameTaskList> {
     final s = widget.state.strings;
     return [
       const AppContextMenuDivider(),
-      AppContextMenuItem(value: 'place', label: s['placeTask']),
+      AppContextMenuItem(value: 'view_section', label: s['assignTaskViews']),
+      AppContextMenuItem(value: 'topic_list', label: s['placeTopicList']),
       AppContextMenuItem(
         value: 'delete',
         label: s['delete'],
@@ -115,7 +117,7 @@ class _ViewFrameTaskListState extends State<ViewFrameTaskList> {
   }
 
   Future<void> _onExtraAction(String action, Task task) async {
-    if (action != 'place') return;
+    if (action != 'view_section' && action != 'topic_list') return;
     if (!mounted) return;
     final marked = _surfaceKey.currentState?.markedTaskIds() ?? const <int>[];
     final byId = {for (final t in widget.tasks) t.id: t};
@@ -124,7 +126,15 @@ class _ViewFrameTaskListState extends State<ViewFrameTaskList> {
         if (byId[id] != null) byId[id]!,
     ];
     if (targets.isEmpty) targets.add(task);
-    await showPlaceTaskDialog(
+    if (action == 'view_section') {
+      await showAssignTaskViewDialog(
+        context: context,
+        state: widget.state,
+        taskIds: [for (final t in targets) t.id],
+      );
+      return;
+    }
+    await showPlaceTaskTopicListDialog(
       context: context,
       state: widget.state,
       tasks: targets,

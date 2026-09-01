@@ -1210,9 +1210,8 @@ class _LinkedMapTextController extends TextEditingController {
           text: t.substring(start, end),
           style: base.copyWith(
             color: AppColors.descriptionLink,
-            decoration: TextDecoration.underline,
+            fontStyle: FontStyle.italic,
             decorationColor: AppColors.descriptionLink,
-            decorationThickness: 1.0,
           ),
         ),
       );

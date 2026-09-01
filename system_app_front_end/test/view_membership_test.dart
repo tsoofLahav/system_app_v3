@@ -68,4 +68,53 @@ void main() {
       'topic_7',
     );
   });
+
+  test('assigning a view inherits the home topic when membership key is empty', () {
+    expect(
+      ViewLayoutConfig.topicKeyForAssign(
+        existingMembershipKey: null,
+        homeTopicId: 7,
+      ),
+      'topic_7',
+    );
+    expect(
+      ViewLayoutConfig.topicKeyForAssign(
+        existingMembershipKey: '',
+        homeTopicKey: 'topic_4',
+      ),
+      'topic_4',
+    );
+    expect(
+      ViewLayoutConfig.topicKeyForAssign(
+        existingMembershipKey: 'topic_9',
+        homeTopicId: 7,
+      ),
+      'topic_9',
+    );
+    expect(
+      ViewLayoutConfig.topicKeyForAssign(existingMembershipKey: null),
+      isNull,
+    );
+  });
+
+  test('one section can be the default', () {
+    const inbox = ViewSectionDef(name: 'Inbox', isDefault: true);
+    const later = ViewSectionDef(name: 'Later');
+    expect(inbox.toJson()['default'], isTrue);
+    expect(later.toJson().containsKey('default'), isFalse);
+    final restored = ViewSectionDef.fromJson(inbox.toJson(), 0);
+    expect(restored.isDefault, isTrue);
+    final next = ViewLayoutConfig.withSingleDefault(
+      [inbox, later],
+      defaultName: 'Later',
+    );
+    expect(next[0].isDefault, isFalse);
+    expect(next[1].isDefault, isTrue);
+    expect(
+      ViewLayoutConfig.defaultSection({
+        'sections': [for (final s in next) s.toJson()],
+      })?.name,
+      'Later',
+    );
+  });
 }

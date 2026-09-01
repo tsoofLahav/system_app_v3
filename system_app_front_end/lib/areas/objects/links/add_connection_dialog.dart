@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
-import '../../files/data/app_file.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/dialog_field_style.dart';
@@ -64,12 +63,8 @@ List<ObjectGraphNode> namedInfoNodes(
 }
 
 int? topicIdForFile(AppState state, int fileId) {
-  for (final file in state.selectedDetail?.files ?? const <AppFile>[]) {
-    if (file.id == fileId) return file.topicId;
-  }
-  for (final file in state.broughtFiles) {
-    if (file.id == fileId) return file.topicId;
-  }
+  final cached = state.fileById(fileId);
+  if (cached != null) return cached.topicId;
   final node = state.objectGraph?.nodes
       .where((n) => n.fileId == fileId && n.topicId != null)
       .firstOrNull;

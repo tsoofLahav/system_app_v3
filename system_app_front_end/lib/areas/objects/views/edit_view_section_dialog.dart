@@ -4,6 +4,7 @@ import '../../../core/app_state.dart';
 import '../../ui/adaptive_dialog.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/app_switch.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/color_dialog.dart';
 import '../../ui/app_segmented_toggle.dart';
@@ -59,6 +60,7 @@ class _ViewSectionDialog extends StatefulWidget {
 class _ViewSectionDialogState extends State<_ViewSectionDialog> {
   late final TextEditingController _name;
   late bool _important;
+  late bool _isDefault;
   late String _cadence;
   String? _colorHex;
 
@@ -69,6 +71,7 @@ class _ViewSectionDialogState extends State<_ViewSectionDialog> {
     super.initState();
     _name = TextEditingController(text: widget.section?.name ?? '');
     _important = sectionFlagIsImportant(widget.section?.flag);
+    _isDefault = widget.section?.isDefault ?? false;
     _cadence = widget.section?.cadence ?? ViewSectionCadence.routine;
     _colorHex = widget.section?.colorHex;
   }
@@ -102,6 +105,7 @@ class _ViewSectionDialogState extends State<_ViewSectionDialog> {
         colorHex: _colorHex,
         clearColor: _colorHex == null || _colorHex!.isEmpty,
         cadence: _cadence,
+        isDefault: _isDefault,
       ),
     );
   }
@@ -155,6 +159,31 @@ class _ViewSectionDialogState extends State<_ViewSectionDialog> {
             ],
             selected: _cadence,
             onSelected: (value) => setState(() => _cadence = value),
+          ),
+          const SizedBox(height: DialogFieldStyle.fieldGap),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(s['defaultSection']),
+                    const SizedBox(height: 2),
+                    Text(
+                      s['defaultSectionHint'],
+                      style: AppTypography.metaStyle.copyWith(
+                        color: AppColors.textHint,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              AppSwitch(
+                value: _isDefault,
+                onChanged: (on) => setState(() => _isDefault = on),
+              ),
+            ],
           ),
           const SizedBox(height: DialogFieldStyle.fieldGap),
           Row(
