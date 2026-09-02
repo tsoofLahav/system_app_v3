@@ -13,6 +13,12 @@ from models import InformationPiece, ObjectEmbed, Task, TaskList, db
 from areas.files.services import document_marker_text as marker_text
 from areas.files.services.document_v3 import new_id, parse_document, serialize_document
 from areas.objects.services.delete_cascade import delete_task_cascade
+from areas.objects.services.description_anchor_remap import (
+    compose_info_text,
+    remap_description_links_for_text,
+    remap_table_description_links,
+    task_title_segment_id,
+)
 from areas.objects.services.task_list_order import tasks_for_list
 from areas.objects.services.task_ops import PENDING
 
@@ -645,12 +651,22 @@ def apply_object_updates(
         elif update_type in {"image", "graph", "table"}:
             payload = update.get("payload") or {}
             if update_type == "image":
+                old_caption = str((embed.payload or {}).get("caption") or "")
                 embed.payload = {**(embed.payload or {}), **payload}
+                new_caption = str((embed.payload or {}).get("caption") or "")
+                remap_description_links_for_text(
+                    source_type=embed.type,
+                    source_id=embed.id,
+                    old_text=old_caption,
+                    new_text=new_caption,
+                )
             else:
                 from areas.objects.services.table_payload import normalize_table_payload
 
+                old_payload = embed.payload if isinstance(embed.payload, dict) else {}
                 embed.type = "table"
                 embed.payload = normalize_table_payload(payload)
+                remap_table_description_links(embed.id, old_payload, embed.payload)
         else:
             errors.append(f"unsupported object update type: {update_type}")
     return errors
@@ -696,14 +712,30 @@ def _sync_task_list(
     if title is not None:
         task_list = db.session.get(TaskList, embed.task_list_id)
         if task_list is not None:
-            task_list.title = str(title)
+            old_title = task_list.title or ""
+            new_title = str(title)
+            remap_description_links_for_text(
+                source_type=embed.type,
+                source_id=embed.id,
+                old_text=old_title,
+                new_text=new_title,
+            )
+            task_list.title = new_title
     existing = tasks_for_list(embed.task_list_id)
     updates, creates, deletes = pair_task_list_updates(existing, tasks_data)
     for task, item in updates:
         new_status = str(item.get("status") or "active")
         if task.status == PENDING and new_status != PENDING:
             task.due_date = None
-        task.title = str(item.get("title") or "")
+        new_title = str(item.get("title") or "")
+        remap_description_links_for_text(
+            source_type="task",
+            source_id=task.id,
+            old_text=task.title or "",
+            new_text=new_title,
+            segment_id=task_title_segment_id(task.id),
+        )
+        task.title = new_title
         task.status = new_status
         task.list_order_index = int(item.get("list_order_index", task.list_order_index))
     for index, item in enumerate(creates):
@@ -725,10 +757,17 @@ def _sync_info(embed: ObjectEmbed, update: dict[str, Any]) -> None:
     info = db.session.get(InformationPiece, embed.information_id)
     if info is None:
         return
+    old_text = compose_info_text(info.title or "", info.body or "")
     if "title" in update:
         info.title = str(update.get("title") or "")
     if "body" in update:
         info.body = str(update.get("body") or "")
+    remap_description_links_for_text(
+        source_type=embed.type,
+        source_id=embed.id,
+        old_text=old_text,
+        new_text=compose_info_text(info.title or "", info.body or ""),
+    )
 
 
 def agent_text_from_document_json(

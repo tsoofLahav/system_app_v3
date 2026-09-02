@@ -186,6 +186,7 @@ def test_sync_task_list_updates_in_place(monkeypatch):
 
     monkeypatch.setattr(dat, "tasks_for_list", lambda _id: [keep, drop])
     monkeypatch.setattr(dat, "delete_task_cascade", deleted.append)
+    monkeypatch.setattr(dat, "remap_description_links_for_text", lambda **_k: None)
     monkeypatch.setattr(dat, "db", type("DB", (), {"session": FakeSession()})())
 
     _sync_task_list(

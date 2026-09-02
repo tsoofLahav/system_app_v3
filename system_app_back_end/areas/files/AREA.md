@@ -141,7 +141,7 @@ Agent text round-trip is not yet lossless. Open issues, worst first:
 
 Agent write path: `commit_agent_file_apply` promotes legacy embeds, versions the file, writes v4 `document_json`, applies `object_updates`, then purges unreferenced embeds. Review proposals include `object_updates`; Accept uses `POST /files/:id/apply-agent-text` (not a bare document PATCH). Id-less `[TABLE]` fences are rejected on write.
 
-`_sync_task_list` updates live `tasks` rows in place: exact title match first, then leftover lines pair in order. Extra incoming lines insert new rows; extra existing rows go through `delete_task_cascade` (view memberships and that task's description links). Apply never soft-archives a task — Archive is archived **files**, including the deep-copy Finish makes of the previous file.
+`_sync_task_list` updates live `tasks` rows in place: exact title match first, then leftover lines pair in order. Extra incoming lines insert new rows; extra existing rows go through `delete_task_cascade` (view memberships and that task's description links). Apply never soft-archives a task — Archive is archived **files**, including the deep-copy Finish makes of the previous file. Changing a task title, info text, table cell, or image caption remaps description `anchor` offsets the same way user typing does.
 
 ### Markers are rejected, not degraded
 

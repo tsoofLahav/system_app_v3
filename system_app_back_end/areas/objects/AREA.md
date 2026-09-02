@@ -79,7 +79,7 @@ The `links` table is the workspace **object graph**, keyed by **`objects.id`** f
 
 Description and related stay separate. Text inside an info does **not** create a map edge; chrome **Add connection…** (or `action=related`) does. Deleting one kind does **not** delete the other.
 
-Task title description links travel with the task row (`description_links` on task payloads and view memberships). `GET /files/:id/description-links` also returns task-hosted links whose home list lives in that file, so in-file underlines keep working. Older `task_list` + `#t{index}` links still paint only if looked up by that slot — new Connect info uses `task:{id}`. `delete_task_cascade` drops those rows. Agent edits of a fence update that same host (`_sync_info` / `_sync_task_list` / table payload merge) and leave related + description links on its id; dropping the pointer is what cascade-deletes the object and its connections.
+Task title description links travel with the task row (`description_links` on task payloads and view memberships). `GET /files/:id/description-links` also returns task-hosted links whose home list lives in that file, so in-file underlines keep working. Older `task_list` + `#t{index}` links still paint only if looked up by that slot — new Connect info uses `task:{id}`. `delete_task_cascade` drops those rows. Agent edits of a fence update that same host (`_sync_info` / `_sync_task_list` / table payload merge) and leave related + description links on its id. Description **anchors** (`start`/`end`) remap with the same prefix/suffix diff as user typing, so inserting text before a connected span moves the underline with those glyphs. Dropping the pointer (or a task checkbox line) is what cascade-deletes the object and its connections.
 
 | Endpoint | Role |
 |----------|------|
@@ -123,6 +123,7 @@ Deleting anything that contains objects must cascade, or the database keeps orph
 |--------|------|
 | [`routes/objects.py`](routes/objects.py) | Create/update/delete embeds; links; graph; object tags; insert embed blocks |
 | [`services/object_graph.py`](services/object_graph.py) | Links-map build, connection dicts, link/tag helpers |
+| [`services/description_anchor_remap.py`](services/description_anchor_remap.py) | Shift description `start`/`end` when host text changes (agent apply) |
 | [`services/table_payload.py`](services/table_payload.py) | Normalize table/chart payloads (incl. legacy graph shape) |
 | [`services/image_payload.py`](services/image_payload.py) | One picture or a row of panes (`images[]`, first mirrored on `url`) |
 | [`routes/tasks.py`](routes/tasks.py) | Task CRUD, status, due date, task description links |
@@ -140,4 +141,4 @@ Deleting anything that contains objects must cascade, or the database keeps orph
 - Ordering is explicit (`list_order_index`), never implied by id.
 - Creating an object via `POST /files/:id/objects` must also insert its embed block — an object with no block is invisible.
 - Never delete a container without its cascade.
-- Related links are info ↔ info only. Description links are host object → info (any host type), or **task → info** for a title span. Agent edits of a host update that row and leave its links; deleting the host (or a task checkbox line) is what cascade-removes them.
+- Related links are info ↔ info only. Description links are host object → info (any host type), or **task → info** for a title span. Agent edits of a host update that row, remap description anchors with the text, and leave the links; deleting the host (or a task checkbox line) is what cascade-removes them.
