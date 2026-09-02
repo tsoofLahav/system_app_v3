@@ -348,16 +348,24 @@ class TableEmbedState extends State<TableEmbed>
     _payload = TableObjectPayload.normalize({..._payload, 'chart': chart});
   }
 
+  /// Persist first. Design… stays open while a payload save remounts this
+  /// embed; `setState` on that defunct State is the crash.
+  void _commitDesignPayload(Map<String, dynamic> next) {
+    _payload = next;
+    _persistNow();
+    if (!mounted) return;
+    setState(() {});
+  }
+
   void _setChartType(String type) {
     final chart = Map<String, dynamic>.from(
       TableObjectPayload.chartOf(_payload) ?? {'enabled': true},
     );
     chart['chartType'] = type;
     chart['enabled'] = true;
-    setState(() {
-      _payload = TableObjectPayload.normalize({..._payload, 'chart': chart});
-    });
-    _persistNow();
+    _commitDesignPayload(
+      TableObjectPayload.normalize({..._payload, 'chart': chart}),
+    );
   }
 
   void _applyPalette(String paletteId) {
@@ -370,10 +378,9 @@ class TableEmbedState extends State<TableEmbed>
     );
     chart['colors'] = palette.colorsForCount(cols);
     chart['enabled'] = true;
-    setState(() {
-      _payload = TableObjectPayload.normalize({..._payload, 'chart': chart});
-    });
-    _persistNow();
+    _commitDesignPayload(
+      TableObjectPayload.normalize({..._payload, 'chart': chart}),
+    );
   }
 
   Future<void> _onChartMenuAction(String action) async {
@@ -396,12 +403,9 @@ class TableEmbedState extends State<TableEmbed>
 
   void _setLook(String look) {
     if (!ObjectLook.tableLooks.contains(look)) return;
-    setState(() {
-      _payload = TableObjectPayload.normalize(
-        ObjectLook.withLook(_payload, look),
-      );
-    });
-    _persistNow();
+    _commitDesignPayload(
+      TableObjectPayload.normalize(ObjectLook.withLook(_payload, look)),
+    );
   }
 
   Future<void> _openDesign() async {

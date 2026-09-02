@@ -339,7 +339,7 @@ One object type `table` (`payload.rows` + optional `payload.chart`). UI: [`table
 | Add row / column | **Immediately after the right-clicked cell** (storage index + 1; in RTL that is visually left of the cell). Anchor is the click, not a drifting “end” | Add **column** only (same anchor rule) |
 | Reorder | Separate **Reorder rows…** / **Reorder columns…**; grab the glass row/column (no handles). The drag ghost stays table-width (not the pane). ⌘O while a cell or the table block has the caret toggles row reorder (chart: column reorder) | **Reorder columns…** only; series colors move with the column. ⌘O toggles column reorder |
 | Exit reorder | Tap outside / Escape / Done | Same |
-| Right-click | Text + Connect info + add/reorder + **Design…**; block caret is add/reorder + **Design…** | Chart chrome **or** cell → **Design…** (look samples, chart type, colour-set samples); columns reorder; cells still get Connect info |
+| Right-click | Text + Connect info + add/reorder + **Design…**; block caret is add/reorder + **Design…** | Chart chrome **or** cell → **Design…** (look samples, chart type, colour-set samples); columns reorder; cells still get Connect info. Taps persist payload and `setState` only while the embed is mounted — a save can remount the table under the still-open dialog |
 
 Type logic beyond presentation (views, links, cascades) → [objects](../objects/AREA.md).
 
@@ -399,6 +399,7 @@ Smoke after edits: type fast in paragraph + info + task + table/chart cell; Shif
 - An empty list item, table row, or trailing object unit (empty final task / info line / graph column) plus Enter exits that structure **without destroying it**.
 - An empty object (empty info, last empty task, last empty graph column) plus Backspace **removes the object** and coalesces surrounding text — no leftover blank paragraph.
 - Embed node ids are stable (`embed:<objectId>`); do not remount embeds under regenerated `p0`/`p1` keys.
+- Design-dialog callbacks persist payload and must not `setState` after the embed is disposed (palette / look / chart type).
 - A bullet, a row, and an embed each count as one line of text; settle caret and marking questions by asking what a plain line would do ([`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md)).
 - Never leave empty/`\n`-only paragraph neighbors after move/delete/split (bridge save prunes them).
 - RTL / Hebrew caret and direction policy: only via [`rich_text/rtl/`](rich_text/rtl/RTL.md).
