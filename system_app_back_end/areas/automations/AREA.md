@@ -29,6 +29,8 @@ Row in `automations` (migration [`011_ai_actions_split.sql`](../../migrations/01
 
 A **section window** has no steps. The minute cron opens it at the start, recycles complimentary / routine tasks, and at duration end **unmarks** the section if nothing is still active. Only missed tasks write `pending_clear` and wait for confirm. Saving a new start or duration on an open window calls `clear_section_window_state` (unmark, drop the dot). Standard automations locked to a section copy that schedule and **do not fire on their own clock** if the window is off. If they need user input they wait for `POST /automations/:id/submit-input`; if they only need review they run at section start. Complimentary tasks are created **only for the roles the steps need** — input when `requires_user_input`, review when `apply_mode` is review — never a spare review row on an input-only automation. `GET /automations` prunes leftover roles. List payload includes `has_pending_review` so the review hover is silent until a pending review exists.
 
+Complimentary notes are **full text**, not `hints.selected_text`. `store_user_input` keeps each topic's note (newlines included) up to `COMPLIMENTARY_INPUT_MAX_CHARS` (12 000); over that is HTTP 400 with a stated limit, never a silent clip. `format_user_input_for_prompt` turns each topic into a delimited block (`--- user input · {name} ---`) so a long paragraph stays attributed to that topic when it is appended onto the AI-step prompt.
+
 A single-topic scope is also the **target**: a step that has to put something somewhere (create a file) uses it. Broader scope leaves the step to carry its own `topic_id`, except `create_file` with `template_slot`, which skeleton-clones that slot into **each** topic in a type scope.
 
 ## Steps
@@ -40,6 +42,7 @@ A single-topic scope is also the **target**: a step that has to put something so
 | `unmark_tasks` | Send done tasks in scope (or one `task_list_id`) back to active. |
 | `archive_files` | Soft-archive files in scope; optional `older_than_days`, `file_ids`, or `template_slot`. |
 | `fill_file` | Append saved snippet content onto matching live files. Target is `file_id` (one topic file) or `template_slot` (that named file in every topic of a type). Payload is `document_json` plus cloned `objects`. |
+| `bring_file` | Project one live file from the scope onto Home (`file_id`). Same file, still owned by its topic. Membership is `workspaces.home_visit_file_ids`. |
 
 Adding a kind is an entry in [`services/steps.py`](services/steps.py) `STEP_SPECS` and a function in [`services/actions/`](services/actions/). Validation refuses a bad series when it is saved, not at 2am when it fires. Steps stop at the first error; earlier ones stand.
 
@@ -77,7 +80,7 @@ A new `daily 08:00` saved at 10:00 is **armed**, not run — "daily at eight" me
 | [`services/steps.py`](services/steps.py) | Step vocabulary and save-time validation |
 | [`services/scope.py`](services/scope.py) | Kind → `{workspace_id, topic_ids, file_ids}` |
 | [`services/run_automation.py`](services/run_automation.py) | Walk the series, record the run |
-| [`services/actions/`](services/actions/) | `ai`, `create_file`, `unmark_tasks`, `archive_files`, `fill_file` |
+| [`services/actions/`](services/actions/) | `ai`, `create_file`, `unmark_tasks`, `archive_files`, `fill_file`, `bring_file` |
 | [`services/automation_schedule.py`](services/automation_schedule.py) | `next_run_after()` / `plan_tick()` |
 | [`../../scripts/run_automations.py`](../../scripts/run_automations.py) | Cron entry point |
 

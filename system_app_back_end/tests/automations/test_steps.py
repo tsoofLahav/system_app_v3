@@ -96,6 +96,14 @@ def test_fill_file_needs_content_and_a_target():
     )
 
 
+def test_bring_file_needs_a_file_from_scope():
+    with pytest.raises(StepError, match="file from the scope"):
+        validate_steps([{"kind": "bring_file"}])
+    assert validate_steps([{"kind": "bring_file", "file_id": 9}]) == [
+        {"kind": "bring_file", "file_id": 9}
+    ]
+
+
 def test_unknown_kind_names_the_position():
     with pytest.raises(StepError, match="step 2"):
         validate_steps([{"kind": "unmark_tasks"}, {"kind": "send_email"}])

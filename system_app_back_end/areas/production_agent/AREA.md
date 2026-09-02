@@ -42,7 +42,7 @@ Reasoning models take `reasoning.effort` (env `OPENAI_REASONING_EFFORT`, default
 
 Tools authorize by **workspace membership** (run `workspace_id`), not the FE allow-list. Client `scope` / `hints` are preferred context (`focused_file_id`, open topic). Archived files stay read-only on writes.
 
-`hints` are optional pointers on the first turn only (`focused_file_id`, `selected_text`). Never dump file content there.
+`hints` are optional pointers on the first turn only (`focused_file_id`, `selected_text`). Never dump file content there. `selected_text` is a pointer clipped to 4000 characters on the client (`DocumentEditorRegistry.agentSelectedTextMaxChars`); when that happens the UI says only the start was sent. Complimentary automation notes are a different path — they are appended onto the prompt, not stuffed into `hints`.
 
 **Clock:** the model has none, so it writes a date from memory unless the run states one. Every run carries `today` / `weekday` / `now` — the client sends the user's local day, and `_with_time_hints` in the runner fills server UTC when nothing arrived (automations have no client). Client values always win.
 

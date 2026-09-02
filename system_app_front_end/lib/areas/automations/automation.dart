@@ -188,6 +188,14 @@ class StepKinds {
   static const unmarkTasks = 'unmark_tasks';
   static const archiveFiles = 'archive_files';
   static const fillFile = 'fill_file';
+  static const bringFile = 'bring_file';
 
-  static const all = [ai, createFile, unmarkTasks, archiveFiles, fillFile];
+  static const all = [
+    ai,
+    createFile,
+    unmarkTasks,
+    archiveFiles,
+    fillFile,
+    bringFile,
+  ];
 }

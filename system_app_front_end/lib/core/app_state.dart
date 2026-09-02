@@ -1335,6 +1335,8 @@ class AppState extends ChangeNotifier {
   Future<List<AppFile>> filesForTopic(int topicId) =>
       _files.listFilesForTopic(topicId);
 
+  Future<List<AppFile>> listLiveFiles() => _files.listAllFiles();
+
   Future<Topic> loadTopic(int id) => _topics.getTopic(id);
 
   Future<List<TopicTaskList>> listTaskListsForTopic(int topicId) =>
@@ -2003,7 +2005,30 @@ class AppState extends ChangeNotifier {
 
   /// Re-read visiting files so Home shows the same bodies as their topics.
   Future<void> _refreshVisitFiles({bool notify = false}) async {
-    if (_broughtFileIds.isEmpty) return;
+    final serverIds = await _fetchHomeVisitIds();
+    if (serverIds != null) {
+      final local = List<int>.from(_broughtFileIds);
+      final added = [
+        for (final id in serverIds)
+          if (!local.contains(id)) id,
+      ];
+      _broughtFileIds = [
+        ...added,
+        for (final id in local)
+          if (serverIds.contains(id)) id,
+      ];
+      if (added.isNotEmpty) {
+        homeCanvasOrderIds = [
+          ...added,
+          for (final id in homeCanvasOrderIds)
+            if (!added.contains(id)) id,
+        ];
+      }
+    }
+    if (_broughtFileIds.isEmpty) {
+      if (notify) notifyListeners();
+      return;
+    }
     final nextIds = <int>[];
     for (final fileId in List<int>.from(_broughtFileIds)) {
       try {
@@ -2947,13 +2972,49 @@ class AppState extends ChangeNotifier {
         order: homeCanvasOrderIds,
       ),
     );
+    await _pushHomeVisitIds();
+  }
+
+  Future<List<int>?> _fetchHomeVisitIds() async {
+    final id = workspaceId;
+    if (id == null) return null;
+    try {
+      return await _files.listHomeVisitIds(workspaceId: id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _pushHomeVisitIds() async {
+    final id = workspaceId;
+    if (id == null) return;
+    try {
+      await _files.saveHomeVisitIds(
+        fileIds: List<int>.from(_broughtFileIds),
+        workspaceId: id,
+      );
+    } catch (_) {}
   }
 
   Future<void> _restoreBroughtFile() async {
     final id = workspaceId;
     if (id == null) return;
     final stored = await broughtFileStore.load(id);
-    if (stored.isEmpty) {
+    var visitIds = List<int>.from(stored.visitIds);
+    final serverIds = await _fetchHomeVisitIds();
+    if (serverIds != null) {
+      if (serverIds.isEmpty && visitIds.isNotEmpty) {
+        try {
+          visitIds = await _files.saveHomeVisitIds(
+            fileIds: visitIds,
+            workspaceId: id,
+          );
+        } catch (_) {}
+      } else {
+        visitIds = serverIds;
+      }
+    }
+    if (visitIds.isEmpty) {
       _broughtFileIds = [];
       broughtTopics.clear();
       homeCanvasOrderIds = [];
@@ -2962,7 +3023,7 @@ class AppState extends ChangeNotifier {
     final home = allTopics.where((t) => t.isMain).firstOrNull;
     final byId = <int, AppFile>{};
     final nextTopics = <int, Topic>{};
-    for (final fileId in stored.visitIds) {
+    for (final fileId in visitIds) {
       try {
         final file = await _files.getFile(fileId);
         final topic = allTopics.where((t) => t.id == file.topicId).firstOrNull;
@@ -2990,7 +3051,7 @@ class AppState extends ChangeNotifier {
       _rememberFile(file);
     }
     final visits = [
-      for (final fileId in stored.visitIds)
+      for (final fileId in visitIds)
         if (byId[fileId] != null) byId[fileId]!,
     ];
     final canvas = mergeHomeCanvasFiles(
@@ -3012,8 +3073,8 @@ class AppState extends ChangeNotifier {
     final orderChanged =
         homeCanvasOrderIds.length != stored.order.length ||
         !_sameIds(homeCanvasOrderIds, stored.order);
-    if (nextIds.length != stored.visitIds.length ||
-        !_sameIds(nextIds, stored.visitIds) ||
+    if (nextIds.length != visitIds.length ||
+        !_sameIds(nextIds, visitIds) ||
         orderChanged) {
       await _persistBroughtFileLayout();
     }
@@ -3332,7 +3393,7 @@ class AppState extends ChangeNotifier {
   /// Call after flushing the editor when reading the live mark instead.
   Map<String, dynamic> agentRunHints({String? selectedText}) {
     final mark =
-        (selectedText ?? DocumentEditorRegistry.activeMarkedTextForAgent())
+        (selectedText ?? DocumentEditorRegistry.activeMarkedTextForAgent()?.text)
             ?.trim();
     return {
       ...agentTimeHints(),

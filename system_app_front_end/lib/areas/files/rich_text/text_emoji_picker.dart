@@ -32,10 +32,7 @@ abstract final class TextEmojiPalette {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return;
 
-    BlockTextFocusRegistry.beginEmojiPickerSession(
-      allowUnfocusedRecent:
-          DocumentEditorRegistry.active?.canLeaveObject?.call() == true,
-    );
+    BlockTextFocusRegistry.beginEmojiPickerSession(allowUnfocusedRecent: true);
     if (isPhoneLayout) {
       FocusManager.instance.primaryFocus?.unfocus();
     }
@@ -48,7 +45,9 @@ abstract final class TextEmojiPalette {
     overlay.insert(_entry!);
     open.value = true;
     HardwareKeyboard.instance.addHandler(_onKey);
-    DocumentEditorRegistry.notifier.addListener(_closeIfNoEditor);
+    if (DocumentEditorRegistry.active != null) {
+      DocumentEditorRegistry.notifier.addListener(_closeIfNoEditor);
+    }
   }
 
   static void close() {

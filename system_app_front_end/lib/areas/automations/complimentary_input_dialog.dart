@@ -10,6 +10,9 @@ import '../ui/dialog_field_style.dart';
 import '../ux/topic/topic_appearance.dart';
 import './automation.dart';
 
+/// Keep in sync with `COMPLIMENTARY_INPUT_MAX_CHARS` in section_windows.py.
+const complimentaryInputMaxChars = 12000;
+
 /// Collects per-topic answers and pops immediately. The caller starts the run.
 Future<Map<String, dynamic>?> showComplimentaryInputDialog({
   required BuildContext context,
@@ -56,19 +59,29 @@ class _ComplimentaryInputDialogState extends State<_ComplimentaryInputDialog> {
     return null;
   }
 
+  int get _charCount => _text.text.trim().length;
+
+  bool get _overLimit => _charCount > complimentaryInputMaxChars;
+
   @override
   void initState() {
     super.initState();
     _text = TextEditingController();
+    _text.addListener(_onTextChanged);
     _focus = FocusNode();
     _focusField();
   }
 
   @override
   void dispose() {
+    _text.removeListener(_onTextChanged);
     _text.dispose();
     _focus.dispose();
     super.dispose();
+  }
+
+  void _onTextChanged() {
+    if (mounted) setState(() {});
   }
 
   void _storeCurrent() {
@@ -108,24 +121,16 @@ class _ComplimentaryInputDialogState extends State<_ComplimentaryInputDialog> {
   }
 
   void _finish() {
-    if (_closing) return;
+    if (_closing || _overLimit) return;
     _closing = true;
     _storeCurrent();
     Navigator.pop(context, _body());
   }
 
   void _next() {
+    if (_overLimit) return;
     _storeCurrent();
     setState(() => _showIndex(_index + 1));
-  }
-
-  void _advanceFromEnter() {
-    final last = !_perTopic || _index >= widget.topics.length - 1;
-    if (last) {
-      _finish();
-    } else {
-      _next();
-    }
   }
 
   String _titleLabel() {
@@ -151,6 +156,7 @@ class _ComplimentaryInputDialogState extends State<_ComplimentaryInputDialog> {
   Widget build(BuildContext context) {
     final s = widget.state.strings;
     final last = !_perTopic || _index >= widget.topics.length - 1;
+    final over = _overLimit;
 
     return AppAdaptiveDialogShell(
       title: Text(_titleLabel()),
@@ -173,19 +179,39 @@ class _ComplimentaryInputDialogState extends State<_ComplimentaryInputDialog> {
             child: Text(s['back']),
           ),
         FilledButton(
-          onPressed: _closing ? null : (last ? _finish : _next),
+          onPressed: _closing || over ? null : (last ? _finish : _next),
           child: Text(last ? s['submitInput'] : s['next']),
         ),
       ],
       child: AppDialogField(
         label: s['userInputTitle'],
-        child: DialogFormattedField(
-          controller: _text,
-          focusNode: _focus,
-          strings: s,
-          minLines: 3,
-          maxLines: 8,
-          onEnter: _advanceFromEnter,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DialogFormattedField(
+              controller: _text,
+              focusNode: _focus,
+              strings: s,
+              minLines: 3,
+              maxLines: 12,
+            ),
+            const SizedBox(height: 4),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                over
+                    ? s.userInputOverLimit(complimentaryInputMaxChars)
+                    : s.userInputCharCount(
+                        _charCount,
+                        complimentaryInputMaxChars,
+                      ),
+                style: DialogFieldStyle.labelStyle.copyWith(
+                  color: over ? AppColors.destructive : AppColors.textHint,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

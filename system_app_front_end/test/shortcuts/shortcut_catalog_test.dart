@@ -33,7 +33,7 @@ void main() {
     expect(action.defaultBinding.keyId, LogicalKeyboardKey.keyE.keyId);
     expect(action.defaultBinding.meta, isTrue);
     expect(action.defaultBinding.shift, isFalse);
-    expect(action.context, ShortcutContextRequirement.insertObject);
+    expect(action.context, ShortcutContextRequirement.emojiPalette);
   });
 
   test('language defaults to Cmd+Shift+E', () {

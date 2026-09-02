@@ -112,6 +112,10 @@ class AppBottomBar extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (state.isViewMode) ...[
+                            ViewEmojiInsertBar(state: state),
+                            if (center.isNotEmpty) const SizedBox(width: 8),
+                          ],
                           if (hasEditor) ...[
                             DocumentInsertBar(state: state, embedded: true),
                             if (center.isNotEmpty) const SizedBox(width: 8),
@@ -317,6 +321,7 @@ class PhoneBottomBar extends StatelessWidget {
           onAddSection: viewChrome.onAddSection,
           onStartFrameReorder: viewChrome.onStartFrameReorder,
         ),
+      if (state.isViewMode) ViewEmojiInsertBar(state: state),
       if (showInsert(state)) DocumentInsertBar(state: state, embedded: true),
       if (showArchiveDeleteConfirm(state)) _archiveConfirmSegment(context, s),
       if (showAi(state)) _aiSegment(),

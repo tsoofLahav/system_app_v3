@@ -36,7 +36,7 @@ The frontend sends preferred context (not a hard tool allow-list — tools may b
 selected topic  → scope.topic_ids
 selected topic's files → scope.file_ids
 active editor file → hints.focused_file_id   (tiny pointer; not the file body)
-caret line / mark → hints.selected_text      (tiny; captured **before** the prompt dialog steals focus — marked span, or caret line when unmarked)
+caret line / mark → hints.selected_text      (pointer, max `DocumentEditorRegistry.agentSelectedTextMaxChars` (4000); captured **before** the prompt dialog steals focus — marked span, or caret line when unmarked). If the mark is longer, only the start is sent and a snackbar says so.
 local clock → hints.today / weekday / now    ([`agent_time_hints.dart`](agent_time_hints.dart))
 ```
 

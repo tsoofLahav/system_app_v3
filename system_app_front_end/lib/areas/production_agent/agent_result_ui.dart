@@ -21,8 +21,12 @@ Future<void> runSavedAgentAction(
 ) async {
   if (state.aiRunning) return;
   try {
-    final selectedText = DocumentEditorRegistry.captureMarkedTextForAgent();
-    final result = await state.runAiAction(action, selectedText: selectedText);
+    final selectedMark = DocumentEditorRegistry.captureMarkedTextForAgent();
+    notifySelectedTextTruncation(context, state.strings, selectedMark);
+    final result = await state.runAiAction(
+      action,
+      selectedText: selectedMark?.text,
+    );
     if (state.aiCancelRequested) {
       await discardCancelledAgentRun(state, result);
       return;

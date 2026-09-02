@@ -94,9 +94,10 @@ What the user sees **inside the file** is in those fences (list header, tasks, i
 | [`services/document_promote.py`](services/document_promote.py) | Promote legacy inline embeds → object rows; writes v4 editor text |
 | [`services/file_versions.py`](services/file_versions.py) | Snapshot before agent/automation writes |
 | [`services/file_ops.py`](services/file_ops.py) | Create / archive / unarchive without a request — used by automations and by the HTTP routes |
+| [`services/home_visits.py`](services/home_visits.py) | Files visiting Home (`workspaces.home_visit_file_ids`); automations and ⌘K share this list |
 | [`services/file_snapshot.py`](services/file_snapshot.py) | Clone a snippet (marker text + objects) onto a file, append or replace |
 | [`services/archive_files.py`](services/archive_files.py) | Paginated archive listing + heading search (no document bodies) |
-| [`routes/files.py`](routes/files.py) | File CRUD, `GET /files/:id/agent-text`, `POST /files/:id/apply-snippet`, archive pages |
+| [`routes/files.py`](routes/files.py) | File CRUD, `GET /files/:id/agent-text`, `POST /files/:id/apply-snippet`, archive pages, `GET`/`PUT /home-visits` |
 | [`routes/file_versions.py`](routes/file_versions.py) | History and `POST /files/:id/diff` |
 | [`routes/topics.py`](routes/topics.py) | Topics — the container files live in. `GET /topics/:id/task-lists` lists task-list objects in **live** files of that topic (objects join files, `archived_at` null). |
 | [`routes/topic_types.py`](routes/topic_types.py) | User-defined topic kinds (`/topic-types`) |

@@ -17,6 +17,8 @@ enum ShortcutContextRequirement {
   textFocus,
   /// Insert an object into the active file (via [DocumentEditorRegistry]).
   insertObject,
+  /// Emoji palette: a file editor, or the view page (task titles).
+  emojiPalette,
   toggleLayoutMode,
 }
 
@@ -319,7 +321,7 @@ final List<ShortcutAction> kShortcutCatalog = [
     category: ShortcutCategory.objects,
     labelKey: 'shortcutInsertEmoji',
     defaultBinding: _m(LogicalKeyboardKey.keyE),
-    context: ShortcutContextRequirement.insertObject,
+    context: ShortcutContextRequirement.emojiPalette,
   ),
   ShortcutAction(
     id: ShortcutActionIds.toggleLayoutMode,

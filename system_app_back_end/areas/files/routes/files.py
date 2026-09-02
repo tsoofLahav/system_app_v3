@@ -161,3 +161,53 @@ def delete_file(file_id):
     delete_file_cascade(file_id)
     db.session.commit()
     return "", 204
+
+
+def _workspace_for_visits():
+    from shared.bootstrap import default_workspace_id
+    from models import Workspace
+
+    data = request.get_json(silent=True) or {}
+    workspace_id = (
+        data.get("workspace_id")
+        or request.args.get("workspace_id", type=int)
+        or default_workspace_id()
+    )
+    if workspace_id is None:
+        return None
+    return db.session.get(Workspace, int(workspace_id))
+
+
+@files_bp.route("/home-visits", methods=["GET"])
+def list_home_visits():
+    from areas.files.services.home_visits import live_visit_ids
+
+    workspace = _workspace_for_visits()
+    if workspace is None:
+        return jsonify({"error": "workspace not found"}), 404
+    ids = live_visit_ids(workspace)
+    db.session.commit()
+    return jsonify({"file_ids": ids})
+
+
+@files_bp.route("/home-visits", methods=["PUT"])
+def replace_home_visits():
+    from areas.files.services.home_visits import set_visit_ids, live_visit_ids
+
+    workspace = _workspace_for_visits()
+    if workspace is None:
+        return jsonify({"error": "workspace not found"}), 404
+    data = request.get_json(silent=True) or {}
+    raw = data.get("file_ids") or []
+    if not isinstance(raw, list):
+        return jsonify({"error": "file_ids must be a list"}), 400
+    ids = []
+    for item in raw:
+        try:
+            ids.append(int(item))
+        except (TypeError, ValueError):
+            return jsonify({"error": "file_ids must be integers"}), 400
+    set_visit_ids(workspace, ids)
+    pruned = live_visit_ids(workspace)
+    db.session.commit()
+    return jsonify({"file_ids": pruned})

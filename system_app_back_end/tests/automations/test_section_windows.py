@@ -3,6 +3,8 @@
 import inspect
 from datetime import datetime, timezone
 
+import pytest
+
 from models import Automation, Task, AiAction
 from areas.automations.routes import automations as automations_routes
 from areas.automations.services import section_windows as windows
@@ -193,3 +195,27 @@ def test_toggle_route_uses_task_ops():
 
     source = inspect.getsource(tasks_routes.toggle_task)
     assert "task_ops.toggle_task" in source
+
+
+def test_format_user_input_keeps_multiline_per_topic():
+    note = "line one\n\nline two with details"
+    formatted = windows.format_user_input_for_prompt(
+        {"by_topic": {"Kitchen": note, "Garden": "water the beds"}}
+    )
+    assert "--- user input · Kitchen ---" in formatted
+    assert "--- user input · Garden ---" in formatted
+    assert "line one\n\nline two with details" in formatted
+    assert formatted.index("Kitchen") < formatted.index("line one")
+    assert "- Kitchen:" not in formatted
+
+
+def test_format_user_input_plain_text_when_no_topics():
+    assert windows.format_user_input_for_prompt({"text": "hello"}) == "hello"
+
+
+def test_cleaned_user_input_text_rejects_over_budget():
+    assert windows.cleaned_user_input_text("  ok  ") == "ok"
+    with pytest.raises(ValueError, match="longer than"):
+        windows.cleaned_user_input_text(
+            "x" * (windows.COMPLIMENTARY_INPUT_MAX_CHARS + 1)
+        )

@@ -45,11 +45,12 @@ Future<void> dispatchShortcutAction(
   if (action == null) return;
   if (!_contextAllows(state, action.context)) return;
 
+  if (action.context == ShortcutContextRequirement.emojiPalette) {
+    TextEmojiPalette.toggle(context, state.strings);
+    return;
+  }
+
   if (action.context == ShortcutContextRequirement.insertObject) {
-    if (actionId == ShortcutActionIds.insertEmoji) {
-      TextEmojiPalette.toggle(context, state.strings);
-      return;
-    }
     final insertType = action.insertType;
     if (insertType == null) return;
     final controller = DocumentEditorRegistry.active;
@@ -206,6 +207,12 @@ bool shortcutHasTextFocus() {
   return DocumentEditorRegistry.active?.isFocused?.call() == true;
 }
 
+/// File body/object, or a view task title — not archive or the diagram.
+bool emojiPaletteAvailable(AppState state) {
+  if (state.isArchiveMode || state.isDiagramMode) return false;
+  return DocumentEditorRegistry.active != null || state.isViewMode;
+}
+
 bool _contextAllows(AppState state, ShortcutContextRequirement requirement) {
   switch (requirement) {
     case ShortcutContextRequirement.none:
@@ -217,6 +224,8 @@ bool _contextAllows(AppState state, ShortcutContextRequirement requirement) {
       return _isTopicMode(state) && (state.selectedTopic?.isMain ?? false);
     case ShortcutContextRequirement.insertObject:
       return DocumentEditorRegistry.active != null;
+    case ShortcutContextRequirement.emojiPalette:
+      return emojiPaletteAvailable(state);
     case ShortcutContextRequirement.textFocus:
       return shortcutHasTextFocus();
     case ShortcutContextRequirement.toggleLayoutMode:

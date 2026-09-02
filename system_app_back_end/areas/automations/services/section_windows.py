@@ -519,13 +519,26 @@ def input_topics(automation: Automation) -> list[dict]:
     ]
 
 
+# Keep in sync with `complimentaryInputMaxChars` in complimentary_input_dialog.dart.
+COMPLIMENTARY_INPUT_MAX_CHARS = 12_000
+
+
+def cleaned_user_input_text(value: object) -> str:
+    text = str(value or "").strip()
+    if len(text) > COMPLIMENTARY_INPUT_MAX_CHARS:
+        raise ValueError(
+            f"input for a topic is longer than {COMPLIMENTARY_INPUT_MAX_CHARS} characters"
+        )
+    return text
+
+
 def store_user_input(automation: Automation, payload: dict) -> dict:
-    text = str(payload.get("text") or "").strip()
+    text = cleaned_user_input_text(payload.get("text"))
     by_topic = payload.get("by_topic") or {}
     cleaned = {}
     if isinstance(by_topic, dict):
         for key, value in by_topic.items():
-            cleaned[str(key)] = str(value or "").strip()
+            cleaned[str(key)] = cleaned_user_input_text(value)
     stored = {
         "text": text,
         "by_topic": cleaned,
@@ -541,24 +554,38 @@ def store_user_input(automation: Automation, payload: dict) -> dict:
     return stored
 
 
+def _user_input_block(label: str, value: str) -> str:
+    heading = " ".join(str(label).split()) or "topic"
+    return f"--- user input · {heading} ---\n{value}\n---"
+
+
 def format_user_input_for_prompt(payload: dict | None) -> str:
+    """Each topic's note is a delimited block so newlines stay with that topic.
+
+    A single `- label: value` line used to break as soon as the user wrote a
+    paragraph: later lines looked like unassigned text, and the long note
+    never landed with the others.
+    """
     if not payload:
         return ""
     by_topic = payload.get("by_topic") or {}
-    lines = []
+    topic_blocks = []
     if isinstance(by_topic, dict):
         for key, value in by_topic.items():
-            if not str(value or "").strip():
+            note = str(value or "").strip()
+            if not note:
                 continue
             topic = db.session.get(Topic, int(key)) if str(key).isdigit() else None
             label = topic.name if topic is not None else key
-            lines.append(f"- {label}: {value}")
+            topic_blocks.append(_user_input_block(label, note))
     text = str(payload.get("text") or "").strip()
-    if text and not lines:
+    if text and not topic_blocks:
         return text
+    blocks = []
     if text:
-        lines.insert(0, text)
-    return "\n".join(lines)
+        blocks.append(_user_input_block("all topics", text))
+    blocks.extend(topic_blocks)
+    return "\n\n".join(blocks)
 
 
 def review_status(automation: Automation) -> dict:

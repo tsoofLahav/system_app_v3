@@ -111,4 +111,41 @@ class FileService {
     final data = await _api.get('/files/$id/agent-text') as Map<String, dynamic>;
     return data['agent_text'] as String? ?? '';
   }
+
+  Future<List<int>> listHomeVisitIds({int? workspaceId}) async {
+    final path = workspaceId != null
+        ? '/home-visits?workspace_id=$workspaceId'
+        : '/home-visits';
+    final data = await _api.get(path) as Map<String, dynamic>;
+    final raw = data['file_ids'];
+    if (raw is! List) return const [];
+    return [
+      for (final item in raw)
+        if (item is int)
+          item
+        else
+          int.tryParse('$item'),
+    ].whereType<int>().toList();
+  }
+
+  Future<List<int>> saveHomeVisitIds({
+    required List<int> fileIds,
+    int? workspaceId,
+  }) async {
+    final data =
+        await _api.put('/home-visits', {
+              'file_ids': fileIds,
+              if (workspaceId != null) 'workspace_id': workspaceId,
+            })
+            as Map<String, dynamic>;
+    final raw = data['file_ids'];
+    if (raw is! List) return fileIds;
+    return [
+      for (final item in raw)
+        if (item is int)
+          item
+        else
+          int.tryParse('$item'),
+    ].whereType<int>().toList();
+  }
 }

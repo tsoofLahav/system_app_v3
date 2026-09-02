@@ -223,7 +223,10 @@ def run_automation_now(automation_id):
 def submit_automation_input(automation_id):
     automation = get_or_404(Automation, automation_id)
     data = request.get_json(silent=True) or {}
-    stored = store_user_input(automation, data)
+    try:
+        stored = store_user_input(automation, data)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
     run = run_automation(automation, trigger_source="user_input", user_input=stored)
     db.session.commit()
     return jsonify({"run": run.to_dict(), "user_input": stored})

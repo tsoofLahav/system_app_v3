@@ -116,6 +116,38 @@ class DocumentInsertBar extends StatelessWidget {
   }
 }
 
+/// Smiley on the bottom bar when there is no full insert strip — views.
+class ViewEmojiInsertBar extends StatelessWidget {
+  const ViewEmojiInsertBar({super.key, required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: TextEmojiPalette.open,
+      builder: (context, _) {
+        final s = state.strings;
+        return GlassBarSegment(
+          height: AppBottomBarMetrics.segmentHeight(phone: isPhoneLayout),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          tightShadow: isPhoneLayout,
+          child: _InsertButton(
+            icon: AppIcons.smiley,
+            tooltip: DocumentInsertBar._tooltip(
+              state,
+              s['insertEmoji'],
+              ShortcutActionIds.insertEmoji,
+            ),
+            selected: TextEmojiPalette.isOpen,
+            onPressed: () => TextEmojiPalette.toggle(context, s),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _InsertButton extends StatelessWidget {
   const _InsertButton({
     required this.icon,

@@ -18,12 +18,14 @@ class Workspace(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    home_visit_file_ids = db.Column(JSONB, nullable=False, default=list)
 
     def to_dict(self):
         return {
             "id": self.id,
             "name": self.name,
             "created_at": _iso(self.created_at),
+            "home_visit_file_ids": list(self.home_visit_file_ids or []),
         }
 
 

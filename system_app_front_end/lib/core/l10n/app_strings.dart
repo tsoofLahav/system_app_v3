@@ -230,6 +230,16 @@ class AppStrings {
   String userInputForTopic(String topic) =>
       this['userInputForTopic'].replaceAll('{topic}', topic);
 
+  String userInputCharCount(int count, int max) => this['userInputCharCount']
+      .replaceAll('{count}', '$count')
+      .replaceAll('{max}', '$max');
+
+  String userInputOverLimit(int max) =>
+      this['userInputOverLimit'].replaceAll('{max}', '$max');
+
+  String markedTextTruncated(int max) =>
+      this['markedTextTruncated'].replaceAll('{max}', '$max');
+
   String newSectionTitle(String viewLabel) =>
       this['newSectionTitle'].replaceAll('{view}', viewLabel);
 
@@ -462,6 +472,8 @@ class AppStrings {
     'stepUnmarkTasks': 'Unmark tasks',
     'stepArchiveFiles': 'Archive files',
     'stepFillFile': 'Add to a file',
+    'stepBringFile': 'Project to Home',
+    'bringFileNeedScope': 'No files in this scope to project onto Home.',
     'archiveThisFile': 'This file',
     'pickTopicFile': 'Choose a file',
     'editFillFileContent': 'Edit the text',
@@ -515,6 +527,9 @@ class AppStrings {
     'leftoverClearApprove': 'Clear leftovers',
     'userInputTitle': 'Automation input',
     'userInputForTopic': 'Input for {topic}',
+    'userInputCharCount': '{count} / {max}',
+    'userInputOverLimit':
+        'This note is too long. Shorten it to {max} characters.',
     'submitInput': 'Submit and run',
     'next': 'Next',
     'back': 'Back',
@@ -863,6 +878,8 @@ class AppStrings {
     'aiReview': 'Review',
     'aiNoContext':
         'Select text or place the caret on a line, task, or list item.',
+    'markedTextTruncated':
+        'Only the first {max} characters of the marked text were sent to the agent.',
     'aiRunning': 'Running…',
     'aiCanceling': 'Canceling the action…',
     'aiDone': 'Done',
@@ -1195,6 +1212,8 @@ class AppStrings {
     'stepUnmarkTasks': 'בטל סימון משימות',
     'stepArchiveFiles': 'העבר קבצים לארכיון',
     'stepFillFile': 'הוסף לקובץ',
+    'stepBringFile': 'הקרן לדף הבית',
+    'bringFileNeedScope': 'אין קבצים בהיקף הזה להקרנה לדף הבית.',
     'archiveThisFile': 'הקובץ הזה',
     'pickTopicFile': 'בחרו קובץ',
     'editFillFileContent': 'עריכת הטקסט',
@@ -1248,6 +1267,8 @@ class AppStrings {
     'leftoverClearApprove': 'נקה שאריות',
     'userInputTitle': 'קלט לאוטומציה',
     'userInputForTopic': 'קלט עבור {topic}',
+    'userInputCharCount': '{count} / {max}',
+    'userInputOverLimit': 'ההערה ארוכה מדי. קצרו אותה ל־{max} תווים.',
     'submitInput': 'שלח והרץ',
     'next': 'הבא',
     'back': 'חזרה',
@@ -1592,6 +1613,8 @@ class AppStrings {
     'aiSuggestEmojiFailed': 'לא ניתן להציע אמוג\'י.',
     'aiReview': 'סקירה',
     'aiNoContext': 'בחר טקסט או מקם את הסמן בשורה, משימה או פריט רשימה.',
+    'markedTextTruncated':
+        'רק {max} התווים הראשונים של הטקסט המסומן נשלחו לסוכן.',
     'aiRunning': 'מריץ…',
     'aiCanceling': 'מבטל את הפעולה…',
     'aiDone': 'בוצע',

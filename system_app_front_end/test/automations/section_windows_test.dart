@@ -90,6 +90,12 @@ void main() {
     );
   });
 
+  test('complimentary input limit copy states the budget', () {
+    expect(AppStrings.en.userInputCharCount(12, 12000), '12 / 12000');
+    expect(AppStrings.en.userInputOverLimit(12000), contains('12000'));
+    expect(AppStrings.he.userInputOverLimit(12000), contains('12000'));
+  });
+
   test('section window automation parses attention and leftover payload', () {
     final automation = Automation.fromJson({
       'id': 4,

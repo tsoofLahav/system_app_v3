@@ -67,7 +67,7 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
   }
 
   // Capture before the dialog steals focus and collapses the mark.
-  final selectedText = DocumentEditorRegistry.captureMarkedTextForAgent();
+  final selectedMark = DocumentEditorRegistry.captureMarkedTextForAgent();
 
   final request = await showAppDialog<AgentPromptRequest>(
     context: context,
@@ -98,10 +98,11 @@ Future<void> runAgentPrompt(BuildContext context, AppState state) async {
       }
     }
     if (state.aiRunning) return;
+    notifySelectedTextTruncation(context, s, selectedMark);
     final result = await state.runAgentPrompt(
       request.prompt,
       applyMode: request.applyMode,
-      selectedText: selectedText,
+      selectedText: selectedMark?.text,
     );
     if (result == null) return;
     if (state.aiCancelRequested) {

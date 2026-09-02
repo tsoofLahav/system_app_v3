@@ -22,6 +22,7 @@ STEP_SPECS: dict[str, tuple[str, ...]] = {
     "unmark_tasks": ("task_list_id",),
     "archive_files": ("file_ids", "older_than_days", "template_slot"),
     "fill_file": ("file_id", "template_slot", "document_json", "objects"),
+    "bring_file": ("file_id",),
 }
 
 STEP_KINDS = tuple(STEP_SPECS)
@@ -72,6 +73,11 @@ def _validate_one(step: dict, *, position: int) -> dict:
             kept.get("file_id") is not None
             or bool(str(kept.get("template_slot") or "").strip()),
             f"step {position}: fill_file needs a file or a template slot",
+        )
+    elif kind == "bring_file":
+        _require(
+            kept.get("file_id") is not None,
+            f"step {position}: bring_file needs a file from the scope",
         )
 
     return kept

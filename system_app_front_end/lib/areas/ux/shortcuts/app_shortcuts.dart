@@ -101,6 +101,10 @@ class _AppShortcutsScopeState extends State<AppShortcutsScope> {
         DocumentEditorRegistry.active == null) {
       return false;
     }
+    if (action.context == ShortcutContextRequirement.emojiPalette &&
+        !emojiPaletteAvailable(widget.state)) {
+      return false;
+    }
 
     _dispatchOnce(actionId, allowRepeat: event is KeyRepeatEvent && sizeRepeat);
     return true;
@@ -109,6 +113,7 @@ class _AppShortcutsScopeState extends State<AppShortcutsScope> {
   bool _allowedBehindModal(ShortcutAction action) {
     switch (action.context) {
       case ShortcutContextRequirement.insertObject:
+      case ShortcutContextRequirement.emojiPalette:
       case ShortcutContextRequirement.textFocus:
         return true;
       default:

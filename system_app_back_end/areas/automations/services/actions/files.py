@@ -140,3 +140,37 @@ def fill_file(*, workspace_id: int, resolved_scope: dict, params: dict, now: dat
         "file_ids": [f.id for f in files],
         "summary": f"added content to {len(files)} file(s)",
     }
+
+
+def bring_file(*, workspace_id: int, resolved_scope: dict, params: dict, now: datetime):
+    """Project one live file from scope onto Home. Same file, still owned by its topic."""
+    from models import Workspace
+    from areas.files.services.home_visits import add_home_visit, is_home_topic
+
+    file_id = params.get("file_id")
+    if file_id is None:
+        return {"error": "no file to project"}
+    matches = [f for f in files_in_scope(resolved_scope) if int(f.id) == int(file_id)]
+    if not matches:
+        return {"error": "that file is not in this automation's scope"}
+    file = matches[0]
+    topic = db.session.get(Topic, file.topic_id)
+    if is_home_topic(topic):
+        return {"error": "that file already lives on Home"}
+    workspace = db.session.get(Workspace, int(workspace_id))
+    if workspace is None:
+        return {"error": "workspace not found"}
+    added = add_home_visit(workspace, file)
+    db.session.flush()
+    name = file.name or "file"
+    if added:
+        return {
+            "ok": True,
+            "file_id": file.id,
+            "summary": f"projected “{name}” onto Home",
+        }
+    return {
+        "ok": True,
+        "file_id": file.id,
+        "summary": f"“{name}” is already on Home",
+    }

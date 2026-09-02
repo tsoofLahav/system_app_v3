@@ -90,6 +90,9 @@ class DocumentEditorRegistry {
   static DocumentEditorController? active;
   static int? get activeFileId => active?.fileId;
 
+  /// Pointer for `hints.selected_text` — never a full file body.
+  static const agentSelectedTextMaxChars = 4000;
+
   static void register(DocumentEditorController controller) {
     _byFile[controller.fileId] = controller;
     // Keep the previously claimed file active when another pane mounts.
@@ -134,18 +137,35 @@ class DocumentEditorRegistry {
     await active?.flushPendingChanges();
   }
 
-  /// Tiny pointer for `hints.selected_text` — never a full file body.
+  /// Pointer for `hints.selected_text` — never a full file body.
   /// Marked span, or the caret line when nothing is marked.
-  static String? activeMarkedTextForAgent({int maxChars = 400}) {
+  static AgentMarkedText? activeMarkedTextForAgent({
+    int maxChars = agentSelectedTextMaxChars,
+  }) {
     final raw = active?.markedTextForAgent?.call()?.trim();
     if (raw == null || raw.isEmpty) return null;
-    if (raw.length <= maxChars) return raw;
-    return raw.substring(0, maxChars);
+    if (raw.length <= maxChars) {
+      return AgentMarkedText(text: raw);
+    }
+    return AgentMarkedText(
+      text: raw.substring(0, maxChars),
+      truncated: true,
+    );
   }
 
   /// Freeze embed marks and read `selected_text` before a dialog steals focus.
-  static String? captureMarkedTextForAgent({int maxChars = 400}) {
+  static AgentMarkedText? captureMarkedTextForAgent({
+    int maxChars = agentSelectedTextMaxChars,
+  }) {
     BlockTextFocusRegistry.capturePendingMark();
     return activeMarkedTextForAgent(maxChars: maxChars);
   }
+}
+
+/// Marked span (or caret line) clipped to [DocumentEditorRegistry.agentSelectedTextMaxChars].
+class AgentMarkedText {
+  const AgentMarkedText({required this.text, this.truncated = false});
+
+  final String text;
+  final bool truncated;
 }

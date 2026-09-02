@@ -11,7 +11,8 @@ import './formatted_text_field.dart';
 
 /// A dialog multiline field that uses the same caret / mark rules as object
 /// editors ([FormattedTextField]): click placement, RTL motion, grapheme-safe
-/// marking, Shift+Enter newline.
+/// marking. Without [onEnter], Enter inserts a newline (Shift+Enter / ⌘Enter
+/// still do). With [onEnter], plain Enter runs that callback instead.
 class DialogFormattedField extends StatelessWidget {
   const DialogFormattedField({
     super.key,

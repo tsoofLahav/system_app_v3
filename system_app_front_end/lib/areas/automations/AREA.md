@@ -29,6 +29,7 @@ A single-topic scope is also the target for a "create a file" step. Broader scop
 | Unmark tasks | Every done task in scope goes back to active |
 | Archive files | Everything in scope, older than N days, one file in a topic, or one template slot |
 | Add to a file | Saved snippet (real file editor, including insert of objects) appended onto a chosen topic file or a template slot |
+| Project to Home | One live file from the scope visits Home (same file, still owned by its topic) |
 
 ## Surfaces
 
@@ -52,7 +53,7 @@ A regular automation whose AI steps need **user input** or **review** must pick 
 
 Press the **title** to open the input or review dialog. The title is pressable (dark-teal underline, same mark as connected text used to use) only **while the section window is open** and the row still needs work — input until submitted, review only when a pending review exists. Connected (description-linked) task text is the quieter mark: italic dark teal, and it keeps strikethrough when the task is done. The pipeline still marks the row when input is submitted or review finishes. The checkbox works like any other task: mark it to give up that round, unmark to take it back. Input hover after submit: “user input was already received”. Review stays silent until a pending review exists — only then hover “review is in process”. Both recycle at the next section start.
 
-When input covers several topics, the dialog shows **one topic at a time**. Enter advances to the next topic (caret in that field) and on the last topic submits. **Shift+Enter** / **⌘Enter** / Ctrl+Enter inserts a newline. The dialog **closes immediately**; a small spinner sits next to the complimentary title while the run is in flight. The header uses a stronger topic-colour ombre than the topic page (`AppColors.topicDialogVeilAlpha`). Template topics are never in automation or AI-action scope.
+When input covers several topics, the dialog shows **one topic at a time**. **Enter** inserts a newline (same as other multiline dialog fields). Next moves to the next topic; Submit and run is on the last. Each note is full text sent with the automation prompt — not `hints.selected_text`. The field shows `{count} / {max}` against `complimentaryInputMaxChars` (12 000, same cap as the backend); over that, Next/Submit disable and the copy says to shorten the note. The dialog **closes immediately**; a small spinner sits next to the complimentary title while the run is in flight. The header uses a stronger topic-colour ombre than the topic page (`AppColors.topicDialogVeilAlpha`). Template topics are never in automation or AI-action scope.
 
 The section-window duration is **hours** and **minutes**, each labelled above the field (not as a disappearing hint).
 
