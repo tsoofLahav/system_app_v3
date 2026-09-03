@@ -20,11 +20,7 @@ abstract final class AppTypography {
     if (textSize != null) documentTextSize = textSize;
   }
 
-  static double get documentBodySize => switch (documentTextSize) {
-    DocumentTextSize.small => 12.5,
-    DocumentTextSize.medium => 14,
-    DocumentTextSize.large => 16,
-  };
+  static double get documentBodySize => documentTextSize.points;
 
   /// Color-emoji faces last so layout and paint share the same emoji metrics.
   /// Without this, a Hebrew/Inter run + emoji shifts the selection wash.

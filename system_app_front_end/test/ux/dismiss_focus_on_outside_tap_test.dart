@@ -3,30 +3,39 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/ui/app_colors.dart';
 import 'package:system_app_front_end/areas/ux/shell/app_bottom_bar.dart';
 import 'package:system_app_front_end/areas/ux/shell/dismiss_focus_on_outside_tap.dart';
+import 'package:system_app_front_end/areas/ux/shell/phone_visible_file.dart';
 
 void main() {
-  test('phone header is off-white; topic ombre only off Home and views', () {
+  test('phone edge ombre is grey on Home and views; topic-tinted otherwise', () {
     const accent = Color(0xFF3B82F6);
-    final home = AppColors.phoneHeaderDecoration(
-      topicAccent: accent,
-      isMainTopic: true,
+    expect(
+      AppColors.phoneEdgeColor(topicAccent: accent, isMainTopic: true),
+      AppColors.phoneCanvas,
     );
-    final view = AppColors.phoneHeaderDecoration(
+    expect(
+      AppColors.phoneEdgeColor(
+        topicAccent: accent,
+        isMainTopic: false,
+        neutral: true,
+      ),
+      AppColors.phoneCanvas,
+    );
+    final topic = AppColors.phoneEdgeColor(
       topicAccent: accent,
       isMainTopic: false,
-      neutral: true,
     );
-    final topic = AppColors.phoneHeaderDecoration(
-      topicAccent: accent,
-      isMainTopic: false,
-    );
-    expect(home.color, AppColors.phoneStripe);
-    expect(home.gradient, isNull);
-    expect(view.color, AppColors.phoneStripe);
-    expect(view.gradient, isNull);
-    expect(topic.gradient, isNotNull);
-    expect(topic.gradient!.colors.first, AppColors.phoneStripe);
-    expect(topic.gradient!.colors.last, isNot(equals(AppColors.phoneStripe)));
+    expect(topic, isNot(equals(AppColors.phoneCanvas)));
+    final fade = AppColors.phoneEdgeOmbre(edge: topic, atTop: true);
+    expect(fade.colors.first.a, greaterThan(fade.colors.last.a));
+  });
+
+  test('phone visible file name is chrome-only and idempotent', () {
+    PhoneVisibleFile.setName(null);
+    PhoneVisibleFile.setName('Notes');
+    expect(PhoneVisibleFile.name.value, 'Notes');
+    PhoneVisibleFile.setName('Notes');
+    PhoneVisibleFile.setName(null);
+    expect(PhoneVisibleFile.name.value, isNull);
   });
 
   test('phone bar is one row, not a vertical stack', () {

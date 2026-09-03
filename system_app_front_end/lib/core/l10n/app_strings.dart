@@ -147,21 +147,71 @@ class AppStrings {
   String weeklyScheduleCaption(String dayKey) =>
       this['weeklyScheduleCaption'].replaceAll('{day}', this[dayKey]);
 
+  String weeklyMultiCaption(List<String> dayKeys) => this['weeklyMultiCaption']
+      .replaceAll('{days}', joinList([for (final key in dayKeys) this[key]]));
+
   String monthlyScheduleCaption(String placementKey, String dayKey) {
-    var placement = this[placementKey];
-    if (language == AppLanguage.en) placement = placement.toLowerCase();
     return this['monthlyScheduleCaption']
-        .replaceAll('{placement}', placement)
+        .replaceAll('{placement}', _placementWord(placementKey))
         .replaceAll('{day}', this[dayKey]);
   }
 
+  String monthlyMultiCaption(
+    List<({String placementKey, String dayKey})> slots,
+  ) =>
+      this['monthlyMultiCaption'].replaceAll(
+        '{slots}',
+        _monthlySlotsPhrase(slots),
+      );
+
   String everyNMonthsCaption(int n, String placementKey, String dayKey) {
-    var placement = this[placementKey];
-    if (language == AppLanguage.en) placement = placement.toLowerCase();
     return this['everyNMonthsCaption']
         .replaceAll('{n}', '$n')
-        .replaceAll('{placement}', placement)
+        .replaceAll('{placement}', _placementWord(placementKey))
         .replaceAll('{day}', this[dayKey]);
+  }
+
+  String everyNMonthsMultiCaption(
+    int n,
+    List<({String placementKey, String dayKey})> slots,
+  ) =>
+      this['everyNMonthsMultiCaption']
+          .replaceAll('{n}', '$n')
+          .replaceAll('{slots}', _monthlySlotsPhrase(slots));
+
+  String joinList(List<String> items) {
+    if (items.isEmpty) return '';
+    if (items.length == 1) return items.first;
+    final last = items.last;
+    final rest = items.sublist(0, items.length - 1).join(this['listComma']);
+    return this['listAnd'].replaceAll('{rest}', rest).replaceAll('{last}', last);
+  }
+
+  String _placementWord(String placementKey) {
+    var placement = this[placementKey];
+    if (language == AppLanguage.en) placement = placement.toLowerCase();
+    return placement;
+  }
+
+  String monthlySlotLabel(String placementKey, String dayKey) =>
+      this['monthlySlotLabel']
+          .replaceAll('{placement}', _placementWord(placementKey))
+          .replaceAll('{day}', this[dayKey]);
+
+  String _monthlySlotsPhrase(
+    List<({String placementKey, String dayKey})> slots,
+  ) {
+    final phrases = [
+      for (final slot in slots)
+        monthlySlotLabel(slot.placementKey, slot.dayKey),
+    ];
+    if (language == AppLanguage.en && phrases.length > 1) {
+      return joinList([
+        phrases.first,
+        ...phrases.skip(1).map((phrase) => 'the $phrase'),
+      ]);
+    }
+    return joinList(phrases);
   }
 
   static const _monthKeys = [
@@ -341,6 +391,7 @@ class AppStrings {
     'connection': 'Connection',
     'noObjectsToConnect': 'No other objects to connect yet.',
     'connectInfo': 'Connect info…',
+    'connectWithout': 'Without',
     'removeConnection': 'Remove connection',
     'searchInfo': 'Search',
     'noInfoObjects': 'No info objects yet.',
@@ -411,6 +462,7 @@ class AppStrings {
     'aiMoveFile': 'Move file to topic (AI)',
     'aiNoFileFocus': 'Place the caret in the file you want to move.',
     'addFile': 'Add file',
+    'openMenu': 'Open menu',
     'fileName': 'File name',
     'created': 'Created',
     'close': 'Close',
@@ -524,10 +576,10 @@ class AppStrings {
     'complimentaryReviewTitle': '{name} review task',
     'inputAlreadyReceived': 'User input was already received',
     'reviewInProcess': 'Review is in process',
-    'leftoverClearTitle': 'Section window ended',
+    'leftoverClearTitle': 'Unfinished tasks — approve',
     'leftoverClearBody':
-        '{view} / {section} still has unfinished tasks. Approve to recycle routine tasks and archive leftover one-time tasks.',
-    'leftoverClearApprove': 'Clear leftovers',
+        '{view} / {section} still has unfinished tasks. You must approve before they recycle.',
+    'leftoverClearApprove': 'Approve',
     'userInputTitle': 'Automation input',
     'userInputForTopic': 'Input for {topic}',
     'userInputCharCount': '{count} / {max}',
@@ -721,6 +773,8 @@ class AppStrings {
     'cut': 'Cut',
     'copy': 'Copy',
     'paste': 'Paste',
+    'more': 'More',
+    'info': 'Info',
     'bold': 'Bold',
     'italic': 'Italic',
     'underline': 'Underline',
@@ -912,14 +966,23 @@ class AppStrings {
     'summaryTasksReadOnly': 'Summary tasks are not editable, only markable.',
     'onceADay': 'Once a day',
     'onceAWeek': 'Once a week',
+    'fewTimesAWeek': 'A few times a week',
     'onceAMonth': 'Once a month',
+    'fewTimesAMonth': 'A few times a month',
     'onceInMonths': 'Once in months',
     'onceInMonthsCount': 'Every how many months',
     'time': 'Time',
     'chooseDay': 'Choose day',
+    'chooseDays': 'Choose days',
     'weeklyScheduleCaption': 'Every {day}',
+    'weeklyMultiCaption': 'Every {days}',
     'monthlyScheduleCaption': 'The {placement} {day} of each month',
+    'monthlyMultiCaption': 'The {slots} of each month',
     'everyNMonthsCaption': 'Every {n} months, the {placement} {day}',
+    'everyNMonthsMultiCaption': 'Every {n} months, the {slots}',
+    'monthlySlotLabel': '{placement} {day}',
+    'listComma': ', ',
+    'listAnd': '{rest} and {last}',
     'narrowSun': 'S',
     'narrowMon': 'M',
     'narrowTue': 'T',
@@ -1090,6 +1153,7 @@ class AppStrings {
     'connection': 'חיבור',
     'noObjectsToConnect': 'אין אובייקטים אחרים לחיבור.',
     'connectInfo': 'חבר למידע…',
+    'connectWithout': 'ללא',
     'removeConnection': 'הסר חיבור',
     'searchInfo': 'חיפוש',
     'noInfoObjects': 'אין אובייקטי מידע עדיין.',
@@ -1160,6 +1224,7 @@ class AppStrings {
     'aiMoveFile': 'העבר קובץ לנושא (AI)',
     'aiNoFileFocus': 'מקם את הסמן בקובץ שברצונך להעביר.',
     'addFile': 'הוסף קובץ',
+    'openMenu': 'פתח תפריט',
     'fileName': 'שם קובץ',
     'created': 'נוצר',
     'close': 'סגור',
@@ -1271,10 +1336,10 @@ class AppStrings {
     'complimentaryReviewTitle': '{name} משימת סקירה',
     'inputAlreadyReceived': 'הקלט מהמשתמש כבר התקבל',
     'reviewInProcess': 'הסקירה בתהליך',
-    'leftoverClearTitle': 'חלון המדור הסתיים',
+    'leftoverClearTitle': 'משימות שלא הסתיימו — חובה לאשר',
     'leftoverClearBody':
-        'ב־{view} / {section} נשארו משימות פתוחות. אישור יאפס משימות שגרתיות ויעביר חד־פעמיות לארכיון.',
-    'leftoverClearApprove': 'נקה שאריות',
+        'ב־{view} / {section} נשארו משימות פתוחות. חובה לאשר לפני שהן מתאפסות.',
+    'leftoverClearApprove': 'אשר',
     'userInputTitle': 'קלט לאוטומציה',
     'userInputForTopic': 'קלט עבור {topic}',
     'userInputCharCount': '{count} / {max}',
@@ -1465,6 +1530,8 @@ class AppStrings {
     'cut': 'גזור',
     'copy': 'העתק',
     'paste': 'הדבק',
+    'more': 'עוד',
+    'info': 'מידע',
     'bold': 'מודגש',
     'italic': 'נטוי',
     'underline': 'קו תחתון',
@@ -1654,14 +1721,23 @@ class AppStrings {
     'summaryTasksReadOnly': 'משימות בסיכום אינן ניתנות לעריכה, רק לסימון.',
     'onceADay': 'פעם ביום',
     'onceAWeek': 'פעם בשבוע',
+    'fewTimesAWeek': 'כמה פעמים בשבוע',
     'onceAMonth': 'פעם בחודש',
+    'fewTimesAMonth': 'כמה פעמים בחודש',
     'onceInMonths': 'פעם בכמה חודשים',
     'onceInMonthsCount': 'כל כמה חודשים',
     'time': 'שעה',
     'chooseDay': 'בחר יום',
+    'chooseDays': 'בחר ימים',
     'weeklyScheduleCaption': 'כל {day}',
+    'weeklyMultiCaption': 'כל {days}',
     'monthlyScheduleCaption': 'יום {day} ה{placement} בכל חודש',
+    'monthlyMultiCaption': '{slots} בכל חודש',
     'everyNMonthsCaption': 'כל {n} חודשים, יום {day} ה{placement}',
+    'everyNMonthsMultiCaption': 'כל {n} חודשים, {slots}',
+    'monthlySlotLabel': 'יום {day} ה{placement}',
+    'listComma': ', ',
+    'listAnd': '{rest} ו{last}',
     'narrowSun': 'א',
     'narrowMon': 'ב',
     'narrowTue': 'ג',

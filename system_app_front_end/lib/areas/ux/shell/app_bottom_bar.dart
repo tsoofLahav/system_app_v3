@@ -30,23 +30,16 @@ abstract final class AppBottomBarMetrics {
   static const floatMargin = 12.0;
   static const scrollInset = 72.0;
 
-  static const phoneSegmentHeight = 38.0;
+  static const phoneSegmentHeight = 42.0;
   static const phoneFloatMargin = 5.0;
   static const phoneFooterStripe = 3.0;
   static const phoneSegmentGap = 14.0;
+  static const phonePeekInset = 7.0;
+  static const phoneVerticalPeek = 4.0;
+  static const phoneOmbreFade = 16.0;
 
-  /// Phone tools row, above the footer stripe — not overlapping it.
+  /// Phone tools row (top or bottom), floating on the ombre.
   static const phoneBarHeight = phoneFloatMargin * 2 + phoneSegmentHeight;
-
-  /// Off-white band under the pills. Zero while the keyboard is up — that
-  /// stripe only holds the home indicator in full screen.
-  static double phoneFooterHeight({
-    required double viewPaddingBottom,
-    required double viewInsetsBottom,
-  }) {
-    if (viewInsetsBottom > 0) return 0;
-    return viewPaddingBottom + phoneFooterStripe;
-  }
 
   static double segmentHeight({required bool phone}) =>
       phone ? phoneSegmentHeight : barHeight;
@@ -61,7 +54,7 @@ abstract final class AppTopicHeaderMetrics {
   static const scrollTopInset = 38.0;
 }
 
-const _iconSize = 22.0;
+const _iconSize = 24.0;
 const _iconTapPadding = 4.0;
 const _segmentPadding = EdgeInsets.symmetric(horizontal: 4);
 
@@ -321,7 +314,7 @@ class PhoneBottomBar extends StatelessWidget {
       ?objectPad,
       _chromeSegment(context, s),
       if (state.isDiagramMode)
-        DiagramTagFilterBar(state: state, tightShadow: true),
+        DiagramTagFilterBar(state: state),
       if (state.isViewMode && viewChrome != null)
         ViewChromeMenu(
           state: state,
@@ -363,9 +356,9 @@ class PhoneBottomBar extends StatelessWidget {
 
   Widget _chromeSegment(BuildContext context, AppStrings s) {
     return GlassBarSegment(
+      style: AppGlassStyle.phoneFloating,
       height: AppBottomBarMetrics.phoneSegmentHeight,
       padding: _segmentPadding,
-      tightShadow: true,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -414,9 +407,9 @@ class PhoneBottomBar extends StatelessWidget {
 
   Widget _archiveConfirmSegment(BuildContext context, AppStrings s) {
     return GlassBarSegment(
+      style: AppGlassStyle.phoneFloating,
       height: AppBottomBarMetrics.phoneSegmentHeight,
       padding: _segmentPadding,
-      tightShadow: true,
       child: TextButton(
         onPressed: () => _confirmArchiveDelete(context),
         child: Text(
@@ -428,25 +421,28 @@ class PhoneBottomBar extends StatelessWidget {
   }
 
   Widget _aiSegment() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (state.canUseAiTools)
-          GlassBarSegment(
-            style: AppGlassStyle.aiAccent,
-            height: AppBottomBarMetrics.phoneSegmentHeight,
-            padding: _segmentPadding,
-            label: 'AI',
-            labelOnBorder: true,
-            tightShadow: true,
-            child: AiToolBar(state: state, compact: true),
+    return GlassBarSegment(
+      style: AppGlassStyle.phoneAi,
+      height: AppBottomBarMetrics.phoneSegmentHeight,
+      padding: _segmentPadding,
+      label: 'AI',
+      labelOnBorder: true,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Opacity(
+            opacity: state.aiRunning ? 0.28 : 1,
+            child: IgnorePointer(
+              ignoring: state.aiRunning,
+              child: state.canUseAiTools
+                  ? AiToolBar(state: state, compact: true)
+                  : const SizedBox(width: 88),
+            ),
           ),
-        if (state.aiRunning) ...[
-          if (state.canUseAiTools)
-            const SizedBox(width: AppBottomBarMetrics.phoneSegmentGap),
-          AiRunningStatus(state: state),
+          if (state.aiRunning)
+            AiRunningStatus(state: state, overlay: true),
         ],
-      ],
+      ),
     );
   }
 
@@ -457,9 +453,9 @@ class PhoneBottomBar extends StatelessWidget {
     final enter = editor.canEnterObject?.call() ?? false;
     if (!leave && !enter) return null;
     return GlassBarSegment(
+      style: AppGlassStyle.phoneFloating,
       height: AppBottomBarMetrics.phoneSegmentHeight,
       padding: _segmentPadding,
-      tightShadow: true,
       child: ObjectArrowPad(
         leftTooltip: s['objectArrowLeft'],
         downTooltip: s['objectArrowDown'],
@@ -613,9 +609,10 @@ class _BarIconButton extends StatelessWidget {
         icon,
         size: _iconSize,
         textDirection: textDirection,
+        weight: isPhoneLayout ? AppIcon.phoneBarWeight : 200,
         color: active
-            ? AppColors.primary.withValues(alpha: 0.88)
-            : AppColors.text.withValues(alpha: 0.72),
+            ? AppColors.primary.withValues(alpha: 0.96)
+            : AppColors.text.withValues(alpha: isPhoneLayout ? 1 : 0.9),
       ),
     );
   }

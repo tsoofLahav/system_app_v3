@@ -9,6 +9,8 @@ library;
 
 import 'package:flutter/rendering.dart';
 
+import '../../model/line_range.dart';
+
 /// Hit slop around glyph ink so a tap on a letter in a tall cell stays Flutter.
 const double _kEmptySpaceGlyphSlop = 4;
 
@@ -209,4 +211,29 @@ double _horizontalGap(double dx, Rect box) {
   if (dx < box.left) return box.left - dx;
   if (dx > box.right) return dx - box.right;
   return 0;
+}
+
+/// Phone object-field word mark: BiDi-aware hit, then Unicode word bounds.
+///
+/// Flutter's `getPositionForPoint` + `getWordBoundary` jump to the
+/// English/number run in a Hebrew paragraph. Super Editor already uses this
+/// geometry; object fields must too.
+TextSelection? phoneObjectWordMarkFromBoxes({
+  required List<Rect> boxes,
+  required Offset local,
+  required String text,
+  required int Function(Offset probe) offsetAt,
+}) {
+  if (text.isEmpty) return null;
+  final offset = bidiAwareOffsetFromBoxes(
+    boxes: boxes,
+    local: local,
+    textLength: text.length,
+    paddingGoesToLineEnd: false,
+    offsetAt: offsetAt,
+    logicalLineEndAt: (_) => text.length,
+  );
+  if (offset == null) return null;
+  final next = wordSelectionAround(text, offset);
+  return next.isCollapsed ? null : next;
 }

@@ -31,6 +31,45 @@ void main() {
     expect(text.substring(clipped.start, clipped.end), 'one\ntwo');
   });
 
+  test('wordSelectionAround marks Hebrew and English words', () {
+    expect(
+      'hello world'.substring(
+        wordSelectionAround('hello world', 1).start,
+        wordSelectionAround('hello world', 1).end,
+      ),
+      'hello',
+    );
+    const hebrew = 'בדיקת איכות עכשיו';
+    final mark = wordSelectionAround(hebrew, 8);
+    expect(hebrew.substring(mark.start, mark.end), 'איכות');
+  });
+
+  test('wordSelectionAround keeps mixed Hebrew, English, and numbers apart', () {
+    const mixed = 'אני Flutter 3 היום';
+    expect(mixed.substring(0, 3), 'אני');
+    expect(
+      mixed.substring(
+        wordSelectionAround(mixed, 1).start,
+        wordSelectionAround(mixed, 1).end,
+      ),
+      'אני',
+    );
+    expect(
+      mixed.substring(
+        wordSelectionAround(mixed, 6).start,
+        wordSelectionAround(mixed, 6).end,
+      ),
+      'Flutter',
+    );
+    expect(
+      mixed.substring(
+        wordSelectionAround(mixed, 12).start,
+        wordSelectionAround(mixed, 12).end,
+      ),
+      '3',
+    );
+  });
+
   test('embed caret correction skips the second tap of a double-click', () {
     expect(
       shouldApplyEmbedCaretForTap(

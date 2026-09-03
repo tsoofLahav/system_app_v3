@@ -7,7 +7,7 @@ import './app_typography.dart';
 
 ThemeData buildAppTheme(
   AppLanguage language, {
-  DocumentTextSize documentTextSize = DocumentTextSize.small,
+  DocumentTextSize documentTextSize = DocumentTextSize.pt12_5,
 }) {
   AppTypography.configure(
     appLanguage: language,

@@ -18,7 +18,7 @@ Row in `automations` (migration [`011_ai_actions_split.sql`](../../migrations/01
 | `scope` | `{"kind": "all"}` / `{"kind": "topic", "topic_id"}` / `{"kind": "topic_type", "topic_type_id"}`. One-release fallback still reads `"tag": "process"`. Legacy `{topic_ids, file_ids}` still resolves. Template topics (`is_template`) are never in scope. |
 | `trigger` | `{"type": "schedule"}` today. Event types are stored but not dispatched. |
 | `steps` | `[{ "kind": …, …params }]` — the work, in order |
-| `schedule` | `daily HH:MM`, `weekly DAY HH:MM`, `monthly PLACEMENT DAY HH:MM`, or `monthly N PLACEMENT DAY HH:MM` (every N months, 2–12). Legacy `quarterly N …` still parses. |
+| `schedule` | `daily HH:MM`, `weekly DAY HH:MM`, `weekly DAY,DAY HH:MM` (a few times a week), `monthly PLACEMENT DAY HH:MM`, `monthly PLACEMENT.DAY[,…] HH:MM` (a few times a month), or `monthly N PLACEMENT DAY HH:MM from YYYY-MM` (every N months, 2–12, counted from that month). Legacy `monthly N …` without `from`, and `quarterly N …`, still parse. |
 | `timezone` | Always `Asia/Jerusalem` for this app. The DSL clock (`daily 08:00`) is Israel wall time; `next_run_at` is stored UTC. Legacy rows that still say `UTC` are rewritten to Jerusalem and re-armed on the next cron tick. |
 | `enabled` | Disabled automations never fire automatically |
 | `last_run_at`, `next_run_at` | Scheduling bookkeeping |
@@ -93,7 +93,7 @@ File and task mutations used by the actions live next to their HTTP routes: [`ar
 - `plan_tick` compares naive UTC. Postgres may return `next_run_at` timezone-aware; strip that before comparing, or the cron dies. The same strip (`as_utc_naive`) applies to `window_opened_at` / `window_closes_at` — listing automations calls `window_is_open`, so a mixed-aware compare 500s the whole list.
 - Cron prints one line per automation every minute (`skip` / `arm` / `run`) to stdout, so Render logs show the decision. `logger.info` alone is silent there.
 - The cron process must have `OPENAI_API_KEY` as an **environment variable** on that Cron Job (Secret Files are not `os.environ`). Each tick logs `openai_key=yes/no` and the `OPENAI*` env names, never the secret.
-- Never send a cron line; the parser only reads the DSL above (`daily` / `weekly` / `monthly`, including `monthly N` for every N months).
+- Never send a cron line; the parser only reads the DSL above (`daily` / `weekly` / `monthly`, including several weekdays, several monthly slots, and `monthly N … from YYYY-MM` for every N months).
 - Automations must respect `scope` the same way agent tools do (`file_allowed` after resolve).
 - An `ai` step's `apply_mode` is its own. `review` produces proposals; it must not write files directly.
 

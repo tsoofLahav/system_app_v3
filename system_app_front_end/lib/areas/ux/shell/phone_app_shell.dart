@@ -3,8 +3,6 @@ import 'package:flutter/services.dart';
 
 import '../../../core/app_state.dart';
 import '../../ui/app_colors.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/app_typography.dart';
 import '../archive/archive_topic_view.dart';
 import '../bring_file/bring_file_picker_dialog.dart';
 import '../create_topic/add_file_dialog.dart';
@@ -16,6 +14,10 @@ import '../topic/topic_view.dart';
 import '../topic_types/type_template_edit_bar.dart';
 import '../widgets/main_pane_loader.dart';
 import './app_bottom_bar.dart';
+import './phone_edge_ombre.dart';
+import './phone_top_bar.dart';
+import '../../files/editor/document_editor_controller.dart';
+import '../../files/rich_text/block_text_focus.dart';
 
 class PhoneAppShell extends StatefulWidget {
   const PhoneAppShell({super.key, required this.state});
@@ -92,20 +94,26 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
             ? null
             : TopicAppearance.accentFor(canvasTopic);
         final isMain = canvasTopic?.isMain ?? true;
-        final footerHeight = AppBottomBarMetrics.phoneFooterHeight(
-          viewPaddingBottom: MediaQuery.viewPaddingOf(context).bottom,
-          viewInsetsBottom: MediaQuery.viewInsetsOf(context).bottom,
+        final edge = AppColors.phoneEdgeColor(
+          topicAccent: accent,
+          isMainTopic: isMain,
+          neutral: state.isViewMode || state.isDiagramMode,
         );
+        final padding = MediaQuery.paddingOf(context);
+        final topFadeStart = padding.top + AppBottomBarMetrics.phoneBarHeight;
+        final bottomFadeStart =
+            padding.bottom + AppBottomBarMetrics.phoneBarHeight;
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: const SystemUiOverlayStyle(
             statusBarColor: Colors.transparent,
             statusBarIconBrightness: Brightness.dark,
-            systemNavigationBarColor: AppColors.phoneStripe,
+            systemNavigationBarColor: AppColors.phoneCanvas,
             systemNavigationBarIconBrightness: Brightness.dark,
           ),
           child: Scaffold(
             key: _scaffoldKey,
-            backgroundColor: AppColors.phoneStripe,
+            backgroundColor: AppColors.phoneCanvas,
+            resizeToAvoidBottomInset: true,
             drawer: Drawer(
               width:
                   (MediaQuery.sizeOf(context).width *
@@ -114,115 +122,118 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
               backgroundColor: Colors.transparent,
               child: AppSidebar(state: state, isPhone: true),
             ),
-            appBar: AppBar(
-              backgroundColor: Colors.transparent,
-              foregroundColor: AppColors.text,
-              surfaceTintColor: Colors.transparent,
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              flexibleSpace: DecoratedBox(
-                decoration: AppColors.phoneHeaderDecoration(
-                  topicAccent: accent,
-                  isMainTopic: isMain,
-                  neutral: state.isViewMode || state.isDiagramMode,
-                ),
-                child: const SizedBox.expand(),
-              ),
-              title: Text(
-                _title(),
-                style: AppTypography.noteTitleStyle.copyWith(fontSize: 16),
-                overflow: TextOverflow.ellipsis,
-              ),
-              leading: IconButton(
-                icon: const AppIcon(AppIcons.menu, size: 22),
-                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-              ),
-              actions: [
-                if (_showBringFile)
-                  IconButton(
-                    tooltip: state.strings['bringFile'],
-                    icon: const AppIcon(AppIcons.bringFile, size: 22),
-                    onPressed: () => _bringFile(context),
-                  ),
-                if (_showAddFile)
-                  IconButton(
-                    tooltip: state.strings['addFile'],
-                    icon: const AppIcon(AppIcons.add, size: 22),
-                    onPressed: () => _addFile(context),
-                  ),
-              ],
-            ),
-            body: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            body: Stack(
+              fit: StackFit.expand,
               children: [
-                Expanded(
-                  child: ColoredBox(
-                    color: AppColors.phoneCanvas,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Positioned.fill(
-                          child: !state.appReady
-                              ? const MainPaneLoader()
-                              : AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 200),
-                                  child: state.isDiagramMode
-                                      ? ObjectDiagramPane(
-                                          key: const ValueKey('diagram'),
-                                          state: state,
-                                        )
-                                      : state.isArchiveMode
-                                      ? ArchiveTopicView(
-                                          key: ValueKey(
-                                            'archive-${state.selectedArchiveTopic?.id}',
-                                          ),
-                                          state: state,
-                                        )
-                                      : state.isViewMode && state.viewPaneReady
-                                      ? TaskViewPane(
-                                          key: ValueKey(
-                                            'view-${state.selectedViewType}',
-                                          ),
-                                          state: state,
-                                        )
-                                      : topicView!,
-                                ),
+                Positioned.fill(
+                  child: !state.appReady
+                      ? const MainPaneLoader()
+                      : AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          child: state.isDiagramMode
+                              ? ObjectDiagramPane(
+                                  key: const ValueKey('diagram'),
+                                  state: state,
+                                )
+                              : state.isArchiveMode
+                              ? ArchiveTopicView(
+                                  key: ValueKey(
+                                    'archive-${state.selectedArchiveTopic?.id}',
+                                  ),
+                                  state: state,
+                                )
+                              : state.isViewMode && state.viewPaneReady
+                              ? TaskViewPane(
+                                  key: ValueKey(
+                                    'view-${state.selectedViewType}',
+                                  ),
+                                  state: state,
+                                )
+                              : topicView!,
                         ),
-                        if (state.isViewMode && state.loading)
-                          const Positioned(
-                            left: 0,
-                            right: 0,
-                            top: 0,
-                            child: LinearProgressIndicator(
-                              minHeight: 2,
-                              backgroundColor: Colors.transparent,
-                            ),
-                          ),
-                        if (state.isEditingTypeTemplate)
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: AppBottomBarMetrics.phoneBarHeight,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [TypeTemplateEditBar(state: state)],
-                            ),
-                          ),
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          child: PhoneBottomBar(state: state),
-                        ),
-                      ],
+                ),
+                if (state.isViewMode && state.loading)
+                  const Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    child: LinearProgressIndicator(
+                      minHeight: 2,
+                      backgroundColor: Colors.transparent,
                     ),
                   ),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: PhoneEdgeOmbre(atTop: true, edge: edge),
                 ),
-                if (footerHeight > 0)
-                  SizedBox(
-                    height: footerHeight,
-                    child: const ColoredBox(color: AppColors.phoneStripe),
+                Positioned(
+                  top: topFadeStart,
+                  left: 0,
+                  right: 0,
+                  height: AppBottomBarMetrics.phoneOmbreFade,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapDown: (_) {
+                      if (BlockTextFocusRegistry.isInMenuSession) return;
+                      DocumentEditorRegistry.dismissLiveMarkOnOutsideTap();
+                      FocusManager.instance.primaryFocus?.unfocus();
+                    },
                   ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: PhoneEdgeOmbre(atTop: false, edge: edge),
+                ),
+                Positioned(
+                  bottom: bottomFadeStart,
+                  left: 0,
+                  right: 0,
+                  height: AppBottomBarMetrics.phoneOmbreFade,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapDown: (_) {
+                      if (BlockTextFocusRegistry.isInMenuSession) return;
+                      DocumentEditorRegistry.dismissLiveMarkOnOutsideTap();
+                      FocusManager.instance.primaryFocus?.unfocus();
+                    },
+                  ),
+                ),
+                Positioned(
+                  top: padding.top + AppBottomBarMetrics.phoneFloatMargin,
+                  left: 0,
+                  right: 0,
+                  child: PhoneTopBar(
+                    state: state,
+                    title: _title(),
+                    onOpenMenu: () =>
+                        _scaffoldKey.currentState?.openDrawer(),
+                    showAddFile: _showAddFile,
+                    showBringFile: _showBringFile,
+                    onAddFile: () => _addFile(context),
+                    onBringFile: () => _bringFile(context),
+                  ),
+                ),
+                if (state.isEditingTypeTemplate)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom:
+                        padding.bottom + AppBottomBarMetrics.phoneBarHeight,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [TypeTemplateEditBar(state: state)],
+                    ),
+                  ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: padding.bottom,
+                  child: PhoneBottomBar(state: state),
+                ),
               ],
             ),
           ),

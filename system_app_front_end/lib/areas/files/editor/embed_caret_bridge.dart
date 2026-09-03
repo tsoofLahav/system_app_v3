@@ -190,12 +190,11 @@ class EmbedCaretPlugin extends SuperEditorPlugin {
   @override
   List<SuperEditorKeyboardAction> get keyboardActions => [_onEnter];
 
-  /// Halts SE double-tap word-select while an embed owns the caret, and on
-  /// chrome / non-text hits of an object block — otherwise SE tries to select
-  /// the embed node, we clear via
+  /// Halts SE double-tap word-select on an object block (not on body text) —
+  /// otherwise SE tries to select the embed node, we clear via
   /// [DocumentCaretSession.suppressDocumentSelectionWhileEmbedOwns], then
   /// Super Editor null-checks `selectionNotifier.value!` and crashes. Inner
-  /// fields keep Flutter word-select.
+  /// fields keep Flutter word-select. A tap on a paragraph leaves the object.
   @override
   List<ContentTapDelegate> get contentTapHandlers => [_tapDelegate];
 
@@ -339,12 +338,11 @@ class _EmbedAwareTapDelegate extends ContentTapDelegate {
 
   @override
   TapHandlingInstruction onDoubleTap(DocumentTapDetails details) {
-    if (caretSession.owner == DocumentCaretOwner.embed) {
-      return TapHandlingInstruction.halt;
-    }
     final pos = details.documentLayout.getDocumentPositionNearestToOffset(
       details.layoutOffset,
     );
+    // Halt only on the object block itself (SE word-select of an embed
+    // crashes). A double-tap on body text must be able to leave the object.
     if (pos != null && caretSession.isObjectEmbed(pos.nodeId)) {
       return TapHandlingInstruction.halt;
     }

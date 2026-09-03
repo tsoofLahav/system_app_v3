@@ -26,6 +26,7 @@ rtl/
   super_editor_bidi_caret.dart ← SE tap/drag: same padding + gap geometry
   super_editor_text_direction.dart  ← SE empty → ambient direction
   super_editor_visual_caret.dart    ← SE visual ←/→ + selectors
+  ios_visual_handles.dart           ← iOS handles: upstream/downstream + tight wash
 ```
 
 ### 1. Base direction — `paragraph_text_direction.dart`
@@ -76,7 +77,7 @@ Desktop Flutter paints selection with `BoxWidthStyle.max` (full paragraph width 
 - [ ] `textDirection: resolveFieldTextDirection(text, ambient)`
 - [ ] `textAlign: TextAlign.start` (follows direction)
 - [ ] `wrapVisualCaretMotion(...)` always (identity actions when LTR)
-- [ ] Primary pointer down stores global position; `onTap` calls `embedCaretForTap` **only on a collapsed single click** (not drag / mark / Shift+click / double-tap). Drags and Shift+click use `bidiAwareOffsetForEditable` (nearer visual edge / nearest run) so a number in Hebrew does not steal the mark.
+- [ ] Primary pointer down stores global position; `onTap` calls `embedCaretForTap` **only on a collapsed single click** (not drag / mark / Shift+click / double-tap). Drags and Shift+click use `bidiAwareOffsetForEditable` (nearer visual edge / nearest run) so a number in Hebrew does not steal the mark. Phone long-press / double-tap word marks use the same geometry plus `wordSelectionAround` — not Flutter’s `getWordBoundary`.
 - [ ] `selectionWidthStyle: BoxWidthStyle.tight` (desktop default `max` fills the line to the left in Hebrew)
 - [ ] `strutStyle: AppTypography.fieldStrut` so color-emoji fallbacks do not shift lines without emoji
 - [ ] Double/triple-click drops a trailing `\n`; Shift+arrows do not (that newline is how the mark steps to the next line)
@@ -96,6 +97,8 @@ The file body is Super Editor, not `FormattedTextField`. Same direction rules ap
 | Visual ←/→ | [`SuperEditorVisualCaretPlugin`](super_editor_visual_caret.dart) + `withVisualHorizontalSelectors` — same flip idea as `rtl_caret_motion.dart` (character/word; not Cmd+line / Home / End) |
 | Tap / mark vs numbers in Hebrew | [`SuperEditorBidiCaretTapHandler`](super_editor_bidi_caret.dart) after the link handler: padding → logical end on a tap; nearer visual edge / nearest glyph run when marking. Desktop drag uses the same geometry from `SuperDocumentEditor`. |
 | Selection wash | SE’s beneath-layer highlight is unreliable for RTL/Hebrew → [`selection_background_phase.dart`](../../editor/selection_background_phase.dart) also paints `BackgroundColorAttribution` on the selected span |
+| iOS handles | [`ios_visual_handles.dart`](ios_visual_handles.dart) — upstream = logical start (top ball), downstream = logical end (bottom ball). Stems snap to the **tight** wash box nearest that document position (Hebrew: upstream on the right of the word). Super Editor’s one-character expansion is fallback only. |
+| Phone mark | Handles only for enlarging. Double-tap / long-press start a word mark on the file body **and** object fields (object fields: BiDi-aware offset + Unicode word, same as a number-in-Hebrew caret). Double-tap on an empty / collapsed caret still opens the Cut/Copy/Paste bar. Body drag does not mark, so a swipe scrolls the file or changes page. Phone double-tap does not open a connected info (Info is on the mark bar). A tap on Super Editor body text leaves an open object (enter/leave pill is not the only exit). |
 
 Embed fields (table cells, info, …) still use `FormattedTextField` + the three pieces above.
 
@@ -113,11 +116,13 @@ Embed fields (table cells, info, …) still use `FormattedTextField` + the three
 flutter test \
   test/files/rtl_paragraph_text_direction_test.dart \
   test/files/rtl_empty_space_caret_test.dart \
+  test/files/phone_mark_toolbar_test.dart \
   test/files/line_range_selection_test.dart \
   test/files/rtl_super_editor_direction_test.dart \
   test/files/document_text_flow_test.dart \
   test/files/table_grid_nav_test.dart \
   test/files/table_cell_session_test.dart \
+  test/files/ios_visual_handles_test.dart \
   test/ux/object_arrow_pad_test.dart
 ```
 

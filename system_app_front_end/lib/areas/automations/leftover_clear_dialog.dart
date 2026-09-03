@@ -33,6 +33,7 @@ Future<void> showLeftoverClearDialog({
 
   final approved = await showAppDialog<bool>(
     context: context,
+    useBottomSheet: false,
     isDismissible: false,
     builder: (ctx) => AppAdaptiveDialogShell(
       title: Text(s['leftoverClearTitle']),

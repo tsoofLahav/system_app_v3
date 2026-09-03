@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/app_strings.dart';
+import '../../../core/platform/app_form_factor.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/color_dialog.dart';
 import '../../ux/widgets/app_context_menu.dart';
 import '../editor/document_secondary_tap.dart';
+import '../editor/editor_key_handoff.dart';
 import '../editor/embeds/image_display_size.dart';
 import './block_text_focus.dart';
 
@@ -163,12 +165,22 @@ class DocumentContextMenu {
     AppContextMenu.dismissActive();
     final session = BlockTextFocusRegistry.openMenuSession();
     try {
-      final value = await AppContextMenu.show(
-        context: context,
-        globalPosition: globalPosition,
-        entries: entries,
-        isRtl: strings.isRtl,
-      );
+      if (isPhoneLayout) {
+        await whenKeyboardIdle();
+      }
+      if (!context.mounted) return;
+      final value = isPhoneLayout
+          ? await AppContextMenu.showModal(
+              context: context,
+              entries: entries,
+              isRtl: strings.isRtl,
+            )
+          : await AppContextMenu.show(
+              context: context,
+              globalPosition: globalPosition,
+              entries: entries,
+              isRtl: strings.isRtl,
+            );
       // Keep the mark frozen while the colour dialog is open.
       if (value == 'text:color:pick' && context.mounted) {
         final hex = await showAppColorDialog(

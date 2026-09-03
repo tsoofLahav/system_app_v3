@@ -7,6 +7,7 @@
 /// - [rtlCaretMotionActions] / [wrapVisualCaretMotion] — visual arrow keys (embeds; flip RTL runs only)
 /// - [emptySpaceCaretOffset] / [embedCaretForTap] / [bidiAwareOffsetFromBoxes] — padding, BiDi gaps, marking
 /// - [ambientAwareTextBuilders] / [SuperEditorVisualCaretPlugin] / [SuperEditorBidiCaretTapHandler] — Super Editor
+/// - [visualIosExpandedHandleLayout] — iOS handles: upstream/downstream identity, tight wash snap
 ///
 /// Wire caret/direction helpers through [FormattedTextField] (embeds) and
 /// Super Editor builders/plugins — see [RTL.md]. Do not reinvent caret math in
@@ -20,6 +21,7 @@ import './rtl_caret_motion.dart';
 
 export './empty_space_caret.dart';
 export './embed_caret_hit.dart';
+export './ios_visual_handles.dart';
 export './paragraph_text_direction.dart';
 export './rtl_caret_motion.dart';
 export './super_editor_bidi_caret.dart';

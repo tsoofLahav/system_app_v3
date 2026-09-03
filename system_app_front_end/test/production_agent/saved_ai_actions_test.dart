@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/automations/automation.dart';
 import 'package:system_app_front_end/areas/automations/schedule_format.dart';
+import 'package:system_app_front_end/core/l10n/app_strings.dart';
 import 'package:system_app_front_end/areas/production_agent/agent_run_defaults.dart';
 import 'package:system_app_front_end/areas/production_agent/ai_action.dart';
 import 'package:system_app_front_end/areas/production_agent/ai_action_bar.dart';
@@ -163,11 +164,11 @@ void main() {
   group('schedule strings the backend can read', () {
     test('daily weekly monthly round-trip', () {
       expect(
-        const AutomationSchedule(kind: 'daily', time: '8:05').toDsl(),
+        AutomationSchedule(kind: 'daily', time: '8:05').toDsl(),
         'daily 08:05',
       );
       expect(
-        const AutomationSchedule(
+        AutomationSchedule(
           kind: 'weekly',
           weekday: 'sun',
           time: '06:00',
@@ -175,7 +176,7 @@ void main() {
         'weekly sun 06:00',
       );
       expect(
-        const AutomationSchedule(
+        AutomationSchedule(
           kind: 'monthly',
           placement: 'last',
           weekday: 'fri',
@@ -184,14 +185,15 @@ void main() {
         'monthly last fri 18:00',
       );
       expect(
-        const AutomationSchedule(
+        AutomationSchedule(
           kind: AutomationSchedule.everyNMonths,
           monthInterval: 3,
           placement: 'last',
           weekday: 'fri',
           time: '18:00',
+          cycleFrom: DateTime(2026, 8),
         ).toDsl(),
-        'monthly 3 last fri 18:00',
+        'monthly 3 last fri 18:00 from 2026-08',
       );
     });
 
@@ -209,21 +211,35 @@ void main() {
     });
 
     test('every N months is monthly with an interval', () {
-      final parsed = AutomationSchedule.parse('monthly 3 last fri 18:00');
+      final parsed = AutomationSchedule.parse(
+        'monthly 3 last fri 18:00 from 2026-08',
+      );
       expect(parsed.kind, AutomationSchedule.everyNMonths);
       expect(parsed.monthInterval, 3);
       expect(parsed.placement, 'last');
       expect(parsed.weekday, 'fri');
-      expect(parsed.toDsl(), 'monthly 3 last fri 18:00');
+      expect(parsed.cycleFrom, DateTime(2026, 8));
+      expect(parsed.toDsl(), 'monthly 3 last fri 18:00 from 2026-08');
 
       final quarterly = AutomationSchedule.parse('quarterly 3 first mon 08:00');
       expect(quarterly.kind, AutomationSchedule.everyNMonths);
       expect(quarterly.monthInterval, 3);
-      expect(quarterly.toDsl(), 'monthly 3 first mon 08:00');
+      expect(quarterly.toDsl(), startsWith('monthly 3 first mon 08:00 from '));
+    });
+
+    test('a few weekdays and monthly slots round-trip', () {
+      expect(
+        AutomationSchedule.parse('weekly mon,thu 09:00').toDsl(),
+        'weekly mon,thu 09:00',
+      );
+      expect(
+        AutomationSchedule.parse('monthly first.fri,third.mon 09:00').toDsl(),
+        'monthly first.fri,third.mon 09:00',
+      );
     });
 
     test('a calendar tap infers weekday and monthly placement', () {
-      const weekly = AutomationSchedule(kind: 'weekly');
+      final weekly = AutomationSchedule(kind: 'weekly');
       expect(
         weekly.applyingDate(DateTime(2026, 8, 18)).weekday,
         'tue',
@@ -258,13 +274,57 @@ void main() {
         'last',
       );
 
-      final monthly = const AutomationSchedule(kind: 'monthly')
+      final monthly = AutomationSchedule(kind: 'monthly')
           .applyingDate(DateTime(2026, 8, 30));
       expect(monthly.weekday, 'sun');
       expect(monthly.placement, 'last');
       expect(monthly.marksDate(DateTime(2026, 8, 30)), isTrue);
       expect(monthly.marksDate(DateTime(2026, 8, 23)), isFalse);
       expect(monthly.marksDate(DateTime(2026, 9, 27)), isTrue);
+    });
+
+    test('every N months only marks the cycle months', () {
+      final everyN = AutomationSchedule.parse(
+        'monthly 3 last fri 18:00 from 2026-08',
+      );
+      expect(everyN.marksDate(DateTime(2026, 8, 28)), isTrue);
+      expect(everyN.marksDate(DateTime(2026, 9, 25)), isFalse);
+      expect(everyN.marksDate(DateTime(2026, 11, 27)), isTrue);
+    });
+
+    test('a few times a week toggles weekdays on the calendar', () {
+      var schedule = AutomationSchedule(
+        kind: AutomationSchedule.weekly,
+        weekday: 'tue',
+        allowMultiple: true,
+      );
+      schedule = schedule.applyingDate(DateTime(2026, 8, 20));
+      expect(schedule.selectedWeekdays, ['tue', 'thu']);
+      expect(schedule.marksDate(DateTime(2026, 8, 18)), isTrue);
+      expect(schedule.marksDate(DateTime(2026, 8, 20)), isTrue);
+      expect(schedule.marksDate(DateTime(2026, 8, 21)), isFalse);
+      schedule = schedule.applyingDate(DateTime(2026, 8, 18));
+      expect(schedule.selectedWeekdays, ['thu']);
+    });
+
+    test('a few times a month toggles first and last slots', () {
+      var schedule = AutomationSchedule(
+        kind: AutomationSchedule.monthly,
+        monthSlots: const [],
+        allowMultiple: true,
+      ).applyingDate(DateTime(2026, 8, 7));
+      schedule = schedule.applyingDate(DateTime(2026, 8, 30));
+      expect(schedule.monthSlots, [
+        const ScheduleMonthSlot(placement: 'first', weekday: 'fri'),
+        const ScheduleMonthSlot(placement: 'last', weekday: 'sun'),
+      ]);
+      expect(schedule.marksDate(DateTime(2026, 8, 7)), isTrue);
+      expect(schedule.marksDate(DateTime(2026, 8, 30)), isTrue);
+      expect(schedule.marksDate(DateTime(2026, 8, 14)), isFalse);
+      expect(
+        schedule.whenCaption(AppStrings.en),
+        'The first Friday and the last Sunday of each month',
+      );
     });
   });
 

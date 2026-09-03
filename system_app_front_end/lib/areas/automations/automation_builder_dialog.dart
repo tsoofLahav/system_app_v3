@@ -751,24 +751,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     _replaceStep(index, popped.step);
   }
 
-  String _whenCaption() {
-    final schedule = _lockedSchedule;
-    final dayKey = AutomationSchedule.weekdayKeys[schedule.weekday]!;
-    if (schedule.kind == AutomationSchedule.weekly) {
-      return s.weeklyScheduleCaption(dayKey);
-    }
-    if (schedule.isEveryNMonths) {
-      return s.everyNMonthsCaption(
-        schedule.uiMonthInterval,
-        schedule.placement,
-        dayKey,
-      );
-    }
-    if (schedule.kind == AutomationSchedule.monthly) {
-      return s.monthlyScheduleCaption(schedule.placement, dayKey);
-    }
-    return '';
-  }
+  String _whenCaption() => _lockedSchedule.whenCaption(s);
 
   @override
   Widget build(BuildContext context) {
@@ -1032,7 +1015,9 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
       children: [
         Expanded(
           child: AppCompactCalendar(
-            title: s['chooseDay'],
+            title: schedule.selectsMultipleDays
+                ? s['chooseDays']
+                : s['chooseDay'],
             weekdayLabels: s.narrowWeekdaysSundayFirst,
             formatMonth: s.monthYear,
             isMarked: schedule.marksDate,

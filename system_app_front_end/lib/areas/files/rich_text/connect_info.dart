@@ -82,6 +82,25 @@ bool objectHasRelatedTo(ObjectEmbed embed, int targetId) {
   });
 }
 
+/// Pieces of `[linkStart, linkEnd)` that stay connected after cutting
+/// `[markStart, markEnd)` out. Empty means the whole link goes.
+List<({int start, int end})> descriptionLinkRemainders({
+  required int linkStart,
+  required int linkEnd,
+  required int markStart,
+  required int markEnd,
+}) {
+  final cutStart = markStart < markEnd ? markStart : markEnd;
+  final cutEnd = markStart < markEnd ? markEnd : markStart;
+  if (cutEnd <= linkStart || cutStart >= linkEnd) {
+    return [(start: linkStart, end: linkEnd)];
+  }
+  return [
+    if (linkStart < cutStart) (start: linkStart, end: cutStart),
+    if (cutEnd < linkEnd) (start: cutEnd, end: linkEnd),
+  ];
+}
+
 /// The description span under the current mark (or caret line).
 DescriptionTextRange? descriptionRangeCoveringMark(
   List<DescriptionTextRange> ranges,
@@ -89,8 +108,19 @@ DescriptionTextRange? descriptionRangeCoveringMark(
   if (ranges.isEmpty) return null;
   final span = BlockTextFocusRegistry.resolveMark().first;
   if (span == null) return null;
-  final start = span.safeStart;
-  final end = span.safeEnd;
+  return descriptionRangeCoveringOffsets(
+    ranges,
+    start: span.safeStart,
+    end: span.safeEnd,
+  );
+}
+
+/// The description span that overlaps `[start, end)` (caret when they match).
+DescriptionTextRange? descriptionRangeCoveringOffsets(
+  List<DescriptionTextRange> ranges, {
+  required int start,
+  required int end,
+}) {
   for (final range in ranges) {
     if (range.end <= range.start) continue;
     final overlaps = start < range.end && end > range.start;
@@ -105,9 +135,17 @@ Future<void> disconnectInfoAtMark({
   required AppState state,
   required List<DescriptionTextRange> ranges,
 }) async {
-  final hit = descriptionRangeCoveringMark(ranges);
-  if (hit == null) return;
-  await state.removeDescriptionLink(hit.link);
+  final span = BlockTextFocusRegistry.resolveMark().first;
+  if (span == null) return;
+  await _clearDescriptionOnRange(
+    state: state,
+    ranges: ranges,
+    markStart: span.safeStart,
+    markEnd: span.safeEnd,
+    anchorTemplate: {
+      if (span.segmentId != null) 'segment_id': span.segmentId,
+    },
+  );
 }
 
 Future<void> connectInfoFromMark({
@@ -134,10 +172,19 @@ Future<void> connectInfoFromMark({
   );
   if (pick == null) return;
 
-  await state.createDescriptionLink(
-    hostObjectId: host.id,
-    targetObjectId: pick.objectId,
+  final ranges = descriptionRangesForSegment(
+    state: state,
+    fileId: host.fileId,
+    segmentId: '${anchor['segment_id'] ?? ''}',
+  );
+  await _applyInfoPick(
+    state: state,
+    pick: pick,
+    ranges: ranges,
+    markStart: anchor['start'] as int,
+    markEnd: anchor['end'] as int,
     anchor: anchor,
+    hostObjectId: host.id,
   );
 }
 
@@ -165,11 +212,116 @@ Future<void> connectInfoFromTask({
   );
   if (pick == null) return;
 
-  await state.createTaskDescriptionLink(
+  final task = state.tasksById[taskId];
+  final ranges = descriptionRangesFromLinks(task?.descriptionLinks ?? const []);
+  await _applyInfoPick(
+    state: state,
+    pick: pick,
+    ranges: ranges,
+    markStart: anchor['start'] as int,
+    markEnd: anchor['end'] as int,
+    anchor: anchor,
     taskId: taskId,
-    targetObjectId: pick.objectId,
+  );
+}
+
+Future<void> _applyInfoPick({
+  required AppState state,
+  required InfoConnectionPick pick,
+  required List<DescriptionTextRange> ranges,
+  required int markStart,
+  required int markEnd,
+  required Map<String, dynamic> anchor,
+  int? hostObjectId,
+  int? taskId,
+}) async {
+  await _clearDescriptionOnRange(
+    state: state,
+    ranges: ranges,
+    markStart: markStart,
+    markEnd: markEnd,
+    anchorTemplate: anchor,
+    hostObjectId: hostObjectId,
+    taskId: taskId,
+  );
+  if (pick.clear || pick.objectId == null) return;
+  if (taskId != null) {
+    await state.createTaskDescriptionLink(
+      taskId: taskId,
+      targetObjectId: pick.objectId!,
+      anchor: anchor,
+    );
+    return;
+  }
+  if (hostObjectId == null) return;
+  await state.createDescriptionLink(
+    hostObjectId: hostObjectId,
+    targetObjectId: pick.objectId!,
     anchor: anchor,
   );
+}
+
+Future<void> _clearDescriptionOnRange({
+  required AppState state,
+  required List<DescriptionTextRange> ranges,
+  required int markStart,
+  required int markEnd,
+  required Map<String, dynamic> anchorTemplate,
+  int? hostObjectId,
+  int? taskId,
+}) async {
+  for (final range in ranges) {
+    final remainders = descriptionLinkRemainders(
+      linkStart: range.start,
+      linkEnd: range.end,
+      markStart: markStart,
+      markEnd: markEnd,
+    );
+    if (remainders.length == 1 &&
+        remainders.first.start == range.start &&
+        remainders.first.end == range.end) {
+      continue;
+    }
+    if (remainders.isEmpty) {
+      await state.removeDescriptionLink(range.link);
+      continue;
+    }
+    await state.patchDescriptionLinkAnchor(
+      link: range.link,
+      start: remainders.first.start,
+      end: remainders.first.end,
+    );
+    for (final extra in remainders.skip(1)) {
+      final targetId = descriptionTargetObjectId(range.link);
+      if (targetId == null) continue;
+      final nextAnchor = <String, dynamic>{
+        ...anchorTemplate,
+        if (range.link['anchor'] is Map)
+          ...Map<String, dynamic>.from(range.link['anchor'] as Map),
+        'start': extra.start,
+        'end': extra.end,
+      };
+      final sourceType = '${range.link['source_type'] ?? ''}';
+      final sourceId = _asInt(range.link['source_id']);
+      if (sourceType == 'task' || taskId != null) {
+        final id = taskId ?? sourceId;
+        if (id == null) continue;
+        await state.createTaskDescriptionLink(
+          taskId: id,
+          targetObjectId: targetId,
+          anchor: nextAnchor,
+        );
+      } else {
+        final id = hostObjectId ?? sourceId;
+        if (id == null) continue;
+        await state.createDescriptionLink(
+          hostObjectId: id,
+          targetObjectId: targetId,
+          anchor: nextAnchor,
+        );
+      }
+    }
+  }
 }
 
 Future<void> openDescriptionTarget({

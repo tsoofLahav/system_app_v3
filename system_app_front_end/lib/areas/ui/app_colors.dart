@@ -244,42 +244,47 @@ abstract final class AppColors {
     );
   }
 
-  /// Phone header and footer stripes — warm off-white, not paper-bright.
+  /// Legacy stripe token — phone chrome no longer uses a solid band.
   static const phoneStripe = Color(0xFFF5F3ED);
 
-  /// Phone middle canvas behind the file card — a step darker so the
-  /// stripes read as a different band.
-  static const phoneCanvas = Color(0xFFE4E2DC);
+  /// Phone peek around the file card, and the default ombre edge.
+  /// Brighter and colder than the warm note greys so the file card reads.
+  static const phoneCanvas = Color(0xFFE8E9ED);
 
-  /// How strongly the header ombre picks up the topic at its lower edge.
-  static const phoneHeaderOmbreTint = 0.14;
+  /// How strongly a non-Home topic tints the phone edge ombre.
+  static const phoneEdgeOmbreTint = 0.22;
 
-  /// Header only, and never on Home: off-white above, a light topic wash
-  /// only in the lower third.
-  static LinearGradient phoneHeaderOmbre(Color topicAccent) {
-    final lower = Color.alphaBlend(
-      uiAccent(topicAccent).withValues(alpha: phoneHeaderOmbreTint),
-      phoneStripe,
-    );
-    return LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [phoneStripe, phoneStripe, lower],
-      stops: const [0.0, 0.62, 1.0],
-    );
-  }
-
-  /// Off-white stripe, or the header ombre when a non-Home topic is open.
-  /// Views, the objects map, and Home stay solid ([neutral] or [isMainTopic]).
-  static BoxDecoration phoneHeaderDecoration({
+  /// Solid colour at the screen edge. Grey on Home / views; topic-tinted
+  /// otherwise.
+  static Color phoneEdgeColor({
     required Color? topicAccent,
     required bool isMainTopic,
     bool neutral = false,
   }) {
-    if (neutral || topicAccent == null || isMainTopic) {
-      return const BoxDecoration(color: phoneStripe);
-    }
-    return BoxDecoration(gradient: phoneHeaderOmbre(topicAccent));
+    if (neutral || topicAccent == null || isMainTopic) return phoneCanvas;
+    return Color.alphaBlend(
+      uiAccent(topicAccent).withValues(alpha: phoneEdgeOmbreTint),
+      phoneCanvas,
+    );
+  }
+
+  /// Fade so scrolling text disappears into the chrome. [atTop] is solid at
+  /// the top and clear toward the file; the bottom ombre is the reverse.
+  static LinearGradient phoneEdgeOmbre({
+    required Color edge,
+    required bool atTop,
+  }) {
+    final solid = edge.withValues(alpha: 0.98);
+    final mid = edge.withValues(alpha: 0.86);
+    final clear = edge.withValues(alpha: 0);
+    return LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: atTop ? [solid, mid, clear] : [clear, mid, solid],
+      stops: atTop
+          ? const [0.0, 0.42, 1.0]
+          : const [0.0, 0.58, 1.0],
+    );
   }
 
   /// Faint frame for reusable details blocks (title + body unit).

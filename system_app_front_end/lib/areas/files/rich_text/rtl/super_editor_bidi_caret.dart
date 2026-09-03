@@ -15,6 +15,19 @@ import './empty_space_caret.dart';
 SuperEditorContentTapDelegateFactory superEditorBidiCaretTapHandlerFactory =
     (SuperEditorContext editContext) => SuperEditorBidiCaretTapHandler(editContext);
 
+/// Same as [superEditorBidiCaretTapHandlerFactory], plus a hook when the tap
+/// lands on body text so an open object can hand writing back to Super Editor.
+SuperEditorContentTapDelegateFactory bidiCaretTapHandler({
+  VoidCallback? onBodyTextTap,
+  VoidCallback? onBodyDoubleTap,
+}) {
+  return (SuperEditorContext editContext) => SuperEditorBidiCaretTapHandler(
+    editContext,
+    onBodyTextTap: onBodyTextTap,
+    onBodyDoubleTap: onBodyDoubleTap,
+  );
+}
+
 /// Document position under a pointer, corrected for Hebrew + numbers.
 ///
 /// Returns null when the hit is not a text node (embeds, empty layout) so
@@ -110,9 +123,22 @@ int _lineEndAtLocal({
 }
 
 class SuperEditorBidiCaretTapHandler extends ContentTapDelegate {
-  SuperEditorBidiCaretTapHandler(this.editContext);
+  SuperEditorBidiCaretTapHandler(
+    this.editContext, {
+    this.onBodyTextTap,
+    this.onBodyDoubleTap,
+  });
 
   final SuperEditorContext editContext;
+
+  /// Called before the caret is placed on a [TextNode], so an embed that
+  /// still owns writing can release it. iOS Super Editor returns after a
+  /// [TapHandlingInstruction.halt] without [FocusNode.requestFocus].
+  final VoidCallback? onBodyTextTap;
+
+  /// Phone: double-tap on body text should still open the mark menu when
+  /// there is no word to mark (empty line / caret-only paste).
+  final VoidCallback? onBodyDoubleTap;
 
   @override
   TapHandlingInstruction onTap(DocumentTapDetails details) {
@@ -120,6 +146,20 @@ class SuperEditorBidiCaretTapHandler extends ContentTapDelegate {
       return _place(details, paddingGoesToLineEnd: false, extend: true);
     }
     return _place(details, paddingGoesToLineEnd: true, extend: false);
+  }
+
+  @override
+  TapHandlingInstruction onDoubleTap(DocumentTapDetails details) {
+    final pos = details.documentLayout.getDocumentPositionNearestToOffset(
+      details.layoutOffset,
+    );
+    if (pos != null) {
+      final node = editContext.document.getNodeById(pos.nodeId);
+      if (node is TextNode) {
+        onBodyDoubleTap?.call();
+      }
+    }
+    return TapHandlingInstruction.continueHandling;
   }
 
   /// Desktop mouse drag is not routed through [ContentTapDelegate]. Pan
@@ -143,6 +183,11 @@ class SuperEditorBidiCaretTapHandler extends ContentTapDelegate {
       paddingGoesToLineEnd: paddingGoesToLineEnd,
     );
     if (pos == null) return TapHandlingInstruction.continueHandling;
+    final node = editContext.document.getNodeById(pos.nodeId);
+    if (node is! TextNode) {
+      return TapHandlingInstruction.continueHandling;
+    }
+    onBodyTextTap?.call();
     if (extend) {
       final current = editContext.composer.selection;
       if (current == null) {

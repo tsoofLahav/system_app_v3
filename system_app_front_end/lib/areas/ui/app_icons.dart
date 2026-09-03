@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import './app_colors.dart';
 
 /// Lucide stroke icons (weight 200) — simple, modern, consistent across the app.
+/// Phone floating chrome paints the same glyphs at [AppIcon.phoneBarWeight].
 abstract final class AppIcons {
   // Bottom bar & AI tools
   static const preferences = LucideIcons.settings2200;
@@ -77,6 +78,7 @@ class AppIcon extends StatelessWidget {
     this.color,
     this.enabled = true,
     this.textDirection,
+    this.weight,
   });
 
   final IconData icon;
@@ -87,10 +89,29 @@ class AppIcon extends StatelessWidget {
   /// Chrome arrows pass [TextDirection.ltr] so left stays left in Hebrew.
   final TextDirection? textDirection;
 
+  /// Lucide stroke for phone floating chrome — thicker than desktop 200,
+  /// lighter than 400 so the glass pills stay readable without shouting.
+  static const phoneBarWeight = 300;
+
+  /// Lucide stroke. Phone bars use [phoneBarWeight] so the icons do not
+  /// vanish on glass. Desktop chrome stays at the catalog 200.
+  final int? weight;
+
+  IconData get _painted {
+    final w = weight;
+    if (w == null || w == 200) return icon;
+    return IconData(
+      icon.codePoint,
+      fontFamily: 'Lucide$w',
+      fontPackage: icon.fontPackage ?? 'lucide_icons_flutter',
+      matchTextDirection: icon.matchTextDirection,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Icon(
-      icon,
+      _painted,
       size: size,
       color:
           color ??

@@ -71,9 +71,10 @@ class ViewChromeMenu extends StatelessWidget {
     final bySection = displayMode != ViewDisplayMode.byTopic;
 
     return GlassBarSegment(
-      height: isPhoneLayout ? 38 : 44,
+      style: isPhoneLayout ? AppGlassStyle.phoneFloating : null,
+      height: isPhoneLayout ? 42 : 44,
       padding: _segmentPadding,
-      tightShadow: isPhoneLayout,
+      tightShadow: false,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -131,13 +132,14 @@ class _ChromeIconButton extends StatelessWidget {
             padding: const EdgeInsets.all(8),
             child: AppIcon(
               icon,
-              size: ViewChromeMenu._iconSize,
+              size: isPhoneLayout ? 24 : ViewChromeMenu._iconSize,
+              weight: isPhoneLayout ? AppIcon.phoneBarWeight : 200,
               enabled: enabled,
               color: !enabled
                   ? null
                   : active
                       ? AppColors.primary.withValues(alpha: 0.95)
-                      : null,
+                      : (isPhoneLayout ? AppColors.text : null),
             ),
           ),
         ),

@@ -63,18 +63,11 @@ class PreferencesDialog extends StatelessWidget {
               AppDialogChoiceField<DocumentTextSize>(
                 label: s['documentTextSize'],
                 options: [
-                  AppSegmentedOption(
-                    value: DocumentTextSize.small,
-                    label: s['documentTextSizeSmall'],
-                  ),
-                  AppSegmentedOption(
-                    value: DocumentTextSize.medium,
-                    label: s['documentTextSizeMedium'],
-                  ),
-                  AppSegmentedOption(
-                    value: DocumentTextSize.large,
-                    label: s['documentTextSizeLarge'],
-                  ),
+                  for (final size in DocumentTextSize.values)
+                    AppSegmentedOption(
+                      value: size,
+                      label: size.label,
+                    ),
                 ],
                 selected: state.documentTextSize,
                 onSelected: state.setDocumentTextSize,

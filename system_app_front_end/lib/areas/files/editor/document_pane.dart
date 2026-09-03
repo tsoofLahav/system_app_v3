@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 
 import '../../../core/app_state.dart';
+import '../../../core/platform/app_form_factor.dart';
 import '../data/app_file.dart';
 import '../data/topic.dart';
 import '../../production_agent/pending_review_ui.dart';
@@ -90,6 +91,9 @@ class _DocumentPaneState extends State<DocumentPane> {
   }
 
   void _onTitleFocusChanged() {
+    // Phone presentation: the title text is hidden most of the time, so we
+    // need a rebuild on focus gain/loss to show it only when renaming.
+    if (isPhoneLayout) setState(() {});
     if (!_titleFocus.hasFocus) unawaited(_saveTitle());
   }
 
@@ -178,13 +182,21 @@ class _DocumentPaneState extends State<DocumentPane> {
   @override
   Widget build(BuildContext context) {
     final file = widget.state.fileById(widget.file.id) ?? widget.file;
+    final hidePhoneTitleText = isPhoneLayout && !_titleFocus.hasFocus;
+    final phoneTitleDecoration = hidePhoneTitleText
+        ? const InputDecoration(
+            border: InputBorder.none,
+            isDense: true,
+            contentPadding: EdgeInsets.zero,
+          )
+        : AppTypography.noteInputDecoration();
 
     final body = Padding(
       padding: AppSpacing.notePadding,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (widget.isBrought) ...[
+          if (!isPhoneLayout && widget.isBrought) ...[
             Text(
               widget.state.broughtFileOriginLabel(widget.topic),
               maxLines: 1,
@@ -201,8 +213,12 @@ class _DocumentPaneState extends State<DocumentPane> {
                   focusNode: _titleFocus,
                   style: AppTypography.noteTitleStyle.copyWith(
                     fontWeight: FontWeight.w700,
+                    color: hidePhoneTitleText
+                        ? Colors.transparent
+                        : AppColors.text,
                   ),
-                  decoration: AppTypography.noteInputDecoration(),
+                  decoration: phoneTitleDecoration,
+                  cursorColor: AppColors.text,
                   // Clicking into the document is how a rename usually ends,
                   // so leaving the field has to save it, not only Enter.
                   onSubmitted: (_) => _titleFocus.unfocus(),
@@ -216,7 +232,7 @@ class _DocumentPaneState extends State<DocumentPane> {
                 ),
             ],
           ),
-          const SizedBox(height: AppSpacing.xs),
+          if (!isPhoneLayout) const SizedBox(height: AppSpacing.xs),
           // Pane height is fixed by the topic layout (or the phone page).
           // Super Editor owns scrolling inside this slot.
           Expanded(

@@ -18,7 +18,7 @@ Each icon uses the same 34px tap slot as the other bottom-bar buttons, so the AI
 
 The agent comes first and never moves: it is the one control that is always there, so it must always be in the same place. Everything is disabled when there is no AI context (nothing selected) or a run is already in flight — `AppState.hasAiContext` and `aiRunning` gate them, and `aiRunning` drives the busy state so the user cannot double-fire.
 
-While a run is in flight, the bottom bar keeps the spinner and **Running…**, plus **Cancel**. Cancel does not abort the request: the spinner stays with **Canceling the action…** until the call returns, then the client drops the result — no review dialog, undo toast, or summary. Pending reviews are discarded; direct-apply file writes are rolled back when undo cards exist (`create_object` still has no undo).
+While a run is in flight, the bottom bar keeps the spinner and **Cancel**. On desktop that sits beside the AI segment with **Running…**. On phone it sits **on the AI pill**: the action icons go pale and cannot be pressed, and a bolder spinner + Cancel sit over them so another action cannot be chosen until the run ends. Cancel does not abort the request: the spinner stays with **Canceling the action…** until the call returns, then the client drops the result — no review dialog, undo toast, or summary. Pending reviews are discarded; direct-apply file writes are rolled back when undo cards exist (`create_object` still has no undo).
 
 ### Keeping an ask
 

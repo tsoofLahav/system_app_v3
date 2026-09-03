@@ -1,4 +1,5 @@
 import 'package:flutter/painting.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/files/rich_text/rtl/rtl.dart';
 
@@ -139,6 +140,41 @@ void main() {
         4,
       );
       expect(probed, const Offset(80.5, 10));
+    });
+
+    test('phone word mark in a Hebrew+English line follows the nearest run', () {
+      const text = 'שלום Flutter';
+      // RTL line: Hebrew on the right, English on the left.
+      const hebrew = Rect.fromLTRB(80, 0, 160, 20);
+      const english = Rect.fromLTRB(0, 0, 70, 20);
+      int offsetAt(Offset probe) => probe.dx >= 80 ? 2 : 8;
+      expect(
+        phoneObjectWordMarkFromBoxes(
+          boxes: const [hebrew, english],
+          local: const Offset(120, 10),
+          text: text,
+          offsetAt: offsetAt,
+        )?.textInside(text),
+        'שלום',
+      );
+      expect(
+        phoneObjectWordMarkFromBoxes(
+          boxes: const [hebrew, english],
+          local: const Offset(30, 10),
+          text: text,
+          offsetAt: offsetAt,
+        )?.textInside(text),
+        'Flutter',
+      );
+      expect(
+        phoneObjectWordMarkFromBoxes(
+          boxes: const [hebrew, english],
+          local: const Offset(75, 10),
+          text: text,
+          offsetAt: offsetAt,
+        )?.textInside(text),
+        'שלום',
+      );
     });
   });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
+import '../../core/platform/app_form_factor.dart';
 import '../automations/ai_actions_dialog.dart';
 import '../ux/shortcuts/app_shortcuts.dart';
 import '../ux/shortcuts/shortcut_catalog.dart';
@@ -90,9 +91,10 @@ class AiToolButton extends StatelessWidget {
       padding: const EdgeInsets.all(aiToolTapPadding),
       constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
       onPressed: enabled ? onPressed : null,
-      icon: Icon(
+      icon: AppIcon(
         icon,
         size: aiToolIconSize,
+        weight: isPhoneLayout ? AppIcon.phoneBarWeight : 200,
         color: enabled ? AppColors.text : AppColors.textHint,
       ),
     );

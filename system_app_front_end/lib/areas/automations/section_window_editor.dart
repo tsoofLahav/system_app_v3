@@ -82,24 +82,7 @@ class _SectionWindowEditorState extends State<_SectionWindowEditor> {
     }
   }
 
-  String _whenCaption() {
-    final s = widget.state.strings;
-    final dayKey = AutomationSchedule.weekdayKeys[_schedule.weekday]!;
-    if (_schedule.kind == AutomationSchedule.weekly) {
-      return s.weeklyScheduleCaption(dayKey);
-    }
-    if (_schedule.isEveryNMonths) {
-      return s.everyNMonthsCaption(
-        _schedule.uiMonthInterval,
-        _schedule.placement,
-        dayKey,
-      );
-    }
-    if (_schedule.kind == AutomationSchedule.monthly) {
-      return s.monthlyScheduleCaption(_schedule.placement, dayKey);
-    }
-    return '';
-  }
+  String _whenCaption() => _schedule.whenCaption(widget.state.strings);
 
   @override
   Widget build(BuildContext context) {
@@ -143,7 +126,9 @@ class _SectionWindowEditorState extends State<_SectionWindowEditor> {
               children: [
                 Expanded(
                   child: AppCompactCalendar(
-                    title: s['chooseDay'],
+                    title: _schedule.selectsMultipleDays
+                        ? s['chooseDays']
+                        : s['chooseDay'],
                     weekdayLabels: s.narrowWeekdaysSundayFirst,
                     formatMonth: s.monthYear,
                     isMarked: _schedule.marksDate,

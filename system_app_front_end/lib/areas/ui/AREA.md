@@ -16,11 +16,11 @@ Loudest last:
 
 | Surface | Treatment |
 |---------|-----------|
-| **Canvas** — the window behind everything | Near-white neutral gradient, with the topic's soft top wash painted full-bleed on desktop (including behind the sidebar). Phone structure is locked in UX: grey middle (`phoneCanvas`); warm off-white header and footer (`phoneStripe`). Header ombre is a light topic wash in the lower third only — not on Home or views. File card has its usual shadow; tool bubbles sit above the footer, with no lift |
+| **Canvas** — the window behind everything | Near-white neutral gradient, with the topic's soft top wash painted full-bleed on desktop (including behind the sidebar). Phone: the file fills the screen on a cooler grey peek (`phoneCanvas`). Thin, fairly solid top and bottom ombres (`phoneEdgeOmbre`) — that same grey on Home / views, topic-tinted otherwise. Floating tool bars sit on that fade with a lift shadow |
 | **File panes** — the working surfaces | Topic colour at a gentle strength, thin saturated topic border, card shadow. Same frames on phone and desktop |
 | **View list frames** — section/topic cards on the view page | Same file-pane treatment (`NoteCard` / `filePaneDecoration`); topic frames use topic colour, section frames use optional section colour |
 | **Sidebar** | Soft glass floating above the canvas — never paints the topic wash itself |
-| **Floating chrome** — bottom bar, insert bar, pills | Glass or solid white with a lift shadow; insert tools stay on the bottom-bar baseline; preferences / automations sit at the start edge. Phone tools are the same bubbles on the grey middle, above the thin footer stripe, with no lift shadow. AI icons use the same 34px tap slots as the other bars |
+| **Floating chrome** — bottom bar, insert bar, pills | Glass or solid white with a lift shadow; insert tools stay on the bottom-bar baseline; preferences / automations sit at the start edge. Phone tools float on the edge ombre as translucent glass pills (top: icon pills around topic · file on one line; bottom: the same pill row), with a lift shadow. The phone AI pill keeps the teal outline and teal `AI` label on glass. AI icons use the same 34px tap slots as the other bars |
 | **Dialogs** | Glass panels over a light scrim |
 | **Context menus** | The topmost layer — cooler frost, tighter rows |
 
@@ -33,8 +33,8 @@ All of them live in [`app_colors.dart`](app_colors.dart). Nothing outside this f
 | Token | Value | Used for |
 |-------|-------|----------|
 | `canvasNeutralTop` / `canvasNeutralBottom` | `#FFFEFE` → `#FAFAF8` | The window gradient |
-| `phoneStripe` | `#F5F3ED` | Phone header and footer stripes (warm off-white) |
-| `phoneCanvas` | `#E4E2DC` | Phone middle behind the file card (a step darker) |
+| `phoneStripe` | `#F5F3ED` | Legacy; phone chrome no longer uses a solid stripe |
+| `phoneCanvas` | `#E8E9ED` | Phone peek around the file, and the default ombre edge — brighter, colder grey |
 | `noteTop` / `noteBottom` | `#FCFBF7` → `#F4F2EC` | Untinted cards |
 | `mainNoteTop` / `mainNoteBottom` | `#FFFFFF` | Panes in the main topic |
 | `noteBorder` | `#DCD8CF` | Card edges |
@@ -98,7 +98,7 @@ All of it comes from [`app_typography.dart`](app_typography.dart). One family, f
 | `pageTitleStyle` | 19 | 1.3 | w500 | Topic title |
 | `noteTitleStyle` | 14 | 1.3 | w500 | Dialog titles. File names in the pane use this plus **w700** |
 | `blockHeaderStyle` | 14 | 1.4 | w600 | Headers inside a document |
-| `noteBodyStyle` | 12.5 / 14 / 16 | 1.55 | w400 | Document body, inputs. Default **small** on desktop, **medium** on phone; Preferences → Text size |
+| `noteBodyStyle` | 12–18 pt | 1.55 | w400 | Document body, inputs. Default **12.5** on desktop, **14** on phone; Preferences → Text size (point steps, not only S/M/L) |
 | `listItemStyle` | same as body | 1.38 | w400 | Bullets |
 | `taskRowStyle` | same as body | 1.38 | w400 | Task rows |
 | `metaStyle` | 12 | 1.4 | w400 | Meta, hints (in `textHint`) |
@@ -150,7 +150,9 @@ Glass is the app's signature surface: a blurred, translucent panel for anything 
 | `floating` | 24 | `glassTint` 0.78, elevation 4 | Floating pills, layout tiles |
 | `dragMode` | 14 | `glassTint` 0.38, hairline white border | Document Move / task Reorder mode frames ([`../files/editor/drag_mode_frame.dart`](../files/editor/drag_mode_frame.dart)) |
 | `opaqueChrome` | 0 | Solid white + lift shadow | Bottom bar segments, view chrome menu, `+` buttons |
-| `aiAccent` | 0 | Solid, `aiCyan` border | The AI segment, with `AI` on the outline |
+| `aiAccent` | 0 | Solid, `aiCyan` border | Desktop AI segment, with `AI` on the outline |
+| `phoneFloating` | 22 | `glassTint` 0.52 | Phone tool pills (top, bottom, insert, view chrome) |
+| `phoneAi` | 22 | `glassTint` 0.52, `aiCyan` border | Phone AI pill — glass, teal outline, teal `AI` on the outline |
 
 Solid chrome is not a contradiction: the bottom bar sits over scrolling text all day, and blur there would shimmer.
 
@@ -185,7 +187,7 @@ The preferences dialog is the **reference** glass dialog. Every other dialog use
 | Confirm | `showAppConfirmDialog` | Same shell; destructive answers use amber-brown text |
 | Full-screen overlay | `OverlayDialogShell` + `OverlayDialogStyle` | Scrim black 18% (arrange 30%), cards radius 14 |
 | Context menu (right-click **and** file `⋯`) | `../ux/widgets/app_context_menu.dart` | Bubble radius 12, rows 28 high, 11.5px labels, `menuTint` frost, highlight in `primary`; compact width 128 + downward caret for anchored create menus |
-| Hover bubble | `../ux/widgets/details_hover_bubble.dart` | Radius 10, blur 18, white 82%, max 320×240 |
+| Hover bubble | `../ux/widgets/details_hover_bubble.dart` · info: [`../objects/links/info_description_bubble.dart`](../objects/links/info_description_bubble.dart) | Radius 10, blur 18, white 82%, max 320×240. Phone **Info** shows the same bubble as a dialog with × |
 | Native popup menu | Avoid — use `AppContextMenu` | — |
 
 Route every dialog through [`adaptive_dialog.dart`](adaptive_dialog.dart). List pickers are keyboard-walked (↑/↓, Enter, Escape) by UX [`dialog_choice_list.dart`](../ux/dialogs/dialog_choice_list.dart). Form fields autofocus and submit on Enter; picker rows are in the tab order; confirmations accept Enter for the confirm answer. Fields inside dialogs use the helpers in [`dialog_field_style.dart`](dialog_field_style.dart):
@@ -205,7 +207,7 @@ The `⋯` on a file opens `AppContextMenu` at the button — the same bubble as 
 
 ## Icons
 
-[Lucide](https://lucide.dev) at the **200 stroke weight**, named in [`app_icons.dart`](app_icons.dart) and drawn through `AppIcon` (20px default, `text` at 82%, `textHint` at 38% when disabled). The thin stroke is what keeps icons as quiet as the type next to them — including the `⋯` on a file (`AppIcons.more`), which must never be a Material `Icons.more_vert`.
+[Lucide](https://lucide.dev) at the **200 stroke weight**, named in [`app_icons.dart`](app_icons.dart) and drawn through `AppIcon` (20px default, `text` at 82%, `textHint` at 38% when disabled). Phone floating chrome uses **300** (`AppIcon.phoneBarWeight`) so the same icons do not vanish on glass. The thin stroke is what keeps desktop icons as quiet as the type next to them — including the `⋯` on a file (`AppIcons.more`), which must never be a Material `Icons.more_vert`.
 
 Sizes in use: 14 dividers and marks · 16 circle buttons and file menus · 18 sidebar and inline actions · 20 default · 22 bottom bar.
 

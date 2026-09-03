@@ -43,6 +43,7 @@ dependencies:
   fl_chart: ^0.70.2
   # 0.3.0-dev.51+ needs Flutter TextInputStyle (newer than 3.41); pin below that.
   super_editor: 0.3.0-dev.50
+  follow_the_leader: 0.5.2
   interactive_graph_view: ^0.3.1
   url_launcher: ^6.3.1
   path_provider: ^2.1.5

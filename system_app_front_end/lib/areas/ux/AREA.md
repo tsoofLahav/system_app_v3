@@ -85,36 +85,33 @@ Home can **project** one or more files that still belong to other topics. That v
 
 ### Phone screen structure
 
-This layout is settled. Do not go back to a reserved well behind the tools, a topic-coloured middle, or pills that sit on a different colour from the file canvas.
+This layout is settled. Do not bring back solid header/footer stripes. The file is the screen; chrome floats on a short, fairly solid ombre.
 
 ```
 ┌─────────────────────────────┐
-│ header (off-white)          │  Home and views: solid. Other topics:
-│         ~~~~ ombre ~~~~     │  off-white at the top, light topic
-├─────────────────────────────┤  wash only in the lower third.
-│                             │
-│  grey middle                │  Same colour under the file and the
-│   ┌───────────────────┐     │  pills. File frame ends above the
-│   │ framed file card  │     │  bubbles. Card shadow for depth;
-│   │                   │     │  pills have no lift shadow.
-│   └───────────────────┘     │
-│   ( )  ( )  ( )  pills      │  One scrolling row, above the footer
-├─────────────────────────────┤  — not overlapping it.
-│ footer (off-white, thin)    │  Separate band. Home indicator
-└─────────────────────────────┘  included. Hidden while the keyboard
-                                 is open — it only holds that place
-                                 in full screen.
+│ ~~~~ top ombre ~~~~         │  Grey by default. Non-Home topics
+│ (menu) topic · file (+ / ↩) │  tint the ombre with topic colour.
+│ ┌─────────────────────────┐ │  Slim peek so the card outline
+│ │                         │ │  shows — swipe to the next file.
+│ │     framed file         │ │  Text scrolls under the ombre
+│ │                         │ │  and fades (unlimited).
+│ └─────────────────────────┘ │
+│ ( )  ( )  ( )  pills        │  Same floating row as before,
+│ ~~~~ bottom ombre ~~~~      │  with a lift shadow, on the fade.
+└─────────────────────────────┘
 ```
 
-Shell: [`shell/phone_app_shell.dart`](shell/phone_app_shell.dart). File roll: [`topic/phone_topic_view.dart`](topic/phone_topic_view.dart). Colours: [UI](../ui/AREA.md). The insert-bar emoji panel is an overlay above the pills (keyboard replacement), not a new shell band.
+Shell: [`shell/phone_app_shell.dart`](shell/phone_app_shell.dart). File roll: [`topic/phone_topic_view.dart`](topic/phone_topic_view.dart). Top chrome: [`shell/phone_top_bar.dart`](shell/phone_top_bar.dart). Colours: [UI](../ui/AREA.md). The insert-bar emoji panel is an overlay above the pills (keyboard replacement), not a new shell band.
 
 ### The topic canvas composition
 
-How a topic is laid out on screen, top to bottom — matching v1:
+**Desktop** — matching v1:
 
 1. **Topic header** floats at the top ([`topic/topic_header.dart`](topic/topic_header.dart)): the topic name (and emoji when it is not the main topic), and the `+` that adds a file. It does not scroll away.
 2. **Files begin immediately under the header**, top-aligned. The canvas reserves the header's height and the bottom bar's; the files never sit vertically centred in leftover space.
 3. The add-file control lives **only** on the header — not also on the bottom bar — so there is one place to look.
+
+**Phone** — the file fills the screen (see [Phone screen structure](#phone-screen-structure)). Add / bring / menu are separate floating icon pills; topic and file names sit on one line (`topic · file`) on the solid part of the top ombre, not stacked into the file. The in-file title field is still how a file is renamed.
 
 ### Who rebuilds
 
@@ -157,7 +154,7 @@ Archived files are not editable. The live topic canvas is unchanged. Finishing a
 
 ### Task view page
 
-Opening a view replaces the main pane with a **grid of file-like frames**. Each frame is one list (a section, or a topic when grouped that way). The page chrome is a small floating capsule above the bottom bar on desktop (same language as the bottom menus). On phone those same controls sit **in** the bottom bar, only while a view is open:
+Opening a view replaces the main pane with a **grid of file-like frames**. Each frame is one list (a section, or a topic when grouped that way). The page chrome is a small floating capsule above the bottom bar on desktop (same language as the bottom menus). On phone those same controls sit **in** the bottom bar, only while a view is open, as the same glass pills as the other phone tools. The view page itself (title + frames) keeps extra top inset under the floating header — unlike a topic file, several frames share the screen, so they cannot use the file’s own scroll padding:
 
 | Control | Does |
 |---------|------|
@@ -169,7 +166,7 @@ Right-click a **section** frame to edit name, important flag, default-section sw
 
 Phone uses its own shell — see [Phone screen structure](#phone-screen-structure). The two rolls are independent. A pending AI review opens as a full-width dialog with Current / Suggested toggle ([`lookalike_review_dialog.dart`](../production_agent/lookalike_review_dialog.dart)); it is not dismissible until Finish or Discard.
 
-Tapping outside the focused editor (canvas, empty padding — not another field) unfocuses it, hides the caret, **clears the mark**, and closes the keyboard, on phone and desktop ([`shell/dismiss_focus_on_outside_tap.dart`](shell/dismiss_focus_on_outside_tap.dart)). The **bottom menu** is excluded: insert and other bar tools must stay usable while typing. An open object is also excluded so a tap on its frame does not kill the field. On phone, the first pill is arrows plus enter/leave (Shift+Enter has no key). Those arrows never mirror in Hebrew.
+Tapping outside the focused editor (canvas, empty padding — not another field) unfocuses it, hides the caret, **clears the mark**, and closes the keyboard, on phone and desktop ([`shell/dismiss_focus_on_outside_tap.dart`](shell/dismiss_focus_on_outside_tap.dart)). The **bottom menu** is excluded: insert and other bar tools must stay usable while typing. An open object is also excluded so a tap on its frame does not kill the field. On phone, tapping the **top ombre** also dismisses focus so the user can read, scroll, and swipe with no caret. Dragging the file vertically dismisses the keyboard too (`ScrollViewKeyboardDismissBehavior.onDrag`). On phone, the first pill is arrows plus enter/leave (Shift+Enter has no key). Those arrows never mirror in Hebrew. The pill is one way in or out of an object; tapping body text must still move the caret there. Marking text on phone (file body and object fields): tap places a caret; long-press or double-tap starts a word mark; **handles** enlarge it — a body drag scrolls the file or swipes to the next one. Double-tap on an empty spot still opens the Cut / Copy / Paste bar so the user can paste without marking first. The iOS bar (Cut / Copy / Paste, optional **Info**, **More**) is the same Cupertino pill on the file body and in object fields. **More** opens the same text menu as a right-click, as a modal, without dropping writing focus. **Info** (object fields, when the mark overlaps a connected info) opens that bubble as a modal — not a double-tap on the connected glyphs.
 
 ## What the sidebar allows
 
@@ -194,7 +191,7 @@ The sidebar is navigation only. It never edits content.
 | View section menu | Right-click a section frame on the view page | Edit name / flag / color |
 | View task menu | Right-click a task in a view frame | Reorder tasks, **Choose view…**, **Topic and list…**, Connect info, Delete |
 | View chrome | Floating capsule on the view page | Sections/topics, add section, reorder frames |
-| AI actions | Bottom bar | Pinned actions, the actions menu, and the agent prompt. While a run is in flight: spinner + Cancel — see [production agent](../production_agent/AREA.md) |
+| AI actions | Bottom bar | Pinned actions, the actions menu, and the agent prompt. On phone a run keeps spinner + Cancel **on** the AI pill (icons go pale) so they are not missed beside it — see [production agent](../production_agent/AREA.md) |
 | Automations | Bottom bar | Manage rules — see [automations](../automations/AREA.md) |
 | Preferences | Bottom bar | App settings, shortcut bindings, topic types, sidebar reorder |
 

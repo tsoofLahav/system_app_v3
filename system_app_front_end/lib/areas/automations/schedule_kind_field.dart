@@ -6,8 +6,8 @@ import '../ui/app_segmented_toggle.dart';
 import '../ui/dialog_field_style.dart';
 import './schedule_format.dart';
 
-/// Daily / weekly / monthly / every N months — the same chips on the builder
-/// and the section-window clock.
+/// Daily / weekly / a few times a week / monthly / a few times a month /
+/// every N months — the same chips on the builder and the section-window clock.
 class AutomationScheduleKindField extends StatefulWidget {
   const AutomationScheduleKindField({
     super.key,
@@ -66,23 +66,68 @@ class _AutomationScheduleKindFieldState
         widget.schedule.copyWith(
           kind: AutomationSchedule.everyNMonths,
           monthInterval: n,
+          allowMultiple: false,
+          cycleFrom: widget.schedule.effectiveCycleFrom,
         ),
       );
     }
   }
 
   void _setKind(String kind) {
-    var next = widget.schedule.copyWith(kind: kind);
-    if (kind == AutomationSchedule.everyNMonths) {
-      next = next.copyWith(
-        monthInterval: widget.schedule.monthInterval < 2
-            ? 2
-            : widget.schedule.monthInterval,
-      );
-    } else if (kind == AutomationSchedule.monthly) {
-      next = next.copyWith(monthInterval: 1);
-    }
-    widget.onChanged(next);
+    widget.onChanged(_scheduleForKind(kind));
+  }
+
+  AutomationSchedule _scheduleForKind(String kind) {
+    final current = widget.schedule;
+    final now = DateTime.now();
+    return switch (kind) {
+      AutomationSchedule.fewTimesWeek => current.copyWith(
+          kind: AutomationSchedule.weekly,
+          weekdays: current.kind == AutomationSchedule.weekly
+              ? current.selectedWeekdays
+              : const [],
+          allowMultiple: true,
+          monthInterval: 1,
+          clearCycleFrom: true,
+        ),
+      AutomationSchedule.weekly => current.copyWith(
+          kind: AutomationSchedule.weekly,
+          weekdays: [current.weekday],
+          allowMultiple: false,
+          monthInterval: 1,
+          clearCycleFrom: true,
+        ),
+      AutomationSchedule.fewTimesMonth => current.copyWith(
+          kind: AutomationSchedule.monthly,
+          monthSlots: (current.kind == AutomationSchedule.monthly ||
+                  current.isEveryNMonths)
+              ? current.monthSlots
+              : const [],
+          allowMultiple: true,
+          monthInterval: 1,
+          clearCycleFrom: true,
+        ),
+      AutomationSchedule.monthly => current.copyWith(
+          kind: AutomationSchedule.monthly,
+          monthSlots: [current.monthSlots.first],
+          allowMultiple: false,
+          monthInterval: 1,
+          clearCycleFrom: true,
+        ),
+      AutomationSchedule.everyNMonths => current.copyWith(
+          kind: AutomationSchedule.everyNMonths,
+          monthSlots: [current.monthSlots.first],
+          allowMultiple: false,
+          monthInterval: current.monthInterval < 2 ? 2 : current.monthInterval,
+          cycleFrom: current.cycleFrom ?? DateTime(now.year, now.month),
+        ),
+      _ => current.copyWith(
+          kind: AutomationSchedule.daily,
+          allowMultiple: false,
+          monthInterval: 1,
+          clearCycleFrom: true,
+        ),
+    };
   }
 
   void _setMonths(String raw) {
@@ -92,6 +137,8 @@ class _AutomationScheduleKindFieldState
       widget.schedule.copyWith(
         kind: AutomationSchedule.everyNMonths,
         monthInterval: n,
+        allowMultiple: false,
+        cycleFrom: widget.schedule.effectiveCycleFrom,
       ),
     );
   }
@@ -114,8 +161,16 @@ class _AutomationScheduleKindFieldState
               label: s['onceAWeek'],
             ),
             AppSegmentedOption(
+              value: AutomationSchedule.fewTimesWeek,
+              label: s['fewTimesAWeek'],
+            ),
+            AppSegmentedOption(
               value: AutomationSchedule.monthly,
               label: s['onceAMonth'],
+            ),
+            AppSegmentedOption(
+              value: AutomationSchedule.fewTimesMonth,
+              label: s['fewTimesAMonth'],
             ),
             AppSegmentedOption(
               value: AutomationSchedule.everyNMonths,

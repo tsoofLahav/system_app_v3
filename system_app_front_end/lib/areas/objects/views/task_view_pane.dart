@@ -580,11 +580,17 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                     : null,
                 padding: EdgeInsets.fromLTRB(
                   AppSpacing.canvasPadding.left,
-                  AppSpacing.canvasPadding.top,
+                  isPhoneLayout
+                      ? MediaQuery.paddingOf(context).top +
+                          AppBottomBarMetrics.phoneBarHeight +
+                          AppSpacing.md
+                      : AppSpacing.canvasPadding.top,
                   AppSpacing.canvasPadding.right,
                   AppSpacing.canvasPadding.bottom +
                       (isPhoneLayout
-                          ? 52
+                          ? AppBottomBarMetrics.phoneBarHeight +
+                              AppBottomBarMetrics.phoneOmbreFade +
+                              AppSpacing.md
                           : AppBottomBarMetrics.scrollInset + 52),
                 ),
                 children: [

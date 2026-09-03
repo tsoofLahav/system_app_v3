@@ -1773,17 +1773,51 @@ class AppState extends ChangeNotifier {
   }
 
   bool viewHasAttention(int viewId) =>
-      sectionWindowAutomations.any((a) => a.viewId == viewId && a.attention);
+      sectionWindowAutomations.any((a) =>
+          a.viewId == viewId &&
+          a.attention &&
+          _sectionStillHasActiveWork(
+            viewId: viewId,
+            sectionKey: a.sectionKey,
+          ));
 
   bool sectionHasAttention({required int viewId, String? sectionKey}) {
     if (sectionKey == null || sectionKey.isEmpty) return false;
     final window = sectionWindowFor(viewId: viewId, sectionKey: sectionKey);
-    return window?.attention ?? false;
+    if (window == null || !window.attention) return false;
+    return _sectionStillHasActiveWork(viewId: viewId, sectionKey: sectionKey);
+  }
+
+  /// Hide the attention dot as soon as the last active task is marked done,
+  /// without waiting for the next automations poll.
+  bool _sectionStillHasActiveWork({
+    required int viewId,
+    String? sectionKey,
+  }) {
+    if (sectionKey == null || sectionKey.isEmpty) return true;
+    if (selectedView?.id != viewId) return true;
+    final name = ViewLayoutConfig.sections(selectedView!.layoutConfig)
+        .where((s) => s.key == sectionKey)
+        .map((s) => s.name)
+        .firstOrNull;
+    if (name == null || name.isEmpty) return true;
+    var sawSection = false;
+    for (final membership in viewMemberships) {
+      if (membership.viewId != viewId) continue;
+      if (membership.sectionName != name) continue;
+      sawSection = true;
+      final id = membership.taskId;
+      if (id == null) continue;
+      final task = tasksById[id];
+      if (task == null || task.status == 'active') return true;
+    }
+    if (!sawSection) return true;
+    return false;
   }
 
   void _startSectionWindowPoll() {
     _sectionWindowPoll?.cancel();
-    _sectionWindowPoll = Timer.periodic(const Duration(seconds: 30), (_) {
+    _sectionWindowPoll = Timer.periodic(const Duration(seconds: 5), (_) {
       unawaited(refreshSectionWindows(notifyIfChanged: true));
     });
   }
@@ -2783,6 +2817,7 @@ class AppState extends ChangeNotifier {
         await _api.post('/tasks/${task.id}/toggle', {}) as Map<String, dynamic>;
     final next = Task.fromJson(data);
     _patchCachedTask(task.id, status: next.status, dueDate: next.dueDate);
+    await refreshSectionWindows(notifyIfChanged: true);
     await _reloadEmbedsForOpenFiles(notify: notify);
   }
 

@@ -1711,6 +1711,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         onSecondaryTapDown: (d) => _showTaskMenu(d, index),
         taskId: id,
         descriptionRanges: _taskDescriptionRanges(index),
+        descriptionRangesBaseText: task?.title,
         onDescriptionActivate: (range) =>
             openDescriptionTarget(state: widget.state, link: range.link),
         onDescriptionAnchorsChanged: (ranges) {
@@ -1919,6 +1920,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
               );
             },
             descriptionRanges: _descriptionRanges(widget.listTitleSegmentId),
+            descriptionRangesBaseText: _bridge.listTitle,
             onDescriptionActivate: widget.hostEmbed == null
                 ? null
                 : (range) => openDescriptionTarget(

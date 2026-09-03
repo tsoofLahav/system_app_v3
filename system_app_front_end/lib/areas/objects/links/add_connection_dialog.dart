@@ -10,6 +10,20 @@ import '../data/object_embed.dart';
 import '../data/object_service.dart';
 import './info_pick_rank.dart';
 
+/// Result of ⌘L / Connect info: an info, or **Without** (clear that span).
+class InfoConnectionPick {
+  const InfoConnectionPick._({this.node, this.clear = false});
+
+  const InfoConnectionPick.none() : this._(clear: true);
+
+  const InfoConnectionPick.info(ObjectGraphNode this.node) : clear = false;
+
+  final ObjectGraphNode? node;
+  final bool clear;
+
+  int? get objectId => node?.objectId;
+}
+
 class ConnectionPick {
   const ConnectionPick({
     required this.objectId,
@@ -258,7 +272,7 @@ class _AddConnectionDialogState extends State<_AddConnectionDialog> {
   }
 }
 
-Future<ObjectGraphNode?> showPickInfoObjectDialog({
+Future<InfoConnectionPick?> showPickInfoObjectDialog({
   required BuildContext context,
   required AppState state,
   Set<int> excludeObjectIds = const {},
@@ -267,7 +281,7 @@ Future<ObjectGraphNode?> showPickInfoObjectDialog({
 }) async {
   await state.loadObjectGraph();
   if (!context.mounted) return null;
-  return showAppDialog<ObjectGraphNode>(
+  return showAppDialog<InfoConnectionPick>(
     context: context,
     builder: (_) => _PickInfoObjectDialog(
       state: state,
@@ -329,8 +343,12 @@ class _PickInfoObjectDialogState extends State<_PickInfoObjectDialog> {
         searchLabel: s['searchInfo'],
         emptyLabel: s['noInfoObjects'],
         query: _query,
+        leadingLabel: s['connectWithout'],
+        onLeading: () =>
+            Navigator.pop(context, const InfoConnectionPick.none()),
         itemCount: nodes.length,
-        onActivate: (i) => Navigator.pop(context, nodes[i]),
+        onActivate: (i) =>
+            Navigator.pop(context, InfoConnectionPick.info(nodes[i])),
         itemBuilder: (context, i) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Text(nodes[i].title, style: AppTypography.noteBodyStyle),
@@ -350,6 +368,8 @@ class _InfoPickBody extends StatelessWidget {
     required this.onActivate,
     required this.itemBuilder,
     required this.onQueryChanged,
+    this.leadingLabel,
+    this.onLeading,
   });
 
   final String searchLabel;
@@ -359,6 +379,11 @@ class _InfoPickBody extends StatelessWidget {
   final ValueChanged<int> onActivate;
   final Widget Function(BuildContext context, int index) itemBuilder;
   final VoidCallback onQueryChanged;
+  final String? leadingLabel;
+  final VoidCallback? onLeading;
+
+  int get _leadingCount =>
+      leadingLabel != null && onLeading != null ? 1 : 0;
 
   @override
   Widget build(BuildContext context) {
@@ -380,15 +405,32 @@ class _InfoPickBody extends StatelessWidget {
           ),
         ),
         const SizedBox(height: DialogFieldStyle.fieldGap),
-        if (itemCount == 0)
+        if (itemCount + _leadingCount == 0)
           Text(emptyLabel, style: AppTypography.noteBodyStyle)
         else
           DialogChoiceList(
-            itemCount: itemCount,
+            itemCount: itemCount + _leadingCount,
             maxHeight: 240,
             autofocus: false,
-            onActivate: onActivate,
-            itemBuilder: (context, i, _) => itemBuilder(context, i),
+            onActivate: (i) {
+              if (_leadingCount == 1 && i == 0) {
+                onLeading!();
+                return;
+              }
+              onActivate(i - _leadingCount);
+            },
+            itemBuilder: (context, i, _) {
+              if (_leadingCount == 1 && i == 0) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    leadingLabel!,
+                    style: AppTypography.noteBodyStyle,
+                  ),
+                );
+              }
+              return itemBuilder(context, i - _leadingCount);
+            },
           ),
       ],
     );

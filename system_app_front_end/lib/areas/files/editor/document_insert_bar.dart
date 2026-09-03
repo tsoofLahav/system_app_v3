@@ -11,6 +11,7 @@ import '../../ux/shell/app_bottom_bar.dart';
 import '../../ux/shortcuts/app_shortcuts.dart';
 import '../../ux/shortcuts/shortcut_catalog.dart';
 
+/// Phone pills: slightly glass + more transparent than desktop floating.
 class DocumentInsertBar extends StatelessWidget {
   const DocumentInsertBar({
     super.key,
@@ -38,8 +39,9 @@ class DocumentInsertBar extends StatelessWidget {
         final s = state.strings;
         final segment = GlassBarSegment(
           height: AppBottomBarMetrics.segmentHeight(phone: isPhoneLayout),
+          style: isPhoneLayout ? AppGlassStyle.phoneFloating : null,
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          tightShadow: isPhoneLayout,
+          tightShadow: false,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -130,8 +132,9 @@ class ViewEmojiInsertBar extends StatelessWidget {
         final s = state.strings;
         return GlassBarSegment(
           height: AppBottomBarMetrics.segmentHeight(phone: isPhoneLayout),
+          style: isPhoneLayout ? AppGlassStyle.phoneFloating : null,
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          tightShadow: isPhoneLayout,
+          tightShadow: false,
           child: _InsertButton(
             icon: AppIcons.smiley,
             tooltip: DocumentInsertBar._tooltip(
@@ -175,7 +178,10 @@ class _InsertButton extends StatelessWidget {
         icon: AppIcon(
           icon,
           size: 20,
-          color: selected ? AppColors.primary : null,
+          weight: isPhoneLayout ? AppIcon.phoneBarWeight : 200,
+          color: selected
+              ? AppColors.primary
+              : (isPhoneLayout ? AppColors.text : null),
         ),
       ),
     );

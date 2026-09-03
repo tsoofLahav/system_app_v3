@@ -102,6 +102,28 @@ abstract final class AppGlassStyle {
     border: aiBorder(0.44),
     opaqueChrome: true,
   );
+
+  /// Phone floating pills — frost over the ombre (top, bottom, insert, view).
+  static final phoneFloating = GlassStyleSpec(
+    blurSigma: 22,
+    tintOpacity: 0.52,
+    tintColor: AppColors.glassTint,
+    showTopHighlight: false,
+    elevation: 4,
+    border: null,
+    opaqueChrome: false,
+  );
+
+  /// Phone AI pill — same frost as the other phone tools, teal outline.
+  static final phoneAi = GlassStyleSpec(
+    blurSigma: 22,
+    tintOpacity: 0.52,
+    tintColor: AppColors.glassTint,
+    showTopHighlight: false,
+    elevation: 4,
+    border: aiBorder(0.62),
+    opaqueChrome: false,
+  );
 }
 
 /// Frosted glass panel — blurs content behind it (liquid glass).
@@ -185,7 +207,7 @@ class GlassSurface extends StatelessWidget {
         ),
       ];
 
-  /// Phone pills: no lift. Any blur fills the gap between bars.
+  /// No lift — use when a shadow would fill the gap between adjacent bars.
   static const List<BoxShadow> _opaqueChromeShadowNone = [];
 
   @override
@@ -407,7 +429,8 @@ class GlassBarSegment extends StatelessWidget {
   /// When true, [label] sits on the top outline (for the AI segment).
   final bool labelOnBorder;
 
-  /// Phone: keep the lift without a haze that fills the gap between pills.
+  /// When true, drop the lift shadow (desktop-adjacent chrome). Phone
+  /// floating pills keep the default lift so they sit on the file.
   final bool tightShadow;
 
   @override

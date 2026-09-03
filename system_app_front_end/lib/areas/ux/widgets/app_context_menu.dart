@@ -27,15 +27,13 @@ class AppContextMenuItem extends AppContextMenuEntry {
   final String label;
   final bool enabled;
   final bool destructive;
+
   /// When true, a check mark is shown beside the label (e.g. current choice).
   final bool checked;
 }
 
 class AppContextMenuSubmenu extends AppContextMenuEntry {
-  const AppContextMenuSubmenu({
-    required this.label,
-    required this.children,
-  });
+  const AppContextMenuSubmenu({required this.label, required this.children});
 
   final String label;
   final List<AppContextMenuItem> children;
@@ -48,6 +46,7 @@ class AppContextMenuDivider extends AppContextMenuEntry {
 /// Optional caret on a context-menu bubble, pointing at an anchor.
 enum ContextMenuArrow {
   none,
+
   /// Triangle on the bottom edge, tip toward the anchor below.
   down,
 }
@@ -55,6 +54,7 @@ enum ContextMenuArrow {
 abstract final class AppContextMenu {
   static const _itemHeight = 28.0;
   static const _menuWidth = 196.0;
+
   /// Compact width for short choice lists (e.g. sidebar create).
   static const compactMenuWidth = 128.0;
   static const _submenuWidth = 188.0;
@@ -89,8 +89,8 @@ abstract final class AppContextMenu {
       color: highlighted
           ? Colors.white
           : destructive
-              ? AppColors.destructive
-              : AppColors.text.withValues(alpha: 0.92),
+          ? AppColors.destructive
+          : AppColors.text.withValues(alpha: 0.92),
     );
   }
 
@@ -158,6 +158,39 @@ abstract final class AppContextMenu {
     return completer.future;
   }
 
+  /// Same entries as [show], centered as a dialog — phone mark **More**.
+  static Future<String?> showModal({
+    required BuildContext context,
+    required List<AppContextMenuEntry> entries,
+    required bool isRtl,
+    double width = _menuWidth,
+  }) {
+    dismissActive();
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Directionality(
+          textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 32,
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(ctx).height * 0.72,
+              ),
+              child: _ModalMenuBody(entries: entries, menuWidth: width),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   static OverlayEntry? _hintEntry;
   static Timer? _hintTimer;
 
@@ -183,8 +216,10 @@ abstract final class AppContextMenu {
     entry = OverlayEntry(
       builder: (overlayContext) {
         final overlayBox =
-            Overlay.of(overlayContext, rootOverlay: true).context
-                    .findRenderObject()
+            Overlay.of(
+                  overlayContext,
+                  rootOverlay: true,
+                ).context.findRenderObject()
                 as RenderBox;
         final local = overlayBox.globalToLocal(globalPosition);
         final left = (local.dx - width / 2).clamp(
@@ -213,10 +248,7 @@ abstract final class AppContextMenu {
                       children: [
                         Padding(
                           padding: const EdgeInsets.fromLTRB(10, 4, 10, 6),
-                          child: Text(
-                            text,
-                            style: _labelStyle(),
-                          ),
+                          child: Text(text, style: _labelStyle()),
                         ),
                       ],
                     ),
@@ -323,9 +355,7 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
   @override
   Widget build(BuildContext context) {
     return Shortcuts(
-      shortcuts: {
-        LogicalKeySet(LogicalKeyboardKey.escape): _DismissIntent(),
-      },
+      shortcuts: {LogicalKeySet(LogicalKeyboardKey.escape): _DismissIntent()},
       child: Actions(
         actions: {
           _DismissIntent: CallbackAction<_DismissIntent>(
@@ -368,7 +398,8 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
     final mainHeight = _menuHeight(widget.entries);
     final hostHeight = _hostHeight(_openSubmenuIndex);
 
-    final totalWidth = menuWidth +
+    final totalWidth =
+        menuWidth +
         (_openSubmenuIndex == null
             ? 0
             : AppContextMenu._submenuWidth + AppContextMenu._submenuGap);
@@ -423,7 +454,10 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
               ),
               if (arrowDown)
                 Positioned(
-                  left: panelLeft + menuWidth / 2 - AppContextMenu._arrowHalfWidth,
+                  left:
+                      panelLeft +
+                      menuWidth / 2 -
+                      AppContextMenu._arrowHalfWidth,
                   top: mainHeight - 0.5,
                   child: const _BubbleArrowDown(),
                 ),
@@ -431,7 +465,8 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
                 _submenuBridge(isRtl: false),
                 _positionedSubmenu(isRtl: false, mainHeight: mainHeight),
               ],
-              if (_openSubmenuIndex != null && isRtl) _submenuBridge(isRtl: true),
+              if (_openSubmenuIndex != null && isRtl)
+                _submenuBridge(isRtl: true),
             ],
           ),
         ),
@@ -480,10 +515,7 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
     );
   }
 
-  Widget _positionedSubmenu({
-    required bool isRtl,
-    required double mainHeight,
-  }) {
+  Widget _positionedSubmenu({required bool isRtl, required double mainHeight}) {
     final submenu = _submenuAt(_openSubmenuIndex!);
     if (submenu == null) return const SizedBox.shrink();
 
@@ -503,7 +535,9 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
   double _rowTop(int index) {
     var top = 5.0;
     for (var i = 0; i < index; i++) {
-      top += widget.entries[i] is AppContextMenuDivider ? 9 : AppContextMenu._itemHeight;
+      top += widget.entries[i] is AppContextMenuDivider
+          ? 9
+          : AppContextMenu._itemHeight;
     }
     return top;
   }
@@ -585,6 +619,56 @@ class _BubbleContextMenuHostState extends State<_BubbleContextMenuHost> {
   }
 }
 
+class _ModalMenuBody extends StatelessWidget {
+  const _ModalMenuBody({required this.entries, required this.menuWidth});
+
+  final List<AppContextMenuEntry> entries;
+  final double menuWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final children = <Widget>[];
+    for (final entry in entries) {
+      if (entry is AppContextMenuDivider) {
+        children.add(const _MenuDivider());
+        continue;
+      }
+      if (entry is AppContextMenuSubmenu) {
+        children.add(const _MenuDivider());
+        for (final item in entry.children) {
+          children.add(
+            _MenuActionRow(
+              label: item.label,
+              enabled: item.enabled,
+              destructive: item.destructive,
+              checked: item.checked,
+              onTap: item.enabled
+                  ? () => Navigator.of(context).pop(item.value)
+                  : null,
+            ),
+          );
+        }
+        continue;
+      }
+      final item = entry as AppContextMenuItem;
+      children.add(
+        _MenuActionRow(
+          label: item.label,
+          enabled: item.enabled,
+          destructive: item.destructive,
+          checked: item.checked,
+          onTap: item.enabled
+              ? () => Navigator.of(context).pop(item.value)
+              : null,
+        ),
+      );
+    }
+    return SingleChildScrollView(
+      child: _BubbleMenuPanel(width: menuWidth, children: children),
+    );
+  }
+}
+
 class _BubbleArrowDown extends StatelessWidget {
   const _BubbleArrowDown();
 
@@ -628,10 +712,7 @@ class _BubbleArrowDownPainter extends CustomPainter {
 }
 
 class _BubbleMenuPanel extends StatelessWidget {
-  const _BubbleMenuPanel({
-    required this.width,
-    required this.children,
-  });
+  const _BubbleMenuPanel({required this.width, required this.children});
 
   final double width;
   final List<Widget> children;
@@ -642,24 +723,21 @@ class _BubbleMenuPanel extends StatelessWidget {
     tintColor: AppColors.menuTint,
     showTopHighlight: false,
     elevation: 0,
-    border: Border.all(
-      color: Colors.black.withValues(alpha: 0.1),
-      width: 0.65,
-    ),
+    border: Border.all(color: Colors.black.withValues(alpha: 0.1), width: 0.65),
   );
 
   static List<BoxShadow> get _shadows => [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.16),
-          blurRadius: 28,
-          offset: const Offset(0, 10),
-        ),
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.07),
-          blurRadius: 8,
-          offset: const Offset(0, 2),
-        ),
-      ];
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.16),
+      blurRadius: 28,
+      offset: const Offset(0, 10),
+    ),
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.07),
+      blurRadius: 8,
+      offset: const Offset(0, 2),
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -721,11 +799,7 @@ class _SubmenuTriggerRowState extends State<_SubmenuTriggerRow> {
               ),
             ),
             const SizedBox(width: 4),
-            DisclosureIcon(
-              expanded: false,
-              size: 16,
-              color: chevronColor,
-            ),
+            DisclosureIcon(expanded: false, size: 16, color: chevronColor),
           ],
         ),
       ),
@@ -761,8 +835,7 @@ class _MenuActionRowState extends State<_MenuActionRow> {
 
   @override
   Widget build(BuildContext context) {
-    final highlighted =
-        (widget.keyboardSelected || _hovered) && widget.enabled;
+    final highlighted = (widget.keyboardSelected || _hovered) && widget.enabled;
     final showSlot = widget.reserveCheckSlot || widget.checked;
     final iconColor = highlighted
         ? Colors.white
@@ -788,11 +861,7 @@ class _MenuActionRowState extends State<_MenuActionRow> {
                     SizedBox(
                       width: 14,
                       child: widget.checked
-                          ? AppIcon(
-                              AppIcons.check,
-                              size: 14,
-                              color: iconColor,
-                            )
+                          ? AppIcon(AppIcons.check, size: 14, color: iconColor)
                           : null,
                     ),
                     const SizedBox(width: 6),
@@ -807,10 +876,7 @@ class _MenuActionRowState extends State<_MenuActionRow> {
 }
 
 class _MenuRowChrome extends StatelessWidget {
-  const _MenuRowChrome({
-    required this.child,
-    required this.highlighted,
-  });
+  const _MenuRowChrome({required this.child, required this.highlighted});
 
   final Widget child;
   final bool highlighted;
@@ -989,10 +1055,14 @@ class _FlatKeyboardMenuHostState extends State<_FlatKeyboardMenuHost> {
     return Shortcuts(
       shortcuts: {
         LogicalKeySet(LogicalKeyboardKey.escape): const _DismissIntent(),
-        LogicalKeySet(LogicalKeyboardKey.arrowDown):
-            const _MoveSelectionIntent(1),
-        LogicalKeySet(LogicalKeyboardKey.arrowUp): const _MoveSelectionIntent(-1),
-        LogicalKeySet(LogicalKeyboardKey.enter): const _ActivateSelectionIntent(),
+        LogicalKeySet(LogicalKeyboardKey.arrowDown): const _MoveSelectionIntent(
+          1,
+        ),
+        LogicalKeySet(LogicalKeyboardKey.arrowUp): const _MoveSelectionIntent(
+          -1,
+        ),
+        LogicalKeySet(LogicalKeyboardKey.enter):
+            const _ActivateSelectionIntent(),
       },
       child: Actions(
         actions: {

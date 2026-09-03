@@ -73,7 +73,7 @@ Toggle semantics: bold/italic/underline/strikethrough flip independently per cha
 
 **Make link** finds `http(s)://` or `www.` in the mark (else caret line) and stores `link` on that span. No URL → no-op. Super Editor body links persist as markdown; embed-field links persist on object payload spans.
 
-Description-link colour (`AppColors.descriptionLink`) is paint-only for connected info: `SpanTextEditingController.setDescriptionPaintRanges` / `displaySpans`. Never write it into persisted `spans`. Connected text paints as italic dark teal (no underline) and **combines** with the field’s strikethrough when a task is done — `TextSpanBuilder` must not replace `base.decoration`. URL `link` is stored and paints teal underline. Description paint ranges remap with the same text edit as format spans (`remapOffsetRange`) so the paint stays on the original glyphs; the field PATCHes the link `anchor` after a short debounce. While the field is focused, parent `descriptionRanges` must not overwrite those remapped offsets.
+Description-link colour (`AppColors.descriptionLink`) is paint-only for connected info: `SpanTextEditingController.setDescriptionPaintRanges` / `displaySpans`. Never write it into persisted `spans`. Connected text paints as italic dark teal (no underline) and **combines** with the field’s strikethrough when a task is done — `TextSpanBuilder` must not replace `base.decoration`. URL `link` is stored and paints teal underline. Description paint ranges remap with the same text edit as format spans (`remapOffsetRange`) so the paint stays on the original glyphs — including when the parent still has the old title (view page). The field PATCHes the link `anchor` after a short debounce. While the field is focused, parent `descriptionRanges` must not overwrite those remapped offsets; new/removed link ids still merge.
 
 The hover bubble stays open while the pointer is on the connected text **or** the bubble (so the bubble can scroll). It closes when the pointer is on neither.
 
@@ -81,7 +81,7 @@ The hover bubble stays open while the pointer is on the connected text **or** th
 
 Before merging any rich-text PR:
 
-1. Run `flutter test test/files/description_range_remap_test.dart test/files/document_mark_test.dart test/files/continuous_text_test.dart test/files/rtl_paragraph_text_direction_test.dart test/files/rtl_empty_space_caret_test.dart`
+1. Run `flutter test test/files/description_range_remap_test.dart test/files/description_link_split_test.dart test/files/document_mark_test.dart test/files/continuous_text_test.dart test/files/rtl_paragraph_text_direction_test.dart test/files/rtl_empty_space_caret_test.dart`
 2. Manual: bold a word → click after it → type (new text stays regular)
 3. Manual: mixed bold + regular lines → size up (bold stays bold, regular stays regular)
 4. Manual: select text → right-click → **one** highlight during menu, matching the selection (not selection + whole line)

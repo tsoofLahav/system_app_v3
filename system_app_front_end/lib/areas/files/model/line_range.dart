@@ -75,3 +75,35 @@ class LineRange {
 
   static bool _isNewline(int unit) => unit == 0x0A || unit == 0x0D;
 }
+
+/// Word under [offset] for a phone double-tap mark (Hebrew and Latin).
+TextSelection wordSelectionAround(String text, int offset) {
+  if (text.isEmpty) return const TextSelection.collapsed(offset: 0);
+  final i = offset.clamp(0, text.length);
+  var start = i;
+  var end = i;
+  if (i < text.length && _isWordChar(text, i)) {
+    start = i;
+    end = i + 1;
+  } else if (i > 0 && _isWordChar(text, i - 1)) {
+    start = i - 1;
+    end = i;
+  } else {
+    return TextSelection.collapsed(offset: i);
+  }
+  while (start > 0 && _isWordChar(text, start - 1)) {
+    start--;
+  }
+  while (end < text.length && _isWordChar(text, end)) {
+    end++;
+  }
+  return LineRange.withoutEdgeNewlines(
+    text,
+    TextSelection(baseOffset: start, extentOffset: end),
+  );
+}
+
+bool _isWordChar(String text, int index) {
+  final ch = String.fromCharCode(text.codeUnitAt(index));
+  return RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(ch);
+}
