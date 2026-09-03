@@ -52,6 +52,8 @@ class UnsavedEmbedEdits {
     }
   }
 
+  static bool isDirty(int objectId) => _objectIds.contains(objectId);
+
   /// True when the agent wrote a payload for an object the user is still editing.
   static bool anyDirtyConflictsWith(Iterable<ObjectEmbed> inbound) {
     for (final embed in inbound) {
@@ -121,13 +123,11 @@ Future<EditConflictChoice> showEditConflictDialog({
           width: AppDialogMetrics.maxWidth,
           actions: [
             TextButton(
-              onPressed: () =>
-                  Navigator.pop(ctx, EditConflictChoice.keepYours),
+              onPressed: () => Navigator.pop(ctx, EditConflictChoice.keepYours),
               child: Text(strings['editConflictKeepYours']),
             ),
             TextButton(
-              onPressed: () =>
-                  Navigator.pop(ctx, EditConflictChoice.useAgent),
+              onPressed: () => Navigator.pop(ctx, EditConflictChoice.useAgent),
               child: Text(strings['editConflictUseAgent']),
             ),
           ],

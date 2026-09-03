@@ -2,7 +2,8 @@
 
 A view section can own one `section_window` automation (start + duration).
 Regular automations that need user input or review lock their clock to that
-window and place two complimentary tasks in a routine section.
+Regular automations that need user input or review lock their clock to that
+window and place complimentary tasks in a repeating view.
 """
 
 from __future__ import annotations
@@ -53,10 +54,16 @@ def section_defs(layout: dict | None) -> list[dict]:
 
 
 def ensure_section_keys(layout: dict | None) -> tuple[dict, bool]:
-    """Give every named section a stable key. Returns (layout, changed)."""
+    """Give every named section a stable key. Stamp view cadence onto sections."""
     config = dict(layout or {})
     sections = section_defs(config)
-    changed = False
+    view_kind = view_cadence(config)
+    changed = str(config.get("cadence") or "").strip() not in (
+        CADENCE_ROUTINE,
+        CADENCE_ONE_TIME,
+    )
+    if changed:
+        config["cadence"] = view_kind
     next_sections = []
     for item in sections:
         row = dict(item)
@@ -64,13 +71,29 @@ def ensure_section_keys(layout: dict | None) -> tuple[dict, bool]:
             row["key"] = new_section_key()
             changed = True
         cadence = str(row.get("cadence") or "").strip()
-        if cadence not in (CADENCE_ROUTINE, CADENCE_ONE_TIME):
-            row["cadence"] = CADENCE_ROUTINE
+        if cadence != view_kind:
+            row["cadence"] = view_kind
             changed = True
         next_sections.append(row)
     if changed:
         config["sections"] = next_sections
+        config["cadence"] = view_kind
     return config, changed
+
+
+def view_cadence(layout: dict | None) -> str:
+    """Repeating / one-time lives on the view. Missing key infers from sections."""
+    config = layout or {}
+    raw = str(config.get("cadence") or "").strip()
+    if raw in (CADENCE_ROUTINE, CADENCE_ONE_TIME):
+        return raw
+    defs = section_defs(config)
+    if defs and all(
+        str(item.get("cadence") or CADENCE_ROUTINE) == CADENCE_ONE_TIME
+        for item in defs
+    ):
+        return CADENCE_ONE_TIME
+    return CADENCE_ROUTINE
 
 
 def find_section(layout: dict | None, *, key: str | None = None, name: str | None = None):
@@ -83,9 +106,7 @@ def find_section(layout: dict | None, *, key: str | None = None, name: str | Non
 
 
 def section_cadence(layout: dict | None, section_key: str | None) -> str:
-    found = find_section(layout, key=section_key)
-    cadence = str((found or {}).get("cadence") or CADENCE_ROUTINE)
-    return cadence if cadence in (CADENCE_ROUTINE, CADENCE_ONE_TIME) else CADENCE_ROUTINE
+    return view_cadence(layout)
 
 
 def section_name_for_key(layout: dict | None, section_key: str | None) -> str:
@@ -304,7 +325,7 @@ def ensure_complimentary_tasks(automation: Automation) -> list[Task]:
     if section is None:
         raise ValueError("section not found")
     if section_cadence(view.layout_config, automation.section_key) != CADENCE_ROUTINE:
-        raise ValueError("complimentary tasks must sit in a routine section")
+        raise ValueError("complimentary tasks must sit in a repeating view")
 
     titles = complimentary_titles(automation)
     created = []

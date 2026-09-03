@@ -52,8 +52,8 @@ A file being "the important one" is a fact about the topic's arrangement, not ab
 - **A new file is added first**, so it is always on screen. Every layout has at least one slot, and a file you just created that you cannot see would be a bug you could not diagnose. The caret lands in that new file.
 - **A hidden file is never lost.** Deleting and archiving are explicit actions with their own UI; being off screen is neither.
 - **Choosing a smaller layout hides files, it does not reorder them.** Switching back shows the same files in the same places.
-- **⌘. is a peek, not a history.** From any layout other than grid it writes grid and remembers the *stored* id (`auto` stays `auto`). Pressed again on grid it restores that id and forgets. Leaving the topic page (another topic, view, archive, diagram) or picking a tile in the layout picker clears the peek. There is no stack and nothing is persisted. [`layout/grid_layout_toggle.dart`](layout/grid_layout_toggle.dart).
-- **Phone shows every file of the topic**, one at a time, in order. There are no layouts on phone — a file hidden on desktop is still in the swipe row. Position (`n / total`) is only in the reorder sheet. The **screen structure is locked** — see [Phone screen structure](#phone-screen-structure).
+- **⌘P is a peek, not a history.** From any layout other than grid it writes grid and remembers the *stored* id (`auto` stays `auto`). Pressed again on grid it restores that id and forgets. Leaving the topic page (another topic, view, archive, diagram) or picking a tile in the layout picker clears the peek. There is no stack and nothing is persisted. [`layout/grid_layout_toggle.dart`](layout/grid_layout_toggle.dart).
+- **Phone shows every file of the topic**, one at a time, in order. There are no layouts on phone — a file hidden on desktop is still in the swipe row. The first file is on screen; further files sit toward the **end** (right in English, left in Hebrew). Do not set `PageView.reverse` — Directionality already mirrors the axis. Position (`n / total`) is only in the reorder sheet. The **screen structure is locked** — see [Phone screen structure](#phone-screen-structure).
 
 | Concern | Files |
 |---------|-------|
@@ -61,7 +61,7 @@ A file being "the important one" is a fact about the topic's arrangement, not ab
 | Which files a layout reaches | [`layout/topic_file_slots.dart`](layout/topic_file_slots.dart) |
 | Drawing them | [`layout/file_layout_board.dart`](layout/file_layout_board.dart) |
 | Choosing a layout | [`layout/file_layout_picker.dart`](layout/file_layout_picker.dart) — glass strip above the bottom bar, no scrim |
-| Grid peek shortcut | [`layout/grid_layout_toggle.dart`](layout/grid_layout_toggle.dart) — ⌘.; in-memory, this page only |
+| Grid peek shortcut | [`layout/grid_layout_toggle.dart`](layout/grid_layout_toggle.dart) — ⌘P; in-memory, this page only |
 | Rearranging files | [`arrange/`](arrange/) — desktop overlay (files only); phone reorder sheet |
 
 ### Arranging
@@ -72,10 +72,10 @@ Arranging is a **mode**: the user opens it from the bottom bar (desktop) or the 
 
 | Dialog | Opens from | What it does |
 |--------|------------|--------------|
-| Layout picker | Bottom-bar layout icon, ⌘R | Four tiles above the bar. No darkened scrim. Tap applies immediately |
-| Arrange files | Bottom-bar arrange icon, ⌘⌥R | One grid of file-preview cards, cut after the layout’s slots, drag to reorder. Writes `order_index` only on Done |
+| Layout picker | Bottom-bar layout icon, ⌘⌥R | Four tiles above the bar. No darkened scrim. Tap applies immediately |
+| Arrange files | Bottom-bar arrange icon, ⌘R | One grid of file-preview cards, cut after the layout’s slots, drag to reorder. Writes `order_index` only on Done |
 
-Desktop arrange is a wrap of the same frosted preview cards as bring-file, with the document scaled down so more of the file is visible. The cards sit in the centre of the overlay. A full-width cut after the layout’s slots (1 / 2 / 3) marks what is on screen; grid layout hides the cut because every file is on screen. Dragging within a wrap reorders; dragging across the cut is how a file comes on or off screen. Layout stays on ⌘R.
+Desktop arrange is a wrap of the same frosted preview cards as bring-file, with the document scaled down so more of the file is visible. The cards sit in the centre of the overlay. A full-width cut after the layout’s slots (1 / 2 / 3) marks what is on screen; grid layout hides the cut because every file is on screen. Dragging within a wrap reorders; dragging across the cut is how a file comes on or off screen. Arrange stays on ⌘R.
 
 **Phone** has no layouts, so arrange is only the swipe row: a `ReorderableListView` of file names ([`arrange/phone_file_reorder_sheet.dart`](arrange/phone_file_reorder_sheet.dart)). Done calls `reorderTopicFiles` and does not change `file_layout`.
 
@@ -101,7 +101,9 @@ This layout is settled. Do not go back to a reserved well behind the tools, a to
 │   ( )  ( )  ( )  pills      │  One scrolling row, above the footer
 ├─────────────────────────────┤  — not overlapping it.
 │ footer (off-white, thin)    │  Separate band. Home indicator
-└─────────────────────────────┘  included.
+└─────────────────────────────┘  included. Hidden while the keyboard
+                                 is open — it only holds that place
+                                 in full screen.
 ```
 
 Shell: [`shell/phone_app_shell.dart`](shell/phone_app_shell.dart). File roll: [`topic/phone_topic_view.dart`](topic/phone_topic_view.dart). Colours: [UI](../ui/AREA.md). The insert-bar emoji panel is an overlay above the pills (keyboard replacement), not a new shell band.
@@ -120,14 +122,15 @@ Listeners sit as low as they need to. The open document is not remounted because
 
 | Change | What rebuilds |
 |--------|----------------|
-| Language (theme / direction) | [`app.dart`](../../app.dart) rebuilds `MaterialApp` only |
+| Language (theme / direction) or document text size | [`app.dart`](../../app.dart) rebuilds `MaterialApp` only |
 | Sidebar, mode, canvas wash, bottom bar | Shell `ListenableBuilder` — chrome only. [`TopicView`](topic/topic_view.dart) is a **stable child**, not rebuilt by that listen |
 | Open topic, file list / names / order, layout | `TopicView` listens itself |
 | Document body or embeds (this device or another) | [`SuperDocumentEditor`](../files/editor/super_document_editor.dart) listens itself and applies into the open editor. If a key is down, the apply waits |
+| Launch | Disk snapshot of the last topic + sidebar paints first (`appReady`). Network then refreshes; a dirty editor keeps its body |
 
 Do not wrap `MaterialApp` or the topic canvas in `Consumer<AppState>` / a shell listen that rebuilds the files on every notify.
 
-[`MainPaneLoader`](widgets/main_pane_loader.dart) (until `appReady`, and while a topic is stale) drops Flutter’s startup-seeded pressed keys so the editor does not open into a looping `KeyDownEvent … already pressed`. Details: [`NOTES.md` § Editor keyboard safety](../../../../NOTES.md#editor-keyboard-safety).
+[`MainPaneLoader`](widgets/main_pane_loader.dart) (until `appReady`, and while a topic is stale) drops Flutter’s startup-seeded pressed keys so the editor does not open into a looping `KeyDownEvent … already pressed`. Details: [`NOTES.md` § Editor keyboard safety](../../../../NOTES.md#editor-keyboard-safety). First install with no snapshot still waits on the API.
 
 ## Sections
 
@@ -175,7 +178,7 @@ Tapping outside the focused editor (canvas, empty padding — not another field)
 - Open the **Objects map** (info object graph) — listed after topics
 - Reach the archive
 - Create a topic, view, tag, or **topic type** from the centered sidebar **+** — a context-menu bubble lists the choices; each opens its own create dialog (tags are filtered on the objects map, not listed as a sidebar section). Creating a type does not open the type editor; a short hint points at Preferences.
-- Topic types are user-defined. The sidebar has one section per type, plus Main (Home) and Others (untyped non-Home topics). Configure types from Preferences; **Reorder** in that list shows drag handles; a **pencil** next to trash opens that type's template and closes Preferences. Topics and views have no handles until **sidebar reorder mode** (⌘O when no task has the caret, or Preferences → Reorder). Right-click a view to rename or delete it (tasks stay in their files). A type's template is a hidden topic: headline **Template for {type}**, with a glass Save (keep edits, Home) / Cancel (restore the enter snapshot) bar.
+- Topic types are user-defined. The sidebar has one section per type, plus Main (Home) and Others (untyped non-Home topics). Configure types from Preferences; **Reorder** in that list shows drag handles; a **pencil** next to trash opens that type's template and closes Preferences. Topics and views have no handles until **sidebar reorder mode** (⌘O when no task has the caret, or Preferences → Reorder). Views are grouped **repeating** then **one-time**, with a subtle line between. Right-click a view to rename or delete it (tasks stay in their files). A type's template is a hidden topic: headline **Template for {type}**, with a glass Save (keep edits, Home) / Cancel (restore the enter snapshot) bar.
 
 The sidebar is navigation only. It never edits content.
 
@@ -211,15 +214,15 @@ Shortcuts are user-rebindable. [`shortcuts/`](shortcuts/) owns the catalog of av
 
 **Insert object** (not “blocks”): catalog category `objects` inserts into the **active** file via `DocumentEditorRegistry` — info, task list, table, graph (chart table), image. After insert, the caret enters the new object (first inner field); images with no field keep the block caret. ⌘L inserts a bullet list (document structure, not an object) unless the caret is in an object field, where it opens Connect info…. Marked paragraph text (or the caret line) becomes points — one per newline. A paragraph has no button anywhere — it is what typing already does. The insert bar also has **emoji** (⌘E; language is ⌘⇧E): desktop opens a movable overlay you can park beside the text; phone opens a keyboard-style panel above the pills. Selecting an emoji inserts at the caret (body or an open object field) and stays open. On a **view**, ⌘E and the smiley on the bottom bar open the same palette into the focused task title. Insert and text shortcuts still fire when a file editor is inside a dialog (fill-file snippet).
 
-Heavy-use defaults are **two keys** (⌘ + letter) so they stay in muscle memory. Letters still follow the English name (`D`etails, `T`ask, `G`raph). The OS already owns some of those letters for text (⌘A select-all, ⌘C/V/X clipboard, ⌘Z undo, ⌘B/I/U format) and a few window actions (⌘W close, ⌘M minimize, ⌘Q quit, ⌘H hide — Home already uses ⌘H). Flutter intercepts catalog keys while this window is focused, so ⌘N / ⌘T / ⌘F / ⌘G / ⌘D / ⌘L / ⌘R / ⌘O do **not** leak to Finder or Chrome; they are safe here because this is a desktop document window, not a browser. **Keep the extra modifier only where the 2-key letter is already a text or window key:** table ⌘⌥T (task took ⌘T), image ⌘⇧I (italic took ⌘I), language ⌘⇧E (emoji took ⌘E), add view ⌘⇧W (close window), layout toggle ⌘⇧M (minimize), arrange files ⌘⌥R (file layout took ⌘R). Grid files is ⌘. (period is easier than a taken letter). Preferences can rebind any of them.
+Heavy-use defaults are **two keys** (⌘ + letter) so they stay in muscle memory. Letters still follow the English name (`D`etails, `T`ask, `G`raph). The OS already owns some of those letters for text (⌘A select-all, ⌘C/V/X clipboard, ⌘Z undo, ⌘B/I/U format) and a few window actions (⌘W close, ⌘M minimize, ⌘Q quit, ⌘H hide — Home already uses ⌘H). Flutter intercepts catalog keys while this window is focused, so ⌘N / ⌘T / ⌘F / ⌘G / ⌘D / ⌘L / ⌘R / ⌘O / ⌘P do **not** leak to Finder or Chrome; they are safe here because this is a desktop document window, not a browser. **Keep the extra modifier only where the 2-key letter is already a text or window key:** table ⌘⌥T (task took ⌘T), image ⌘⇧I (italic took ⌘I), language ⌘⇧E (emoji took ⌘E), add view ⌘⇧W (close window), layout toggle ⌘⇧M (minimize), file layout ⌘⌥R (arrange took ⌘R). Grid files is ⌘P. Preferences can rebind any of them.
 
 | Catalog | Default | Does |
 |---------|---------|------|
 | Go home | ⌘H | Opens Home |
 | Bring file | ⌘K | Search overlay of files from other topics; choosing one **visits** it on Home in the layout (same document, still owned by its topic). Repeat to visit more. Arrange and cycle include those visits. |
-| Arrange | ⌘⌥R | File arrange overlay (topic page) |
-| File layout | ⌘R | Layout picker (topic page, desktop). Phone has no layouts. |
-| Toggle grid layout | ⌘. | Topic page, desktop: any other layout → grid; grid → the layout this shortcut left. Remembered only for this shortcut, only while you stay on this topic page — not in the database, and forgotten if you leave or pick a layout from ⌘R. Phone has no layouts. |
+| Arrange | ⌘R | File arrange overlay (topic page) |
+| File layout | ⌘⌥R | Layout picker (topic page, desktop). Phone has no layouts. |
+| Toggle grid layout | ⌘P | Topic page, desktop: any other layout → grid; grid → the layout this shortcut left. Remembered only for this shortcut, only while you stay on this topic page — not in the database, and forgotten if you leave or pick a layout from ⌘⌥R. Phone has no layouts. |
 | Cycle files | ⌘[ ⌘] | Rotate **every live file in the topic** in a circle (not only the layout’s slots; not archived). Applies immediately — do not wait for KeyUp / `runWhenKeyboardIdle` |
 | Add file / topic | ⌘F / ⌘N | The same dialogs as the chrome |
 | Add view | ⌘⇧W | Same as the sidebar + |

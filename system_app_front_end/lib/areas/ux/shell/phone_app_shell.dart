@@ -92,6 +92,10 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
             ? null
             : TopicAppearance.accentFor(canvasTopic);
         final isMain = canvasTopic?.isMain ?? true;
+        final footerHeight = AppBottomBarMetrics.phoneFooterHeight(
+          viewPaddingBottom: MediaQuery.viewPaddingOf(context).bottom,
+          viewInsetsBottom: MediaQuery.viewInsetsOf(context).bottom,
+        );
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: const SystemUiOverlayStyle(
             statusBarColor: Colors.transparent,
@@ -214,12 +218,11 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
                     ),
                   ),
                 ),
-                SizedBox(
-                  height:
-                      MediaQuery.viewPaddingOf(context).bottom +
-                      AppBottomBarMetrics.phoneFooterStripe,
-                  child: const ColoredBox(color: AppColors.phoneStripe),
-                ),
+                if (footerHeight > 0)
+                  SizedBox(
+                    height: footerHeight,
+                    child: const ColoredBox(color: AppColors.phoneStripe),
+                  ),
               ],
             ),
           ),

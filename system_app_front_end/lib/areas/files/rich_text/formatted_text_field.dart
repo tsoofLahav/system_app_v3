@@ -50,8 +50,8 @@ class DescriptionTextRange {
 
 /// Object inner text (info, tasks, table cells, captions): a Material
 /// [TextField]. Flutter paints the caret. Click placement is
-/// [embedCaretForTap] only — not drags, not an existing mark, not Shift+click.
-/// See `CARET_AND_WRITING_FOCUS.md` § Writing in objects.
+/// [embedCaretForTap] on a collapsed click; [bidiAwareOffsetForEditable] on
+/// a drag or Shift+click. See `CARET_AND_WRITING_FOCUS.md` § Writing in objects.
 ///
 /// Enter advances (new item / leave info). Shift+Enter / ⌘Enter / Ctrl+Enter
 /// inserts a newline. Escape leaves the object.
@@ -186,6 +186,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   TextDirection? _detectedDirection;
   Offset? _pendingTapGlobal;
   var _pointerMovedBeyondSlop = false;
+  int? _markBaseOffset;
   DateTime? _lastTapAt;
   var _consecutiveTapCount = 0;
   late final Map<Type, Action<Intent>> _rtlMotionActions;
@@ -1018,7 +1019,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       flow: _flow,
     );
 
-    final offset = _offsetForGlobal(globalPosition);
+    final offset = _offsetForGlobal(
+      globalPosition,
+      paddingGoesToLineEnd: true,
+    );
     if (offset != null && !_clickIsInsideExistingMark(offset)) {
       // Same as Super Editor: drop a stale snapshot, place the caret, expand
       // to the line at the pointer, then freeze.
@@ -1042,13 +1046,19 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     BlockTextFocusRegistry.capturePendingMark();
   }
 
-  int? _offsetForGlobal(Offset global) {
+  int? _offsetForGlobal(Offset global, {required bool paddingGoesToLineEnd}) {
     final host = context.findRenderObject();
     if (host == null) return null;
     final editable = _findRenderEditable(host);
     if (editable == null) return null;
-    final offset = editable.getPositionForPoint(global).offset;
-    return offset.clamp(0, widget.controller.text.length);
+    final textLength = widget.controller.text.length;
+    return bidiAwareOffsetForEditable(
+          editable: editable,
+          globalPosition: global,
+          textLength: textLength,
+          paddingGoesToLineEnd: paddingGoesToLineEnd,
+        ) ??
+        editable.getPositionForPoint(global).offset.clamp(0, textLength);
   }
 
   bool _clickIsInsideExistingMark(int offset) {
@@ -1078,16 +1088,18 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   /// drops a selection that was covering several parts.
   ///
   /// RTL solution (`rtl/RTL.md`): padding beside the line → logical end **on
-  /// a single click**; BiDi gaps snap to the nearest glyph. Drags, an existing
-  /// mark, Shift+click, and double/triple tap keep Flutter's selection —
-  /// [embedCaretForTap] would collapse them to the line end.
+  /// a single click**; BiDi gaps snap to the nearest glyph. Drags and
+  /// Shift+click use the nearer visual edge / nearest run — not padding →
+  /// line-end, and not Flutter's number-boundary hit-test.
   void _handleTap() {
     final flow = _flow;
     final segmentId = _registeredSegmentId;
     final tapGlobal = _pendingTapGlobal;
     final dragged = _pointerMovedBeyondSlop;
+    final markBase = _markBaseOffset;
     _pendingTapGlobal = null;
     _pointerMovedBeyondSlop = false;
+    _markBaseOffset = null;
     final tapCount = _consecutiveTapCount;
 
     final selection = widget.controller.selection;
@@ -1119,7 +1131,18 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
           flow.collapseTo(DocumentTextPosition(segmentId, offset));
         }
       } else {
-        offset = _offsetForGlobal(tapGlobal) ?? offset;
+        offset =
+            _offsetForGlobal(tapGlobal, paddingGoesToLineEnd: false) ?? offset;
+        if ((extending || dragged) && tapCount < 2) {
+          final base = extending
+              ? (selection.isValid ? selection.baseOffset : offset)
+              : (markBase ??
+                    (selection.isValid ? selection.baseOffset : offset));
+          widget.controller.selection = TextSelection(
+            baseOffset: base,
+            extentOffset: offset,
+          );
+        }
       }
       final hostBox = context.findRenderObject();
       if (hostBox is RenderBox) {
@@ -1456,6 +1479,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
           if (event.buttons == kPrimaryButton) {
             _pendingTapGlobal = event.position;
             _pointerMovedBeyondSlop = false;
+            _markBaseOffset = _offsetForGlobal(
+              event.position,
+              paddingGoesToLineEnd: false,
+            );
             _registerConsecutiveTap();
           }
           final isSecondary = (event.buttons & kSecondaryMouseButton) != 0;
@@ -1494,13 +1521,25 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         onPointerMove: (event) {
           final down = _pendingTapGlobal;
           if (down == null) return;
-          if ((event.position - down).distance > kTouchSlop) {
-            _pointerMovedBeyondSlop = true;
-          }
+          if ((event.position - down).distance <= kTouchSlop) return;
+          _pointerMovedBeyondSlop = true;
+          if ((event.buttons & kPrimaryButton) == 0) return;
+          if (_consecutiveTapCount >= 2) return;
+          final base = _markBaseOffset;
+          final extent = _offsetForGlobal(
+            event.position,
+            paddingGoesToLineEnd: false,
+          );
+          if (base == null || extent == null) return;
+          widget.controller.selection = TextSelection(
+            baseOffset: base,
+            extentOffset: extent,
+          );
         },
         onPointerCancel: (_) {
           _pendingTapGlobal = null;
           _pointerMovedBeyondSlop = false;
+          _markBaseOffset = null;
         },
         child: MouseRegion(
           onHover: widget.descriptionRanges.isEmpty
@@ -1552,6 +1591,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                     textDirection: textDirection,
                     textAlign: TextAlign.start,
                     textAlignVertical: widget.textAlignVertical,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    spellCheckConfiguration:
+                        const SpellCheckConfiguration.disabled(),
                     // Desktop Flutter defaults to BoxWidthStyle.max, which pads
                     // each line's wash to the paragraph width — in RTL that is
                     // the trail to the left edge. Tight matches Super Editor.
@@ -2231,9 +2274,9 @@ bool imeDeletedEmptySentinel(String previous, String next) {
 }
 
 /// Click caret correction ([embedCaretForTap]) is for a collapsed single click.
-/// Drags, an existing mark, Shift+click, and the 2nd/3rd click of a double/triple
-/// tap keep Flutter's selection so a Hebrew padding hit does not expand to the
-/// whole visual line (and so double-click can stay a word, like Super Editor).
+/// Drags and Shift+click keep a mark, but use BiDi-aware geometry so a number
+/// in Hebrew does not steal the extent. Double/triple tap keep Flutter so a
+/// Hebrew padding hit does not expand to the whole visual line.
 @visibleForTesting
 bool shouldApplyEmbedCaretForTap({
   required bool draggedBeyondSlop,

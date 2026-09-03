@@ -83,6 +83,7 @@ abstract final class ViewLayoutConfig {
   static const topicOrderKey = 'topic_order';
   /// Frame keys (`section:<name>`, `section:` for uncategorized) — like [topicOrderKey].
   static const sectionOrderKey = 'section_order';
+  static const cadenceKey = 'cadence';
 
   static const modeBySection = 'by_section';
   static const modeByTopic = 'by_topic';
@@ -91,6 +92,36 @@ abstract final class ViewLayoutConfig {
     final raw = config[displayModeKey];
     if (raw == modeByTopic) return modeByTopic;
     return modeBySection;
+  }
+
+  /// Repeating (`routine`) or one-time. Lives on the view; every section
+  /// follows it. Missing key infers from sections (all one-time → one-time).
+  static String cadence(Map<String, dynamic> config) {
+    final raw = '${config[cadenceKey] ?? ''}';
+    if (raw == ViewSectionCadence.oneTime) return ViewSectionCadence.oneTime;
+    if (raw == ViewSectionCadence.routine) return ViewSectionCadence.routine;
+    final defs = sections(config);
+    if (defs.isNotEmpty &&
+        defs.every((section) => section.cadence == ViewSectionCadence.oneTime)) {
+      return ViewSectionCadence.oneTime;
+    }
+    return ViewSectionCadence.routine;
+  }
+
+  static bool isRepeating(Map<String, dynamic> config) =>
+      cadence(config) == ViewSectionCadence.routine;
+
+  static Map<String, dynamic> withCadence(
+    Map<String, dynamic> config,
+    String next,
+  ) {
+    final value = next == ViewSectionCadence.oneTime
+        ? ViewSectionCadence.oneTime
+        : ViewSectionCadence.routine;
+    final stamped = {...config, cadenceKey: value};
+    final defs = sections(stamped);
+    if (defs.isEmpty) return stamped;
+    return withSections(stamped, defs);
   }
 
   static Map<String, dynamic> withDisplayMode(
@@ -161,12 +192,14 @@ abstract final class ViewLayoutConfig {
     Map<String, dynamic> config,
     List<ViewSectionDef> sections,
   ) {
+    final viewCadence = cadence(config);
     final ordered = [
       for (var i = 0; i < sections.length; i++)
-        sections[i].copyWith(orderIndex: i),
+        sections[i].copyWith(orderIndex: i, cadence: viewCadence),
     ];
     return {
       ...config,
+      cadenceKey: viewCadence,
       sectionsKey: [for (final s in ordered) s.toJson()],
     };
   }

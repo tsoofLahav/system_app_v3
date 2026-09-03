@@ -35,6 +35,7 @@ class BlockTextFocusRegistry {
   static int _sessionToken = 0;
   static FormatRange? _frozenRange;
   static DocumentMark? _frozenMark;
+  static TextEditingController? _frozenController;
   static DocumentMark? _pendingMark;
 
   /// Last non-collapsed selection on a controller — survives macOS EditableText
@@ -71,6 +72,7 @@ class BlockTextFocusRegistry {
     _menuSessionDepth = 0;
     _frozenMark = null;
     _frozenRange = null;
+    _frozenController = null;
     _pendingMark = null;
     discardTransientMark();
     FormatRange.clearPending();
@@ -237,12 +239,16 @@ class BlockTextFocusRegistry {
     int? taskId,
     DocumentTextFlow? flow,
   }) {
-    if (!isInMenuSession) {
-      final previous = activeController ?? _recentTarget?.controller;
-      if (previous != null && !identical(previous, controller)) {
-        _collapseIfMarked(previous);
-        discardTransientMark();
-      }
+    final previous = activeController ?? _recentTarget?.controller;
+    final previousFlow = activeFlow;
+    if (previous != null && !identical(previous, controller)) {
+      _collapseIfMarked(previous);
+      discardTransientMark();
+    }
+    if (previousFlow != null &&
+        !identical(previousFlow, flow) &&
+        !previousFlow.isDisposed) {
+      previousFlow.clearSelection();
     }
     activeController = controller;
     onChanged = changed;
@@ -355,6 +361,7 @@ class BlockTextFocusRegistry {
     _recentTarget = null;
     _frozenMark = null;
     _pendingMark = null;
+    _frozenController = null;
     _snapshotController = null;
     _snapshotSelection = null;
     _bumpFocus();
@@ -373,6 +380,7 @@ class BlockTextFocusRegistry {
       _sessionToken++;
       _frozenMark = _pendingMark ?? _resolveLiveMark();
       _pendingMark = null;
+      _frozenController = activeController;
       final controller = activeController;
       if (controller == null) {
         _frozenRange = FormatRange.pending;
@@ -405,19 +413,36 @@ class BlockTextFocusRegistry {
     FormatRange.clearPending();
 
     final range = _frozenRange;
+    final frozenController = _frozenController;
     final node = activeFocusNode;
     final controller = activeController;
     final mark = _frozenMark;
     _frozenRange = null;
     _frozenMark = null;
+    _frozenController = null;
     _pendingMark = null;
     menuSessionListenable.value++;
 
-    // A mark that covered several parts stays marked after the menu closes, so
-    // the caret is not silently yanked into one of them.
-    if (mark != null && mark.spansParts) return;
+    // Collapse the field the menu froze — not whoever owns writing now.
+    // A mark that covered several parts stays if that same field still has
+    // the caret; otherwise the old wash is leftover and must go.
+    final keepMultiPart = mark != null &&
+        mark.spansParts &&
+        identical(frozenController, controller);
+    if (!keepMultiPart &&
+        frozenController != null &&
+        range != null &&
+        range.isValid) {
+      try {
+        frozenController.selection = TextSelection.collapsed(
+          offset: range.end.clamp(0, frozenController.text.length),
+        );
+      } catch (_) {}
+    }
 
+    if (keepMultiPart) return;
     if (node == null || controller == null) return;
+    if (!identical(controller, frozenController)) return;
 
     final restoreController = controller;
     final restoreNode = node;

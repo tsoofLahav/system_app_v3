@@ -57,9 +57,9 @@ Future<void> createTopicFromDialog(BuildContext context, AppState state) async {
 }
 
 Future<void> createViewFromDialog(BuildContext context, AppState state) async {
-  final name = await showCreateViewDialog(context: context, state: state);
-  if (name == null) return;
-  await state.createView(name: name);
+  final result = await showCreateViewDialog(context: context, state: state);
+  if (result == null) return;
+  await state.createView(name: result.name, cadence: result.cadence);
 }
 
 Future<void> createTagFromDialog(BuildContext context, AppState state) async {

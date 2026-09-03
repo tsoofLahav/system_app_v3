@@ -622,14 +622,27 @@ class RichTableEditorState extends State<RichTableEditor> {
       fullyEmptied: fullyEmptied,
     );
     if (rows.isEmpty) return;
-    _afterKeystroke(() => _dropRows(rows));
+    final start = parseTableCellSegmentId(
+      _flow.selection?.anchor.segmentId ?? '',
+    );
+    _afterKeystroke(
+      () => _dropRows(
+        rows,
+        startRow: start?.$2,
+        startCol: start?.$3,
+      ),
+    );
   }
 
   void _afterKeystroke(VoidCallback fn) {
     runWhenKeyboardIdle(fn);
   }
 
-  void _dropRows(List<int> rows) {
+  void _dropRows(
+    List<int> rows, {
+    int? startRow,
+    int? startCol,
+  }) {
     widget.onFocus?.call();
     if (rows.isEmpty || !mounted) return;
     final drop = rows.toSet();
@@ -639,13 +652,13 @@ class RichTableEditorState extends State<RichTableEditor> {
       if (drop.isEmpty) return;
     }
     final descending = drop.toList()..sort((a, b) => b.compareTo(a));
-    final focusSource = () {
-      for (var r = 0; r < _controllers.length; r++) {
-        if (!drop.contains(r)) return r;
-      }
-      return 0;
-    }();
-    final focusRow = focusSource - drop.where((r) => r < focusSource).length;
+    final caret = caretAfterDroppedTableRows(
+      droppedRows: drop,
+      startRow: startRow ?? (_lastCell?.$1 ?? 0),
+      startCol: startCol ?? (_lastCell?.$2 ?? 0),
+      columnCount: _columnCount,
+      rowCountBefore: _controllers.length,
+    );
     setState(() {
       _unfocusAllCells();
       for (final r in descending) {
@@ -658,8 +671,12 @@ class RichTableEditorState extends State<RichTableEditor> {
     });
     _emit();
     runWhenKeyboardIdle(() {
-      if (!mounted) return;
-      _focusCell(focusRow.clamp(0, _controllers.length - 1), 0);
+      if (!mounted || _controllers.isEmpty) return;
+      _focusCell(
+        caret.row.clamp(0, _controllers.length - 1),
+        caret.col.clamp(0, _columnCount - 1),
+        atStart: caret.atStart,
+      );
     });
   }
 

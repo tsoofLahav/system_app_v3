@@ -5,6 +5,7 @@ import '../../../core/l10n/app_strings.dart';
 import '../../../core/models/archive_index.dart';
 import '../../files/data/topic.dart';
 import '../../objects/data/app_view.dart';
+import '../../objects/data/view_layout.dart';
 import '../../objects/views/create_view_dialog.dart';
 import '../shortcuts/app_shortcuts.dart';
 import '../shortcuts/shortcut_catalog.dart';
@@ -333,13 +334,17 @@ class _ViewSection extends StatelessWidget {
   final Future<void> Function(String viewType) onSelectView;
 
   Future<void> _renameView(BuildContext context, AppView view) async {
-    final name = await showCreateViewDialog(
+    final result = await showCreateViewDialog(
       context: context,
       state: state,
       view: view,
     );
-    if (name == null) return;
-    await state.renameView(view, name: name);
+    if (result == null) return;
+    await state.renameView(
+      view,
+      name: result.name,
+      cadence: result.cadence,
+    );
   }
 
   Future<void> _deleteView(BuildContext context, AppView view) async {
@@ -355,25 +360,37 @@ class _ViewSection extends StatelessWidget {
     if (ok) await state.deleteView(view);
   }
 
-  void _onReorder(int oldIndex, int newIndex) {
+  void _onReorderGroup(List<AppView> group, int oldIndex, int newIndex) {
     if (newIndex > oldIndex) newIndex -= 1;
-    final next = List<AppView>.from(state.userViews);
+    final next = List<AppView>.from(group);
     next.insert(newIndex, next.removeAt(oldIndex));
-    state.reorderViews(next);
+    final repeating = _repeatingViews;
+    final oneTime = _oneTimeViews;
+    final isRepeating = group.isNotEmpty &&
+        ViewLayoutConfig.isRepeating(group.first.layoutConfig);
+    state.reorderViews(isRepeating ? [...next, ...oneTime] : [...repeating, ...next]);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final s = state.strings;
-    final views = state.userViews;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(8, 4, 8, 2),
-          child: Text(s['views'], style: AppTypography.sidebarSectionStyle),
-        ),
-        if (views.length < 2 || !state.sidebarReorderMode)
+  List<AppView> get _repeatingViews => [
+    for (final view in state.userViews)
+      if (ViewLayoutConfig.isRepeating(view.layoutConfig)) view,
+  ];
+
+  List<AppView> get _oneTimeViews => [
+    for (final view in state.userViews)
+      if (!ViewLayoutConfig.isRepeating(view.layoutConfig)) view,
+  ];
+
+  Widget _tilesFor(
+    BuildContext context,
+    List<AppView> views, {
+    required bool reorder,
+  }) {
+    if (views.isEmpty) return const SizedBox.shrink();
+    if (!reorder) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           for (final view in views)
             _ViewTile(
               key: ValueKey(view.id),
@@ -382,36 +399,75 @@ class _ViewSection extends StatelessWidget {
               onTap: () => onSelectView(view.type),
               onEdit: () => _renameView(context, view),
               onDelete: () => _deleteView(context, view),
-              strings: s,
+              strings: state.strings,
               attention: state.viewHasAttention(view.id),
-            )
-        else
-          ReorderableListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            buildDefaultDragHandles: false,
-            proxyDecorator: (child, index, animation) {
-              return Material(color: Colors.transparent, child: child);
-            },
-            itemCount: views.length,
-            onReorder: _onReorder,
-            itemBuilder: (context, index) {
-              final view = views[index];
-              return _ViewTile(
-                key: ValueKey(view.id),
-                view: view,
-                selected: state.selectedViewType == view.type,
-                onTap: () => onSelectView(view.type),
-                onEdit: () => _renameView(context, view),
-                onDelete: () => _deleteView(context, view),
-                strings: s,
-                dragIndex: index,
-                attention: state.viewHasAttention(view.id),
-              );
-            },
-          ),
+            ),
+        ],
+      );
+    }
+    return ReorderableListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      proxyDecorator: (child, index, animation) {
+        return Material(color: Colors.transparent, child: child);
+      },
+      itemCount: views.length,
+      onReorder: (oldIndex, newIndex) =>
+          _onReorderGroup(views, oldIndex, newIndex),
+      itemBuilder: (context, index) {
+        final view = views[index];
+        return _ViewTile(
+          key: ValueKey(view.id),
+          view: view,
+          selected: state.selectedViewType == view.type,
+          onTap: () => onSelectView(view.type),
+          onEdit: () => _renameView(context, view),
+          onDelete: () => _deleteView(context, view),
+          strings: state.strings,
+          dragIndex: index,
+          attention: state.viewHasAttention(view.id),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = state.strings;
+    final repeating = _repeatingViews;
+    final oneTime = _oneTimeViews;
+    final reorder = state.sidebarReorderMode &&
+        (repeating.length > 1 || oneTime.length > 1);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(8, 4, 8, 2),
+          child: Text(s['views'], style: AppTypography.sidebarSectionStyle),
+        ),
+        _tilesFor(context, repeating, reorder: reorder && repeating.length > 1),
+        if (repeating.isNotEmpty && oneTime.isNotEmpty)
+          const _ViewTypeDivider(),
+        _tilesFor(context, oneTime, reorder: reorder && oneTime.length > 1),
         const SizedBox(height: 2),
       ],
+    );
+  }
+}
+
+class _ViewTypeDivider extends StatelessWidget {
+  const _ViewTypeDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Divider(
+        height: 1,
+        thickness: 1,
+        color: AppColors.noteBorder.withValues(alpha: 0.28),
+      ),
     );
   }
 }

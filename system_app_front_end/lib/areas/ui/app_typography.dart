@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/document_text_size.dart';
 import '../../core/l10n/app_language.dart';
 import './app_colors.dart';
 
@@ -9,10 +10,21 @@ abstract final class AppTypography {
   static const FontWeight weight = FontWeight.w400;
   static const FontWeight titleWeight = FontWeight.w500;
   static AppLanguage language = AppLanguage.en;
+  static DocumentTextSize documentTextSize = DocumentTextSize.platformDefault;
 
-  static void configure({required AppLanguage appLanguage}) {
+  static void configure({
+    required AppLanguage appLanguage,
+    DocumentTextSize? textSize,
+  }) {
     language = appLanguage;
+    if (textSize != null) documentTextSize = textSize;
   }
+
+  static double get documentBodySize => switch (documentTextSize) {
+    DocumentTextSize.small => 12.5,
+    DocumentTextSize.medium => 14,
+    DocumentTextSize.large => 16,
+  };
 
   /// Color-emoji faces last so layout and paint share the same emoji metrics.
   /// Without this, a Hebrew/Inter run + emoji shifts the selection wash.
@@ -86,8 +98,9 @@ abstract final class AppTypography {
   static TextStyle get blockHeaderStyle =>
       _style(size: 14, height: 1.4, fontWeight: FontWeight.w600);
 
-  /// Body, inputs, tasks, checklist items — smaller.
-  static TextStyle get noteBodyStyle => _style(size: 12.5, height: 1.55);
+  /// Body, inputs, tasks, checklist items — follows [documentTextSize].
+  static TextStyle get noteBodyStyle =>
+      _style(size: documentBodySize, height: 1.55);
 
   /// A paragraph as it reads inside a document — tighter than a bare body
   /// line, because paragraphs sit one under another with almost no gap.
@@ -95,25 +108,27 @@ abstract final class AppTypography {
       noteBodyStyle.copyWith(height: 1.35);
 
   /// A heading inside a document. Level 1 is the largest; each level down
-  /// loses 2px, and level 5 lands back on the paragraph size.
+  /// loses 2px. Sizes stay relative to the chosen body size.
   static TextStyle documentHeadingStyle(int level) {
     final clamped = level.clamp(1, 5);
     return noteTitleStyle.copyWith(
-      fontSize: 24 - clamped * 2,
+      fontSize: documentBodySize + 11.5 - clamped * 2,
       height: 1.3,
       fontWeight: FontWeight.w600,
     );
   }
 
   /// Dense list bullets and list item fields.
-  static TextStyle get listItemStyle => _style(size: 12.5, height: 1.38);
+  static TextStyle get listItemStyle =>
+      _style(size: documentBodySize, height: 1.38);
 
   /// Task rows in files and task views.
-  static TextStyle get taskRowStyle => _style(size: 12.5, height: 1.38);
+  static TextStyle get taskRowStyle =>
+      _style(size: documentBodySize, height: 1.38);
 
   static double get taskRowLineHeight {
     final style = taskRowStyle;
-    return (style.fontSize ?? 12.5) * (style.height ?? 1.38);
+    return (style.fontSize ?? documentBodySize) * (style.height ?? 1.38);
   }
 
   /// Locks line height to [style] so color-emoji fallbacks do not shift

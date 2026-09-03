@@ -33,7 +33,7 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | [`editor/object_embed_component.dart`](editor/object_embed_component.dart) | SE `ComponentBuilder` wrapping embed UIs |
 | [`rich_text/`](rich_text/) | Span formatting used inside embeds (tables, info, …). Insert-bar emoji palette: [`text_emoji_picker.dart`](rich_text/text_emoji_picker.dart) |
 | [`rich_text/rtl/`](rich_text/rtl/RTL.md) | **RTL solution** — Hebrew/BiDi direction helpers |
-| [`data/`](data/) | File, topic, and topic-type models + API services. `files.meta.template_slot` is the stable key automations use |
+| [`data/`](data/) | File, topic, and topic-type models + API services. `files.meta.template_slot` is the stable key automations use. Last-topic bodies live on device in [`launch_snapshot_store.dart`](data/launch_snapshot_store.dart) so Home can paint before the network |
 
 A type's template is a hidden `is_template` topic (`template_topic_id`). Preferences → types list pencil (or **Edit template**) opens it and closes the dialog stack. The header reads **Template for {type}**. Save keeps autosaved edits and goes Home; Cancel restores the file snapshot taken on enter. New topics of that type copy its **files with content** (backend). **Duplicate** copies the topic in full (live files, object content, in-topic links, tags, icon, colour). Creating a type asks for an English name and a Hebrew name; the sidebar follows the app language. In Manage types, **Reorder** shows drag handles so sidebar sections can move. Template topics do not appear in the sidebar.
 
@@ -60,7 +60,7 @@ On phone the framed pane ends above the tool bubbles on the light-grey middle; t
 
 ### One scroll owner
 
-Each file pane scrolls its document in a local `CustomScrollView` with `SuperEditor` as a **sliver** (`shrinkWrap: true`). The topic canvas also scrolls; SE always emits a sliver when any ancestor `Scrollable` exists, so it must never sit under `Column` / `Expanded` / box parents.
+Each file pane scrolls its document in a local `CustomScrollView` with `SuperEditor` as a **sliver** (`shrinkWrap: true`). A `SliverFillRemaining` fills leftover pane height so a tap below the last line still places the caret at the end of the file. The topic canvas also scrolls; SE always emits a sliver when any ancestor `Scrollable` exists, so it must never sit under `Column` / `Expanded` / box parents.
 
 ### Visual rules (Super Editor stylesheet)
 
@@ -145,7 +145,7 @@ A marking that covers a part **end to end** removes the part; a marking that cov
 |------------------|--------|
 | A whole bullet (mark or select-all + delete) | The bullet is removed |
 | Every bullet / last bullet deleted | The list block is removed |
-| Every cell of a row | The row is removed |
+| Every cell of a row | The row is removed. Caret: first cell that was part of the deletion if that row remains; else the last cell of the last remaining row **before** the deleted block |
 | Every cell of a table (inner mark-delete) | Rows go; if every row is marked, one empty row stays |
 | Whole atomic embed, or info text cleared | The object is removed (and its backing row) |
 | All tasks in a task list (inner mark-delete) | Tasks go; if every task is marked, one empty task stays |
@@ -157,13 +157,13 @@ Empty **Enter** still exits below a list/table/object without destroying it (con
 
 ### RTL / Hebrew
 
-Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed Hebrew+English) lives in one place: **[`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)** — embeds via `FormattedTextField`, file body via ambient-aware SE builders + visual ←/→ plugin. Do not add competing caret math outside that folder. Object-field double-click is the word only; another click is the sentence. Fields use `BoxWidthStyle.tight` (Flutter’s desktop default is `max`, which fills the line to the left in Hebrew) and `AppTypography.fieldStrut` so color-emoji fallbacks do not shift lines without emoji. A trailing `\n` from that tap is not part of the mark; Shift+arrows keep it so the mark can grow onto the next line. Emoji is a whole grapheme — Shift+arrows, Super Editor marks, and span paint snap to grapheme edges so a mark cannot split a surrogate pair (`string is not well-formed UTF-16`).
+Fluent RTL (visual arrows, paragraph base direction, empty-padding taps, mixed Hebrew+English/numbers) lives in one place: **[`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md)** — embeds via `FormattedTextField`, file body via ambient-aware SE builders, visual ←/→, and BiDi tap/mark hit-testing. Do not add competing caret math outside that folder. Object-field double-click is the word only; another click is the sentence. Fields use `BoxWidthStyle.tight` (Flutter’s desktop default is `max`, which fills the line to the left in Hebrew) and `AppTypography.fieldStrut` so color-emoji fallbacks do not shift lines without emoji. A trailing `\n` from that tap is not part of the mark; Shift+arrows keep it so the mark can grow onto the next line. Emoji is a whole grapheme — Shift+arrows, Super Editor marks, and span paint snap to grapheme edges so a mark cannot split a surrogate pair (`string is not well-formed UTF-16`).
 
 ### Object inner text
 
-Object fields are Flutter `TextField`s ([`FormattedTextField`](rich_text/formatted_text_field.dart)). Super Editor is a package — writing-inside-objects rules live in [`CARET_AND_WRITING_FOCUS.md`](../../../../../CARET_AND_WRITING_FOCUS.md) § Writing in objects. Short form: native caret; click placement via [`embedCaretForTap`](rich_text/rtl/embed_caret_hit.dart); do not rewrite selection on a drag, inbound refresh, or while typing; `maxLines: null`; do not remount or reseed a focused field; expand-to-line only for an unmarked **action**, never while marking.
+Object fields are Flutter `TextField`s ([`FormattedTextField`](rich_text/formatted_text_field.dart)). Super Editor is a package — writing-inside-objects rules live in [`CARET_AND_WRITING_FOCUS.md`](../../../../../CARET_AND_WRITING_FOCUS.md) § Writing in objects. Short form: native caret; click placement via [`embedCaretForTap`](rich_text/rtl/embed_caret_hit.dart); drag / Shift+click via [`bidiAwareOffsetForEditable`](rich_text/rtl/empty_space_caret.dart) so a number in Hebrew does not steal the mark; do not rewrite selection on inbound refresh or while typing; `maxLines: null`; do not remount or reseed a focused field; expand-to-line only for an unmarked **action**, never while marking.
 
-**One owner.** Click or right-click a paragraph → body owns writing and the object mark is forgotten. Click or right-click an inner field → that field owns writing and the Super Editor caret is cleared. Super Editor `hasFocus` is true for descendant fields; only **primary** focus means the body owns writing. Never paint both washes. A second right-click while a menu is open retargets the mark and menu to the new line.
+**One owner.** Click or right-click a paragraph → body owns writing and the object mark is forgotten. Click or right-click an inner field → that field owns writing and the Super Editor caret is cleared. Super Editor `hasFocus` is true for descendant fields; only **primary** focus means the body owns writing. Never paint both washes. A second right-click while a menu is open retargets the mark and menu to the new line. Putting the caret in another file or object must drop the previous right-click line mark (the menu freeze belongs to the field that opened it, not whoever owns writing now).
 
 Each **multi-field** object (task list, table) owns one [`DocumentTextFlow`](editor/document_text_flow.dart) so Shift+arrows and Shift+click mark across **tasks or cells inside that object**. Info is one field and has no flow. Marks do not cross objects or into the Super Editor body. Choose view / ⌘J applies to every marked task in the list (view then section; each task keeps its topic and list).
 
@@ -358,9 +358,11 @@ The display side is deliberately forgiving where the write side is strict: item 
 
 ## Saving
 
-Edits mutate the Super Editor document; save serializes via the marker bridge and `PATCH document_json` (`%%system_app_document v4\n` + body). Saves are debounced and silent — typing never triggers a full editor remount from `AppState`.
+Per keystroke the body **inserts into Super Editor** (and snaps graphemes only if a mark splits an emoji). `PATCH document_json` is **debounced** (~450ms) and silent — typing never remounts the editor. Phone object-pill chrome does not notify unless enter/leave actually changed. File body and object fields turn **off** OS autocorrect, suggestions, and spellcheck.
 
-A newer body from elsewhere (phone, agent) is applied **into** the already-open `SuperDocumentEditor`. The topic page is not rebuilt for that. Who listens where: UX [`AREA.md` § Who rebuilds](../ux/AREA.md#who-rebuilds).
+Edits mutate the Super Editor document; save serializes via the marker bridge (`%%system_app_document v4\n` + body). A newer body from elsewhere (phone, agent) is applied **into** the already-open `SuperDocumentEditor`. The topic page is not rebuilt for that. Who listens where: UX [`AREA.md` § Who rebuilds](../ux/AREA.md#who-rebuilds).
+
+Last-topic file bodies, that topic’s embeds, and sidebar topic chrome are stored on device for **first paint**; archive, views, automations, and AI actions load after the network.
 
 **User vs agent:** if the open file has no unsaved local **body** edits, take the inbound copy. A dirty embed only counts as a file conflict when the agent also wrote **that same object**. Typing in object A while the agent edits object B does not open keep-yours / use-agent — B takes inbound and A keeps local. If both sides changed the body, or the same object, ask which version to keep ([`edit_conflict.dart`](editor/edit_conflict.dart)) — never silently write a stale local payload over an agent graph on dispose. Keyboard safety still applies: wait until no key is down before remounting cells or showing the dialog.
 

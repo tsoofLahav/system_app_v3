@@ -21,11 +21,13 @@ Canonical checklists that this file consolidates:
 
 A file is **one continuous piece of text**. Paragraphs, lists, tables, and objects sit in that same flow. The user should never feel that they clicked into a nested widget to keep writing.
 
+**Per keystroke:** Super Editor inserts into the in-memory document (grapheme snap only if a mark splits an emoji). Save is the existing ~450ms debounce. Do not notify phone object-pill chrome unless enter/leave changed. Do not run OS autocorrect / suggestions / spellcheck on the file body or object fields.
+
 **Parts are lines.** A bullet, a table row, and an embed (or each of its editable inner parts, once the object is open) count as one line of the document. Any caret or marking decision is settled by asking what a plain line would do. A caret that stalls at a boundary, or a delete that leaves an empty bullet or blank gap, is a bug — not a widget detail. Inner mark-delete of every task or table row is the exception: one empty part stays so the object is not destroyed from the inside (chrome or empty Backspace on the last unit still deletes it).
 
 A blank line the user typed is text and is saved. Move and delete must not leave empty paragraphs the user did not make.
 
-A tap **on glyphs** in a table cell, task, or info stays on that glyph. Padding beside the line jumps to the logical end **on a click**. A drag or Shift+click keeps the user’s mark (do not snap it to the whole line). Gaps between Hebrew and numbers snap to the nearest glyph. End-of-line taps keep the caret on that line.
+A tap **on glyphs** in a table cell, task, or info stays on that glyph. Padding beside the line jumps to the logical end **on a click**. A drag or Shift+click keeps the user’s mark (do not snap it to the whole line) and uses the nearer visual edge / nearest run so a number in Hebrew does not steal the start. Gaps between Hebrew and numbers snap to the nearest glyph. End-of-line taps keep the caret on that line.
 
 ---
 
@@ -49,8 +51,8 @@ Only **one** of those owns typing at a time (`DocumentCaretOwner.document` vs `e
 | Do | Don't |
 |----|--------|
 | Leave the native caret (`showCursor` on) | Hide the cursor and overlay-paint a bar |
-| Place the caret on a **click** with [`embedCaretForTap`](system_app_front_end/lib/areas/files/rich_text/rtl/embed_caret_hit.dart) in the same turn | Write `controller.selection` on keystrokes, inbound refresh, or mouse-up after a drag |
-| Hebrew: tap **on glyphs** stays; empty padding beside the line → logical end **only for a collapsed click** | Apply padding→line-end on a drag, an existing mark, or Shift+click (that is the Hebrew “whole line immediately” bug) |
+| Place the caret on a **click** with [`embedCaretForTap`](system_app_front_end/lib/areas/files/rich_text/rtl/embed_caret_hit.dart) in the same turn | Write `controller.selection` on keystrokes, inbound refresh, or mouse-up after a drag that was already a mark |
+| Hebrew: tap **on glyphs** stays; empty padding beside the line → logical end **only for a collapsed click**; drag / Shift+click use nearer visual edge / nearest run | Apply padding→line-end on a drag, an existing mark, or Shift+click (that is the Hebrew “whole line immediately” bug). Let a number in Hebrew steal the mark start |
 | Expand to the caret line only when resolving an **unmarked action** (right-click / format / AI) | Expand-to-line while the user is marking |
 | `maxLines: null` even for one visual line; strip newlines where a single line is required | `maxLines: 1` (vertical intents mark the whole field) |
 | Silent saves (`notify: false`); stable widget keys; skip reseed while the field is focused | Remount or `setRichState` a focused field (caret jumps to the end) |
@@ -73,11 +75,12 @@ Only **one** surface owns writing, and only **one** mark is painted. Super Edito
 | Right-click **object chrome** (not text) | Block / chrome menu | Whole-object menu. Inner-field mark is not the target. |
 | **Shift+Enter** on the block | Opens the object | Same as §4. |
 | **Enter** inside | Leave (info) or next item; Escape leaves from any field; Shift+Enter / ⌘Enter is a newline | Same as §4. |
-| Tap **canvas / empty padding** | Nobody | Hide caret, clear every mark. |
+| Tap **canvas** outside the file card | Nobody | Hide caret, clear every mark. |
+| Tap **empty space in the file** (below the last line) | Super Editor body | Caret at the **end** of the last block. |
 
 Never paint an object-field wash and a Super Editor line wash at the same time. Opening the body menu must not freeze a leftover object mark (`releaseLiveMark` before `openMenuSession`).
 
-A **new** right-click, anywhere, retargets even while the previous right-click menu is still open: close that freeze (`beginNewPointerAim`), mark the new line, open the new menu. The first menu’s `openMenuSession` completing later must not keep the old freeze or restore the old caret.
+A **new** right-click, anywhere, retargets even while the previous right-click menu is still open: close that freeze (`beginNewPointerAim`), mark the new line, open the new menu. The first menu’s `openMenuSession` completing later must not keep the old freeze or restore the old caret. Putting the caret in another file or object while that menu is open (or as it closes) drops the auto-marked line — the freeze belongs to the field that opened the menu, not whoever owns writing now.
 
 Enter inside info leaves the object. **Escape** leaves from any inner field. **Shift+Enter** / **⌘Enter** / Ctrl+Enter inserts a newline. Tasks / table cells keep structural Enter; those same modifiers insert a newline in that field. Shift+Enter on the object **block** still opens it.
 
@@ -199,9 +202,11 @@ Symptom: looping `KeyDownEvent is dispatched, but the state shows that the physi
 | Change | What rebuilds |
 |--------|----------------|
 | Language | `app.dart` rebuilds `MaterialApp` only |
+| Document text size | Same — `app.dart` rebuilds `MaterialApp`; `TopicView` also listens |
 | Sidebar, mode, canvas wash, bottom bar | Shell listen — chrome only. `TopicView` is a **stable child** |
 | Open topic, file list / names / order, layout | `TopicView` listens itself |
 | Document body or embeds | `SuperDocumentEditor` listens itself and applies into the open editor. If a key is down, the apply waits |
+| Launch | Last topic + sidebar paint from a disk snapshot; network refresh does not clobber a dirty editor |
 
 ### Smoke-check after editor edits
 
@@ -230,6 +235,8 @@ A newly inserted list or table gets the caret in its first bullet or top-left ce
 
 **New file:** added first so it is on screen; the caret lands in it.
 
+**Opening a topic:** the caret lands at the **end** of the first file on that page (desktop: first shown file; phone: the first swipe page).
+
 **Cycle files (⌘[ ⌘]):** rotates every live file in the topic. Applies immediately — do **not** wait for KeyUp / `runWhenKeyboardIdle` (that stall is for editor mutations, not chrome).
 
 **Shortcuts:** non-text shortcuts are taken at the hardware keyboard (work without a caret; the editor cannot swallow them). Text shortcuts still need a caret. A press fires once: ignore a second delivery until KeyUp (size up/down may repeat).
@@ -239,7 +246,7 @@ A newly inserted list or table gets the caret in its first bullet or top-left ce
 - Base direction = first strong character, else ambient UI.
 - Visual ←/→ inside a field: flip intents, do not reimplement arrows.
 - Empty padding tap → logical line end in the same event turn (never post-frame).
-- Empty space under the file → logical end of the last part.
+- Empty space under the file (the leftover pane below the last block) → logical end of the last part. That area is a `SliverFillRemaining` so it stays tappable; it is not tap-outside.
 - Cmd+arrow / Home / End in Hebrew are a known gap (shared intents; flipping would break Home/End).
 
 Table grid ←/→ is only [`table_grid_nav.dart`](system_app_front_end/lib/areas/files/rich_text/table_grid_nav.dart): physical pad → visual cell. In-cell caret is first-strong RTL, not grid RTL.

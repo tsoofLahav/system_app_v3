@@ -23,6 +23,7 @@ rtl/
   rtl_caret_motion.dart       ← FormattedTextField visual ←/→
   empty_space_caret.dart
   embed_caret_hit.dart        ← tap affinity + BiDi-gap snap; run-aware arrows
+  super_editor_bidi_caret.dart ← SE tap/drag: same padding + gap geometry
   super_editor_text_direction.dart  ← SE empty → ambient direction
   super_editor_visual_caret.dart    ← SE visual ←/→ + selectors
 ```
@@ -66,7 +67,7 @@ Full-width fields leave empty space beside glyphs (especially RTL). Flutter’s 
 | Extra cell/row padding above/below ink (tall cells, centered tasks) | Flutter — do not treat ink-bottom as the line |
 | Empty space under the whole file (outside every field) | `DocumentTextFlow` → logical end of last part |
 
-Correction runs in `FormattedTextField.onTap` **in the same event turn** (before paint). Never post-frame — that flashes wrong → right. Apply it on a **collapsed single click** only. A drag, an existing mark, Shift+click, or the 2nd/3rd click of a double/triple tap keeps Flutter's selection — padding→line-end on those is the Hebrew “whole line immediately” bug.
+Correction runs in `FormattedTextField.onTap` **in the same event turn** (before paint). Never post-frame — that flashes wrong → right. Apply padding→line-end on a **collapsed single click** only. A drag or Shift+click uses the nearer visual edge / nearest glyph run (`bidiAwareOffsetForEditable`) so a number in Hebrew does not steal the mark — not padding→line-end (that is the Hebrew “whole line immediately” bug). Double/triple tap keep Flutter so they can stay a word / sentence.
 
 Desktop Flutter paints selection with `BoxWidthStyle.max` (full paragraph width per line). In RTL the glyphs sit on the right, so that extra box is the trail to the left edge — even when the mark is only a word. Super Editor paints span-tight wash; object fields set `selectionWidthStyle: BoxWidthStyle.tight` so they match. Leave `selectionHeightStyle` at Flutter’s default — `tight` hugs the ink and sits off Hebrew lines that have extra leading. Color-emoji fallbacks need `AppTypography.fieldStrut` or they steal line metrics and the wash is right on emoji lines and wrong on the others. A trailing `\n` from **double/triple-click** is dropped so that extra line box does not appear; Shift+arrows keep the newline so the mark can step onto the next line. Internal newlines in a multi-line mark stay. Double-click = word, another click = sentence, no trail. Emoji must stay a whole grapheme — never step a mark by one UTF-16 unit.
 
@@ -75,7 +76,7 @@ Desktop Flutter paints selection with `BoxWidthStyle.max` (full paragraph width 
 - [ ] `textDirection: resolveFieldTextDirection(text, ambient)`
 - [ ] `textAlign: TextAlign.start` (follows direction)
 - [ ] `wrapVisualCaretMotion(...)` always (identity actions when LTR)
-- [ ] Primary pointer down stores global position; `onTap` calls `embedCaretForTap` **only on a collapsed single click** (not drag / mark / Shift+click / double-tap)
+- [ ] Primary pointer down stores global position; `onTap` calls `embedCaretForTap` **only on a collapsed single click** (not drag / mark / Shift+click / double-tap). Drags and Shift+click use `bidiAwareOffsetForEditable` (nearer visual edge / nearest run) so a number in Hebrew does not steal the mark.
 - [ ] `selectionWidthStyle: BoxWidthStyle.tight` (desktop default `max` fills the line to the left in Hebrew)
 - [ ] `strutStyle: AppTypography.fieldStrut` so color-emoji fallbacks do not shift lines without emoji
 - [ ] Double/triple-click drops a trailing `\n`; Shift+arrows do not (that newline is how the mark steps to the next line)
@@ -93,6 +94,7 @@ The file body is Super Editor, not `FormattedTextField`. Same direction rules ap
 | Base direction | [`ambientAwareTextBuilders`](super_editor_text_direction.dart) — first strong char, else ambient UI (empty Hebrew paragraphs start RTL so the caret sits on the right). Do **not** use stock `getParagraphDirection` alone (it hard-codes empty → LTR). |
 | Align | Stylesheet sets `TextAlign.start` (not absolute left/right) |
 | Visual ←/→ | [`SuperEditorVisualCaretPlugin`](super_editor_visual_caret.dart) + `withVisualHorizontalSelectors` — same flip idea as `rtl_caret_motion.dart` (character/word; not Cmd+line / Home / End) |
+| Tap / mark vs numbers in Hebrew | [`SuperEditorBidiCaretTapHandler`](super_editor_bidi_caret.dart) after the link handler: padding → logical end on a tap; nearer visual edge / nearest glyph run when marking. Desktop drag uses the same geometry from `SuperDocumentEditor`. |
 | Selection wash | SE’s beneath-layer highlight is unreliable for RTL/Hebrew → [`selection_background_phase.dart`](../../editor/selection_background_phase.dart) also paints `BackgroundColorAttribution` on the selected span |
 
 Embed fields (table cells, info, …) still use `FormattedTextField` + the three pieces above.
@@ -129,7 +131,7 @@ Manual (Hebrew UI):
 6. Click on a Hebrew letter mid-word → caret stays where Flutter put it on the glyph  
 7. Click mid-word in a table cell / task / info (including tall-cell padding below ink) → caret stays on the word, not the line end  
 8. Click the end of a wrapped line in an object field → caret stays on that line (not the start of the next)  
-9. Numbers inside Hebrew in an object field — arrows and clicks follow the number run, like the file body
+9. Numbers inside Hebrew — taps land at the line end (not after the number); marking a line does not start after the number. File body **and** object fields.
 
 ## Related
 

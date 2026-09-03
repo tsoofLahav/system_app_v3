@@ -324,4 +324,26 @@ void main() {
     expect(enters, 0);
     expect(controller.text, 'Buy milk\n');
   });
+
+  testWidgets('object fields disable system suggestions', (tester) async {
+    final controller = TextEditingController(text: 'Hi');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FormattedTextField(
+            controller: controller,
+            style: const TextStyle(fontSize: 14),
+            maxLines: null,
+          ),
+        ),
+      ),
+    );
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.autocorrect, isFalse);
+    expect(field.enableSuggestions, isFalse);
+    expect(field.spellCheckConfiguration?.spellCheckEnabled, isFalse);
+  });
 }

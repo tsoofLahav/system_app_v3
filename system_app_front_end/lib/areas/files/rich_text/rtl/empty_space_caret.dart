@@ -79,6 +79,92 @@ int? emptySpaceCaretOffsetFromBoxes({
   return null;
 }
 
+/// Same geometry as [bidiAwareOffsetFromBoxes] against a [RenderEditable].
+int? bidiAwareOffsetForEditable({
+  required RenderEditable editable,
+  required Offset globalPosition,
+  required int textLength,
+  required bool paddingGoesToLineEnd,
+}) {
+  if (textLength <= 0) return 0;
+  final boxes = [
+    for (final b in editable.getBoxesForSelection(
+      TextSelection(baseOffset: 0, extentOffset: textLength),
+    ))
+      Rect.fromLTRB(b.left, b.top, b.right, b.bottom),
+  ];
+  return bidiAwareOffsetFromBoxes(
+    boxes: boxes,
+    local: editable.globalToLocal(globalPosition),
+    textLength: textLength,
+    paddingGoesToLineEnd: paddingGoesToLineEnd,
+    offsetAt: (probe) => editable
+        .getPositionForPoint(editable.localToGlobal(probe))
+        .offset
+        .clamp(0, textLength),
+    logicalLineEndAt: (probeOnLine) {
+      final probe = editable.getPositionForPoint(
+        editable.localToGlobal(probeOnLine),
+      );
+      return editable.getLineAtOffset(probe).extentOffset.clamp(0, textLength);
+    },
+  );
+}
+
+/// Offset for a pointer among glyph [boxes] of one field / paragraph.
+///
+/// [paddingGoesToLineEnd] is a collapsed tap (resume writing). A mark/drag
+/// uses the nearer visual edge so a Hebrew padding hit does not swallow the
+/// whole line, and BiDi gaps snap to the nearest run — not the number
+/// boundary Flutter's hit-test prefers.
+int? bidiAwareOffsetFromBoxes({
+  required List<Rect> boxes,
+  required Offset local,
+  required int textLength,
+  required bool paddingGoesToLineEnd,
+  required int Function(Offset probe) offsetAt,
+  required int Function(Offset probeOnLine) logicalLineEndAt,
+}) {
+  if (textLength <= 0) return 0;
+  if (boxes.isEmpty) return offsetAt(local);
+
+  for (final box in boxes) {
+    if (box.inflate(_kEmptySpaceGlyphSlop).contains(local)) {
+      return offsetAt(local);
+    }
+  }
+
+  final onLine = [
+    for (final box in boxes)
+      if (local.dy >= box.top - _kEmptySpaceGlyphSlop &&
+          local.dy <= box.bottom + _kEmptySpaceGlyphSlop)
+        box,
+  ];
+  if (onLine.isEmpty) return offsetAt(local);
+
+  var left = onLine.first.left;
+  var right = onLine.first.right;
+  for (final box in onLine) {
+    if (box.left < left) left = box.left;
+    if (box.right > right) right = box.right;
+  }
+
+  if (local.dx < left - 0.5 || local.dx > right + 0.5) {
+    if (paddingGoesToLineEnd) {
+      final midX = (left + right) / 2;
+      final midY = (onLine.first.top + onLine.first.bottom) / 2;
+      return logicalLineEndAt(Offset(midX, midY));
+    }
+    final midY = (onLine.first.top + onLine.first.bottom) / 2;
+    final edgeX = local.dx < left ? left + 0.5 : right - 0.5;
+    return offsetAt(Offset(edgeX, midY));
+  }
+
+  final gap = bidiGapCaretProbe(boxes: boxes, local: local);
+  if (gap != null) return offsetAt(gap);
+  return offsetAt(local);
+}
+
 /// Probe slightly inside the nearest glyph when the tap sits in a BiDi gap
 /// on the line (between Hebrew and a number/English run). Null on a glyph
 /// or in padding beside the line — those use other rules.

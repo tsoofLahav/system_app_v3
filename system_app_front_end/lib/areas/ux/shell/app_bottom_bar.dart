@@ -38,6 +38,16 @@ abstract final class AppBottomBarMetrics {
   /// Phone tools row, above the footer stripe — not overlapping it.
   static const phoneBarHeight = phoneFloatMargin * 2 + phoneSegmentHeight;
 
+  /// Off-white band under the pills. Zero while the keyboard is up — that
+  /// stripe only holds the home indicator in full screen.
+  static double phoneFooterHeight({
+    required double viewPaddingBottom,
+    required double viewInsetsBottom,
+  }) {
+    if (viewInsetsBottom > 0) return 0;
+    return viewPaddingBottom + phoneFooterStripe;
+  }
+
   static double segmentHeight({required bool phone}) =>
       phone ? phoneSegmentHeight : barHeight;
 }

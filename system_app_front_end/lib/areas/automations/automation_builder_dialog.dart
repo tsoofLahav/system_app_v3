@@ -954,7 +954,10 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   }
 
   Future<void> _pickView() async {
-    final views = state.userViews;
+    final views = [
+      for (final view in state.userViews)
+        if (ViewLayoutConfig.isRepeating(view.layoutConfig)) view,
+    ];
     if (views.isEmpty) return;
     var initial = 0;
     for (var i = 0; i < views.length; i++) {

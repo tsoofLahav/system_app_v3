@@ -53,21 +53,44 @@ def test_ensure_section_keys_assigns_stable_key_and_routine_default():
     section = layout["sections"][0]
     assert section["key"]
     assert section["cadence"] == windows.CADENCE_ROUTINE
+    assert layout["cadence"] == windows.CADENCE_ROUTINE
     again, changed_again = windows.ensure_section_keys(layout)
     assert changed_again is False
     assert again["sections"][0]["key"] == section["key"]
 
 
-def test_section_cadence_reads_layout():
-    layout = {
+def test_section_cadence_follows_view():
+    mixed = {
         "sections": [
             {"name": "Daily", "key": "abc", "cadence": "routine"},
             {"name": "Once", "key": "def", "cadence": "one_time"},
         ]
     }
-    assert windows.section_cadence(layout, "abc") == "routine"
-    assert windows.section_cadence(layout, "def") == "one_time"
-    assert windows.section_name_for_key(layout, "def") == "Once"
+    assert windows.view_cadence(mixed) == "routine"
+    assert windows.section_cadence(mixed, "abc") == "routine"
+    assert windows.section_cadence(mixed, "def") == "routine"
+    assert windows.section_name_for_key(mixed, "def") == "Once"
+
+    once = {
+        "cadence": "one_time",
+        "sections": [
+            {"name": "Once", "key": "def", "cadence": "one_time"},
+        ],
+    }
+    assert windows.view_cadence(once) == "one_time"
+    assert windows.section_cadence(once, "def") == "one_time"
+
+
+def test_ensure_section_keys_stamps_view_cadence_onto_sections():
+    layout, changed = windows.ensure_section_keys(
+        {
+            "cadence": "one_time",
+            "sections": [{"name": "Focus", "order": 0, "cadence": "routine"}],
+        }
+    )
+    assert changed is True
+    assert layout["cadence"] == "one_time"
+    assert layout["sections"][0]["cadence"] == "one_time"
 
 
 def test_complimentary_titles():
@@ -157,7 +180,7 @@ def test_patch_clears_window_when_clock_changes():
 
 def test_complimentary_placement_requires_routine():
     source = inspect.getsource(windows.ensure_complimentary_tasks)
-    assert "routine section" in source
+    assert "repeating view" in source
     assert "wanted_complimentary_roles" in source
     assert "for role in roles" in source
 

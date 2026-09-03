@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
+import '../../../core/document_text_size.dart';
 import '../../../core/l10n/app_language.dart';
 import '../../../core/platform/app_form_factor.dart';
 import '../../ui/adaptive_dialog.dart';
@@ -57,6 +58,26 @@ class PreferencesDialog extends StatelessWidget {
                 ],
                 selected: state.language,
                 onSelected: state.setLanguage,
+              ),
+              const SizedBox(height: DialogFieldStyle.fieldGap),
+              AppDialogChoiceField<DocumentTextSize>(
+                label: s['documentTextSize'],
+                options: [
+                  AppSegmentedOption(
+                    value: DocumentTextSize.small,
+                    label: s['documentTextSizeSmall'],
+                  ),
+                  AppSegmentedOption(
+                    value: DocumentTextSize.medium,
+                    label: s['documentTextSizeMedium'],
+                  ),
+                  AppSegmentedOption(
+                    value: DocumentTextSize.large,
+                    label: s['documentTextSizeLarge'],
+                  ),
+                ],
+                selected: state.documentTextSize,
+                onSelected: state.setDocumentTextSize,
               ),
               const SizedBox(height: DialogFieldStyle.fieldGap),
               AppDialogField(

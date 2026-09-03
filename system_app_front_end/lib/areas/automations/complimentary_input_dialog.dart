@@ -195,6 +195,14 @@ class _ComplimentaryInputDialogState extends State<_ComplimentaryInputDialog> {
               strings: s,
               minLines: 3,
               maxLines: 12,
+              onEnter: () {
+                if (_closing || over) return;
+                if (last) {
+                  _finish();
+                } else {
+                  _next();
+                }
+              },
             ),
             const SizedBox(height: 4),
             Align(

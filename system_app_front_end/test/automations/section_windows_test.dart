@@ -35,6 +35,44 @@ void main() {
     expect(once.isRoutine, isFalse);
   });
 
+  test('view cadence is repeating unless every section is one-time', () {
+    expect(ViewLayoutConfig.cadence({}), ViewSectionCadence.routine);
+    expect(
+      ViewLayoutConfig.cadence({
+        'sections': [
+          {'name': 'A', 'cadence': 'one_time'},
+          {'name': 'B', 'cadence': 'routine'},
+        ],
+      }),
+      ViewSectionCadence.routine,
+    );
+    expect(
+      ViewLayoutConfig.cadence({
+        'sections': [
+          {'name': 'A', 'cadence': 'one_time'},
+        ],
+      }),
+      ViewSectionCadence.oneTime,
+    );
+    expect(
+      ViewLayoutConfig.cadence({'cadence': 'one_time'}),
+      ViewSectionCadence.oneTime,
+    );
+    final stamped = ViewLayoutConfig.withCadence(
+      {
+        'sections': [
+          {'name': 'A', 'cadence': 'routine'},
+        ],
+      },
+      ViewSectionCadence.oneTime,
+    );
+    expect(stamped['cadence'], ViewSectionCadence.oneTime);
+    expect(
+      ViewLayoutConfig.sections(stamped).single.cadence,
+      ViewSectionCadence.oneTime,
+    );
+  });
+
   test('complimentary placement is required for input or review steps', () {
     expect(
       Automation.needsComplimentaryPlacement([

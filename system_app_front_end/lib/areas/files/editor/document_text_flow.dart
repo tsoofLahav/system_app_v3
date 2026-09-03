@@ -129,6 +129,59 @@ List<int> fullyMarkedTableRows({
   return rows;
 }
 
+/// Caret after inner mark-delete drops fully marked rows.
+///
+/// If the first cell of the deletion is still in the table, stay on it.
+/// If that row is gone, land on the last cell of the last remaining row
+/// before the deleted block.
+@immutable
+class TableDeleteCaret {
+  const TableDeleteCaret({
+    required this.row,
+    required this.col,
+    required this.atStart,
+  });
+
+  final int row;
+  final int col;
+
+  /// True → logical start of the cell; false → logical end.
+  final bool atStart;
+}
+
+TableDeleteCaret caretAfterDroppedTableRows({
+  required Set<int> droppedRows,
+  required int startRow,
+  required int startCol,
+  required int columnCount,
+  required int rowCountBefore,
+}) {
+  final cols = columnCount < 1 ? 1 : columnCount;
+  final lastRow = rowCountBefore < 1 ? 0 : rowCountBefore - 1;
+  final originRow = startRow.clamp(0, lastRow);
+  final col = startCol.clamp(0, cols - 1);
+  int remap(int row) =>
+      row - droppedRows.where((dropped) => dropped < row).length;
+
+  if (!droppedRows.contains(originRow)) {
+    return TableDeleteCaret(row: remap(originRow), col: col, atStart: true);
+  }
+
+  var before = originRow - 1;
+  while (before >= 0 && droppedRows.contains(before)) {
+    before--;
+  }
+  if (before >= 0) {
+    return TableDeleteCaret(
+      row: remap(before),
+      col: cols - 1,
+      atStart: false,
+    );
+  }
+
+  return const TableDeleteCaret(row: 0, col: 0, atStart: true);
+}
+
 /// Columns whose every cell is in [fullyEmptied] — a whole marked chart
 /// series is removed, not left blank.
 List<int> fullyMarkedTableColumns({

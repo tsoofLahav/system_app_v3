@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:super_editor/super_editor.dart';
 
 import '../../../core/app_state.dart';
@@ -35,6 +36,7 @@ import './edit_conflict.dart';
 import './editor_key_handoff.dart';
 import './embed_caret_bridge.dart';
 import './embed_move_bubble.dart';
+import '../../ux/shell/dismiss_focus_on_outside_tap.dart';
 import './embeds/image_display_size.dart';
 import './embeds/object_design_dialog.dart';
 import './embeds/object_look.dart';
@@ -89,6 +91,12 @@ class _PaneCaretLayerBuilder implements SuperEditorLayerBuilder {
       : const ContentLayerProxyWidget(child: SizedBox.shrink());
 }
 
+/// No OS autocorrect / suggestion bar — those run on every iOS keystroke.
+const kFileEditorImeConfiguration = SuperEditorImeConfiguration(
+  enableAutocorrect: false,
+  enableSuggestions: false,
+);
+
 /// File editor surface backed by Super Editor + v4 marker-text persistence.
 class SuperDocumentEditor extends StatefulWidget {
   const SuperDocumentEditor({
@@ -96,13 +104,11 @@ class SuperDocumentEditor extends StatefulWidget {
     required this.file,
     required this.state,
     this.embeds = const [],
-    this.minViewportHeight,
   });
 
   final AppFile file;
   final AppState state;
   final List<ObjectEmbed> embeds;
-  final double? minViewportHeight;
 
   @override
   State<SuperDocumentEditor> createState() => _SuperDocumentEditorState();
@@ -119,9 +125,11 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   Timer? _saveTimer;
   var _dirty = false;
   var _conflictOpen = false;
+  final _phoneObjectGate = PhoneObjectGateSignal();
   String? _lastSavedJson;
   var _applyingRemote = false;
   var _snappingComposerGraphemes = false;
+  Offset? _bidiDragDownGlobal;
 
   /// Object ids currently present as embed nodes — used to cascade-delete
   /// when Super Editor removes a pointer without going through [_deleteObject].
@@ -208,6 +216,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _trackedObjectIds = _objectIdsInDocument();
     widget.state.addListener(_onAppStateChanged);
     DocumentEditorRegistry.notifier.addListener(_onClaimedPaneChanged);
+    BlockTextFocusRegistry.menuSessionListenable.addListener(_onMenuSessionChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       DocumentEditorRegistry.register(
@@ -230,6 +239,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           enterObject: _enterObjectFromPhone,
           leaveObject: _leaveObjectFromPhone,
           nudgeObjectCaret: _nudgeObjectCaretFromPhone,
+          isDirty: () => _fileHasUnsaved,
         ),
       );
       unawaited(_loadEmbedsQuietly());
@@ -245,6 +255,9 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     UnsavedEmbedEdits.fileConflictPending = false;
     unawaited(_flushPendingChanges());
     DocumentEditorRegistry.notifier.removeListener(_onClaimedPaneChanged);
+    BlockTextFocusRegistry.menuSessionListenable.removeListener(
+      _onMenuSessionChanged,
+    );
     DocumentEditorRegistry.unregister(widget.file.id);
     widget.state.removeListener(_onAppStateChanged);
     _doc.removeListener(_onDocumentChange);
@@ -294,6 +307,12 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   void _bumpPhoneObjectGate() {
     if (!isPhoneLayout) return;
+    if (!_phoneObjectGate.shouldNotify(
+      canEnter: _canEnterObject(),
+      canLeave: _canLeaveObject(),
+    )) {
+      return;
+    }
     DocumentEditorRegistry.objectGateNotifier.notify();
   }
 
@@ -368,8 +387,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   /// Caret visibility, and one live mark: a pane that is no longer claimed
   /// drops its selection so it cannot leak into agent hints or stay painted.
   void _onClaimedPaneChanged() {
-    if (DocumentEditorRegistry.activeFileId != widget.file.id &&
-        !BlockTextFocusRegistry.isInMenuSession) {
+    if (DocumentEditorRegistry.activeFileId != widget.file.id) {
       if (_composer.selection != null) {
         _composer.clearSelection();
       }
@@ -378,6 +396,25 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       }
     }
     _syncCaretVisibility();
+  }
+
+  /// Right-click expands the caret line for the menu. When that menu closes
+  /// because writing moved to another file or object, drop the leftover wash.
+  void _onMenuSessionChanged() {
+    if (BlockTextFocusRegistry.isInMenuSession) return;
+    if (DocumentEditorRegistry.activeFileId != widget.file.id) {
+      if (_composer.selection != null) {
+        _composer.clearSelection();
+      }
+      return;
+    }
+    if (_caretSession.owner == DocumentCaretOwner.embed ||
+        !_focusNode.hasPrimaryFocus) {
+      final sel = _composer.selection;
+      if (sel != null && !sel.isCollapsed) {
+        _composer.clearSelection();
+      }
+    }
   }
 
   bool _ownsFocusNode(FocusNode node) {
@@ -576,27 +613,33 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     runWhenKeyboardIdle(() {
       runNextFrame(() {
         if (!mounted) return;
-        DocumentEditorRegistry.claim(widget.file.id);
-        if (_doc.nodeCount > 0) {
-          final node = _doc.getNodeAt(0);
-          if (node != null) {
-            _editor.execute([
-              ChangeSelectionRequest(
-                DocumentSelection.collapsed(
-                  position: DocumentPosition(
-                    nodeId: node.id,
-                    nodePosition: node.beginningPosition,
-                  ),
-                ),
-                SelectionChangeType.placeCaret,
-                SelectionReason.userInteraction,
-              ),
-            ]);
-          }
-        }
-        _focusNode.requestFocus();
+        _placeCaretAtDocumentEnd();
       });
     });
+  }
+
+  /// End of the last block — opening a topic, or a tap in the empty pane.
+  void _placeCaretAtDocumentEnd() {
+    DocumentEditorRegistry.claim(widget.file.id);
+    _takeDocumentWriting();
+    if (_doc.nodeCount > 0) {
+      final node = _doc.getNodeAt(_doc.nodeCount - 1);
+      if (node != null) {
+        _editor.execute([
+          ChangeSelectionRequest(
+            DocumentSelection.collapsed(
+              position: DocumentPosition(
+                nodeId: node.id,
+                nodePosition: node.endPosition,
+              ),
+            ),
+            SelectionChangeType.placeCaret,
+            SelectionReason.userInteraction,
+          ),
+        ]);
+      }
+    }
+    _focusNode.requestFocus();
   }
 
   void _scheduleSave() {
@@ -1468,7 +1511,21 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   /// Right-click aims at the pointer. An existing mark is kept only when the
   /// click is inside it.
   void _aimCaretAtPointer(Offset global) {
-    final pos = _positionAtGlobalOffset(global);
+    final layout = _docLayoutKey.currentState as DocumentLayout?;
+    if (layout == null) return;
+    DocumentPosition? pos;
+    try {
+      final local = layout.getDocumentOffsetFromAncestorOffset(global);
+      pos = bidiDocumentPosition(
+        document: _doc,
+        layout: layout,
+        layoutOffset: local,
+        globalOffset: global,
+        paddingGoesToLineEnd: true,
+      );
+    } catch (_) {
+      pos = _positionAtGlobalOffset(global);
+    }
     if (pos == null) return;
     final sel = _composer.selection;
     if (sel != null && !sel.isCollapsed && sel.containsPosition(_doc, pos)) {
@@ -1480,7 +1537,81 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         SelectionChangeType.placeCaret,
         SelectionReason.userInteraction,
       ),
+      const ClearComposingRegionRequest(),
     ]);
+  }
+
+  void _onBidiMarkPointerDown(PointerDownEvent event) {
+    if ((event.buttons & kPrimaryButton) == 0) return;
+    if (event.kind == PointerDeviceKind.trackpad) return;
+    _bidiDragDownGlobal = event.position;
+  }
+
+  void _onBidiMarkPointerMove(PointerMoveEvent event) {
+    final down = _bidiDragDownGlobal;
+    if (down == null) return;
+    if ((event.buttons & kPrimaryButton) == 0) return;
+    if (event.kind == PointerDeviceKind.trackpad) return;
+    if (_caretSession.owner == DocumentCaretOwner.embed) return;
+    if (!_focusNode.hasPrimaryFocus) return;
+    if ((event.position - down).distance <= kTouchSlop) return;
+    _applyBidiDragSelection(down: down, current: event.position);
+  }
+
+  void _clearBidiMarkPointer() {
+    _bidiDragDownGlobal = null;
+  }
+
+  void _applyBidiDragSelection({
+    required Offset down,
+    required Offset current,
+  }) {
+    final layout = _docLayoutKey.currentState as DocumentLayout?;
+    if (layout == null) return;
+    try {
+      final downLocal = layout.getDocumentOffsetFromAncestorOffset(down);
+      final currentLocal = layout.getDocumentOffsetFromAncestorOffset(current);
+      final extent = bidiDocumentPosition(
+        document: _doc,
+        layout: layout,
+        layoutOffset: currentLocal,
+        globalOffset: current,
+        paddingGoesToLineEnd: false,
+      );
+      if (extent == null) return;
+      final DocumentPosition basePos;
+      if (HardwareKeyboard.instance.isShiftPressed) {
+        basePos = _composer.selection?.base ??
+            bidiDocumentPosition(
+              document: _doc,
+              layout: layout,
+              layoutOffset: downLocal,
+              globalOffset: down,
+              paddingGoesToLineEnd: false,
+            ) ??
+            extent;
+      } else {
+        final fromDown = bidiDocumentPosition(
+          document: _doc,
+          layout: layout,
+          layoutOffset: downLocal,
+          globalOffset: down,
+          paddingGoesToLineEnd: false,
+        );
+        if (fromDown == null) return;
+        basePos = fromDown;
+      }
+      final next = DocumentSelection(base: basePos, extent: extent);
+      if (_composer.selection == next) return;
+      _editor.execute([
+        ChangeSelectionRequest(
+          next,
+          SelectionChangeType.expandSelection,
+          SelectionReason.userInteraction,
+        ),
+        const ClearComposingRegionRequest(),
+      ]);
+    } catch (_) {}
   }
 
   /// Body claimed typing: forget the object mark and caret, then focus SE.
@@ -2222,63 +2353,80 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     return EmbedCaretScope(
       registry: _embedCaretRegistry,
       onExitObject: _exitEmbedObject,
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: (event) {
-          if ((event.buttons & kSecondaryMouseButton) != 0) {
-            DocumentSecondaryTap.notePointer(event.pointer);
-          }
-        },
-        child: GestureDetector(
-          onSecondaryTapDown: _onSecondaryTap,
+      child: KeepEditorFocus(
+        child: Listener(
           behavior: HitTestBehavior.translucent,
-          child: CustomScrollView(
-            slivers: [
-              SuperEditor(
-                key: ValueKey<int>(_superEditorEpoch),
-                editor: _editor,
-                focusNode: _focusNode,
-                // One IME identity per file. Panes share the app's single IME
-                // connection, so without a role a second open file registers as
-                // the same input: super_editor throws "duplicate input IDs" and
-                // the two panes fight over the connection.
-                inputRole: 'file-${widget.file.id}',
-                documentLayoutKey: _docLayoutKey,
-                stylesheet: _stylesheet,
-                selectionStyle: _selectionStyles,
-                componentBuilders: _componentBuilders(ambient),
-                keyboardActions: [
-                  if (_moveModeNodeId != null) _handleMoveModeKey,
-                  ...kFileEditorImeKeyboardActions,
-                ],
-                contentTapDelegateFactories: [cmdClickLinkTapHandlerFactory],
-                documentOverlayBuilders: documentOverlayBuilders(
-                  withCaret: _showCaret,
+          onPointerDown: (event) {
+            if ((event.buttons & kSecondaryMouseButton) != 0) {
+              DocumentSecondaryTap.notePointer(event.pointer);
+            }
+            _onBidiMarkPointerDown(event);
+          },
+          onPointerMove: _onBidiMarkPointerMove,
+          onPointerUp: (_) => _clearBidiMarkPointer(),
+          onPointerCancel: (_) => _clearBidiMarkPointer(),
+          child: GestureDetector(
+            onSecondaryTapDown: _onSecondaryTap,
+            behavior: HitTestBehavior.translucent,
+            child: CustomScrollView(
+              slivers: [
+                SuperEditor(
+                  key: ValueKey<int>(_superEditorEpoch),
+                  editor: _editor,
+                  focusNode: _focusNode,
+                  // One IME identity per file. Panes share the app's single IME
+                  // connection, so without a role a second open file registers as
+                  // the same input: super_editor throws "duplicate input IDs" and
+                  // the two panes fight over the connection.
+                  inputRole: 'file-${widget.file.id}',
+                  documentLayoutKey: _docLayoutKey,
+                  stylesheet: _stylesheet,
+                  selectionStyle: _selectionStyles,
+                  componentBuilders: _componentBuilders(ambient),
+                  keyboardActions: [
+                    if (_moveModeNodeId != null) _handleMoveModeKey,
+                    ...kFileEditorImeKeyboardActions,
+                  ],
+                  contentTapDelegateFactories: [
+                    cmdClickLinkTapHandlerFactory,
+                    superEditorBidiCaretTapHandlerFactory,
+                  ],
+                  documentOverlayBuilders: documentOverlayBuilders(
+                    withCaret: _showCaret,
+                  ),
+                  plugins: {
+                    _visibleSelectionPlugin,
+                    _visualCaretPlugin,
+                    _embedCaretPlugin,
+                  },
+                  // Tab/Enter embeds + visual ←/→ when the paragraph is RTL.
+                  selectorHandlers: withVisualHorizontalSelectors(
+                    base: _embedCaretPlugin.selectorHandlers,
+                    ambient: ambient,
+                  ),
+                  shrinkWrap: true,
+                  imePolicies: const SuperEditorImePolicies(
+                    openImeOnNonPrimaryFocusGain: false,
+                    closeKeyboardOnLosePrimaryFocus: true,
+                    openKeyboardOnGainPrimaryFocus: true,
+                    openKeyboardOnSelectionChange: true,
+                    closeKeyboardOnSelectionLost: true,
+                  ),
+                  imeConfiguration: kFileEditorImeConfiguration,
+                  selectionPolicies: const SuperEditorSelectionPolicies(
+                    clearSelectionWhenEditorLosesFocus: false,
+                    clearSelectionWhenImeConnectionCloses: false,
+                  ),
                 ),
-                plugins: {
-                  _visibleSelectionPlugin,
-                  _visualCaretPlugin,
-                  _embedCaretPlugin,
-                },
-                // Tab/Enter embeds + visual ←/→ when the paragraph is RTL.
-                selectorHandlers: withVisualHorizontalSelectors(
-                  base: _embedCaretPlugin.selectorHandlers,
-                  ambient: ambient,
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => runWhenKeyboardIdle(_placeCaretAtDocumentEnd),
+                  ),
                 ),
-                shrinkWrap: true,
-                imePolicies: const SuperEditorImePolicies(
-                  openImeOnNonPrimaryFocusGain: false,
-                  closeKeyboardOnLosePrimaryFocus: true,
-                  openKeyboardOnGainPrimaryFocus: true,
-                  openKeyboardOnSelectionChange: true,
-                  closeKeyboardOnSelectionLost: true,
-                ),
-                selectionPolicies: const SuperEditorSelectionPolicies(
-                  clearSelectionWhenEditorLosesFocus: false,
-                  clearSelectionWhenImeConnectionCloses: false,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

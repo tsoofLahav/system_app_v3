@@ -11,15 +11,11 @@ class DocumentEditor extends StatelessWidget {
     required this.file,
     required this.state,
     this.embeds = const [],
-    this.minViewportHeight,
   });
 
   final AppFile file;
   final AppState state;
   final List<ObjectEmbed> embeds;
-
-  /// Pane viewport height so empty space under the text stays tappable.
-  final double? minViewportHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +28,6 @@ class DocumentEditor extends StatelessWidget {
       file: file,
       state: state,
       embeds: state.embedsByFileId[file.id] ?? embeds,
-      minViewportHeight: minViewportHeight,
     );
   }
 }

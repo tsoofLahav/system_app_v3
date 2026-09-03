@@ -392,7 +392,6 @@ class _TaskViewPaneState extends State<TaskViewPane> {
       flag: next.flag,
       colorHex: next.colorHex,
       key: next.key,
-      cadence: next.cadence,
       isDefault: next.isDefault,
     );
   }

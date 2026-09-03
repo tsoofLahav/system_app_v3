@@ -8,7 +8,9 @@ import '../../ui/app_typography.dart';
 import '../shell/app_bottom_bar.dart';
 import './topic_appearance.dart';
 
-/// One file at a time. Swipe the row; layouts do not apply on phone.
+/// One file at a time. Swipe toward the end of the row — right in English,
+/// left in Hebrew. [PageView.reverse] is not set: Directionality already
+/// mirrors the axis.
 class PhoneTopicView extends StatefulWidget {
   const PhoneTopicView({
     super.key,
@@ -107,7 +109,6 @@ class _PhoneTopicViewState extends State<PhoneTopicView> {
 
     return PageView.builder(
       controller: _pageController,
-      reverse: state.isRtl,
       itemCount: files.length,
       onPageChanged: (index) => setState(() => _currentPage = index),
       itemBuilder: (context, index) {

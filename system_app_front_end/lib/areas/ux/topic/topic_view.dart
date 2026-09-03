@@ -75,6 +75,7 @@ class _TopicViewState extends State<TopicView> {
       s.error,
       s.topicDetailStale,
       s.language,
+      s.documentTextSize,
       topic?.id,
       topic?.name,
       topic?.icon,

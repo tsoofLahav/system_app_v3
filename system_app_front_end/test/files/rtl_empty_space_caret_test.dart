@@ -90,4 +90,55 @@ void main() {
       );
     });
   });
+
+  group('bidiAwareOffsetFromBoxes', () {
+    test('tap in padding beside the line → logical line end', () {
+      expect(
+        bidiAwareOffsetFromBoxes(
+          boxes: const [Rect.fromLTRB(80, 0, 160, 20)],
+          local: const Offset(20, 10),
+          textLength: 24,
+          paddingGoesToLineEnd: true,
+          offsetAt: (_) => 8,
+          logicalLineEndAt: (_) => 24,
+        ),
+        24,
+      );
+    });
+
+    test('mark in padding beside the line → nearer visual edge, not line end', () {
+      expect(
+        bidiAwareOffsetFromBoxes(
+          boxes: const [Rect.fromLTRB(80, 0, 160, 20)],
+          local: const Offset(20, 10),
+          textLength: 24,
+          paddingGoesToLineEnd: false,
+          offsetAt: (probe) => probe.dx < 90 ? 0 : 12,
+          logicalLineEndAt: (_) => 24,
+        ),
+        0,
+      );
+    });
+
+    test('gap next to a number run snaps to the nearest glyph', () {
+      const hebrew = Rect.fromLTRB(80, 0, 160, 20);
+      const number = Rect.fromLTRB(20, 0, 50, 20);
+      Offset? probed;
+      expect(
+        bidiAwareOffsetFromBoxes(
+          boxes: const [hebrew, number],
+          local: const Offset(65, 10),
+          textLength: 12,
+          paddingGoesToLineEnd: false,
+          offsetAt: (probe) {
+            probed = probe;
+            return probe.dx >= 80 ? 4 : 8;
+          },
+          logicalLineEndAt: (_) => 12,
+        ),
+        4,
+      );
+      expect(probed, const Offset(80.5, 10));
+    });
+  });
 }

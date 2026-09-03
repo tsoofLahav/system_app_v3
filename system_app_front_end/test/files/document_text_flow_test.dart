@@ -416,4 +416,45 @@ void main() {
       );
     });
   });
+
+  group('caret after dropped table rows', () {
+    test('stays on the first deleted cell when that row remains', () {
+      final caret = caretAfterDroppedTableRows(
+        droppedRows: {1, 2},
+        startRow: 0,
+        startCol: 1,
+        columnCount: 3,
+        rowCountBefore: 4,
+      );
+      expect(caret.row, 0);
+      expect(caret.col, 1);
+      expect(caret.atStart, isTrue);
+    });
+
+    test('lands on the last cell before the deleted block', () {
+      final caret = caretAfterDroppedTableRows(
+        droppedRows: {1, 2},
+        startRow: 1,
+        startCol: 0,
+        columnCount: 3,
+        rowCountBefore: 4,
+      );
+      expect(caret.row, 0);
+      expect(caret.col, 2);
+      expect(caret.atStart, isFalse);
+    });
+
+    test('falls back to the first remaining cell when nothing is above', () {
+      final caret = caretAfterDroppedTableRows(
+        droppedRows: {0, 1},
+        startRow: 0,
+        startCol: 2,
+        columnCount: 3,
+        rowCountBefore: 3,
+      );
+      expect(caret.row, 0);
+      expect(caret.col, 0);
+      expect(caret.atStart, isTrue);
+    });
+  });
 }

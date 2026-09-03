@@ -45,6 +45,7 @@ dependencies:
   super_editor: 0.3.0-dev.50
   interactive_graph_view: ^0.3.1
   url_launcher: ^6.3.1
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:

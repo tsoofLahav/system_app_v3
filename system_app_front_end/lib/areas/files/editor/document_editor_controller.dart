@@ -24,6 +24,7 @@ class DocumentEditorController {
     this.enterObject,
     this.leaveObject,
     this.nudgeObjectCaret,
+    this.isDirty,
   });
 
   final int fileId;
@@ -70,6 +71,22 @@ class DocumentEditorController {
 
   /// Phone: move inside the open object, or to the next block when on it.
   final void Function(AxisDirection direction)? nudgeObjectCaret;
+
+  /// Unsaved body or embed edits in this file — inbound must not clobber.
+  final bool Function()? isDirty;
+}
+
+/// Phone enter/leave pill: only notify chrome when the two flags change.
+class PhoneObjectGateSignal {
+  var _canEnter = false;
+  var _canLeave = false;
+
+  bool shouldNotify({required bool canEnter, required bool canLeave}) {
+    if (_canEnter == canEnter && _canLeave == canLeave) return false;
+    _canEnter = canEnter;
+    _canLeave = canLeave;
+    return true;
+  }
 }
 
 /// Tracks every open file editor. Inserts go to the **last claimed** file —
@@ -89,6 +106,8 @@ class DocumentEditorRegistry {
 
   static DocumentEditorController? active;
   static int? get activeFileId => active?.fileId;
+
+  static DocumentEditorController? controllerFor(int fileId) => _byFile[fileId];
 
   /// Pointer for `hints.selected_text` — never a full file body.
   static const agentSelectedTextMaxChars = 4000;
@@ -147,10 +166,7 @@ class DocumentEditorRegistry {
     if (raw.length <= maxChars) {
       return AgentMarkedText(text: raw);
     }
-    return AgentMarkedText(
-      text: raw.substring(0, maxChars),
-      truncated: true,
-    );
+    return AgentMarkedText(text: raw.substring(0, maxChars), truncated: true);
   }
 
   /// Freeze embed marks and read `selected_text` before a dialog steals focus.

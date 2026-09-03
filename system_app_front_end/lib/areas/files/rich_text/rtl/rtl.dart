@@ -5,8 +5,8 @@
 /// Pieces:
 /// - [detectParagraphTextDirection] / [resolveFieldTextDirection] — base direction
 /// - [rtlCaretMotionActions] / [wrapVisualCaretMotion] — visual arrow keys (embeds; flip RTL runs only)
-/// - [emptySpaceCaretOffset] / [embedCaretForTap] — padding, BiDi gaps, end-of-line affinity
-/// - [ambientAwareTextBuilders] / [SuperEditorVisualCaretPlugin] — Super Editor
+/// - [emptySpaceCaretOffset] / [embedCaretForTap] / [bidiAwareOffsetFromBoxes] — padding, BiDi gaps, marking
+/// - [ambientAwareTextBuilders] / [SuperEditorVisualCaretPlugin] / [SuperEditorBidiCaretTapHandler] — Super Editor
 ///
 /// Wire caret/direction helpers through [FormattedTextField] (embeds) and
 /// Super Editor builders/plugins — see [RTL.md]. Do not reinvent caret math in
@@ -22,6 +22,7 @@ export './empty_space_caret.dart';
 export './embed_caret_hit.dart';
 export './paragraph_text_direction.dart';
 export './rtl_caret_motion.dart';
+export './super_editor_bidi_caret.dart';
 export './super_editor_text_direction.dart';
 export './super_editor_visual_caret.dart';
 

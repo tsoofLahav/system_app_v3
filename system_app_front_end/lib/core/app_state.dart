@@ -3,13 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../areas/files/data/app_file.dart';
+import '../areas/files/data/launch_snapshot_store.dart';
 import '../areas/files/editor/document_editor_controller.dart';
+import '../areas/files/editor/edit_conflict.dart';
 import '../areas/files/model/document_codec.dart';
 import '../areas/files/model/document_model.dart';
+import './document_text_size.dart';
 import './l10n/app_language.dart';
 import './l10n/app_strings.dart';
 import '../areas/automations/automation.dart';
-import '../areas/files/data/app_file.dart';
 import '../areas/objects/data/app_view.dart';
 import './models/archive_index.dart';
 import './models/block.dart';
@@ -30,6 +33,7 @@ import './services/bootstrap_service.dart';
 import './services/image_service.dart';
 import '../shared/utils/hardware_keyboard_guard.dart';
 import '../areas/files/data/file_service.dart';
+import '../areas/ui/app_typography.dart';
 import '../areas/objects/data/object_service.dart';
 import '../areas/objects/tags/object_tag_filter.dart';
 import './services/tag_service.dart';
@@ -98,6 +102,7 @@ class AppState extends ChangeNotifier {
   late final ImageService _images;
 
   AppLanguage _language = AppLanguage.en;
+  DocumentTextSize _documentTextSize = DocumentTextSize.platformDefault;
   bool loading = false;
   String? error;
   bool appReady = false;
@@ -186,9 +191,11 @@ class AppState extends ChangeNotifier {
   /// there are no visits.
   List<int> homeCanvasOrderIds = [];
 
-  /// ⌘. peek: previous stored layout for this topic page only. Not persisted.
+  /// ⌘P peek: previous stored layout for this topic page only. Not persisted.
   final GridLayoutPeek _gridLayoutPeek = GridLayoutPeek();
   final BroughtFileStore broughtFileStore = BroughtFileStore();
+  final LaunchSnapshotStore launchSnapshotStore = LaunchSnapshotStore();
+  Timer? _launchSnapshotWriteTimer;
 
   /// File id whose lookalike pending dialog is currently open (anti double-open).
   int? _pendingReviewDialogFileId;
@@ -285,6 +292,7 @@ class AppState extends ChangeNotifier {
 
   AppStrings get strings => AppStrings.forLanguage(_language);
   AppLanguage get language => _language;
+  DocumentTextSize get documentTextSize => _documentTextSize;
   TextDirection get textDirection => strings.textDirection;
   bool get isRtl => strings.isRtl;
 
@@ -353,9 +361,17 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       await _loadLanguage();
+      await _loadDocumentTextSize();
       await _loadDiagramPrefs();
       await shortcutBindings.restore();
       shortcutRebuildListenable.notifyListeners();
+      final paintedFromSnapshot = await _hydrateLaunchSnapshot();
+      if (paintedFromSnapshot) {
+        await settleHardwareKeyboardForLaunch();
+        appReady = true;
+        loading = false;
+        notifyListeners();
+      }
       await _bootstrap.bootstrap();
       final status = await _bootstrap.status();
       workspaceId = status['workspace_id'] as int?;
@@ -373,7 +389,20 @@ class AppState extends ChangeNotifier {
             activeTopics.firstOrNull ??
             allTopics.first;
         await selectTopic(home);
+      } else if (selectedTopic != null) {
+        final id = selectedTopic!.id;
+        final fresh = allTopics.where((t) => t.id == id).firstOrNull;
+        if (fresh != null) {
+          await selectTopic(fresh, preservePainted: paintedFromSnapshot);
+        } else if (allTopics.isNotEmpty) {
+          final home =
+              allTopics.where((t) => t.isMain).firstOrNull ??
+              activeTopics.firstOrNull ??
+              allTopics.first;
+          await selectTopic(home);
+        }
       }
+      await _writeLaunchSnapshot();
     } catch (e) {
       error = e.toString();
     } finally {
@@ -403,6 +432,14 @@ class AppState extends ChangeNotifier {
     unawaited(_persistLanguage(language));
   }
 
+  void setDocumentTextSize(DocumentTextSize size) {
+    if (_documentTextSize == size) return;
+    _documentTextSize = size;
+    AppTypography.configure(appLanguage: _language, textSize: size);
+    notifyListeners();
+    unawaited(_persistDocumentTextSize(size));
+  }
+
   Future<void> toggleLanguage() async {
     setLanguage(_language == AppLanguage.en ? AppLanguage.he : AppLanguage.en);
   }
@@ -413,6 +450,7 @@ class AppState extends ChangeNotifier {
   }
 
   static const _languagePrefsKey = 'app_language';
+  static const _documentTextSizePrefsKey = 'document_text_size';
   static const _fileLayoutAutoMigrationKey = 'migrated_file_layout_auto_v1';
   static const _diagramShowUnconnectedKey = 'diagram_show_unconnected';
 
@@ -437,6 +475,23 @@ class AppState extends ChangeNotifier {
   Future<void> _loadLanguage() async {
     final prefs = await SharedPreferences.getInstance();
     _language = AppLanguage.fromStorage(prefs.getString(_languagePrefsKey));
+  }
+
+  Future<void> _loadDocumentTextSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(_documentTextSizePrefsKey);
+    _documentTextSize = stored == null
+        ? DocumentTextSize.platformDefault
+        : DocumentTextSize.fromStorage(stored);
+    AppTypography.configure(
+      appLanguage: _language,
+      textSize: _documentTextSize,
+    );
+  }
+
+  Future<void> _persistDocumentTextSize(DocumentTextSize size) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_documentTextSizePrefsKey, size.name);
   }
 
   Future<void> _loadDiagramPrefs() async {
@@ -492,7 +547,7 @@ class AppState extends ChangeNotifier {
     if (home != null) await selectTopic(home);
   }
 
-  Future<void> selectTopic(Topic topic) async {
+  Future<void> selectTopic(Topic topic, {bool preservePainted = false}) async {
     _gridLayoutPeek.forgetIfLeft(topic.id);
     if (_typeTemplateEdit != null && topic.id != _typeTemplateEdit!.topicId) {
       _typeTemplateEdit = null;
@@ -501,13 +556,19 @@ class AppState extends ChangeNotifier {
     isArchiveMode = false;
     isDiagramMode = false;
     selectedTopic = topic;
-    selectedDetail = null;
-    topicDetailStale = true;
-    notifyListeners();
+    final keepPainted =
+        preservePainted &&
+        selectedDetail != null &&
+        selectedDetail!.topic.id == topic.id;
+    if (!keepPainted) {
+      selectedDetail = null;
+      topicDetailStale = true;
+      notifyListeners();
+    }
     try {
       final files = await _files.listFilesForTopic(topic.id);
       for (final file in files) {
-        _rememberFile(file);
+        _rememberFile(_mergeInboundFile(file));
       }
       selectedDetail = TopicDetail(
         topic: topic,
@@ -515,9 +576,14 @@ class AppState extends ChangeNotifier {
       );
       topicDetailStale = false;
       for (final file in files) {
-        await loadEmbedsForFile(file.id);
+        await _loadEmbedsForFileMergingDirty(file.id);
       }
       if (topic.isMain) await _refreshVisitFiles();
+      if (pendingFocusFileId == null && selectedDetail != null) {
+        final ordered = orderedFilesFor(topic, selectedDetail!.files);
+        if (ordered.isNotEmpty) pendingFocusFileId = ordered.first.id;
+      }
+      _scheduleLaunchSnapshotWrite();
     } catch (e) {
       error = e.toString();
     }
@@ -1190,7 +1256,7 @@ class AppState extends ChangeNotifier {
 
   String layoutFor(Topic topic) => topic.fileLayout;
 
-  /// Picker / explicit pick. Forgets the ⌘. peek so a chosen tile is the layout.
+  /// Picker / explicit pick. Forgets the ⌘P peek so a chosen tile is the layout.
   Future<void> setLayoutForTopic(Topic topic, String layoutId) async {
     _gridLayoutPeek.forget();
     await _applyFileLayout(topic, layoutId);
@@ -1849,6 +1915,7 @@ class AppState extends ChangeNotifier {
     // Silent document autosaves must not notify — MaterialApp's Consumer and
     // other listeners rebuilding mid-keystroke desync HardwareKeyboard.
     if (notify) notifyListeners();
+    _scheduleLaunchSnapshotWrite();
   }
 
   Future<void> archiveFile(AppFile file) async {
@@ -1966,7 +2033,7 @@ class AppState extends ChangeNotifier {
         (selectedDetail?.topic.id == topic.id ? selectedDetail!.topic : null) ??
         topic;
     for (final file in files) {
-      _rememberFile(file);
+      _rememberFile(_mergeInboundFile(file));
     }
     selectedDetail = TopicDetail(
       topic: fresh,
@@ -1974,10 +2041,133 @@ class AppState extends ChangeNotifier {
     );
     if (selectedTopic?.id == fresh.id) selectedTopic = fresh;
     notifyListeners();
+    _scheduleLaunchSnapshotWrite();
   }
 
   void _rememberFile(AppFile file) {
     filesById[file.id] = file;
+  }
+
+  AppFile _mergeInboundFile(AppFile inbound) {
+    final local = filesById[inbound.id];
+    if (local == null) return inbound;
+    final dirty =
+        DocumentEditorRegistry.controllerFor(inbound.id)?.isDirty?.call() ==
+        true;
+    return mergeTopicFileForRefresh(
+      local: local,
+      inbound: inbound,
+      bodyDirty: dirty,
+    );
+  }
+
+  Future<void> _loadEmbedsForFileMergingDirty(int fileId) async {
+    final current = embedsByFileId[fileId];
+    if (current != null &&
+        current.any((embed) => UnsavedEmbedEdits.isDirty(embed.id))) {
+      return;
+    }
+    await loadEmbedsForFile(fileId, notify: false);
+  }
+
+  Future<bool> _hydrateLaunchSnapshot() async {
+    final snap = await launchSnapshotStore.load();
+    if (snap == null) return false;
+    workspaceId = snap.workspaceId;
+    allTopics = snap.topics;
+    filesById
+      ..clear()
+      ..addAll({for (final file in snap.files) file.id: file});
+    embedsByFileId
+      ..clear()
+      ..addAll({
+        for (final entry in snap.embedsByFileId.entries)
+          entry.key: List<ObjectEmbed>.from(entry.value),
+      });
+    for (final embeds in embedsByFileId.values) {
+      _ingestTasks([for (final embed in embeds) ...?embed.tasks]);
+    }
+    final topic = allTopics
+        .where((t) => t.id == snap.selectedTopicId)
+        .firstOrNull;
+    if (topic == null) return false;
+    selectedTopic = topic;
+    selectedDetail = TopicDetail(
+      topic: topic,
+      files: [
+        for (final file in snap.files)
+          if (file.topicId == topic.id) filesById[file.id]!,
+      ],
+    );
+    _broughtFileIds = List<int>.from(snap.homeVisitFileIds);
+    homeCanvasOrderIds = List<int>.from(snap.homeCanvasOrderIds);
+    broughtTopics.clear();
+    for (final id in _broughtFileIds) {
+      final file = filesById[id];
+      if (file == null) continue;
+      final source = allTopics.where((t) => t.id == file.topicId).firstOrNull;
+      if (source != null) broughtTopics[id] = source;
+    }
+    topicDetailStale = false;
+    return true;
+  }
+
+  void _scheduleLaunchSnapshotWrite() {
+    _launchSnapshotWriteTimer?.cancel();
+    _launchSnapshotWriteTimer = Timer(const Duration(milliseconds: 450), () {
+      unawaited(_writeLaunchSnapshot());
+    });
+  }
+
+  Future<void> _writeLaunchSnapshot() async {
+    _launchSnapshotWriteTimer?.cancel();
+    final snap = _captureLaunchSnapshot();
+    if (snap == null) return;
+    await launchSnapshotStore.save(snap);
+  }
+
+  LaunchSnapshot? _captureLaunchSnapshot() {
+    final wid = workspaceId;
+    final topic = selectedTopic;
+    final detail = selectedDetail;
+    if (wid == null || topic == null || detail == null) return null;
+    final topics = [
+      ...activeTopics,
+      if (!activeTopics.any((t) => t.id == topic.id)) topic,
+    ];
+    final seen = <int>{};
+    final files = <AppFile>[];
+    void addFile(AppFile file) {
+      if (isScratchFile(file) || !seen.add(file.id)) return;
+      files.add(filesById[file.id] ?? file);
+    }
+
+    for (final file in detail.files) {
+      addFile(file);
+    }
+    if (topic.isMain) {
+      for (final file in broughtFiles) {
+        addFile(file);
+      }
+    }
+    if (files.isEmpty) return null;
+    return LaunchSnapshot(
+      workspaceId: wid,
+      selectedTopicId: topic.id,
+      topics: topics,
+      files: files,
+      embedsByFileId: {
+        for (final file in files)
+          if (embedsByFileId[file.id] != null)
+            file.id: embedsByFileId[file.id]!,
+      },
+      homeVisitFileIds: topic.isMain
+          ? List<int>.from(_broughtFileIds)
+          : const [],
+      homeCanvasOrderIds: topic.isMain
+          ? List<int>.from(homeCanvasOrderIds)
+          : const [],
+    );
   }
 
   /// Point every in-memory view of this file at [file].
@@ -2041,10 +2231,10 @@ class AppState extends ChangeNotifier {
           broughtTopics.remove(fileId);
           continue;
         }
-        _rememberFile(file);
+        _rememberFile(_mergeInboundFile(file));
         broughtTopics[file.id] = topic;
         nextIds.add(file.id);
-        await loadEmbedsForFile(file.id, notify: false);
+        await _loadEmbedsForFileMergingDirty(file.id);
       } catch (_) {
         broughtTopics.remove(fileId);
       }
@@ -2136,6 +2326,7 @@ class AppState extends ChangeNotifier {
       rethrow;
     }
     if (notify) notifyListeners();
+    _scheduleLaunchSnapshotWrite();
   }
 
   Future<ObjectEmbed> createObjectInDocument(
@@ -2359,7 +2550,8 @@ class AppState extends ChangeNotifier {
         wrote = true;
         continue;
       }
-      final keep = existing.where((m) => m.viewId == viewId).firstOrNull ??
+      final keep =
+          existing.where((m) => m.viewId == viewId).firstOrNull ??
           existing.firstOrNull;
       final topicKey = ViewLayoutConfig.topicKeyForAssign(
         existingMembershipKey: keep?.topicKey,
@@ -2453,7 +2645,8 @@ class AppState extends ChangeNotifier {
     }
 
     for (final taskId in ids) {
-      final current = tasksById[taskId] ??
+      final current =
+          tasksById[taskId] ??
           viewTasks.where((t) => t.id == taskId).firstOrNull;
       if (noList || noTopic) {
         if (current?.taskListId != null) {
@@ -2540,6 +2733,7 @@ class AppState extends ChangeNotifier {
     if (notify) {
       await loadEmbedsForFile(embed.fileId);
     }
+    _scheduleLaunchSnapshotWrite();
   }
 
   /// Synchronous in-memory update used by info editors before structural rebuild.
@@ -2973,6 +3167,7 @@ class AppState extends ChangeNotifier {
       ),
     );
     await _pushHomeVisitIds();
+    _scheduleLaunchSnapshotWrite();
   }
 
   Future<List<int>?> _fetchHomeVisitIds() async {
@@ -3034,10 +3229,10 @@ class AppState extends ChangeNotifier {
             (home != null && file.topicId == home.id)) {
           continue;
         }
-        _rememberFile(file);
-        byId[file.id] = file;
+        _rememberFile(_mergeInboundFile(file));
+        byId[file.id] = filesById[file.id]!;
         nextTopics[file.id] = topic;
-        await loadEmbedsForFile(file.id, notify: false);
+        await _loadEmbedsForFileMergingDirty(file.id);
       } catch (_) {
         continue;
       }
@@ -3153,7 +3348,7 @@ class AppState extends ChangeNotifier {
         flag: flag,
         colorHex: colorHex,
         orderIndex: sections.length,
-        cadence: cadence ?? ViewSectionCadence.routine,
+        cadence: cadence ?? ViewLayoutConfig.cadence(selectedView!.layoutConfig),
         isDefault: isDefault,
       ),
     );
@@ -3324,17 +3519,37 @@ class AppState extends ChangeNotifier {
     return AppColors.tryParseHex(hex) ?? AppColors.colorFromHex(hex);
   }
 
-  Future<void> createView({required String name}) async {
+  Future<void> createView({
+    required String name,
+    String cadence = ViewSectionCadence.routine,
+  }) async {
     if (workspaceId == null) return;
-    final view = await _views.createView(workspaceId: workspaceId!, name: name);
+    final view = await _views.createView(
+      workspaceId: workspaceId!,
+      name: name,
+      layoutConfig: ViewLayoutConfig.withCadence({}, cadence),
+    );
     userViews = [...userViews, view];
     notifyListeners();
   }
 
-  Future<void> renameView(AppView view, {required String name}) async {
+  Future<void> renameView(
+    AppView view, {
+    required String name,
+    String? cadence,
+  }) async {
     final trimmed = name.trim();
-    if (trimmed.isEmpty || trimmed == view.name) return;
-    final updated = await _views.updateView(view.id, name: trimmed);
+    Map<String, dynamic>? layout;
+    if (cadence != null &&
+        ViewLayoutConfig.cadence(view.layoutConfig) != cadence) {
+      layout = ViewLayoutConfig.withCadence(view.layoutConfig, cadence);
+    }
+    if ((trimmed.isEmpty || trimmed == view.name) && layout == null) return;
+    final updated = await _views.updateView(
+      view.id,
+      name: trimmed.isEmpty ? null : trimmed,
+      layoutConfig: layout,
+    );
     userViews = [for (final v in userViews) v.id == updated.id ? updated : v];
     if (selectedView?.id == updated.id) {
       selectedView = updated;
@@ -3393,7 +3608,8 @@ class AppState extends ChangeNotifier {
   /// Call after flushing the editor when reading the live mark instead.
   Map<String, dynamic> agentRunHints({String? selectedText}) {
     final mark =
-        (selectedText ?? DocumentEditorRegistry.activeMarkedTextForAgent()?.text)
+        (selectedText ??
+                DocumentEditorRegistry.activeMarkedTextForAgent()?.text)
             ?.trim();
     return {
       ...agentTimeHints(),

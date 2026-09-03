@@ -98,9 +98,9 @@ All of it comes from [`app_typography.dart`](app_typography.dart). One family, f
 | `pageTitleStyle` | 19 | 1.3 | w500 | Topic title |
 | `noteTitleStyle` | 14 | 1.3 | w500 | Dialog titles. File names in the pane use this plus **w700** |
 | `blockHeaderStyle` | 14 | 1.4 | w600 | Headers inside a document |
-| `noteBodyStyle` | 12.5 | 1.55 | w400 | Document body, inputs |
-| `listItemStyle` | 12.5 | 1.38 | w400 | Bullets |
-| `taskRowStyle` | 12.5 | 1.38 | w400 | Task rows |
+| `noteBodyStyle` | 12.5 / 14 / 16 | 1.55 | w400 | Document body, inputs. Default **small** on desktop, **medium** on phone; Preferences → Text size |
+| `listItemStyle` | same as body | 1.38 | w400 | Bullets |
+| `taskRowStyle` | same as body | 1.38 | w400 | Task rows |
 | `metaStyle` | 12 | 1.4 | w400 | Meta, hints (in `textHint`) |
 | `sidebarSectionStyle` | 13 | 1.35 | w400 | Sidebar sections |
 | `sidebarItemStyle` | 11 | 1.4 | w400 | Sidebar topics |
@@ -120,7 +120,7 @@ The distinction matters and is easy to get wrong:
 | **App chrome** — menu labels, dialog titles, buttons, sidebar | `AppTypography` chrome styles |
 | **File content** — what a user types in a document | `noteBodyStyle`, `listItemStyle`, `taskRowStyle` |
 
-Changing the document default size or font is a UI change, but it changes how every file reads — a deliberate decision, not a tweak.
+Changing the document default size is a UI change, but it changes how every file reads. The body size is user-configurable (Preferences → Text size: small 12.5 / medium 14 / large 16). Chrome styles stay fixed.
 
 ## Spacing and shape
 
@@ -173,7 +173,7 @@ Marking and selection are **gentle by rule**: a translucent fill or a hairline r
 
 **Hug the content.** Dialogs and choice bubbles are sized and padded for what they hold — not for empty air. Default max width is `AppDialogMetrics.maxWidth` (280); only pickers/lists that need room use `wideWidth` (400), the automation builder uses `extraWideWidth` (460) so a calendar and clock can sit side by side, and the fill-file snippet editor uses `fileEditorWidth` (520) because it hosts a real file pane. Chrome padding is 12/10/12/8; field gaps are 8. Do not pass a custom `width:` on a dialog unless the body truly overflows at 280. Metrics live in [`dialog_metrics.dart`](dialog_metrics.dart).
 
-The preferences dialog is the **reference** glass dialog. Every other dialog uses the same shell and the same field language.
+The preferences dialog is the **reference** glass dialog. Every other dialog uses the same shell and the same field language. Language and **text size** (file body only) are the first two fields.
 
 | Kind | Widget | Shape |
 |------|--------|-------|

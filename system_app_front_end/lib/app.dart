@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import './areas/ui/app_theme.dart';
 import './core/app_state.dart';
+import './core/document_text_size.dart';
 import './core/l10n/app_language.dart';
 import './areas/ux/shell/app_shell.dart';
 
@@ -18,7 +19,7 @@ class SystemApp extends StatelessWidget {
   }
 }
 
-/// Rebuilds [MaterialApp] only when language (theme / direction) changes.
+/// Rebuilds [MaterialApp] only when language or document text size changes.
 ///
 /// A `Consumer<AppState>` around the whole app remounts the file editor on
 /// every `notifyListeners` and desyncs [HardwareKeyboard] while typing
@@ -33,12 +34,14 @@ class _SystemAppView extends StatefulWidget {
 class _SystemAppViewState extends State<_SystemAppView> {
   late final AppState _state;
   late AppLanguage _language;
+  late DocumentTextSize _documentTextSize;
 
   @override
   void initState() {
     super.initState();
     _state = context.read<AppState>();
     _language = _state.language;
+    _documentTextSize = _state.documentTextSize;
     _state.addListener(_onState);
   }
 
@@ -49,8 +52,15 @@ class _SystemAppViewState extends State<_SystemAppView> {
   }
 
   void _onState() {
-    if (_state.language == _language || !mounted) return;
-    setState(() => _language = _state.language);
+    if (_state.language == _language &&
+        _state.documentTextSize == _documentTextSize) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _language = _state.language;
+      _documentTextSize = _state.documentTextSize;
+    });
   }
 
   @override
@@ -58,7 +68,7 @@ class _SystemAppViewState extends State<_SystemAppView> {
     return MaterialApp(
       title: 'system_app',
       debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(_language),
+      theme: buildAppTheme(_language, documentTextSize: _documentTextSize),
       builder: (context, child) {
         return Directionality(
           textDirection: _state.textDirection,

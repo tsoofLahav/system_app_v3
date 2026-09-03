@@ -847,4 +847,36 @@ void main() {
     expect(controller.selection.isCollapsed, isTrue);
     expect(BlockTextFocusRegistry.activeController, isNull);
   });
+
+  test('closing the menu drops the old field mark after the caret moved', () {
+    final oldField = TextEditingController(text: 'hello world');
+    final newField = TextEditingController(text: 'other');
+    addTearDown(oldField.dispose);
+    addTearDown(newField.dispose);
+    final oldFocus = FocusNode();
+    final newFocus = FocusNode();
+    addTearDown(oldFocus.dispose);
+    addTearDown(newFocus.dispose);
+
+    BlockTextFocusRegistry.register(
+      controller: oldField,
+      changed: () {},
+      focusNode: oldFocus,
+    );
+    oldField.selection = const TextSelection(baseOffset: 0, extentOffset: 5);
+    BlockTextFocusRegistry.capturePendingMark();
+    BlockTextFocusRegistry.openMenuSession();
+
+    BlockTextFocusRegistry.register(
+      controller: newField,
+      changed: () {},
+      focusNode: newFocus,
+    );
+    newField.selection = const TextSelection.collapsed(offset: 0);
+    BlockTextFocusRegistry.closeMenuSession();
+
+    expect(oldField.selection.isCollapsed, isTrue);
+    expect(newField.selection, const TextSelection.collapsed(offset: 0));
+    BlockTextFocusRegistry.abandonStashedFocus();
+  });
 }

@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 
+import '../../core/document_text_size.dart';
 import '../../core/l10n/app_language.dart';
 import './app_colors.dart';
 import './app_typography.dart';
 
-ThemeData buildAppTheme(AppLanguage language) {
-  AppTypography.configure(appLanguage: language);
+ThemeData buildAppTheme(
+  AppLanguage language, {
+  DocumentTextSize documentTextSize = DocumentTextSize.small,
+}) {
+  AppTypography.configure(
+    appLanguage: language,
+    textSize: documentTextSize,
+  );
 
   const seed = AppColors.primary;
   final scheme = ColorScheme.fromSeed(

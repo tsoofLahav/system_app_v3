@@ -72,8 +72,8 @@ void main() {
       expect(action.defaultBinding.alt, isFalse);
     }
 
-    expectCmd(ShortcutActionIds.openFileLayout, LogicalKeyboardKey.keyR);
-    expectCmd(ShortcutActionIds.toggleGridFileLayout, LogicalKeyboardKey.period);
+    expectCmd(ShortcutActionIds.openArrange, LogicalKeyboardKey.keyR);
+    expectCmd(ShortcutActionIds.toggleGridFileLayout, LogicalKeyboardKey.keyP);
     expectCmd(ShortcutActionIds.addFile, LogicalKeyboardKey.keyF);
     expectCmd(ShortcutActionIds.addTopic, LogicalKeyboardKey.keyN);
     expectCmd(ShortcutActionIds.insertInfo, LogicalKeyboardKey.keyD);
@@ -91,24 +91,24 @@ void main() {
     expect(action.defaultBinding.shift, isTrue);
   });
 
-  test('file layout defaults to Cmd+R and arrange to Cmd+Option+R', () {
+  test('file layout defaults to Cmd+Option+R and arrange to Cmd+R', () {
     final layout = shortcutActionById(ShortcutActionIds.openFileLayout)!;
     expect(layout.defaultBinding.keyId, LogicalKeyboardKey.keyR.keyId);
     expect(layout.defaultBinding.meta, isTrue);
     expect(layout.defaultBinding.shift, isFalse);
-    expect(layout.defaultBinding.alt, isFalse);
+    expect(layout.defaultBinding.alt, isTrue);
     expect(layout.context, ShortcutContextRequirement.topicMode);
 
     final arrange = shortcutActionById(ShortcutActionIds.openArrange)!;
     expect(arrange.defaultBinding.keyId, LogicalKeyboardKey.keyR.keyId);
     expect(arrange.defaultBinding.meta, isTrue);
     expect(arrange.defaultBinding.shift, isFalse);
-    expect(arrange.defaultBinding.alt, isTrue);
+    expect(arrange.defaultBinding.alt, isFalse);
   });
 
-  test('grid layout toggle defaults to Cmd+.', () {
+  test('grid layout toggle defaults to Cmd+P', () {
     final action = shortcutActionById(ShortcutActionIds.toggleGridFileLayout)!;
-    expect(action.defaultBinding.keyId, LogicalKeyboardKey.period.keyId);
+    expect(action.defaultBinding.keyId, LogicalKeyboardKey.keyP.keyId);
     expect(action.defaultBinding.meta, isTrue);
     expect(action.defaultBinding.shift, isFalse);
     expect(action.defaultBinding.alt, isFalse);
