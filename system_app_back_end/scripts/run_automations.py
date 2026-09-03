@@ -17,7 +17,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app import app
 from models import Automation, db
-from areas.automations.services.automation_schedule import plan_tick
+from areas.automations.services.automation_schedule import (
+    normalize_stored_timezone,
+    plan_tick,
+)
 from areas.automations.services.run_automation import run_automation
 from areas.automations.services.section_windows import (
     KIND_SECTION_WINDOW,
@@ -64,6 +67,11 @@ def tick(now: datetime | None = None) -> int:
     ran = 0
     for row in rows:
         try:
+            if normalize_stored_timezone(row):
+                _log(
+                    f"[automations] id={row.id} tz UTC→Asia/Jerusalem "
+                    f"(re-arm next_run_at)"
+                )
             action, planned_next = plan_tick(
                 schedule=row.schedule,
                 timezone=row.timezone,

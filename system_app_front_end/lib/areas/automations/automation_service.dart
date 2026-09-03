@@ -1,5 +1,6 @@
 import '../../core/services/api_service.dart';
 import './automation.dart';
+import './schedule_format.dart';
 
 class AutomationService {
   AutomationService(this._api);
@@ -24,7 +25,7 @@ class AutomationService {
     required Map<String, dynamic> scope,
     required List<Map<String, dynamic>> steps,
     String? schedule,
-    String timezone = 'UTC',
+    String timezone = AutomationSchedule.defaultTimezone,
     bool enabled = true,
     String kind = 'standard',
     int? viewId,

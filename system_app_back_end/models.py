@@ -425,7 +425,7 @@ class Automation(db.Model):
     scope = db.Column(JSONB, nullable=False, default=dict)
     steps = db.Column(JSONB, nullable=False, default=list)
     schedule = db.Column(db.Text)
-    timezone = db.Column(db.Text, nullable=False, default="UTC")
+    timezone = db.Column(db.Text, nullable=False, default="Asia/Jerusalem")
     enabled = db.Column(db.Boolean, nullable=False, default=True)
     last_run_at = db.Column(db.DateTime)
     next_run_at = db.Column(db.DateTime)

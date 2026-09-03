@@ -1,3 +1,5 @@
+import './schedule_format.dart';
+
 /// A scope, a trigger, and an ordered series of steps.
 ///
 /// Saved AI actions are a different thing — see
@@ -18,7 +20,7 @@ class Automation {
     this.scope = const {},
     this.steps = const [],
     this.schedule,
-    this.timezone = 'UTC',
+    this.timezone = AutomationSchedule.defaultTimezone,
     this.enabled = true,
     this.lastRunAt,
     this.nextRunAt,
@@ -90,7 +92,7 @@ class Automation {
                 .toList()
           : const [],
       schedule: json['schedule'] as String?,
-      timezone: json['timezone'] as String? ?? 'UTC',
+      timezone: json['timezone'] as String? ?? AutomationSchedule.defaultTimezone,
       enabled: json['enabled'] as bool? ?? true,
       lastRunAt: DateTime.tryParse(json['last_run_at'] as String? ?? ''),
       nextRunAt: DateTime.tryParse(json['next_run_at'] as String? ?? ''),

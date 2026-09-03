@@ -25,9 +25,31 @@ WEEKDAYS = {
 
 def resolve_timezone(timezone_name):
     try:
-        return ZoneInfo(timezone_name or UTC.key)
+        return ZoneInfo(timezone_name or DEFAULT_AUTOMATION_TIMEZONE)
     except Exception:
-        return UTC
+        return ZoneInfo(DEFAULT_AUTOMATION_TIMEZONE)
+
+
+def is_legacy_utc(timezone_name):
+    return not (timezone_name or "").strip() or timezone_name.strip() == "UTC"
+
+
+def normalize_stored_timezone(automation) -> bool:
+    """Old rows defaulted to UTC. The app clock is Asia/Jerusalem."""
+    if not is_legacy_utc(getattr(automation, "timezone", None)):
+        return False
+    automation.timezone = DEFAULT_AUTOMATION_TIMEZONE
+    automation.next_run_at = None
+    return True
+
+
+def wall_clock(now_utc, timezone_name=None):
+    """UTC instant → wall time in the automation timezone (Israel by default)."""
+    tz = resolve_timezone(timezone_name or DEFAULT_AUTOMATION_TIMEZONE)
+    naive = as_utc_naive(now_utc)
+    if naive is None:
+        naive = datetime.utcnow()
+    return utc_naive_to_local(naive, tz)
 
 
 def as_utc_naive(dt):
@@ -85,7 +107,7 @@ def plan_tick(*, schedule, timezone, now_utc, next_run_at):
 SLOT_GRACE = timedelta(seconds=90)
 
 
-def in_current_slot(schedule, now_utc, timezone=UTC.key):
+def in_current_slot(schedule, now_utc, timezone=DEFAULT_AUTOMATION_TIMEZONE):
     """True when local time is in this occurrence's minute (plus a short grace)."""
     tz = resolve_timezone(timezone)
     now_local = utc_naive_to_local(now_utc, tz)
@@ -122,7 +144,7 @@ def _this_occurrence_local(schedule, after_local, tz):
     return candidate
 
 
-def next_run_after(schedule, after_utc, timezone=UTC.key):
+def next_run_after(schedule, after_utc, timezone=DEFAULT_AUTOMATION_TIMEZONE):
     if not schedule:
         raise ValueError("schedule is required")
 

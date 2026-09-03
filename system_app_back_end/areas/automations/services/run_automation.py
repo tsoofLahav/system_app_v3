@@ -12,6 +12,7 @@ from datetime import datetime
 
 from models import Automation, AutomationRun, db
 from areas.automations.services.actions import ACTIONS
+from areas.automations.services.automation_schedule import wall_clock
 from areas.automations.services.scope import resolve_scope
 
 
@@ -24,7 +25,7 @@ def run_steps(
     user_input: dict | None = None,
 ) -> dict:
     """Execute a series and describe what happened, step by step."""
-    now = now or datetime.utcnow()
+    now = now or wall_clock(datetime.utcnow())
     resolved = resolve_scope(scope, workspace_id=workspace_id)
     records: list[dict] = []
 
@@ -83,7 +84,8 @@ def run_automation(
     db.session.add(run)
     db.session.flush()
 
-    now = datetime.utcnow()
+    now_utc = datetime.utcnow()
+    now = wall_clock(now_utc, automation.timezone)
     if (automation.kind or "standard") == KIND_SECTION_WINDOW:
         result = {"status": "ok", "steps": [], "scope": {}}
     else:

@@ -6,7 +6,16 @@ replace it.
 
 from datetime import datetime, timezone
 
-from areas.automations.services.automation_schedule import next_run_after, plan_tick
+from types import SimpleNamespace
+
+from areas.automations.services.automation_schedule import (
+    DEFAULT_AUTOMATION_TIMEZONE,
+    next_run_after,
+    normalize_stored_timezone,
+    plan_tick,
+    resolve_timezone,
+    wall_clock,
+)
 
 NOW = datetime(2026, 8, 18, 9, 0)
 
@@ -68,6 +77,28 @@ def test_aware_and_naive_datetimes_can_be_compared():
     )
     assert action == "run"
     assert next_run_at == datetime(2026, 8, 19, 8, 0)
+
+
+def test_missing_timezone_is_israel():
+    assert DEFAULT_AUTOMATION_TIMEZONE == "Asia/Jerusalem"
+    assert resolve_timezone(None).key == "Asia/Jerusalem"
+    assert resolve_timezone("").key == "Asia/Jerusalem"
+
+
+def test_legacy_utc_rows_rearm_on_israel():
+    row = SimpleNamespace(timezone="UTC", next_run_at=datetime(2026, 8, 19, 8, 0))
+    assert normalize_stored_timezone(row) is True
+    assert row.timezone == "Asia/Jerusalem"
+    assert row.next_run_at is None
+    assert normalize_stored_timezone(row) is False
+
+
+def test_wall_clock_is_israel_not_utc():
+    # 22:30 UTC on Tuesday is already Wednesday 01:30 in Israel (UTC+3).
+    utc = datetime(2026, 8, 18, 22, 30)
+    local = wall_clock(utc)
+    assert local.day == 19
+    assert local.hour == 1
 
 
 def test_the_timezone_is_the_users_not_utc():

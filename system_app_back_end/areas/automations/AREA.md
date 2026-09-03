@@ -19,7 +19,7 @@ Row in `automations` (migration [`011_ai_actions_split.sql`](../../migrations/01
 | `trigger` | `{"type": "schedule"}` today. Event types are stored but not dispatched. |
 | `steps` | `[{ "kind": …, …params }]` — the work, in order |
 | `schedule` | `daily HH:MM`, `weekly DAY HH:MM`, `monthly PLACEMENT DAY HH:MM`, or `monthly N PLACEMENT DAY HH:MM` (every N months, 2–12). Legacy `quarterly N …` still parses. |
-| `timezone` | Schedule is interpreted here, stored UTC. Default for new rows from the app: `Asia/Jerusalem`. |
+| `timezone` | Always `Asia/Jerusalem` for this app. The DSL clock (`daily 08:00`) is Israel wall time; `next_run_at` is stored UTC. Legacy rows that still say `UTC` are rewritten to Jerusalem and re-armed on the next cron tick. |
 | `enabled` | Disabled automations never fire automatically |
 | `last_run_at`, `next_run_at` | Scheduling bookkeeping |
 | `kind` | `standard` (default) or `section_window` |
@@ -89,7 +89,7 @@ File and task mutations used by the actions live next to their HTTP routes: [`ar
 ## Rules
 
 - Disabled automations must not run automatically; manual run stays allowed.
-- Schedules are stored as strings and resolved in the automation's timezone — never assume UTC input.
+- Schedules are stored as strings and resolved in **Asia/Jerusalem** — never treat the DSL clock as UTC. `{date}` / weekday on a run and pending-task activation use the same Israel day.
 - `plan_tick` compares naive UTC. Postgres may return `next_run_at` timezone-aware; strip that before comparing, or the cron dies. The same strip (`as_utc_naive`) applies to `window_opened_at` / `window_closes_at` — listing automations calls `window_is_open`, so a mixed-aware compare 500s the whole list.
 - Cron prints one line per automation every minute (`skip` / `arm` / `run`) to stdout, so Render logs show the decision. `logger.info` alone is silent there.
 - The cron process must have `OPENAI_API_KEY` as an **environment variable** on that Cron Job (Secret Files are not `os.environ`). Each tick logs `openai_key=yes/no` and the `OPENAI*` env names, never the secret.

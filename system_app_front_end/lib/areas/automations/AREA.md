@@ -14,7 +14,7 @@ An automation is a **scope**, a **trigger**, and an ordered **series of steps**.
 |-------|-----|
 | Name | English and Hebrew, both required; the list follows the UI language |
 | Scope | All topics / one topic / a topic type (loaded from `topic_types`) |
-| Schedule | Once a day / week / month, or once every N months (2–12). Weekly, monthly, and every-N-months use a calendar next to a matching 24-hour numbered dial (typed hour and minute under the dial); daily is the clock alone |
+| Schedule | Once a day / week / month, or once every N months (2–12). Weekly, monthly, and every-N-months use a calendar next to a matching 24-hour numbered dial (typed hour and minute under the dial); daily is the clock alone. Times are **Israel** (`Asia/Jerusalem`), not UTC |
 | Enabled | Switch on the **end** of each automations-list row (after edit, run, delete) — off means it never fires automatically |
 | Steps | Horizontal frames. Drag to reorder (run order is the array order). Add from `+`, tap a frame to edit. Delete a step with the small x on the frame — the step editor has no trash. |
 
@@ -64,7 +64,7 @@ Timing uses locked structured controls rather than free text, so an invalid sche
 | Trigger | Path |
 |---------|------|
 | **Run now** | `POST /automations/:id/run` — the stored scope, same as the clock |
-| **Schedule** | Server cron; `next_run_at` is the next fire |
+| **Schedule** | Server cron in Asia/Jerusalem; `next_run_at` is the next fire (UTC instant) |
 
 Results: each AI step goes through `presentAgentRunResult`; other steps snackbar their summaries. The open topic reloads so a new or archived file appears. Cancel on the AI spinner drops those results the same way a cancelled consult does.
 

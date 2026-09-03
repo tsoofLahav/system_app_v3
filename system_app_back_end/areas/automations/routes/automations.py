@@ -10,6 +10,9 @@ from models import Automation, db
 from shared.bootstrap import default_workspace_id
 from shared.helpers import apply_updates, get_or_404
 from areas.objects.services.delete_cascade import delete_automation_cascade
+from areas.automations.services.automation_schedule import (
+    DEFAULT_AUTOMATION_TIMEZONE,
+)
 from areas.automations.services.run_automation import run_automation
 from areas.automations.services.steps import StepError, validate_steps
 from areas.automations.services.section_windows import (
@@ -109,7 +112,7 @@ def create_automation():
         scope=data.get("scope") or {},
         steps=steps,
         schedule=data.get("schedule"),
-        timezone=data.get("timezone", "UTC"),
+        timezone=data.get("timezone") or DEFAULT_AUTOMATION_TIMEZONE,
         enabled=bool(data.get("enabled", True)),
         kind=kind,
         view_id=data.get("view_id"),
