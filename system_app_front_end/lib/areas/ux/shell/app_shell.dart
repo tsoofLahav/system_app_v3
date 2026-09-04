@@ -130,12 +130,14 @@ class _SectionWindowHostState extends State<_SectionWindowHost> {
     try {
       for (final window in pending) {
         if (!mounted) return;
-        _seen.add(window.id);
         await showLeftoverClearDialog(
           context: context,
           state: widget.state,
           window: window,
         );
+        if (!widget.state.pendingClearWindows.any((w) => w.id == window.id)) {
+          _seen.add(window.id);
+        }
       }
     } finally {
       _showing = false;

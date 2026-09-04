@@ -14,7 +14,7 @@ Everything the user sees in a file is stored in **one column**: `files.document_
 |--------|---------|
 | `document_json` | **Editor text (v4)** — marker string with header `%%system_app_document v4` (column name kept for now) |
 | `name`, `topic_id`, `order_index` | Placement inside a topic |
-| `meta` (JSONB) | Automation anchors, `template_slot`, and misc flags |
+| `meta` (JSONB) | Automation anchors, `template_slot`, `system_kind` (e.g. `missed_section_report` for the standing Missed tasks file), and misc flags |
 | `archived_at` | Soft archive |
 
 Legacy **v3 JSON** in this column is migrated to editor text on read (`File.to_dict`) and rewritten on the next save. **Spans are dropped** on migrate (span encoding is a follow-up). Spec: frontend [`DOCUMENT_TEXT.md`](../../../system_app_front_end/lib/areas/files/editor/DOCUMENT_TEXT.md).

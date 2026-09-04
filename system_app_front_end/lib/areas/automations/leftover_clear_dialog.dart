@@ -31,38 +31,49 @@ Future<void> showLeftoverClearDialog({
   final viewName = '${payload['view_name'] ?? ''}';
   final sectionName = '${payload['section_name'] ?? ''}';
 
-  final approved = await showAppDialog<bool>(
+  final choice = await showAppDialog<String>(
     context: context,
     useBottomSheet: false,
     isDismissible: false,
-    builder: (ctx) => AppAdaptiveDialogShell(
-      title: Text(s['leftoverClearTitle']),
-      actions: [
-        FilledButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          child: Text(s['leftoverClearApprove']),
-        ),
-      ],
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            s.leftoverClearMessage(viewName, sectionName),
-            style: AppTypography.metaStyle,
+    builder: (ctx) => PopScope(
+      canPop: false,
+      child: AppAdaptiveDialogShell(
+        title: Text(s['leftoverClearTitle']),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(ctx, 'dismiss'),
+            child: Text(s['leftoverClearDismiss']),
           ),
-          if (titles.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            for (final title in titles)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text('• $title', style: AppTypography.taskRowStyle),
-              ),
-          ],
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, 'report'),
+            child: Text(s['leftoverClearReport']),
+          ),
         ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              s.leftoverClearMessage(viewName, sectionName),
+              style: AppTypography.metaStyle,
+            ),
+            if (titles.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              for (final title in titles)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text('• $title', style: AppTypography.taskRowStyle),
+                ),
+            ],
+          ],
+        ),
       ),
     ),
   );
-  if (approved != true) return;
-  await state.approveTaskResetAcknowledgement();
+  if (choice != 'report' && choice != 'dismiss') return;
+  try {
+    await state.resolveLeftoverClear(disposition: choice!);
+  } catch (_) {
+    // pending_clear stays; the next poll shows the modal again.
+  }
 }

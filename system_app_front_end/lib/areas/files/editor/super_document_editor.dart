@@ -30,9 +30,14 @@ import '../rich_text/list_text_parse.dart';
 import '../rich_text/rtl/rtl.dart';
 import '../rich_text/text_links.dart';
 import '../../../shared/utils/platform_text.dart';
+import '../../production_agent/lookalike_review_dialog.dart';
+import '../../production_agent/pending_review_service.dart';
+import '../../ux/topic/topic_appearance.dart';
 import './document_caret_session.dart';
 import './document_editor_controller.dart';
+import './document_hunks.dart';
 import './document_secondary_tap.dart';
+import './document_three_way.dart';
 import './edit_conflict.dart';
 import './editor_key_handoff.dart';
 import './embed_caret_bridge.dart';
@@ -610,35 +615,97 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         return;
       case RemoteEditDecision.ask:
         UnsavedEmbedEdits.fileConflictPending = true;
-        _askDocumentConflict(remote);
+        _mergeOrReviewRemote(remote);
         return;
     }
   }
 
-  void _askDocumentConflict(String? remote) {
-    if (_conflictOpen) return;
-    void run() async {
-      if (!mounted || _conflictOpen) return;
-      _conflictOpen = true;
-      final choice = await showEditConflictDialog(
-        context: context,
-        strings: widget.state.strings,
-      );
-      _conflictOpen = false;
+  void _mergeOrReviewRemote(String? remote) {
+    if (_conflictOpen || remote == null) {
       UnsavedEmbedEdits.fileConflictPending = false;
-      if (!mounted) return;
-      if (choice == EditConflictChoice.keepYours) {
-        UnsavedEmbedEdits.takeLocalOverInbound = true;
-        await _flushPendingChanges();
-        return;
-      }
-      _saveTimer?.cancel();
-      _dirty = false;
-      _scheduleRemoteDocumentReload(remote);
+      return;
+    }
+    runWhenKeyboardIdle(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _conflictOpen) return;
+        unawaited(_runThreeWay(remote));
+      });
+    });
+  }
+
+  Future<void> _runThreeWay(String remote) async {
+    final local = mutableDocumentToMarkerText(_doc);
+    final base = _lastSavedJson ?? local;
+    final result = threeWayMarkerText(
+      base: base,
+      local: local,
+      server: remote,
+    );
+    if (!result.hasConflicts) {
+      UnsavedEmbedEdits.fileConflictPending = false;
+      _applyMergedDocument(
+        result.merged,
+        persist: result.merged != remote,
+      );
+      return;
     }
 
+    final hunks = buildHunks(result.localSided, result.serverSided);
+    if (hunks.isEmpty) {
+      UnsavedEmbedEdits.fileConflictPending = false;
+      _applyMergedDocument(result.localSided, persist: true);
+      return;
+    }
+
+    _conflictOpen = true;
+    try {
+      if (!mounted) return;
+      final detail = widget.state.selectedDetail;
+      await LookalikeReviewDialog.show(
+        context,
+        pending: PendingReview(
+          id: 0,
+          fileId: widget.file.id,
+          oldAgentText: result.localSided,
+          newAgentText: result.serverSided,
+          hunks: hunks,
+        ),
+        strings: widget.state.strings,
+        fileName: _currentFile.name,
+        topicAccent:
+            detail == null ? null : TopicAppearance.accentFor(detail.topic),
+        onFinish: (decisions) async {
+          final merged = mergeHunkTexts(
+            result.localSided,
+            result.serverSided,
+            decisions,
+          );
+          if (merged == null) {
+            throw StateError('every hunk must have accept or reject');
+          }
+          _applyMergedDocument(merged, persist: true);
+        },
+        onDiscard: () async {
+          _applyMergedDocument(result.localSided, persist: true);
+        },
+      );
+    } finally {
+      _conflictOpen = false;
+      UnsavedEmbedEdits.fileConflictPending = false;
+    }
+  }
+
+  void _applyMergedDocument(String json, {required bool persist}) {
     runWhenKeyboardIdle(() {
-      WidgetsBinding.instance.addPostFrameCallback((_) => run());
+      if (!mounted) return;
+      _saveTimer?.cancel();
+      _reloadFromStored(json);
+      if (!persist) return;
+      unawaited(
+        widget.state.updateFile(_currentFile, {
+          'document_json': json,
+        }, notify: false),
+      );
     });
   }
 
@@ -1510,11 +1577,9 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
             AppSpacing.xs
         : 0.0;
     final bottomPresentationInset = isPhoneLayout
-        ? viewPadding.bottom +
-            AppBottomBarMetrics.phoneBarHeight +
-            AppBottomBarMetrics.phoneOmbreFade +
-            AppSpacing.xl +
-            AppSpacing.md
+        ? AppBottomBarMetrics.phoneFileEndBreath(
+            MediaQuery.sizeOf(context).height,
+          )
         : 0.0;
     return Stylesheet(
       documentPadding: EdgeInsets.only(

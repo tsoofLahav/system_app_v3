@@ -94,9 +94,14 @@ class AutomationService {
     return Map<String, dynamic>.from(data);
   }
 
-  Future<Map<String, dynamic>> clearLeftovers(int id) async {
+  Future<Map<String, dynamic>> clearLeftovers(
+    int id, {
+    required String disposition,
+  }) async {
     final data =
-        await _api.post('/automations/$id/clear-leftovers', {})
+        await _api.post('/automations/$id/clear-leftovers', {
+          'disposition': disposition,
+        })
             as Map<String, dynamic>;
     return Map<String, dynamic>.from(data);
   }

@@ -20,9 +20,9 @@ STEP_SPECS: dict[str, tuple[str, ...]] = {
     "ai": ("action_id", "prompt", "apply_mode", "requires_user_input"),
     "create_file": ("name", "topic_id", "template_slot"),
     "unmark_tasks": ("task_list_id",),
-    "archive_files": ("file_ids", "older_than_days", "template_slot"),
-    "fill_file": ("file_id", "template_slot", "document_json", "objects"),
-    "bring_file": ("file_id",),
+    "archive_files": ("file_name", "file_ids", "older_than_days", "template_slot"),
+    "fill_file": ("file_name", "file_id", "template_slot", "document_json", "objects"),
+    "bring_file": ("file_name", "file_id"),
 }
 
 STEP_KINDS = tuple(STEP_SPECS)
@@ -45,7 +45,12 @@ def _validate_one(step: dict, *, position: int) -> dict:
     kept = {"kind": kind}
     for key in STEP_SPECS[kind]:
         if step.get(key) not in (None, ""):
-            kept[key] = step[key]
+            value = step[key]
+            if key == "file_name" and isinstance(value, str):
+                value = value.strip()
+                if not value:
+                    continue
+            kept[key] = value
 
     if kind == "ai":
         _require(
@@ -70,14 +75,16 @@ def _validate_one(step: dict, *, position: int) -> dict:
             f"step {position}: fill_file needs saved content",
         )
         _require(
-            kept.get("file_id") is not None
+            bool(str(kept.get("file_name") or "").strip())
+            or kept.get("file_id") is not None
             or bool(str(kept.get("template_slot") or "").strip()),
-            f"step {position}: fill_file needs a file or a template slot",
+            f"step {position}: fill_file needs a file name or a template slot",
         )
     elif kind == "bring_file":
         _require(
-            kept.get("file_id") is not None,
-            f"step {position}: bring_file needs a file from the scope",
+            bool(str(kept.get("file_name") or "").strip())
+            or kept.get("file_id") is not None,
+            f"step {position}: bring_file needs a file name from the scope",
         )
 
     return kept

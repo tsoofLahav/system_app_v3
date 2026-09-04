@@ -205,6 +205,10 @@ A **secondary** dialog — one opened from a dialog — keeps the same shell and
 
 The `⋯` on a file opens `AppContextMenu` at the button — the same bubble as a right-click, not a Material `PopupMenuButton`.
 
+## App logo
+
+The OS launcher icon (home screen, dock, Finder) is the writing-cat illustration. Source art is [`icon.png`](../../../icon.png); [`icon_launcher.png`](../../../icon_launcher.png) is the same image with the white corners filled so Apple’s mask does not leave a white ring. Regenerated into iOS and macOS `AppIcon` asset catalogs with `dart run flutter_launcher_icons`.
+
 ## Icons
 
 [Lucide](https://lucide.dev) at the **200 stroke weight**, named in [`app_icons.dart`](app_icons.dart) and drawn through `AppIcon` (20px default, `text` at 82%, `textHint` at 38% when disabled). Phone floating chrome uses **300** (`AppIcon.phoneBarWeight`) so the same icons do not vanish on glass. The thin stroke is what keeps desktop icons as quiet as the type next to them — including the `⋯` on a file (`AppIcons.more`), which must never be a Material `Icons.more_vert`.

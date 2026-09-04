@@ -44,6 +44,7 @@ import '../areas/objects/data/view_layout.dart';
 import '../areas/objects/data/view_service.dart';
 import '../areas/ux/bring_file/bring_file_catalog.dart';
 import '../areas/ux/bring_file/brought_file_store.dart';
+import '../areas/ux/bring_file/home_visit_merge.dart';
 import '../areas/ux/layout/file_layouts.dart';
 import '../areas/ux/layout/grid_layout_toggle.dart';
 import '../areas/ux/layout/topic_file_slots.dart';
@@ -190,6 +191,11 @@ class AppState extends ChangeNotifier {
   /// Mixed Home canvas order (visits interleaved with Home files). Empty when
   /// there are no visits.
   List<int> homeCanvasOrderIds = [];
+
+  /// This-session bring/dismiss ops. Replayed on a GET so an in-flight fetch
+  /// cannot wipe a visit the user just added, and last-session prefs cannot
+  /// PUT themselves back over an empty server.
+  final List<HomeVisitOp> _homeVisitSessionOps = [];
 
   /// ⌘P peek: previous stored layout for this topic page only. Not persisted.
   final GridLayoutPeek _gridLayoutPeek = GridLayoutPeek();
@@ -2231,25 +2237,10 @@ class AppState extends ChangeNotifier {
   Future<void> _refreshVisitFiles({bool notify = false}) async {
     final serverIds = await _fetchHomeVisitIds();
     if (serverIds != null) {
-      final local = List<int>.from(_broughtFileIds);
-      final added = [
-        for (final id in serverIds)
-          if (!local.contains(id)) id,
-      ];
-      _broughtFileIds = [
-        ...added,
-        for (final id in local)
-          if (serverIds.contains(id)) id,
-      ];
-      if (added.isNotEmpty) {
-        homeCanvasOrderIds = [
-          ...added,
-          for (final id in homeCanvasOrderIds)
-            if (!added.contains(id)) id,
-        ];
-      }
+      _applyServerVisitIds(serverIds);
     }
     if (_broughtFileIds.isEmpty) {
+      if (serverIds != null) await _persistBroughtFileLayout();
       if (notify) notifyListeners();
       return;
     }
@@ -2277,8 +2268,8 @@ class AppState extends ChangeNotifier {
         !_sameIds(nextIds, _broughtFileIds)) {
       _broughtFileIds = nextIds;
       if (_broughtFileIds.isEmpty) homeCanvasOrderIds = [];
-      await _persistBroughtFileLayout();
     }
+    if (serverIds != null) await _persistBroughtFileLayout();
     if (notify) notifyListeners();
   }
 
@@ -3150,6 +3141,7 @@ class AppState extends ChangeNotifier {
     final canvas = home == null
         ? <AppFile>[live]
         : orderedFilesFor(home, homeFiles);
+    _homeVisitSessionOps.add(HomeVisitOp.add(live.id));
     _broughtFileIds = [
       live.id,
       for (final id in _broughtFileIds)
@@ -3176,6 +3168,7 @@ class AppState extends ChangeNotifier {
     final canvas = home == null
         ? broughtFiles
         : orderedFilesFor(home, homeFiles);
+    _homeVisitSessionOps.add(HomeVisitOp.remove(fileId));
     _broughtFileIds = [
       for (final id in _broughtFileIds)
         if (id != fileId) id,
@@ -3219,35 +3212,59 @@ class AppState extends ChangeNotifier {
     final id = workspaceId;
     if (id == null) return;
     try {
+      final sent = List<int>.from(_broughtFileIds);
       await _files.saveHomeVisitIds(
-        fileIds: List<int>.from(_broughtFileIds),
+        fileIds: sent,
         workspaceId: id,
       );
+      _ackHomeVisitOps(sent);
     } catch (_) {}
+  }
+
+  void _ackHomeVisitOps(List<int> serverIds) {
+    final pending = List<HomeVisitOp>.from(_homeVisitSessionOps);
+    _homeVisitSessionOps
+      ..clear()
+      ..addAll(ackHomeVisitOps(serverIds, pending));
+  }
+
+  void _applyServerVisitIds(List<int> serverIds) {
+    final previous = List<int>.from(_broughtFileIds);
+    _ackHomeVisitOps(serverIds);
+    final next = applyHomeVisitOps(serverIds, _homeVisitSessionOps);
+    final added = [
+      for (final id in next)
+        if (!previous.contains(id)) id,
+    ];
+    _broughtFileIds = next;
+    if (next.isEmpty) {
+      homeCanvasOrderIds = [];
+      return;
+    }
+    final previousVisits = {for (final id in previous) id};
+    homeCanvasOrderIds = [
+      ...added,
+      for (final id in homeCanvasOrderIds)
+        if (next.contains(id) || !previousVisits.contains(id)) id,
+    ];
   }
 
   Future<void> _restoreBroughtFile() async {
     final id = workspaceId;
     if (id == null) return;
     final stored = await broughtFileStore.load(id);
-    var visitIds = List<int>.from(stored.visitIds);
     final serverIds = await _fetchHomeVisitIds();
-    if (serverIds != null) {
-      if (serverIds.isEmpty && visitIds.isNotEmpty) {
-        try {
-          visitIds = await _files.saveHomeVisitIds(
-            fileIds: visitIds,
-            workspaceId: id,
-          );
-        } catch (_) {}
-      } else {
-        visitIds = serverIds;
-      }
-    }
+    if (serverIds != null) _ackHomeVisitOps(serverIds);
+    final visitIds = mergeHomeVisitIds(
+      serverIds: serverIds,
+      pendingOps: _homeVisitSessionOps,
+      fallback: serverIds == null ? stored.visitIds : const [],
+    );
     if (visitIds.isEmpty) {
       _broughtFileIds = [];
       broughtTopics.clear();
       homeCanvasOrderIds = [];
+      if (serverIds != null) await _persistBroughtFileLayout();
       return;
     }
     final home = allTopics.where((t) => t.isMain).firstOrNull;
@@ -3299,15 +3316,7 @@ class AppState extends ChangeNotifier {
     homeCanvasOrderIds = _broughtFileIds.isEmpty
         ? const []
         : [for (final file in canvas) file.id];
-    final nextIds = List<int>.from(_broughtFileIds);
-    final orderChanged =
-        homeCanvasOrderIds.length != stored.order.length ||
-        !_sameIds(homeCanvasOrderIds, stored.order);
-    if (nextIds.length != visitIds.length ||
-        !_sameIds(nextIds, visitIds) ||
-        orderChanged) {
-      await _persistBroughtFileLayout();
-    }
+    if (serverIds != null) await _persistBroughtFileLayout();
   }
 
   static bool _sameIds(List<int> a, List<int> b) {
@@ -3746,11 +3755,17 @@ class AppState extends ChangeNotifier {
       pendingClearWindows.firstOrNull;
 
   Future<void> approveTaskResetAcknowledgement({bool approve = true}) async {
+    if (!approve) return;
+    await resolveLeftoverClear(disposition: 'report');
+  }
+
+  Future<void> resolveLeftoverClear({required String disposition}) async {
     final window = pendingTaskResetAcknowledgement;
-    if (window == null || !approve) return;
-    await _automations.clearLeftovers(window.id);
+    if (window == null) return;
+    await _automations.clearLeftovers(window.id, disposition: disposition);
     await loadAutomations();
     if (isViewMode) await refreshCurrentView();
+    if (selectedTopic != null) await selectTopic(selectedTopic!);
   }
 
   Future<void> refreshCurrentView() async {

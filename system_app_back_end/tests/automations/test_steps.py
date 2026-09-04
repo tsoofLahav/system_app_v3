@@ -66,8 +66,25 @@ def test_archiving_with_no_filter_means_everything_in_scope():
 def test_fill_file_needs_content_and_a_target():
     with pytest.raises(StepError, match="saved content"):
         validate_steps([{"kind": "fill_file", "file_id": 3}])
-    with pytest.raises(StepError, match="file or a template slot"):
+    with pytest.raises(StepError, match="file name or a template slot"):
         validate_steps([{"kind": "fill_file", "document_json": "%%system_app_document v4\nHi"}])
+    assert validate_steps(
+        [
+            {
+                "kind": "fill_file",
+                "file_name": "Daily",
+                "document_json": "%%system_app_document v4\nHi",
+                "objects": [],
+            }
+        ]
+    ) == [
+        {
+            "kind": "fill_file",
+            "file_name": "Daily",
+            "document_json": "%%system_app_document v4\nHi",
+            "objects": [],
+        }
+    ]
     assert validate_steps(
         [
             {
@@ -97,8 +114,11 @@ def test_fill_file_needs_content_and_a_target():
 
 
 def test_bring_file_needs_a_file_from_scope():
-    with pytest.raises(StepError, match="file from the scope"):
+    with pytest.raises(StepError, match="file name from the scope"):
         validate_steps([{"kind": "bring_file"}])
+    assert validate_steps([{"kind": "bring_file", "file_name": "Plan"}]) == [
+        {"kind": "bring_file", "file_name": "Plan"}
+    ]
     assert validate_steps([{"kind": "bring_file", "file_id": 9}]) == [
         {"kind": "bring_file", "file_id": 9}
     ]

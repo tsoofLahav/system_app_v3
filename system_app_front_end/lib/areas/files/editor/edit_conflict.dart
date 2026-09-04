@@ -19,7 +19,8 @@ enum RemoteEditDecision {
   /// User did not change this content — take the inbound copy.
   takeRemote,
 
-  /// Both sides changed — ask which version to keep.
+  /// Both sides changed — file body 3-ways (lookalike on leftover overlaps);
+  /// embed payloads still ask keep-yours / use-agent.
   ask,
 }
 

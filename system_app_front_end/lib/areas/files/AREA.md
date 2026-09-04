@@ -18,7 +18,9 @@ Everything the user writes is saved as **marker text (v4)** in `files.document_j
 | [`editor/super_editor_mark.dart`](editor/super_editor_mark.dart) | Super Editor twin of `DocumentMark`: marked span, else caret line |
 | [`editor/file_editor_keyboard_actions.dart`](editor/file_editor_keyboard_actions.dart) | Super Editor IME keys minus Cmd+B / Cmd+I (catalog owns those) |
 | [`editor/cmd_click_link_handler.dart`](editor/cmd_click_link_handler.dart) | Click / tap (or ⌘-click) opens a persisted web link |
-| [`editor/edit_conflict.dart`](editor/edit_conflict.dart) | User vs agent: take inbound unless dirty; same object or body asks, different objects do not |
+| [`editor/edit_conflict.dart`](editor/edit_conflict.dart) | User vs inbound: take inbound unless dirty; same object still asks; file body 3-ways then lookalike on leftover overlaps |
+| [`editor/document_three_way.dart`](editor/document_three_way.dart) | Marker-part 3-way (base / local / server) |
+| [`editor/document_hunks.dart`](editor/document_hunks.dart) | Line hunks + accept/reject merge (lookalike, no archive) |
 | [`editor/embed_move_bubble.dart`](editor/embed_move_bubble.dart) | Floating glass Move Mode controls (outside the file) |
 | [`model/marker_super_editor_bridge.dart`](model/marker_super_editor_bridge.dart) | Marker text ↔ Super Editor document |
 | [`model/object_embed_node.dart`](model/object_embed_node.dart) | Custom SE node for object pointers |
@@ -60,7 +62,7 @@ On phone the framed pane fills the screen with a slim peek so the card outline s
 
 ### One scroll owner
 
-Each file pane scrolls its document in a local `CustomScrollView` with `SuperEditor` as a **sliver** (`shrinkWrap: true`). A `SliverFillRemaining` fills leftover pane height so a tap below the last line still places the caret at the end of the file. On phone, this scroll view uses `ScrollViewKeyboardDismissBehavior.onDrag`, and the stylesheet adds presentation-only top/bottom insets so edge lines can be scrolled to mid-screen under the ombre (extra room below the last line so it is not tight against the pills). The topic canvas also scrolls; SE always emits a sliver when any ancestor `Scrollable` exists, so it must never sit under `Column` / `Expanded` / box parents.
+Each file pane scrolls its document in a local `CustomScrollView` with `SuperEditor` as a **sliver** (`shrinkWrap: true`). A `SliverFillRemaining` fills leftover pane height so a tap below the last line still places the caret at the end of the file. On phone, this scroll view uses `ScrollViewKeyboardDismissBehavior.onDrag`, and the stylesheet adds presentation-only insets: top so the first line clears the ombre, bottom about half the screen (`AppBottomBarMetrics.phoneFileEndBreath`) so the last line sits mid-screen and the file feels unfinished. The topic canvas also scrolls; SE always emits a sliver when any ancestor `Scrollable` exists, so it must never sit under `Column` / `Expanded` / box parents.
 
 ### Visual rules (Super Editor stylesheet)
 
@@ -368,7 +370,7 @@ Edits mutate the Super Editor document; save serializes via the marker bridge (`
 
 Last-topic file bodies, that topic’s embeds, and sidebar topic chrome are stored on device for **first paint**; archive, views, automations, and AI actions load after the network.
 
-**User vs agent:** if the open file has no unsaved local **body** edits, take the inbound copy. A dirty embed only counts as a file conflict when the agent also wrote **that same object**. Typing in object A while the agent edits object B does not open keep-yours / use-agent — B takes inbound and A keeps local. If both sides changed the body, or the same object, ask which version to keep ([`edit_conflict.dart`](editor/edit_conflict.dart)) — never silently write a stale local payload over an agent graph on dispose. Keyboard safety still applies: wait until no key is down before remounting cells or showing the dialog.
+**User vs inbound (other device or agent):** if the open file has no unsaved local **body** edits, take the inbound copy. A dirty embed only counts as a file conflict when inbound also wrote **that same object**. Typing in object A while inbound edits object B does not open a dialog — B takes inbound and A keeps local. If both sides changed the **body**, 3-way merge marker parts against the last successful PATCH ([`document_three_way.dart`](editor/document_three_way.dart)): one-sided and identical edits apply; leftover overlaps open the lookalike dialog (Current = this device, Suggested = inbound). Finish/Discard PATCH the merged text — they do not archive. Embed payload clashes still use keep-yours / use-agent ([`edit_conflict.dart`](editor/edit_conflict.dart)). Topic refresh must put the **server** `document_json` on `filesById` even when the editor is dirty, so the open Super Editor can see inbound. Never silently write a stale local payload over an inbound graph on dispose. Keyboard safety still applies: wait until no key is down before remounting or showing the dialog.
 
 In-session undo/redo uses Super Editor’s history stack.
 
@@ -389,7 +391,7 @@ In this area specifically:
 | Debounce embed PATCHes; patch cache **before** `await` | PATCH + `notifyListeners` / full embed reload on every `onChanged` |
 | Super Editor `setState` only when embed **id/type/order** changes; defer with `runWhenKeyboardIdle`. Phone IME has no keys-down — payload refresh must not remount | Treat every new embeds-list identity as a reason to remount; remount a `TextField` after the first letter |
 | Drop engine-seeded keys while [`MainPaneLoader`](../ux/widgets/main_pane_loader.dart) is showing; `settleHardwareKeyboardForLaunch` before `appReady` | Call `HardwareKeyboard.clearState` (wipes shortcut handlers) |
-| Keep controllers as SoT while **dirty**; take inbound when not dirty (after keys are up). If the same object (or the file body) is dirty on both sides, ask. Different objects do not. Dispose must not PATCH a payload that is older than the cache | Overwrite live cells from a stale cache while typing; flush old graph/info on dispose over an agent write; dispose cell/task/info focus nodes mid-KeyDown |
+| Keep controllers as SoT while **dirty**; put inbound `document_json` on `filesById` so the editor can 3-way. Same object dirty on both sides still asks. File body leftover overlaps use the lookalike. Dispose must not PATCH a payload that is older than the cache | Hide inbound body in `filesById` while dirty; overwrite live cells from a stale cache while typing; flush old graph/info on dispose over an inbound write; dispose cell/task/info focus nodes mid-KeyDown |
 | Shift+Enter, empty-structure Backspace, restore writing focus → `runWhenKeyboardIdle` | Sync `unfocus` / delete structure / `requestFocus` on the KeyDown frame |
 | Install `FormattedTextField` `onKeyEvent` **once** (stored tear-off) | Re-wrap `FocusNode.onKeyEvent` on every rebuild — tear-offs are not `==`, so Arrow Up stack-overflows |
 | Tap outside the focused editor (canvas / empty padding) unfocuses, closes the keyboard, and **clears the mark**. Bottom menus and the open object do not. | Leave Super Editor focused when the tap is not on another field; keep the mark painted after tap-outside |

@@ -134,6 +134,15 @@ void main() {
     expect(AppStrings.he.userInputOverLimit(12000), contains('12000'));
   });
 
+  test('leftover dialog copy offers report and dismiss', () {
+    expect(AppStrings.en['leftoverClearReport'], 'Report');
+    expect(AppStrings.en['leftoverClearDismiss'], 'Dismiss');
+    expect(AppStrings.he['leftoverClearReport'], isNotEmpty);
+    expect(AppStrings.he['leftoverClearDismiss'], isNotEmpty);
+    expect(AppStrings.en.leftoverClearMessage('Daily', 'Focus'), contains('Daily'));
+    expect(AppStrings.en.leftoverClearMessage('Daily', 'Focus'), contains('Report'));
+  });
+
   test('section window automation parses attention and leftover payload', () {
     final automation = Automation.fromJson({
       'id': 4,

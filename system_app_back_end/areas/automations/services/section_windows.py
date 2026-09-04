@@ -2,20 +2,21 @@
 
 A view section can own one `section_window` automation (start + duration).
 Regular automations that need user input or review lock their clock to that
-Regular automations that need user input or review lock their clock to that
 window and place complimentary tasks in a repeating view.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from models import (
     AgentPendingReview,
     AiAction,
     Automation,
     AutomationRun,
+    File,
     Task,
     Topic,
     View,
@@ -32,6 +33,11 @@ CADENCE_ROUTINE = "routine"
 CADENCE_ONE_TIME = "one_time"
 ROLE_INPUT = "input"
 ROLE_REVIEW = "review"
+DISPOSITION_REPORT = "report"
+DISPOSITION_DISMISS = "dismiss"
+MISSED_REPORT_KIND = "missed_section_report"
+MISSED_REPORT_FILE_NAME = "Missed tasks"
+_ISRAEL = ZoneInfo("Asia/Jerusalem")
 
 
 def new_section_key() -> str:
@@ -128,6 +134,39 @@ def window_is_open(automation: Automation, now: datetime | None = None) -> bool:
     return True
 
 
+def window_should_close(automation: Automation, now: datetime | None = None) -> bool:
+    """Duration ended on an opened window that still needs leftover handling.
+
+    Do not gate this on [window_is_open]: that is already false after close time,
+    which used to skip [close_window_or_pending] and never write pending_clear.
+    """
+    if (automation.kind or KIND_STANDARD) != KIND_SECTION_WINDOW:
+        return False
+    if automation.pending_clear:
+        return False
+    if automation.window_opened_at is None:
+        return False
+    now = as_utc_naive(now or datetime.utcnow())
+    closes = as_utc_naive(automation.window_closes_at)
+    return now is not None and closes is not None and now >= closes
+
+
+def close_expired_section_windows(
+    workspace_id: int, now: datetime | None = None
+) -> int:
+    """Close windows whose duration has ended. Safe to call from GET /automations."""
+    now = as_utc_naive(now or datetime.utcnow()) or datetime.utcnow()
+    rows = Automation.query.filter_by(
+        workspace_id=workspace_id, kind=KIND_SECTION_WINDOW
+    ).all()
+    closed = 0
+    for row in rows:
+        if window_should_close(row, now):
+            close_window_or_pending(row, now)
+            closed += 1
+    return closed
+
+
 def _memberships_in_section(view_id: int, section_name: str) -> list[ViewTaskMembership]:
     return (
         ViewTaskMembership.query.filter_by(view_id=view_id, section_name=section_name)
@@ -149,7 +188,7 @@ def tasks_in_section(view_id: int, section_name: str) -> list[Task]:
 
 
 def leftover_active_tasks(view_id: int, section_name: str) -> list[Task]:
-    return [t for t in tasks_in_section(view_id, section_name) if t.status != DONE]
+    return [t for t in tasks_in_section(view_id, section_name) if t.status == ACTIVE]
 
 
 def section_has_active_tasks(view_id: int, section_name: str) -> bool:
@@ -471,27 +510,143 @@ def close_window_or_pending(automation: Automation, now: datetime) -> None:
     clear_section_window_state(automation)
 
 
-def apply_leftover_clear(automation: Automation) -> dict:
+def _israel_wall(now: datetime | None = None) -> datetime:
+    moment = now or datetime.now(timezone.utc)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(_ISRAEL)
+
+
+def missed_report_snippet(
+    *,
+    when: datetime | None,
+    view_name: str,
+    section_name: str,
+    titles: list[str],
+) -> str:
+    from areas.files.services.document_marker_text import wrap_editor_text
+
+    stamp = _israel_wall(when).strftime("%d %b %Y, %H:%M")
+    if stamp.startswith("0"):
+        stamp = stamp[1:]
+    place = " / ".join(part for part in (view_name, section_name) if part)
+    lines = [stamp, place] if place else [stamp]
+    for title in titles:
+        text = str(title or "").strip()
+        if text:
+            lines.append(f"- {text}")
+    return wrap_editor_text("\n".join(lines))
+
+
+def _missed_report_file(workspace_id: int) -> File | None:
+    from areas.files.services import file_ops
+
+    topics = (
+        Topic.query.filter_by(workspace_id=workspace_id)
+        .filter(Topic.archived_at.is_(None))
+        .order_by(Topic.order_index, Topic.id)
+        .all()
+    )
+    for topic in topics:
+        files = (
+            File.query.filter_by(topic_id=topic.id)
+            .filter(File.archived_at.is_(None))
+            .all()
+        )
+        for file in files:
+            meta = file.meta or {}
+            if meta.get("system_kind") == MISSED_REPORT_KIND:
+                return file
+    home = next((topic for topic in topics if topic.name == "Home"), None)
+    target = home or (topics[0] if topics else None)
+    if target is None:
+        return None
+    return file_ops.create_file(
+        topic_id=target.id,
+        name=MISSED_REPORT_FILE_NAME,
+        meta={"system_kind": MISSED_REPORT_KIND},
+        place_first=True,
+    )
+
+
+def _prepend_editor_text(dest: str | None, snippet: str | None) -> str:
+    from areas.files.services.document_marker_text import (
+        editor_text_body,
+        wrap_editor_text,
+    )
+
+    dest_body = editor_text_body(dest)
+    snip_body = editor_text_body(snippet)
+    if not dest_body.strip():
+        return wrap_editor_text(snip_body)
+    if not snip_body.strip():
+        return wrap_editor_text(dest_body)
+    return wrap_editor_text(f"{snip_body.rstrip()}\n\n{dest_body.lstrip()}")
+
+
+def append_missed_report(automation: Automation, payload: dict, leftovers: list) -> int | None:
+    titles = [
+        str(item.get("title") or "").strip()
+        for item in leftovers
+        if isinstance(item, dict) and str(item.get("title") or "").strip()
+    ]
+    snippet = missed_report_snippet(
+        when=datetime.utcnow(),
+        view_name=str(payload.get("view_name") or ""),
+        section_name=str(payload.get("section_name") or ""),
+        titles=titles,
+    )
+    file = _missed_report_file(automation.workspace_id)
+    if file is None:
+        return None
+    file.document_json = _prepend_editor_text(file.document_json, snippet)
+    db.session.add(file)
+    return file.id
+
+
+def apply_leftover_clear(
+    automation: Automation, *, disposition: str = DISPOSITION_REPORT
+) -> dict:
     payload = automation.pending_clear or {}
     leftovers = payload.get("leftovers") or []
     cadence = payload.get("cadence") or CADENCE_ROUTINE
     view = db.session.get(View, automation.view_id) if automation.view_id else None
     archived = 0
     unmarked = 0
+    marked_done = 0
+    report_file_id = None
     now = datetime.utcnow()
     leftover_ids = {int(item["id"]) for item in leftovers if item.get("id") is not None}
+    choice = (
+        disposition
+        if disposition in (DISPOSITION_REPORT, DISPOSITION_DISMISS)
+        else DISPOSITION_REPORT
+    )
 
-    for item in leftovers:
-        task_id = item.get("id")
-        if task_id is None:
-            continue
-        task = db.session.get(Task, int(task_id))
-        if task is None or task.archived_at is not None:
-            continue
-        item_cadence = item.get("cadence") or cadence
-        if item_cadence == CADENCE_ONE_TIME:
-            task.archived_at = now
-            archived += 1
+    if choice == DISPOSITION_DISMISS:
+        for item in leftovers:
+            task_id = item.get("id")
+            if task_id is None:
+                continue
+            task = db.session.get(Task, int(task_id))
+            if task is None or task.archived_at is not None:
+                continue
+            if task.status != DONE:
+                set_task_status(task, done=True)
+                marked_done += 1
+    else:
+        report_file_id = append_missed_report(automation, payload, leftovers)
+        for item in leftovers:
+            task_id = item.get("id")
+            if task_id is None:
+                continue
+            task = db.session.get(Task, int(task_id))
+            if task is None or task.archived_at is not None:
+                continue
+            item_cadence = item.get("cadence") or cadence
+            if item_cadence == CADENCE_ONE_TIME:
+                task.archived_at = now
+                archived += 1
 
     if view is not None and cadence == CADENCE_ROUTINE:
         name = payload.get("section_name") or section_name_for_key(
@@ -499,7 +654,7 @@ def apply_leftover_clear(automation: Automation) -> dict:
         )
         if name:
             for task in tasks_in_section(view.id, name):
-                if task.id in leftover_ids and cadence == CADENCE_ONE_TIME:
+                if task.id in leftover_ids:
                     continue
                 if task.status == DONE:
                     set_task_status(task, done=False)
@@ -509,7 +664,13 @@ def apply_leftover_clear(automation: Automation) -> dict:
     automation.window_opened_at = None
     automation.window_closes_at = None
     db.session.flush()
-    return {"archived": archived, "unmarked": unmarked}
+    return {
+        "archived": archived,
+        "unmarked": unmarked,
+        "marked_done": marked_done,
+        "disposition": choice,
+        "report_file_id": report_file_id,
+    }
 
 
 def pending_clears(workspace_id: int) -> list[dict]:
@@ -731,10 +892,8 @@ def ensure_section_windows(workspace_id: int) -> list[Automation]:
 def tick_section_window(automation: Automation, *, now: datetime, action: str, planned) -> None:
     """Advance one section window. `action` is plan_tick's start decision."""
     now = as_utc_naive(now) or now
-    if window_is_open(automation, now) and automation.window_closes_at:
-        closes = as_utc_naive(automation.window_closes_at) or automation.window_closes_at
-        if now >= closes:
-            close_window_or_pending(automation, now)
+    if window_should_close(automation, now):
+        close_window_or_pending(automation, now)
     if action == "run" and not window_is_open(automation, now) and not automation.pending_clear:
         open_window(automation, now)
     if planned is not None:

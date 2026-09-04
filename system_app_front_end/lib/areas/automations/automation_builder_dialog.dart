@@ -26,6 +26,8 @@ import '../ui/time_picker_dialog.dart';
 import '../ux/dialogs/dialog_choice_list.dart';
 import '../ux/widgets/topic_emoji.dart';
 import './automation.dart';
+import '../objects/links/info_pick_rank.dart';
+import './file_name_pick.dart';
 import './fill_file_snippet_dialog.dart';
 import './schedule_format.dart';
 import './schedule_kind_field.dart';
@@ -190,13 +192,13 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
         return (step['template_slot'] as String? ?? '').trim().isNotEmpty;
       }
       if (_scopeKind == AutomationScope.topic) {
-        return _asInt(step['file_id']) != null;
+        return _stepFileName(step).isNotEmpty;
       }
-      return _asInt(step['file_id']) != null ||
+      return _stepFileName(step).isNotEmpty ||
           (step['template_slot'] as String? ?? '').trim().isNotEmpty;
     }
     if (kind == StepKinds.bringFile) {
-      return _asInt(step['file_id']) != null;
+      return _stepFileName(step).isNotEmpty;
     }
     return StepKinds.all.contains(kind);
   }
@@ -228,7 +230,10 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     try {
       final files = await state.filesForTopic(_topicId!);
       if (!mounted) return;
-      setState(() => _topicFiles = files);
+      setState(() {
+        _topicFiles = files;
+        _hydrateStepFileNames();
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() => _topicFiles = const []);
@@ -244,6 +249,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
           for (final file in files)
             if (_fileInBringScope(file)) file,
         ];
+        _hydrateStepFileNames();
       });
     } catch (_) {
       if (!mounted) return;
@@ -273,15 +279,27 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     return slot;
   }
 
-  String _fileLabel(int? id) {
-    if (id == null) return s['pickTopicFile'];
-    for (final file in _topicFiles) {
-      if (file.id == id) return file.name;
+  String _fileLabel(String? name) {
+    final trimmed = (name ?? '').trim();
+    return trimmed.isEmpty ? s['pickTopicFile'] : trimmed;
+  }
+
+  String _stepFileName(Map<String, dynamic> step) {
+    return stepFileName(step, [..._topicFiles, ..._scopeFiles]) ?? '';
+  }
+
+  void _writeFileName(Map<String, dynamic> step, String name) {
+    step['file_name'] = name.trim();
+    step.remove('file_id');
+    step.remove('file_ids');
+  }
+
+  void _hydrateStepFileNames() {
+    for (final step in _steps) {
+      final name = _stepFileName(step);
+      if (name.isEmpty) continue;
+      _writeFileName(step, name);
     }
-    for (final file in _scopeFiles) {
-      if (file.id == id) return file.name;
-    }
-    return s['pickTopicFile'];
   }
 
   Map<String, dynamic> _placementFields() {
@@ -300,6 +318,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
+      _hydrateStepFileNames();
       final placement = _placementFields();
       if (_isEdit) {
         await state.updateAutomation(widget.automation!, {
@@ -431,8 +450,8 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
           .firstOrNull;
       if (slot != null) step['template_slot'] = slot;
     } else if (_scopeKind == AutomationScope.topic) {
-      final id = _topicFiles.firstOrNull?.id;
-      if (id != null) step['file_id'] = id;
+      final name = uniqueFileNames(_topicFiles).firstOrNull;
+      if (name != null) _writeFileName(step, name);
     }
     _appendStep(step);
   }
@@ -447,13 +466,14 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
       ).showSnackBar(SnackBar(content: Text(s['bringFileNeedScope'])));
       return;
     }
-    final fileId = _scopeFiles.length == 1
-        ? _scopeFiles.first.id
+    final names = uniqueFileNames(_scopeFiles);
+    final name = names.length == 1
+        ? names.first
         : await _pickScopeFile(null);
-    if (fileId == null || !mounted) return;
+    if (name == null || name.isEmpty || !mounted) return;
     _appendStep({
       'kind': StepKinds.bringFile,
-      'file_id': fileId,
+      'file_name': name,
     });
   }
 
@@ -505,12 +525,12 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     if (kind == StepKinds.fillFile) {
       final slot = (step['template_slot'] as String? ?? '').trim();
       if (slot.isNotEmpty) return _slotLabel(slot);
-      final fileId = _asInt(step['file_id']);
-      if (fileId != null) return _fileLabel(fileId);
+      final name = _stepFileName(step);
+      if (name.isNotEmpty) return _fileLabel(name);
     }
     if (kind == StepKinds.bringFile) {
-      final fileId = _asInt(step['file_id']);
-      if (fileId != null) return _fileLabel(fileId);
+      final name = _stepFileName(step);
+      if (name.isNotEmpty) return _fileLabel(name);
     }
     return _stepLabel(kind);
   }
@@ -565,54 +585,32 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     return picked?.id;
   }
 
-  Future<int?> _pickTopicFile(int? currentId) async {
-    final files = _topicFiles;
-    if (files.isEmpty) return null;
-    var initial = 0;
-    for (var i = 0; i < files.length; i++) {
-      if (files[i].id == currentId) {
-        initial = i;
-        break;
-      }
-    }
-    final picked = await showAppChoiceDialog(
-      context: context,
-      title: s['pickTopicFile'],
-      cancelLabel: s['cancel'],
-      items: files,
-      initialIndex: initial,
-      itemBuilder: (context, file, _) => DialogChoiceText(file.name),
-    );
-    return picked?.id;
+  Future<String?> _pickTopicFile(String? currentName) async {
+    return _pickFileName(uniqueFileNames(_topicFiles), currentName);
   }
 
-  Future<int?> _pickScopeFile(int? currentId) async {
-    final files = _scopeFiles;
-    if (files.isEmpty) return null;
+  Future<String?> _pickScopeFile(String? currentName) async {
+    return _pickFileName(uniqueFileNames(_scopeFiles), currentName);
+  }
+
+  Future<String?> _pickFileName(List<String> names, String? currentName) async {
+    if (names.isEmpty) return null;
     var initial = 0;
-    for (var i = 0; i < files.length; i++) {
-      if (files[i].id == currentId) {
+    final current = normalizeComparable(currentName ?? '');
+    for (var i = 0; i < names.length; i++) {
+      if (normalizeComparable(names[i]) == current) {
         initial = i;
         break;
       }
     }
-    final picked = await showAppChoiceDialog(
+    return showAppChoiceDialog(
       context: context,
       title: s['pickTopicFile'],
       cancelLabel: s['cancel'],
-      items: files,
+      items: names,
       initialIndex: initial,
-      itemBuilder: (context, file, _) {
-        final topic = state.allTopics
-            .where((t) => t.id == file.topicId)
-            .firstOrNull;
-        final name = topic == null
-            ? file.name
-            : '${file.name} · ${state.topicDisplayName(topic)}';
-        return DialogChoiceText(name);
-      },
+      itemBuilder: (context, name, _) => DialogChoiceText(name),
     );
-    return picked?.id;
   }
 
   Future<Map<String, dynamic>?> _editFillSnippet(
@@ -1340,14 +1338,14 @@ class _StepEditDialog extends StatefulWidget {
   final String Function(int? id) topicLabel;
   final String Function(int? id) actionLabel;
   final String Function(String? slot) slotLabel;
-  final String Function(int? id) fileLabel;
+  final String Function(String? name) fileLabel;
   final List<AppFile> templateFiles;
   final List<AppFile> topicFiles;
   final List<AppFile> scopeFiles;
   final Future<int?> Function({int? currentId}) onPickTopic;
   final Future<int?> Function(int? currentId) onPickAction;
-  final Future<int?> Function(int? currentId) onPickFile;
-  final Future<int?> Function(int? currentId) onPickScopeFile;
+  final Future<String?> Function(String? currentName) onPickFile;
+  final Future<String?> Function(String? currentName) onPickScopeFile;
   final Future<Map<String, dynamic>?> Function(Map<String, dynamic> step)
   onEditSnippet;
   final List<AiAction> aiActions;
@@ -1556,8 +1554,8 @@ class _StepEditDialogState extends State<_StepEditDialog> {
         widget.topicFiles.isNotEmpty;
     final days = _step['older_than_days'];
     final slot = _step['template_slot'] as String?;
-    final fileId = _firstFileId(_step);
-    final selected = fileId != null && useFile
+    final fileName = stepFileName(_step, widget.topicFiles) ?? '';
+    final selected = fileName.isNotEmpty && useFile
         ? 'file'
         : (slot != null && slot.isNotEmpty && useSlot
               ? 'slot'
@@ -1581,12 +1579,15 @@ class _StepEditDialogState extends State<_StepEditDialog> {
               _step.remove('older_than_days');
               _step.remove('template_slot');
               _step.remove('file_ids');
+              _step.remove('file_id');
+              _step.remove('file_name');
               if (mode == 'older') _step['older_than_days'] = 30;
               if (mode == 'slot') {
                 _step['template_slot'] = slots.first.templateSlot;
               }
               if (mode == 'file') {
-                _step['file_ids'] = [widget.topicFiles.first.id];
+                final name = uniqueFileNames(widget.topicFiles).firstOrNull;
+                if (name != null) _step['file_name'] = name;
               }
             });
           },
@@ -1624,11 +1625,15 @@ class _StepEditDialogState extends State<_StepEditDialog> {
           AppDialogPickerField(
             label: s['pickTopicFile'],
             preview: const AppIcon(AppIcons.archiveFiles, size: 16),
-            valueLabel: widget.fileLabel(fileId),
+            valueLabel: widget.fileLabel(fileName),
             onTap: () async {
-              final picked = await widget.onPickFile(fileId);
+              final picked = await widget.onPickFile(fileName);
               if (picked == null) return;
-              setState(() => _step['file_ids'] = [picked]);
+              setState(() {
+                _step.remove('file_ids');
+                _step.remove('file_id');
+                _step['file_name'] = picked;
+              });
             },
           ),
         ],
@@ -1644,7 +1649,7 @@ class _StepEditDialogState extends State<_StepEditDialog> {
     final useSlot =
         widget.scopeKind == AutomationScope.topicType && slots.isNotEmpty;
     final useFile = widget.scopeKind == AutomationScope.topic;
-    final fileId = _asInt(_step['file_id']);
+    final fileName = stepFileName(_step, widget.topicFiles) ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1672,6 +1677,7 @@ class _StepEditDialogState extends State<_StepEditDialog> {
               if (picked == null) return;
               setState(() {
                 _step.remove('file_id');
+                _step.remove('file_name');
                 _step['template_slot'] = picked;
               });
             },
@@ -1683,13 +1689,14 @@ class _StepEditDialogState extends State<_StepEditDialog> {
               : AppDialogPickerField(
                   label: s['pickTopicFile'],
                   preview: const AppIcon(AppIcons.fillFile, size: 16),
-                  valueLabel: widget.fileLabel(fileId),
+                  valueLabel: widget.fileLabel(fileName),
                   onTap: () async {
-                    final picked = await widget.onPickFile(fileId);
+                    final picked = await widget.onPickFile(fileName);
                     if (picked == null) return;
                     setState(() {
                       _step.remove('template_slot');
-                      _step['file_id'] = picked;
+                      _step.remove('file_id');
+                      _step['file_name'] = picked;
                     });
                   },
                 ),
@@ -1703,18 +1710,21 @@ class _StepEditDialogState extends State<_StepEditDialog> {
   }
 
   Widget _bringFileFields() {
-    final fileId = _asInt(_step['file_id']);
+    final fileName = stepFileName(_step, widget.scopeFiles) ?? '';
     if (widget.scopeFiles.isEmpty) {
       return Text(s['bringFileNeedScope'], style: AppTypography.metaStyle);
     }
     return AppDialogPickerField(
       label: s['pickTopicFile'],
       preview: const AppIcon(AppIcons.bringFile, size: 16),
-      valueLabel: widget.fileLabel(fileId),
+      valueLabel: widget.fileLabel(fileName),
       onTap: () async {
-        final picked = await widget.onPickScopeFile(fileId);
+        final picked = await widget.onPickScopeFile(fileName);
         if (picked == null) return;
-        setState(() => _step['file_id'] = picked);
+        setState(() {
+          _step.remove('file_id');
+          _step['file_name'] = picked;
+        });
       },
     );
   }
@@ -1810,16 +1820,4 @@ class _KeepTextFieldState extends State<_KeepTextField> {
       onChanged: widget.onChanged,
     );
   }
-}
-
-int? _asInt(Object? value) {
-  if (value == null) return null;
-  if (value is int) return value;
-  return int.tryParse('$value');
-}
-
-int? _firstFileId(Map<String, dynamic> step) {
-  final raw = step['file_ids'];
-  if (raw is! List || raw.isEmpty) return null;
-  return _asInt(raw.first);
 }

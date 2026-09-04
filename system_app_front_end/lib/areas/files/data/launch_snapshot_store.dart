@@ -80,14 +80,15 @@ class LaunchSnapshot {
   }
 }
 
-/// Keep the live body when the open editor is dirty; otherwise take inbound.
+/// Take inbound metadata and body. Session SoT for a dirty editor stays in
+/// Super Editor; hiding the server body here blocked 3-way merge.
 AppFile mergeTopicFileForRefresh({
   required AppFile local,
   required AppFile inbound,
   required bool bodyDirty,
 }) {
-  if (!bodyDirty) return inbound;
-  return inbound.copyWith(documentJson: local.documentJson);
+  // [local] / [bodyDirty] kept so callers stay stable; body always inbound.
+  return inbound;
 }
 
 bool isScratchFile(AppFile file) => file.meta['automation_scratch'] == true;

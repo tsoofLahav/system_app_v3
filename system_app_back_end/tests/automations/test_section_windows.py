@@ -144,6 +144,8 @@ def test_routes_expose_window_endpoints():
     assert "/review-status" in source
     assert "ensure_section_windows" in source
     assert "ensure_complimentary_tasks" in source
+    assert "close_expired_section_windows" in source
+    assert "disposition" in source
 
 
 def test_cron_handles_section_windows_and_locked_clocks():
@@ -160,6 +162,46 @@ def test_leftover_clear_archives_one_time_and_unmarks_routine():
     assert "archived_at" in source
     assert "set_task_status" in source
     assert "CADENCE_ROUTINE" in source
+    assert "DISPOSITION_DISMISS" in source
+    assert "append_missed_report" in source
+
+
+def test_window_should_close_after_duration_even_when_not_open():
+    now = datetime(2026, 9, 5, 12, 0, 0)
+    expired = Automation(
+        kind=windows.KIND_SECTION_WINDOW,
+        window_opened_at=datetime(2026, 9, 5, 10, 0, 0, tzinfo=timezone.utc),
+        window_closes_at=datetime(2026, 9, 5, 11, 0, 0, tzinfo=timezone.utc),
+    )
+    assert windows.window_is_open(expired, now) is False
+    assert windows.window_should_close(expired, now) is True
+    expired.pending_clear = {"leftovers": []}
+    assert windows.window_should_close(expired, now) is False
+
+
+def test_tick_closes_with_window_should_close_not_window_is_open():
+    source = inspect.getsource(windows.tick_section_window)
+    assert "window_should_close" in source
+    assert "if window_is_open(automation, now) and automation.window_closes_at" not in source
+
+
+def test_missed_report_snippet_lists_when_and_titles():
+    when = datetime(2026, 9, 5, 11, 30, 0, tzinfo=timezone.utc)
+    text = windows.missed_report_snippet(
+        when=when,
+        view_name="Daily",
+        section_name="Focus",
+        titles=["Call mom", "Email"],
+    )
+    assert "Daily / Focus" in text
+    assert "- Call mom" in text
+    assert "- Email" in text
+    assert "Sep 2026" in text
+
+
+def test_leftovers_are_active_tasks_only():
+    source = inspect.getsource(windows.leftover_active_tasks)
+    assert "status == ACTIVE" in source
 
 
 def test_clean_duration_end_unmarks_without_confirm():

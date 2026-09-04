@@ -20,6 +20,7 @@ from areas.automations.services.section_windows import (
     KIND_STANDARD,
     apply_leftover_clear,
     clear_section_window_state,
+    close_expired_section_windows,
     complete_review_if_clear,
     enrich_automation,
     ensure_complimentary_tasks,
@@ -72,6 +73,7 @@ def list_automations():
     workspace_id = _workspace_id_from_request()
     if workspace_id:
         ensure_section_windows(workspace_id)
+        close_expired_section_windows(workspace_id)
         db.session.commit()
     query = Automation.query
     if workspace_id:
@@ -85,6 +87,8 @@ def list_pending_clears():
     workspace_id = _workspace_id_from_request()
     if not workspace_id:
         return jsonify([])
+    close_expired_section_windows(workspace_id)
+    db.session.commit()
     return jsonify(pending_clears(workspace_id))
 
 
@@ -240,7 +244,11 @@ def clear_automation_leftovers(automation_id):
     automation = get_or_404(Automation, automation_id)
     if not automation.pending_clear:
         return jsonify({"error": "nothing to clear"}), 400
-    result = apply_leftover_clear(automation)
+    data = request.get_json(silent=True) or {}
+    disposition = str(data.get("disposition") or "report").strip()
+    if disposition not in ("report", "dismiss"):
+        return jsonify({"error": "disposition must be report or dismiss"}), 400
+    result = apply_leftover_clear(automation, disposition=disposition)
     db.session.commit()
     return jsonify({"ok": True, **result})
 

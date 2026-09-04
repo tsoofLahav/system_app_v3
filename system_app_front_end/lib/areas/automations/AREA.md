@@ -27,9 +27,9 @@ A single-topic scope is also the target for a "create a file" step. Broader scop
 | Run AI | A saved action, or a prompt written here, plus review / apply directly |
 | Create a file | A template slot when the scope is a typed template, or a name (`{date}` and friends); a topic if scope is not one topic and not a slot |
 | Unmark tasks | Every done task in scope goes back to active |
-| Archive files | Everything in scope, older than N days, one file in a topic, or one template slot |
-| Add to a file | Saved snippet (real file editor, including insert of objects) appended onto a chosen topic file or a template slot |
-| Project to Home | One live file from the scope visits Home (same file, still owned by its topic) |
+| Archive files | Everything in scope, older than N days, one **file name** in a topic, or one template slot. The picker lists existing names; the step stores the name, not an id |
+| Add to a file | Saved snippet (real file editor, including insert of objects) appended onto a chosen **file name** or a template slot. At run the closest live name in scope wins (same resemblance as Connect-info search); nothing close enough errors |
+| Project to Home | One **file name** from the scope visits Home (same file, still owned by its topic). Resolve like Add to a file |
 
 ## Surfaces
 
@@ -38,11 +38,12 @@ A single-topic scope is also the target for a "create a file" step. Broader scop
 | [`automation_dialog.dart`](automation_dialog.dart) (bottom bar) | Two pages: regular automations and **section windows**, each searchable by name. Regular: create, edit, run now, delete, on/off. Section windows are auto-created with a view section (off until start + duration are set); edit opens the window editor, no delete |
 | [`automation_builder_dialog.dart`](automation_builder_dialog.dart) | Regular automations — create and rewrite |
 | [`section_window_editor.dart`](section_window_editor.dart) | Start time + duration for a section window |
+| [`leftover_clear_dialog.dart`](leftover_clear_dialog.dart) | Blocking Report / Dismiss when a window ends with active tasks |
 | Agent dialog / AI bar ⋯ | Saved **actions**, not automations |
 
 ## Section windows and complimentary tasks
 
-Every named view section gets a `section_window` automation (created off). Start + duration open a window: attention dots on the **sidebar view** and **section header** until the last **active** task is marked done (the dot clears immediately, without waiting for the next poll) or the duration ends. When the duration ends with **nothing missed**, routine (and complimentary) tasks unmark immediately — no dialog. If any task is still active, a **blocking center modal** (any screen — not a snackbar) must approve before leftover **one-time** tasks are archived and the rest recycle. Changing the window’s start or duration clears that cycle: all section tasks go active and the attention dot goes off.
+Every named view section gets a `section_window` automation (created off). Start + duration open a window: attention dots on the **sidebar view** and **section header** until the last **active** task is marked done (the dot clears immediately, without waiting for the next poll) or the duration ends. When the duration ends with **nothing missed**, routine (and complimentary) tasks unmark immediately — no dialog. If any task is still **active**, a **blocking center modal** (any screen — not a snackbar; cannot dismiss without choosing) must be answered: **Report** appends what was missed and when onto a standing **Missed tasks** file on Home (`meta.system_kind = missed_section_report`, newest entry first), then leftover one-time tasks archive and the rest recycle; **Dismiss** means those leftovers were actually done or not needed — mark those same task rows done (do not archive-and-reinsert) and leave them done until the next window start. `GET /automations` closes expired windows so the 5s poll can raise the modal without waiting for the minute cron. Changing the window’s start or duration clears that cycle: all section tasks go active and the attention dot goes off.
 
 A regular automation whose AI steps need **user input** or **review** must pick a **repeating** view + section. Its clock is a read-only copy of that section window. If the window is off, it does not fire on the clock. On save it places **only the complimentary tasks those steps need**:
 
@@ -74,7 +75,7 @@ Results: each AI step goes through `presentAgentRunResult`; other steps snackbar
 | [`automation_builder_dialog.dart`](automation_builder_dialog.dart) | Scope, schedule, steps, complimentary section |
 | [`section_window_editor.dart`](section_window_editor.dart) | Section window start + duration |
 | [`complimentary_input_dialog.dart`](complimentary_input_dialog.dart) | Per-topic (or one) user input, then run |
-| [`leftover_clear_dialog.dart`](leftover_clear_dialog.dart) | Blocking leftover confirm |
+| [`leftover_clear_dialog.dart`](leftover_clear_dialog.dart) | Blocking leftover Report / Dismiss |
 | [`fill_file_snippet_dialog.dart`](fill_file_snippet_dialog.dart) | Real file editor + insert bar for a `fill_file` snippet (text and objects) |
 | [`schedule_format.dart`](schedule_format.dart) | DSL parse / format (`daily` / `weekly` / `weekly DAY,DAY` / `monthly` / `monthly N … from YYYY-MM`) |
 | [`schedule_kind_field.dart`](schedule_kind_field.dart) | Once a day / week / month, a few times a week or month, every N months chips |
