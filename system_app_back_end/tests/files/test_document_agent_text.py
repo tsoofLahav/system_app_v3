@@ -404,6 +404,25 @@ def test_single_blank_line_between_paragraphs_survives_apply():
     assert "[SPACER" not in marker_text.editor_text_body(dense_editor)
 
 
+def test_densified_agent_edit_reinstates_spacers_from_live_file():
+    """Model drops [SPACER] while editing one line — live gaps must survive."""
+    from areas.files.services import document_marker_text as marker_text
+
+    live = marker_text.wrap_editor_text(
+        'Before\n\n[SPACER n="1"]\n\nTarget paragraph\n\n[SPACER n="1"]\n\nAfter'
+    )
+    # Dense suggestion: no spacers, edited middle line only.
+    agent = "Before\n\nTarget paragraph EDITED\n\nAfter"
+    editor, _, errors = agent_text_to_editor_text(
+        agent, known_object_ids=set(), current_body=live
+    )
+    assert not errors
+    body = marker_text.editor_text_body(editor)
+    assert body.count("[SPACER") == 2
+    assert "Target paragraph EDITED" in body
+    assert "Before" in body and "After" in body
+
+
 def test_legacy_spacer_type_normalizes_to_empty_paragraphs():
     from areas.files.services.document_v3 import _normalize_v3
 

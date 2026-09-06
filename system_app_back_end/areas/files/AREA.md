@@ -45,7 +45,7 @@ world
 ```
 
 - Blocks separated by `\n\n`; soft break inside a paragraph = `\n`.
-- Gaps: `[SPACER]` / `[SPACER n="N"]`. Consecutive empty paragraphs stay as separate `n="1"` markers on apply (do not merge into `n="2"`). Clients expand `n` to that many empties. A bare blank line in agent text (`A\n\n\nB`) must also become a spacer on apply — lookalike paints that gap, and Finish used to drop it.
+- Gaps: `[SPACER]` / `[SPACER n="N"]`. Consecutive empty paragraphs stay as separate `n="1"` markers on apply (do not merge into `n="2"`). Clients expand `n` to that many empties. A bare blank line in agent text (`A\n\n\nB`) must also become a spacer on apply — lookalike paints that gap, and Finish used to drop it. If the model densifies and drops `[SPACER]` while editing nearby text, apply reinstates those spacers from the live file between surviving neighbors.
 - Objects are **pointer lines only** (`[INFO id="N"]`, `[TASK_LIST id="N"]`, `[IMAGE id="N"]`, `[GRAPH id="N"]`, `[TABLE id="N"]`). Content lives in object tables / `objects.payload`.
 - Move object = cut/paste the pointer line ([`document_marker_text.py`](services/document_marker_text.py)).
 
