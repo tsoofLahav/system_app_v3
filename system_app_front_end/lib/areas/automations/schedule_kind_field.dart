@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/l10n/app_strings.dart';
+import '../ui/app_icons.dart';
 import '../ui/app_segmented_toggle.dart';
 import '../ui/dialog_field_style.dart';
 import './schedule_format.dart';
 
-/// Daily / weekly / a few times a week / monthly / a few times a month /
-/// every N months — the same chips on the builder and the section-window clock.
+/// Day / week / month — the same chips on the builder and the section-window
+/// clock. Week and month calendars toggle days. Month can unlock an every-N
+/// interval (locked at 1 by default).
 class AutomationScheduleKindField extends StatefulWidget {
   const AutomationScheduleKindField({
     super.key,
@@ -31,21 +33,28 @@ class _AutomationScheduleKindFieldState
     extends State<AutomationScheduleKindField> {
   late final TextEditingController _months;
   final _monthsFocus = FocusNode();
+  late bool _adaptive;
 
   AppStrings get s => widget.strings;
 
   @override
   void initState() {
     super.initState();
-    _months = TextEditingController(text: '${widget.schedule.uiMonthInterval}');
+    _adaptive = widget.schedule.isEveryNMonths;
+    _months = TextEditingController(text: '${_shownInterval()}');
     _monthsFocus.addListener(_commitMonthsIfUnfocused);
   }
 
   @override
   void didUpdateWidget(covariant AutomationScheduleKindField oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.schedule.uiKind != widget.schedule.uiKind) {
+      _adaptive = widget.schedule.isEveryNMonths;
+    } else if (widget.schedule.isEveryNMonths && !_adaptive) {
+      _adaptive = true;
+    }
     if (_monthsFocus.hasFocus) return;
-    final shown = '${widget.schedule.uiMonthInterval}';
+    final shown = '${_shownInterval()}';
     if (_months.text != shown) _months.text = shown;
   }
 
@@ -57,69 +66,55 @@ class _AutomationScheduleKindFieldState
     super.dispose();
   }
 
+  int _shownInterval() =>
+      _adaptive ? widget.schedule.shownMonthInterval : 1;
+
   void _commitMonthsIfUnfocused() {
-    if (_monthsFocus.hasFocus) return;
-    final n = (int.tryParse(_months.text.trim()) ?? 2).clamp(2, 12);
+    if (_monthsFocus.hasFocus || !_adaptive) return;
+    final n = (int.tryParse(_months.text.trim()) ?? 1).clamp(1, 12);
     if (_months.text != '$n') _months.text = '$n';
-    if (n != widget.schedule.uiMonthInterval) {
-      widget.onChanged(
-        widget.schedule.copyWith(
-          kind: AutomationSchedule.everyNMonths,
-          monthInterval: n,
-          allowMultiple: false,
-          cycleFrom: widget.schedule.effectiveCycleFrom,
-        ),
-      );
-    }
+    _applyInterval(n);
   }
 
   void _setKind(String kind) {
     widget.onChanged(_scheduleForKind(kind));
+    if (kind != AutomationSchedule.monthly) {
+      setState(() => _adaptive = false);
+    }
   }
 
   AutomationSchedule _scheduleForKind(String kind) {
     final current = widget.schedule;
-    final now = DateTime.now();
     return switch (kind) {
-      AutomationSchedule.fewTimesWeek => current.copyWith(
+      AutomationSchedule.weekly => current.copyWith(
           kind: AutomationSchedule.weekly,
           weekdays: current.kind == AutomationSchedule.weekly
               ? current.selectedWeekdays
-              : const [],
-          allowMultiple: true,
-          monthInterval: 1,
-          clearCycleFrom: true,
-        ),
-      AutomationSchedule.weekly => current.copyWith(
-          kind: AutomationSchedule.weekly,
-          weekdays: [current.weekday],
-          allowMultiple: false,
-          monthInterval: 1,
-          clearCycleFrom: true,
-        ),
-      AutomationSchedule.fewTimesMonth => current.copyWith(
-          kind: AutomationSchedule.monthly,
-          monthSlots: (current.kind == AutomationSchedule.monthly ||
-                  current.isEveryNMonths)
-              ? current.monthSlots
-              : const [],
+              : [
+                  AutomationSchedule.weekdayFromDart(DateTime.now().weekday),
+                ],
           allowMultiple: true,
           monthInterval: 1,
           clearCycleFrom: true,
         ),
       AutomationSchedule.monthly => current.copyWith(
           kind: AutomationSchedule.monthly,
-          monthSlots: [current.monthSlots.first],
-          allowMultiple: false,
+          monthSlots: (current.kind == AutomationSchedule.monthly ||
+                  current.isEveryNMonths)
+              ? current.monthSlots
+              : [
+                  ScheduleMonthSlot(
+                    placement: AutomationSchedule.placementFromDate(
+                      DateTime.now(),
+                    ),
+                    weekday: AutomationSchedule.weekdayFromDart(
+                      DateTime.now().weekday,
+                    ),
+                  ),
+                ],
+          allowMultiple: true,
           monthInterval: 1,
           clearCycleFrom: true,
-        ),
-      AutomationSchedule.everyNMonths => current.copyWith(
-          kind: AutomationSchedule.everyNMonths,
-          monthSlots: [current.monthSlots.first],
-          allowMultiple: false,
-          monthInterval: current.monthInterval < 2 ? 2 : current.monthInterval,
-          cycleFrom: current.cycleFrom ?? DateTime(now.year, now.month),
         ),
       _ => current.copyWith(
           kind: AutomationSchedule.daily,
@@ -130,15 +125,42 @@ class _AutomationScheduleKindFieldState
     };
   }
 
+  void _setAdaptive(bool adaptive) {
+    setState(() => _adaptive = adaptive);
+    if (!adaptive) {
+      _months.text = '1';
+      widget.onChanged(
+        widget.schedule.copyWith(
+          kind: AutomationSchedule.monthly,
+          monthInterval: 1,
+          allowMultiple: true,
+          clearCycleFrom: true,
+        ),
+      );
+      return;
+    }
+    _months.text = '${widget.schedule.shownMonthInterval}';
+  }
+
   void _setMonths(String raw) {
     final n = int.tryParse(raw.trim());
-    if (n == null || n < 2 || n > 12) return;
+    if (n == null || n < 1 || n > 12) return;
+    _applyInterval(n);
+  }
+
+  void _applyInterval(int n) {
+    final now = DateTime.now();
     widget.onChanged(
       widget.schedule.copyWith(
-        kind: AutomationSchedule.everyNMonths,
+        kind: n > 1
+            ? AutomationSchedule.everyNMonths
+            : AutomationSchedule.monthly,
         monthInterval: n,
-        allowMultiple: false,
-        cycleFrom: widget.schedule.effectiveCycleFrom,
+        allowMultiple: true,
+        cycleFrom: n > 1
+            ? (widget.schedule.cycleFrom ?? DateTime(now.year, now.month))
+            : null,
+        clearCycleFrom: n <= 1,
       ),
     );
   }
@@ -154,47 +176,54 @@ class _AutomationScheduleKindFieldState
           options: [
             AppSegmentedOption(
               value: AutomationSchedule.daily,
-              label: s['onceADay'],
+              label: s['scheduleDay'],
             ),
             AppSegmentedOption(
               value: AutomationSchedule.weekly,
-              label: s['onceAWeek'],
-            ),
-            AppSegmentedOption(
-              value: AutomationSchedule.fewTimesWeek,
-              label: s['fewTimesAWeek'],
+              label: s['scheduleWeek'],
             ),
             AppSegmentedOption(
               value: AutomationSchedule.monthly,
-              label: s['onceAMonth'],
-            ),
-            AppSegmentedOption(
-              value: AutomationSchedule.fewTimesMonth,
-              label: s['fewTimesAMonth'],
-            ),
-            AppSegmentedOption(
-              value: AutomationSchedule.everyNMonths,
-              label: s['onceInMonths'],
+              label: s['scheduleMonth'],
             ),
           ],
           selected: widget.schedule.uiKind,
           onSelected: widget.enabled ? _setKind : null,
         ),
-        if (widget.schedule.uiKind == AutomationSchedule.everyNMonths) ...[
+        if (widget.schedule.uiKind == AutomationSchedule.monthly) ...[
           const SizedBox(height: DialogFieldStyle.fieldGap),
           AppDialogField(
             label: s['onceInMonthsCount'],
-            child: TextField(
-              controller: _months,
-              focusNode: _monthsFocus,
-              enabled: widget.enabled,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(2),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _months,
+                    focusNode: _monthsFocus,
+                    enabled: widget.enabled && _adaptive,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(2),
+                    ],
+                    decoration: DialogFieldStyle.decoration(),
+                    onChanged: widget.enabled && _adaptive ? _setMonths : null,
+                  ),
+                ),
+                IconButton(
+                  tooltip: _adaptive
+                      ? s['lockMonthInterval']
+                      : s['unlockMonthInterval'],
+                  visualDensity: VisualDensity.compact,
+                  onPressed: widget.enabled
+                      ? () => _setAdaptive(!_adaptive)
+                      : null,
+                  icon: AppIcon(
+                    _adaptive ? AppIcons.lockOpen : AppIcons.lock,
+                    size: 16,
+                  ),
+                ),
               ],
-              decoration: DialogFieldStyle.decoration(),
-              onChanged: widget.enabled ? _setMonths : null,
             ),
           ),
         ],

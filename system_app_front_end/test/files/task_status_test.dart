@@ -20,6 +20,13 @@ void main() {
     expect(pending.appearsInView, isFalse);
     expect(active.appearsInView, isTrue);
     expect(done.appearsInView, isTrue);
+    const archived = Task(
+      id: 5,
+      title: 'e',
+      status: 'done',
+      archivedAt: '2026-09-06T00:00:00Z',
+    );
+    expect(archived.appearsInView, isFalse);
   });
 
   test('reordering inside the active zone keeps pending and inactive', () {

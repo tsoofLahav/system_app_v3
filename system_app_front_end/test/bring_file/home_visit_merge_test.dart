@@ -44,6 +44,39 @@ void main() {
     );
   });
 
+  test('empty server canvas seeds from this device then session add goes first', () {
+    expect(
+      mergeHomeCanvasOrder(
+        serverOrder: const [],
+        pendingOps: const [HomeVisitOp.add(88)],
+        fallback: const [1, 99, 2],
+      ),
+      [88, 1, 99, 2],
+    );
+  });
+
+  test('server canvas wins over last-session fallback', () {
+    expect(
+      mergeHomeCanvasOrder(
+        serverOrder: const [2, 99, 1],
+        pendingOps: const [],
+        fallback: const [1, 99, 2],
+      ),
+      [2, 99, 1],
+    );
+  });
+
+  test('failed canvas GET keeps fallback and session add', () {
+    expect(
+      mergeHomeCanvasOrder(
+        serverOrder: null,
+        pendingOps: const [HomeVisitOp.add(88)],
+        fallback: const [1, 99],
+      ),
+      [88, 1, 99],
+    );
+  });
+
   test('ack drops ops the server already reflects', () {
     expect(
       ackHomeVisitOps(const [1], const [HomeVisitOp.add(1), HomeVisitOp.add(2)]),

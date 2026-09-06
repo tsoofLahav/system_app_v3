@@ -31,6 +31,7 @@ def _live_topic_filter():
     return (
         Topic.archived_at.is_(None),
         Topic.is_template.is_(False),
+        Topic.is_system.is_(False),
     )
 
 

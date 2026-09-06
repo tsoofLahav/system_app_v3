@@ -19,9 +19,10 @@ class ScheduleMonthSlot {
 
 /// The schedule string the backend's `next_run_after()` reads.
 ///
-/// Daily / weekly / monthly / every N months, never a cron line. The create
-/// form used to send `0 8 * * *` at a parser that only knows `daily 08:00`,
-/// which is why a scheduled automation could never have fired on time.
+/// Daily / weekly / monthly, never a cron line. Month may carry an interval
+/// (`monthly N … from YYYY-MM`). The create form used to send `0 8 * * *` at
+/// a parser that only knows `daily 08:00`, which is why a scheduled
+/// automation could never have fired on time.
 class AutomationSchedule {
   AutomationSchedule({
     required this.kind,
@@ -38,7 +39,9 @@ class AutomationSchedule {
             [
               ScheduleMonthSlot(
                 placement: placement,
-                weekday: (weekdays ?? [weekday]).first,
+                weekday: weekdays == null || weekdays.isEmpty
+                    ? weekday
+                    : weekdays.first,
               ),
             ];
 
@@ -50,10 +53,8 @@ class AutomationSchedule {
   static const weekly = 'weekly';
   static const monthly = 'monthly';
   static const everyNMonths = 'every_n_months';
-  static const fewTimesWeek = 'few_times_week';
-  static const fewTimesMonth = 'few_times_month';
 
-  static const kinds = [daily, weekly, monthly, everyNMonths];
+  static const kinds = [daily, weekly, monthly];
   static const weekdays = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
   static const placements = ['first', 'second', 'third', 'last'];
 
@@ -94,21 +95,12 @@ class AutomationSchedule {
   bool get isEveryNMonths =>
       kind == everyNMonths || (kind == monthly && monthInterval > 1);
 
-  bool get selectsMultipleDays =>
-      allowMultiple || selectedWeekdays.length > 1 || monthSlots.length > 1;
+  bool get selectsMultipleDays => kind == weekly || kind == monthly || isEveryNMonths;
 
-  /// Kind the schedule chips show — every-N-months and "a few times" are
-  /// their own chips.
-  String get uiKind {
-    if (isEveryNMonths) return everyNMonths;
-    if (kind == weekly && (allowMultiple || selectedWeekdays.length > 1)) {
-      return fewTimesWeek;
-    }
-    if (kind == monthly && (allowMultiple || monthSlots.length > 1)) {
-      return fewTimesMonth;
-    }
-    return kind;
-  }
+  /// Day / week / month chips. Every-N-months is month plus the interval field.
+  String get uiKind => isEveryNMonths ? monthly : kind;
+
+  int get shownMonthInterval => monthInterval.clamp(1, 12);
 
   int get uiMonthInterval => monthInterval < 2 ? 2 : monthInterval.clamp(2, 12);
 
@@ -121,15 +113,17 @@ class AutomationSchedule {
 
   String toDsl() {
     final clock = _normaliseTime(time);
-    return switch (uiKind) {
-      weekly || fewTimesWeek =>
-        'weekly ${(selectedWeekdays.isEmpty ? const ['mon'] : selectedWeekdays).join(',')} $clock',
-      monthly || fewTimesMonth => 'monthly ${_monthSlotsDsl()} $clock',
-      everyNMonths =>
-        'monthly $uiMonthInterval ${_monthSlotsDsl()} $clock'
-            ' from ${_yearMonth(effectiveCycleFrom)}',
-      _ => 'daily $clock',
-    };
+    if (kind == weekly) {
+      return 'weekly ${(selectedWeekdays.isEmpty ? const ['mon'] : selectedWeekdays).join(',')} $clock';
+    }
+    if (kind == monthly || isEveryNMonths) {
+      if (monthInterval > 1) {
+        return 'monthly $uiMonthInterval ${_monthSlotsDsl()} $clock'
+            ' from ${_yearMonth(effectiveCycleFrom)}';
+      }
+      return 'monthly ${_monthSlotsDsl()} $clock';
+    }
+    return 'daily $clock';
   }
 
   String _monthSlotsDsl() {
@@ -299,26 +293,20 @@ class AutomationSchedule {
     return placements[index.clamp(0, placements.length - 2)];
   }
 
-  /// Weekly takes the weekday; monthly / every N months also infer placement.
-  /// "A few times" chips toggle; once-a-week / once-a-month replace.
+  /// Weekly and monthly taps toggle days — one tap is one day, more taps
+  /// add more. Monthly also infers first / second / third / last.
   AutomationSchedule applyingDate(DateTime date) {
     final day = weekdayFromDart(date.weekday);
     if (kind == weekly) {
-      if (allowMultiple || selectedWeekdays.length > 1) {
-        return copyWith(weekdays: _toggleWeekday(day));
-      }
-      return copyWith(weekdays: [day]);
+      return copyWith(weekdays: _toggleWeekday(day));
     }
     if (kind == monthly || kind == everyNMonths) {
       final slot = ScheduleMonthSlot(
         placement: placementFromDate(date),
         weekday: day,
       );
-      final nextSlots = (allowMultiple || monthSlots.length > 1)
-          ? _toggleMonthSlot(slot)
-          : [slot];
       return copyWith(
-        monthSlots: nextSlots,
+        monthSlots: _toggleMonthSlot(slot),
         cycleFrom: isEveryNMonths ? DateTime(date.year, date.month) : cycleFrom,
       );
     }

@@ -127,6 +127,9 @@ def update_file(file_id):
         datetime_fields={"archived_at"},
     )
     if was_archived and file.archived_at is None:
+        topic = db.session.get(Topic, file.topic_id)
+        if topic is not None and getattr(topic, "is_system", False):
+            return jsonify({"error": "system reports stay in archive"}), 400
         file_ops.unarchive_file(file)
     promote_legacy_embeds(file)
     # Pointers removed from the file body must drop the object rows too
@@ -180,19 +183,24 @@ def _workspace_for_visits():
 
 @files_bp.route("/home-visits", methods=["GET"])
 def list_home_visits():
-    from areas.files.services.home_visits import live_visit_ids
+    from areas.files.services.home_visits import canvas_ids_of, live_visit_ids
 
     workspace = _workspace_for_visits()
     if workspace is None:
         return jsonify({"error": "workspace not found"}), 404
     ids = live_visit_ids(workspace)
     db.session.commit()
-    return jsonify({"file_ids": ids})
+    return jsonify({"file_ids": ids, "canvas_order": canvas_ids_of(workspace)})
 
 
 @files_bp.route("/home-visits", methods=["PUT"])
 def replace_home_visits():
-    from areas.files.services.home_visits import set_visit_ids, live_visit_ids
+    from areas.files.services.home_visits import (
+        canvas_ids_of,
+        live_visit_ids,
+        set_canvas_ids,
+        set_visit_ids,
+    )
 
     workspace = _workspace_for_visits()
     if workspace is None:
@@ -208,6 +216,17 @@ def replace_home_visits():
         except (TypeError, ValueError):
             return jsonify({"error": "file_ids must be integers"}), 400
     set_visit_ids(workspace, ids)
+    if "canvas_order" in data:
+        raw_order = data.get("canvas_order") or []
+        if not isinstance(raw_order, list):
+            return jsonify({"error": "canvas_order must be a list"}), 400
+        order = []
+        for item in raw_order:
+            try:
+                order.append(int(item))
+            except (TypeError, ValueError):
+                return jsonify({"error": "canvas_order must be integers"}), 400
+        set_canvas_ids(workspace, order)
     pruned = live_visit_ids(workspace)
     db.session.commit()
-    return jsonify({"file_ids": pruned})
+    return jsonify({"file_ids": pruned, "canvas_order": canvas_ids_of(workspace)})

@@ -80,7 +80,7 @@ class Task {
   bool get canToggleMark => isActive || isDone;
 
   /// Membership is kept, but pending rows stay off the view page.
-  bool get appearsInView => isActive || isDone;
+  bool get appearsInView => archivedAt == null && (isActive || isDone);
 
   bool get isComplimentaryTask =>
       complimentaryRole == 'input' || complimentaryRole == 'review';

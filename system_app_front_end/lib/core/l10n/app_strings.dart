@@ -78,6 +78,7 @@ class AppStrings {
 
   String displayTopicName(String? topicName) {
     if (topicName == 'automations') return _views['automations'] ?? topicName!;
+    if (topicName == 'Reports') return this['reportsTopic'];
     if (topicName == null || topicName == 'main') return this['main'];
     return topicName;
   }
@@ -578,7 +579,7 @@ class AppStrings {
     'reviewInProcess': 'Review is in process',
     'leftoverClearTitle': 'Unfinished tasks',
     'leftoverClearBody':
-        '{view} / {section} still has unfinished tasks. Report what was missed, or dismiss if those tasks were done or not needed.',
+        '{view} / {section} still has unfinished tasks. Report logs the miss and keeps them to do. Dismiss marks them done.',
     'leftoverClearApprove': 'Approve',
     'leftoverClearReport': 'Report',
     'leftoverClearDismiss': 'Dismiss',
@@ -947,6 +948,7 @@ class AppStrings {
     'aiCanceling': 'Canceling the action…',
     'aiDone': 'Done',
     'archive': 'Archive',
+    'reportsTopic': 'Reports',
     'archiveTopicHeadline': '{name} - Archive',
     'automations': 'Automations',
     'dailyRotation': 'Daily rotation',
@@ -972,7 +974,12 @@ class AppStrings {
     'onceAMonth': 'Once a month',
     'fewTimesAMonth': 'A few times a month',
     'onceInMonths': 'Once in months',
+    'scheduleDay': 'Day',
+    'scheduleWeek': 'Week',
+    'scheduleMonth': 'Month',
     'onceInMonthsCount': 'Every how many months',
+    'lockMonthInterval': 'Every month',
+    'unlockMonthInterval': 'Every few months',
     'time': 'Time',
     'chooseDay': 'Choose day',
     'chooseDays': 'Choose days',
@@ -1340,7 +1347,7 @@ class AppStrings {
     'reviewInProcess': 'הסקירה בתהליך',
     'leftoverClearTitle': 'משימות שלא הסתיימו',
     'leftoverClearBody':
-        'ב־{view} / {section} נשארו משימות פתוחות. דווחו מה הוחמץ, או דחו אם המשימות כבר נעשו או לא היו נחוצות.',
+        'ב־{view} / {section} נשארו משימות פתוחות. דיווח רושם את ההחמצה ומשאיר אותן לביצוע. דחייה מסמנת אותן כבוצעו.',
     'leftoverClearApprove': 'אשר',
     'leftoverClearReport': 'דווח',
     'leftoverClearDismiss': 'דחה',
@@ -1704,6 +1711,7 @@ class AppStrings {
     'aiCanceling': 'מבטל את הפעולה…',
     'aiDone': 'בוצע',
     'archive': 'ארכיון',
+    'reportsTopic': 'דיווחים',
     'archiveTopicHeadline': '{name} - ארכיון',
     'automations': 'אוטומציות',
     'dailyRotation': 'החלפת מסמך יומי',
@@ -1729,7 +1737,12 @@ class AppStrings {
     'onceAMonth': 'פעם בחודש',
     'fewTimesAMonth': 'כמה פעמים בחודש',
     'onceInMonths': 'פעם בכמה חודשים',
+    'scheduleDay': 'יום',
+    'scheduleWeek': 'שבוע',
+    'scheduleMonth': 'חודש',
     'onceInMonthsCount': 'כל כמה חודשים',
+    'lockMonthInterval': 'כל חודש',
+    'unlockMonthInterval': 'כל כמה חודשים',
     'time': 'שעה',
     'chooseDay': 'בחר יום',
     'chooseDays': 'בחר ימים',

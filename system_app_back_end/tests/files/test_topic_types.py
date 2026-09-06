@@ -32,7 +32,9 @@ def test_topic_carries_its_type():
     assert "topic_type_id" in Topic.__table__.columns
     assert "topic_type_id" in inspect.getsource(Topic.to_dict)
     assert "is_template" in Topic.__table__.columns
+    assert "is_system" in Topic.__table__.columns
     assert "is_template" in inspect.getsource(Topic.to_dict)
+    assert "is_system" in inspect.getsource(Topic.to_dict)
 
 
 def test_create_topic_accepts_a_type_and_a_clone():

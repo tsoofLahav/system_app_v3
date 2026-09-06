@@ -173,7 +173,7 @@ Marking and selection are **gentle by rule**: a translucent fill or a hairline r
 
 ## Dialogs and menus
 
-**Hug the content.** Dialogs and choice bubbles are sized and padded for what they hold — not for empty air. Default max width is `AppDialogMetrics.maxWidth` (280); only pickers/lists that need room use `wideWidth` (400), the automation builder uses `extraWideWidth` (460) so a calendar and clock can sit side by side, and the fill-file snippet editor uses `fileEditorWidth` (520) because it hosts a real file pane. Chrome padding is 12/10/12/8; field gaps are 8. Do not pass a custom `width:` on a dialog unless the body truly overflows at 280. Metrics live in [`dialog_metrics.dart`](dialog_metrics.dart).
+**Hug the content.** Dialogs and choice bubbles are sized and padded for what they hold — not for empty air. Default max width is `AppDialogMetrics.maxWidth` (280); only pickers/lists that need room use `wideWidth` (400), the automation builder and section-window editor use `extraWideWidth` (460) so a calendar and clock can sit side by side, and the fill-file snippet editor uses `fileEditorWidth` (520) because it hosts a real file pane. Chrome padding is 12/10/12/8; field gaps are 8. Do not pass a custom `width:` on a dialog unless the body truly overflows at 280. Metrics live in [`dialog_metrics.dart`](dialog_metrics.dart).
 
 The preferences dialog is the **reference** glass dialog. Every other dialog uses the same shell and the same field language. Language and **text size** (file body only) are the first two fields.
 
@@ -182,7 +182,7 @@ The preferences dialog is the **reference** glass dialog. Every other dialog use
 | Standard dialog | `AppAdaptiveDialogShell` → `AppGlassDialog` | Max width 280, radius 16, padding 12/10/12/8, tight hairline dividers. Optional `headerAccent` paints the topic-page ombre behind the title; complimentary input uses `headerAccentTintAlpha: topicDialogVeilAlpha` (0.22) so the topic colour is readable |
 | Phone dialog | `AppAdaptiveDialogShell` | Radius 16, inset 14×16, tint 0.94, matching tight padding |
 | Wide dialog | same shell + `wideWidth` | 400 — colour/emoji pickers, shortcut list, automations list |
-| Extra-wide dialog | same shell + `extraWideWidth` | 460 — automation builder (calendar + clock) |
+| Extra-wide dialog | same shell + `extraWideWidth` | 460 — automation builder and section-window editor (calendar + clock) |
 | File-editor dialog | `AppGlassDialog` + `fileEditorWidth` | 520 — fill-file snippet (hosts `DocumentPane` + insert bar) |
 | Confirm | `showAppConfirmDialog` | Same shell; destructive answers use amber-brown text |
 | Full-screen overlay | `OverlayDialogShell` + `OverlayDialogStyle` | Scrim black 18% (arrange 30%), cards radius 14 |

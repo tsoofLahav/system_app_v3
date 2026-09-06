@@ -37,6 +37,8 @@ DISPOSITION_REPORT = "report"
 DISPOSITION_DISMISS = "dismiss"
 MISSED_REPORT_KIND = "missed_section_report"
 MISSED_REPORT_FILE_NAME = "Missed tasks"
+ONE_TIME_ARCHIVE_KIND = "one_time_section_archive"
+ONE_TIME_ARCHIVE_FILE_NAME = "One-time tasks"
 _ISRAEL = ZoneInfo("Asia/Jerusalem")
 
 
@@ -420,16 +422,21 @@ def _recycle_routine_section(view: View, section_key: str) -> None:
             set_task_status(task, done=False)
 
 
+def _end_window(automation: Automation) -> None:
+    """Drop open / close / leftover payload. Tasks stay as they are until the next start."""
+    automation.window_opened_at = None
+    automation.window_closes_at = None
+    automation.pending_clear = None
+
+
 def clear_section_window_state(automation: Automation) -> None:
-    """Close the window, drop leftover confirm, unmark the section, no attention."""
+    """Schedule-edit reset: close, unmark the section, drop the next-run arm."""
     view = db.session.get(View, automation.view_id) if automation.view_id else None
     if view is not None and automation.section_key:
         for linked in linked_standard_automations(view.id, automation.section_key):
             recycle_complimentary(linked)
         _recycle_routine_section(view, automation.section_key)
-    automation.window_opened_at = None
-    automation.window_closes_at = None
-    automation.pending_clear = None
+    _end_window(automation)
     automation.next_run_at = None
 
 
@@ -507,7 +514,7 @@ def close_window_or_pending(automation: Automation, now: datetime) -> None:
             ],
         }
         return
-    clear_section_window_state(automation)
+    _close_section_window(automation)
 
 
 def _israel_wall(now: datetime | None = None) -> datetime:
@@ -538,34 +545,57 @@ def missed_report_snippet(
     return wrap_editor_text("\n".join(lines))
 
 
-def _missed_report_file(workspace_id: int) -> File | None:
+def _standing_report_file(workspace_id: int, kind: str, name: str) -> File | None:
     from areas.files.services import file_ops
+    from areas.files.services.system_topics import ensure_system_reports_topic
 
-    topics = (
-        Topic.query.filter_by(workspace_id=workspace_id)
-        .filter(Topic.archived_at.is_(None))
-        .order_by(Topic.order_index, Topic.id)
+    topic = ensure_system_reports_topic(workspace_id)
+    existing = (
+        File.query.filter_by(topic_id=topic.id)
+        .order_by(File.id)
         .all()
     )
-    for topic in topics:
-        files = (
-            File.query.filter_by(topic_id=topic.id)
-            .filter(File.archived_at.is_(None))
-            .all()
+    for file in existing:
+        meta = file.meta or {}
+        if meta.get("system_kind") == kind:
+            if file.archived_at is None:
+                file_ops.archive_file(file)
+            return file
+
+    leftovers = (
+        File.query.join(Topic, File.topic_id == Topic.id)
+        .filter(
+            Topic.workspace_id == workspace_id,
+            File.archived_at.is_(None),
         )
-        for file in files:
-            meta = file.meta or {}
-            if meta.get("system_kind") == MISSED_REPORT_KIND:
-                return file
-    home = next((topic for topic in topics if topic.name == "Home"), None)
-    target = home or (topics[0] if topics else None)
-    if target is None:
-        return None
-    return file_ops.create_file(
-        topic_id=target.id,
-        name=MISSED_REPORT_FILE_NAME,
-        meta={"system_kind": MISSED_REPORT_KIND},
-        place_first=True,
+        .all()
+    )
+    for file in leftovers:
+        meta = file.meta or {}
+        if meta.get("system_kind") != kind:
+            continue
+        file.topic_id = topic.id
+        file_ops.archive_file(file)
+        return file
+
+    file = file_ops.create_file(
+        topic_id=topic.id,
+        name=name,
+        meta={"system_kind": kind},
+    )
+    file_ops.archive_file(file)
+    return file
+
+
+def _missed_report_file(workspace_id: int) -> File | None:
+    return _standing_report_file(
+        workspace_id, MISSED_REPORT_KIND, MISSED_REPORT_FILE_NAME
+    )
+
+
+def _one_time_archive_file(workspace_id: int) -> File | None:
+    return _standing_report_file(
+        workspace_id, ONE_TIME_ARCHIVE_KIND, ONE_TIME_ARCHIVE_FILE_NAME
     )
 
 
@@ -604,19 +634,57 @@ def append_missed_report(automation: Automation, payload: dict, leftovers: list)
     return file.id
 
 
+def _drop_section_memberships(view_id: int, section_name: str, task_ids: set[int]) -> None:
+    if not task_ids:
+        return
+    for row in _memberships_in_section(view_id, section_name):
+        if row.task_id in task_ids:
+            db.session.delete(row)
+
+
+def _archive_one_time_section(automation: Automation, view: View) -> int:
+    """Leave the live section: write Reports, drop memberships, archive view-only rows."""
+    if section_cadence(view.layout_config, automation.section_key) != CADENCE_ONE_TIME:
+        return 0
+    name = section_name_for_key(view.layout_config, automation.section_key)
+    if not name:
+        return 0
+    tasks = tasks_in_section(view.id, name)
+    if not tasks:
+        return 0
+    titles = [str(task.title or "").strip() for task in tasks if str(task.title or "").strip()]
+    snippet = missed_report_snippet(
+        when=datetime.utcnow(),
+        view_name=view.name or "",
+        section_name=name,
+        titles=titles,
+    )
+    file = _one_time_archive_file(automation.workspace_id)
+    if file is not None:
+        file.document_json = _prepend_editor_text(file.document_json, snippet)
+        db.session.add(file)
+    now = datetime.utcnow()
+    _drop_section_memberships(view.id, name, {task.id for task in tasks})
+    for task in tasks:
+        if task.task_list_id is None and task.archived_at is None:
+            task.archived_at = now
+    return len(tasks)
+
+
+def _close_section_window(automation: Automation) -> None:
+    view = db.session.get(View, automation.view_id) if automation.view_id else None
+    if view is not None and automation.section_key:
+        _archive_one_time_section(automation, view)
+    _end_window(automation)
+
+
 def apply_leftover_clear(
     automation: Automation, *, disposition: str = DISPOSITION_REPORT
 ) -> dict:
     payload = automation.pending_clear or {}
     leftovers = payload.get("leftovers") or []
-    cadence = payload.get("cadence") or CADENCE_ROUTINE
-    view = db.session.get(View, automation.view_id) if automation.view_id else None
-    archived = 0
-    unmarked = 0
     marked_done = 0
     report_file_id = None
-    now = datetime.utcnow()
-    leftover_ids = {int(item["id"]) for item in leftovers if item.get("id") is not None}
     choice = (
         disposition
         if disposition in (DISPOSITION_REPORT, DISPOSITION_DISMISS)
@@ -636,37 +704,16 @@ def apply_leftover_clear(
                 marked_done += 1
     else:
         report_file_id = append_missed_report(automation, payload, leftovers)
-        for item in leftovers:
-            task_id = item.get("id")
-            if task_id is None:
-                continue
-            task = db.session.get(Task, int(task_id))
-            if task is None or task.archived_at is not None:
-                continue
-            item_cadence = item.get("cadence") or cadence
-            if item_cadence == CADENCE_ONE_TIME:
-                task.archived_at = now
-                archived += 1
 
-    if view is not None and cadence == CADENCE_ROUTINE:
-        name = payload.get("section_name") or section_name_for_key(
-            view.layout_config, automation.section_key
-        )
-        if name:
-            for task in tasks_in_section(view.id, name):
-                if task.id in leftover_ids:
-                    continue
-                if task.status == DONE:
-                    set_task_status(task, done=False)
-                    unmarked += 1
-
-    automation.pending_clear = None
-    automation.window_opened_at = None
-    automation.window_closes_at = None
+    archived = 0
+    view = db.session.get(View, automation.view_id) if automation.view_id else None
+    if view is not None and automation.section_key:
+        archived = _archive_one_time_section(automation, view)
+    _end_window(automation)
     db.session.flush()
     return {
         "archived": archived,
-        "unmarked": unmarked,
+        "unmarked": 0,
         "marked_done": marked_done,
         "disposition": choice,
         "report_file_id": report_file_id,
@@ -692,6 +739,7 @@ def input_topics(automation: Automation) -> list[dict]:
         Topic.workspace_id == automation.workspace_id,
         Topic.archived_at.is_(None),
         Topic.is_template.is_(False),
+        Topic.is_system.is_(False),
     )
     if ids:
         query = query.filter(Topic.id.in_([int(i) for i in ids]))

@@ -11,6 +11,7 @@ class Topic {
     this.fileLayout = 'auto',
     this.topicTypeId,
     this.isTemplate = false,
+    this.isSystem = false,
     this.archivedAt,
     this.createdAt,
     this.tags = const [],
@@ -31,6 +32,9 @@ class Topic {
 
   /// Hidden type template — not listed in the sidebar.
   final bool isTemplate;
+
+  /// Built-in topic (Reports). Archive only — not listed, not editable.
+  final bool isSystem;
 
   final String? archivedAt;
   final String? createdAt;
@@ -53,6 +57,7 @@ class Topic {
       fileLayout: json['file_layout'] as String? ?? 'auto',
       topicTypeId: json['topic_type_id'] as int?,
       isTemplate: json['is_template'] as bool? ?? false,
+      isSystem: json['is_system'] as bool? ?? false,
       archivedAt: json['archived_at'] as String?,
       createdAt: json['created_at'] as String?,
       tags: rawTags is List
@@ -83,6 +88,7 @@ class Topic {
       fileLayout: fileLayout ?? this.fileLayout,
       topicTypeId: clearTopicType ? null : (topicTypeId ?? this.topicTypeId),
       isTemplate: isTemplate,
+      isSystem: isSystem,
       archivedAt: archivedAt,
       createdAt: createdAt,
       tags: tags ?? this.tags,

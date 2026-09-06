@@ -8,7 +8,7 @@ abstract final class AppDialogMetrics {
   /// Wider panels only when the body needs it (tables, shortcut lists).
   static const wideWidth = 400.0;
 
-  /// Calendar + compact clock side by side in the automation builder.
+  /// Calendar + compact clock side by side (automation builder and section window).
   static const extraWideWidth = 460.0;
 
   /// Real file editor hosted inside the fill-file automation step.

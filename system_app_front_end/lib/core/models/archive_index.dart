@@ -28,8 +28,13 @@ class ArchiveIndex {
       if (entry.topic.topicTypeId == typeId) entry,
   ];
 
+  List<ArchiveTopicEntry> get systemTopics => [
+    for (final entry in topics)
+      if (entry.topic.isSystem) entry,
+  ];
+
   List<ArchiveTopicEntry> get untypedTopics => [
     for (final entry in topics)
-      if (entry.topic.topicTypeId == null) entry,
+      if (entry.topic.topicTypeId == null && !entry.topic.isSystem) entry,
   ];
 }

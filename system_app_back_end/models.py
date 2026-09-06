@@ -19,6 +19,7 @@ class Workspace(db.Model):
     name = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     home_visit_file_ids = db.Column(JSONB, nullable=False, default=list)
+    home_canvas_file_ids = db.Column(JSONB, nullable=False, default=list)
 
     def to_dict(self):
         return {
@@ -26,6 +27,7 @@ class Workspace(db.Model):
             "name": self.name,
             "created_at": _iso(self.created_at),
             "home_visit_file_ids": list(self.home_visit_file_ids or []),
+            "home_canvas_file_ids": list(self.home_canvas_file_ids or []),
         }
 
 
@@ -41,6 +43,7 @@ class Topic(db.Model):
     file_layout = db.Column(db.Text, nullable=False, default="auto")
     topic_type_id = db.Column(db.Integer, db.ForeignKey("topic_types.id"))
     is_template = db.Column(db.Boolean, nullable=False, default=False)
+    is_system = db.Column(db.Boolean, nullable=False, default=False)
     archived_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -55,6 +58,7 @@ class Topic(db.Model):
             "file_layout": self.file_layout or "auto",
             "topic_type_id": self.topic_type_id,
             "is_template": bool(self.is_template),
+            "is_system": bool(self.is_system),
             "archived_at": _iso(self.archived_at),
             "created_at": _iso(self.created_at),
         }

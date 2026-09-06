@@ -13,6 +13,8 @@ import './document_text_size.dart';
 import './l10n/app_language.dart';
 import './l10n/app_strings.dart';
 import '../areas/automations/automation.dart';
+import '../areas/automations/section_attention_notices.dart';
+import '../areas/automations/section_attention_notifications.dart';
 import '../areas/objects/data/app_view.dart';
 import './models/archive_index.dart';
 import './models/block.dart';
@@ -304,7 +306,7 @@ class AppState extends ChangeNotifier {
 
   List<Topic> get activeTopics => [
     for (final topic in allTopics)
-      if (!topic.isArchived && !topic.isTemplate) topic,
+      if (!topic.isArchived && !topic.isTemplate && !topic.isSystem) topic,
   ];
 
   List<Topic> get untypedTopics => [
@@ -554,6 +556,10 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> selectTopic(Topic topic, {bool preservePainted = false}) async {
+    if (topic.isSystem) {
+      await selectArchiveTopic(topic);
+      return;
+    }
     _gridLayoutPeek.forgetIfLeft(topic.id);
     if (_typeTemplateEdit != null && topic.id != _typeTemplateEdit!.topicId) {
       _typeTemplateEdit = null;
@@ -1126,8 +1132,9 @@ class AppState extends ChangeNotifier {
     ArchiveTopicEntry? daily;
     try {
       for (final topic in allTopics) {
+        if (topic.isTemplate) continue;
         final page = await _files.listArchivedForTopic(topic.id, limit: 0);
-        if (page.total == 0) continue;
+        if (page.total == 0 && !topic.isSystem) continue;
         final entry = ArchiveTopicEntry(
           topic: topic,
           archivedFileCount: page.total,
@@ -1213,6 +1220,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> unarchiveFile(AppFile file) async {
+    final host = allTopics.where((t) => t.id == file.topicId).firstOrNull;
+    if (host != null && host.isSystem) return;
     await _files.updateFile(file.id, {'archived_at': null});
     archiveAgentTextByFileId.remove(file.id);
     final topic = selectedArchiveTopic;
@@ -1830,16 +1839,111 @@ class AppState extends ChangeNotifier {
 
   Future<void> refreshSectionWindows({bool notifyIfChanged = false}) async {
     if (workspaceId == null) return;
+    var changed = false;
     try {
       final next = await _automations.list(workspaceId: workspaceId);
-      final changed =
+      changed =
           _automationAttentionSignature(next) !=
           _automationAttentionSignature(automations);
       automations = next;
-      if (changed || !notifyIfChanged) notifyListeners();
+      if (changed && isViewMode) {
+        try {
+          await _refreshViewMemberships();
+        } catch (_) {}
+      }
     } catch (_) {
       // A poll must not take the app down; the next tick retries.
     }
+    try {
+      changed = await _refreshSharedFileOrder() || changed;
+    } catch (_) {}
+    _syncSectionAttentionNotifications();
+    if (changed || !notifyIfChanged) notifyListeners();
+  }
+
+  void _syncSectionAttentionNotifications() {
+    unawaited(
+      sectionAttentionNotifications.sync(
+        notices: sectionAttentionNotices(
+          automations: automations,
+          titleOf: automationDisplayName,
+          stillHasWork: (automation) {
+            final viewId = automation.viewId;
+            if (viewId == null) return automation.attention;
+            return _sectionStillHasActiveWork(
+              viewId: viewId,
+              sectionKey: automation.sectionKey,
+            );
+          },
+        ),
+        body: strings['sectionAttention'],
+      ),
+    );
+  }
+
+  /// Pull `order_index` / names for the open topic and the shared Home canvas
+  /// order. Does not replace document bodies or `file_layout`.
+  Future<bool> _refreshSharedFileOrder() async {
+    var changed = false;
+    try {
+      if (selectedDetail != null) {
+        changed = await _refreshOpenTopicFilePlacement() || changed;
+      }
+      changed = await _refreshHomeCanvasOrder() || changed;
+    } catch (_) {}
+    return changed;
+  }
+
+  Future<bool> _refreshOpenTopicFilePlacement() async {
+    final detail = selectedDetail;
+    if (detail == null) return false;
+    final inbound = await _files.listFilesForTopic(detail.topic.id);
+    var changed = false;
+    for (final file in inbound) {
+      final local = filesById[file.id];
+      if (local == null) {
+        _rememberFile(file);
+        await loadEmbedsForFile(file.id, notify: false);
+        changed = true;
+        continue;
+      }
+      if (local.orderIndex != file.orderIndex || local.name != file.name) {
+        _rememberFile(
+          local.copyWith(orderIndex: file.orderIndex, name: file.name),
+        );
+        changed = true;
+      }
+    }
+    final nextFiles = [for (final file in inbound) filesById[file.id]!];
+    if (!_sameFilePlacement(detail.files, nextFiles)) {
+      selectedDetail = TopicDetail(topic: detail.topic, files: nextFiles);
+      changed = true;
+    }
+    return changed;
+  }
+
+  Future<bool> _refreshHomeCanvasOrder() async {
+    final payload = await _fetchHomeVisits();
+    if (payload == null) return false;
+    final beforeVisits = List<int>.from(_broughtFileIds);
+    final beforeCanvas = List<int>.from(homeCanvasOrderIds);
+    _applyServerVisitIds(payload.fileIds, serverCanvas: payload.canvasOrder);
+    for (final fileId in _broughtFileIds) {
+      if (beforeVisits.contains(fileId) && filesById[fileId] != null) continue;
+      await _hydrateVisitFile(fileId);
+    }
+    for (final id in beforeVisits) {
+      if (!_broughtFileIds.contains(id)) broughtTopics.remove(id);
+    }
+    final changed =
+        !_sameIds(beforeVisits, _broughtFileIds) ||
+        !_sameIds(beforeCanvas, homeCanvasOrderIds);
+    final seedCanvas =
+        payload.canvasOrder.isEmpty &&
+        homeCanvasOrderIds.isNotEmpty &&
+        _broughtFileIds.isNotEmpty;
+    if (changed || seedCanvas) await _persistBroughtFileLayout();
+    return changed;
   }
 
   String _automationAttentionSignature(List<Automation> rows) {
@@ -1852,6 +1956,7 @@ class AppState extends ChangeNotifier {
   Future<void> loadAutomations() async {
     if (workspaceId == null) return;
     automations = await _automations.list(workspaceId: workspaceId);
+    _syncSectionAttentionNotifications();
     notifyListeners();
   }
 
@@ -2235,9 +2340,10 @@ class AppState extends ChangeNotifier {
 
   /// Re-read visiting files so Home shows the same bodies as their topics.
   Future<void> _refreshVisitFiles({bool notify = false}) async {
-    final serverIds = await _fetchHomeVisitIds();
-    if (serverIds != null) {
-      _applyServerVisitIds(serverIds);
+    final payload = await _fetchHomeVisits();
+    final serverIds = payload?.fileIds;
+    if (payload != null) {
+      _applyServerVisitIds(payload.fileIds, serverCanvas: payload.canvasOrder);
     }
     if (_broughtFileIds.isEmpty) {
       if (serverIds != null) await _persistBroughtFileLayout();
@@ -3086,10 +3192,12 @@ class AppState extends ChangeNotifier {
       _reloadEmbedsForOpenFiles(notify: notify);
 
   /// Writes the topic's file order. The layout then decides how far down that
-  /// order the screen reaches.
+  /// order the screen reaches. Order is shared; `file_layout` is desktop-only
+  /// and is not written here.
   ///
   /// Visiting files on Home are not Home's files — their `order_index` on the
-  /// source topic is left alone. The mixed canvas order is stored locally.
+  /// source topic is left alone. The mixed canvas order is shared on the
+  /// workspace (`home_canvas_file_ids`).
   Future<String?> reorderTopicFiles(
     Topic topic, {
     required List<AppFile> ordered,
@@ -3198,11 +3306,11 @@ class AppState extends ChangeNotifier {
     _scheduleLaunchSnapshotWrite();
   }
 
-  Future<List<int>?> _fetchHomeVisitIds() async {
+  Future<HomeVisitsPayload?> _fetchHomeVisits() async {
     final id = workspaceId;
     if (id == null) return null;
     try {
-      return await _files.listHomeVisitIds(workspaceId: id);
+      return await _files.listHomeVisits(workspaceId: id);
     } catch (_) {
       return null;
     }
@@ -3213,8 +3321,9 @@ class AppState extends ChangeNotifier {
     if (id == null) return;
     try {
       final sent = List<int>.from(_broughtFileIds);
-      await _files.saveHomeVisitIds(
+      await _files.saveHomeVisits(
         fileIds: sent,
+        canvasOrder: homeCanvasOrderIds,
         workspaceId: id,
       );
       _ackHomeVisitOps(sent);
@@ -3228,32 +3337,43 @@ class AppState extends ChangeNotifier {
       ..addAll(ackHomeVisitOps(serverIds, pending));
   }
 
-  void _applyServerVisitIds(List<int> serverIds) {
+  void _applyServerVisitIds(List<int> serverIds, {List<int>? serverCanvas}) {
     final previous = List<int>.from(_broughtFileIds);
     _ackHomeVisitOps(serverIds);
     final next = applyHomeVisitOps(serverIds, _homeVisitSessionOps);
-    final added = [
-      for (final id in next)
-        if (!previous.contains(id)) id,
-    ];
     _broughtFileIds = next;
     if (next.isEmpty) {
       homeCanvasOrderIds = [];
       return;
     }
     final previousVisits = {for (final id in previous) id};
-    homeCanvasOrderIds = [
-      ...added,
-      for (final id in homeCanvasOrderIds)
-        if (next.contains(id) || !previousVisits.contains(id)) id,
+    final added = [
+      for (final id in next)
+        if (!previous.contains(id)) id,
     ];
+    final merged = mergeHomeCanvasOrder(
+      serverOrder: serverCanvas,
+      pendingOps: _homeVisitSessionOps,
+      fallback: [...added, ...homeCanvasOrderIds],
+    );
+    final kept = <int>[];
+    final seen = <int>{};
+    for (final id in merged) {
+      if (!seen.add(id)) continue;
+      if (next.contains(id) || !previousVisits.contains(id)) kept.add(id);
+    }
+    for (final id in next) {
+      if (seen.add(id)) kept.insert(0, id);
+    }
+    homeCanvasOrderIds = kept;
   }
 
   Future<void> _restoreBroughtFile() async {
     final id = workspaceId;
     if (id == null) return;
     final stored = await broughtFileStore.load(id);
-    final serverIds = await _fetchHomeVisitIds();
+    final payload = await _fetchHomeVisits();
+    final serverIds = payload?.fileIds;
     if (serverIds != null) _ackHomeVisitOps(serverIds);
     final visitIds = mergeHomeVisitIds(
       serverIds: serverIds,
@@ -3304,7 +3424,11 @@ class AppState extends ChangeNotifier {
     final canvas = mergeHomeCanvasFiles(
       homeFiles: homeFiles,
       visits: visits,
-      storedOrder: stored.order,
+      storedOrder: mergeHomeCanvasOrder(
+        serverOrder: payload?.canvasOrder,
+        pendingOps: _homeVisitSessionOps,
+        fallback: stored.order,
+      ),
     );
     _broughtFileIds = [
       for (final file in canvas)
@@ -3325,6 +3449,45 @@ class AppState extends ChangeNotifier {
       if (a[i] != b[i]) return false;
     }
     return true;
+  }
+
+  static bool _sameFilePlacement(List<AppFile> a, List<AppFile> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id ||
+          a[i].orderIndex != b[i].orderIndex ||
+          a[i].name != b[i].name) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<void> _hydrateVisitFile(int fileId) async {
+    try {
+      final file = await _files.getFile(fileId);
+      final topic = allTopics.where((t) => t.id == file.topicId).firstOrNull;
+      if (file.isArchived ||
+          topic == null ||
+          topic.isArchived ||
+          topic.isMain) {
+        _broughtFileIds = [
+          for (final id in _broughtFileIds)
+            if (id != fileId) id,
+        ];
+        broughtTopics.remove(fileId);
+        return;
+      }
+      _rememberFile(_mergeInboundFile(file));
+      broughtTopics[file.id] = topic;
+      await _loadEmbedsForFileMergingDirty(file.id);
+    } catch (_) {
+      _broughtFileIds = [
+        for (final id in _broughtFileIds)
+          if (id != fileId) id,
+      ];
+      broughtTopics.remove(fileId);
+    }
   }
 
   List<Task> get viewTasks {
@@ -3765,7 +3928,7 @@ class AppState extends ChangeNotifier {
     await _automations.clearLeftovers(window.id, disposition: disposition);
     await loadAutomations();
     if (isViewMode) await refreshCurrentView();
-    if (selectedTopic != null) await selectTopic(selectedTopic!);
+    await loadArchive();
   }
 
   Future<void> refreshCurrentView() async {

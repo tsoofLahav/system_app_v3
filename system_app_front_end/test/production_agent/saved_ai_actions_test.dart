@@ -239,7 +239,7 @@ void main() {
     });
 
     test('a calendar tap infers weekday and monthly placement', () {
-      final weekly = AutomationSchedule(kind: 'weekly');
+      final weekly = AutomationSchedule(kind: 'weekly', weekdays: const []);
       expect(
         weekly.applyingDate(DateTime(2026, 8, 18)).weekday,
         'tue',
@@ -274,7 +274,7 @@ void main() {
         'last',
       );
 
-      final monthly = AutomationSchedule(kind: 'monthly')
+      final monthly = AutomationSchedule(kind: 'monthly', monthSlots: const [])
           .applyingDate(DateTime(2026, 8, 30));
       expect(monthly.weekday, 'sun');
       expect(monthly.placement, 'last');
@@ -290,6 +290,20 @@ void main() {
       expect(everyN.marksDate(DateTime(2026, 8, 28)), isTrue);
       expect(everyN.marksDate(DateTime(2026, 9, 25)), isFalse);
       expect(everyN.marksDate(DateTime(2026, 11, 27)), isTrue);
+    });
+
+    test('week and month chips toggle extra days without a second kind', () {
+      expect(
+        AutomationSchedule.parse('monthly 3 last fri 18:00 from 2026-08').uiKind,
+        AutomationSchedule.monthly,
+      );
+      var week = AutomationSchedule(
+        kind: AutomationSchedule.weekly,
+        weekday: 'tue',
+      );
+      week = week.applyingDate(DateTime(2026, 8, 20));
+      expect(week.selectedWeekdays, ['tue', 'thu']);
+      expect(week.uiKind, AutomationSchedule.weekly);
     });
 
     test('a few times a week toggles weekdays on the calendar', () {

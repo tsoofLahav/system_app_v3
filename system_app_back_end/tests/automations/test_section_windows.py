@@ -156,14 +156,19 @@ def test_cron_handles_section_windows_and_locked_clocks():
     assert "activate_due_pending_tasks" in source
 
 
-def test_leftover_clear_archives_one_time_and_unmarks_routine():
+def test_leftover_clear_reports_keep_active_and_dismiss_marks_done():
     source = inspect.getsource(windows.apply_leftover_clear)
-    assert "CADENCE_ONE_TIME" in source
-    assert "archived_at" in source
-    assert "set_task_status" in source
-    assert "CADENCE_ROUTINE" in source
     assert "DISPOSITION_DISMISS" in source
+    assert "set_task_status" in source
     assert "append_missed_report" in source
+    assert "_archive_one_time_section" in source
+    assert "_recycle_routine_section" not in source
+    assert "CADENCE_ROUTINE" not in source
+    archive = inspect.getsource(windows._archive_one_time_section)
+    assert "CADENCE_ONE_TIME" in archive
+    assert "archived_at" in archive
+    assert "_drop_section_memberships" in archive
+    assert "ONE_TIME_ARCHIVE_KIND" in archive or "_one_time_archive_file" in archive
 
 
 def test_window_should_close_after_duration_even_when_not_open():
@@ -185,6 +190,16 @@ def test_tick_closes_with_window_should_close_not_window_is_open():
     assert "if window_is_open(automation, now) and automation.window_closes_at" not in source
 
 
+def test_missed_report_file_is_archived_on_system_topic():
+    source = inspect.getsource(windows._standing_report_file)
+    assert "ensure_system_reports_topic" in source
+    assert "archive_file" in source
+    missed = inspect.getsource(windows._missed_report_file)
+    assert "MISSED_REPORT_KIND" in missed
+    one_time = inspect.getsource(windows._one_time_archive_file)
+    assert "ONE_TIME_ARCHIVE_KIND" in one_time
+
+
 def test_missed_report_snippet_lists_when_and_titles():
     when = datetime(2026, 9, 5, 11, 30, 0, tzinfo=timezone.utc)
     text = windows.missed_report_snippet(
@@ -204,14 +219,22 @@ def test_leftovers_are_active_tasks_only():
     assert "status == ACTIVE" in source
 
 
-def test_clean_duration_end_unmarks_without_confirm():
+def test_clean_duration_end_keeps_done_until_next_start():
     source = inspect.getsource(windows.close_window_or_pending)
     assert "leftover_active_tasks" in source
-    assert "clear_section_window_state" in source
+    assert "_close_section_window" in source
+    assert "clear_section_window_state" not in source
+    close = inspect.getsource(windows._close_section_window)
+    assert "_archive_one_time_section" in close
+    assert "_end_window" in close
+    assert "recycle_complimentary" not in close
+    end = inspect.getsource(windows._end_window)
+    assert "pending_clear = None" in end
+    assert "recycle_complimentary" not in end
     reset = inspect.getsource(windows.clear_section_window_state)
     assert "recycle_complimentary" in reset
     assert "_recycle_routine_section" in reset
-    assert "pending_clear = None" in reset
+    assert "_end_window" in reset
 
 
 def test_patch_clears_window_when_clock_changes():

@@ -85,8 +85,10 @@ class ArchiveFilePreview extends StatelessWidget {
       globalPosition: corner,
       isRtl: isRtl,
       entries: [
-        AppContextMenuItem(value: 'unarchive', label: s['unarchiveFile']),
-        const AppContextMenuDivider(),
+        if (state.selectedArchiveTopic?.isSystem != true)
+          AppContextMenuItem(value: 'unarchive', label: s['unarchiveFile']),
+        if (state.selectedArchiveTopic?.isSystem != true)
+          const AppContextMenuDivider(),
         AppContextMenuItem(
           value: 'delete',
           label: s['delete'],

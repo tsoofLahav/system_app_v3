@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/automations/automation.dart';
+import 'package:system_app_front_end/areas/automations/section_attention_notices.dart';
 import 'package:system_app_front_end/areas/objects/data/task.dart';
 import 'package:system_app_front_end/areas/objects/data/view_layout.dart';
 import 'package:system_app_front_end/areas/objects/tasks/task_list_surface.dart';
@@ -134,6 +135,11 @@ void main() {
     expect(AppStrings.he.userInputOverLimit(12000), contains('12000'));
   });
 
+  test('Reports is a built-in topic name', () {
+    expect(AppStrings.en.displayTopicName('Reports'), 'Reports');
+    expect(AppStrings.he.displayTopicName('Reports'), 'דיווחים');
+  });
+
   test('leftover dialog copy offers report and dismiss', () {
     expect(AppStrings.en['leftoverClearReport'], 'Report');
     expect(AppStrings.en['leftoverClearDismiss'], 'Dismiss');
@@ -141,6 +147,40 @@ void main() {
     expect(AppStrings.he['leftoverClearDismiss'], isNotEmpty);
     expect(AppStrings.en.leftoverClearMessage('Daily', 'Focus'), contains('Daily'));
     expect(AppStrings.en.leftoverClearMessage('Daily', 'Focus'), contains('Report'));
+    expect(AppStrings.en.leftoverClearMessage('Daily', 'Focus'), contains('keeps them to do'));
+    expect(AppStrings.en.leftoverClearMessage('Daily', 'Focus'), contains('Dismiss marks them done'));
+  });
+
+  test('each attention section becomes one notification', () {
+    final open = Automation.fromJson({
+      'id': 4,
+      'workspace_id': 1,
+      'name': 'Daily / Focus',
+      'kind': 'section_window',
+      'attention': true,
+    });
+    final quiet = Automation.fromJson({
+      'id': 5,
+      'workspace_id': 1,
+      'name': 'Daily / Evening',
+      'kind': 'section_window',
+      'attention': false,
+    });
+    final other = Automation.fromJson({
+      'id': 6,
+      'workspace_id': 1,
+      'name': 'Docs',
+      'kind': 'standard',
+      'attention': true,
+    });
+    final notices = sectionAttentionNotices(
+      automations: [open, quiet, other],
+      titleOf: (a) => a.name,
+      stillHasWork: (a) => a.attention,
+    );
+    expect(notices, hasLength(1));
+    expect(notices.single.id, 4);
+    expect(notices.single.title, 'Daily / Focus');
   });
 
   test('section window automation parses attention and leftover payload', () {

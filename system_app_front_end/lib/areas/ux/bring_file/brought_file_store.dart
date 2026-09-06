@@ -8,8 +8,9 @@ import '../layout/topic_file_slots.dart';
 /// Local persist for files visiting Home, plus the mixed Home canvas order.
 ///
 /// Visiting files stay on their own topics. Home and the source topic show
-/// the same [AppFile] record (`AppState.filesById`). The canvas order is this
-/// device's arrangement of visits among Home's files; it is not `order_index`.
+/// the same [AppFile] record (`AppState.filesById`). The shared canvas order
+/// lives on the server (`workspaces.home_canvas_file_ids`); this store is
+/// paint / offline only. `topics.file_layout` is not stored here.
 class BroughtFileLayout {
   const BroughtFileLayout({this.visitIds = const [], this.order = const []});
 

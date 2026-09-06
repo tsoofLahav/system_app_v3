@@ -46,3 +46,17 @@ List<int> mergeHomeVisitIds({
   final pending = ackHomeVisitOps(serverIds, pendingOps);
   return applyHomeVisitOps(serverIds, pending);
 }
+
+/// Shared Home canvas order. A successful GET is the base; an empty server
+/// list still seeds from [fallback] so a device that already arranged can
+/// write that order up. Failed GET keeps [fallback]. Session add/remove
+/// replay on top (adds at the front).
+List<int> mergeHomeCanvasOrder({
+  required List<int>? serverOrder,
+  required List<HomeVisitOp> pendingOps,
+  List<int> fallback = const [],
+}) {
+  if (serverOrder == null) return applyHomeVisitOps(fallback, pendingOps);
+  final base = serverOrder.isEmpty ? fallback : serverOrder;
+  return applyHomeVisitOps(base, pendingOps);
+}

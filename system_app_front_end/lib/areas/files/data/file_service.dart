@@ -112,40 +112,55 @@ class FileService {
     return data['agent_text'] as String? ?? '';
   }
 
-  Future<List<int>> listHomeVisitIds({int? workspaceId}) async {
+  Future<HomeVisitsPayload> listHomeVisits({int? workspaceId}) async {
     final path = workspaceId != null
         ? '/home-visits?workspace_id=$workspaceId'
         : '/home-visits';
     final data = await _api.get(path) as Map<String, dynamic>;
-    final raw = data['file_ids'];
-    if (raw is! List) return const [];
-    return [
-      for (final item in raw)
-        if (item is int)
-          item
-        else
-          int.tryParse('$item'),
-    ].whereType<int>().toList();
+    return HomeVisitsPayload.fromJson(data);
   }
 
-  Future<List<int>> saveHomeVisitIds({
+  Future<HomeVisitsPayload> saveHomeVisits({
     required List<int> fileIds,
+    List<int> canvasOrder = const [],
     int? workspaceId,
   }) async {
     final data =
         await _api.put('/home-visits', {
               'file_ids': fileIds,
+              'canvas_order': canvasOrder,
               if (workspaceId != null) 'workspace_id': workspaceId,
             })
             as Map<String, dynamic>;
-    final raw = data['file_ids'];
-    if (raw is! List) return fileIds;
-    return [
-      for (final item in raw)
-        if (item is int)
-          item
-        else
-          int.tryParse('$item'),
-    ].whereType<int>().toList();
+    return HomeVisitsPayload.fromJson(data);
   }
+}
+
+/// Membership and mixed Home canvas order from `GET` / `PUT /home-visits`.
+class HomeVisitsPayload {
+  const HomeVisitsPayload({
+    this.fileIds = const [],
+    this.canvasOrder = const [],
+  });
+
+  final List<int> fileIds;
+  final List<int> canvasOrder;
+
+  factory HomeVisitsPayload.fromJson(Map<String, dynamic> data) {
+    return HomeVisitsPayload(
+      fileIds: _intIds(data['file_ids']),
+      canvasOrder: _intIds(data['canvas_order']),
+    );
+  }
+}
+
+List<int> _intIds(Object? raw) {
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is int)
+        item
+      else
+        int.tryParse('$item'),
+  ].whereType<int>().toList();
 }

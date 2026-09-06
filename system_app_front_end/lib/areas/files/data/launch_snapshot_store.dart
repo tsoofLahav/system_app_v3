@@ -159,6 +159,7 @@ Map<String, dynamic> _topicJson(Topic topic) => {
   'file_layout': topic.fileLayout,
   if (topic.topicTypeId != null) 'topic_type_id': topic.topicTypeId,
   'is_template': topic.isTemplate,
+  'is_system': topic.isSystem,
 };
 
 Map<String, dynamic> _fileJson(AppFile file) => {

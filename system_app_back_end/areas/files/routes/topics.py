@@ -4,6 +4,10 @@ from models import EntityTag, File, ObjectEmbed, Tag, TaskList, Topic, TopicType
 from shared.helpers import active_query, apply_updates, get_or_404
 from shared.bootstrap import default_workspace_id
 from areas.files.services.clone_topic_content import clone_topic_content
+from areas.files.services.system_topics import (
+    ensure_system_reports_topic,
+    is_system_topic,
+)
 from areas.objects.services.delete_cascade import delete_topic_cascade
 
 topics_bp = Blueprint("topics", __name__)
@@ -32,6 +36,9 @@ def list_topics():
     workspace_id = request.args.get("workspace_id", type=int)
     if workspace_id:
         query = query.filter_by(workspace_id=workspace_id)
+        ensure_system_reports_topic(workspace_id)
+        db.session.commit()
+        query = active_query(Topic).filter_by(workspace_id=workspace_id)
     topics = query.order_by(Topic.order_index, Topic.id).all()
     result = []
     for topic in topics:
@@ -106,6 +113,8 @@ def create_topic():
 @topics_bp.route("/topics/<int:topic_id>", methods=["PATCH"])
 def update_topic(topic_id):
     topic = get_or_404(Topic, topic_id)
+    if is_system_topic(topic):
+        return jsonify({"error": "system topics cannot be edited"}), 400
     data = request.get_json(silent=True) or {}
     apply_updates(
         topic,
@@ -141,7 +150,9 @@ def update_topic(topic_id):
 
 @topics_bp.route("/topics/<int:topic_id>", methods=["DELETE"])
 def delete_topic(topic_id):
-    get_or_404(Topic, topic_id)
+    topic = get_or_404(Topic, topic_id)
+    if is_system_topic(topic):
+        return jsonify({"error": "system topics cannot be deleted"}), 400
     delete_topic_cascade(topic_id)
     db.session.commit()
     return "", 204

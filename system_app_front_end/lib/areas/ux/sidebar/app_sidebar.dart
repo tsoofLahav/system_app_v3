@@ -614,6 +614,16 @@ class _ArchiveSectionState extends State<_ArchiveSection> {
           ),
         ),
         if (expanded) ...[
+          for (final entry in index.systemTopics)
+            _TopicTile(
+              topic: entry.topic,
+              displayName: widget.state.topicDisplayName(entry.topic),
+              selected: widget.state.isArchiveMode &&
+                  widget.state.selectedArchiveTopic?.id == entry.topic.id,
+              state: widget.state,
+              onTap: () => widget.onSelect(entry.topic),
+              onEdit: () {},
+            ),
           if (index.daily != null)
             _TopicTile(
               topic: index.daily!.topic,

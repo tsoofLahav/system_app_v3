@@ -14,14 +14,14 @@ Everything the user sees in a file is stored in **one column**: `files.document_
 |--------|---------|
 | `document_json` | **Editor text (v4)** — marker string with header `%%system_app_document v4` (column name kept for now) |
 | `name`, `topic_id`, `order_index` | Placement inside a topic |
-| `meta` (JSONB) | Automation anchors, `template_slot`, `system_kind` (e.g. `missed_section_report` for the standing Missed tasks file), and misc flags |
+| `meta` (JSONB) | Automation anchors, `template_slot`, `system_kind` (e.g. `missed_section_report` for Missed tasks, `one_time_section_archive` for One-time tasks), and misc flags |
 | `archived_at` | Soft archive |
 
 Legacy **v3 JSON** in this column is migrated to editor text on read (`File.to_dict`) and rewritten on the next save. **Spans are dropped** on migrate (span encoding is a follow-up). Spec: frontend [`DOCUMENT_TEXT.md`](../../../system_app_front_end/lib/areas/files/editor/DOCUMENT_TEXT.md).
 
 ## Which files a topic shows
 
-`topics.file_layout` holds the layout the user picked, or `auto` until they pick one. `auto` follows file count: 1 → `single`, 2 → `split`, 3+ → `hero`. A picked layout has a fixed number of slots — `single` 1, `split` 2, `hero` 3 (large pane on the start edge), `grid` all of them — and files fill those slots in `order_index` order. Leftover stored ids `hero_left`, `hero_right`, and `row` still load (`hero_*` as `hero`, `row` as `grid`).
+`files.order_index` is the shared file order for a topic — phone and computer use the same list. `topics.file_layout` is desktop presentation only (phone has no layouts). `auto` follows file count: 1 → `single`, 2 → `split`, 3+ → `hero`. A picked layout has a fixed number of slots — `single` 1, `split` 2, `hero` 3 (large pane on the start edge), `grid` all of them — and files fill those slots in `order_index` order. Leftover stored ids `hero_left`, `hero_right`, and `row` still load (`hero_*` as `hero`, `row` as `grid`).
 
 A file past the last slot is **not on screen**. It is not archived and not marked; it is simply further down the order than the layout has room for, and the user reaches it by rearranging the topic.
 
@@ -94,7 +94,7 @@ What the user sees **inside the file** is in those fences (list header, tasks, i
 | [`services/document_promote.py`](services/document_promote.py) | Promote legacy inline embeds → object rows; writes v4 editor text |
 | [`services/file_versions.py`](services/file_versions.py) | Snapshot before agent/automation writes |
 | [`services/file_ops.py`](services/file_ops.py) | Create / archive / unarchive without a request — used by automations and by the HTTP routes |
-| [`services/home_visits.py`](services/home_visits.py) | Files visiting Home (`workspaces.home_visit_file_ids`); automations and ⌘K share this list |
+| [`services/home_visits.py`](services/home_visits.py) | Files visiting Home (`workspaces.home_visit_file_ids`) plus the mixed Home canvas order (`workspaces.home_canvas_file_ids`, migration [`023_home_canvas_order.sql`](../../migrations/023_home_canvas_order.sql)). Automations and ⌘K share both. `topics.file_layout` stays desktop-only. |
 | [`services/file_snapshot.py`](services/file_snapshot.py) | Clone a snippet (marker text + objects) onto a file, append or replace |
 | [`services/archive_files.py`](services/archive_files.py) | Paginated archive listing + heading search (no document bodies) |
 | [`routes/files.py`](routes/files.py) | File CRUD, `GET /files/:id/agent-text`, `POST /files/:id/apply-snippet`, archive pages, `GET`/`PUT /home-visits` |
@@ -103,10 +103,13 @@ What the user sees **inside the file** is in those fences (list header, tasks, i
 | [`routes/topic_types.py`](routes/topic_types.py) | User-defined topic kinds (`/topic-types`) |
 | [`services/template_slots.py`](services/template_slots.py) | Stamp `files.meta.template_slot` when a topic becomes a type template |
 | [`services/type_templates.py`](services/type_templates.py) | Hidden per-type template topic (`is_template`); detach a live topic into that shell |
+| [`services/system_topics.py`](services/system_topics.py) | Built-in **Reports** topic (`is_system`); Archive only, not user-editable |
 | [`services/clone_topic_skeleton.py`](services/clone_topic_skeleton.py) | Copy file structure (names, layout, empty objects) onto a new topic — automations' `template_slot` clone |
 | [`services/clone_topic_content.py`](services/clone_topic_content.py) | Duplicate a topic, or copy a type template's files with content |
 
 ## Topic types
+
+`topics.is_system` (migration [`022_topic_is_system.sql`](../../migrations/022_topic_is_system.sql)) marks the built-in **Reports** topic. It is created on `GET /topics`, never listed as a working topic, and cannot be PATCHed or deleted. Leftover-task reports and closed one-time section archives are standing archived files in that topic.
 
 A type is a row in `topic_types`, not a tag. Each type has an English `name` and a Hebrew `name_he`; the app shows the one that matches the UI language. `topics.topic_type_id` is optional (Home stays untyped). A type points at a hidden `is_template` topic (`template_topic_id`), edited from Preferences — not a working topic. Creating a topic of that type copies the template's **files with content**. Changing a topic's type later does not re-apply the template. **Duplicate** (`clone_from_topic_id`) copies that topic in full: live file bodies, object content (tasks, info, tables/graphs, images), in-topic links, tags, icon, and colour. Archived files, views, and automations are not copied. If a type still points at a live topic, listing types clones it into a new hidden template and leaves the original visible.
 

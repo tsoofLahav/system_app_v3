@@ -5,6 +5,7 @@ import '../../core/app_state.dart';
 import '../ui/adaptive_dialog.dart';
 import '../ui/compact_calendar.dart';
 import '../ui/dialog_field_style.dart';
+import '../ui/dialog_metrics.dart';
 import '../ui/time_picker_dialog.dart';
 import './automation.dart';
 import './schedule_format.dart';
@@ -99,6 +100,7 @@ class _SectionWindowEditorState extends State<_SectionWindowEditor> {
 
     return AppAdaptiveDialogShell(
       title: Text(widget.state.automationDisplayName(widget.automation)),
+      width: AppDialogMetrics.extraWideWidth,
       actions: [
         TextButton(
           onPressed: _saving ? null : () => Navigator.pop(context, false),
@@ -126,9 +128,7 @@ class _SectionWindowEditorState extends State<_SectionWindowEditor> {
               children: [
                 Expanded(
                   child: AppCompactCalendar(
-                    title: _schedule.selectsMultipleDays
-                        ? s['chooseDays']
-                        : s['chooseDay'],
+                    title: s['chooseDays'],
                     weekdayLabels: s.narrowWeekdaysSundayFirst,
                     formatMonth: s.monthYear,
                     isMarked: _schedule.marksDate,

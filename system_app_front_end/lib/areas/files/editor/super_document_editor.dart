@@ -156,6 +156,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   late final SuperEditorVisualCaretPlugin _visualCaretPlugin;
   late final DocumentCaretSession _caretSession;
   late final SuperEditorIosControlsController _iosControls;
+  final _scroll = ScrollController();
   var _phoneCaretMenuWanted = false;
 
   /// Bumped when [_reloadFromStored] swaps [Editor]. Forces a full SuperEditor
@@ -305,6 +306,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _composer.selectionNotifier.removeListener(_onComposerSelection);
     _focusNode.removeListener(_onFocusChanged);
     _focusNode.dispose();
+    _scroll.dispose();
     _iosControls.handleBeingDragged.removeListener(_syncPhoneMarkToolbar);
     _iosControls.dispose();
     _composer.dispose();
@@ -806,6 +808,25 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       }
     }
     _focusNode.requestFocus();
+    _revealPhoneFileEndBreath();
+  }
+
+  /// Auto-focus at the last line otherwise scrolls that line onto the IME,
+  /// hiding the extra bottom room. After the keyboard settles, keep the
+  /// document scrolled to the end so that room stays on screen.
+  void _revealPhoneFileEndBreath() {
+    if (!isPhoneLayout) return;
+    void jump() {
+      if (!mounted || !_scroll.hasClients) return;
+      final pos = _scroll.position;
+      if (pos.maxScrollExtent <= 0) return;
+      _scroll.jumpTo(pos.maxScrollExtent);
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      jump();
+      Future<void>.delayed(const Duration(milliseconds: 380), jump);
+    });
   }
 
   void _scheduleSave() {
@@ -2611,6 +2632,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
               onSecondaryTapDown: _onSecondaryTap,
               behavior: HitTestBehavior.translucent,
               child: CustomScrollView(
+                controller: _scroll,
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 slivers: [

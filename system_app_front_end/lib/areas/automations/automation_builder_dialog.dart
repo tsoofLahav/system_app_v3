@@ -259,7 +259,11 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
 
   bool _fileInBringScope(AppFile file) {
     final topic = state.allTopics.where((t) => t.id == file.topicId).firstOrNull;
-    if (topic == null || topic.isArchived || topic.isTemplate || topic.isMain) {
+    if (topic == null ||
+        topic.isArchived ||
+        topic.isTemplate ||
+        topic.isSystem ||
+        topic.isMain) {
       return false;
     }
     if (_scopeKind == AutomationScope.topic) {
@@ -1013,9 +1017,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
       children: [
         Expanded(
           child: AppCompactCalendar(
-            title: schedule.selectsMultipleDays
-                ? s['chooseDays']
-                : s['chooseDay'],
+            title: s['chooseDays'],
             weekdayLabels: s.narrowWeekdaysSundayFirst,
             formatMonth: s.monthYear,
             isMarked: schedule.marksDate,

@@ -20,6 +20,7 @@ def task_list_ids_in_scope(resolved: dict) -> list[int]:
             Topic.workspace_id == int(resolved["workspace_id"]),
             Topic.archived_at.is_(None),
             Topic.is_template.is_(False),
+            Topic.is_system.is_(False),
         )
     )
     if resolved.get("topic_ids"):
