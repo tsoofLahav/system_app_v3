@@ -18,6 +18,7 @@ import '../areas/automations/section_attention_notifications.dart';
 import '../areas/objects/data/app_view.dart';
 import './models/archive_index.dart';
 import './models/block.dart';
+import '../areas/objects/data/inner_tasks.dart';
 import '../areas/objects/data/object_embed.dart';
 import './models/tag.dart';
 import '../areas/objects/data/task.dart';
@@ -2861,6 +2862,7 @@ class AppState extends ChangeNotifier {
       'body': body,
       'metadata': {'spans': spans ?? []},
     });
+    applyOuterTaskMarksFromInfo(infoObjectId: embed.id, body: body);
     if (notify) {
       await loadEmbedsForFile(embed.fileId);
     }
@@ -2900,6 +2902,73 @@ class AppState extends ChangeNotifier {
     ];
   }
 
+  ObjectEmbed? _embedById(int objectId) {
+    for (final list in embedsByFileId.values) {
+      for (final embed in list) {
+        if (embed.id == objectId) return embed;
+      }
+    }
+    return null;
+  }
+
+  int? _infoObjectIdFromLink(Map<String, dynamic> link) {
+    final target = link['target_id'];
+    if (target is int) return target;
+    final peer = link['peer'];
+    if (peer is Map && peer['id'] is int) return peer['id'] as int;
+    return null;
+  }
+
+  bool _taskDescribesInfo(Task task, int infoObjectId) {
+    for (final link in task.descriptionLinks) {
+      if (_infoObjectIdFromLink(link) == infoObjectId) return true;
+    }
+    return false;
+  }
+
+  /// Unanimous inner checkboxes update connected outer tasks in cache only.
+  void applyOuterTaskMarksFromInfo({
+    required int infoObjectId,
+    required String body,
+  }) {
+    final verdict = innerTasksUnanimous(body);
+    if (verdict == null) return;
+    for (final task in tasksById.values) {
+      if (!_taskDescribesInfo(task, infoObjectId)) continue;
+      if (!task.canToggleMark) continue;
+      if (verdict && !task.isDone) {
+        _patchCachedTask(task.id, status: 'done');
+      } else if (!verdict && task.isDone) {
+        _patchCachedTask(task.id, status: 'active');
+      }
+    }
+  }
+
+  /// Outer done/active writes every inner checkbox on connected infos.
+  void applyInnerTasksFromOuter(Task task) {
+    if (!task.isActive && !task.isDone) return;
+    for (final link in task.descriptionLinks) {
+      final objectId = _infoObjectIdFromLink(link);
+      if (objectId == null) continue;
+      final embed = _embedById(objectId);
+      if (embed == null || embed.type != 'info') continue;
+      if (UnsavedEmbedEdits.isDirty(embed.id)) continue;
+      final info = embed.information ?? const <String, dynamic>{};
+      final title = info['title'] as String? ?? '';
+      final body = info['body'] as String? ?? '';
+      final next = setAllInnerTasks(body, done: task.isDone);
+      if (next == body) continue;
+      final meta = info['metadata'];
+      final spans = meta is Map && meta['spans'] is List
+          ? [
+              for (final s in meta['spans'])
+                if (s is Map) Map<String, dynamic>.from(s),
+            ]
+          : <Map<String, dynamic>>[];
+      patchInfoObjectCache(embed, title: title, body: next, spans: spans);
+    }
+  }
+
   Future<void> addInfoLink(
     ObjectEmbed embed,
     String targetType,
@@ -2914,6 +2983,7 @@ class AppState extends ChangeNotifier {
         await _api.post('/tasks/${task.id}/toggle', {}) as Map<String, dynamic>;
     final next = Task.fromJson(data);
     _patchCachedTask(task.id, status: next.status, dueDate: next.dueDate);
+    applyInnerTasksFromOuter(next);
     await refreshSectionWindows(notifyIfChanged: true);
     await _reloadEmbedsForOpenFiles(notify: notify);
   }
@@ -2957,6 +3027,9 @@ class AppState extends ChangeNotifier {
       targetTaskListId: listId,
       insertIndexInZone: insertIndexInZone,
       targetDone: targetDone,
+    );
+    applyInnerTasksFromOuter(
+      task.copyWith(status: targetDone ? 'done' : 'active'),
     );
     await _reloadEmbedsForOpenFiles(notify: notify);
   }

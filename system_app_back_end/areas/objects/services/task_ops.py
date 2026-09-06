@@ -65,8 +65,11 @@ def unmarked_status_for(task: Task, *, has_view: bool | None = None) -> str:
 def set_task_status(task: Task, *, done: bool) -> Task:
     if done:
         task.status = DONE
-        return task
-    task.status = unmarked_status_for(task)
+    else:
+        task.status = unmarked_status_for(task)
+    from areas.objects.services.inner_tasks import sync_inner_tasks_from_outer
+
+    sync_inner_tasks_from_outer(task)
     return task
 
 

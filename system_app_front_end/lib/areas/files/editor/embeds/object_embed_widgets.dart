@@ -3,10 +3,12 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../config/api_config.dart';
 import '../../../../core/app_state.dart';
 import '../../../objects/data/image_payload.dart';
+import '../../../objects/data/inner_tasks.dart';
 import '../../../objects/data/object_embed.dart';
 import '../../../objects/links/add_connection_dialog.dart';
 import '../../../ux/topic/topic_appearance.dart';
@@ -15,6 +17,7 @@ import '../document_text_flow.dart';
 import '../edit_conflict.dart';
 import '../editor_key_handoff.dart';
 import '../embed_caret_bridge.dart';
+import '../embed_exit_scope.dart';
 import '../../rich_text/block_text_actions.dart';
 import '../../rich_text/block_text_focus.dart';
 import '../../rich_text/connect_info.dart';
@@ -141,6 +144,20 @@ class _InfoTextController extends SpanTextEditingController {
         if (bs < be) {
           bodySpans.add({...s, 'start': bs, 'end': be});
         }
+      }
+    }
+    for (final item in parseInnerTaskLines(bodyPart)) {
+      bodySpans.add({
+        'start': item.start,
+        'end': item.markEnd,
+        'color': '#9D988F',
+      });
+      if (item.done && item.markEnd < item.end) {
+        bodySpans.add({
+          'start': item.markEnd,
+          'end': item.end,
+          'strikethrough': true,
+        });
       }
     }
 
@@ -486,6 +503,80 @@ class InfoEmbedState extends State<InfoEmbed>
     }
   }
 
+  void _applyInnerEdit(InnerTaskEdit next) {
+    _controller.value = TextEditingValue(
+      text: next.text,
+      selection: TextSelection.collapsed(offset: next.caret),
+    );
+    _scheduleSave();
+    _syncOuterFromInner();
+  }
+
+  void _syncOuterFromInner() {
+    final body = splitInfoText(_controller.text).$2;
+    widget.state.applyOuterTaskMarksFromInfo(
+      infoObjectId: widget.embed.id,
+      body: body,
+    );
+  }
+
+  void _onTextChanged(String _) {
+    final caret = _controller.selection.isValid
+        ? _controller.selection.baseOffset
+        : _controller.text.length;
+    final promoted = promoteBareDashToCheckbox(_controller.text, caret);
+    if (promoted != null) {
+      _applyInnerEdit(promoted);
+      return;
+    }
+    _scheduleSave();
+    _syncOuterFromInner();
+  }
+
+  void _onInfoEnter() {
+    final caret = _controller.selection.isValid
+        ? _controller.selection.baseOffset
+        : _controller.text.length;
+    final next = insertInnerTaskLineOnEnter(_controller.text, caret);
+    if (next != null) {
+      _applyInnerEdit(next);
+      return;
+    }
+    final exit = EmbedExitScope.maybeOf(context);
+    if (exit != null) exit.onExit(exit.nodeId);
+    widget.onExitBelow?.call();
+  }
+
+  bool _consumeInnerTap(int offset) {
+    if (!tapHitsCombinedInnerMark(_controller.text, offset)) return false;
+    final next = toggleCombinedInnerTask(_controller.text, offset);
+    if (next == null) return false;
+    _controller.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: offset.clamp(0, next.length)),
+    );
+    _scheduleSave();
+    _syncOuterFromInner();
+    return true;
+  }
+
+  KeyEventResult _onHostKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey != LogicalKeyboardKey.backspace) {
+      return KeyEventResult.ignored;
+    }
+    if (!_controller.selection.isValid || !_controller.selection.isCollapsed) {
+      return KeyEventResult.ignored;
+    }
+    final next = backspaceInnerTaskPrefix(
+      _controller.text,
+      _controller.selection.baseOffset,
+    );
+    if (next == null) return KeyEventResult.ignored;
+    _applyInnerEdit(next);
+    return KeyEventResult.handled;
+  }
+
   Future<void> _showTextMenu(TapDownDetails details) async {
     final ranges = descriptionRangesForSegment(
       state: widget.state,
@@ -547,7 +638,10 @@ class InfoEmbedState extends State<InfoEmbed>
           style: AppTypography.noteTitleStyle,
           maxLines: null,
           minLines: 1,
-          onChanged: (_) => _scheduleSave(),
+          onChanged: _onTextChanged,
+          onEnter: _onInfoEnter,
+          consumeTapAtOffset: _consumeInnerTap,
+          hostKeyEvent: _onHostKey,
           onBackspaceAtStart: _onBackspaceAtStart,
           onSecondaryTapDown: _showTextMenu,
           descriptionRanges: descriptionRangesForSegment(

@@ -52,6 +52,9 @@ def update_task(task_id):
         raise ValueError("pending tasks need a view")
     if "status" in data:
         task_ops.sync_status_with_memberships(task)
+        from areas.objects.services.inner_tasks import sync_inner_tasks_from_outer
+
+        sync_inner_tasks_from_outer(task)
     db.session.commit()
     return jsonify(task.to_dict())
 

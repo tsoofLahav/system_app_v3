@@ -23,5 +23,9 @@ def update_information(info_id):
         {"title", "body", "archived_at"},
         datetime_fields={"archived_at"},
     )
+    if "body" in data:
+        from areas.objects.services.inner_tasks import sync_outer_tasks_from_info
+
+        sync_outer_tasks_from_info(info)
     db.session.commit()
     return jsonify(info.to_dict())

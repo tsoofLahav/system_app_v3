@@ -104,6 +104,7 @@ class FormattedTextField extends StatefulWidget {
     this.textInputAction,
     this.focusNode,
     this.onEnter,
+    this.consumeTapAtOffset,
     this.stripNewlines = false,
     this.onSecondaryTapDown,
     this.textAlignVertical,
@@ -138,6 +139,10 @@ class FormattedTextField extends StatefulWidget {
   final TextInputAction? textInputAction;
   final FocusNode? focusNode;
   final VoidCallback? onEnter;
+
+  /// Return true to consume a collapsed click at this text offset (e.g. an
+  /// inner-task checkbox) instead of placing the caret.
+  final bool Function(int textOffset)? consumeTapAtOffset;
   final bool stripNewlines;
   final GestureTapDownCallback? onSecondaryTapDown;
   final TextAlignVertical? textAlignVertical;
@@ -1188,6 +1193,12 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
             extentOffset: offset,
           );
         }
+      }
+      if (!dragged &&
+          !extending &&
+          tapCount == 1 &&
+          widget.consumeTapAtOffset?.call(offset) == true) {
+        return;
       }
       final hostBox = context.findRenderObject();
       if (hostBox is RenderBox) {

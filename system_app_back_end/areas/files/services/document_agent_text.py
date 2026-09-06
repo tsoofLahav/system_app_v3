@@ -768,6 +768,10 @@ def _sync_info(embed: ObjectEmbed, update: dict[str, Any]) -> None:
         old_text=old_text,
         new_text=compose_info_text(info.title or "", info.body or ""),
     )
+    if "body" in update:
+        from areas.objects.services.inner_tasks import sync_outer_tasks_from_info
+
+        sync_outer_tasks_from_info(info)
 
 
 def agent_text_from_document_json(

@@ -63,6 +63,8 @@ Views are membership and filtering only. **Never add per-view status columns** �
 
 An `info` object holds a piece of knowledge (`title`, `body`, `metadata`). The file UI edits them as one text field (first line → `title`); storage and agent text stay title + body. Graph node titles are the stored title — empty stays empty (the map paints a fallback; Connect info hides unnamed infos). Do not coerce empty titles to `"Info"`.
 
+**Inner tasks** are checkbox lines in `information_pieces.body` (`- [ ]` / `- [x]`), not `tasks` rows. They have no views, list order, or membership. If a task has a description link to that info: all inner done → outer done; all inner active → outer active; mixed → leave the outer; outer done → every inner done; outer active → every inner active. Inactive / pending outers are left alone. Sync lives in [`services/inner_tasks.py`](services/inner_tasks.py) and runs from info PATCH, agent `_sync_info`, and task status writes.
+
 The `links` table is the workspace **object graph**, keyed by **`objects.id`** for object endpoints (migration `006` also adds `links.kind`, `links.anchor`, `tags.icon`).
 
 | Column | Meaning |
@@ -132,6 +134,7 @@ Deleting anything that contains objects must cascade, or the database keeps orph
 | [`routes/views.py`](routes/views.py) | Views and memberships |
 | [`services/task_list_order.py`](services/task_list_order.py) | Canonical ordering within a list |
 | [`services/task_ops.py`](services/task_ops.py) | Toggle / unmark / pending → active — used by automations, cron, and HTTP routes |
+| [`services/inner_tasks.py`](services/inner_tasks.py) | Parse info-body checkboxes and sync them with a connected outer task |
 | [`services/delete_cascade.py`](services/delete_cascade.py) | Cascade rules for every container |
 
 ## Rules

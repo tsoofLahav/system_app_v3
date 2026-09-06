@@ -69,6 +69,8 @@ task ──┬── shown inline in its file (home list)
 
 An info object holds knowledge (`title`, `body`, …). In the file, title and body edit as **one text field** (first line → `title`, rest → `body`) with no placeholder explaining that; diagrams and the API still see separate fields. Graph edges are keyed by **`objects.id`**. Removing an info from a file (any path) must delete the object row — the map is every info in the workspace, so orphans stay visible until cascade-deleted (see backend objects `AREA.md` deletion).
 
+**Inner tasks** are checkbox lines in that body (`- [ ]` / `- [x]`), not task rows. Typing `- ` at the start of a body line starts one; Enter on a filled line adds the next; Enter or Backspace on an empty one drops the prefix. Tap `[ ]` / `[x]` to toggle. They do not appear in views and have no reorder. If the info is a description of a task, unanimous inner done/active mirrors the outer mark, and marking the outer done/active writes every inner line. Mixed inner marks leave the outer alone. Helpers: [`data/inner_tasks.dart`](data/inner_tasks.dart).
+
 | Kind | Meaning |
 |------|---------|
 | `related` | **info ↔ info** only (stored directed; UI treats undirected) |
