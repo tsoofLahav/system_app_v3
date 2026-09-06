@@ -29,7 +29,10 @@ enum EditConflictChoice { keepYours, useAgent }
 /// Object ids with unsaved embed edits (graph cells, info text, …).
 ///
 /// The open file asks only when a dirty embed's inbound payload moved — typing
-/// in object A while the agent edits object B is not a file conflict.
+/// in object A while the agent edits object B is not a file conflict for
+/// *embeds*, but the **file body** still counts as unsaved whenever any embed
+/// is dirty so a concurrent device write opens the lookalike instead of
+/// silently taking inbound.
 class UnsavedEmbedEdits {
   UnsavedEmbedEdits._();
 
@@ -54,6 +57,9 @@ class UnsavedEmbedEdits {
   }
 
   static bool isDirty(int objectId) => _objectIds.contains(objectId);
+
+  /// Any embed in this session still has unsaved edits.
+  static bool get hasAnyDirty => _objectIds.isNotEmpty;
 
   /// True when the agent wrote a payload for an object the user is still editing.
   static bool anyDirtyConflictsWith(Iterable<ObjectEmbed> inbound) {
@@ -143,5 +149,5 @@ Future<EditConflictChoice> showEditConflictDialog({
       ),
     ),
   );
-  return answer ?? EditConflictChoice.useAgent;
+  return answer ?? EditConflictChoice.keepYours;
 }

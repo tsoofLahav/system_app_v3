@@ -1882,8 +1882,10 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  /// Pull `order_index` / names for the open topic and the shared Home canvas
-  /// order. Does not replace document bodies or `file_layout`.
+  /// Pull open-topic / Home placement and open file bodies so the other
+  /// device's writes show up without a manual refresh. Bodies land on
+  /// `filesById`; open Super Editors decide take / lookalike themselves
+  /// (keyboard-idle). Does not rewrite `file_layout`.
   Future<bool> _refreshSharedFileOrder() async {
     var changed = false;
     try {
@@ -1891,6 +1893,7 @@ class AppState extends ChangeNotifier {
         changed = await _refreshOpenTopicFilePlacement() || changed;
       }
       changed = await _refreshHomeCanvasOrder() || changed;
+      changed = await _refreshBroughtFileBodies() || changed;
     } catch (_) {}
     return changed;
   }
@@ -1908,12 +1911,16 @@ class AppState extends ChangeNotifier {
         changed = true;
         continue;
       }
-      if (local.orderIndex != file.orderIndex || local.name != file.name) {
-        _rememberFile(
-          local.copyWith(orderIndex: file.orderIndex, name: file.name),
-        );
+      final merged = _mergeInboundFile(file);
+      final bodyChanged = local.documentJson != merged.documentJson;
+      final metaChanged =
+          local.orderIndex != merged.orderIndex || local.name != merged.name;
+      if (bodyChanged || metaChanged) {
+        _rememberFile(merged);
         changed = true;
       }
+      // Payload-only edits (tasks / info / table) may leave document_json alone.
+      if (await _refreshEmbedsIfChanged(file.id)) changed = true;
     }
     final nextFiles = [for (final file in inbound) filesById[file.id]!];
     if (!_sameFilePlacement(detail.files, nextFiles)) {
@@ -1921,6 +1928,58 @@ class AppState extends ChangeNotifier {
       changed = true;
     }
     return changed;
+  }
+
+  /// Visit cards that are not in the open topic still need body/embed sync.
+  Future<bool> _refreshBroughtFileBodies() async {
+    if (_broughtFileIds.isEmpty) return false;
+    final openTopicIds = {
+      for (final file in selectedDetail?.files ?? const <AppFile>[]) file.id,
+    };
+    var changed = false;
+    for (final fileId in List<int>.from(_broughtFileIds)) {
+      if (openTopicIds.contains(fileId)) continue;
+      try {
+        final file = await _files.getFile(fileId);
+        final local = filesById[fileId];
+        if (local == null) {
+          await _hydrateVisitFile(fileId);
+          changed = true;
+          continue;
+        }
+        final merged = _mergeInboundFile(file);
+        if (local.documentJson != merged.documentJson ||
+            local.name != merged.name) {
+          _rememberFile(merged);
+          changed = true;
+        }
+        if (await _refreshEmbedsIfChanged(fileId)) changed = true;
+      } catch (_) {}
+    }
+    return changed;
+  }
+
+  /// Returns true when the cached embed list identity/payload moved.
+  Future<bool> _refreshEmbedsIfChanged(int fileId) async {
+    final before = embedsByFileId[fileId];
+    final beforeSig = before == null ? null : _embedsSyncSignature(before);
+    await _loadEmbedsForFileMergingDirty(fileId);
+    final after = embedsByFileId[fileId];
+    if (after == null) return before != null;
+    return beforeSig != _embedsSyncSignature(after);
+  }
+
+  static String _embedsSyncSignature(List<ObjectEmbed> embeds) {
+    return [
+      for (final embed in embeds)
+        '${embed.id}:${embed.type}:${embed.taskListTitle}:'
+        '${embedConflictKey(embed)}:'
+        '${[
+          for (final task in embed.tasks ?? const <Task>[])
+            '${task.id}:${task.title}:${task.status}:'
+            '${task.dueDate}:${task.listOrderIndex}',
+        ].join(',')}',
+    ].join('|');
   }
 
   Future<bool> _refreshHomeCanvasOrder() async {
@@ -2056,12 +2115,26 @@ class AppState extends ChangeNotifier {
     Map<String, dynamic> body, {
     bool notify = true,
   }) async {
-    final updated = await _files.updateFile(file.id, body);
-    _putFile(updated);
-    // Silent document autosaves must not notify — MaterialApp's Consumer and
-    // other listeners rebuilding mid-keystroke desync HardwareKeyboard.
-    if (notify) notifyListeners();
-    _scheduleLaunchSnapshotWrite();
+    final payload = Map<String, dynamic>.from(body);
+    if (payload.containsKey('document_json') &&
+        !payload.containsKey('base_revision')) {
+      payload['base_revision'] =
+          (filesById[file.id] ?? file).contentRevision;
+    }
+    try {
+      final updated = await _files.updateFile(file.id, payload);
+      _putFile(updated);
+      // Silent document autosaves must not notify — MaterialApp's Consumer and
+      // other listeners rebuilding mid-keystroke desync HardwareKeyboard.
+      if (notify) notifyListeners();
+      _scheduleLaunchSnapshotWrite();
+    } on FileRevisionConflict catch (e) {
+      // Keep the server copy visible for 3-way / lookalike. Caller (usually SE)
+      // still owns the live local text and handles the exception.
+      _putFile(e.server);
+      if (notify) notifyListeners();
+      rethrow;
+    }
   }
 
   Future<void> archiveFile(AppFile file) async {
@@ -2207,13 +2280,31 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  /// Refresh embeds for [fileId], keeping any still-dirty local payloads so a
+  /// poll cannot wipe in-progress object edits. Clean embeds take inbound.
   Future<void> _loadEmbedsForFileMergingDirty(int fileId) async {
     final current = embedsByFileId[fileId];
-    if (current != null &&
-        current.any((embed) => UnsavedEmbedEdits.isDirty(embed.id))) {
+    final inbound = await _objects.listForFile(fileId);
+    try {
+      descriptionLinksByFileId[fileId] = await _objects
+          .listFileDescriptionLinks(fileId);
+    } catch (_) {}
+    if (current == null ||
+        !current.any((embed) => UnsavedEmbedEdits.isDirty(embed.id))) {
+      embedsByFileId[fileId] = inbound;
+      _ingestTasks([for (final embed in inbound) ...?embed.tasks]);
       return;
     }
-    await loadEmbedsForFile(fileId, notify: false);
+    final localById = {for (final embed in current) embed.id: embed};
+    final merged = <ObjectEmbed>[
+      for (final embed in inbound)
+        if (UnsavedEmbedEdits.isDirty(embed.id) && localById[embed.id] != null)
+          localById[embed.id]!
+        else
+          embed,
+    ];
+    embedsByFileId[fileId] = merged;
+    _ingestTasks([for (final embed in merged) ...?embed.tasks]);
   }
 
   Future<bool> _hydrateLaunchSnapshot() async {

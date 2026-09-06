@@ -94,6 +94,8 @@ class File(db.Model):
     topic_id = db.Column(db.Integer, db.ForeignKey("topics.id"), nullable=False)
     name = db.Column(db.Text, nullable=False)
     document_json = db.Column(db.Text, nullable=False, default="")
+    # Bumps on every document_json write. PATCH with a stale base_revision → 409.
+    content_revision = db.Column(db.Integer, nullable=False, default=1)
     order_index = db.Column(db.Integer, nullable=False, default=0)
     meta = db.Column(JSONB, nullable=False, default=dict)
     archived_at = db.Column(db.DateTime)
@@ -105,6 +107,7 @@ class File(db.Model):
             "topic_id": self.topic_id,
             "name": self.name,
             "order_index": self.order_index,
+            "content_revision": int(self.content_revision or 1),
             "meta": self.meta if self.meta is not None else {},
             "archived_at": _iso(self.archived_at),
             "created_at": _iso(self.created_at),

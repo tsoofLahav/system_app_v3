@@ -79,6 +79,7 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget>
       embed: widget.embed,
       onRefresh: widget.onRefresh,
     );
+    widget.state.addListener(_onAppState);
   }
 
   @override
@@ -98,8 +99,26 @@ class _InlineTaskListWidgetState extends State<InlineTaskListWidget>
     _bridge.embed = widget.embed;
   }
 
+  void _onAppState() {
+    if (!mounted) return;
+    final list = widget.state.embedsByFileId[widget.embed.fileId];
+    if (list == null) return;
+    ObjectEmbed? live;
+    for (final embed in list) {
+      if (embed.id == widget.embed.id) {
+        live = embed;
+        break;
+      }
+    }
+    if (live == null || identical(live, _bridge.embed)) return;
+    _bridge.embed = live;
+    // Payload-only cache updates do not remount Super Editor (keyboard safety).
+    _surfaceKey.currentState?.syncFromRemote();
+  }
+
   @override
   void dispose() {
+    widget.state.removeListener(_onAppState);
     _registry?.unregister(nodeId);
     _registry = null;
     super.dispose();

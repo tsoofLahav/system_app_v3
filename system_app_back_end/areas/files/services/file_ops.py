@@ -79,3 +79,24 @@ def move_file_to_topic(file: File, *, topic_id: int) -> File:
         raise ValueError("topic not found")
     file.topic_id = topic.id
     return file
+
+
+def bump_content_revision(file: File) -> None:
+    """Every document_json write advances the optimistic-concurrency token."""
+    file.content_revision = int(file.content_revision or 1) + 1
+
+
+def check_base_revision(file: File, data: dict) -> tuple[bool, str | None]:
+    """Return (ok, error). Missing base_revision is allowed only when the body
+    is not changing — callers gate on document_changed first."""
+    raw = data.get("base_revision")
+    if raw is None:
+        return False, "base_revision is required when updating document_json"
+    try:
+        expected = int(raw)
+    except (TypeError, ValueError):
+        return False, "base_revision must be an integer"
+    current = int(file.content_revision or 1)
+    if expected != current:
+        return False, "revision conflict"
+    return True, None

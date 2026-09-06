@@ -107,6 +107,9 @@ def create_embed_in_file(
         block_index=block_index,
         object_type=pointer_type,
     )
+    from areas.files.services.file_ops import bump_content_revision
+
+    bump_content_revision(file)
     embed.anchor = {"kind": "embed", "object_id": embed.id}
     embed.sort_key = sort_key if sort_key is not None else embed.id
     sync_object_anchors(file.document_json or "", [embed])

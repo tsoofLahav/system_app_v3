@@ -2,6 +2,18 @@ import './app_file.dart';
 import '../../../core/models/archive_files_page.dart';
 import '../../../core/services/api_service.dart';
 
+/// Server rejected a document PATCH because [baseRevision] was stale.
+class FileRevisionConflict implements Exception {
+  FileRevisionConflict(this.server);
+
+  /// Current server file (new revision + body).
+  final AppFile server;
+
+  @override
+  String toString() =>
+      'FileRevisionConflict(file=${server.id}, rev=${server.contentRevision})';
+}
+
 class FileService {
   FileService(this._api);
 
@@ -42,8 +54,20 @@ class FileService {
   }
 
   Future<AppFile> updateFile(int id, Map<String, dynamic> body) async {
-    final data = await _api.patch('/files/$id', body) as Map<String, dynamic>;
-    return AppFile.fromJson(data);
+    try {
+      final data = await _api.patch('/files/$id', body) as Map<String, dynamic>;
+      return AppFile.fromJson(data);
+    } on ApiException catch (e) {
+      if (e.statusCode == 409) {
+        final raw = e.body?['file'];
+        if (raw is Map) {
+          throw FileRevisionConflict(
+            AppFile.fromJson(Map<String, dynamic>.from(raw)),
+          );
+        }
+      }
+      rethrow;
+    }
   }
 
   Future<AppFile> applyAgentText(

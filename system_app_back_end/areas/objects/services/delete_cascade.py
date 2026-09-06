@@ -69,6 +69,9 @@ def delete_object_embed_cascade(embed: ObjectEmbed, *, remove_from_document: boo
     file = db.session.get(File, embed.file_id)
     if file and remove_from_document:
         file.document_json = remove_object_embeds(file.document_json or "", embed.id)
+        from areas.files.services.file_ops import bump_content_revision
+
+        bump_content_revision(file)
 
     delete_links_for_object(embed.id, embed.type)
     EntityTag.query.filter_by(

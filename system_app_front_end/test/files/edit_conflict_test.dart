@@ -72,6 +72,20 @@ void main() {
       isTrue,
     );
   });
+
+  test('any dirty embed counts as unsaved for file-body ask', () {
+    expect(UnsavedEmbedEdits.hasAnyDirty, isFalse);
+    UnsavedEmbedEdits.mark(1, true, baselineKey: embedConflictKey(_info(1, 'mine')));
+    expect(UnsavedEmbedEdits.hasAnyDirty, isTrue);
+    expect(
+      decideRemoteEdit(
+        localDirty: UnsavedEmbedEdits.hasAnyDirty,
+        inboundEqualsLocal: false,
+        inboundEqualsBaseline: false,
+      ),
+      RemoteEditDecision.ask,
+    );
+  });
 }
 
 ObjectEmbed _info(int id, String body) {

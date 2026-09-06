@@ -168,6 +168,7 @@ Map<String, dynamic> _fileJson(AppFile file) => {
   'name': file.name,
   'document_json': file.documentJson,
   'order_index': file.orderIndex,
+  'content_revision': file.contentRevision,
   if (file.meta.isNotEmpty) 'meta': file.meta,
   if (file.archivedAt != null) 'archived_at': file.archivedAt,
   if (file.createdAt != null) 'created_at': file.createdAt,

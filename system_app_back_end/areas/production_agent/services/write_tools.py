@@ -168,6 +168,9 @@ def commit_agent_file_apply(
     promote_legacy_embeds(file)
     save_file_version(file, source=source)
     file.document_json = new_document_json
+    from areas.files.services.file_ops import bump_content_revision
+
+    bump_content_revision(file)
     update_errors = apply_object_updates(file.id, object_updates)
     if update_errors:
         return update_errors

@@ -20,6 +20,7 @@ import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
 import '../../ux/shell/app_bottom_bar.dart';
 import '../data/app_file.dart';
+import '../data/file_service.dart';
 import '../model/document_text_codec.dart';
 import '../model/marker_super_editor_bridge.dart';
 import '../model/object_embed_node.dart';
@@ -140,6 +141,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   var _conflictOpen = false;
   final _phoneObjectGate = PhoneObjectGateSignal();
   String? _lastSavedJson;
+  /// Revision of [_lastSavedJson] / the fork point for the next document PATCH.
+  var _baseRevision = 1;
   var _applyingRemote = false;
   var _snappingComposerGraphemes = false;
   Offset? _bidiDragDownGlobal;
@@ -253,6 +256,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _doc.addListener(_onDocumentChange);
     _composer.selectionNotifier.addListener(_onComposerSelection);
     _lastSavedJson = _currentFile.documentJson;
+    _baseRevision = _currentFile.contentRevision;
     _trackedObjectIds = _objectIdsInDocument();
     widget.state.addListener(_onAppStateChanged);
     DocumentEditorRegistry.notifier.addListener(_onClaimedPaneChanged);
@@ -594,7 +598,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   bool get _fileHasUnsaved =>
-      _dirty || UnsavedEmbedEdits.anyDirtyConflictsWith(_embeds);
+      _dirty || UnsavedEmbedEdits.hasAnyDirty;
 
   void _handleRemoteDocument(String? remote) {
     final local = mutableDocumentToMarkerText(_doc);
@@ -607,6 +611,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       case RemoteEditDecision.ignore:
         if (remote == local) {
           _lastSavedJson = remote;
+          _baseRevision = _currentFile.contentRevision;
           _dirty = false;
         }
         return;
@@ -643,6 +648,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       local: local,
       server: remote,
     );
+    // Non-overlapping edits from both devices apply quietly. Only leftover
+    // overlaps open the lookalike — never silently take inbound alone.
     if (!result.hasConflicts) {
       UnsavedEmbedEdits.fileConflictPending = false;
       _applyMergedDocument(
@@ -701,12 +708,18 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     runWhenKeyboardIdle(() {
       if (!mounted) return;
       _saveTimer?.cancel();
+      // After a 409 the cache holds the server revision we must match on PATCH.
+      _baseRevision = _currentFile.contentRevision;
       _reloadFromStored(json);
       if (!persist) return;
       unawaited(
         widget.state.updateFile(_currentFile, {
           'document_json': json,
-        }, notify: false),
+          'base_revision': _baseRevision,
+        }, notify: false).then((_) {
+          if (!mounted) return;
+          _baseRevision = _currentFile.contentRevision;
+        }),
       );
     });
   }
@@ -844,11 +857,19 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       _dirty = false;
       return;
     }
-    await widget.state.updateFile(_currentFile, {
-      'document_json': json,
-    }, notify: false);
-    _lastSavedJson = json;
-    _dirty = false;
+    try {
+      await widget.state.updateFile(_currentFile, {
+        'document_json': json,
+        'base_revision': _baseRevision,
+      }, notify: false);
+      _lastSavedJson = json;
+      _baseRevision = _currentFile.contentRevision;
+      _dirty = false;
+    } on FileRevisionConflict catch (e) {
+      // Server advanced while we still have local text — open 3-way / lookalike.
+      _baseRevision = e.server.contentRevision;
+      _handleRemoteDocument(e.server.documentJson);
+    }
   }
 
   ObjectEmbed? _lookup(int objectId) =>
@@ -1217,6 +1238,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     );
     _doc.addListener(_onDocumentChange);
     _lastSavedJson = json;
+    _baseRevision = _currentFile.contentRevision;
     _dirty = false;
     _trackedObjectIds = _objectIdsInDocument();
     _applyingRemote = false;

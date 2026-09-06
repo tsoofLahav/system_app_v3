@@ -13,6 +13,7 @@ Everything the user sees in a file is stored in **one column**: `files.document_
 | Column | Meaning |
 |--------|---------|
 | `document_json` | **Editor text (v4)** — marker string with header `%%system_app_document v4` (column name kept for now) |
+| `content_revision` | Integer optimistic-concurrency token (migration [`025_file_content_revision.sql`](../../migrations/025_file_content_revision.sql)). Every `document_json` write bumps it. `PATCH /files/:id` with a body change must send `base_revision` matching the current value; mismatch → **409** + current `file` (no blind overwrite). |
 | `name`, `topic_id`, `order_index` | Placement inside a topic |
 | `meta` (JSONB) | Automation anchors, `template_slot`, `system_kind` (e.g. `missed_section_report` for Missed tasks, `one_time_section_archive` for One-time tasks), and misc flags |
 | `archived_at` | Soft archive |
@@ -130,6 +131,7 @@ Leaving the document out of that response is a data-loss bug, not a display one:
 - Never drop an embed pointer during a programmatic edit; fail loudly instead.
 - Save a file version before any agent or automation write.
 - Any endpoint the editor loads a file from must include `document_json`.
+- Document writes bump `content_revision`. User `PATCH` of `document_json` requires matching `base_revision` or returns 409 with the current file.
 
 ## Known gaps
 

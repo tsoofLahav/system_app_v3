@@ -106,6 +106,13 @@ def update_file(file_id):
         "document_json" in data and data["document_json"] != file.document_json
     )
     if document_changed:
+        ok, error = file_ops.check_base_revision(file, data)
+        if not ok:
+            status = 409 if error == "revision conflict" else 400
+            body = {"error": error}
+            if status == 409:
+                body["file"] = file.to_dict()
+            return jsonify(body), status
         save_file_version(file, source="user")
         try:
             validate_document(data["document_json"])
@@ -136,6 +143,7 @@ def update_file(file_id):
     # (selection Backspace/Cut in the editor often only PATCHes the document).
     if document_changed:
         purge_unreferenced_embeds_for_file(file)
+        file_ops.bump_content_revision(file)
     db.session.commit()
     return jsonify(file.to_dict())
 
@@ -154,6 +162,7 @@ def apply_file_snippet(file_id):
         },
         append=bool(data.get("append")),
     )
+    file_ops.bump_content_revision(file)
     db.session.commit()
     return _file_response(file)
 

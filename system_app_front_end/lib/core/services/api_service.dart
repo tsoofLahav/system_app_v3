@@ -5,10 +5,11 @@ import 'package:http/http.dart' as http;
 import '../../config/api_config.dart';
 
 class ApiException implements Exception {
-  ApiException(this.message, {this.statusCode});
+  ApiException(this.message, {this.statusCode, this.body});
 
   final String message;
   final int? statusCode;
+  final Map<String, dynamic>? body;
 
   @override
   String toString() => message;
@@ -80,10 +81,18 @@ class ApiService {
       return jsonDecode(response.body);
     }
     String message = 'Request failed (${response.statusCode})';
+    Map<String, dynamic>? body;
     try {
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      message = body['error']?.toString() ?? message;
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        body = decoded;
+        message = body['error']?.toString() ?? message;
+      }
     } catch (_) {}
-    throw ApiException(message, statusCode: response.statusCode);
+    throw ApiException(
+      message,
+      statusCode: response.statusCode,
+      body: body,
+    );
   }
 }

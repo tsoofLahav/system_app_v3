@@ -50,6 +50,9 @@ def apply_snippet_to_file(
         dest.document_json = append_editor_text(dest.document_json, rewritten)
     else:
         dest.document_json = rewritten
+    from areas.files.services.file_ops import bump_content_revision
+
+    bump_content_revision(dest)
     embeds = ObjectEmbed.query.filter_by(file_id=dest.id).all()
     sync_object_anchors(dest.document_json or "", embeds)
     db.session.flush()

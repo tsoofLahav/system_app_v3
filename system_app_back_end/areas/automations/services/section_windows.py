@@ -630,6 +630,9 @@ def append_missed_report(automation: Automation, payload: dict, leftovers: list)
     if file is None:
         return None
     file.document_json = _prepend_editor_text(file.document_json, snippet)
+    from areas.files.services.file_ops import bump_content_revision
+
+    bump_content_revision(file)
     db.session.add(file)
     return file.id
 
@@ -662,6 +665,9 @@ def _archive_one_time_section(automation: Automation, view: View) -> int:
     file = _one_time_archive_file(automation.workspace_id)
     if file is not None:
         file.document_json = _prepend_editor_text(file.document_json, snippet)
+        from areas.files.services.file_ops import bump_content_revision
+
+        bump_content_revision(file)
         db.session.add(file)
     now = datetime.utcnow()
     _drop_section_memberships(view.id, name, {task.id for task in tasks})
