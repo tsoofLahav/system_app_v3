@@ -1924,6 +1924,12 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     final hit = _descriptionCoveringSelection();
     if (hit == null) return;
     final (title, body) = descriptionPeerCopy(hit.link);
+    final peer = hit.link['peer'];
+    final peerId = peer is Map
+        ? (peer['id'] is int
+              ? peer['id'] as int
+              : int.tryParse('${peer['id']}'))
+        : null;
     runWhenKeyboardIdle(() {
       if (!mounted) return;
       unawaited(
@@ -1932,6 +1938,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
           strings: _phoneStrings(context),
           title: title,
           body: body,
+          infoObjectId: peerId,
         ),
       );
     });
@@ -2003,12 +2010,21 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     final peer = hit.link['peer'];
     final title = peer is Map ? '${peer['title'] ?? ''}' : '';
     final body = peer is Map ? '${peer['body'] ?? ''}' : '';
+    final peerId = peer is Map
+        ? (peer['id'] is int
+              ? peer['id'] as int
+              : int.tryParse('${peer['id']}'))
+        : null;
     if (title.isEmpty && body.isEmpty) return;
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return;
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     final origin = box.localToGlobal(local);
+    AppState? appState;
+    try {
+      appState = context.read<AppState>();
+    } catch (_) {}
     _descriptionBubble = OverlayEntry(
       builder: (ctx) {
         return Positioned(
@@ -2025,7 +2041,18 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
             },
             child: Padding(
               padding: const EdgeInsets.only(top: 18),
-              child: InfoDescriptionBubble(title: title, body: body),
+              child: InfoDescriptionBubble(
+                title: title,
+                body: body,
+                onToggleInner: peerId == null || appState == null
+                    ? null
+                    : (currentBody, markOffset) =>
+                          appState!.toggleInnerTaskOnInfo(
+                            infoObjectId: peerId,
+                            body: currentBody,
+                            markOffset: markOffset,
+                          ),
+              ),
             ),
           ),
         );

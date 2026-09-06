@@ -2851,16 +2851,26 @@ class AppState extends ChangeNotifier {
     required String title,
     required String body,
     List<Map<String, dynamic>>? spans,
+    List<Map<String, dynamic>>? titleSpans,
     bool notify = false,
   }) async {
     if (embed.informationId == null) return;
     // Patch cache *before* the network round-trip so a remount during drag/drop
     // never re-seeds from stale empty title/body.
-    patchInfoObjectCache(embed, title: title, body: body, spans: spans);
+    patchInfoObjectCache(
+      embed,
+      title: title,
+      body: body,
+      spans: spans,
+      titleSpans: titleSpans,
+    );
     await _api.patch('/information/${embed.informationId}', {
       'title': title,
       'body': body,
-      'metadata': {'spans': spans ?? []},
+      'metadata': {
+        'spans': spans ?? [],
+        'title_spans': titleSpans ?? [],
+      },
     });
     applyOuterTaskMarksFromInfo(infoObjectId: embed.id, body: body);
     if (notify) {
@@ -2875,6 +2885,7 @@ class AppState extends ChangeNotifier {
     required String title,
     required String body,
     List<Map<String, dynamic>>? spans,
+    List<Map<String, dynamic>>? titleSpans,
   }) {
     final list = embedsByFileId[embed.fileId];
     if (list == null) return;
@@ -2887,6 +2898,9 @@ class AppState extends ChangeNotifier {
         ? Map<String, dynamic>.from(prevMeta)
         : <String, dynamic>{};
     meta['spans'] = spans ?? [];
+    if (titleSpans != null) {
+      meta['title_spans'] = titleSpans;
+    }
     embedsByFileId[embed.fileId] = [
       for (var j = 0; j < list.length; j++)
         j == i
@@ -2965,7 +2979,107 @@ class AppState extends ChangeNotifier {
                 if (s is Map) Map<String, dynamic>.from(s),
             ]
           : <Map<String, dynamic>>[];
-      patchInfoObjectCache(embed, title: title, body: next, spans: spans);
+      final titleSpans = meta is Map && meta['title_spans'] is List
+          ? [
+              for (final s in meta['title_spans'])
+                if (s is Map) Map<String, dynamic>.from(s),
+            ]
+          : <Map<String, dynamic>>[];
+      patchInfoObjectCache(
+        embed,
+        title: title,
+        body: next,
+        spans: spans,
+        titleSpans: titleSpans,
+      );
+    }
+  }
+
+  /// Toggle one inner checkbox on a description-linked info (bubble / modal).
+  Future<String?> toggleInnerTaskOnInfo({
+    required int infoObjectId,
+    required String body,
+    required int markOffset,
+  }) async {
+    final next = toggleInnerTaskAt(body, markOffset);
+    if (next == null || next == body) return null;
+    final embed = _embedById(infoObjectId);
+    if (embed == null || embed.type != 'info' || embed.informationId == null) {
+      return null;
+    }
+    final info = embed.information ?? const <String, dynamic>{};
+    final title = info['title'] as String? ?? '';
+    final meta = info['metadata'];
+    final spans = meta is Map && meta['spans'] is List
+        ? [
+            for (final s in meta['spans'])
+              if (s is Map) Map<String, dynamic>.from(s),
+          ]
+        : <Map<String, dynamic>>[];
+    final titleSpans = meta is Map && meta['title_spans'] is List
+        ? [
+            for (final s in meta['title_spans'])
+              if (s is Map) Map<String, dynamic>.from(s),
+          ]
+        : <Map<String, dynamic>>[];
+    await updateInfoObject(
+      embed,
+      title: title,
+      body: next,
+      spans: spans,
+      titleSpans: titleSpans,
+    );
+    _patchDescriptionPeerBody(infoObjectId, next);
+    if (!UnsavedEmbedEdits.isDirty(embed.id)) {
+      patchInfoObjectCache(
+        embed,
+        title: title,
+        body: next,
+        spans: spans,
+        titleSpans: titleSpans,
+      );
+    }
+    notifyListeners();
+    return next;
+  }
+
+  void _patchDescriptionPeerBody(int infoObjectId, String body) {
+    for (final entry in descriptionLinksByFileId.entries) {
+      var changed = false;
+      final next = <Map<String, dynamic>>[];
+      for (final link in entry.value) {
+        final peer = link['peer'];
+        if (peer is Map && peer['id'] == infoObjectId) {
+          next.add({
+            ...link,
+            'peer': {...Map<String, dynamic>.from(peer), 'body': body},
+          });
+          changed = true;
+        } else {
+          next.add(link);
+        }
+      }
+      if (changed) descriptionLinksByFileId[entry.key] = next;
+    }
+    for (final task in tasksById.values.toList()) {
+      if (task.descriptionLinks.isEmpty) continue;
+      var changed = false;
+      final nextLinks = <Map<String, dynamic>>[];
+      for (final link in task.descriptionLinks) {
+        final peer = link['peer'];
+        if (peer is Map && peer['id'] == infoObjectId) {
+          nextLinks.add({
+            ...link,
+            'peer': {...Map<String, dynamic>.from(peer), 'body': body},
+          });
+          changed = true;
+        } else {
+          nextLinks.add(link);
+        }
+      }
+      if (changed) {
+        _patchCachedTask(task.id, descriptionLinks: nextLinks);
+      }
     }
   }
 

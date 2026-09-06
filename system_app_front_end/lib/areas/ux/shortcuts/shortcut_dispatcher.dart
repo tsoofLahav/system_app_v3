@@ -53,6 +53,14 @@ Future<void> dispatchShortcutAction(
   if (action.context == ShortcutContextRequirement.insertObject) {
     final insertType = action.insertType;
     if (insertType == null) return;
+    // ⌘T inside an info adds an inner checklist line, not a task-list object.
+    if (insertType == 'task_list') {
+      final info = InfoEmbedState.keyboardFocus;
+      if (info != null) {
+        info.insertInnerChecklist();
+        return;
+      }
+    }
     final controller = DocumentEditorRegistry.active;
     if (controller == null) return;
     await controller.insertAtBlock(insertType);

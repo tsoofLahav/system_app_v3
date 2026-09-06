@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../../../../config/api_config.dart';
 import '../../../../core/app_state.dart';
 import '../../../objects/data/image_payload.dart';
+import '../../../objects/data/inner_task_mark.dart';
 import '../../../objects/data/inner_tasks.dart';
 import '../../../objects/data/object_embed.dart';
 import '../../../objects/links/add_connection_dialog.dart';
@@ -47,29 +48,52 @@ String infoEditSnapshot({
   required String title,
   required String body,
   required List<dynamic> spans,
-}) => jsonEncode({'title': title, 'body': body, 'spans': spans});
+  List<dynamic> titleSpans = const [],
+}) => jsonEncode({
+  'title': title,
+  'body': body,
+  'spans': spans,
+  'title_spans': titleSpans,
+});
 
 String infoSnapshotFromEmbed(ObjectEmbed embed) {
   final info = embed.information ?? const {};
   final meta = info['metadata'];
   final rawSpans = meta is Map ? meta['spans'] : null;
+  final rawTitle = meta is Map ? meta['title_spans'] : null;
   final spans = rawSpans is List ? rawSpans : const [];
+  final titleSpans = rawTitle is List ? rawTitle : const [];
   return infoEditSnapshot(
     title: info['title'] as String? ?? '',
     body: info['body'] as String? ?? '',
     spans: spans,
+    titleSpans: titleSpans,
   );
 }
 
-/// Body-relative spans → offsets in the combined title\\nbody string.
+/// Body + title spans → offsets in the combined title\\nbody string.
 List<Map<String, dynamic>> infoSpansToCombined(
   List<Map<String, dynamic>> bodySpans,
-  String combined,
-) {
+  String combined, {
+  List<Map<String, dynamic>> titleSpans = const [],
+}) {
   final nl = combined.indexOf('\n');
-  if (nl < 0) return const [];
+  if (nl < 0) {
+    // Title-only info: spans are stored as title spans (or legacy body key).
+    return [
+      for (final s in [...titleSpans, ...bodySpans])
+        if ((s['end'] as int) > (s['start'] as int)) Map<String, dynamic>.from(s),
+    ];
+  }
   final offset = nl + 1;
   return [
+    for (final s in titleSpans)
+      if ((s['end'] as int) > 0 && (s['start'] as int) < nl)
+        {
+          ...s,
+          'start': (s['start'] as int).clamp(0, nl),
+          'end': (s['end'] as int).clamp(0, nl),
+        },
     for (final s in bodySpans)
       {
         ...s,
@@ -79,19 +103,33 @@ List<Map<String, dynamic>> infoSpansToCombined(
   ];
 }
 
-/// Combined-string spans → body-relative spans for the API.
-List<Map<String, dynamic>> infoSpansToBody(
-  List<Map<String, dynamic>> combinedSpans,
-  String combined,
-) {
+/// Combined-string spans → title + body spans for the API.
+({List<Map<String, dynamic>> title, List<Map<String, dynamic>> body})
+    infoSpansForApi(List<Map<String, dynamic>> combinedSpans, String combined) {
   final nl = combined.indexOf('\n');
-  if (nl < 0) return const [];
+  if (nl < 0) {
+    return (
+      title: [
+        for (final s in combinedSpans)
+          if ((s['end'] as int) > (s['start'] as int)) Map<String, dynamic>.from(s),
+      ],
+      body: const <Map<String, dynamic>>[],
+    );
+  }
   final offset = nl + 1;
   final bodyLen = combined.length - offset;
-  final out = <Map<String, dynamic>>[];
+  final title = <Map<String, dynamic>>[];
+  final body = <Map<String, dynamic>>[];
   for (final s in combinedSpans) {
     var start = s['start'] as int;
     var end = s['end'] as int;
+    if (end > 0 && start < nl) {
+      title.add({
+        ...s,
+        'start': start.clamp(0, nl),
+        'end': end.clamp(0, nl),
+      });
+    }
     if (end <= offset) continue;
     if (start < offset) start = offset;
     start -= offset;
@@ -99,12 +137,21 @@ List<Map<String, dynamic>> infoSpansToBody(
     if (start >= bodyLen) continue;
     if (end > bodyLen) end = bodyLen;
     if (start >= end) continue;
-    out.add({...s, 'start': start, 'end': end});
+    body.add({...s, 'start': start, 'end': end});
   }
-  return out;
+  return (title: title, body: body);
 }
 
+/// Combined-string spans → body-relative spans for the API.
+///
+/// Prefer [infoSpansForApi] when title spans must also persist.
+List<Map<String, dynamic>> infoSpansToBody(
+  List<Map<String, dynamic>> combinedSpans,
+  String combined,
+) => infoSpansForApi(combinedSpans, combined).body;
+
 /// Renders the first line as title weight/size; rest as body + user spans.
+/// Inner-task marks paint as circular [InnerTaskMark] widgets (not `[ ]` text).
 class _InfoTextController extends SpanTextEditingController {
   @override
   TextSpan buildTextSpan({
@@ -147,11 +194,6 @@ class _InfoTextController extends SpanTextEditingController {
       }
     }
     for (final item in parseInnerTaskLines(bodyPart)) {
-      bodySpans.add({
-        'start': item.start,
-        'end': item.markEnd,
-        'color': '#9D988F',
-      });
       if (item.done && item.markEnd < item.end) {
         bodySpans.add({
           'start': item.markEnd,
@@ -169,13 +211,78 @@ class _InfoTextController extends SpanTextEditingController {
           spans: titleSpans,
         ),
         TextSpan(text: '\n', style: bodyStyle),
-        TextSpanBuilder.build(
-          text: bodyPart,
-          baseStyle: bodyStyle,
-          spans: bodySpans,
-        ),
+        ..._bodyInlineSpans(bodyPart, bodyStyle, bodySpans),
       ],
     );
+  }
+
+  List<InlineSpan> _bodyInlineSpans(
+    String body,
+    TextStyle bodyStyle,
+    List<Map<String, dynamic>> bodySpans,
+  ) {
+    final items = parseInnerTaskLines(body);
+    if (items.isEmpty) {
+      return [
+        TextSpanBuilder.build(text: body, baseStyle: bodyStyle, spans: bodySpans),
+      ];
+    }
+    final out = <InlineSpan>[];
+    var cursor = 0;
+    for (final item in items) {
+      if (item.markStart > cursor) {
+        out.add(
+          TextSpanBuilder.build(
+            text: body.substring(cursor, item.markStart),
+            baseStyle: bodyStyle,
+            spans: _spansInSlice(bodySpans, cursor, item.markStart),
+          ),
+        );
+      }
+      // One caret slot for ☐ / ☑ — painted as a round checklist mark.
+      out.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 1),
+            child: InnerTaskMark(done: item.done, size: 13),
+          ),
+        ),
+      );
+      cursor = item.markEnd;
+    }
+    if (cursor < body.length) {
+      out.add(
+        TextSpanBuilder.build(
+          text: body.substring(cursor),
+          baseStyle: bodyStyle,
+          spans: _spansInSlice(bodySpans, cursor, body.length),
+        ),
+      );
+    }
+    return out;
+  }
+
+  List<Map<String, dynamic>> _spansInSlice(
+    List<Map<String, dynamic>> spans,
+    int from,
+    int to,
+  ) {
+    final len = to - from;
+    if (len <= 0) return const [];
+    final out = <Map<String, dynamic>>[];
+    for (final s in spans) {
+      var start = s['start'] as int;
+      var end = s['end'] as int;
+      if (end <= from || start >= to) continue;
+      if (start < from) start = from;
+      if (end > to) end = to;
+      start -= from;
+      end -= from;
+      if (start >= end) continue;
+      out.add({...s, 'start': start, 'end': end});
+    }
+    return out;
   }
 }
 
@@ -250,26 +357,41 @@ class InfoEmbedState extends State<InfoEmbed>
     final info = embed.information ?? const {};
     final title = info['title'] as String? ?? '';
     final body = info['body'] as String? ?? '';
-    final combined = composeInfoText(title, body);
     final meta = info['metadata'];
-    final rawSpans = meta is Map ? meta['spans'] : null;
-    final bodySpans = rawSpans is List
+    List<Map<String, dynamic>> mapsFrom(dynamic raw) => raw is List
         ? [
-            for (final s in rawSpans)
+            for (final s in raw)
               if (s is Map) Map<String, dynamic>.from(s),
           ]
         : <Map<String, dynamic>>[];
+    final bodySpans = mapsFrom(meta is Map ? meta['spans'] : null);
+    final titleSpans = mapsFrom(meta is Map ? meta['title_spans'] : null);
+    final canonicalBody = canonicalizeInnerTaskMarks(body);
+    final combined = composeInfoText(title, canonicalBody);
     _controller.setRichState(
       text: combined,
-      spans: infoSpansToCombined(bodySpans, combined),
+      spans: infoSpansToCombined(
+        bodySpans,
+        combined,
+        titleSpans: titleSpans,
+      ),
       preserveSelection: preserveSelection,
     );
+    if (canonicalBody != body) {
+      // Rewrite legacy `[ ]` marks to ☐ without waiting for the next keystroke.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _scheduleSave();
+      });
+    }
   }
 
-  (String, String, List<Map<String, dynamic>>) _splitForApi() {
+  (String, String, List<Map<String, dynamic>>, List<Map<String, dynamic>>)
+  _splitForApi() {
     final combined = _controller.text;
     final parts = splitInfoText(combined);
-    return (parts.$1, parts.$2, infoSpansToBody(_controller.spans, combined));
+    final split = infoSpansForApi(_controller.spans, combined);
+    return (parts.$1, parts.$2, split.body, split.title);
   }
 
   @override
@@ -375,8 +497,13 @@ class InfoEmbedState extends State<InfoEmbed>
   }
 
   String get _localKey {
-    final (title, body, spans) = _splitForApi();
-    return infoEditSnapshot(title: title, body: body, spans: spans);
+    final (title, body, spans, titleSpans) = _splitForApi();
+    return infoEditSnapshot(
+      title: title,
+      body: body,
+      spans: spans,
+      titleSpans: titleSpans,
+    );
   }
 
   bool _shouldFlushOnDispose() {
@@ -467,15 +594,21 @@ class InfoEmbedState extends State<InfoEmbed>
 
   Future<void> _save({bool flush = false}) async {
     _saveTimer?.cancel();
-    final (title, body, spans) = _splitForApi();
+    final (title, body, spans, titleSpans) = _splitForApi();
     try {
       await widget.state.updateInfoObject(
         widget.embed,
         title: title,
         body: body,
         spans: spans,
+        titleSpans: titleSpans,
       );
-      _baselineKey = infoEditSnapshot(title: title, body: body, spans: spans);
+      _baselineKey = infoEditSnapshot(
+        title: title,
+        body: body,
+        spans: spans,
+        titleSpans: titleSpans,
+      );
       _setDirty(false);
     } catch (_) {
       // Object may have been removed while a debounce was pending.
@@ -485,12 +618,13 @@ class InfoEmbedState extends State<InfoEmbed>
 
   /// Sync cache only — use before structural rebuild; API can catch up async.
   void pushControllersToCache() {
-    final (title, body, spans) = _splitForApi();
+    final (title, body, spans, titleSpans) = _splitForApi();
     widget.state.patchInfoObjectCache(
       widget.embed,
       title: title,
       body: body,
       spans: spans,
+      titleSpans: titleSpans,
     );
   }
 
@@ -547,6 +681,16 @@ class InfoEmbedState extends State<InfoEmbed>
     widget.onExitBelow?.call();
   }
 
+  /// Menu / ⌘T while this info has the caret — new empty checkbox line.
+  void insertInnerChecklist() {
+    final caret = _controller.selection.isValid
+        ? _controller.selection.baseOffset
+        : _controller.text.length;
+    final next = insertInnerTaskAtCaret(_controller.text, caret);
+    _applyInnerEdit(next);
+    if (!_focus.hasFocus) _focus.requestFocus();
+  }
+
   bool _consumeInnerTap(int offset) {
     if (!tapHitsCombinedInnerMark(_controller.text, offset)) return false;
     final next = toggleCombinedInnerTask(_controller.text, offset);
@@ -589,6 +733,10 @@ class InfoEmbedState extends State<InfoEmbed>
       strings: widget.state.strings,
       includeDisconnectInfo: descriptionRangeCoveringMark(ranges) != null,
       onAction: (action) async {
+        if (action == 'info:add_checklist') {
+          insertInnerChecklist();
+          return;
+        }
         if (action == 'text:connect_info') {
           await connectInfoFromMark(
             context: context,

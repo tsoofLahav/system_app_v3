@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../../core/app_state.dart';
 import '../../../core/l10n/app_strings.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
@@ -12,7 +14,12 @@ Future<void> showInfoDescriptionModal({
   required AppStrings strings,
   required String title,
   required String body,
+  int? infoObjectId,
 }) {
+  AppState? state;
+  try {
+    state = context.read<AppState>();
+  } catch (_) {}
   return showAppDialog<void>(
     context: context,
     builder: (ctx) {
@@ -23,7 +30,18 @@ Future<void> showInfoDescriptionModal({
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            InfoDescriptionBubble(title: title, body: body, maxHeight: 360),
+            InfoDescriptionBubble(
+              title: title,
+              body: body,
+              maxHeight: 360,
+              onToggleInner: infoObjectId == null || state == null
+                  ? null
+                  : (currentBody, markOffset) => state!.toggleInnerTaskOnInfo(
+                        infoObjectId: infoObjectId,
+                        body: currentBody,
+                        markOffset: markOffset,
+                      ),
+            ),
             PositionedDirectional(
               top: 4,
               end: 4,

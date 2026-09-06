@@ -47,7 +47,7 @@ The built-in **Reports** topic (`is_system`) is also hidden from the live sideba
 
 **One marking.** Super Editor body actions (right-click, format, cut/copy, Make link, AI `selected_text`) use the same rule as embed fields: if anything is marked, use that span; if not, use the **line at the caret**. Paste is the exception — unmarked paste inserts at the caret. [`caretLineSelection`](editor/super_editor_mark.dart) expands a collapsed caret before those other actions. Object blocks stay whole-object (chrome menu), not a text line. Catalog **⌘B / ⌘I / ⌘U** toggle once — Super Editor’s own Cmd+B / Cmd+I are stripped so they cannot double-toggle.
 
-**Web links.** Right-click **Make link** (no shortcut; ⌘K is bring-file) finds `http(s)://` or `www.` in the mark-or-caret-line and paints it like a description link. v4 still has no general span encoding; **links only** round-trip as CommonMark `[text](url)` in paragraph/list lines. Click / tap opens the URL (⌘-click still works). Object-field links store `link` on existing payload spans and open the same way.
+**Web links.** Right-click **Make link** (no shortcut; ⌘K is bring-file) finds `http(s)://` or `www.` in the mark-or-caret-line and paints it like a description link. Paragraph / heading / list lines round-trip **bold / italic / underline / strikethrough** and links via Super Editor markdown in [`marker_super_editor_bridge.dart`](model/marker_super_editor_bridge.dart) (`**` / `*` / `¬` / `~` / `[text](url)`). Font size and colour still drop on save. Click / tap opens the URL (⌘-click still works). Object-field links store `link` on existing payload spans and open the same way.
 
 ### The name in the header
 
@@ -284,7 +284,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Embed | Widget | Flow role |
 |-------|--------|-----------|
 | Task list | [`embeds/inline_task_list.dart`](editor/embeds/inline_task_list.dart) | Thin host: document segments + Move Mode; rows via objects [`TaskListSurface`](../objects/tasks/task_list_surface.dart) |
-| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); body lines `- [ ]` / `- [x]` are inner tasks (tap the mark; Enter continues the list); tag chips; **field** right-click → formatting + **Connect info…** / **Remove connection**; **chrome** (block caret) → **Design…** / Add tag / Add connection (related) |
+| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); body lines `- ☐` / `- ☑` are inner tasks (round checklist mark, not the square task mark; Enter continues the list; **Add checklist** / ⌘T inserts one); tag chips; **field** right-click → formatting + **Connect info…** / **Remove connection** / **Add checklist**; **chrome** (block caret) → **Design…** / Add tag / Add connection (related) |
 | Image | same | Atomic unit; caption field; chrome **Design…** + size |
 | Table (+ chart) | [`embeds/table_embed.dart`](editor/embeds/table_embed.dart) | `RichTableEditor` + optional chart; behaviour in **[Tables & charts](#tables--charts)** |
 | Host | [`embed_block_host.dart`](editor/embed_block_host.dart) | Move Mode; optional atomic `#embed` segment |

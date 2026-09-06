@@ -52,6 +52,36 @@ void main() {
       expect(out, isNot(contains('[INFO](http')));
     });
 
+    test('round-trips bold italic underline and strikethrough', () {
+      final bold = AttributedText('bold');
+      bold.addAttribution(boldAttribution, const SpanRange(0, 3));
+      final italic = AttributedText('italic');
+      italic.addAttribution(italicsAttribution, const SpanRange(0, 5));
+      final under = AttributedText('under');
+      under.addAttribution(underlineAttribution, const SpanRange(0, 4));
+      final strike = AttributedText('strike');
+      strike.addAttribution(strikethroughAttribution, const SpanRange(0, 5));
+
+      expect(attributedTextToMarkerLine(bold), '**bold**');
+      expect(attributedTextToMarkerLine(italic), '*italic*');
+      expect(attributedTextToMarkerLine(under), '¬under¬');
+      expect(attributedTextToMarkerLine(strike), '~strike~');
+
+      for (final sample in [bold, italic, under, strike]) {
+        final encoded = attributedTextToMarkerLine(sample);
+        final decoded = markerLineToAttributedText(encoded);
+        expect(decoded.toPlainText(), sample.toPlainText());
+        expect(
+          decoded
+              .getAttributionSpansByFilter(
+                (a) => sample.getAllAttributionsAt(0).contains(a),
+              )
+              .length,
+          greaterThan(0),
+        );
+      }
+    });
+
     test('round-trips bullet list fence via ListItemNodes', () {
       final stored = '''
 ${DocumentTextCodec.header}

@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:super_editor/super_editor.dart';
 
 import '../rich_text/list_text_parse.dart';
-import '../rich_text/text_links.dart';
 import './document_text_codec.dart';
 import './object_embed_node.dart';
 
@@ -314,68 +313,22 @@ String listItemClipboardLine(
   return '$indent- $text';
 }
 
-/// Encode [LinkAttribution] spans as CommonMark `[text](url)`. Other styles
-/// are still dropped (v4 has no general span encoding yet).
+/// Encode style + link attributions for a paragraph / list / heading line.
+///
+/// Bold / italic / underline / strikethrough / links use Super Editor markdown
+/// (`**` / `*` / `¬` / `~` / `[text](url)`). Font size and colour still drop
+/// (no compact encoding yet).
 String attributedTextToMarkerLine(AttributedText text) {
   final plain = text.toPlainText();
   if (plain.isEmpty) return plain;
-  final spans = text
-      .getAttributionSpansByFilter((a) => a is LinkAttribution)
-      .toList()
-    ..sort((a, b) => a.start.compareTo(b.start));
-  if (spans.isEmpty) return plain;
-
-  final buffer = StringBuffer();
-  var cursor = 0;
-  for (final span in spans) {
-    final attr = span.attribution;
-    if (attr is! LinkAttribution) continue;
-    final start = span.start.clamp(0, plain.length);
-    final end = (span.end + 1).clamp(0, plain.length);
-    if (end <= start || start < cursor) continue;
-    if (start > cursor) buffer.write(plain.substring(cursor, start));
-    buffer.write('[${plain.substring(start, end)}](${attr.plainTextUri})');
-    cursor = end;
-  }
-  if (cursor < plain.length) buffer.write(plain.substring(cursor));
-  return buffer.toString();
+  return text.toMarkdown();
 }
 
-/// Parse CommonMark `[text](url)` in a paragraph or list line.
+/// Parse marker-line styles back into [AttributedText].
 AttributedText markerLineToAttributedText(String line) {
-  final matches = _markdownLinkRe.allMatches(line).toList();
-  if (matches.isEmpty) return AttributedText(line);
-
-  final buffer = StringBuffer();
-  final spans = AttributedSpans();
-  var cursor = 0;
-  for (final match in matches) {
-    if (match.start > cursor) {
-      buffer.write(line.substring(cursor, match.start));
-    }
-    final label = match.group(1)!;
-    final url = launchableUrl(match.group(2)!);
-    final start = buffer.length;
-    buffer.write(label);
-    final endInclusive = buffer.length - 1;
-    final uri = Uri.tryParse(url);
-    if (uri != null && endInclusive >= start) {
-      spans.addAttribution(
-        newAttribution: LinkAttribution.fromUri(uri),
-        start: start,
-        end: endInclusive,
-      );
-    }
-    cursor = match.end;
-  }
-  if (cursor < line.length) buffer.write(line.substring(cursor));
-  return AttributedText(buffer.toString(), spans);
+  if (line.isEmpty) return AttributedText();
+  return parseInlineMarkdown(line);
 }
-
-final _markdownLinkRe = RegExp(
-  r'\[([^\[\]]+)\]\((https?://[^\s)]+|www\.[^\s)]+)\)',
-  caseSensitive: false,
-);
 
 String listItemClipboardPrefix({required bool ordered, required int index}) {
   if (ordered) return '${index + 1}. ';

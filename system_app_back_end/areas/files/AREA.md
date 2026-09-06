@@ -17,7 +17,7 @@ Everything the user sees in a file is stored in **one column**: `files.document_
 | `meta` (JSONB) | Automation anchors, `template_slot`, `system_kind` (e.g. `missed_section_report` for Missed tasks, `one_time_section_archive` for One-time tasks), and misc flags |
 | `archived_at` | Soft archive |
 
-Legacy **v3 JSON** in this column is migrated to editor text on read (`File.to_dict`) and rewritten on the next save. **Spans are dropped** on migrate (span encoding is a follow-up). Spec: frontend [`DOCUMENT_TEXT.md`](../../../system_app_front_end/lib/areas/files/editor/DOCUMENT_TEXT.md).
+Legacy **v3 JSON** in this column is migrated to editor text on read (`File.to_dict`) and rewritten on the next save. **Spans are dropped** on migrate; the frontend then round-trips bold / italic / underline / strikethrough / links in v4 marker lines (size and colour still drop). Spec: frontend [`DOCUMENT_TEXT.md`](../../../system_app_front_end/lib/areas/files/editor/DOCUMENT_TEXT.md).
 
 ## Which files a topic shows
 
@@ -141,7 +141,7 @@ Agent text round-trip is not yet lossless. Open issues, worst first:
 | `_escape_cell` escapes `\` and in-cell tab; rows join with visible `\t` | A newline in a table cell becomes an extra row on read |
 | Unmatched fence markers in plain text advance one char without emitting it | Text like `Hello [TABLE] world` loses characters |
 | Malformed list/task lines are skipped with `continue` | Items vanish with no error |
-| Spans not in v4 editor text yet | Migrate/agent paths drop inline formatting until span encoding ships |
+| Size / colour not in v4 editor text yet | Bold / italic / underline / strikethrough / links round-trip; size and colour still drop until compact tags ship |
 
 Agent write path: `commit_agent_file_apply` promotes legacy embeds, versions the file, writes v4 `document_json`, applies `object_updates`, then purges unreferenced embeds. Review proposals include `object_updates`; Accept uses `POST /files/:id/apply-agent-text` (not a bare document PATCH). Id-less `[TABLE]` fences are rejected on write.
 

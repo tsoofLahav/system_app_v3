@@ -3,7 +3,7 @@
 /// A line matching `- [ ]` / `- [x]` (or `☐` / `☑`) is an inner task.
 library;
 
-final _line = RegExp(r'^(\s*)(?:[-*]\s+\[([ xX])\]|([☐☑]))\s?(.*)$');
+final _line = RegExp(r'^(\s*)[-*]\s+(?:\[([ xX])\]|([☐☑]))\s?(.*)$');
 
 class InnerTaskLine {
   const InnerTaskLine({
@@ -53,7 +53,7 @@ List<InnerTaskLine> parseInnerTaskLines(String body) {
         markEnd = markStart + 3;
       } else {
         done = glyph == '☑';
-        markStart = offset + indent.length;
+        markStart = offset + indent.length + 2;
         markEnd = markStart + 1;
       }
       items.add(
@@ -83,7 +83,7 @@ bool? innerTasksUnanimous(String body) {
 }
 
 String _renderLine(InnerTaskLine item, {required bool done}) {
-  final mark = done ? '[x]' : '[ ]';
+  final mark = done ? '☑' : '☐';
   final title = item.title;
   return '${item.indent}- $mark${title.isEmpty ? '' : ' $title'}';
 }
@@ -97,6 +97,22 @@ String setAllInnerTasks(String body, {required bool done}) {
   for (final raw in body.split('\n')) {
     final item = byStart[offset];
     out.add(item == null ? raw : _renderLine(item, done: done));
+    offset += raw.length + 1;
+  }
+  return out.join('\n');
+}
+
+/// Rewrite `[ ]` / `[x]` lines to `☐` / `☑` (same done state).
+String canonicalizeInnerTaskMarks(String body) {
+  final items = parseInnerTaskLines(body);
+  if (items.isEmpty) return body;
+  if (items.every((item) => item.markEnd - item.markStart == 1)) return body;
+  final byStart = {for (final item in items) item.start: item};
+  var offset = 0;
+  final out = <String>[];
+  for (final raw in body.split('\n')) {
+    final item = byStart[offset];
+    out.add(item == null ? raw : _renderLine(item, done: item.done));
     offset += raw.length + 1;
   }
   return out.join('\n');
@@ -181,6 +197,59 @@ bool? combinedInnerTasksUnanimous(String combined) {
   return innerTasksUnanimous(_split(combined).$2);
 }
 
+/// Insert a fresh empty checkbox line (menu / ⌘T while in an info).
+InnerTaskEdit insertInnerTaskAtCaret(String combined, int caret) {
+  final parts = _split(combined);
+  final title = parts.$1;
+  final body = parts.$2;
+  final bodyAt = _bodyOffset(combined);
+  const fresh = '- ☐ ';
+
+  if (bodyAt < 0 || caret < bodyAt) {
+    if (body.isEmpty) {
+      return InnerTaskEdit(
+        text: '$title\n$fresh',
+        caret: title.length + 1 + fresh.length,
+      );
+    }
+    final nextBody = '$fresh\n$body';
+    return InnerTaskEdit(
+      text: _join(title, nextBody),
+      caret: title.length + 1 + fresh.length,
+    );
+  }
+
+  final local = (caret - bodyAt).clamp(0, body.length);
+  final item = innerTaskAt(body, local);
+  if (item != null) {
+    if (item.title.trim().isEmpty) {
+      final caretAt = bodyAt + item.start + '${item.indent}$fresh'.length;
+      return InnerTaskEdit(text: combined, caret: caretAt);
+    }
+    return insertInnerTaskLineOnEnter(combined, caret)!;
+  }
+
+  final lineStart = body.lastIndexOf('\n', local <= 0 ? 0 : local - 1) + 1;
+  final lineEnd = body.indexOf('\n', lineStart);
+  final end = lineEnd < 0 ? body.length : lineEnd;
+  final line = body.substring(lineStart, end);
+  if (line.trim().isEmpty) {
+    final indent = RegExp(r'^(\s*)').firstMatch(line)?.group(1) ?? '';
+    final nextLine = '$indent$fresh';
+    final nextBody = body.replaceRange(lineStart, end, nextLine);
+    return InnerTaskEdit(
+      text: _join(title, nextBody),
+      caret: bodyAt + lineStart + nextLine.length,
+    );
+  }
+  final prefix = '\n$fresh';
+  final nextBody = body.replaceRange(end, end, prefix);
+  return InnerTaskEdit(
+    text: _join(title, nextBody),
+    caret: bodyAt + end + prefix.length,
+  );
+}
+
 /// `- ` / `* ` at the start of a body line becomes `- [ ] `.
 InnerTaskEdit? promoteBareDashToCheckbox(String combined, int caret) {
   final bodyAt = _bodyOffset(combined);
@@ -195,7 +264,7 @@ InnerTaskEdit? promoteBareDashToCheckbox(String combined, int caret) {
   if (match == null) return null;
   if (local != lineStart + line.length) return null;
   final indent = match.group(1) ?? '';
-  final nextLine = '$indent- [ ] ';
+  final nextLine = '$indent- ☐ ';
   final nextBody = body.replaceRange(lineStart, end, nextLine);
   return InnerTaskEdit(
     text: _join(combined.substring(0, bodyAt - 1), nextBody),
@@ -223,7 +292,7 @@ InnerTaskEdit? insertInnerTaskLineOnEnter(String combined, int caret) {
     );
   }
   final insertAt = item.end;
-  const fresh = '- [ ] ';
+  const fresh = '- ☐ ';
   final prefix = insertAt < body.length ? '\n$fresh' : '\n$fresh';
   final nextBody = body.replaceRange(insertAt, insertAt, prefix);
   return InnerTaskEdit(

@@ -20,6 +20,7 @@ class DocumentContextMenu {
     bool includeConnectInfo = false,
     bool includeDisconnectInfo = false,
     bool includeMakeList = false,
+    bool includeAddChecklist = false,
   }) => [
     AppContextMenuItem(value: 'text:bold', label: strings['bold'] ?? 'Bold'),
     AppContextMenuItem(
@@ -67,6 +68,13 @@ class DocumentContextMenu {
           value: 'text:disconnect_info',
           label: strings['removeConnection'] ?? 'Remove connection',
         ),
+    ],
+    if (includeAddChecklist) ...[
+      const AppContextMenuDivider(),
+      AppContextMenuItem(
+        value: 'info:add_checklist',
+        label: strings['addChecklist'] ?? 'Add checklist',
+      ),
     ],
     const AppContextMenuDivider(),
     AppContextMenuItem(value: 'text:cut', label: strings['cut'] ?? 'Cut'),
@@ -208,6 +216,7 @@ class DocumentContextMenu {
     bool includeConnectInfo = false,
     bool includeDisconnectInfo = false,
     bool includeMakeList = false,
+    bool includeAddChecklist = false,
   }) {
     return _showMenu(
       context: context,
@@ -219,6 +228,7 @@ class DocumentContextMenu {
         includeConnectInfo: includeConnectInfo,
         includeDisconnectInfo: includeDisconnectInfo,
         includeMakeList: includeMakeList,
+        includeAddChecklist: includeAddChecklist,
       ),
     );
   }
@@ -345,7 +355,7 @@ class DocumentContextMenu {
     );
   }
 
-  /// Info field: formatting + Connect info.
+  /// Info field: formatting + Connect info + Add checklist.
   static Future<void> showInfoFieldMenu({
     required BuildContext context,
     required Offset globalPosition,
@@ -360,6 +370,7 @@ class DocumentContextMenu {
       onAction: onAction,
       includeConnectInfo: true,
       includeDisconnectInfo: includeDisconnectInfo,
+      includeAddChecklist: true,
     );
   }
 

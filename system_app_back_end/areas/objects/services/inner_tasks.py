@@ -13,7 +13,7 @@ from models import InformationPiece, Link, ObjectEmbed, Task, db
 from areas.objects.services.object_graph import TASK_LINK_TYPE
 from areas.objects.services.task_ops import ACTIVE, DONE, unmarked_status_for
 
-_LINE = re.compile(r"^(\s*)(?:[-*]\s+\[([ xX])\]|([☐☑]))\s?(.*)$")
+_LINE = re.compile(r"^(\s*)[-*]\s+(?:\[([ xX])\]|([☐☑]))\s?(.*)$")
 _SYNCING = False
 
 
@@ -58,7 +58,7 @@ def parse_inner_task_lines(body: str) -> list[InnerTaskLine]:
                 mark_end = mark_start + 3
             else:
                 done = glyph == "☑"
-                mark_start = offset + len(indent)
+                mark_start = offset + len(indent) + 2
                 mark_end = mark_start + 1
             items.append(
                 InnerTaskLine(
@@ -87,7 +87,7 @@ def inner_tasks_unanimous(body: str) -> bool | None:
 
 
 def _render_line(item: InnerTaskLine, *, done: bool) -> str:
-    mark = "[x]" if done else "[ ]"
+    mark = "☑" if done else "☐"
     title = item.title
     return f"{item.indent}- {mark}{f' {title}' if title else ''}"
 

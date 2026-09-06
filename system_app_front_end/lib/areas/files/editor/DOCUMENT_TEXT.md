@@ -4,7 +4,7 @@ A file’s body is **marker text**, not a v3 JSON block tree. Disk / API SoT is 
 
 **Runtime editing surface** is Super Editor (`MutableDocument`). Load/save goes through [`marker_super_editor_bridge.dart`](../model/marker_super_editor_bridge.dart). [`DocumentBuffer`](../model/document_buffer.dart) remains available for marker-range helpers and tests; it is not the file-editor SoT anymore.
 
-Spans / inline formatting are **not** encoded in general (bold/italic/size/color still drop on save). **Web links** are the exception: paragraph and list lines round-trip CommonMark `[text](url)` via [`marker_super_editor_bridge.dart`](../model/marker_super_editor_bridge.dart). Object pointer lines are never parsed as links. Migration from v3 drops other spans.
+Spans / inline formatting round-trip in paragraph, heading, and list lines via Super Editor markdown (`**bold**`, `*italic*`, `¬underline¬`, `~strike~`, plus CommonMark links). **Font size and colour** still drop on save (no compact encoding yet). Object pointer lines are never parsed as styled text. Migration from v3 drops other spans.
 
 Backend twin: [`system_app_back_end/areas/files/AREA.md`](../../../../system_app_back_end/areas/files/AREA.md). Fluent rules for embeds: [`FLUENT_TEXT.md`](FLUENT_TEXT.md).
 
@@ -52,9 +52,9 @@ Legacy fallback: `[EMBED id="N"]` (type resolved from the objects table).
 
 Object **content** lives in object tables / `objects.payload`. Deleting a pointer cascades to the object row.
 
-### Links
+### Links and inline styles
 
-Only `http(s)://` and `www.` URLs. Stored as `[label](url)` inside paragraph / heading / list-item text. Load restores Super Editor `LinkAttribution`. Do not put markdown links on pointer lines.
+Bold / italic / underline / strikethrough and `http(s)://` / `www.` URLs round-trip in paragraph / heading / list-item text (`**` / `*` / `¬` / `~` / `[label](url)`). Load restores Super Editor attributions. Do not put markdown on pointer lines. Font size and colour are not encoded yet.
 
 ### Move
 

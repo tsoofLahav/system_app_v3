@@ -590,7 +590,8 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                       (isPhoneLayout
                           ? AppBottomBarMetrics.phoneBarHeight +
                               AppBottomBarMetrics.phoneOmbreFade +
-                              AppSpacing.md
+                              AppSpacing.md +
+                              MediaQuery.viewInsetsOf(context).bottom
                           : AppBottomBarMetrics.scrollInset + 52),
                 ),
                 children: [

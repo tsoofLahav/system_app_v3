@@ -72,6 +72,7 @@ abstract final class ShortcutActionIds {
   static const textBold = 'text_bold';
   static const textItalic = 'text_italic';
   static const textUnderline = 'text_underline';
+  static const textStrikethrough = 'text_strikethrough';
   static const textCut = 'text_cut';
   static const textCopy = 'text_copy';
   static const textPaste = 'text_paste';
@@ -232,6 +233,14 @@ final List<ShortcutAction> kShortcutCatalog = [
     defaultBinding: _m(LogicalKeyboardKey.keyU),
     context: ShortcutContextRequirement.textFocus,
     textAction: 'text:underline',
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.textStrikethrough,
+    category: ShortcutCategory.text,
+    labelKey: 'strikethrough',
+    defaultBinding: _m(LogicalKeyboardKey.keyY),
+    context: ShortcutContextRequirement.textFocus,
+    textAction: 'text:strikethrough',
   ),
   ShortcutAction(
     id: ShortcutActionIds.textCut,
