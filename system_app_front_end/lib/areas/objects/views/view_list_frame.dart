@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
@@ -6,13 +8,14 @@ import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
 import '../../ui/note_widgets.dart';
+import '../../ux/widgets/app_context_menu.dart';
 import '../data/task.dart';
 import '../tasks/task_drag_data.dart';
 import '../tasks/task_list_surface.dart';
 import './view_frame_task_list.dart';
 
 /// One file-like frame holding a section or topic task list.
-class ViewListFrame extends StatelessWidget {
+class ViewListFrame extends StatefulWidget {
   const ViewListFrame({
     super.key,
     required this.state,
@@ -22,7 +25,9 @@ class ViewListFrame extends StatelessWidget {
     this.sectionName,
     this.sectionFlag,
     this.topicKey,
-    this.onSectionTitleMenu,
+    this.onEditSection,
+    this.onOpenSectionAutomation,
+    this.onDeleteSection,
     this.accent,
     this.tintSeed = 1,
     this.isImportant = false,
@@ -40,8 +45,10 @@ class ViewListFrame extends StatelessWidget {
   final String? sectionFlag;
   final String? topicKey;
 
-  /// Right-click on the title only (edit / automation / delete section).
-  final GestureTapDownCallback? onSectionTitleMenu;
+  /// Named-section chrome (null on topic frames / Uncategorized).
+  final Future<void> Function()? onEditSection;
+  final Future<void> Function()? onOpenSectionAutomation;
+  final Future<void> Function()? onDeleteSection;
   final Color? accent;
   final int tintSeed;
   final bool isImportant;
@@ -50,14 +57,26 @@ class ViewListFrame extends StatelessWidget {
   final bool taskReorderMode;
   final ValueChanged<bool>? onTaskReorderModeChanged;
 
+  @override
+  State<ViewListFrame> createState() => _ViewListFrameState();
+}
+
+class _ViewListFrameState extends State<ViewListFrame> {
+  final _listKey = GlobalKey<ViewFrameTaskListState>();
+
+  bool get _hasSectionChrome =>
+      widget.onEditSection != null ||
+      widget.onOpenSectionAutomation != null ||
+      widget.onDeleteSection != null;
+
   bool _acceptsTask(TaskDragPayload payload) =>
-      payload.sourceListId == state.selectedView?.id;
+      payload.sourceListId == widget.state.selectedView?.id;
 
   void _dropOnFrame(TaskDragPayload payload) {
-    final drop = onForeignDrop;
+    final drop = widget.onForeignDrop;
     if (drop == null) return;
     final targetDone = payload.sourceDone;
-    final indexInZone = tasks
+    final indexInZone = widget.tasks
         .where((t) => t.isDone == targetDone && t.id != payload.task.id)
         .length;
     drop(
@@ -67,21 +86,73 @@ class ViewListFrame extends StatelessWidget {
     );
   }
 
+  Future<void> _addTask() async {
+    await _listKey.currentState?.addTask();
+  }
+
+  Future<void> _onTitleMenu(TapDownDetails details) async {
+    final s = widget.state.strings;
+    final action = await AppContextMenu.show(
+      context: context,
+      globalPosition: details.globalPosition,
+      isRtl: s.isRtl,
+      entries: [
+        AppContextMenuItem(
+          value: 'add_task',
+          label: s['addTask'],
+        ),
+        if (_hasSectionChrome) ...[
+          const AppContextMenuDivider(),
+          if (widget.onEditSection != null)
+            AppContextMenuItem(value: 'edit', label: s['editSection']),
+          if (widget.onOpenSectionAutomation != null)
+            AppContextMenuItem(
+              value: 'automation',
+              label: s['openSectionAutomation'],
+            ),
+          if (widget.onDeleteSection != null)
+            AppContextMenuItem(
+              value: 'delete',
+              label: s['deleteSection'],
+              destructive: true,
+            ),
+        ],
+      ],
+    );
+    if (!mounted || action == null) return;
+    if (action == 'add_task') {
+      await _addTask();
+      return;
+    }
+    if (action == 'edit') {
+      await widget.onEditSection?.call();
+      return;
+    }
+    if (action == 'automation') {
+      await widget.onOpenSectionAutomation?.call();
+      return;
+    }
+    if (action == 'delete') {
+      await widget.onDeleteSection?.call();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final card = NoteCard(
-      topicAccent: accent,
-      fileId: accent == null ? null : tintSeed,
+      topicAccent: widget.accent,
+      fileId: widget.accent == null ? null : widget.tintSeed,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             GestureDetector(
-              onSecondaryTapDown: onSectionTitleMenu,
+              onDoubleTap: () => unawaited(_addTask()),
+              onSecondaryTapDown: (d) => unawaited(_onTitleMenu(d)),
               child: Row(
                 children: [
-                  if (isImportant) ...[
+                  if (widget.isImportant) ...[
                     AppIcon(
                       AppIcons.flag,
                       size: 14,
@@ -91,15 +162,15 @@ class ViewListFrame extends StatelessWidget {
                   ],
                   Expanded(
                     child: Text(
-                      title,
+                      widget.title,
                       style: AppTypography.noteTitleStyle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (attention)
+                  if (widget.attention)
                     Tooltip(
-                      message: state.strings['sectionAttention'],
+                      message: widget.state.strings['sectionAttention'],
                       child: Container(
                         width: 8,
                         height: 8,
@@ -114,20 +185,18 @@ class ViewListFrame extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             IgnorePointer(
-              ignoring: frameReorderMode,
+              ignoring: widget.frameReorderMode,
               child: ViewFrameTaskList(
-                key: ValueKey(
-                  'view-frame:${sectionName ?? ''}:${topicKey ?? ''}',
-                ),
-                state: state,
-                tasks: tasks,
-                sectionName: sectionName,
-                sectionFlag: sectionFlag,
-                topicKey: topicKey,
-                reorderMode: taskReorderMode,
-                onReorderModeChanged: onTaskReorderModeChanged,
-                onForeignDrop: onForeignDrop,
-                enabled: !frameReorderMode,
+                key: _listKey,
+                state: widget.state,
+                tasks: widget.tasks,
+                sectionName: widget.sectionName,
+                sectionFlag: widget.sectionFlag,
+                topicKey: widget.topicKey,
+                reorderMode: widget.taskReorderMode,
+                onReorderModeChanged: widget.onTaskReorderModeChanged,
+                onForeignDrop: widget.onForeignDrop,
+                enabled: !widget.frameReorderMode,
               ),
             ),
           ],
@@ -136,7 +205,9 @@ class ViewListFrame extends StatelessWidget {
     );
 
     Widget body = card;
-    if (taskReorderMode && !frameReorderMode && onForeignDrop != null) {
+    if (widget.taskReorderMode &&
+        !widget.frameReorderMode &&
+        widget.onForeignDrop != null) {
       body = DragTarget<TaskDragPayload>(
         onWillAcceptWithDetails: (d) => _acceptsTask(d.data),
         onAcceptWithDetails: (d) => _dropOnFrame(d.data),
@@ -159,7 +230,7 @@ class ViewListFrame extends StatelessWidget {
       );
     }
 
-    if (frameReorderMode) {
+    if (widget.frameReorderMode) {
       return DragModeFrame(
         padding: EdgeInsets.zero,
         child: body,

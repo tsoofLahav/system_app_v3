@@ -64,7 +64,7 @@ On phone the framed pane fills the screen with a slim peek so the card outline s
 
 ### One scroll owner
 
-Each file pane scrolls its document in a local `CustomScrollView` with `SuperEditor` as a **sliver** (`shrinkWrap: true`). A `SliverFillRemaining` fills leftover pane height so a tap below the last line still places the caret at the end of the file. On phone, this scroll view uses `ScrollViewKeyboardDismissBehavior.onDrag`, and the stylesheet adds presentation-only insets: top so the first line clears the ombre, bottom about half the screen (`AppBottomBarMetrics.phoneFileEndBreath`) so the last line sits mid-screen and the file feels unfinished. Auto-focus at the last line would otherwise scroll that line onto the keyboard and hide the room — after placing the caret, the pane jumps to the end of the scroll so that space stays visible. The topic canvas also scrolls; SE always emits a sliver when any ancestor `Scrollable` exists, so it must never sit under `Column` / `Expanded` / box parents.
+Each file pane scrolls its document in a local `CustomScrollView` with `SuperEditor` as a **sliver** (`shrinkWrap: true`). A `SliverFillRemaining` fills leftover pane height so a tap below the last line still places the caret at the end of the file. On phone, this scroll view uses `ScrollViewKeyboardDismissBehavior.onDrag`, and the stylesheet adds presentation-only insets: top so the first line clears the ombre, bottom enough to clear the tool pills (home-indicator + bar + ombre + spacing). The topic canvas also scrolls; SE always emits a sliver when any ancestor `Scrollable` exists, so it must never sit under `Column` / `Expanded` / box parents.
 
 ### Visual rules (Super Editor stylesheet)
 
@@ -284,7 +284,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Embed | Widget | Flow role |
 |-------|--------|-----------|
 | Task list | [`embeds/inline_task_list.dart`](editor/embeds/inline_task_list.dart) | Thin host: document segments + Move Mode; rows via objects [`TaskListSurface`](../objects/tasks/task_list_surface.dart) |
-| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); body lines `- ☐` / `- ☑` are inner tasks (round checklist mark, not the square task mark; Enter continues the list; **Add checklist** / ⌘T inserts one); tag chips; **field** right-click → formatting + **Connect info…** / **Remove connection** / **Add checklist**; **chrome** (block caret) → **Design…** / Add tag / Add connection (related) |
+| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); body lines `☐` / `☑` are inner tasks (round checklist mark, not the square task mark; Enter continues the list; **Add checklist** / ⌘T inserts one or converts a multi-line mark); tag chips; **field** right-click → formatting + **Connect info…** / **Remove connection** / **Add checklist**; **chrome** (block caret) → **Design…** / Add tag / Add connection (related) |
 | Image | same | Atomic unit; caption field; chrome **Design…** + size |
 | Table (+ chart) | [`embeds/table_embed.dart`](editor/embeds/table_embed.dart) | `RichTableEditor` + optional chart; behaviour in **[Tables & charts](#tables--charts)** |
 | Host | [`embed_block_host.dart`](editor/embed_block_host.dart) | Move Mode; optional atomic `#embed` segment |

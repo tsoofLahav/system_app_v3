@@ -39,6 +39,26 @@ def test_plain_rows_not_chart():
     assert not chart_enabled(payload)
 
 
+def test_normalize_keeps_cell_spans():
+    payload = normalize_table_payload(
+        {
+            "rows": [
+                [
+                    {
+                        "text": "Bold",
+                        "spans": [{"start": 0, "end": 4, "bold": True}],
+                    },
+                    {"text": "plain"},
+                ]
+            ]
+        }
+    )
+    assert payload["rows"][0][0]["spans"] == [
+        {"start": 0, "end": 4, "bold": True}
+    ]
+    assert payload["rows"][0][1]["spans"] == []
+
+
 def test_normalize_keeps_look():
     payload = normalize_table_payload(
         {

@@ -48,6 +48,9 @@ def update_task(task_id):
         {"title", "status", "due_date", "list_order_index", "archived_at", "task_list_id"},
         datetime_fields={"due_date", "archived_at"},
     )
+    if "title_spans" in data:
+        raw = data.get("title_spans")
+        task.title_spans = raw if isinstance(raw, list) else []
     if data.get("status") == task_ops.PENDING and not task_ops.task_has_view(task):
         raise ValueError("pending tasks need a view")
     if "status" in data:

@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
 import '../data/inner_task_mark.dart';
 import '../data/inner_tasks.dart';
@@ -133,8 +134,14 @@ class _InfoDescriptionBubbleState extends State<InfoDescriptionBubble> {
                       decoration: item.done
                           ? TextDecoration.lineThrough
                           : TextDecoration.none,
+                      decorationColor: item.done
+                          ? (bodyStyle.color ?? AppColors.text)
+                              .withValues(alpha: 0.55)
+                          : null,
+                      decorationThickness: item.done ? 1.15 : null,
                       color: item.done
-                          ? bodyStyle.color?.withValues(alpha: 0.55)
+                          ? (bodyStyle.color ?? AppColors.text)
+                              .withValues(alpha: 0.55)
                           : bodyStyle.color,
                     ),
                   ),

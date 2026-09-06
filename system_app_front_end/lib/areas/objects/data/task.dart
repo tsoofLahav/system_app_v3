@@ -33,6 +33,7 @@ class Task {
     this.sourceAutomationId,
     this.complimentaryRole,
     this.complimentaryCycle = const {},
+    this.titleSpans = const [],
     this.descriptionLinks = const [],
   });
 
@@ -66,6 +67,7 @@ class Task {
   final int? sourceAutomationId;
   final String? complimentaryRole;
   final Map<String, dynamic> complimentaryCycle;
+  final List<Map<String, dynamic>> titleSpans;
   final List<Map<String, dynamic>> descriptionLinks;
 
   bool get isDone => status == 'done';
@@ -150,6 +152,7 @@ class Task {
     int? sourceAutomationId,
     String? complimentaryRole,
     Map<String, dynamic>? complimentaryCycle,
+    List<Map<String, dynamic>>? titleSpans,
     List<Map<String, dynamic>>? descriptionLinks,
     bool clearSection = false,
     bool clearSectionFlag = false,
@@ -192,6 +195,7 @@ class Task {
       sourceAutomationId: sourceAutomationId ?? this.sourceAutomationId,
       complimentaryRole: complimentaryRole ?? this.complimentaryRole,
       complimentaryCycle: complimentaryCycle ?? this.complimentaryCycle,
+      titleSpans: titleSpans ?? this.titleSpans,
       descriptionLinks: descriptionLinks ?? this.descriptionLinks,
     );
   }
@@ -235,6 +239,7 @@ class Task {
       complimentaryCycle: json['complimentary_cycle'] is Map
           ? Map<String, dynamic>.from(json['complimentary_cycle'] as Map)
           : const {},
+      titleSpans: _mapsFromJson(json['title_spans']),
       descriptionLinks: _mapsFromJson(json['description_links']),
     );
   }
@@ -247,6 +252,7 @@ class Task {
     if (detailsBlockId != null) 'details_block_id': detailsBlockId,
     if (dueDate != null) 'due_date': dueDate,
     if (archivedAt != null) 'archived_at': archivedAt,
+    if (titleSpans.isNotEmpty) 'title_spans': titleSpans,
   };
 }
 

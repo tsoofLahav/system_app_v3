@@ -153,6 +153,7 @@ class Task(db.Model):
     source_automation_id = db.Column(db.Integer, db.ForeignKey("automations.id"))
     complimentary_role = db.Column(db.Text)
     complimentary_cycle = db.Column(JSONB, nullable=False, default=dict)
+    title_spans = db.Column(JSONB, nullable=False, default=list)
 
     def to_dict(self):
         from areas.objects.services.object_graph import description_link_dicts_for_task
@@ -171,6 +172,7 @@ class Task(db.Model):
             "complimentary_cycle": (
                 self.complimentary_cycle if self.complimentary_cycle is not None else {}
             ),
+            "title_spans": self.title_spans if self.title_spans is not None else [],
             "description_links": description_link_dicts_for_task(self.id),
         }
 

@@ -35,10 +35,10 @@ class ViewFrameTaskList extends StatefulWidget {
   final bool enabled;
 
   @override
-  State<ViewFrameTaskList> createState() => _ViewFrameTaskListState();
+  State<ViewFrameTaskList> createState() => ViewFrameTaskListState();
 }
 
-class _ViewFrameTaskListState extends State<ViewFrameTaskList> {
+class ViewFrameTaskListState extends State<ViewFrameTaskList> {
   late ViewFrameTaskListBridge _bridge;
   final _surfaceKey = GlobalKey<TaskListSurfaceState>();
 
@@ -59,7 +59,9 @@ class _ViewFrameTaskListState extends State<ViewFrameTaskList> {
         widget.tasks.isNotEmpty &&
         (oldWidget.tasks.length != widget.tasks.length ||
             !_sameTaskIds(oldWidget.tasks, widget.tasks));
-    if (tasksArrived) {
+    final becameEmpty =
+        oldWidget.tasks.isNotEmpty && widget.tasks.isEmpty;
+    if (tasksArrived || becameEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _surfaceKey.currentState?.syncFromRemote();
       });
@@ -100,6 +102,11 @@ class _ViewFrameTaskListState extends State<ViewFrameTaskList> {
       cancelLabel: s['cancel'],
       destructive: true,
     );
+  }
+
+  /// Section title / empty-body gestures call this.
+  Future<void> addTask() async {
+    await _surfaceKey.currentState?.addEmptyTask();
   }
 
   List<AppContextMenuEntry> _extraEntries(Task task) {
@@ -151,6 +158,7 @@ class _ViewFrameTaskListState extends State<ViewFrameTaskList> {
         key: _surfaceKey,
         state: widget.state,
         bridge: _bridge,
+        allowEmptyList: true,
         onExitBelow: (_) {
           FocusManager.instance.primaryFocus?.unfocus();
         },

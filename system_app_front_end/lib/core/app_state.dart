@@ -3151,17 +3151,21 @@ class AppState extends ChangeNotifier {
   Future<void> updateTaskTitle(
     Task task,
     String title, {
+    List<Map<String, dynamic>>? titleSpans,
     bool notify = false,
   }) async {
     try {
-      await _api.patch('/tasks/${task.id}', {'title': title});
+      await _api.patch('/tasks/${task.id}', {
+        'title': title,
+        if (titleSpans != null) 'title_spans': titleSpans,
+      });
     } on ApiException catch (e) {
       if (e.statusCode == 404) return;
       rethrow;
     }
     // Patch caches in place — never reload embeds mid-keystroke (that rebuilds
     // text fields and desyncs HardwareKeyboard: KeyDownEvent already pressed).
-    _patchCachedTask(task.id, title: title);
+    _patchCachedTask(task.id, title: title, titleSpans: titleSpans);
     if (notify) notifyListeners();
   }
 
@@ -3216,6 +3220,7 @@ class AppState extends ChangeNotifier {
     String? status,
     String? dueDate,
     List<Map<String, dynamic>>? descriptionLinks,
+    List<Map<String, dynamic>>? titleSpans,
     int? taskListId,
     String? taskListTitle,
   }) {
@@ -3232,6 +3237,7 @@ class AppState extends ChangeNotifier {
               status: status,
               dueDate: dueDate,
               descriptionLinks: descriptionLinks,
+              titleSpans: titleSpans,
               taskListId: taskListId,
               taskListTitle: taskListTitle,
             );

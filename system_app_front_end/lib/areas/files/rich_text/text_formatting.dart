@@ -89,7 +89,11 @@ class TextSpanBuilder {
       );
     }
     if (decorations.isNotEmpty) {
-      style = style.copyWith(decoration: TextDecoration.combine(decorations));
+      style = style.copyWith(
+        decoration: TextDecoration.combine(decorations),
+        // Keep strikes/underlines on the text color — never theme primary/amber.
+        decorationColor: style.decorationColor ?? style.color ?? AppColors.text,
+      );
     }
     return style;
   }

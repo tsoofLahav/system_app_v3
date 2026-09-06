@@ -153,6 +153,10 @@ List<Map<String, dynamic>> infoSpansToBody(
 /// Renders the first line as title weight/size; rest as body + user spans.
 /// Inner-task marks paint as circular [InnerTaskMark] widgets (not `[ ]` text).
 class _InfoTextController extends SpanTextEditingController {
+  /// Body-local mark offset — wired so every circle is tappable (WidgetSpans
+  /// otherwise swallow hits and only the first mark often works via text hit).
+  void Function(int bodyMarkStart)? onInnerMarkPressed;
+
   @override
   TextSpan buildTextSpan({
     required BuildContext context,
@@ -240,12 +244,19 @@ class _InfoTextController extends SpanTextEditingController {
         );
       }
       // One caret slot for ☐ / ☑ — painted as a round checklist mark.
+      final markStart = item.markStart;
       out.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.middle,
           child: Padding(
             padding: const EdgeInsets.only(right: 1),
-            child: InnerTaskMark(done: item.done, size: 13),
+            child: InnerTaskMark(
+              done: item.done,
+              size: 13,
+              onToggle: onInnerMarkPressed == null
+                  ? null
+                  : () => onInnerMarkPressed!(markStart),
+            ),
           ),
         ),
       );
@@ -367,11 +378,14 @@ class InfoEmbedState extends State<InfoEmbed>
     final bodySpans = mapsFrom(meta is Map ? meta['spans'] : null);
     final titleSpans = mapsFrom(meta is Map ? meta['title_spans'] : null);
     final canonicalBody = canonicalizeInnerTaskMarks(body);
+    final remappedBodySpans = canonicalBody == body
+        ? bodySpans
+        : remapSpansForTextEdit(bodySpans, body, canonicalBody);
     final combined = composeInfoText(title, canonicalBody);
     _controller.setRichState(
       text: combined,
       spans: infoSpansToCombined(
-        bodySpans,
+        remappedBodySpans,
         combined,
         titleSpans: titleSpans,
       ),
@@ -400,6 +414,11 @@ class InfoEmbedState extends State<InfoEmbed>
     _focus = FocusNode();
     _focus.addListener(_onKeyboardFocus);
     _controller = _InfoTextController();
+    _controller.onInnerMarkPressed = (bodyMarkStart) {
+      final bodyAt = _controller.text.indexOf('\n');
+      if (bodyAt < 0) return;
+      _consumeInnerTap(bodyAt + 1 + bodyMarkStart);
+    };
     _seedFromEmbed(widget.embed);
     _baselineKey = infoSnapshotFromEmbed(widget.embed);
     widget.state.addListener(_onAppState);
@@ -681,12 +700,19 @@ class InfoEmbedState extends State<InfoEmbed>
     widget.onExitBelow?.call();
   }
 
-  /// Menu / ⌘T while this info has the caret — new empty checkbox line.
+  /// Menu / ⌘T while this info has the caret — convert the mark, or insert.
   void insertInnerChecklist() {
-    final caret = _controller.selection.isValid
-        ? _controller.selection.baseOffset
-        : _controller.text.length;
-    final next = insertInnerTaskAtCaret(_controller.text, caret);
+    final sel = _controller.selection;
+    final next = sel.isValid && !sel.isCollapsed
+        ? convertSelectionToInnerTasks(
+            _controller.text,
+            sel.start,
+            sel.end,
+          )
+        : insertInnerTaskAtCaret(
+            _controller.text,
+            sel.isValid ? sel.baseOffset : _controller.text.length,
+          );
     _applyInnerEdit(next);
     if (!_focus.hasFocus) _focus.requestFocus();
   }

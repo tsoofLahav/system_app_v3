@@ -41,12 +41,12 @@ abstract final class AppBottomBarMetrics {
   /// Phone tools row (top or bottom), floating on the ombre.
   static const phoneBarHeight = phoneFloatMargin * 2 + phoneSegmentHeight;
 
-  /// Extra scroll room under the last file line so it sits mid-screen,
-  /// not flush against the bottom pills — the file should feel unfinished.
-  static const phoneFileEndBreathFactor = 0.48;
+    /// Extra scroll room under the last view frame so phone editing can bring
+    /// lower cards above the keyboard (Scaffold already shrinks the body).
+    static const phoneViewEndBreathFactor = 0.48;
 
-  static double phoneFileEndBreath(double screenHeight) =>
-      screenHeight * phoneFileEndBreathFactor;
+    static double phoneViewEndBreath(double screenHeight) =>
+        screenHeight * phoneViewEndBreathFactor;
 
   static double segmentHeight({required bool phone}) =>
       phone ? phoneSegmentHeight : barHeight;

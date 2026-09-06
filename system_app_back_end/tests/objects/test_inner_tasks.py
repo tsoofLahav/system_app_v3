@@ -23,12 +23,18 @@ def test_parse_and_unanimous():
 def test_set_all_and_toggle_keep_prose():
     body = "note\n- [ ] one\n- [x] two"
     done = inner_tasks.set_all_inner_tasks(body, done=True)
-    assert done == "note\n- ☑ one\n- ☑ two"
+    assert done == "note\n☑ one\n☑ two"
     active = inner_tasks.set_all_inner_tasks(done, done=False)
-    assert active == "note\n- ☐ one\n- ☐ two"
+    assert active == "note\n☐ one\n☐ two"
     items = inner_tasks.parse_inner_task_lines(body)
     flipped = inner_tasks.toggle_inner_task_at(body, items[0].mark_start)
-    assert flipped == "note\n- ☑ one\n- [x] two"
+    assert flipped == "note\n☑ one\n- [x] two"
+
+
+def test_parse_glyph_without_dash():
+    items = inner_tasks.parse_inner_task_lines("☐ milk\n☑ eggs")
+    assert [item.title for item in items] == ["milk", "eggs"]
+    assert [item.done for item in items] == [False, True]
 
 
 def test_status_writes_sync_inner_tasks():

@@ -779,6 +779,15 @@ class BlockTextFocusRegistry {
           offset: span.safeEnd,
         );
       }
+      // Persist even when a MarkedSpan lost its onChanged (lone fields / menus).
+      final changed = onChanged;
+      if (changed != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            changed();
+          } catch (_) {}
+        });
+      }
       return;
     }
 

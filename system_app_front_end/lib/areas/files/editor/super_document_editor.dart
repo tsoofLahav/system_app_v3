@@ -811,9 +811,9 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _revealPhoneFileEndBreath();
   }
 
-  /// Auto-focus at the last line otherwise scrolls that line onto the IME,
-  /// hiding the extra bottom room. After the keyboard settles, keep the
-  /// document scrolled to the end so that room stays on screen.
+  /// Auto-focus at the last line can leave the caret tucked under the pills.
+  /// After the keyboard settles, scroll to the end so chrome clearance stays
+  /// on screen.
   void _revealPhoneFileEndBreath() {
     if (!isPhoneLayout) return;
     void jump() {
@@ -1598,9 +1598,11 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
             AppSpacing.xs
         : 0.0;
     final bottomPresentationInset = isPhoneLayout
-        ? AppBottomBarMetrics.phoneFileEndBreath(
-            MediaQuery.sizeOf(context).height,
-          )
+        ? viewPadding.bottom +
+            AppBottomBarMetrics.phoneBarHeight +
+            AppBottomBarMetrics.phoneOmbreFade +
+            AppSpacing.xl +
+            AppSpacing.md
         : 0.0;
     return Stylesheet(
       documentPadding: EdgeInsets.only(

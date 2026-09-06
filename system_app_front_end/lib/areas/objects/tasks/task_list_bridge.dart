@@ -36,7 +36,11 @@ abstract class TaskListBridge {
   /// Return false to cancel delete (e.g. user dismissed confirm).
   Future<bool> confirmDelete(Task task) async => true;
 
-  Future<void> updateTitle(Task task, String title);
+  Future<void> updateTitle(
+    Task task,
+    String title, {
+    List<Map<String, dynamic>> titleSpans = const [],
+  });
 
   Future<void> updateListTitle(String title) async {}
 

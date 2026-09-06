@@ -57,13 +57,13 @@ Views are membership and filtering only. **Never add per-view status columns** �
 
 **Create task in a view.** `POST /views/:id/tasks` creates a real `tasks` row with **`task_list_id` null by default** (orphan — no home list). Optional `task_list_id` places it into an existing list. Membership takes **only the frame it was added in**: `section_name` / `section_flag` / `topic_key` from that request (empty/null = Uncategorized / No topic). `after_task_id` is insert order only — do not copy the sibling’s section, topic, or home list. `tasks.task_list_id` is already nullable. Deleting a task with a home list should warn; orphans need no “original list” warning.
 
-**Task list header.** `task_lists.title` (migration `005`) is the list’s header — same role as info title. `PATCH /task-lists/:id` updates it. Membership/task payloads include `task_list_title` when the task has a home list. Agent text carries it as `title="…"` on `[TASK_LIST id="…"]` so `patch_file` can rename the list.
+**Task list header.** `task_lists.title` (migration `005`) is the list’s header — same role as info title. `PATCH /task-lists/:id` updates it. Membership/task payloads include `task_list_title` when the task has a home list. Agent text carries it as `title="…"` on `[TASK_LIST id="…"]` so `patch_file` can rename the list. Task title inline styles live in `tasks.title_spans` (migration `024`).
 
 ## Information and the object graph
 
 An `info` object holds a piece of knowledge (`title`, `body`, `metadata`). The file UI edits them as one text field (first line → `title`); storage and agent text stay title + body. Graph node titles are the stored title — empty stays empty (the map paints a fallback; Connect info hides unnamed infos). Do not coerce empty titles to `"Info"`.
 
-**Inner tasks** are checkbox lines in `information_pieces.body` (`- [ ]` / `- [x]`), not `tasks` rows. They have no views, list order, or membership. If a task has a description link to that info: all inner done → outer done; all inner active → outer active; mixed → leave the outer; outer done → every inner done; outer active → every inner active. Inactive / pending outers are left alone. Sync lives in [`services/inner_tasks.py`](services/inner_tasks.py) and runs from info PATCH, agent `_sync_info`, and task status writes.
+**Inner tasks** are checkbox lines in `information_pieces.body` (`☐` / `☑`; legacy `- [ ]` / `- [x]` / `- ☐` still parse), not `tasks` rows. They have no views, list order, or membership. Preferred storage is the glyph without a list dash. If a task has a description link to that info: all inner done → outer done; all inner active → outer active; mixed → leave the outer; outer done → every inner done; outer active → every inner active. Inactive / pending outers are left alone. Sync lives in [`services/inner_tasks.py`](services/inner_tasks.py) and runs from info PATCH, agent `_sync_info`, and task status writes.
 
 The `links` table is the workspace **object graph**, keyed by **`objects.id`** for object endpoints (migration `006` also adds `links.kind`, `links.anchor`, `tags.icon`).
 

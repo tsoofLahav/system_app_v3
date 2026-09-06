@@ -5,8 +5,18 @@ from __future__ import annotations
 from typing import Any
 
 
-def _cell(text: str = "") -> dict[str, Any]:
-    return {"text": str(text), "spans": []}
+def _cell(text: str = "", spans: list | None = None) -> dict[str, Any]:
+    return {"text": str(text), "spans": list(spans or [])}
+
+
+def _cell_from(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        spans = raw.get("spans")
+        return _cell(
+            str(raw.get("text") or ""),
+            spans if isinstance(spans, list) else [],
+        )
+    return _cell(str(raw or ""))
 
 
 def empty_table_payload(*, columns: int = 2) -> dict[str, Any]:
@@ -89,12 +99,7 @@ def _normalize_rows(rows: list) -> list[list[dict[str, Any]]]:
     for row in rows:
         if not isinstance(row, list):
             continue
-        parsed.append(
-            [
-                _cell(str(cell.get("text") if isinstance(cell, dict) else cell or ""))
-                for cell in row
-            ]
-        )
+        parsed.append([_cell_from(cell) for cell in row])
     if not parsed:
         return [[_cell(), _cell()]]
     max_cols = max(len(r) for r in parsed)

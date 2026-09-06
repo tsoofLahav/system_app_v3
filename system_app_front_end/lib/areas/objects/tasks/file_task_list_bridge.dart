@@ -66,8 +66,17 @@ class FileTaskListBridge extends TaskListBridge {
       state.deleteTask(task, notify: false);
 
   @override
-  Future<void> updateTitle(Task task, String title) =>
-      state.updateTaskTitle(task, title, notify: false);
+  Future<void> updateTitle(
+    Task task,
+    String title, {
+    List<Map<String, dynamic>> titleSpans = const [],
+  }) =>
+      state.updateTaskTitle(
+        task,
+        title,
+        titleSpans: titleSpans,
+        notify: false,
+      );
 
   @override
   Future<void> updateListTitle(String title) async {

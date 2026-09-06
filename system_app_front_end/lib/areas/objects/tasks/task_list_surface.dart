@@ -117,6 +117,7 @@ class TaskListSurface extends StatefulWidget {
     this.onReorderModeChanged,
     this.climbToListTitleOnLastBackspace = true,
     this.includeAssignView = true,
+    this.allowEmptyList = false,
     this.onArrowExitAbove,
     this.onArrowExitBelow,
     this.hostEmbed,
@@ -128,7 +129,7 @@ class TaskListSurface extends StatefulWidget {
   final ValueChanged<int?>? onExitBelow;
 
   /// Last empty task + Backspace when the list should leave the file (in-file
-  /// host). Views leave this null and keep the empty seed row.
+  /// host). Views leave this null and use [allowEmptyList] instead.
   final VoidCallback? onDeleteObject;
   final bool compactMode;
   final String? listTitleSegmentId;
@@ -143,6 +144,10 @@ class TaskListSurface extends StatefulWidget {
 
   /// When false, the host supplies its own Choose view entry (view frames).
   final bool includeAssignView;
+
+  /// View frames may have zero tasks. File lists keep at least one row (or
+  /// delete the object via [onDeleteObject]).
+  final bool allowEmptyList;
 
   /// ↑ on the first line of the list — leave the embed upward.
   final VoidCallback? onArrowExitAbove;
@@ -273,7 +278,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     _syncFromTasks(_displayTasks);
     _syncFlowOrder();
     _flow.onPruneStructures = _onPruneFullyMarked;
-    if (_taskIds.isEmpty || _taskIds.every((id) => id == null)) {
+    if (!widget.allowEmptyList &&
+        (_taskIds.isEmpty || _taskIds.every((id) => id == null))) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(_ensureSeedTask());
       });
@@ -330,6 +336,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
   bool _rowsNeedAdopt(List<Task> tasks) {
     if (tasks.isEmpty) {
+      if (widget.allowEmptyList) return _controllers.isNotEmpty;
       return !(_controllers.length == 1 &&
           _taskIds.length == 1 &&
           _taskIds.first == null);
@@ -386,7 +393,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   /// and existing titles, carets, and links stay on their task.
   void _adoptTasks(List<Task> tasks) {
     if (tasks.isEmpty) {
-      if (_controllers.length == 1 &&
+      if (!widget.allowEmptyList &&
+          _controllers.length == 1 &&
           _taskIds.length == 1 &&
           _taskIds.first == null) {
         return;
@@ -400,7 +408,11 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       _done.clear();
       _saveTimers.clear();
       _rowKeys.clear();
-      _syncFromTasks(const []);
+      if (!widget.allowEmptyList) {
+        _syncFromTasks(const []);
+      } else {
+        _syncFlowOrder();
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         for (final timer in oldTimers) {
           timer?.cancel();
@@ -446,7 +458,19 @@ class TaskListSurfaceState extends State<TaskListSurface> {
               savePending: pending,
             ) &&
             imeVisibleText(controller.text) != task.title) {
-          controller.text = task.title;
+          controller.setRichState(
+            text: task.title,
+            spans: [
+              for (final s in task.titleSpans) Map<String, dynamic>.from(s),
+            ],
+            preserveSelection: focus.hasFocus,
+          );
+        } else if (!focus.hasFocus &&
+            !pending &&
+            !_sameTaskSpans(controller.spans, task.titleSpans)) {
+          controller.spans = [
+            for (final s in task.titleSpans) Map<String, dynamic>.from(s),
+          ];
         }
         nextControllers.add(controller);
         nextFocus.add(focus);
@@ -455,7 +479,14 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         nextTimers.add(oldTimers[oldIndex]);
         nextRowKeys.add(oldRowKeys[oldIndex]);
       } else {
-        nextControllers.add(SpanTextEditingController(text: task.title));
+        nextControllers.add(
+          SpanTextEditingController(
+            text: task.title,
+            spans: [
+              for (final s in task.titleSpans) Map<String, dynamic>.from(s),
+            ],
+          ),
+        );
         nextFocus.add(_createRowFocus());
         nextIds.add(task.id);
         nextDone.add(task.isDone);
@@ -497,6 +528,10 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
   void _syncFromTasks(List<Task> tasks) {
     if (tasks.isEmpty) {
+      if (widget.allowEmptyList) {
+        _syncFlowOrder();
+        return;
+      }
       _controllers.add(SpanTextEditingController(text: ''));
       _focusNodes.add(_createRowFocus());
       _taskIds.add(null);
@@ -507,7 +542,14 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       return;
     }
     for (final task in tasks) {
-      _controllers.add(SpanTextEditingController(text: task.title));
+      _controllers.add(
+        SpanTextEditingController(
+          text: task.title,
+          spans: [
+            for (final s in task.titleSpans) Map<String, dynamic>.from(s),
+          ],
+        ),
+      );
       _focusNodes.add(_createRowFocus());
       _taskIds.add(task.id);
       _done.add(task.isDone);
@@ -816,15 +858,39 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     }
     final id = _taskIds[index]!;
     final title = imeVisibleText(_controllers[index].text);
+    final spans = [
+      for (final s in _controllers[index].spans) Map<String, dynamic>.from(s),
+    ];
     final task = _taskById(id);
     if (task == null) {
       _scheduleSave(index);
       return;
     }
-    if (task.title == title) return;
+    if (task.title == title && _sameTaskSpans(task.titleSpans, spans)) return;
     try {
-      await _bridge.updateTitle(task, title);
+      await _bridge.updateTitle(task, title, titleSpans: spans);
     } catch (_) {}
+  }
+
+  bool _sameTaskSpans(
+    List<Map<String, dynamic>> a,
+    List<Map<String, dynamic>> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i]['start'] != b[i]['start'] ||
+          a[i]['end'] != b[i]['end'] ||
+          a[i]['bold'] != b[i]['bold'] ||
+          a[i]['italic'] != b[i]['italic'] ||
+          a[i]['underline'] != b[i]['underline'] ||
+          a[i]['strikethrough'] != b[i]['strikethrough'] ||
+          a[i]['size'] != b[i]['size'] ||
+          a[i]['color'] != b[i]['color'] ||
+          a[i]['link'] != b[i]['link']) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Create a server row for a local null-id seed once the user has typed.
@@ -887,10 +953,10 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final unique = indices.toSet().toList()..sort();
     final removingAll = unique.length >= _controllers.length;
 
-    // Inner mark-delete must not destroy the object — keep one empty row.
-    // Delete the object from chrome / empty Backspace on the last unit.
+    // File lists must not destroy the object from an inner mark — keep one
+    // empty row. Views may go fully empty ([allowEmptyList]).
     var drop = unique;
-    if (removingAll) {
+    if (removingAll && !widget.allowEmptyList) {
       drop = unique.skip(1).toList();
     }
     if (drop.isEmpty) return;
@@ -924,6 +990,10 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         _optimistic = _tasksFromLocalRows();
       });
       _syncFlowOrder();
+      if (_focusNodes.isEmpty) {
+        FocusManager.instance.primaryFocus?.unfocus();
+        return;
+      }
       final focusIndex = () {
         final firstDropped = drop.first;
         if (firstDropped > 0) return firstDropped - 1;
@@ -1117,7 +1187,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
   Future<void> _removeAt(int index) async {
     if (_persisting) return;
-    if (_controllers.length <= 1) {
+    if (_controllers.length <= 1 && !widget.allowEmptyList) {
       widget.onExitBelow?.call(_taskIds[index]);
       return;
     }
@@ -1146,6 +1216,10 @@ class TaskListSurfaceState extends State<TaskListSurface> {
           _optimistic = _tasksFromLocalRows();
         });
         _syncFlowOrder();
+        if (_focusNodes.isEmpty) {
+          FocusManager.instance.primaryFocus?.unfocus();
+          return;
+        }
         final nextFocus = index > 0 ? index - 1 : 0;
         if (nextFocus < _focusNodes.length) {
           _focusNodes[nextFocus].requestFocus();
@@ -1173,6 +1247,65 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     } finally {
       _persisting = false;
     }
+  }
+
+  /// New empty row at the end — used when a view section is empty.
+  Future<void> addEmptyTask() async {
+    if (_persisting) return;
+    widget.onFocus?.call();
+    if (_controllers.isEmpty) {
+      _persisting = true;
+      setState(() {
+        _controllers.add(SpanTextEditingController(text: ''));
+        _focusNodes.add(_createRowFocus());
+        _taskIds.add(null);
+        _done.add(false);
+        _saveTimers.add(null);
+        _rowKeys.add(Object());
+        _optimistic = _tasksFromLocalRows();
+      });
+      _syncFlowOrder();
+      _pendingFocusIndex = 0;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
+      try {
+        final created = await _bridge.createAfter(
+          title: '',
+          afterTaskId: null,
+          status: _createStatus(done: false),
+        );
+        if (!mounted) return;
+        if (_taskIds.isNotEmpty) {
+          setState(() {
+            _taskIds[0] = created.id;
+            _optimistic = _tasksFromLocalRows();
+          });
+          await _flushTitle(0);
+        }
+        if (!mounted) return;
+        await _bridge.refresh();
+      } finally {
+        _persisting = false;
+      }
+      return;
+    }
+    await _insertAfter(_controllers.length - 1);
+  }
+
+  Future<void> _showEmptyListMenu(TapDownDetails details) async {
+    final s = widget.state.strings;
+    final action = await AppContextMenu.show(
+      context: context,
+      globalPosition: details.globalPosition,
+      isRtl: s.isRtl,
+      entries: [
+        AppContextMenuItem(
+          value: 'add_task',
+          label: s['addTask'],
+        ),
+      ],
+    );
+    if (!mounted || action != 'add_task') return;
+    await addEmptyTask();
   }
 
   Future<void> _toggle(int index) async {
@@ -1940,6 +2073,13 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         if (_bridge.showListTitle && !compact && !_reorderMode)
           const SizedBox(height: 4),
         if (showDoneHeader) _zoneLabel(s['tasksActive']),
+        if (_controllers.isEmpty && widget.allowEmptyList && !_reorderMode)
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onDoubleTap: () => unawaited(addEmptyTask()),
+            onSecondaryTapDown: _showEmptyListMenu,
+            child: const SizedBox(height: 36, width: double.infinity),
+          ),
         for (var i = 0; i < activeCount; i++) _keyedTaskRow(i),
         _dropGap(targetDone: false, indexInZone: activeCount),
         if (showDoneHeader) ...[

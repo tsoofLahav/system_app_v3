@@ -1,8 +1,9 @@
 """Checkbox lines stored in an info body — not `tasks` rows.
 
-A line matching `- [ ]` / `- [x]` is an inner task. If that info is the
-description target of a real task, unanimous inner state mirrors the outer
-task (and the outer mark writes back onto every inner line).
+A line matching `☐` / `☑` (or legacy `- [ ]` / `- [x]` / `- ☐`) is an
+inner task. Preferred storage is the glyph alone — no list dash. If that
+info is the description target of a real task, unanimous inner state mirrors
+the outer task (and the outer mark writes back onto every inner line).
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from models import InformationPiece, Link, ObjectEmbed, Task, db
 from areas.objects.services.object_graph import TASK_LINK_TYPE
 from areas.objects.services.task_ops import ACTIVE, DONE, unmarked_status_for
 
-_LINE = re.compile(r"^(\s*)[-*]\s+(?:\[([ xX])\]|([☐☑]))\s?(.*)$")
+_LINE = re.compile(r"^(\s*)(?:([-*])\s+)?(?:\[([ xX])\]|([☐☑]))\s?(.*)$")
 _SYNCING = False
 
 
@@ -49,16 +50,18 @@ def parse_inner_task_lines(body: str) -> list[InnerTaskLine]:
         line_end = offset + len(raw)
         if match:
             indent = match.group(1) or ""
-            box = match.group(2)
-            glyph = match.group(3)
-            title = match.group(4) or ""
+            bullet = match.group(2)
+            box = match.group(3)
+            glyph = match.group(4)
+            title = match.group(5) or ""
+            prefix_len = len(indent) + (2 if bullet is not None else 0)
             if box is not None:
                 done = box.lower() == "x"
-                mark_start = offset + len(indent) + 2
+                mark_start = offset + prefix_len
                 mark_end = mark_start + 3
             else:
                 done = glyph == "☑"
-                mark_start = offset + len(indent) + 2
+                mark_start = offset + prefix_len
                 mark_end = mark_start + 1
             items.append(
                 InnerTaskLine(
@@ -89,7 +92,7 @@ def inner_tasks_unanimous(body: str) -> bool | None:
 def _render_line(item: InnerTaskLine, *, done: bool) -> str:
     mark = "☑" if done else "☐"
     title = item.title
-    return f"{item.indent}- {mark}{f' {title}' if title else ''}"
+    return f"{item.indent}{mark}{f' {title}' if title else ''}"
 
 
 def set_all_inner_tasks(body: str, *, done: bool) -> str:

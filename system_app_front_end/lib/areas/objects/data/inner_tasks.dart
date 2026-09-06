@@ -1,9 +1,12 @@
 /// Checkbox lines stored in an info body — not [Task] rows.
 ///
-/// A line matching `- [ ]` / `- [x]` (or `☐` / `☑`) is an inner task.
+/// A line matching `☐` / `☑` (or legacy `- [ ]` / `- [x]` / `- ☐`) is an
+/// inner task. Preferred storage is the glyph alone — no list dash.
 library;
 
-final _line = RegExp(r'^(\s*)[-*]\s+(?:\[([ xX])\]|([☐☑]))\s?(.*)$');
+final _line = RegExp(
+  r'^(\s*)(?:([-*])\s+)?(?:\[([ xX])\]|([☐☑]))\s?(.*)$',
+);
 
 class InnerTaskLine {
   const InnerTaskLine({
@@ -41,19 +44,21 @@ List<InnerTaskLine> parseInnerTaskLines(String body) {
     final lineEnd = offset + raw.length;
     if (match != null) {
       final indent = match.group(1) ?? '';
-      final box = match.group(2);
-      final glyph = match.group(3);
-      final title = match.group(4) ?? '';
+      final bullet = match.group(2);
+      final box = match.group(3);
+      final glyph = match.group(4);
+      final title = match.group(5) ?? '';
+      final prefixLen = indent.length + (bullet != null ? 2 : 0);
       late final bool done;
       late final int markStart;
       late final int markEnd;
       if (box != null) {
         done = box.toLowerCase() == 'x';
-        markStart = offset + indent.length + 2;
+        markStart = offset + prefixLen;
         markEnd = markStart + 3;
       } else {
         done = glyph == '☑';
-        markStart = offset + indent.length + 2;
+        markStart = offset + prefixLen;
         markEnd = markStart + 1;
       }
       items.add(
@@ -85,7 +90,7 @@ bool? innerTasksUnanimous(String body) {
 String _renderLine(InnerTaskLine item, {required bool done}) {
   final mark = done ? '☑' : '☐';
   final title = item.title;
-  return '${item.indent}- $mark${title.isEmpty ? '' : ' $title'}';
+  return '${item.indent}$mark${title.isEmpty ? '' : ' $title'}';
 }
 
 String setAllInnerTasks(String body, {required bool done}) {
@@ -102,20 +107,26 @@ String setAllInnerTasks(String body, {required bool done}) {
   return out.join('\n');
 }
 
-/// Rewrite `[ ]` / `[x]` lines to `☐` / `☑` (same done state).
+/// Rewrite bracket / dashed forms to preferred `☐` / `☑` lines.
 String canonicalizeInnerTaskMarks(String body) {
   final items = parseInnerTaskLines(body);
   if (items.isEmpty) return body;
-  if (items.every((item) => item.markEnd - item.markStart == 1)) return body;
   final byStart = {for (final item in items) item.start: item};
   var offset = 0;
   final out = <String>[];
+  var changed = false;
   for (final raw in body.split('\n')) {
     final item = byStart[offset];
-    out.add(item == null ? raw : _renderLine(item, done: item.done));
+    if (item == null) {
+      out.add(raw);
+    } else {
+      final next = _renderLine(item, done: item.done);
+      out.add(next);
+      if (next != raw) changed = true;
+    }
     offset += raw.length + 1;
   }
-  return out.join('\n');
+  return changed ? out.join('\n') : body;
 }
 
 InnerTaskLine? innerTaskAt(String body, int offset) {
@@ -197,25 +208,55 @@ bool? combinedInnerTasksUnanimous(String combined) {
   return innerTasksUnanimous(_split(combined).$2);
 }
 
+const _fresh = '☐ ';
+
+String _lineToInnerTask(String raw) {
+  final match = _line.firstMatch(raw);
+  if (match != null) {
+    final indent = match.group(1) ?? '';
+    final box = match.group(3);
+    final glyph = match.group(4);
+    final title = match.group(5) ?? '';
+    final done = box != null ? box.toLowerCase() == 'x' : glyph == '☑';
+    return _renderLine(
+      InnerTaskLine(
+        start: 0,
+        end: raw.length,
+        markStart: 0,
+        markEnd: 1,
+        done: done,
+        title: title,
+        indent: indent,
+      ),
+      done: done,
+    );
+  }
+  final indent = RegExp(r'^(\s*)').firstMatch(raw)?.group(1) ?? '';
+  var content = raw.substring(indent.length);
+  if (content.trim().isEmpty) return raw;
+  final bare = RegExp(r'^[-*]\s+(.*)$').firstMatch(content);
+  if (bare != null) content = bare.group(1) ?? '';
+  return '$indent☐${content.isEmpty ? '' : ' $content'}';
+}
+
 /// Insert a fresh empty checkbox line (menu / ⌘T while in an info).
 InnerTaskEdit insertInnerTaskAtCaret(String combined, int caret) {
   final parts = _split(combined);
   final title = parts.$1;
   final body = parts.$2;
   final bodyAt = _bodyOffset(combined);
-  const fresh = '- ☐ ';
 
   if (bodyAt < 0 || caret < bodyAt) {
     if (body.isEmpty) {
       return InnerTaskEdit(
-        text: '$title\n$fresh',
-        caret: title.length + 1 + fresh.length,
+        text: '$title\n$_fresh',
+        caret: title.length + 1 + _fresh.length,
       );
     }
-    final nextBody = '$fresh\n$body';
+    final nextBody = '$_fresh\n$body';
     return InnerTaskEdit(
       text: _join(title, nextBody),
-      caret: title.length + 1 + fresh.length,
+      caret: title.length + 1 + _fresh.length,
     );
   }
 
@@ -223,7 +264,7 @@ InnerTaskEdit insertInnerTaskAtCaret(String combined, int caret) {
   final item = innerTaskAt(body, local);
   if (item != null) {
     if (item.title.trim().isEmpty) {
-      final caretAt = bodyAt + item.start + '${item.indent}$fresh'.length;
+      final caretAt = bodyAt + item.start + '${item.indent}$_fresh'.length;
       return InnerTaskEdit(text: combined, caret: caretAt);
     }
     return insertInnerTaskLineOnEnter(combined, caret)!;
@@ -235,14 +276,14 @@ InnerTaskEdit insertInnerTaskAtCaret(String combined, int caret) {
   final line = body.substring(lineStart, end);
   if (line.trim().isEmpty) {
     final indent = RegExp(r'^(\s*)').firstMatch(line)?.group(1) ?? '';
-    final nextLine = '$indent$fresh';
+    final nextLine = '$indent$_fresh';
     final nextBody = body.replaceRange(lineStart, end, nextLine);
     return InnerTaskEdit(
       text: _join(title, nextBody),
       caret: bodyAt + lineStart + nextLine.length,
     );
   }
-  final prefix = '\n$fresh';
+  final prefix = '\n$_fresh';
   final nextBody = body.replaceRange(end, end, prefix);
   return InnerTaskEdit(
     text: _join(title, nextBody),
@@ -250,7 +291,56 @@ InnerTaskEdit insertInnerTaskAtCaret(String combined, int caret) {
   );
 }
 
-/// `- ` / `* ` at the start of a body line becomes `- [ ] `.
+/// Marked body lines become inner tasks (menu / ⌘T with a non-empty mark).
+InnerTaskEdit convertSelectionToInnerTasks(
+  String combined,
+  int selectionStart,
+  int selectionEnd,
+) {
+  var a = selectionStart;
+  var b = selectionEnd;
+  if (a > b) {
+    final t = a;
+    a = b;
+    b = t;
+  }
+  if (a == b) return insertInnerTaskAtCaret(combined, a);
+
+  final parts = _split(combined);
+  final title = parts.$1;
+  final body = parts.$2;
+  final bodyAt = _bodyOffset(combined);
+
+  // Selection must touch the body — title-only marks just insert.
+  if (bodyAt < 0 || b <= bodyAt) {
+    return insertInnerTaskAtCaret(combined, b);
+  }
+
+  final bodyStart = a <= bodyAt ? 0 : a - bodyAt;
+  final bodyEnd = (b - bodyAt).clamp(0, body.length);
+  if (bodyEnd <= bodyStart) {
+    return insertInnerTaskAtCaret(combined, b);
+  }
+
+  final lineStart =
+      body.lastIndexOf('\n', bodyStart <= 0 ? 0 : bodyStart - 1) + 1;
+  // Include the whole last touched line (even if the mark ends mid-line).
+  final lastBreak = body.indexOf('\n', bodyEnd > 0 ? bodyEnd - 1 : 0);
+  final rangeEnd = lastBreak < 0 ? body.length : lastBreak;
+
+  final range = body.substring(lineStart, rangeEnd);
+  if (range.split('\n').every((line) => line.trim().isEmpty)) {
+    return insertInnerTaskAtCaret(combined, b);
+  }
+  final converted = range.split('\n').map(_lineToInnerTask).join('\n');
+  final nextBody = body.replaceRange(lineStart, rangeEnd, converted);
+  return InnerTaskEdit(
+    text: _join(title, nextBody),
+    caret: bodyAt + lineStart + converted.length,
+  );
+}
+
+/// `- ` / `* ` at the start of a body line becomes `☐ `.
 InnerTaskEdit? promoteBareDashToCheckbox(String combined, int caret) {
   final bodyAt = _bodyOffset(combined);
   if (bodyAt < 0 || caret < bodyAt) return null;
@@ -264,7 +354,7 @@ InnerTaskEdit? promoteBareDashToCheckbox(String combined, int caret) {
   if (match == null) return null;
   if (local != lineStart + line.length) return null;
   final indent = match.group(1) ?? '';
-  final nextLine = '$indent- ☐ ';
+  final nextLine = '$indent$_fresh';
   final nextBody = body.replaceRange(lineStart, end, nextLine);
   return InnerTaskEdit(
     text: _join(combined.substring(0, bodyAt - 1), nextBody),
@@ -292,8 +382,7 @@ InnerTaskEdit? insertInnerTaskLineOnEnter(String combined, int caret) {
     );
   }
   final insertAt = item.end;
-  const fresh = '- ☐ ';
-  final prefix = insertAt < body.length ? '\n$fresh' : '\n$fresh';
+  final prefix = '\n$_fresh';
   final nextBody = body.replaceRange(insertAt, insertAt, prefix);
   return InnerTaskEdit(
     text: _join(combined.substring(0, bodyAt - 1), nextBody),

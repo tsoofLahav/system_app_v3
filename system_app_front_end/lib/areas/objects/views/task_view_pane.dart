@@ -10,7 +10,6 @@ import '../../ui/app_typography.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ux/shell/app_bottom_bar.dart';
 import '../../ux/topic/topic_appearance.dart';
-import '../../ux/widgets/app_context_menu.dart';
 import '../data/task.dart';
 import '../data/view_layout.dart';
 import '../tasks/task_drag_data.dart';
@@ -406,42 +405,6 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     await state.updateViewSection(oldName: section.name, next: next);
   }
 
-  Future<void> _onSectionTitleMenu(
-    Offset globalPosition,
-    ViewSectionDef section,
-  ) async {
-    final s = state.strings;
-    final action = await AppContextMenu.show(
-      context: context,
-      globalPosition: globalPosition,
-      isRtl: s.isRtl,
-      entries: [
-        AppContextMenuItem(value: 'edit', label: s['editSection']),
-        AppContextMenuItem(
-          value: 'automation',
-          label: s['openSectionAutomation'],
-        ),
-        AppContextMenuItem(
-          value: 'delete',
-          label: s['deleteSection'],
-          destructive: true,
-        ),
-      ],
-    );
-    if (!mounted || action == null) return;
-    if (action == 'edit') {
-      await _editSection(section);
-      return;
-    }
-    if (action == 'automation') {
-      await _openSectionAutomation(section);
-      return;
-    }
-    if (action == 'delete') {
-      await _deleteSection(section);
-    }
-  }
-
   Future<void> _openSectionAutomation(ViewSectionDef section) async {
     final view = state.selectedView;
     final key = section.key;
@@ -556,8 +519,8 @@ class _TaskViewPaneState extends State<TaskViewPane> {
           onTaskReorderModeChanged: (value) {
             setState(() => _taskReorderMode = value);
           },
-          onSectionTitleMenu: _onSectionTitleMenu,
           onEditSection: _editSection,
+          onOpenSectionAutomation: _openSectionAutomation,
           onDeleteSection: _deleteSection,
           onMoveFrame: (fromKey, toKey) => _moveFrame(frames, fromKey, toKey),
           onExitFrameReorder: _exitFrameReorder,
@@ -591,7 +554,9 @@ class _TaskViewPaneState extends State<TaskViewPane> {
                           ? AppBottomBarMetrics.phoneBarHeight +
                               AppBottomBarMetrics.phoneOmbreFade +
                               AppSpacing.md +
-                              MediaQuery.viewInsetsOf(context).bottom
+                              AppBottomBarMetrics.phoneViewEndBreath(
+                                MediaQuery.sizeOf(context).height,
+                              )
                           : AppBottomBarMetrics.scrollInset + 52),
                 ),
                 children: [
@@ -659,8 +624,8 @@ class _FrameGrid extends StatelessWidget {
     required this.state,
     required this.onForeignDrop,
     required this.onTaskReorderModeChanged,
-    required this.onSectionTitleMenu,
     required this.onEditSection,
+    required this.onOpenSectionAutomation,
     required this.onDeleteSection,
     required this.onMoveFrame,
     required this.onExitFrameReorder,
@@ -678,8 +643,8 @@ class _FrameGrid extends StatelessWidget {
   })
   onForeignDrop;
   final ValueChanged<bool> onTaskReorderModeChanged;
-  final Future<void> Function(Offset, ViewSectionDef) onSectionTitleMenu;
   final Future<void> Function(ViewSectionDef) onEditSection;
+  final Future<void> Function(ViewSectionDef) onOpenSectionAutomation;
   final Future<void> Function(ViewSectionDef) onDeleteSection;
   final void Function(String fromKey, String toKey) onMoveFrame;
   final VoidCallback onExitFrameReorder;
@@ -704,8 +669,8 @@ class _FrameGrid extends StatelessWidget {
               state: state,
               onForeignDrop: onForeignDrop,
               onTaskReorderModeChanged: onTaskReorderModeChanged,
-              onSectionTitleMenu: onSectionTitleMenu,
               onEditSection: onEditSection,
+              onOpenSectionAutomation: onOpenSectionAutomation,
               onDeleteSection: onDeleteSection,
               onMoveFrame: onMoveFrame,
             ),
@@ -737,8 +702,8 @@ class _DraggableFrame extends StatelessWidget {
     required this.state,
     required this.onForeignDrop,
     required this.onTaskReorderModeChanged,
-    required this.onSectionTitleMenu,
     required this.onEditSection,
+    required this.onOpenSectionAutomation,
     required this.onDeleteSection,
     required this.onMoveFrame,
   });
@@ -755,8 +720,8 @@ class _DraggableFrame extends StatelessWidget {
   })
   onForeignDrop;
   final ValueChanged<bool> onTaskReorderModeChanged;
-  final Future<void> Function(Offset, ViewSectionDef) onSectionTitleMenu;
   final Future<void> Function(ViewSectionDef) onEditSection;
+  final Future<void> Function(ViewSectionDef) onOpenSectionAutomation;
   final Future<void> Function(ViewSectionDef) onDeleteSection;
   final void Function(String fromKey, String toKey) onMoveFrame;
 
@@ -771,9 +736,10 @@ class _DraggableFrame extends StatelessWidget {
       sectionName: frame.sectionName,
       sectionFlag: frame.sectionFlag,
       topicKey: frame.topicKey,
-      onSectionTitleMenu: canEditSection
-          ? (d) => unawaited(onSectionTitleMenu(d.globalPosition, section))
-          : null,
+      onEditSection: canEditSection ? () => onEditSection(section) : null,
+      onOpenSectionAutomation:
+          canEditSection ? () => onOpenSectionAutomation(section) : null,
+      onDeleteSection: canEditSection ? () => onDeleteSection(section) : null,
       accent: frame.accent,
       tintSeed: frame.tintSeed,
       isImportant: frame.isImportant,
