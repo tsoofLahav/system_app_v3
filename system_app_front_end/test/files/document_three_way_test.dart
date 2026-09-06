@@ -70,4 +70,57 @@ void main() {
       isFalse,
     );
   });
+
+  test('mid-file SPACER and blank slices survive a clean 3-way', () {
+    final withSpacer = _doc('Hello\n\n[SPACER n="1"]\n\nWorld');
+    final result = threeWayMarkerText(
+      base: withSpacer,
+      local: withSpacer,
+      server: withSpacer,
+    );
+    expect(result.hasConflicts, isFalse);
+    expect(
+      splitMarkerParts(result.merged),
+      ['Hello', '[SPACER n="1"]', 'World'],
+    );
+  });
+
+  test('extra blank separators become SPACER parts, not dropped', () {
+    // hello + two blank gaps + world (no explicit SPACER marker).
+    final gappy = _doc('Hello\n\n\n\nWorld');
+    final result = threeWayMarkerText(
+      base: gappy,
+      local: gappy,
+      server: gappy,
+    );
+    expect(result.hasConflicts, isFalse);
+    expect(
+      splitMarkerParts(result.merged),
+      ['Hello', '[SPACER n="1"]', 'World'],
+    );
+  });
+
+  test('one-sided edit keeps untouched SPACER between parts', () {
+    final base = _doc('a\n\n[SPACER n="1"]\n\nb');
+    final result = threeWayMarkerText(
+      base: base,
+      local: _doc('A\n\n[SPACER n="1"]\n\nb'),
+      server: base,
+    );
+    expect(result.hasConflicts, isFalse);
+    expect(
+      splitMarkerParts(result.merged),
+      ['A', '[SPACER n="1"]', 'b'],
+    );
+  });
+
+  test('paragraph edge spaces are not trimmed away', () {
+    final spaced = _doc('  hello  \n\nworld');
+    final result = threeWayMarkerText(
+      base: spaced,
+      local: spaced,
+      server: spaced,
+    );
+    expect(splitMarkerParts(result.merged).first, '  hello  ');
+  });
 }

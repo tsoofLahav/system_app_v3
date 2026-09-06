@@ -98,16 +98,33 @@ bool _sameLines(List<String> a, List<String> b) {
 List<String> splitMarkerParts(String raw) {
   final body = DocumentTextCodec.stripHeader(raw);
   if (body.trim().isEmpty) return const [];
+  // Exact `\n\n` (not `\n\n+`): empty slices are blank lines the user made.
+  // Canonicalize them to [SPACER] so join → Super Editor reload keeps the gap
+  // (the bridge skips empty slices when splitting on `\n\n+`).
   return [
-    for (final part in body.split(RegExp(r'\n\n+')))
-      if (part.trim().isNotEmpty) part.trim(),
+    for (final part in body.split('\n\n'))
+      if (part.trim().isEmpty)
+        '[SPACER n="1"]'
+      else
+        // Do not trim — leading/trailing spaces inside a part are content.
+        part,
   ];
 }
 
 String joinMarkerParts(List<String> parts) {
   if (parts.isEmpty) return DocumentTextCodec.empty();
+  // Drop only a file that is nothing but spacers (same as save / backend).
+  final meaningful = [
+    for (final part in parts)
+      if (!_isSpacerPart(part)) part,
+  ];
+  if (meaningful.isEmpty) return DocumentTextCodec.empty();
   return DocumentTextCodec.wrap(parts.join('\n\n'));
 }
+
+bool _isSpacerPart(String part) =>
+    DocumentTextCodec.spacerRe.hasMatch(part.trim());
+
 
 /// 3-way merge of v4 marker parts. One-sided and identical edits apply;
 /// leftover overlaps stay on [localSided] / [serverSided] for the lookalike.

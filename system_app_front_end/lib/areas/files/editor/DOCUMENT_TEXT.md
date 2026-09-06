@@ -29,7 +29,7 @@ Structure markers for lists are shared. Tables are **objects** (pointer in the f
 ## Structure grammar
 
 - Blocks separated by `\n\n`. Soft line break inside a paragraph = `\n`.
-- Extra blank gaps: `[SPACER]` or `[SPACER n="N"]` (N 1–12).
+- Extra blank gaps: `[SPACER]` or `[SPACER n="N"]` (N 1–12). Load expands `n` to that many empty paragraphs (agent apply may still emit a single `n="N"` for a blank run inside paragraph text).
 - Headings: `#` … `######` lines.
 - Lists: `[BULLET_LIST]…[/BULLET_LIST]`, `[ORDERED_LIST]…[/ORDERED_LIST]` (mapped to Super Editor `ListItemNode`s).
 - Legacy structure tables: `[TABLE]…[/TABLE]` — migrated on open to a `table` object + pointer.

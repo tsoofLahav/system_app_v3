@@ -23,6 +23,7 @@ class MarkerPartInfo {
     this.headingLevel,
     this.listBody,
     this.tableBody,
+    this.spacerCount,
   });
 
   final MarkerPartKind kind;
@@ -31,6 +32,9 @@ class MarkerPartInfo {
   final int? headingLevel;
   final String? listBody;
   final String? tableBody;
+
+  /// Empty paragraphs for `[SPACER n="…"]` (1–12). Null when not a spacer.
+  final int? spacerCount;
 }
 
 class DocumentTextCodec {
@@ -72,8 +76,11 @@ class DocumentTextCodec {
         objectType: objectTypeForTag(pointer.group(1)!),
       );
     }
-    if (spacerRe.hasMatch(trimmed)) {
-      return const MarkerPartInfo(MarkerPartKind.spacer);
+    final spacer = spacerRe.firstMatch(trimmed);
+    if (spacer != null) {
+      final rawN = int.tryParse(spacer.group(1) ?? '1') ?? 1;
+      final n = rawN.clamp(1, 12);
+      return MarkerPartInfo(MarkerPartKind.spacer, spacerCount: n);
     }
     final bullet = _bulletFenceRe.firstMatch(trimmed);
     if (bullet != null) {
@@ -203,7 +210,10 @@ class DocumentTextCodec {
             ),
           );
         case MarkerPartKind.spacer:
-          blocks.add(ParagraphNode(id: DocumentCodec.newId('b'), text: ''));
+          final n = (info.spacerCount ?? 1).clamp(1, 12);
+          for (var i = 0; i < n; i++) {
+            blocks.add(ParagraphNode(id: DocumentCodec.newId('b'), text: ''));
+          }
         case MarkerPartKind.bulletList:
           blocks.add(_parseList(info.listBody ?? '', ordered: false));
         case MarkerPartKind.orderedList:

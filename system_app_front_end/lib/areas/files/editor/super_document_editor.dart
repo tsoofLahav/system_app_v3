@@ -139,6 +139,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   Timer? _saveTimer;
   var _dirty = false;
   var _conflictOpen = false;
+  /// Lookalike closed; remount + PATCH in progress (blocks input briefly).
+  var _settlingMerge = false;
   final _phoneObjectGate = PhoneObjectGateSignal();
   String? _lastSavedJson;
   /// Revision of [_lastSavedJson] / the fork point for the next document PATCH.
@@ -670,6 +672,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     try {
       if (!mounted) return;
       final detail = widget.state.selectedDetail;
+      List<Map<String, String>>? finishDecisions;
+      var discarded = false;
       await LookalikeReviewDialog.show(
         context,
         pending: PendingReview(
@@ -683,21 +687,37 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         fileName: _currentFile.name,
         topicAccent:
             detail == null ? null : TopicAppearance.accentFor(detail.topic),
+        // Capture only — remounting Super Editor under the open dialog blows
+        // the IME (DiagnosticsProperty spam / caret in the wrong place).
         onFinish: (decisions) async {
-          final merged = mergeHunkTexts(
-            result.localSided,
-            result.serverSided,
-            decisions,
-          );
-          if (merged == null) {
-            throw StateError('every hunk must have accept or reject');
-          }
-          _applyMergedDocument(merged, persist: true);
+          finishDecisions = decisions;
         },
         onDiscard: () async {
-          _applyMergedDocument(result.localSided, persist: true);
+          discarded = true;
         },
       );
+      if (!mounted) return;
+      if (finishDecisions != null) {
+        final merged = mergeHunkTexts(
+          result.localSided,
+          result.serverSided,
+          finishDecisions!,
+        );
+        if (merged == null) {
+          throw StateError('every hunk must have accept or reject');
+        }
+        await _settleMergedDocument(
+          merged,
+          persist: true,
+          afterDialog: true,
+        );
+      } else if (discarded) {
+        await _settleMergedDocument(
+          result.localSided,
+          persist: true,
+          afterDialog: true,
+        );
+      }
     } finally {
       _conflictOpen = false;
       UnsavedEmbedEdits.fileConflictPending = false;
@@ -705,23 +725,57 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   void _applyMergedDocument(String json, {required bool persist}) {
-    runWhenKeyboardIdle(() {
-      if (!mounted) return;
+    unawaited(
+      _settleMergedDocument(json, persist: persist, afterDialog: false),
+    );
+  }
+
+  /// Apply a merged body into the open editor, then PATCH.
+  ///
+  /// [afterDialog]: wait for the lookalike route to finish tearing down and
+  /// show a short busy wash before remounting — never swap Editor mid-dialog.
+  Future<void> _settleMergedDocument(
+    String json, {
+    required bool persist,
+    required bool afterDialog,
+  }) async {
+    if (!mounted) return;
+    if (afterDialog) {
+      setState(() => _settlingMerge = true);
+      // Let the dialog route dispose before we touch Super Editor / IME.
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    await whenKeyboardIdle();
+    if (!mounted) return;
+    try {
       _saveTimer?.cancel();
-      // After a 409 the cache holds the server revision we must match on PATCH.
       _baseRevision = _currentFile.contentRevision;
       _reloadFromStored(json);
       if (!persist) return;
-      unawaited(
-        widget.state.updateFile(_currentFile, {
+      try {
+        await widget.state.updateFile(_currentFile, {
           'document_json': json,
           'base_revision': _baseRevision,
-        }, notify: false).then((_) {
-          if (!mounted) return;
-          _baseRevision = _currentFile.contentRevision;
-        }),
-      );
-    });
+        }, notify: false);
+        if (mounted) _baseRevision = _currentFile.contentRevision;
+      } on FileRevisionConflict catch (e) {
+        // Another write landed during settle — keep merged local, adopt rev.
+        _baseRevision = e.server.contentRevision;
+        if (mounted) {
+          await widget.state.updateFile(_currentFile, {
+            'document_json': json,
+            'base_revision': _baseRevision,
+          }, notify: false);
+          if (mounted) _baseRevision = _currentFile.contentRevision;
+        }
+      }
+      if (afterDialog && mounted) {
+        await Future<void>.delayed(const Duration(milliseconds: 160));
+      }
+    } finally {
+      if (afterDialog && mounted) setState(() => _settlingMerge = false);
+    }
   }
 
   void _scheduleRemoteDocumentReload(String? json) {
@@ -2641,87 +2695,106 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       child: KeepEditorFocus(
         child: SuperEditorIosControlsScope(
           controller: _iosControls,
-          child: Listener(
-            behavior: HitTestBehavior.translucent,
-            onPointerDown: (event) {
-              if ((event.buttons & kSecondaryMouseButton) != 0) {
-                DocumentSecondaryTap.notePointer(event.pointer);
-              }
-              _onBidiMarkPointerDown(event);
-            },
-            onPointerMove: _onBidiMarkPointerMove,
-            onPointerUp: (_) => _clearBidiMarkPointer(),
-            onPointerCancel: (_) => _clearBidiMarkPointer(),
-            child: GestureDetector(
-              onSecondaryTapDown: _onSecondaryTap,
-              behavior: HitTestBehavior.translucent,
-              child: CustomScrollView(
-                controller: _scroll,
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                slivers: [
-                  SuperEditor(
-                    key: ValueKey<int>(_superEditorEpoch),
-                    editor: _editor,
-                    focusNode: _focusNode,
-                    // One IME identity per file. Panes share the app's single IME
-                    // connection, so without a role a second open file registers as
-                    // the same input: super_editor throws "duplicate input IDs" and
-                    // the two panes fight over the connection.
-                    inputRole: 'file-${widget.file.id}',
-                    documentLayoutKey: _docLayoutKey,
-                    stylesheet: _stylesheet,
-                    selectionStyle: _selectionStyles,
-                    componentBuilders: _componentBuilders(ambient),
-                    keyboardActions: [
-                      if (_moveModeNodeId != null) _handleMoveModeKey,
-                      ...kFileEditorImeKeyboardActions,
-                    ],
-                    contentTapDelegateFactories: [
-                      cmdClickLinkTapHandlerFactory,
-                      bidiCaretTapHandler(
-                        onBodyTextTap: _onPhoneBodyTextTap,
-                        onBodyDoubleTap: _onPhoneBodyDoubleTap,
+          child: Stack(
+            children: [
+              Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (event) {
+                  if ((event.buttons & kSecondaryMouseButton) != 0) {
+                    DocumentSecondaryTap.notePointer(event.pointer);
+                  }
+                  _onBidiMarkPointerDown(event);
+                },
+                onPointerMove: _onBidiMarkPointerMove,
+                onPointerUp: (_) => _clearBidiMarkPointer(),
+                onPointerCancel: (_) => _clearBidiMarkPointer(),
+                child: GestureDetector(
+                  onSecondaryTapDown: _onSecondaryTap,
+                  behavior: HitTestBehavior.translucent,
+                  child: CustomScrollView(
+                    controller: _scroll,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    slivers: [
+                      SuperEditor(
+                        key: ValueKey<int>(_superEditorEpoch),
+                        editor: _editor,
+                        focusNode: _focusNode,
+                        // One IME identity per file. Panes share the app's single IME
+                        // connection, so without a role a second open file registers as
+                        // the same input: super_editor throws "duplicate input IDs" and
+                        // the two panes fight over the connection.
+                        inputRole: 'file-${widget.file.id}',
+                        documentLayoutKey: _docLayoutKey,
+                        stylesheet: _stylesheet,
+                        selectionStyle: _selectionStyles,
+                        componentBuilders: _componentBuilders(ambient),
+                        keyboardActions: [
+                          if (_moveModeNodeId != null) _handleMoveModeKey,
+                          ...kFileEditorImeKeyboardActions,
+                        ],
+                        contentTapDelegateFactories: [
+                          cmdClickLinkTapHandlerFactory,
+                          bidiCaretTapHandler(
+                            onBodyTextTap: _onPhoneBodyTextTap,
+                            onBodyDoubleTap: _onPhoneBodyDoubleTap,
+                          ),
+                        ],
+                        documentOverlayBuilders: documentOverlayBuilders(
+                          withCaret: _showCaret,
+                        ),
+                        plugins: {
+                          _visibleSelectionPlugin,
+                          _visualCaretPlugin,
+                          _embedCaretPlugin,
+                        },
+                        // Tab/Enter embeds + visual ←/→ when the paragraph is RTL.
+                        selectorHandlers: withVisualHorizontalSelectors(
+                          base: _embedCaretPlugin.selectorHandlers,
+                          ambient: ambient,
+                        ),
+                        shrinkWrap: true,
+                        imePolicies: const SuperEditorImePolicies(
+                          openImeOnNonPrimaryFocusGain: false,
+                          closeKeyboardOnLosePrimaryFocus: true,
+                          openKeyboardOnGainPrimaryFocus: true,
+                          openKeyboardOnSelectionChange: true,
+                          closeKeyboardOnSelectionLost: true,
+                        ),
+                        imeConfiguration: kFileEditorImeConfiguration,
+                        selectionPolicies: const SuperEditorSelectionPolicies(
+                          clearSelectionWhenEditorLosesFocus: false,
+                          clearSelectionWhenImeConnectionCloses: false,
+                        ),
+                      ),
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () =>
+                              runWhenKeyboardIdle(_placeCaretAtDocumentEnd),
+                        ),
                       ),
                     ],
-                    documentOverlayBuilders: documentOverlayBuilders(
-                      withCaret: _showCaret,
-                    ),
-                    plugins: {
-                      _visibleSelectionPlugin,
-                      _visualCaretPlugin,
-                      _embedCaretPlugin,
-                    },
-                    // Tab/Enter embeds + visual ←/→ when the paragraph is RTL.
-                    selectorHandlers: withVisualHorizontalSelectors(
-                      base: _embedCaretPlugin.selectorHandlers,
-                      ambient: ambient,
-                    ),
-                    shrinkWrap: true,
-                    imePolicies: const SuperEditorImePolicies(
-                      openImeOnNonPrimaryFocusGain: false,
-                      closeKeyboardOnLosePrimaryFocus: true,
-                      openKeyboardOnGainPrimaryFocus: true,
-                      openKeyboardOnSelectionChange: true,
-                      closeKeyboardOnSelectionLost: true,
-                    ),
-                    imeConfiguration: kFileEditorImeConfiguration,
-                    selectionPolicies: const SuperEditorSelectionPolicies(
-                      clearSelectionWhenEditorLosesFocus: false,
-                      clearSelectionWhenImeConnectionCloses: false,
-                    ),
                   ),
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () =>
-                          runWhenKeyboardIdle(_placeCaretAtDocumentEnd),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
+              if (_settlingMerge)
+                const Positioned.fill(
+                  child: AbsorbPointer(
+                    child: ColoredBox(
+                      color: Color(0x66FFFFFF),
+                      child: Center(
+                        child: SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),

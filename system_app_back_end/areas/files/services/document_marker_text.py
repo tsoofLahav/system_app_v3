@@ -135,13 +135,14 @@ def _spacer_marker(n: int) -> str:
 
 
 def _append_spacer(lines: list[str], n: int = 1) -> None:
+    """Append a spacer marker. Do not merge into the previous spacer.
+
+    Merging consecutive empties into ``[SPACER n="2"]`` made an identity
+    agent apply rewrite two ``n="1"`` markers. Older FE load treated any
+    SPACER as one blank — gaps disappeared after Finish. Keep one marker
+    per call; ``n>1`` still means that many empties when the client expands.
+    """
     n = max(SPACER_N_MIN, min(int(n), SPACER_N_MAX))
-    if lines:
-        match = _SPACER_RE.fullmatch(lines[-1].strip())
-        if match:
-            prev = int(match.group(1) or 1)
-            lines[-1] = _spacer_marker(prev + n)
-            return
     lines.append(_spacer_marker(n))
 
 

@@ -38,9 +38,14 @@ MutableDocument markerTextToMutableDocument(String? raw) {
           ),
         );
       case MarkerPartKind.spacer:
-        nodes.add(
-          ParagraphNode(id: Editor.createNodeId(), text: AttributedText()),
-        );
+        // Agent apply may merge consecutive blanks into `[SPACER n="N"]`;
+        // expand N empty paragraphs so gaps survive Finish / reload.
+        final n = (info.spacerCount ?? 1).clamp(1, 12);
+        for (var i = 0; i < n; i++) {
+          nodes.add(
+            ParagraphNode(id: Editor.createNodeId(), text: AttributedText()),
+          );
+        }
       case MarkerPartKind.bulletList:
         nodes.addAll(listItemsFromMarkerBody(info.listBody ?? '', ordered: false));
       case MarkerPartKind.orderedList:

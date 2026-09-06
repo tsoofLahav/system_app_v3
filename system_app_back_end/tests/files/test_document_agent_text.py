@@ -269,12 +269,30 @@ def test_empty_paragraphs_round_trip_as_spacer_markers():
         }
     )
     text = document_to_agent_text(original)
-    assert '[SPACER n="2"]' in text
+    # Two empty paragraphs stay two markers (not merged into n="2").
+    assert text.count("[SPACER") == 2
+    assert '[SPACER n="1"]' in text
     doc, _, errors = apply_agent_text(original, text, known_object_ids=set())
     assert not errors
     assert all(b["type"] != "spacer" for b in doc["blocks"])
     empties = [b for b in doc["blocks"] if b["type"] == "paragraph" and b["text"] == ""]
     assert len(empties) == 2
+
+
+def test_editor_text_identity_apply_keeps_consecutive_spacers():
+    """open_file → apply unchanged must not rewrite two n=1 into n=2."""
+    from areas.files.services import document_marker_text as marker_text
+    from areas.files.services.document_agent_text import editor_text_to_agent_text
+
+    editor = marker_text.wrap_editor_text(
+        'A\n\n[SPACER n="1"]\n\n[SPACER n="1"]\n\nB'
+    )
+    agent = editor_text_to_agent_text(editor)
+    back, _, errors = agent_text_to_editor_text(
+        agent, known_object_ids=set(), current_body=editor
+    )
+    assert not errors
+    assert back == editor
 
 
 def test_single_blank_line_in_paragraph_becomes_spacer():

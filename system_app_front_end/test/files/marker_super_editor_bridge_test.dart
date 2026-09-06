@@ -167,6 +167,27 @@ Outro''';
       );
     });
 
+    test('SPACER n expands to that many empty paragraphs', () {
+      // Agent apply used to merge two blanks into n="2"; load must not
+      // collapse that back to a single empty line.
+      final stored =
+          '${DocumentTextCodec.header}\nA\n\n[SPACER n="2"]\n\nB';
+      final doc = markerTextToMutableDocument(stored);
+      expect(doc.nodeCount, 4);
+      expect((doc.getNodeAt(0) as ParagraphNode).text.toPlainText(), 'A');
+      expect((doc.getNodeAt(1) as ParagraphNode).text.toPlainText(), '');
+      expect((doc.getNodeAt(2) as ParagraphNode).text.toPlainText(), '');
+      expect((doc.getNodeAt(3) as ParagraphNode).text.toPlainText(), 'B');
+
+      final out = DocumentTextCodec.stripHeader(
+        mutableDocumentToMarkerText(doc),
+      );
+      expect(
+        out,
+        'A\n\n[SPACER n="1"]\n\n[SPACER n="1"]\n\nB',
+      );
+    });
+
     test('blank lines at the end of a file survive the save', () {
       // Otherwise an object inserted down there lands under the last text:
       // the caret sits past parts the stored file no longer has.

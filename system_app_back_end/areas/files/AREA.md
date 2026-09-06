@@ -45,7 +45,7 @@ world
 ```
 
 - Blocks separated by `\n\n`; soft break inside a paragraph = `\n`.
-- Gaps: `[SPACER]` / `[SPACER n="N"]`.
+- Gaps: `[SPACER]` / `[SPACER n="N"]`. Consecutive empty paragraphs stay as separate `n="1"` markers on apply (do not merge into `n="2"`). Clients expand `n` to that many empties.
 - Objects are **pointer lines only** (`[INFO id="N"]`, `[TASK_LIST id="N"]`, `[IMAGE id="N"]`, `[GRAPH id="N"]`, `[TABLE id="N"]`). Content lives in object tables / `objects.payload`.
 - Move object = cut/paste the pointer line ([`document_marker_text.py`](services/document_marker_text.py)).
 

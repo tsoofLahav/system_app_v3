@@ -42,7 +42,7 @@ A bullet, a table row, and an **embed block** count as **one line** of the docum
 
 ### 1. A blank line is text
 
-A gap the user typed is part of the file, wherever it sits — between two paragraphs, beside an object, or at the end. Empty paragraphs are saved as `[SPACER n="1"]` parts and come back as empty paragraphs, so what is on screen and what is on disk have the same number of lines.
+A gap the user typed is part of the file, wherever it sits — between two paragraphs, beside an object, or at the end. Empty paragraphs are saved as `[SPACER n="1"]` parts and come back as empty paragraphs, so what is on screen and what is on disk have the same number of lines. `[SPACER n="N"]` must expand to **N** empties on load — otherwise an agent apply that compacted gaps into one marker drops blanks after Finish.
 
 That equality is what makes insertion land right: the insert bar turns the caret's node index into a marker part index ([`markerGapIndexForNodeIndex`](../model/marker_super_editor_bridge.dart)), and the server inserts the pointer between stored parts. When the save dropped trailing blanks, the two counts drifted and an object typed under a gap reappeared under the last paragraph.
 
