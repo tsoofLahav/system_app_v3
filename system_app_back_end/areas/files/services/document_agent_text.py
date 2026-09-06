@@ -813,7 +813,14 @@ def _find_next_special(text: str, start: int) -> int | None:
 
 
 def _text_to_blocks(text: str) -> list[dict[str, Any]]:
-    """Plain text → paragraphs/headings; empty ``\\n\\n`` runs → empty paragraphs."""
+    """Plain text → paragraphs/headings; blank-line runs → empty paragraphs.
+
+    Agent / lookalike treat one empty line between paragraphs (``A\\n\\n\\nB``)
+    as a visible gap. ``split(\"\\n\\n\")`` turns that into ``[\"A\", \"\\nB\"]``,
+    and a naive ``strip()`` used to throw the blank away — Suggested still
+    looked spaced, Finish wrote a dense file. Count leading ``\\n`` leftovers
+    as empty paragraphs; a plain ``A\\n\\nB`` block break stays dense.
+    """
     blocks: list[dict[str, Any]] = []
     pending_empty = 0
 
@@ -824,6 +831,10 @@ def _text_to_blocks(text: str) -> list[dict[str, Any]]:
         pending_empty = 0
 
     for part in text.split("\n\n"):
+        # Odd newline counts leave a leading ``\\n`` on the next slice.
+        while part.startswith("\n"):
+            pending_empty += 1
+            part = part[1:]
         stripped = part.strip()
         if not stripped:
             pending_empty += 1

@@ -379,6 +379,31 @@ def test_text_to_blocks_empty_runs_become_empty_paragraphs():
     assert parsed["blocks"][1]["text"] == ""
 
 
+def test_single_blank_line_between_paragraphs_survives_apply():
+    """Lookalike shows one empty line as a gap; Finish must keep it on disk.
+
+    Models often drop ``[SPACER]`` and write ``A\\n\\n\\nB`` instead. That must
+    become an empty paragraph / spacer — not densify to ``A\\n\\nB``.
+    """
+    from areas.files.services import document_marker_text as marker_text
+
+    agent = "Intro\n\n\nEdited line\n\n\nOutro"
+    editor, _, errors = agent_text_to_editor_text(
+        agent, known_object_ids=set(), current_body=""
+    )
+    assert not errors
+    body = marker_text.editor_text_body(editor)
+    assert body.count("[SPACER") == 2
+    assert "Intro" in body and "Edited line" in body and "Outro" in body
+
+    dense = "Intro\n\nEdited line\n\nOutro"
+    dense_editor, _, dense_errors = agent_text_to_editor_text(
+        dense, known_object_ids=set(), current_body=""
+    )
+    assert not dense_errors
+    assert "[SPACER" not in marker_text.editor_text_body(dense_editor)
+
+
 def test_legacy_spacer_type_normalizes_to_empty_paragraphs():
     from areas.files.services.document_v3 import _normalize_v3
 
