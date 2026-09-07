@@ -43,6 +43,25 @@ void main() {
     );
   });
 
+  test('polled body behind local revision is ignored', () {
+    expect(
+      shouldIgnorePolledBody(localRev: 5, inboundRev: 4),
+      isTrue,
+    );
+    expect(
+      shouldIgnorePolledBody(localRev: 5, inboundRev: 5),
+      isFalse,
+    );
+    expect(
+      shouldIgnorePolledBody(localRev: 5, inboundRev: 6),
+      isFalse,
+    );
+    expect(
+      shouldIgnorePolledBody(localRev: 5, inboundRev: null),
+      isFalse,
+    );
+  });
+
   test('dirty local and a new inbound asks', () {
     expect(
       decideRemoteEdit(

@@ -7,7 +7,6 @@ pointers with live object payloads. See document_marker_text.py / DOCUMENT_TEXT.
 from __future__ import annotations
 
 import re
-from difflib import SequenceMatcher
 from typing import Any
 
 from models import InformationPiece, ObjectEmbed, Task, TaskList, db
@@ -533,102 +532,6 @@ def parse_agent_text(text: str) -> dict[str, Any]:
     return {"blocks": blocks, "object_updates": object_updates}
 
 
-def _is_spacer_part(part: str) -> bool:
-    return bool(_SPACER_RE.fullmatch(part.strip()))
-
-
-def _content_indices_and_gaps(
-    parts: list[str],
-) -> tuple[list[int], list[list[str]]]:
-    """Indices of non-spacer content parts, and spacer runs between each pair."""
-    content_idx = [
-        i for i, part in enumerate(parts) if not _is_spacer_part(part) and part.strip()
-    ]
-    gaps: list[list[str]] = []
-    for left, right in zip(content_idx, content_idx[1:]):
-        gaps.append(
-            [
-                parts[i]
-                for i in range(left + 1, right)
-                if _is_spacer_part(parts[i])
-            ]
-        )
-    return content_idx, gaps
-
-
-def reinstate_editor_spacers(
-    old_editor: str | None,
-    new_editor: str,
-) -> str:
-    """Put back ``[SPACER]`` gaps the model dropped between surviving parts.
-
-    Lookalike Accept on a text edit often also accepts ``remove [SPACER]``
-    hunks, so Suggested looks mostly fine while Finish densifies only that
-    region on disk. If the live file had spacers between content neighbors
-    that still exist (same or replaced text), restore those spacers when the
-    new body only has a normal block break.
-    """
-    if not old_editor or not new_editor:
-        return new_editor
-    if not marker_text.is_editor_text(old_editor):
-        return new_editor
-    if not marker_text.is_editor_text(new_editor):
-        return new_editor
-
-    old_parts = marker_text.editor_text_body(old_editor).split("\n\n")
-    new_parts = marker_text.editor_text_body(new_editor).split("\n\n")
-    if not old_parts or not new_parts:
-        return new_editor
-
-    old_cidx, old_gaps = _content_indices_and_gaps(old_parts)
-    new_cidx, _ = _content_indices_and_gaps(new_parts)
-    if len(new_cidx) < 2 or not old_gaps:
-        return new_editor
-
-    old_content = [old_parts[i] for i in old_cidx]
-    new_content = [new_parts[i] for i in new_cidx]
-    new_to_old: dict[int, int] = {}
-    for tag, i1, i2, j1, j2 in SequenceMatcher(
-        a=old_content, b=new_content, autojunk=False
-    ).get_opcodes():
-        if tag == "equal":
-            for k in range(i2 - i1):
-                new_to_old[j1 + k] = i1 + k
-        elif tag == "replace":
-            for k in range(min(i2 - i1, j2 - j1)):
-                new_to_old[j1 + k] = i1 + k
-
-    out: list[str] = []
-    out.extend(new_parts[: new_cidx[0]])
-    for j, ci in enumerate(new_cidx):
-        out.append(new_parts[ci])
-        if j >= len(new_cidx) - 1:
-            break
-        next_ci = new_cidx[j + 1]
-        between = new_parts[ci + 1 : next_ci]
-        if any(_is_spacer_part(p) for p in between):
-            out.extend(between)
-            continue
-        oi = new_to_old.get(j)
-        oi_next = new_to_old.get(j + 1)
-        if (
-            oi is not None
-            and oi_next is not None
-            and oi_next == oi + 1
-            and oi < len(old_gaps)
-            and old_gaps[oi]
-        ):
-            out.extend(old_gaps[oi])
-            continue
-        out.extend(between)
-    out.extend(new_parts[new_cidx[-1] + 1 :])
-
-    body = "\n\n".join(out)
-    if body and all(_is_spacer_part(p) for p in out):
-        return marker_text.empty_editor_text()
-    return marker_text.wrap_editor_text(body)
-
-
 def agent_text_to_editor_text(
     agent_text: str,
     *,
@@ -707,8 +610,6 @@ def agent_text_to_editor_text(
         return marker_text.empty_editor_text(), parsed["object_updates"], []
     body = "\n\n".join(line for line in lines if line is not None)
     editor = marker_text.wrap_editor_text(body)
-    if current_body:
-        editor = reinstate_editor_spacers(current_body, editor)
     return editor, parsed["object_updates"], []
 
 

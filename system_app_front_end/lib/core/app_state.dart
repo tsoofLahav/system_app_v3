@@ -180,6 +180,14 @@ class AppState extends ChangeNotifier {
   /// a projected file is the same [AppFile] as on its source topic.
   final Map<int, AppFile> filesById = {};
 
+  /// Latest polled server body per file (for 3-way). When the open editor is
+  /// dirty, [filesById] keeps the live draft so remount cannot drop blanks;
+  /// this map still carries the other device's tip.
+  final Map<int, String> inboundDocumentJson = {};
+
+  /// Matching [AppFile.contentRevision] for [inboundDocumentJson].
+  final Map<int, int> inboundContentRevision = {};
+
   /// Visit ids on Home, in canvas order among themselves. Bodies live in
   /// [filesById], not a second copy.
   List<int> _broughtFileIds = [];
@@ -1907,16 +1915,25 @@ class AppState extends ChangeNotifier {
       final local = filesById[file.id];
       if (local == null) {
         _rememberFile(file);
+        inboundDocumentJson.remove(file.id);
+        inboundContentRevision.remove(file.id);
         await loadEmbedsForFile(file.id, notify: false);
         changed = true;
         continue;
       }
+      final prevInbound = inboundDocumentJson[file.id];
+      inboundDocumentJson[file.id] = file.documentJson;
+      inboundContentRevision[file.id] = file.contentRevision;
       final merged = _mergeInboundFile(file);
       final bodyChanged = local.documentJson != merged.documentJson;
       final metaChanged =
           local.orderIndex != merged.orderIndex || local.name != merged.name;
+      final inboundMoved = prevInbound != file.documentJson;
       if (bodyChanged || metaChanged) {
         _rememberFile(merged);
+        changed = true;
+      } else if (inboundMoved) {
+        // Dirty editor kept its draft in filesById; still wake SE for 3-way.
         changed = true;
       }
       // Payload-only edits (tasks / info / table) may leave document_json alone.
@@ -1947,10 +1964,15 @@ class AppState extends ChangeNotifier {
           changed = true;
           continue;
         }
+        final prevInbound = inboundDocumentJson[file.id];
+        inboundDocumentJson[file.id] = file.documentJson;
+        inboundContentRevision[file.id] = file.contentRevision;
         final merged = _mergeInboundFile(file);
         if (local.documentJson != merged.documentJson ||
             local.name != merged.name) {
           _rememberFile(merged);
+          changed = true;
+        } else if (prevInbound != file.documentJson) {
           changed = true;
         }
         if (await _refreshEmbedsIfChanged(fileId)) changed = true;
@@ -2124,6 +2146,10 @@ class AppState extends ChangeNotifier {
     try {
       final updated = await _files.updateFile(file.id, payload);
       _putFile(updated);
+      if (payload.containsKey('document_json')) {
+        inboundDocumentJson[updated.id] = updated.documentJson;
+        inboundContentRevision[updated.id] = updated.contentRevision;
+      }
       // Silent document autosaves must not notify — MaterialApp's Consumer and
       // other listeners rebuilding mid-keystroke desync HardwareKeyboard.
       if (notify) notifyListeners();
@@ -2131,7 +2157,22 @@ class AppState extends ChangeNotifier {
     } on FileRevisionConflict catch (e) {
       // Keep the server copy visible for 3-way / lookalike. Caller (usually SE)
       // still owns the live local text and handles the exception.
-      _putFile(e.server);
+      inboundDocumentJson[e.server.id] = e.server.documentJson;
+      inboundContentRevision[e.server.id] = e.server.contentRevision;
+      final local = filesById[e.server.id];
+      final dirty =
+          DocumentEditorRegistry.controllerFor(e.server.id)?.isDirty?.call() ==
+          true;
+      if (dirty && local != null) {
+        _rememberFile(
+          e.server.copyWith(
+            documentJson: local.documentJson,
+            contentRevision: local.contentRevision,
+          ),
+        );
+      } else {
+        _putFile(e.server);
+      }
       if (notify) notifyListeners();
       rethrow;
     }
@@ -2265,6 +2306,40 @@ class AppState extends ChangeNotifier {
 
   void _rememberFile(AppFile file) {
     filesById[file.id] = file;
+  }
+
+  /// Mirror the open editor body into [filesById] without notify — poll/remount
+  /// must not resurrect a pre-keystroke body while the file is dirty.
+  void putOpenDocumentDraft(int fileId, String documentJson) {
+    final local = filesById[fileId];
+    if (local == null || local.documentJson == documentJson) return;
+    filesById[fileId] = local.copyWith(documentJson: documentJson);
+  }
+
+  /// After taking inbound into the open editor, align cache + poll stash.
+  void applyOpenDocumentFromRemote(
+    int fileId,
+    String documentJson,
+    int contentRevision,
+  ) {
+    final local = filesById[fileId];
+    if (local == null) return;
+    filesById[fileId] = local.copyWith(
+      documentJson: documentJson,
+      contentRevision: contentRevision,
+    );
+    inboundDocumentJson[fileId] = documentJson;
+    inboundContentRevision[fileId] = contentRevision;
+  }
+
+  /// Server tip from the last poll, if any (for Super Editor 3-way).
+  String? polledInboundDocument(int fileId) => inboundDocumentJson[fileId];
+
+  int? polledInboundRevision(int fileId) => inboundContentRevision[fileId];
+
+  void clearPolledInbound(int fileId) {
+    inboundDocumentJson.remove(fileId);
+    inboundContentRevision.remove(fileId);
   }
 
   AppFile _mergeInboundFile(AppFile inbound) {

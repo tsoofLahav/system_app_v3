@@ -83,7 +83,7 @@ void main() {
     expect(loaded.homeCanvasOrderIds, [99, 3]);
   });
 
-  test('inbound body reaches filesById even when the editor is dirty', () {
+  test('dirty editor keeps live body; clean takes inbound', () {
     const local = AppFile(
       id: 10,
       topicId: 2,
@@ -104,7 +104,8 @@ void main() {
       inbound: inbound,
       bodyDirty: true,
     );
-    expect(kept.documentJson, 'server copy');
+    expect(kept.documentJson, 'local typing');
+    expect(kept.contentRevision, local.contentRevision);
     expect(kept.name, 'Notes renamed');
     expect(kept.orderIndex, 3);
 

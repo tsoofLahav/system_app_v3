@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -146,6 +147,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   /// Revision of [_lastSavedJson] / the fork point for the next document PATCH.
   var _baseRevision = 1;
   var _applyingRemote = false;
+  /// True while a document PATCH await is outstanding — skip poll remounts.
+  var _documentPatchInFlight = false;
   var _snappingComposerGraphemes = false;
   Offset? _bidiDragDownGlobal;
 
@@ -551,6 +554,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     final removed = _trackedObjectIds.difference(live);
     _trackedObjectIds = live;
     _dirty = true;
+    // Poll/remount read filesById — keep the live draft there so blanks are
+    // not replaced by a pre-edit server body before PATCH lands.
+    final draft = mutableDocumentToMarkerText(_doc);
+    widget.state.putOpenDocumentDraft(widget.file.id, draft);
     _scheduleSave();
     if (removed.isNotEmpty) {
       unawaited(_cascadeDeleteRemovedObjects(removed));
@@ -591,8 +598,16 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         _scheduleEmbedStructureRebuild();
       }
     }
-    final remote = _currentFile.documentJson;
-    if (remote != _lastSavedJson) {
+    final remote =
+        widget.state.polledInboundDocument(widget.file.id) ??
+        _currentFile.documentJson;
+    final inboundRev = widget.state.polledInboundRevision(widget.file.id);
+    final skipRemote = _documentPatchInFlight ||
+        shouldIgnorePolledBody(
+          localRev: _currentFile.contentRevision,
+          inboundRev: inboundRev,
+        );
+    if (!skipRemote && remote != _lastSavedJson) {
       _handleRemoteDocument(remote);
     }
     _tryFocusPendingObject();
@@ -782,9 +797,12 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     if (!mounted) return;
     void apply() {
       if (!mounted) return;
-      final latest = _currentFile.documentJson;
-      if (latest == _lastSavedJson) return;
-      _reloadFromStored(latest);
+      final latest = json ??
+          widget.state.polledInboundDocument(widget.file.id) ??
+          _currentFile.documentJson;
+      if (latest == null || latest == _lastSavedJson) return;
+      final inboundRev = widget.state.polledInboundRevision(widget.file.id);
+      _reloadFromStored(latest, contentRevision: inboundRev);
     }
 
     runWhenKeyboardIdle(apply);
@@ -911,6 +929,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       _dirty = false;
       return;
     }
+    _documentPatchInFlight = true;
     try {
       await widget.state.updateFile(_currentFile, {
         'document_json': json,
@@ -923,6 +942,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       // Server advanced while we still have local text — open 3-way / lookalike.
       _baseRevision = e.server.contentRevision;
       _handleRemoteDocument(e.server.documentJson);
+    } finally {
+      _documentPatchInFlight = false;
     }
   }
 
@@ -1268,7 +1289,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     });
   }
 
-  void _reloadFromStored(String? json) {
+  void _reloadFromStored(String? json, {int? contentRevision}) {
     _applyingRemote = true;
     _doc.removeListener(_onDocumentChange);
     // Drop any selection before swapping documents — shared composer notifies
@@ -1292,8 +1313,14 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     );
     _doc.addListener(_onDocumentChange);
     _lastSavedJson = json;
-    _baseRevision = _currentFile.contentRevision;
     _dirty = false;
+    if (json != null) {
+      final rev = contentRevision ?? _currentFile.contentRevision;
+      widget.state.applyOpenDocumentFromRemote(widget.file.id, json, rev);
+      _baseRevision = rev;
+    } else {
+      _baseRevision = contentRevision ?? _currentFile.contentRevision;
+    }
     _trackedObjectIds = _objectIdsInDocument();
     _applyingRemote = false;
     // Remount SuperEditor so the prior DocumentImeInputClient is disposed.

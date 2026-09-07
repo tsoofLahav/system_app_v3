@@ -106,6 +106,18 @@ RemoteEditDecision decideRemoteEdit({
   return RemoteEditDecision.ask;
 }
 
+/// True when poll tip is behind a revision we already have (stale read).
+///
+/// After PATCH, a late list/GET can still return the pre-save body. Taking it
+/// remounts and drops unsaved blanks. Ignore when [inboundRev] < [localRev].
+bool shouldIgnorePolledBody({
+  required int localRev,
+  required int? inboundRev,
+}) {
+  if (inboundRev == null) return false;
+  return inboundRev < localRev;
+}
+
 bool jsonEquals(Object? a, Object? b) => jsonEncode(a) == jsonEncode(b);
 
 /// Must choose — barrier dismiss would silently pick a side.
