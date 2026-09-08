@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from flask import current_app, jsonify, request
 from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.orm.exc import StaleDataError
 from werkzeug.exceptions import HTTPException
 
 from models import db
@@ -53,6 +54,18 @@ def apply_updates(instance, data, allowed_fields, datetime_fields=None):
 
 
 def register_error_handlers(app):
+    @app.errorhandler(StaleDataError)
+    def handle_stale_write(error):
+        db.session.rollback()
+        body = {"error": "revision conflict"}
+        file_id = (request.view_args or {}).get("file_id")
+        if file_id is not None:
+            from models import File
+            file = db.session.get(File, file_id)
+            if file is not None:
+                body["file"] = file.to_dict()
+        return jsonify(body), 409
+
     @app.errorhandler(HTTPException)
     def handle_http_exception(error):
         response = jsonify({"error": error.description})

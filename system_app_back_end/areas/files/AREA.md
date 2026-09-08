@@ -154,3 +154,7 @@ Agent write path: `commit_agent_file_apply` promotes legacy embeds, versions the
 `validate_agent_text_markers` runs before every write. A fence that is opened and never closed, a closer with no opener, or a list carrying an attribute all fail with a line-numbered error the agent can act on.
 
 This is not cosmetic. `parse_agent_text` needs an open **and** a close: without the pair it falls through, and the run becomes a paragraph that keeps the marker as characters (minus the `[`, which the scanner ate). That text then reaches the file, and the user reads `BULLET_LIST]` in their own document. Rejecting costs the agent one retry; degrading costs the user their content.
+
+## Sync boundary (2026-09-08)
+
+File ORM writes now use `content_revision` as SQLAlchemy version_id_col, atomically rejecting stale UPDATE/DELETE statements. StaleDataError rolls back and returns HTTP 409 with the current file when available. Metadata writes can also advance this revision. Bulk SQL bypasses this guard. Regression: test_file_content_revision.py uses two isolated ORM sessions.

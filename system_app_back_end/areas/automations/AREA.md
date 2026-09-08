@@ -101,3 +101,7 @@ File and task mutations used by the actions live next to their HTTP routes: [`ar
 ## Known gaps
 
 Event triggers (`file.updated`, `task.unmarked`, another automation finished) are not dispatched. Phase two: an `automation_events` queue drained by the same minute cron.
+
+## Sync boundary (2026-09-08)
+
+File writes share the File mapper revision guard; an overlapping stale transaction must fail rather than overwrite another writer.

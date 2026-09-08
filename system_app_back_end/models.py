@@ -96,6 +96,9 @@ class File(db.Model):
     document_json = db.Column(db.Text, nullable=False, default="")
     # Bumps on every document_json write. PATCH with a stale base_revision → 409.
     content_revision = db.Column(db.Integer, nullable=False, default=1)
+    # SQLAlchemy includes the observed revision in UPDATE/DELETE predicates.
+    # This guards all ORM writers, including agent and automation transactions.
+    __mapper_args__ = {"version_id_col": content_revision}
     order_index = db.Column(db.Integer, nullable=False, default=0)
     meta = db.Column(JSONB, nullable=False, default=dict)
     archived_at = db.Column(db.DateTime)

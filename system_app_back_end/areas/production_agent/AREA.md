@@ -171,3 +171,7 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 - Undo for `create_object` alone / long-lived DB undo
 - Per-hunk review of `create_object`
 - `agent_configs.tool_allowlist` is not yet honored
+
+## Sync boundary (2026-09-08)
+
+File ORM writes participate in content_revision version checking. Concurrent stale writers fail the transaction rather than blindly overwriting another device. Bulk SQL file writes must not bypass the mapper guard.
