@@ -67,7 +67,7 @@ Timing uses locked structured controls rather than free text, so an invalid sche
 | **Run now** | `POST /automations/:id/run` — the stored scope, same as the clock |
 | **Schedule** | Server cron in Asia/Jerusalem; `next_run_at` is the next fire (UTC instant) |
 
-Results: each AI step goes through `presentAgentRunResult`; other steps snackbar their summaries. The open topic reloads so a new or archived file appears. Cancel on the AI spinner drops those results the same way a cancelled consult does.
+Results: each AI step goes through `presentAgentRunResult`; other steps snackbar their summaries. Touched files reload in place; open-topic membership soft-refreshes so a new or archived file appears without remounting every editor. Cancel on the AI spinner drops those results the same way a cancelled consult does.
 
 | File | Role |
 |------|------|
@@ -91,3 +91,7 @@ Results: each AI step goes through `presentAgentRunResult`; other steps snackbar
 - A disabled automation must not appear as active. The on/off switch lives on the list and PATCHes `enabled` only.
 - Refresh the current topic after a run completes — otherwise the user sees stale content.
 - Do not put automations on the AI bar. That bar is for actions you press while looking at something.
+
+## Sync boundary (2026-09-08)
+
+The 5s open-app tick requests per-file DocumentSync reconciliation alongside section/placement refresh. Manual automation runs await the mounted-editor/object save barrier before dispatch.

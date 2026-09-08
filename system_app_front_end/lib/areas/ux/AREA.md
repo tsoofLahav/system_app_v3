@@ -249,3 +249,7 @@ List dialogs (connect, choose view, place task, tags, move-file topic, topic typ
 - Use `core/platform/app_form_factor.dart` to branch desktop vs phone; do not check screen width inline.
 - Visual constants come from [UI](../ui/AREA.md) — this area decides *what appears*, not what it looks like.
 - Which files are on screen is derived from the layout and the order. Never add a field to a file to answer it.
+
+## Sync boundary (2026-09-08)
+
+Topic, view, and archive-topic navigation await the editor save barrier before replacing their panes. Offline/conflicted saves must not be reported as successful navigation saves.

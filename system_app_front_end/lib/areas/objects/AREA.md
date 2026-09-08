@@ -137,3 +137,7 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 **Shipped (presentation, in files):** list-like task embed; info title/body + tag chips (field: Connect info; chrome: add tag / related connection); table embed (+ chart quality); Move Mode; description italic teal + hover bubble (stays open on the bubble so it can scroll) + double-click / double-tap to open the info in its file. Task-title description links also show in views and keep strikethrough when the task is done. Typing before a connected span keeps the paint on those glyphs.
 
 **Next (this area):** non-info map nodes; convert-selection → create Info.
+
+## Sync boundary (2026-09-08)
+
+Mounted info, task, table/chart, and caption editors register with EditorSaveRegistry. Navigation/AI waits for these saves and pending AppState object requests; writes are serialized per object/task key. Info/table acknowledgements retain dirty status if editing continued during the request. Object payload conflict policy remains separate from file-body DocumentSync; it is not covered by the File revision token.

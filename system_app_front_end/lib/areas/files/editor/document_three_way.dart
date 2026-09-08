@@ -43,7 +43,8 @@ List<_Range> _changedRanges(List<TextOpcode> ops) {
 
 List<_Range> _clusters(List<_Range> ranges) {
   if (ranges.isEmpty) return const [];
-  final sorted = [...ranges]..sort((a, b) => a.lo != b.lo ? a.lo - b.lo : a.hi - b.hi);
+  final sorted = [...ranges]
+    ..sort((a, b) => a.lo != b.lo ? a.lo - b.lo : a.hi - b.hi);
   final out = <_Range>[];
   var cur = sorted.first;
   for (var i = 1; i < sorted.length; i++) {
@@ -61,12 +62,7 @@ List<_Range> _clusters(List<_Range> ranges) {
   return out;
 }
 
-List<String> _image(
-  List<TextOpcode> ops,
-  List<String> other,
-  int lo,
-  int hi,
-) {
+List<String> _image(List<TextOpcode> ops, List<String> other, int lo, int hi) {
   final out = <String>[];
   for (final (tag, i1, i2, j1, j2) in ops) {
     if (tag == 'insert') {
@@ -97,13 +93,13 @@ bool _sameLines(List<String> a, List<String> b) {
 
 List<String> splitMarkerParts(String raw) {
   final body = DocumentTextCodec.stripHeader(raw);
-  if (body.trim().isEmpty) return const [];
+  if (body.isEmpty) return const [];
   // Exact `\n\n` (not `\n\n+`): empty slices are blank lines the user made.
   // Canonicalize them to [SPACER] so join → Super Editor reload keeps the gap
   // (the bridge skips empty slices when splitting on `\n\n+`).
   return [
     for (final part in body.split('\n\n'))
-      if (part.trim().isEmpty)
+      if (part.isEmpty)
         '[SPACER n="1"]'
       else
         // Do not trim — leading/trailing spaces inside a part are content.
@@ -113,18 +109,8 @@ List<String> splitMarkerParts(String raw) {
 
 String joinMarkerParts(List<String> parts) {
   if (parts.isEmpty) return DocumentTextCodec.empty();
-  // Drop only a file that is nothing but spacers (same as save / backend).
-  final meaningful = [
-    for (final part in parts)
-      if (!_isSpacerPart(part)) part,
-  ];
-  if (meaningful.isEmpty) return DocumentTextCodec.empty();
   return DocumentTextCodec.wrap(parts.join('\n\n'));
 }
-
-bool _isSpacerPart(String part) =>
-    DocumentTextCodec.spacerRe.hasMatch(part.trim());
-
 
 /// 3-way merge of v4 marker parts. One-sided and identical edits apply;
 /// leftover overlaps stay on [localSided] / [serverSided] for the lookalike.
@@ -216,31 +202,6 @@ ThreeWayResult threeWayMarkerText({
     cursor = cluster.hi;
   }
   takeEqual(baseParts.length);
-
-  // Trailing inserts past the last base index.
-  final tailLocal = _image(localOps, localParts, baseParts.length, baseParts.length);
-  final tailServer = _image(serverOps, serverParts, baseParts.length, baseParts.length);
-  if (tailLocal.isNotEmpty || tailServer.isNotEmpty) {
-    final localUnchanged = tailLocal.isEmpty;
-    final serverUnchanged = tailServer.isEmpty;
-    if (localUnchanged) {
-      merged.addAll(tailServer);
-      localSided.addAll(tailServer);
-      serverSided.addAll(tailServer);
-    } else if (serverUnchanged) {
-      merged.addAll(tailLocal);
-      localSided.addAll(tailLocal);
-      serverSided.addAll(tailLocal);
-    } else if (_sameLines(tailLocal, tailServer)) {
-      merged.addAll(tailLocal);
-      localSided.addAll(tailLocal);
-      serverSided.addAll(tailLocal);
-    } else {
-      conflicts = true;
-      localSided.addAll(tailLocal);
-      serverSided.addAll(tailServer);
-    }
-  }
 
   return ThreeWayResult(
     hasConflicts: conflicts,

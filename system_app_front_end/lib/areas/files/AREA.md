@@ -44,7 +44,7 @@ The built-in **Reports** topic (`is_system`) is also hidden from the live sideba
 
 ### Document vs Super Editor (one sync rule)
 
-**Persisted SoT** = marker text (`%%system_app_document v4\n` + body). **Session SoT** = Super Editor `MutableDocument` (undo via SE history). Save = bridge serialize → debounced `PATCH document_json` with `base_revision` (the revision this edit forked from). Server bumps `content_revision` on every body write; stale `base_revision` → 409 + current file → 3-way / lookalike. While dirty, each edit also mirrors the draft into `filesById` and poll keeps the server tip in `inboundDocumentJson` (not over the draft) so remount cannot drop unsaved blanks/`[SPACER]`. Embed node ids are stable (`embed:<objectId>`). Object **payloads** stay in the objects area.
+**Persisted SoT** = v4 marker text. **Session SoT** = the editor's live document mirrored into `DocumentSync.draft`. `DocumentSync.baseline` stores the matched acknowledged server body/revision; incoming cache data never changes that baseline directly. See [`DOCUMENT_FLOW.md`](editor/DOCUMENT_FLOW.md). Embed identities are stable (`embed:<objectId>`); object payloads stay outside marker text.
 
 **One marking.** Super Editor body actions (right-click, format, cut/copy, Make link, AI `selected_text`) use the same rule as embed fields: if anything is marked, use that span; if not, use the **line at the caret**. Paste is the exception — unmarked paste inserts at the caret. [`caretLineSelection`](editor/super_editor_mark.dart) expands a collapsed caret before those other actions. Object blocks stay whole-object (chrome menu), not a text line. Catalog **⌘B / ⌘I / ⌘U** toggle once — Super Editor’s own Cmd+B / Cmd+I are stripped so they cannot double-toggle.
 
@@ -367,15 +367,13 @@ The display side is deliberately forgiving where the write side is strict: item 
 
 ## Saving
 
-Per keystroke the body **inserts into Super Editor** (and snaps graphemes only if a mark splits an emoji). `PATCH document_json` is **debounced** (~450ms) and silent — typing never remounts the editor. Phone object-pill chrome does not notify unless enter/leave actually changed. File body and object fields turn **off** OS autocorrect, suggestions, and spellcheck.
+The single coordinator is [`DocumentSync`](editor/document_sync.dart), kept per file in AppState across widget lifetimes. It owns the exact baseline body/revision, draft, edit generation, and one in-flight operation. The editor owns rendering/focus only. Full protocol, object boundaries, and verification: [`DOCUMENT_FLOW.md`](editor/DOCUMENT_FLOW.md).
 
-Edits mutate the Super Editor document; save serializes via the marker bridge (`%%system_app_document v4\n` + body). A newer body from elsewhere (phone, agent) is applied **into** the already-open `SuperDocumentEditor`. The topic page is not rebuilt for that. Who listens where: UX [`AREA.md` § Who rebuilds](../ux/AREA.md#who-rebuilds).
+450ms typing debounce and the 5s open-app tick request the same fetch → reconcile → revision-guarded write operation. Dirty edits made during reads, review, PATCH, or keyboard-idle waits are retained and reconciled; a 409 always fetches and merges again. Only a changed displayed snapshot remounts this editor, behind the keyboard-idle gate. No canvas-wide reload.
 
-Last-topic file bodies, that topic’s embeds, and sidebar topic chrome are stored on device for **first paint**; archive, views, automations, and AI actions load after the network.
+Navigation and AI flush all mounted text editors and await object writes. `EditorSaveRegistry` provides the object boundary; AppState serializes requests per object/task. Object JSON retains its own conflict policy, separate from file-body three-way merge. Save errors retain local state and abort awaited preparation.
 
-**User vs inbound (other device or agent):** the ~5s section poll also pulls **open topic + brought-file** `document_json` (and embeds, keeping dirty payloads) onto `filesById` so the other device shows up without a manual refresh. Open Super Editors listen and apply — remount / dialog only via `runWhenKeyboardIdle`. Debounced save sends `base_revision` (fork point, not “latest poll”). If the other device already saved, PATCH returns **409** with their file; local text stays and opens 3-way / lookalike — autosave having cleared `_dirty` no longer lets them silently overwrite. If this device has no unsaved work (clean body **and** no dirty embeds), take the inbound body. If this device still has unsaved work and inbound body differs (poll), 3-way merge against the last successful PATCH ([`document_three_way.dart`](editor/document_three_way.dart)): non-overlapping edits apply; leftover overlaps open the lookalike (Current = this device, Suggested = inbound). A dirty embed alone still counts as unsaved for that body decision; embed *payload* clashes stay per-object (keep-yours / use-agent), and typing in object A while inbound only edits object B does not open an embed dialog — B takes inbound and A keeps local. Finish/Discard on the lookalike PATCH the merged text — they do not archive. **Close the dialog first**, then remount + PATCH under a short busy wash (never swap Super Editor while the lookalike route is still up). Topic refresh must put the **server** `document_json` on `filesById` even when the editor is dirty. Never silently write a stale local payload over an inbound graph on dispose. **Stale poll:** ignore inbound when its `content_revision` is behind the local tip, and while a document PATCH is in flight — a late pre-save body must not remount after save (`shouldIgnorePolledBody`; see [`DOCUMENT_FLOW.md`](editor/DOCUMENT_FLOW.md)).
-
-In-session undo/redo uses Super Editor’s history stack.
+Last-topic snapshots remain a first-paint cache, not a replacement for the sync baseline. In-session undo remains Super Editor history; remote replacement resets that editor history.
 
 ## Keyboard / focus safety (recurring bug class)
 
@@ -394,7 +392,6 @@ In this area specifically:
 | Debounce embed PATCHes; patch cache **before** `await` | PATCH + `notifyListeners` / full embed reload on every `onChanged` |
 | Super Editor `setState` only when embed **id/type/order** changes; defer with `runWhenKeyboardIdle`. Phone IME has no keys-down — payload refresh must not remount | Treat every new embeds-list identity as a reason to remount; remount a `TextField` after the first letter |
 | Drop engine-seeded keys while [`MainPaneLoader`](../ux/widgets/main_pane_loader.dart) is showing; `settleHardwareKeyboardForLaunch` before `appReady` | Call `HardwareKeyboard.clearState` (wipes shortcut handlers) |
-| Keep controllers as SoT while **dirty**; put inbound `document_json` on `filesById` (including the 5s poll) so the editor can 3-way. Document PATCH sends `base_revision`; 409 → lookalike path. Any unsaved body/embed + differing inbound body → 3-way, lookalike on leftover overlaps. Same object dirty on both sides still asks. Dispose must not PATCH a payload that is older than the cache | Hide inbound body in `filesById` while dirty; skip body refresh on the poll; PATCH document without `base_revision`; silently take the other device when both edited; overwrite live cells from a stale cache while typing; flush old graph/info on dispose over an inbound write; dispose cell/task/info focus nodes mid-KeyDown |
 | Shift+Enter, empty-structure Backspace, restore writing focus → `runWhenKeyboardIdle` | Sync `unfocus` / delete structure / `requestFocus` on the KeyDown frame |
 | Install `FormattedTextField` `onKeyEvent` **once** (stored tear-off) | Re-wrap `FocusNode.onKeyEvent` on every rebuild — tear-offs are not `==`, so Arrow Up stack-overflows |
 | Tap outside the focused editor (canvas / empty padding) unfocuses, closes the keyboard, and **clears the mark**. Bottom menus and the open object do not. | Leave Super Editor focused when the tap is not on another field; keep the mark painted after tap-outside |
@@ -412,7 +409,7 @@ Smoke after edits: type fast in paragraph + info + task + table/chart cell; Shif
 - Embed node ids are stable (`embed:<objectId>`); do not remount embeds under regenerated `p0`/`p1` keys.
 - Design-dialog callbacks persist payload and must not `setState` after the embed is disposed (palette / look / chart type).
 - A bullet, a row, and an embed each count as one line of text; settle caret and marking questions by asking what a plain line would do ([`editor/FLUENT_TEXT.md`](editor/FLUENT_TEXT.md)).
-- Never leave empty/`\n`-only paragraph neighbors after move/delete/split (bridge save prunes them).
+- Structural operations may remove their own synthetic landing stubs; serialization must preserve authored blank paragraphs.
 - RTL / Hebrew caret and direction policy: only via [`rich_text/rtl/`](rich_text/rtl/RTL.md).
 - A list has one style. Points vs numbers is switched on the existing list, never offered as two kinds of list to insert.
 
@@ -422,3 +419,7 @@ Smoke after edits: type fast in paragraph + info + task + table/chart cell; Shif
 - Cmd+arrow and Home/End in Hebrew — see known gap in [`rich_text/rtl/RTL.md`](rich_text/rtl/RTL.md).
 - Undo/redo is still per document mutation, not one stack shared with cross-part edits.
 - Convert selection → Info is an objects-area product flow (uses object APIs) with a small files entry point.
+
+### Whitespace regression checkpoint (2026-09-08)
+
+The bridge serializes and parses inline styles per physical line. Super Editor's general Markdown serializer emits hard-break syntax that its inline reader does not restore; using the pair on a whole multiline paragraph collapsed newlines. Paragraph edge spaces and authored leading empty paragraphs are retained. Two soft breaks emit an explicit SPACER so loading does not collapse a blank into only a block boundary. A lone empty initial paragraph remains the empty-document sentinel. Three-way merges process end insertions once and retain all-SPACER documents. Regression coverage: `test/files/sync_whitespace_regression_test.dart`.

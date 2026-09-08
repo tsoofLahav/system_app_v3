@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
 import '../../files/editor/document_editor_controller.dart';
+import '../../files/editor/editor_save_registry.dart';
 import '../../files/editor/document_mark.dart';
 import '../../files/editor/document_text_flow.dart';
 import '../../files/editor/drag_mode_frame.dart';
@@ -179,6 +180,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   int? _pasteTargetIndex;
   var _ensuringSeed = false;
   var _persisting = false;
+  Completer<void>? _taskCreation;
   var _reorderMode = false;
   int? _reorderResumeIndex;
   List<Task>? _optimistic;
@@ -272,6 +274,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   @override
   void initState() {
     super.initState();
+    EditorSaveRegistry.register(this, _flushAllText);
     _titleFocus = FocusNode();
     _titleFocus.addListener(_onFieldFocus);
     _titleController = SpanTextEditingController(text: _bridge.listTitle);
@@ -450,7 +453,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       if (oldIndex != null) {
         final focus = oldFocus[oldIndex];
         final controller = oldControllers[oldIndex];
-        final pending = oldTimers[oldIndex]?.isActive ?? false;
+        final pending =
+            (oldTimers[oldIndex]?.isActive ?? false) ||
+            widget.state.isTaskWritePending(task.id);
         if (!keepLocalTaskTitle(
               local: controller.text,
               incoming: task.title,
@@ -691,6 +696,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
   @override
   void dispose() {
+    EditorSaveRegistry.unregister(this);
     if (identical(keyboardFocus, this)) keyboardFocus = null;
     if (identical(BlockTextFocusRegistry.pasteOverride, tryPasteAsTasks)) {
       BlockTextFocusRegistry.pasteOverride = null;
@@ -717,8 +723,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       keyboardFocus = this;
       final taskIndex = _focusNodes.indexWhere((f) => f.hasFocus);
       if (taskIndex >= 0) _pasteTargetIndex = taskIndex;
-      BlockTextFocusRegistry.pasteOverride =
-          taskIndex >= 0 ? tryPasteAsTasks : null;
+      BlockTextFocusRegistry.pasteOverride = taskIndex >= 0
+          ? tryPasteAsTasks
+          : null;
       return;
     }
     if (identical(BlockTextFocusRegistry.pasteOverride, tryPasteAsTasks)) {
@@ -746,14 +753,26 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     });
   }
 
-  Future<void> _flushTitleHeader() async {
+  Future<void> _flushAllText() async {
+    await _taskCreation?.future;
+    if (_persisting) throw StateError(widget.state.strings['taskSavePending']);
+    await _flushTitleHeader(reportErrors: true);
+    for (var i = 0; i < _controllers.length; i++) {
+      _saveTimers[i]?.cancel();
+      await _flushTitle(i, reportErrors: true);
+    }
+  }
+
+  Future<void> _flushTitleHeader({bool reportErrors = false}) async {
     _titleSaveTimer?.cancel();
     if (!_bridge.showListTitle) return;
     final title = _titleController.text;
     if (title == _bridge.listTitle) return;
     try {
       await _bridge.updateListTitle(title);
-    } catch (_) {}
+    } catch (_) {
+      if (reportErrors) rethrow;
+    }
   }
 
   void _onTitleEnter() {
@@ -845,7 +864,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     });
   }
 
-  Future<void> _flushTitle(int index) async {
+  Future<void> _flushTitle(int index, {bool reportErrors = false}) async {
     if (!mounted) return;
     if (index < 0 || index >= _taskIds.length) return;
     if (_taskIds[index] == null) {
@@ -869,7 +888,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     if (task.title == title && _sameTaskSpans(task.titleSpans, spans)) return;
     try {
       await _bridge.updateTitle(task, title, titleSpans: spans);
-    } catch (_) {}
+    } catch (_) {
+      if (reportErrors) rethrow;
+    }
   }
 
   bool _sameTaskSpans(
@@ -901,6 +922,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final title = imeVisibleText(_controllers[index].text);
     if (title.trim().isEmpty) return;
     _persisting = true;
+    final completed = Completer<void>();
+    _taskCreation = completed;
     try {
       final created = await _bridge.createAfter(
         title: title,
@@ -915,6 +938,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       await _bridge.refresh();
     } finally {
       _persisting = false;
+      _taskCreation = null;
+      completed.complete();
     }
   }
 
@@ -1297,12 +1322,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       context: context,
       globalPosition: details.globalPosition,
       isRtl: s.isRtl,
-      entries: [
-        AppContextMenuItem(
-          value: 'add_task',
-          label: s['addTask'],
-        ),
-      ],
+      entries: [AppContextMenuItem(value: 'add_task', label: s['addTask'])],
     );
     if (!mounted || action != 'add_task') return;
     await addEmptyTask();
@@ -1827,40 +1847,42 @@ class TaskListSurfaceState extends State<TaskListSurface> {
             builder: (context, _) => _complimentaryTitle(task, titleStyle),
           )
         : FormattedTextField(
-        controller: _controllers[index],
-        focusNode: _focusNodes[index],
-        segmentId: _taskSegmentId(index),
-        documentBaseOffset: widget.documentBaseOffset,
-        style: titleStyle,
-        maxLines: null,
-        minLines: 1,
-        textAlignVertical: TextAlignVertical.center,
-        onChanged: (_) {
-          widget.onFocus?.call();
-          _scheduleSave(index);
-        },
-        onEnter: () => unawaited(_handleEnter(index)),
-        onBackspaceAtStart: () => _handleBackspace(index),
-        onSecondaryTapDown: (d) => _showTaskMenu(d, index),
-        taskId: id,
-        descriptionRanges: _taskDescriptionRanges(index),
-        descriptionRangesBaseText: task?.title,
-        onDescriptionActivate: (range) =>
-            openDescriptionTarget(state: widget.state, link: range.link),
-        onDescriptionAnchorsChanged: (ranges) {
-          unawaited(persistRemappedDescriptionAnchors(widget.state, ranges));
-        },
-        onArrowExitAbove: () =>
-            _arrowFromLine(_hasTitleLine ? index + 1 : index, goingDown: false),
-        onArrowExitBelow: () =>
-            _arrowFromLine(_hasTitleLine ? index + 1 : index, goingDown: true),
-      );
+            controller: _controllers[index],
+            focusNode: _focusNodes[index],
+            segmentId: _taskSegmentId(index),
+            documentBaseOffset: widget.documentBaseOffset,
+            style: titleStyle,
+            maxLines: null,
+            minLines: 1,
+            textAlignVertical: TextAlignVertical.center,
+            onChanged: (_) {
+              widget.onFocus?.call();
+              _scheduleSave(index);
+            },
+            onEnter: () => unawaited(_handleEnter(index)),
+            onBackspaceAtStart: () => _handleBackspace(index),
+            onSecondaryTapDown: (d) => _showTaskMenu(d, index),
+            taskId: id,
+            descriptionRanges: _taskDescriptionRanges(index),
+            descriptionRangesBaseText: task?.title,
+            onDescriptionActivate: (range) =>
+                openDescriptionTarget(state: widget.state, link: range.link),
+            onDescriptionAnchorsChanged: (ranges) {
+              unawaited(
+                persistRemappedDescriptionAnchors(widget.state, ranges),
+              );
+            },
+            onArrowExitAbove: () => _arrowFromLine(
+              _hasTitleLine ? index + 1 : index,
+              goingDown: false,
+            ),
+            onArrowExitBelow: () => _arrowFromLine(
+              _hasTitleLine ? index + 1 : index,
+              goingDown: true,
+            ),
+          );
 
-    return _taskChrome(
-      mark: mark,
-      title: title,
-      alignCenter: complimentary,
-    );
+    return _taskChrome(mark: mark, title: title, alignCenter: complimentary);
   }
 
   Widget _complimentaryTitle(Task task, TextStyle style) {
@@ -1877,7 +1899,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final label = task.isReviewComplimentary
         ? s.complimentaryReviewTitle(name)
         : s.complimentaryInputTitle(name);
-    final processing = task.sourceAutomationId != null &&
+    final processing =
+        task.sourceAutomationId != null &&
         widget.state.isComplimentaryProcessing(task.sourceAutomationId!);
     final pressable = complimentaryTaskPressable(
       task: task,
@@ -1957,9 +1980,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         await widget.state.submitComplimentaryInput(automationId, body);
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
       return;
     }

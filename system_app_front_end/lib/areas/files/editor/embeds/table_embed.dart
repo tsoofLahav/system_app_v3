@@ -1,3 +1,4 @@
+import '../editor_save_registry.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -56,6 +57,7 @@ class TableEmbedState extends State<TableEmbed>
   var _dirty = false;
   var _conflictOpen = false;
   Timer? _saveTimer;
+  Future<void>? _saveInFlight;
 
   @override
   String get nodeId => widget.blockId;
@@ -85,6 +87,7 @@ class TableEmbedState extends State<TableEmbed>
     super.initState();
     _payload = TableObjectPayload.normalize(widget.embed.payload);
     _baseline = _payload;
+    EditorSaveRegistry.register(this, _flushPayload);
     widget.state.addListener(_onAppState);
   }
 
@@ -113,6 +116,7 @@ class TableEmbedState extends State<TableEmbed>
 
   @override
   void dispose() {
+    EditorSaveRegistry.unregister(this);
     widget.state.removeListener(_onAppState);
     _saveTimer?.cancel();
     if (_shouldFlushOnDispose()) {
@@ -251,10 +255,29 @@ class TableEmbedState extends State<TableEmbed>
   }
 
   void _persistNow() {
+    _setDirty(true);
+    unawaited(
+      _flushPayload().catchError((Object e) {
+        widget.state.error = e.toString();
+      }),
+    );
+  }
+
+  Future<void> _flushPayload() async {
     _saveTimer?.cancel();
-    widget.onPayloadChanged(_payload);
-    _baseline = _payload;
-    _setDirty(false);
+    if (_saveInFlight != null) await _saveInFlight;
+    if (!_dirty) return;
+    final captured = TableObjectPayload.normalize(_payload);
+    final pending = widget.state.updateObjectPayload(widget.embed.id, captured);
+    _saveInFlight = pending;
+    try {
+      await pending;
+      _baseline = captured;
+      _setDirty(jsonEncode(_payload) != jsonEncode(captured));
+    } finally {
+      if (identical(_saveInFlight, pending)) _saveInFlight = null;
+    }
+    if (mounted && _dirty) await _flushPayload();
   }
 
   void _onRowsChanged(TableNode node) {

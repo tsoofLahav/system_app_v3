@@ -206,7 +206,7 @@ Outro''';
       expect(markerGapIndexForNodeIndex(doc, doc.nodeCount), 3);
     });
 
-    test('a file of nothing but blank lines is an empty file', () {
+    test('a file of authored blank paragraphs keeps them', () {
       final doc = MutableDocument(
         nodes: [
           ParagraphNode(id: 'e1', text: AttributedText()),
@@ -216,7 +216,7 @@ Outro''';
 
       expect(
         DocumentTextCodec.stripHeader(mutableDocumentToMarkerText(doc)),
-        isEmpty,
+        '[SPACER n="1"]\n\n[SPACER n="1"]',
       );
     });
   });

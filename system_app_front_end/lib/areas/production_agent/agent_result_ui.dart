@@ -68,9 +68,8 @@ Future<void> presentAutomationRunResult(
       }
     }
   }
-  if (state.selectedTopic != null) {
-    await state.selectTopic(state.selectedTopic!);
-  }
+  // Membership (create/archive) without blanking every open editor.
+  await state.softRefreshOpenTopicFiles();
   if (!context.mounted) return;
   final failed = run['status'] != 'completed';
   final error = '${run['error'] ?? ''}'.trim();
@@ -191,8 +190,8 @@ Future<void> presentAgentRunResult(
   final applied = result['applied'] == true;
   final undoCards = undoCardsFromAgentResult(result);
   if (applied && undoCards.isNotEmpty) {
-    if (reloadTopicIfApplied && state.selectedTopic != null) {
-      await state.selectTopic(state.selectedTopic!);
+    if (reloadTopicIfApplied) {
+      await state.reloadAgentTouchedFiles(undoCards.map((c) => c.fileId));
     }
     if (!context.mounted) return;
     await showCompactUndoQueue(context, state, undoCards);
@@ -208,9 +207,25 @@ Future<void> presentAgentRunResult(
           : (applied ? s['aiAgentApplied'] : s['aiAgentNoChanges']));
   if (!context.mounted) return;
   showAgentMessageSnackBar(context, message);
-  if (reloadTopicIfApplied &&
-      applied &&
-      state.selectedTopic != null) {
-    await state.selectTopic(state.selectedTopic!);
+  if (reloadTopicIfApplied && applied) {
+    await state.reloadAgentTouchedFiles(appliedFileIdsFromAgentResult(result));
   }
+}
+
+/// File ids the agent wrote when [result] was applied (no pending review).
+List<int> appliedFileIdsFromAgentResult(Map<dynamic, dynamic> result) {
+  final out = <int>{};
+  for (final card in undoCardsFromAgentResult(result)) {
+    if (card.fileId != 0) out.add(card.fileId);
+  }
+  final changes = result['proposed_changes'];
+  if (changes is List) {
+    for (final change in changes) {
+      if (change is! Map) continue;
+      if (change['applied'] == false) continue;
+      final id = change['file_id'];
+      if (id is int && id != 0) out.add(id);
+    }
+  }
+  return out.toList();
 }

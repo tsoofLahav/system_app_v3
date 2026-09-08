@@ -12,20 +12,17 @@ import './object_embed_node.dart';
 
 /// Convert wrapped or bare editor text into a Super Editor document.
 MutableDocument markerTextToMutableDocument(String? raw) {
-  final body = DocumentTextCodec.stripHeader(raw ?? '').trim();
+  final body = DocumentTextCodec.stripHeader(raw ?? '');
   if (body.isEmpty) {
     return MutableDocument(
-      nodes: [
-        ParagraphNode(id: Editor.createNodeId(), text: AttributedText()),
-      ],
+      nodes: [ParagraphNode(id: Editor.createNodeId(), text: AttributedText())],
     );
   }
 
   final nodes = <DocumentNode>[];
-  final parts = body.split(RegExp(r'\n\n+'));
+  final parts = body.split('\n\n');
   for (final part in parts) {
     final trimmed = part.trim();
-    if (trimmed.isEmpty) continue;
     final info = DocumentTextCodec.classifyTopLevel(trimmed);
     switch (info.kind) {
       case MarkerPartKind.embed:
@@ -47,9 +44,13 @@ MutableDocument markerTextToMutableDocument(String? raw) {
           );
         }
       case MarkerPartKind.bulletList:
-        nodes.addAll(listItemsFromMarkerBody(info.listBody ?? '', ordered: false));
+        nodes.addAll(
+          listItemsFromMarkerBody(info.listBody ?? '', ordered: false),
+        );
       case MarkerPartKind.orderedList:
-        nodes.addAll(listItemsFromMarkerBody(info.listBody ?? '', ordered: true));
+        nodes.addAll(
+          listItemsFromMarkerBody(info.listBody ?? '', ordered: true),
+        );
       case MarkerPartKind.table:
         // Legacy structure fence — caller migrates to a table object.
         nodes.add(
@@ -104,17 +105,14 @@ String mutableDocumentToMarkerText(Document document) {
     }
 
     if (node is ObjectEmbedNode) {
-      lines.add(
-        DocumentTextCodec.pointerLine(node.objectId, node.objectType),
-      );
+      lines.add(DocumentTextCodec.pointerLine(node.objectId, node.objectType));
       i++;
       continue;
     }
 
     if (node is LegacyTableFenceNode) {
       final rowLines = [
-        for (final row in node.rows)
-          row.map(_escapeCell).join('\t'),
+        for (final row in node.rows) row.map(_escapeCell).join('\t'),
       ];
       if (rowLines.isNotEmpty) {
         lines.add('[TABLE]\n${rowLines.join('\n')}\n[/TABLE]');
@@ -151,18 +149,19 @@ String mutableDocumentToMarkerText(Document document) {
       final level = _headingLevel(blockType);
       final text = attributedTextToMarkerLine(node.text);
       if (level != null) {
-        lines.add('${'#' * level} $text'.trimRight());
-      } else if (text.trim().isEmpty) {
-        // A blank line the user made is content: it is kept wherever it sits,
-        // including at the end of the file, so an object inserted there lands
-        // after the gap instead of jumping up under the last text. Only blanks
-        // before any content are dropped — a file cannot start on air, and a
-        // brand new file is one empty paragraph.
-        if (lines.isNotEmpty) {
-          lines.add('[SPACER n="1"]');
-        }
+        lines.add('${'#' * level} $text');
+      } else if (text.isEmpty) {
+        // Keep authored empty paragraphs, including leading ones. A lone
+        // initial empty paragraph is the canonical new-document sentinel.
+        if (nodeCount > 1) lines.add('[SPACER n="1"]');
       } else {
-        lines.add(text);
+        // Two soft breaks contain an authored blank line. Bare double
+        // newlines delimit marker blocks, so make that blank explicit.
+        final parts = text.split('\n\n');
+        for (var j = 0; j < parts.length; j++) {
+          if (j > 0) lines.add('[SPACER n="1"]');
+          lines.add(parts[j].isEmpty ? '[SPACER n="1"]' : parts[j]);
+        }
       }
       i++;
       continue;
@@ -227,13 +226,13 @@ List<LegacyTableFenceNode> legacyTableFencesIn(Document document) {
 }
 
 NamedAttribution _headerAttribution(int level) => switch (level) {
-      1 => header1Attribution,
-      2 => header2Attribution,
-      3 => header3Attribution,
-      4 => header4Attribution,
-      5 => header5Attribution,
-      _ => header6Attribution,
-    };
+  1 => header1Attribution,
+  2 => header2Attribution,
+  3 => header3Attribution,
+  4 => header4Attribution,
+  5 => header5Attribution,
+  _ => header6Attribution,
+};
 
 int? _headingLevel(Object? blockType) {
   if (blockType == header1Attribution) return 1;
@@ -267,7 +266,10 @@ List<ListItemNode> listItemsFromPlainLines(
   return listItemsFromMarkerBody(body, ordered: ordered);
 }
 
-List<ListItemNode> listItemsFromMarkerBody(String body, {required bool ordered}) {
+List<ListItemNode> listItemsFromMarkerBody(
+  String body, {
+  required bool ordered,
+}) {
   final items = <ListItemNode>[];
   final itemRe = ordered
       ? RegExp(r'^(\s*)\d+[\.\)]\s+(.*)$')
@@ -326,13 +328,32 @@ String listItemClipboardLine(
 String attributedTextToMarkerLine(AttributedText text) {
   final plain = text.toPlainText();
   if (plain.isEmpty) return plain;
-  return text.toMarkdown();
+  // The package markdown serializer inserts hard-break spaces and its inline
+  // reader drops those breaks. Encode each physical line independently so
+  // newline characters remain literal and style spans close on each line.
+  var offset = 0;
+  return plain
+      .split('\n')
+      .map((line) {
+        final encoded = line.isEmpty
+            ? ''
+            : text.copyText(offset, offset + line.length).toMarkdown();
+        offset += line.length + 1;
+        return encoded;
+      })
+      .join('\n');
 }
 
 /// Parse marker-line styles back into [AttributedText].
 AttributedText markerLineToAttributedText(String line) {
   if (line.isEmpty) return AttributedText();
-  return parseInlineMarkdown(line);
+  var result = AttributedText();
+  final lines = line.split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    if (i > 0) result = result.copyAndAppend(AttributedText('\n'));
+    result = result.copyAndAppend(parseInlineMarkdown(lines[i]));
+  }
+  return result;
 }
 
 String listItemClipboardPrefix({required bool ordered, required int index}) {
@@ -361,11 +382,7 @@ String _escapeCell(String text) =>
 /// Temporary node for unmigrated `[TABLE]…[/TABLE]` fences.
 @immutable
 class LegacyTableFenceNode extends BlockNode {
-  LegacyTableFenceNode({
-    required this.id,
-    required this.rows,
-    super.metadata,
-  }) {
+  LegacyTableFenceNode({required this.id, required this.rows, super.metadata}) {
     initAddToMetadata({
       'blockType': const NamedAttribution('legacyTableFence'),
     });

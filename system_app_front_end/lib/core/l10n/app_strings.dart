@@ -712,6 +712,8 @@ class AppStrings {
     'deleteViewBody': 'Delete "{name}"? Tasks stay in their files.',
     'deleteFileTitle': 'Delete file?',
     'deleteFileBody': 'Delete "{name}"?',
+    'taskSavePending': 'The task list is still updating. Please try again shortly.',
+    'aiSyncConflict': 'Resolve this conflict before using the AI action',
     'editConflictTitle': 'You and the agent both changed this file',
     'editConflictBody':
         'Choose which version to keep. The other will be discarded.',
@@ -1480,6 +1482,8 @@ class AppStrings {
     'deleteViewBody': 'למחוק את "{name}"? המשימות נשארות בקבצים.',
     'deleteFileTitle': 'למחוק קובץ?',
     'deleteFileBody': 'למחוק את "{name}"?',
+    'taskSavePending': 'רשימת המשימות עדיין מתעדכנת. נסו שוב בעוד רגע.',
+    'aiSyncConflict': 'יש לפתור את ההתנגשות לפני הפעלת פעולת הבינה המלאכותית',
     'editConflictTitle': 'גם אתם וגם הסוכן שיניתם את הקובץ',
     'editConflictBody': 'בחרו איזו גרסה לשמור. הגרסה השנייה תימחק.',
     'editConflictUseAgent': 'גרסת הסוכן',

@@ -1,3 +1,4 @@
+import '../editor_save_registry.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -82,7 +83,8 @@ List<Map<String, dynamic>> infoSpansToCombined(
     // Title-only info: spans are stored as title spans (or legacy body key).
     return [
       for (final s in [...titleSpans, ...bodySpans])
-        if ((s['end'] as int) > (s['start'] as int)) Map<String, dynamic>.from(s),
+        if ((s['end'] as int) > (s['start'] as int))
+          Map<String, dynamic>.from(s),
     ];
   }
   final offset = nl + 1;
@@ -105,13 +107,14 @@ List<Map<String, dynamic>> infoSpansToCombined(
 
 /// Combined-string spans → title + body spans for the API.
 ({List<Map<String, dynamic>> title, List<Map<String, dynamic>> body})
-    infoSpansForApi(List<Map<String, dynamic>> combinedSpans, String combined) {
+infoSpansForApi(List<Map<String, dynamic>> combinedSpans, String combined) {
   final nl = combined.indexOf('\n');
   if (nl < 0) {
     return (
       title: [
         for (final s in combinedSpans)
-          if ((s['end'] as int) > (s['start'] as int)) Map<String, dynamic>.from(s),
+          if ((s['end'] as int) > (s['start'] as int))
+            Map<String, dynamic>.from(s),
       ],
       body: const <Map<String, dynamic>>[],
     );
@@ -124,11 +127,7 @@ List<Map<String, dynamic>> infoSpansToCombined(
     var start = s['start'] as int;
     var end = s['end'] as int;
     if (end > 0 && start < nl) {
-      title.add({
-        ...s,
-        'start': start.clamp(0, nl),
-        'end': end.clamp(0, nl),
-      });
+      title.add({...s, 'start': start.clamp(0, nl), 'end': end.clamp(0, nl)});
     }
     if (end <= offset) continue;
     if (start < offset) start = offset;
@@ -228,7 +227,11 @@ class _InfoTextController extends SpanTextEditingController {
     final items = parseInnerTaskLines(body);
     if (items.isEmpty) {
       return [
-        TextSpanBuilder.build(text: body, baseStyle: bodyStyle, spans: bodySpans),
+        TextSpanBuilder.build(
+          text: body,
+          baseStyle: bodyStyle,
+          spans: bodySpans,
+        ),
       ];
     }
     final out = <InlineSpan>[];
@@ -337,6 +340,7 @@ class InfoEmbedState extends State<InfoEmbed>
   late _InfoTextController _controller;
   late final FocusNode _focus;
   Timer? _saveTimer;
+  Future<void>? _saveInFlight;
   EmbedCaretRegistry? _registry;
   var _dirty = false;
   var _conflictOpen = false;
@@ -421,6 +425,7 @@ class InfoEmbedState extends State<InfoEmbed>
     };
     _seedFromEmbed(widget.embed);
     _baselineKey = infoSnapshotFromEmbed(widget.embed);
+    EditorSaveRegistry.register(this, () => _save(flush: true));
     widget.state.addListener(_onAppState);
   }
 
@@ -474,6 +479,7 @@ class InfoEmbedState extends State<InfoEmbed>
 
   @override
   void dispose() {
+    EditorSaveRegistry.unregister(this);
     widget.state.removeListener(_onAppState);
     if (identical(keyboardFocus, this)) keyboardFocus = null;
     _focus.removeListener(_onKeyboardFocus);
@@ -538,7 +544,11 @@ class InfoEmbedState extends State<InfoEmbed>
   void _considerInbound(ObjectEmbed inbound) {
     if (UnsavedEmbedEdits.takeLocalOverInbound && _dirty) {
       UnsavedEmbedEdits.takeLocalOverInbound = false;
-      unawaited(_save());
+      unawaited(
+        _save().catchError((Object e) {
+          widget.state.error = e.toString();
+        }),
+      );
       return;
     }
     final inboundKey = infoSnapshotFromEmbed(inbound);
@@ -613,26 +623,37 @@ class InfoEmbedState extends State<InfoEmbed>
 
   Future<void> _save({bool flush = false}) async {
     _saveTimer?.cancel();
+    if (_saveInFlight != null) await _saveInFlight;
+    if (!_dirty) return;
     final (title, body, spans, titleSpans) = _splitForApi();
+    final snapshot = infoEditSnapshot(
+      title: title,
+      body: body,
+      spans: spans,
+      titleSpans: titleSpans,
+    );
+    final pending = widget.state.updateInfoObject(
+      widget.embed,
+      title: title,
+      body: body,
+      spans: spans,
+      titleSpans: titleSpans,
+    );
+    _saveInFlight = pending;
     try {
-      await widget.state.updateInfoObject(
-        widget.embed,
-        title: title,
-        body: body,
-        spans: spans,
-        titleSpans: titleSpans,
-      );
-      _baselineKey = infoEditSnapshot(
-        title: title,
-        body: body,
-        spans: spans,
-        titleSpans: titleSpans,
-      );
-      _setDirty(false);
-    } catch (_) {
-      // Object may have been removed while a debounce was pending.
+      await pending;
+      _baselineKey = snapshot;
+      if (mounted) {
+        final (t, b, s, ts) = _splitForApi();
+        _setDirty(
+          infoEditSnapshot(title: t, body: b, spans: s, titleSpans: ts) !=
+              snapshot,
+        );
+      }
+    } finally {
+      if (identical(_saveInFlight, pending)) _saveInFlight = null;
     }
-    if (flush) return;
+    if (flush && mounted && _dirty) await _save(flush: true);
   }
 
   /// Sync cache only — use before structural rebuild; API can catch up async.
@@ -704,11 +725,7 @@ class InfoEmbedState extends State<InfoEmbed>
   void insertInnerChecklist() {
     final sel = _controller.selection;
     final next = sel.isValid && !sel.isCollapsed
-        ? convertSelectionToInnerTasks(
-            _controller.text,
-            sel.start,
-            sel.end,
-          )
+        ? convertSelectionToInnerTasks(_controller.text, sel.start, sel.end)
         : insertInnerTaskAtCaret(
             _controller.text,
             sel.isValid ? sel.baseOffset : _controller.text.length,
@@ -826,9 +843,7 @@ class InfoEmbedState extends State<InfoEmbed>
           onDescriptionActivate: (range) =>
               openDescriptionTarget(state: widget.state, link: range.link),
           onDescriptionAnchorsChanged: (ranges) {
-            unawaited(
-              persistRemappedDescriptionAnchors(widget.state, ranges),
-            );
+            unawaited(persistRemappedDescriptionAnchors(widget.state, ranges));
           },
           onArrowExitAbove: () => navigateEmbedLine(
             lineIndex: 0,
@@ -900,6 +915,8 @@ class _ImageEmbedState extends State<ImageEmbed> {
   late List<TextEditingController> _captionControllers;
   late List<FocusNode> _captionFocus;
   Timer? _captionSaveTimer;
+  bool _captionsDirty = false;
+  Future<void>? _captionWrite;
   var _uploading = false;
   late double _scale;
 
@@ -925,6 +942,7 @@ class _ImageEmbedState extends State<ImageEmbed> {
       for (final pane in _panes) TextEditingController(text: pane['caption']),
     ];
     _captionFocus = [for (final _ in _panes) FocusNode()];
+    EditorSaveRegistry.register(this, _flushCaptions);
   }
 
   @override
@@ -936,6 +954,7 @@ class _ImageEmbedState extends State<ImageEmbed> {
   }
 
   void _syncCaptionControllers() {
+    if (_captionsDirty || _captionWrite != null) return;
     final panes = _panes;
     while (_captionControllers.length > panes.length) {
       _captionControllers.removeLast().dispose();
@@ -959,6 +978,7 @@ class _ImageEmbedState extends State<ImageEmbed> {
 
   @override
   void dispose() {
+    EditorSaveRegistry.unregister(this);
     _captionSaveTimer?.cancel();
     for (final c in _captionControllers) {
       c.dispose();
@@ -995,6 +1015,7 @@ class _ImageEmbedState extends State<ImageEmbed> {
   }
 
   void _scheduleCaptionSave() {
+    _captionsDirty = true;
     _captionSaveTimer?.cancel();
     _captionSaveTimer = Timer(
       const Duration(milliseconds: 400),
@@ -1003,6 +1024,19 @@ class _ImageEmbedState extends State<ImageEmbed> {
   }
 
   void _commitCaptions() {
+    unawaited(
+      _flushCaptions().catchError((Object e) {
+        widget.state.error = e.toString();
+      }),
+    );
+  }
+
+  Future<void> _flushCaptions() async {
+    _captionSaveTimer?.cancel();
+    if (_captionWrite != null) await _captionWrite;
+    if (!_captionsDirty) return;
+    _captionsDirty = false;
+
     final panes = [
       for (var i = 0; i < _panes.length; i++)
         {
@@ -1012,12 +1046,23 @@ class _ImageEmbedState extends State<ImageEmbed> {
               : (_panes[i]['caption'] ?? ''),
         },
     ];
-    widget.onPayloadChanged(
+    final write = widget.state.updateObjectPayload(
+      widget.embed.id,
       ImageObjectPayload.mirrored(
         panes,
         existing: {..._payload, 'width': _scale},
       ),
     );
+    _captionWrite = write;
+    try {
+      await write;
+    } catch (_) {
+      _captionsDirty = true;
+      rethrow;
+    } finally {
+      if (identical(_captionWrite, write)) _captionWrite = null;
+    }
+    if (mounted && _captionsDirty) await _flushCaptions();
   }
 
   Future<void> _onSecondaryTap(TapDownDetails details) async {

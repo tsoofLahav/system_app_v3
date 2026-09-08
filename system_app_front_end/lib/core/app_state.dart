@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../areas/files/data/app_file.dart';
 import '../areas/files/data/launch_snapshot_store.dart';
 import '../areas/files/editor/document_editor_controller.dart';
+import '../areas/files/editor/document_sync.dart';
 import '../areas/files/editor/edit_conflict.dart';
 import '../areas/files/model/document_codec.dart';
 import '../areas/files/model/document_model.dart';
@@ -183,6 +184,62 @@ class AppState extends ChangeNotifier {
   /// Latest polled server body per file (for 3-way). When the open editor is
   /// dirty, [filesById] keeps the live draft so remount cannot drop blanks;
   /// this map still carries the other device's tip.
+  final Map<String, Future<void>> _objectWrites = {};
+
+  Future<void> _serializeObjectWrite(
+    String key,
+    Future<void> Function() write,
+  ) {
+    final previous = _objectWrites[key] ?? Future<void>.value();
+    final next = previous.then(
+      (_) => write(),
+      onError: (Object _, StackTrace _) => write(),
+    );
+    _objectWrites[key] = next;
+    return next.whenComplete(() {
+      if (identical(_objectWrites[key], next)) _objectWrites.remove(key);
+    });
+  }
+
+  bool isTaskWritePending(int taskId) =>
+      _objectWrites.containsKey('task:$taskId');
+
+  Future<void> _flushEditors() async {
+    await DocumentEditorRegistry.flushAll();
+    while (_objectWrites.isNotEmpty) {
+      await Future.wait(List<Future<void>>.from(_objectWrites.values));
+    }
+  }
+
+  final Map<int, DocumentSync> _documentSyncs = {};
+
+  DocumentSync documentSyncFor(AppFile file) => _documentSyncs.putIfAbsent(
+    file.id,
+    () =>
+        DocumentSync(DocumentVersion(file.documentJson, file.contentRevision)),
+  );
+
+  Future<DocumentVersion> readDocumentVersion(int fileId) async {
+    final file = await _files.getFile(fileId);
+    return DocumentVersion(file.documentJson, file.contentRevision);
+  }
+
+  Future<DocumentVersion> writeDocumentVersion(
+    int fileId,
+    String body,
+    int revision,
+  ) async {
+    try {
+      final file = await _files.updateFile(fileId, {
+        'document_json': body,
+        'base_revision': revision,
+      });
+      return DocumentVersion(file.documentJson, file.contentRevision);
+    } on FileRevisionConflict {
+      throw const DocumentWriteConflict();
+    }
+  }
+
   final Map<int, String> inboundDocumentJson = {};
 
   /// Matching [AppFile.contentRevision] for [inboundDocumentJson].
@@ -569,6 +626,7 @@ class AppState extends ChangeNotifier {
       await selectArchiveTopic(topic);
       return;
     }
+    await _flushEditors();
     _gridLayoutPeek.forgetIfLeft(topic.id);
     if (_typeTemplateEdit != null && topic.id != _typeTemplateEdit!.topicId) {
       _typeTemplateEdit = null;
@@ -612,6 +670,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> selectView(String viewType) async {
+    await _flushEditors();
     _gridLayoutPeek.forget();
     isViewMode = true;
     isArchiveMode = false;
@@ -655,6 +714,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> selectArchiveTopic(Topic topic) async {
+    await _flushEditors();
     _gridLayoutPeek.forget();
     isArchiveMode = true;
     isViewMode = false;
@@ -1749,7 +1809,7 @@ class AppState extends ChangeNotifier {
   }) async {
     _beginAiRun();
     try {
-      await DocumentEditorRegistry.flushActive();
+      await _flushEditors();
       final result = await _aiActions.run(
         action.id,
         scope: agentRunScope(),
@@ -1770,6 +1830,7 @@ class AppState extends ChangeNotifier {
   // --- Automations: scope, trigger, a series of steps -----------------------
 
   Timer? _sectionWindowPoll;
+  bool _sectionRefreshRunning = false;
 
   List<Automation> get standardAutomations => [
     for (final a in automations)
@@ -1796,14 +1857,12 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  bool viewHasAttention(int viewId) =>
-      sectionWindowAutomations.any((a) =>
-          a.viewId == viewId &&
-          a.attention &&
-          _sectionStillHasActiveWork(
-            viewId: viewId,
-            sectionKey: a.sectionKey,
-          ));
+  bool viewHasAttention(int viewId) => sectionWindowAutomations.any(
+    (a) =>
+        a.viewId == viewId &&
+        a.attention &&
+        _sectionStillHasActiveWork(viewId: viewId, sectionKey: a.sectionKey),
+  );
 
   bool sectionHasAttention({required int viewId, String? sectionKey}) {
     if (sectionKey == null || sectionKey.isEmpty) return false;
@@ -1814,16 +1873,12 @@ class AppState extends ChangeNotifier {
 
   /// Hide the attention dot as soon as the last active task is marked done,
   /// without waiting for the next automations poll.
-  bool _sectionStillHasActiveWork({
-    required int viewId,
-    String? sectionKey,
-  }) {
+  bool _sectionStillHasActiveWork({required int viewId, String? sectionKey}) {
     if (sectionKey == null || sectionKey.isEmpty) return true;
     if (selectedView?.id != viewId) return true;
-    final name = ViewLayoutConfig.sections(selectedView!.layoutConfig)
-        .where((s) => s.key == sectionKey)
-        .map((s) => s.name)
-        .firstOrNull;
+    final name = ViewLayoutConfig.sections(
+      selectedView!.layoutConfig,
+    ).where((s) => s.key == sectionKey).map((s) => s.name).firstOrNull;
     if (name == null || name.isEmpty) return true;
     var sawSection = false;
     for (final membership in viewMemberships) {
@@ -1848,26 +1903,37 @@ class AppState extends ChangeNotifier {
 
   Future<void> refreshSectionWindows({bool notifyIfChanged = false}) async {
     if (workspaceId == null) return;
-    var changed = false;
+    if (_sectionRefreshRunning) return;
+    _sectionRefreshRunning = true;
     try {
-      final next = await _automations.list(workspaceId: workspaceId);
-      changed =
-          _automationAttentionSignature(next) !=
-          _automationAttentionSignature(automations);
-      automations = next;
-      if (changed && isViewMode) {
-        try {
-          await _refreshViewMemberships();
-        } catch (_) {}
+      var changed = false;
+      try {
+        final next = await _automations.list(workspaceId: workspaceId);
+        changed =
+            _automationAttentionSignature(next) !=
+            _automationAttentionSignature(automations);
+        automations = next;
+        if (changed && isViewMode) {
+          try {
+            await _refreshViewMemberships();
+          } catch (_) {}
+        }
+      } catch (_) {
+        // A poll must not take the app down; the next tick retries.
       }
-    } catch (_) {
-      // A poll must not take the app down; the next tick retries.
+      try {
+        changed = await _refreshSharedFileOrder() || changed;
+      } catch (_) {}
+      try {
+        await DocumentEditorRegistry.synchronizeAll();
+      } catch (e) {
+        error = e.toString();
+      }
+      _syncSectionAttentionNotifications();
+      if (changed || !notifyIfChanged) notifyListeners();
+    } finally {
+      _sectionRefreshRunning = false;
     }
-    try {
-      changed = await _refreshSharedFileOrder() || changed;
-    } catch (_) {}
-    _syncSectionAttentionNotifications();
-    if (changed || !notifyIfChanged) notifyListeners();
   }
 
   void _syncSectionAttentionNotifications() {
@@ -1995,12 +2061,9 @@ class AppState extends ChangeNotifier {
     return [
       for (final embed in embeds)
         '${embed.id}:${embed.type}:${embed.taskListTitle}:'
-        '${embedConflictKey(embed)}:'
-        '${[
-          for (final task in embed.tasks ?? const <Task>[])
-            '${task.id}:${task.title}:${task.status}:'
-            '${task.dueDate}:${task.listOrderIndex}',
-        ].join(',')}',
+            '${embedConflictKey(embed)}:'
+            '${[for (final task in embed.tasks ?? const <Task>[]) '${task.id}:${task.title}:${task.status}:'
+                  '${task.dueDate}:${task.listOrderIndex}'].join(',')}',
     ].join('|');
   }
 
@@ -2099,7 +2162,7 @@ class AppState extends ChangeNotifier {
   Future<Map<String, dynamic>> runAutomationNow(Automation automation) async {
     _beginAiRun();
     try {
-      await DocumentEditorRegistry.flushActive();
+      await _flushEditors();
       return await _automations.run(automation.id);
     } finally {
       _endAiRunUnlessCanceling();
@@ -2140,8 +2203,7 @@ class AppState extends ChangeNotifier {
     final payload = Map<String, dynamic>.from(body);
     if (payload.containsKey('document_json') &&
         !payload.containsKey('base_revision')) {
-      payload['base_revision'] =
-          (filesById[file.id] ?? file).contentRevision;
+      payload['base_revision'] = (filesById[file.id] ?? file).contentRevision;
     }
     try {
       final updated = await _files.updateFile(file.id, payload);
@@ -2330,6 +2392,20 @@ class AppState extends ChangeNotifier {
     );
     inboundDocumentJson[fileId] = documentJson;
     inboundContentRevision[fileId] = contentRevision;
+    _scheduleLaunchSnapshotWrite();
+  }
+
+  void publishDocumentSync(int fileId, DocumentSync sync) {
+    final local = filesById[fileId];
+    if (local != null) {
+      filesById[fileId] = local.copyWith(
+        documentJson: sync.draft,
+        contentRevision: sync.baseline.revision,
+      );
+    }
+    inboundDocumentJson[fileId] = sync.baseline.body;
+    inboundContentRevision[fileId] = sync.baseline.revision;
+    _scheduleLaunchSnapshotWrite();
   }
 
   /// Server tip from the last poll, if any (for Super Editor 3-way).
@@ -2346,8 +2422,9 @@ class AppState extends ChangeNotifier {
     final local = filesById[inbound.id];
     if (local == null) return inbound;
     final dirty =
+        _documentSyncs[inbound.id]?.dirty == true ||
         DocumentEditorRegistry.controllerFor(inbound.id)?.isDirty?.call() ==
-        true;
+            true;
     return mergeTopicFileForRefresh(
       local: local,
       inbound: inbound,
@@ -2576,6 +2653,33 @@ class AppState extends ChangeNotifier {
     return updated;
   }
 
+  /// Reload only the files an agent/automation touched — no topic canvas wipe.
+  ///
+  /// [selectTopic] blanks the pane (`topicDetailStale`) and remounts every
+  /// editor; that interrupts typing in untouched files. Open Super Editors
+  /// pick up the new tip via [_onAppStateChanged] when clean.
+  Future<void> reloadAgentTouchedFiles(Iterable<int> fileIds) async {
+    final ids = {
+      for (final id in fileIds)
+        if (id != 0) id,
+    };
+    if (ids.isEmpty) return;
+    for (final id in ids) {
+      try {
+        await reloadFile(id, notify: false);
+        await _loadEmbedsForFileMergingDirty(id);
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  /// Soft-refresh open-topic membership (create/archive) without MainPaneLoader.
+  Future<void> softRefreshOpenTopicFiles() async {
+    final detail = selectedDetail;
+    if (detail == null) return;
+    await _refreshTopicFiles(detail.topic);
+  }
+
   Future<void> deleteObjectEmbed(int objectId) async {
     try {
       await _objects.deleteEmbed(objectId);
@@ -2603,28 +2707,30 @@ class AppState extends ChangeNotifier {
     Map<String, dynamic> payload, {
     bool notify = false,
   }) async {
-    // Patch cache first so a remount never re-seeds from a stale payload while
-    // the network round-trip is in flight (same pattern as [updateInfoObject]).
-    for (final entry in embedsByFileId.entries) {
-      final list = entry.value;
-      final index = list.indexWhere((e) => e.id == objectId);
-      if (index < 0) continue;
-      final current = list[index];
-      embedsByFileId[entry.key] = [
-        for (var i = 0; i < list.length; i++)
-          if (i == index) current.copyWith(payload: payload) else list[i],
-      ];
-      break;
-    }
-    try {
-      await _api.patch('/objects/$objectId', {'payload': payload});
-    } on ApiException catch (e) {
-      // Late write after delete (empty graph exit, prune, etc.).
-      if (e.statusCode == 404) return;
-      rethrow;
-    }
-    if (notify) notifyListeners();
-    _scheduleLaunchSnapshotWrite();
+    return _serializeObjectWrite('object:$objectId', () async {
+      // Patch cache first so a remount never re-seeds from a stale payload while
+      // the network round-trip is in flight (same pattern as [updateInfoObject]).
+      for (final entry in embedsByFileId.entries) {
+        final list = entry.value;
+        final index = list.indexWhere((e) => e.id == objectId);
+        if (index < 0) continue;
+        final current = list[index];
+        embedsByFileId[entry.key] = [
+          for (var i = 0; i < list.length; i++)
+            if (i == index) current.copyWith(payload: payload) else list[i],
+        ];
+        break;
+      }
+      try {
+        await _api.patch('/objects/$objectId', {'payload': payload});
+      } on ApiException catch (e) {
+        // Late write after delete (empty graph exit, prune, etc.).
+        if (e.statusCode == 404) return;
+        rethrow;
+      }
+      if (notify) notifyListeners();
+      _scheduleLaunchSnapshotWrite();
+    });
   }
 
   Future<ObjectEmbed> createObjectInDocument(
@@ -3020,29 +3126,28 @@ class AppState extends ChangeNotifier {
     List<Map<String, dynamic>>? titleSpans,
     bool notify = false,
   }) async {
-    if (embed.informationId == null) return;
-    // Patch cache *before* the network round-trip so a remount during drag/drop
-    // never re-seeds from stale empty title/body.
-    patchInfoObjectCache(
-      embed,
-      title: title,
-      body: body,
-      spans: spans,
-      titleSpans: titleSpans,
-    );
-    await _api.patch('/information/${embed.informationId}', {
-      'title': title,
-      'body': body,
-      'metadata': {
-        'spans': spans ?? [],
-        'title_spans': titleSpans ?? [],
-      },
+    return _serializeObjectWrite('info:${embed.id}', () async {
+      if (embed.informationId == null) return;
+      // Patch cache *before* the network round-trip so a remount during drag/drop
+      // never re-seeds from stale empty title/body.
+      patchInfoObjectCache(
+        embed,
+        title: title,
+        body: body,
+        spans: spans,
+        titleSpans: titleSpans,
+      );
+      await _api.patch('/information/${embed.informationId}', {
+        'title': title,
+        'body': body,
+        'metadata': {'spans': spans ?? [], 'title_spans': titleSpans ?? []},
+      });
+      applyOuterTaskMarksFromInfo(infoObjectId: embed.id, body: body);
+      if (notify) {
+        await loadEmbedsForFile(embed.fileId);
+      }
+      _scheduleLaunchSnapshotWrite();
     });
-    applyOuterTaskMarksFromInfo(infoObjectId: embed.id, body: body);
-    if (notify) {
-      await loadEmbedsForFile(embed.fileId);
-    }
-    _scheduleLaunchSnapshotWrite();
   }
 
   /// Synchronous in-memory update used by info editors before structural rebuild.
@@ -3320,19 +3425,21 @@ class AppState extends ChangeNotifier {
     List<Map<String, dynamic>>? titleSpans,
     bool notify = false,
   }) async {
-    try {
-      await _api.patch('/tasks/${task.id}', {
-        'title': title,
-        if (titleSpans != null) 'title_spans': titleSpans,
-      });
-    } on ApiException catch (e) {
-      if (e.statusCode == 404) return;
-      rethrow;
-    }
-    // Patch caches in place — never reload embeds mid-keystroke (that rebuilds
-    // text fields and desyncs HardwareKeyboard: KeyDownEvent already pressed).
-    _patchCachedTask(task.id, title: title, titleSpans: titleSpans);
-    if (notify) notifyListeners();
+    return _serializeObjectWrite('task:${task.id}', () async {
+      try {
+        await _api.patch('/tasks/${task.id}', {
+          'title': title,
+          if (titleSpans != null) 'title_spans': titleSpans,
+        });
+      } on ApiException catch (e) {
+        if (e.statusCode == 404) return;
+        rethrow;
+      }
+      // Patch caches in place — never reload embeds mid-keystroke (that rebuilds
+      // text fields and desyncs HardwareKeyboard: KeyDownEvent already pressed).
+      _patchCachedTask(task.id, title: title, titleSpans: titleSpans);
+      if (notify) notifyListeners();
+    });
   }
 
   Task? taskById(int id) => tasksById[id];
@@ -3509,20 +3616,22 @@ class AppState extends ChangeNotifier {
     String title, {
     bool notify = false,
   }) async {
-    await _api.patch('/task-lists/$taskListId', {'title': title});
-    for (final entry in embedsByFileId.entries.toList()) {
-      final embeds = entry.value;
-      embedsByFileId[entry.key] = [
-        for (final e in embeds)
-          e.taskListId == taskListId ? e.copyWith(taskListTitle: title) : e,
-      ];
-    }
-    for (final task in tasksById.values.toList()) {
-      if (task.taskListId == taskListId) {
-        _patchCachedTask(task.id, taskListTitle: title);
+    return _serializeObjectWrite('list:$taskListId', () async {
+      await _api.patch('/task-lists/$taskListId', {'title': title});
+      for (final entry in embedsByFileId.entries.toList()) {
+        final embeds = entry.value;
+        embedsByFileId[entry.key] = [
+          for (final e in embeds)
+            e.taskListId == taskListId ? e.copyWith(taskListTitle: title) : e,
+        ];
       }
-    }
-    if (notify) notifyListeners();
+      for (final task in tasksById.values.toList()) {
+        if (task.taskListId == taskListId) {
+          _patchCachedTask(task.id, taskListTitle: title);
+        }
+      }
+      if (notify) notifyListeners();
+    });
   }
 
   /// Place an orphan (or any) view task into a home list.
@@ -3914,7 +4023,8 @@ class AppState extends ChangeNotifier {
         flag: flag,
         colorHex: colorHex,
         orderIndex: sections.length,
-        cadence: cadence ?? ViewLayoutConfig.cadence(selectedView!.layoutConfig),
+        cadence:
+            cadence ?? ViewLayoutConfig.cadence(selectedView!.layoutConfig),
         isDefault: isDefault,
       ),
     );
@@ -4194,7 +4304,7 @@ class AppState extends ChangeNotifier {
     try {
       // Persist the open editor first so open_file matches what the user sees,
       // and so a later apply reload is not racing a stale debounce save.
-      await DocumentEditorRegistry.flushActive();
+      await _flushEditors();
       final result = await _agent.run(
         prompt: prompt,
         workspaceId: workspaceId!,
@@ -4217,7 +4327,7 @@ class AppState extends ChangeNotifier {
     List<Map<String, String>> decisions,
   ) async {
     await _pendingReviews.finish(fileId, decisions: decisions);
-    if (selectedTopic != null) await selectTopic(selectedTopic!);
+    await reloadAgentTouchedFiles([fileId]);
     await loadArchive();
   }
 
@@ -4240,13 +4350,14 @@ class AppState extends ChangeNotifier {
     if (reloadTopic &&
         selectedTopic != null &&
         (topicId == null || selectedTopic!.id == topicId)) {
-      await selectTopic(selectedTopic!);
+      await reloadAgentTouchedFiles([fileId]);
     }
   }
 
   Future<void> applyAgentReview() async {
     final changes = pendingAgentReview?['proposed_changes'] as List?;
     if (changes == null || selectedDetail == null) return;
+    final touched = <int>[];
     for (final change in changes) {
       if (change is! Map) continue;
       final fileId = change['file_id'] as int?;
@@ -4263,9 +4374,10 @@ class AppState extends ChangeNotifier {
             : null,
         tool: change['tool'] as String?,
       );
+      touched.add(fileId);
     }
     pendingAgentReview = null;
-    if (selectedTopic != null) await selectTopic(selectedTopic!);
+    await reloadAgentTouchedFiles(touched);
   }
 
   void dismissAgentReview() {

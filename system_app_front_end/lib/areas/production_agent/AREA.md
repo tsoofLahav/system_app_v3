@@ -45,7 +45,7 @@ When `selected_text` is present, “this” / the marked text (including an imag
 The clock hints are not optional: without them the model dates a line from memory. Send the **local** day — the backend can only fall back to UTC, which is the wrong date late in the evening.
 
 Before the run, the active editor is flushed so `open_file` matches the open document.
-After finish pending / direct apply, the topic reloads; open Super Editors pick up a changed `document_json` and remount from stored text.
+After finish pending / direct apply, only the touched files reload (`reloadAgentTouchedFiles`) — the topic canvas is not wiped, so editors on other files keep typing.
 
 ## Apply mode
 
@@ -59,7 +59,7 @@ After finish pending / direct apply, the topic reloads; open Super Editors pick 
 
 - `has_pending_review` / review proposals → if any edited file is **already on screen**, open lookalike dialogs in a queue (Finish/Discard on one → next pending on-screen file); otherwise snackbar “Open the file to review changes”
 - `applied` with `undo` cards → compact undo toast queue ([`compact_undo_toast.dart`](compact_undo_toast.dart)): file + topic + change summary, **Undo** / **X** / ~8s auto-close; next file when one closes
-- else → snackbar summary (or error); **~10s** with an **X** to dismiss early ([`showAgentMessageSnackBar`](agent_result_ui.dart)); reload topic when `applied`
+- else → snackbar summary (or error); **~10s** with an **X** to dismiss early ([`showAgentMessageSnackBar`](agent_result_ui.dart)); reload only applied file ids when `applied`
 
 Pending also opens when the **file** mounts ([`document_pane.dart`](../files/editor/document_pane.dart) → [`pending_review_ui.dart`](pending_review_ui.dart) → [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart)). After a dialog closes, the same helper continues to any other on-screen file that still has pending.
 
@@ -101,7 +101,7 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 - Never present a cancelled run — wait for the return, discard pending / undo direct-apply, and skip the result UI.
 - Never hardcode a silent consult `apply_mode` — the dialog chooses and sends it.
 - Never show raw JSON or marker/editor text to the user — visual [`FilePreview`](../files/editor/file_preview.dart) only.
-- Refresh the open topic after Finish so the editor and Archive list update.
+- Refresh touched files after Finish (`reloadAgentTouchedFiles`) so those editors and Archive update — do not `selectTopic` (that remounts every pane).
 - Pass `hints.selected_text` from the active mark so “delete this line” can resolve correctly (marked span, or the caret line when unmarked).
 
 ## Not done yet
@@ -110,3 +110,7 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 - Per-hunk review of `create_object` (stays direct_apply)
 - Multi-file single combined lookalike dialog (each file still has its own dialog, queued)
 - Delete unused `text_diff_dialog.dart` / `change_review_dialog.dart` (BACKLOG C4)
+
+## Sync boundary (2026-09-08)
+
+Before agent dispatch, flush all mounted document and object text editors and await queued object writes. Required document conflicts show the localized resolve-before-AI instruction. A failed flush prevents dispatch. Document result refreshes enter the per-file DocumentSync coordinator.

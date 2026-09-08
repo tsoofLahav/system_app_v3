@@ -165,6 +165,9 @@ While a menu is open there is never a second wash (native selection + line-at-ca
 
 ## 6. Where typing must not die (keyboard safety)
 
+Document synchronization is owned by the per-file `DocumentSync`, not by focus callbacks. After any asynchronous wait, it rechecks the draft generation before adopting a result; editor replacement occurs only for a changed displayed snapshot and after keyboard idle. See [DOCUMENT_FLOW.md](system_app_front_end/lib/areas/files/editor/DOCUMENT_FLOW.md).
+
+
 Flutter desyncs when a `TextField` / `FocusNode` is disposed or the editor remounts **while a physical key is still down**.
 
 Symptom: looping `KeyDownEvent is dispatched, but the state shows that the physical key is already pressed` or `KeyUpEvent … physical key is not pressed`.

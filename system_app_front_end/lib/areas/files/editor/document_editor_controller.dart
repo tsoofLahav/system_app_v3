@@ -2,6 +2,7 @@ import 'package:flutter/painting.dart';
 
 import '../../../shared/utils/frame_safe_notifier.dart';
 import './editor_key_handoff.dart';
+import './editor_save_registry.dart';
 import '../rich_text/block_text_focus.dart';
 
 class DocumentEditorController {
@@ -25,8 +26,10 @@ class DocumentEditorController {
     this.leaveObject,
     this.nudgeObjectCaret,
     this.isDirty,
+    this.synchronize,
   });
 
+  final Future<void> Function()? synchronize;
   final int fileId;
   final Future<void> Function(String action) insertAtBlock;
   final void Function(int blockIndex) focusBlock;
@@ -149,6 +152,19 @@ class DocumentEditorRegistry {
     if (active?.fileId == fileId) {
       active = _byFile.isEmpty ? null : _byFile.values.last;
       notifier.notify();
+    }
+  }
+
+  static Future<void> flushAll() async {
+    await EditorSaveRegistry.flushAll();
+    for (final editor in List<DocumentEditorController>.from(_byFile.values)) {
+      await editor.flushPendingChanges();
+    }
+  }
+
+  static Future<void> synchronizeAll() async {
+    for (final editor in List<DocumentEditorController>.from(_byFile.values)) {
+      await editor.synchronize?.call();
     }
   }
 

@@ -21,7 +21,6 @@ import '../../ui/app_colors.dart';
 import '../../ui/app_typography.dart';
 import '../../ux/shell/app_bottom_bar.dart';
 import '../data/app_file.dart';
-import '../data/file_service.dart';
 import '../model/document_text_codec.dart';
 import '../model/marker_super_editor_bridge.dart';
 import '../model/object_embed_node.dart';
@@ -40,6 +39,7 @@ import './document_editor_controller.dart';
 import './document_hunks.dart';
 import './document_secondary_tap.dart';
 import './document_three_way.dart';
+import './document_sync.dart';
 import './edit_conflict.dart';
 import './editor_key_handoff.dart';
 import './embed_caret_bridge.dart';
@@ -138,17 +138,14 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   final _docLayoutKey = GlobalKey();
 
   Timer? _saveTimer;
-  var _dirty = false;
+  late final DocumentSync _sync;
+  late String _displayedSyncBody;
   var _conflictOpen = false;
+
   /// Lookalike closed; remount + PATCH in progress (blocks input briefly).
   var _settlingMerge = false;
   final _phoneObjectGate = PhoneObjectGateSignal();
-  String? _lastSavedJson;
-  /// Revision of [_lastSavedJson] / the fork point for the next document PATCH.
-  var _baseRevision = 1;
   var _applyingRemote = false;
-  /// True while a document PATCH await is outstanding — skip poll remounts.
-  var _documentPatchInFlight = false;
   var _snappingComposerGraphemes = false;
   Offset? _bidiDragDownGlobal;
 
@@ -206,7 +203,9 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _focusNode = FocusNode();
     _focusNode.addListener(_onFocusChanged);
     _composer = MutableDocumentComposer();
-    _doc = markerTextToMutableDocument(_currentFile.documentJson);
+    _sync = widget.state.documentSyncFor(_currentFile);
+    _displayedSyncBody = _sync.draft;
+    _doc = markerTextToMutableDocument(_sync.draft);
     _editor = createDefaultDocumentEditor(
       document: _doc,
       composer: _composer,
@@ -260,8 +259,6 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _iosControls.handleBeingDragged.addListener(_syncPhoneMarkToolbar);
     _doc.addListener(_onDocumentChange);
     _composer.selectionNotifier.addListener(_onComposerSelection);
-    _lastSavedJson = _currentFile.documentJson;
-    _baseRevision = _currentFile.contentRevision;
     _trackedObjectIds = _objectIdsInDocument();
     widget.state.addListener(_onAppStateChanged);
     DocumentEditorRegistry.notifier.addListener(_onClaimedPaneChanged);
@@ -291,8 +288,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           leaveObject: _leaveObjectFromPhone,
           nudgeObjectCaret: _nudgeObjectCaretFromPhone,
           isDirty: () => _fileHasUnsaved,
+          synchronize: _synchronizeDocument,
         ),
       );
+      _requestBackgroundSync();
       unawaited(_loadEmbedsQuietly());
       unawaited(_migrateLegacyTablesIfNeeded());
       _tryFocusPendingFile();
@@ -304,7 +303,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _removeMoveBubble();
     _saveTimer?.cancel();
     UnsavedEmbedEdits.fileConflictPending = false;
-    unawaited(_flushPendingChanges());
+    _requestBackgroundSync();
     DocumentEditorRegistry.notifier.removeListener(_onClaimedPaneChanged);
     BlockTextFocusRegistry.menuSessionListenable.removeListener(
       _onMenuSessionChanged,
@@ -553,10 +552,11 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     final live = _objectIdsInDocument();
     final removed = _trackedObjectIds.difference(live);
     _trackedObjectIds = live;
-    _dirty = true;
+    _sync.edit(mutableDocumentToMarkerText(_doc));
     // Poll/remount read filesById — keep the live draft there so blanks are
     // not replaced by a pre-edit server body before PATCH lands.
     final draft = mutableDocumentToMarkerText(_doc);
+    _displayedSyncBody = draft;
     widget.state.putOpenDocumentDraft(widget.file.id, draft);
     _scheduleSave();
     if (removed.isNotEmpty) {
@@ -598,94 +598,30 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
         _scheduleEmbedStructureRebuild();
       }
     }
-    final remote =
-        widget.state.polledInboundDocument(widget.file.id) ??
-        _currentFile.documentJson;
-    final inboundRev = widget.state.polledInboundRevision(widget.file.id);
-    final skipRemote = _documentPatchInFlight ||
-        shouldIgnorePolledBody(
-          localRev: _currentFile.contentRevision,
-          inboundRev: inboundRev,
-        );
-    if (!skipRemote && remote != _lastSavedJson) {
-      _handleRemoteDocument(remote);
+    final revision =
+        widget.state.polledInboundRevision(widget.file.id) ??
+        _currentFile.contentRevision;
+    if (revision > _sync.baseline.revision ||
+        _currentFile.contentRevision > _sync.baseline.revision) {
+      _requestBackgroundSync();
     }
     _tryFocusPendingObject();
     _tryFocusPendingFile();
   }
 
   bool get _fileHasUnsaved =>
-      _dirty || UnsavedEmbedEdits.hasAnyDirty;
+      _sync.dirty ||
+      _embeds.any((embed) => UnsavedEmbedEdits.isDirty(embed.id));
 
-  void _handleRemoteDocument(String? remote) {
-    final local = mutableDocumentToMarkerText(_doc);
-    final decision = decideRemoteEdit(
-      localDirty: _fileHasUnsaved,
-      inboundEqualsLocal: remote == local,
-      inboundEqualsBaseline: remote == _lastSavedJson,
-    );
-    switch (decision) {
-      case RemoteEditDecision.ignore:
-        if (remote == local) {
-          _lastSavedJson = remote;
-          _baseRevision = _currentFile.contentRevision;
-          _dirty = false;
-        }
-        return;
-      case RemoteEditDecision.takeRemote:
-        _saveTimer?.cancel();
-        _dirty = false;
-        _scheduleRemoteDocumentReload(remote);
-        return;
-      case RemoteEditDecision.ask:
-        UnsavedEmbedEdits.fileConflictPending = true;
-        _mergeOrReviewRemote(remote);
-        return;
-    }
-  }
-
-  void _mergeOrReviewRemote(String? remote) {
-    if (_conflictOpen || remote == null) {
-      UnsavedEmbedEdits.fileConflictPending = false;
-      return;
-    }
-    runWhenKeyboardIdle(() {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _conflictOpen) return;
-        unawaited(_runThreeWay(remote));
-      });
-    });
-  }
-
-  Future<void> _runThreeWay(String remote) async {
-    final local = mutableDocumentToMarkerText(_doc);
-    final base = _lastSavedJson ?? local;
-    final result = threeWayMarkerText(
-      base: base,
-      local: local,
-      server: remote,
-    );
-    // Non-overlapping edits from both devices apply quietly. Only leftover
-    // overlaps open the lookalike — never silently take inbound alone.
-    if (!result.hasConflicts) {
-      UnsavedEmbedEdits.fileConflictPending = false;
-      _applyMergedDocument(
-        result.merged,
-        persist: result.merged != remote,
-      );
-      return;
-    }
-
+  Future<String?> _reviewSyncConflict(ThreeWayResult result) async {
+    await whenKeyboardIdle();
+    if (!mounted || _conflictOpen) return null;
     final hunks = buildHunks(result.localSided, result.serverSided);
-    if (hunks.isEmpty) {
-      UnsavedEmbedEdits.fileConflictPending = false;
-      _applyMergedDocument(result.localSided, persist: true);
-      return;
-    }
-
+    if (hunks.isEmpty) return result.localSided;
     _conflictOpen = true;
+    UnsavedEmbedEdits.fileConflictPending = true;
     try {
-      if (!mounted) return;
+      if (!mounted) return null;
       final detail = widget.state.selectedDetail;
       List<Map<String, String>>? finishDecisions;
       var discarded = false;
@@ -699,9 +635,12 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           hunks: hunks,
         ),
         strings: widget.state.strings,
-        fileName: _currentFile.name,
-        topicAccent:
-            detail == null ? null : TopicAppearance.accentFor(detail.topic),
+        fileName: widget.state.aiRunning
+            ? widget.state.strings['aiSyncConflict']
+            : _currentFile.name,
+        topicAccent: detail == null
+            ? null
+            : TopicAppearance.accentFor(detail.topic),
         // Capture only — remounting Super Editor under the open dialog blows
         // the IME (DiagnosticsProperty spam / caret in the wrong place).
         onFinish: (decisions) async {
@@ -711,101 +650,59 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           discarded = true;
         },
       );
-      if (!mounted) return;
+      if (!mounted) return null;
+      setState(() => _settlingMerge = true);
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await WidgetsBinding.instance.endOfFrame;
+      await whenKeyboardIdle();
       if (finishDecisions != null) {
-        final merged = mergeHunkTexts(
+        return mergeHunkTexts(
           result.localSided,
           result.serverSided,
           finishDecisions!,
         );
-        if (merged == null) {
-          throw StateError('every hunk must have accept or reject');
-        }
-        await _settleMergedDocument(
-          merged,
-          persist: true,
-          afterDialog: true,
-        );
-      } else if (discarded) {
-        await _settleMergedDocument(
-          result.localSided,
-          persist: true,
-          afterDialog: true,
-        );
       }
+      return discarded ? result.localSided : null;
     } finally {
       _conflictOpen = false;
       UnsavedEmbedEdits.fileConflictPending = false;
     }
   }
 
-  void _applyMergedDocument(String json, {required bool persist}) {
+  void _requestBackgroundSync() {
     unawaited(
-      _settleMergedDocument(json, persist: persist, afterDialog: false),
+      _synchronizeDocument().catchError((Object error) {
+        // The draft remains in the session and the next trigger retries.
+        if (mounted) widget.state.error = error.toString();
+      }),
     );
   }
 
-  /// Apply a merged body into the open editor, then PATCH.
-  ///
-  /// [afterDialog]: wait for the lookalike route to finish tearing down and
-  /// show a short busy wash before remounting — never swap Editor mid-dialog.
-  Future<void> _settleMergedDocument(
-    String json, {
-    required bool persist,
-    required bool afterDialog,
-  }) async {
-    if (!mounted) return;
-    if (afterDialog) {
-      setState(() => _settlingMerge = true);
-      // Let the dialog route dispose before we touch Super Editor / IME.
-      await Future<void>.delayed(const Duration(milliseconds: 120));
-      await WidgetsBinding.instance.endOfFrame;
-    }
-    await whenKeyboardIdle();
-    if (!mounted) return;
+  Future<void> _synchronizeDocument() async {
     try {
-      _saveTimer?.cancel();
-      _baseRevision = _currentFile.contentRevision;
-      _reloadFromStored(json);
-      if (!persist) return;
-      try {
-        await widget.state.updateFile(_currentFile, {
-          'document_json': json,
-          'base_revision': _baseRevision,
-        }, notify: false);
-        if (mounted) _baseRevision = _currentFile.contentRevision;
-      } on FileRevisionConflict catch (e) {
-        // Another write landed during settle — keep merged local, adopt rev.
-        _baseRevision = e.server.contentRevision;
-        if (mounted) {
-          await widget.state.updateFile(_currentFile, {
-            'document_json': json,
-            'base_revision': _baseRevision,
-          }, notify: false);
-          if (mounted) _baseRevision = _currentFile.contentRevision;
-        }
-      }
-      if (afterDialog && mounted) {
-        await Future<void>.delayed(const Duration(milliseconds: 160));
-      }
+      await _sync.synchronize(
+        read: () => widget.state.readDocumentVersion(widget.file.id),
+        write: (body, revision) =>
+            widget.state.writeDocumentVersion(widget.file.id, body, revision),
+        review: _reviewSyncConflict,
+        beforeAdopt: () async {
+          await whenKeyboardIdle();
+          if (_conflictOpen) await WidgetsBinding.instance.endOfFrame;
+        },
+        onAdopt: () {
+          widget.state.publishDocumentSync(widget.file.id, _sync);
+          if (mounted && _displayedSyncBody != _sync.draft) {
+            _reloadFromStored(
+              _sync.draft,
+              contentRevision: _sync.baseline.revision,
+              fromSync: true,
+            );
+          }
+        },
+      );
     } finally {
-      if (afterDialog && mounted) setState(() => _settlingMerge = false);
+      if (mounted && _settlingMerge) setState(() => _settlingMerge = false);
     }
-  }
-
-  void _scheduleRemoteDocumentReload(String? json) {
-    if (!mounted) return;
-    void apply() {
-      if (!mounted) return;
-      final latest = json ??
-          widget.state.polledInboundDocument(widget.file.id) ??
-          _currentFile.documentJson;
-      if (latest == null || latest == _lastSavedJson) return;
-      final inboundRev = widget.state.polledInboundRevision(widget.file.id);
-      _reloadFromStored(latest, contentRevision: inboundRev);
-    }
-
-    runWhenKeyboardIdle(apply);
   }
 
   /// Ids/types/order changed — not mere payload/title text patches.
@@ -917,34 +814,13 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   void _scheduleSave() {
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(milliseconds: 450), () {
-      if (mounted) unawaited(_flushPendingChanges());
+      if (mounted) _requestBackgroundSync();
     });
   }
 
   Future<void> _flushPendingChanges() async {
     _saveTimer?.cancel();
-    if (!_dirty) return;
-    final json = mutableDocumentToMarkerText(_doc);
-    if (json == _lastSavedJson) {
-      _dirty = false;
-      return;
-    }
-    _documentPatchInFlight = true;
-    try {
-      await widget.state.updateFile(_currentFile, {
-        'document_json': json,
-        'base_revision': _baseRevision,
-      }, notify: false);
-      _lastSavedJson = json;
-      _baseRevision = _currentFile.contentRevision;
-      _dirty = false;
-    } on FileRevisionConflict catch (e) {
-      // Server advanced while we still have local text — open 3-way / lookalike.
-      _baseRevision = e.server.contentRevision;
-      _handleRemoteDocument(e.server.documentJson);
-    } finally {
-      _documentPatchInFlight = false;
-    }
+    if (_sync.dirty || _sync.running) await _synchronizeDocument();
   }
 
   ObjectEmbed? _lookup(int objectId) =>
@@ -1229,7 +1105,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     }
 
     // Persist current SE doc first so server insert lands on current markers.
-    _dirty = true;
+    _sync.edit(mutableDocumentToMarkerText(_doc));
     await _flushPendingChanges();
 
     final embed = await widget.state.createObjectInDocument(
@@ -1289,8 +1165,13 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     });
   }
 
-  void _reloadFromStored(String? json, {int? contentRevision}) {
+  void _reloadFromStored(
+    String? json, {
+    int? contentRevision,
+    bool fromSync = false,
+  }) {
     _applyingRemote = true;
+    _displayedSyncBody = json ?? '';
     _doc.removeListener(_onDocumentChange);
     // Drop any selection before swapping documents — shared composer notifies
     // the still-mounted (old) SuperEditor/IME during the swap otherwise.
@@ -1312,14 +1193,17 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           _docLayoutKey.currentState as DocumentLayout,
     );
     _doc.addListener(_onDocumentChange);
-    _lastSavedJson = json;
-    _dirty = false;
-    if (json != null) {
-      final rev = contentRevision ?? _currentFile.contentRevision;
-      widget.state.applyOpenDocumentFromRemote(widget.file.id, json, rev);
-      _baseRevision = rev;
-    } else {
-      _baseRevision = contentRevision ?? _currentFile.contentRevision;
+    if (!fromSync && json != null) {
+      _sync.baseline = DocumentVersion(
+        json,
+        contentRevision ?? _currentFile.contentRevision,
+      );
+      _sync.edit(json);
+      widget.state.applyOpenDocumentFromRemote(
+        widget.file.id,
+        json,
+        _sync.baseline.revision,
+      );
     }
     _trackedObjectIds = _objectIdsInDocument();
     _applyingRemote = false;
@@ -1410,7 +1294,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       _editor.execute([DeleteNodeRequest(nodeId: nodeId)]);
     }
     _trackedObjectIds = _objectIdsInDocument();
-    _dirty = true;
+    _sync.edit(mutableDocumentToMarkerText(_doc));
     await _flushPendingChanges();
     _caretSession.owner = DocumentCaretOwner.document;
     _caretSession.activeEmbedNodeId = null;
@@ -1507,7 +1391,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       ),
     ]);
     // Stay in Move Mode so the user can keep nudging with the bubble.
-    _dirty = true;
+    _sync.edit(mutableDocumentToMarkerText(_doc));
     _scheduleSave();
     _rebuildAfterEmbedMove();
   }
@@ -1696,16 +1580,16 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     final viewPadding = MediaQuery.paddingOf(context);
     final topPresentationInset = isPhoneLayout
         ? viewPadding.top +
-            AppBottomBarMetrics.phoneSegmentHeight +
-            AppBottomBarMetrics.phoneOmbreFade * 0.75 +
-            AppSpacing.xs
+              AppBottomBarMetrics.phoneSegmentHeight +
+              AppBottomBarMetrics.phoneOmbreFade * 0.75 +
+              AppSpacing.xs
         : 0.0;
     final bottomPresentationInset = isPhoneLayout
         ? viewPadding.bottom +
-            AppBottomBarMetrics.phoneBarHeight +
-            AppBottomBarMetrics.phoneOmbreFade +
-            AppSpacing.xl +
-            AppSpacing.md
+              AppBottomBarMetrics.phoneBarHeight +
+              AppBottomBarMetrics.phoneOmbreFade +
+              AppSpacing.xl +
+              AppSpacing.md
         : 0.0;
     return Stylesheet(
       documentPadding: EdgeInsets.only(
