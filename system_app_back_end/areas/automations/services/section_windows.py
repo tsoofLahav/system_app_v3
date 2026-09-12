@@ -830,24 +830,26 @@ def review_status(automation: Automation) -> dict:
         .order_by(AutomationRun.id.desc())
         .first()
     )
-    file_ids = []
+    review_ids = []
     if latest and isinstance(latest.result, dict):
         for step in latest.result.get("steps") or []:
             if not isinstance(step, dict):
                 continue
             ids = step.get("pending_review_ids") or []
-            file_ids.extend(int(i) for i in ids if i is not None)
+            review_ids.extend(int(i) for i in ids if i is not None)
             agent = step.get("agent") or {}
             if isinstance(agent, dict):
                 more = agent.get("pending_review_ids") or []
-                file_ids.extend(int(i) for i in more if i is not None)
-    file_ids = list(dict.fromkeys(file_ids))
+                review_ids.extend(int(i) for i in more if i is not None)
+    review_ids = list(dict.fromkeys(review_ids))
     pending = []
-    if file_ids:
+    if review_ids:
         rows = AgentPendingReview.query.filter(
-            AgentPendingReview.file_id.in_(file_ids)
+            AgentPendingReview.id.in_(review_ids),
+            AgentPendingReview.workspace_id == automation.workspace_id
         ).all()
-        pending = [row.file_id for row in rows]
+        by_id = {row.id: row.file_id for row in rows}
+        pending = list(dict.fromkeys(by_id[i] for i in review_ids if i in by_id))
     input_task = complimentary_task(automation.id, ROLE_INPUT)
     review_task = complimentary_task(automation.id, ROLE_REVIEW)
     received = False
@@ -856,6 +858,7 @@ def review_status(automation: Automation) -> dict:
     if automation.pending_user_input:
         received = True
     return {
+        "run_completed": bool(latest and latest.status == "completed"),
         "has_pending_review": bool(pending),
         "file_ids": pending,
         "input_received": received,
@@ -868,7 +871,7 @@ def review_status(automation: Automation) -> dict:
 
 def complete_review_if_clear(automation: Automation) -> bool:
     status = review_status(automation)
-    if status["has_pending_review"]:
+    if status["has_pending_review"] or not status["run_completed"]:
         return False
     _mark_complimentary(automation, ROLE_REVIEW, done=True)
     return True

@@ -44,19 +44,36 @@ def ai(*, workspace_id: int, resolved_scope: dict, params: dict, now: datetime):
     if user_note:
         prompt = f"{prompt}\n\nUser input:\n{user_note}"
 
-    result = run_agent(
-        prompt=prompt,
-        workspace_id=workspace_id,
-        scope=resolved_scope,
-        apply_mode=apply_mode,
-        hints={"today": now.strftime("%Y-%m-%d"), "weekday": now.strftime("%A")},
-    )
-    if result.get("status") != "ok":
-        return {"error": result.get("error") or "the agent run failed", "agent": result}
+    topic_ids = resolved_scope.get("topic_ids") or []
+    scopes = ([{**resolved_scope, "topic_ids": [topic_id]} for topic_id in topic_ids]
+              if params.get("per_topic") else [resolved_scope])
+    results = []
+    pending_ids = []
+    for scope in scopes:
+        topic_prompt = prompt
+        if params.get("per_topic"):
+            topic_prompt += (
+                f"\n\nThis automation runs separately for each topic. "
+                f"Perform this step for topic_id {scope['topic_ids'][0]} in this run; "
+                "the other topics are handled by separate runs."
+            )
+        result = run_agent(
+            prompt=topic_prompt,
+            workspace_id=workspace_id,
+            scope=scope,
+            apply_mode=apply_mode,
+            hints={"today": now.strftime("%Y-%m-%d"), "weekday": now.strftime("%A")},
+            commit=False,
+        )
+        results.append({"topic_ids": scope.get("topic_ids", []), "agent": result})
+        pending_ids.extend(result.get("pending_review_ids") or [])
+        if result.get("status") != "ok":
+            return {"error": result.get("error") or "the agent run failed",
+                    "topic_results": results, "pending_review_ids": pending_ids}
     return {
         "ok": True,
-        "summary": result.get("summary") or "",
-        "applied": bool(result.get("applied")),
-        "pending_review_ids": result.get("pending_review_ids") or [],
-        "agent": result,
+        "summary": "\n".join(r["agent"].get("summary") or "" for r in results),
+        "applied": any(r["agent"].get("applied") for r in results),
+        "pending_review_ids": list(dict.fromkeys(pending_ids)),
+        "topic_results": results,
     }

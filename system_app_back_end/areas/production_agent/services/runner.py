@@ -659,6 +659,7 @@ def run_agent(
     apply_mode: str | None = None,
     context: dict | None = None,
     hints: dict | None = None,
+    commit: bool = True,
 ) -> dict:
     scope = dict(scope or {})
     scope["workspace_id"] = int(workspace_id)
@@ -681,6 +682,8 @@ def run_agent(
         {"role": "user", "content": first_input},
     ]
 
+    # Flush caller state before isolating speculative tool writes.
+    tool_transaction = db.session.begin_nested()
     try:
         conversation_id = create_conversation(
             metadata={
@@ -756,6 +759,7 @@ def run_agent(
             final_summary = output_text_from_response(response) or "Stopped after tool round limit"
 
     except RuntimeError as error:
+        tool_transaction.rollback()
         return {
             "status": "error",
             "error": str(error),
@@ -766,6 +770,7 @@ def run_agent(
             "applied": False,
         }
     except Exception as error:
+        tool_transaction.rollback()
         logger.exception("agent run failed")
         return {
             "status": "error",
@@ -784,14 +789,15 @@ def run_agent(
     applied = any(
         isinstance(c, dict) and c.get("applied") for c in proposed_changes
     )
-    # Commit if any write tool applied; otherwise roll back (review/notify paths).
+    # Never roll back the scheduler/window transaction along with tool writes.
     if applied:
-        db.session.commit()
+        tool_transaction.commit()
     else:
-        db.session.rollback()
+        tool_transaction.rollback()
 
     pending_ids: list[int] = []
     if apply_mode == "review" and proposed_changes:
+        pending_transaction = db.session.begin_nested()
         try:
             import uuid
 
@@ -803,12 +809,15 @@ def run_agent(
                     c for c in proposed_changes if isinstance(c, dict)
                 ],
             )
-            if pending_ids:
-                db.session.commit()
+            pending_transaction.commit()
         except Exception:
             logger.exception("failed to persist pending reviews")
-            db.session.rollback()
-            pending_ids = []
+            pending_transaction.rollback()
+            return {"status": "error", "error": "failed to persist pending reviews",
+                    "applied": applied, "pending_review_ids": []}
+
+    if commit:
+        db.session.commit()
 
     print(
         f"[agent-run] tools={[t.get('name') for t in tool_trace]} "

@@ -37,6 +37,8 @@ def run_steps(
             break
 
         params = {k: v for k, v in step.items() if k != "kind"}
+        if kind == "ai" and (scope or {}).get("kind") == "topic_type":
+            params["per_topic"] = True
         if user_input:
             params = {**params, "user_input": user_input}
         try:

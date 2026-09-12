@@ -102,12 +102,12 @@ Each write tool ends in the same apply path (`patch_file` / `rewrite_file`):
 | Mode | Effect |
 |------|--------|
 | `direct_apply` | Writes immediately via `commit_agent_file_apply`, commits; response includes per-file `undo` card (old snapshot + change previews) for the FE toast |
-| `review` | Rolls back live writes; upserts `agent_pending_reviews`; response includes `has_pending_review` |
+| `review` | Rolls back speculative writes to a savepoint; upserts `agent_pending_reviews`; response includes `has_pending_review` |
 | `notify_only` | Returns the new document without diff or write |
 
 ## Pending reviews
 
-Table `agent_pending_reviews` (one open row per `file_id`; newest run replaces). After review rollback, runner upserts then commits.
+Table `agent_pending_reviews` (one open row per `file_id`; newest run replaces). After review savepoint rollback, runner upserts pending rows. Manual runs commit; automation callers own the final commit.
 
 | Method | Path | Role |
 |--------|------|------|
@@ -162,7 +162,7 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 - Follow-up turns send tool results only.
 - Never persist agent text as the live file format.
 - Never apply a partial update: if parsing produced errors, write nothing.
-- `review` and `notify_only` must roll back the tool session; review then persists pending in a new commit.
+- `review` and `notify_only` roll back only the tool savepoint; review persists pending outside that savepoint. Automation callers own the surrounding transaction.
 - Drop the OpenAI conversation when the run ends.
 - Changing the agent's behavior means editing the markdown source and syncing — not hardcoding prompt text in `runner.py`.
 
@@ -175,3 +175,7 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 ## Sync boundary (2026-09-08)
 
 File ORM writes participate in content_revision version checking. Concurrent stale writers fail the transaction rather than blindly overwriting another device. Bulk SQL file writes must not bypass the mapper guard.
+
+## Transaction ownership (2026-09-12)
+
+Tool writes run inside a savepoint: review/notify and tool errors roll back only those writes. Pending-review persistence uses a separate savepoint; storage failure returns an error rather than an empty successful review. `run_agent(commit=False)` lets automation callers commit the window, run record and reviews together. Manual callers retain the default final commit.

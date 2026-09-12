@@ -105,3 +105,9 @@ Event triggers (`file.updated`, `task.unmarked`, another automation finished) ar
 ## Sync boundary (2026-09-08)
 
 File writes share the File mapper revision guard; an overlapping stale transaction must fail rather than overwrite another writer.
+
+## Review lifecycle and section attention (2026-09-12)
+
+AI steps in a topic-type scope execute once per live topic, recording each result and aggregating pending-review IDs in topic order. Failure stops the step and retains earlier review IDs; partial coverage is not success. A topic with no proposed changes legitimately has no pending review. Review status resolves `AgentPendingReview.id` (not `file_id`) within the workspace, then returns file IDs for the walkthrough. Only a completed run with no remaining reviews can complete the complimentary task.
+
+The automation caller owns its transaction. Agent tool rollback is limited to a savepoint, preserving window opening, recycled tasks and the AutomationRun. Attention remains true while an open window has any active task, independently of whether its review task is done.
