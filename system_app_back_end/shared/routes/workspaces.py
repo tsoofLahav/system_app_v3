@@ -21,10 +21,20 @@ def get_workspace(workspace_id):
 @workspaces_bp.route("/workspaces", methods=["POST"])
 def create_workspace():
     data = request.get_json(silent=True) or {}
-    if not data.get("name"):
+    name = str(data.get("name") or "").strip()
+    if not name:
         return jsonify({"error": "name is required"}), 400
-    workspace = Workspace(name=data["name"])
+    workspace = Workspace(name=name)
     db.session.add(workspace)
+    db.session.flush()
+    from models import Topic, File
+    from areas.files.services.document_v3 import empty_document_json
+    from areas.production_agent.services.prompt import ensure_agent_config
+    home = Topic(workspace_id=workspace.id, name="Home", icon="🏠", color="#6366F1", order_index=0)
+    db.session.add(home)
+    db.session.flush()
+    db.session.add(File(topic_id=home.id, name="Daily", document_json=empty_document_json(), order_index=0, meta={"automation_anchor": "daily"}))
+    ensure_agent_config(workspace.id)
     db.session.commit()
     return jsonify(workspace.to_dict()), 201
 

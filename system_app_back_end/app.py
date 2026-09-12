@@ -50,6 +50,9 @@ def create_app():
             return
         _sync_agent_prompt(app)
 
+    from shared.workspace_scope import register_workspace_scope
+    register_workspace_scope(app)
+
     return app
 
 

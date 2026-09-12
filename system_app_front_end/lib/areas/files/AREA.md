@@ -423,3 +423,7 @@ Smoke after edits: type fast in paragraph + info + task + table/chart cell; Shif
 ### Whitespace regression checkpoint (2026-09-08)
 
 The bridge serializes and parses inline styles per physical line. Super Editor's general Markdown serializer emits hard-break syntax that its inline reader does not restore; using the pair on a whole multiline paragraph collapsed newlines. Paragraph edge spaces and authored leading empty paragraphs are retained. Two soft breaks emit an explicit SPACER so loading does not collapse a blank into only a block boundary. A lone empty initial paragraph remains the empty-document sentinel. Three-way merges process end insertions once and retain all-SPACER documents. Regression coverage: `test/files/sync_whitespace_regression_test.dart`.
+
+## Presentation profiles
+
+Profiles reuse Workspace ownership; no user table or schema migration is needed. Existing data remains in the first workspace (displayed as Personal when named Default). New workspaces start with an empty Home/Daily journal. Requests carry X-Workspace-Id, launch snapshots use workspace-specific filenames, and Home visits already use workspace-specific keys. Unknown profiles fail rather than falling back to personal data. Switching flushes pending editor/object writes, saves the snapshot, then remounts a fresh AppState after keyboard idle.

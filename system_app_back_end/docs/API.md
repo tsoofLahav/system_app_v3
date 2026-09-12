@@ -240,3 +240,7 @@ A prompt on a button. No stored scope — the client sends live `scope` / `hints
 ## Uploads
 
 Unchanged: `POST /upload`, static file serving under `/uploads/`.
+
+## Local presentation profiles
+
+`GET /workspaces` lists profile names and IDs. `POST /workspaces` with `{"name":"Demo"}` creates an empty Home/Daily workspace. Send `X-Workspace-Id` on subsequent requests, including bootstrap and uploads. ORM reads and recognized resource references are scoped to that workspace. A missing header preserves legacy default behavior; this selector is not authentication. No schema migration is required.

@@ -4,7 +4,9 @@ from areas.production_agent.services.prompt import ensure_agent_config
 
 
 def bootstrap_if_empty() -> dict:
-    workspace = Workspace.query.order_by(Workspace.id).first()
+    from shared.workspace_scope import selected_workspace_id
+    selected = selected_workspace_id()
+    workspace = db.session.get(Workspace, selected) if selected else Workspace.query.order_by(Workspace.id).first()
     if workspace is not None:
         ensure_agent_config(workspace.id)
         db.session.commit()
@@ -46,5 +48,7 @@ def bootstrap_if_empty() -> dict:
 
 
 def default_workspace_id() -> int | None:
-    workspace = Workspace.query.order_by(Workspace.id).first()
+    from shared.workspace_scope import selected_workspace_id
+    selected = selected_workspace_id()
+    workspace = db.session.get(Workspace, selected) if selected else Workspace.query.order_by(Workspace.id).first()
     return workspace.id if workspace else None

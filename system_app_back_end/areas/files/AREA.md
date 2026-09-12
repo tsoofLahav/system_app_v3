@@ -158,3 +158,7 @@ This is not cosmetic. `parse_agent_text` needs an open **and** a close: without 
 ## Sync boundary (2026-09-08)
 
 File ORM writes now use `content_revision` as SQLAlchemy version_id_col, atomically rejecting stale UPDATE/DELETE statements. StaleDataError rolls back and returns HTTP 409 with the current file when available. Metadata writes can also advance this revision. Bulk SQL bypasses this guard. Regression: test_file_content_revision.py uses two isolated ORM sessions.
+
+## Presentation profiles
+
+Profiles reuse Workspace ownership; no user table or schema migration is needed. Existing data remains in the first workspace (displayed as Personal when named Default). New workspaces start with an empty Home/Daily journal. Requests carry X-Workspace-Id, launch snapshots use workspace-specific filenames, and Home visits already use workspace-specific keys. Unknown profiles fail rather than falling back to personal data. Switching flushes pending editor/object writes, saves the snapshot, then remounts a fresh AppState after keyboard idle.
