@@ -61,7 +61,7 @@ After finish pending / direct apply, only the touched files reload (`reloadAgent
 - `applied` with `undo` cards → compact undo toast queue ([`compact_undo_toast.dart`](compact_undo_toast.dart)): file + topic + change summary, **Undo** / **X** / ~8s auto-close; next file when one closes
 - else → snackbar summary (or error); **~10s** with an **X** to dismiss early ([`showAgentMessageSnackBar`](agent_result_ui.dart)); reload only applied file ids when `applied`
 
-Pending also opens when the **file** mounts ([`document_pane.dart`](../files/editor/document_pane.dart) → [`pending_review_ui.dart`](pending_review_ui.dart) → [`lookalike_review_dialog.dart`](lookalike_review_dialog.dart)). After a dialog closes, the same helper continues to any other on-screen file that still has pending.
+Pending opens once when entering a topic (`TopicView` → `topic_review_queue.dart`). The server returns all pending live files in the topic, including files outside the visible layout. File remounts and edits do not trigger reviews. After all files finish or are discarded, topic acknowledgement updates the same automation run used by the complimentary walkthrough, which skips handled topics.
 
 ### The review dialog
 

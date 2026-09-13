@@ -469,7 +469,7 @@ def _mark_complimentary(automation: Automation, role: str, *, done: bool) -> Non
     task = complimentary_task(automation.id, role)
     if task is None:
         return
-    set_task_status(task, done=done)
+    set_task_status(task, done=done, discard_reviews=False)
 
 
 def _fire_linked_at_start(window: Automation) -> None:
@@ -866,7 +866,12 @@ def review_status(automation: Automation) -> dict:
         ).all()
         by_id = {row.id: row.file_id for row in rows}
         pending = list(dict.fromkeys(by_id[i] for i in review_ids if i in by_id))
-    topics = input_topics(automation)
+    if latest and "review_refs" in (latest.result or {}):
+        from .review_tracking import pending_for_run
+        pending = [row.file_id for row in pending_for_run(latest)]
+    context = (latest.event_context or {}) if latest else {}
+    handled = set(context.get("reviewed_topic_ids", []))
+    topics = [t for t in input_topics(automation) if t["id"] not in handled]
     files_by_id = {f.id: f for f in File.query.filter(File.id.in_(pending)).all()} if pending else {}
     known_topics = {topic["id"] for topic in topics}
     for file in files_by_id.values():
@@ -890,6 +895,7 @@ def review_status(automation: Automation) -> dict:
     if automation.pending_user_input:
         received = True
     return {
+        "run_id": latest.id if latest else None,
         "run_completed": bool(latest and latest.status == "completed"),
         "topics": groups,
         "has_pending_review": bool(pending),
@@ -905,6 +911,10 @@ def review_status(automation: Automation) -> dict:
 def complete_review_if_clear(automation: Automation) -> bool:
     status = review_status(automation)
     if status["has_pending_review"] or not status["run_completed"]:
+        return False
+    latest = AutomationRun.query.filter_by(automation_id=automation.id).order_by(AutomationRun.id.desc()).first()
+    context = latest.event_context or {}
+    if set(context.get("review_topic_ids", [])) - set(context.get("reviewed_topic_ids", [])):
         return False
     _mark_complimentary(automation, ROLE_REVIEW, done=True)
     return True

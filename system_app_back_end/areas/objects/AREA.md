@@ -145,3 +145,5 @@ Deleting anything that contains objects must cascade, or the database keeps orph
 - Creating an object via `POST /files/:id/objects` must also insert its embed block — an object with no block is invisible.
 - Never delete a container without its cascade.
 - Related links are info ↔ info only. Description links are host object → info (any host type), or **task → info** for a title span. Agent edits of a host update that row, remap description anchors with the text, and leave the links; deleting the host (or a task checkbox line) is what cascade-removes them.
+
+Explicit completion/dismissal of a complimentary review task discards its owned pending review generations through review_tracking. Automatic completion after review acknowledgement calls set_task_status with discard_reviews=False, preserving unrelated/older pending work. PATCH status, toggle, and leftover dismissal share this behavior.

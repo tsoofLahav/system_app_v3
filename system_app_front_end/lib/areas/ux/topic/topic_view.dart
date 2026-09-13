@@ -1,3 +1,4 @@
+import '../../production_agent/topic_review_queue.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
@@ -36,12 +37,14 @@ class TopicView extends StatefulWidget {
 class _TopicViewState extends State<TopicView> {
   AppState get state => widget.state;
   late Object _signature;
+  int? _reviewedVisitTopicId;
 
   @override
   void initState() {
     super.initState();
     _signature = _canvasSignature(state);
     state.addListener(_onState);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeReviewTopic());
   }
 
   @override
@@ -61,9 +64,28 @@ class _TopicViewState extends State<TopicView> {
   }
 
   void _onState() {
+    _maybeReviewTopic();
     final next = _canvasSignature(state);
     if (next == _signature || !mounted) return;
     setState(() => _signature = next);
+  }
+
+  void _maybeReviewTopic() {
+    if (!mounted) return;
+    if (state.isViewMode || state.isArchiveMode || state.isDiagramMode) {
+      _reviewedVisitTopicId = null;
+      return;
+    }
+    final topic = state.selectedDetail?.topic;
+    if (topic == null || topic.id != state.selectedTopic?.id ||
+        state.topicDetailStale || state.reviewInteractionActive ||
+        _reviewedVisitTopicId == topic.id) return;
+    _reviewedVisitTopicId = topic.id;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && state.selectedTopic?.id == topic.id && !state.isViewMode) {
+        openTopicReviewQueue(context, state, topic.id);
+      }
+    });
   }
 
   /// What the canvas actually paints — not embed payloads, AI actions, etc.

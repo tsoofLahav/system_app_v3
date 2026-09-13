@@ -76,11 +76,15 @@ def run_automation(
         mark_input_done,
     )
 
+    from .section_windows import input_topics
+    from .review_tracking import capture_review_refs, pending_for_run
     run = AutomationRun(
         automation_id=automation.id,
         status="running",
         trigger_source=trigger_source,
-        event_context={"user_input": user_input} if user_input else {},
+        event_context={"user_input": user_input,
+                       "review_topic_ids": [t["id"] for t in input_topics(automation)],
+                       "reviewed_topic_ids": []},
     )
     db.session.add(run)
     # Publish running state (and the opened window) before slow AI work.
@@ -103,7 +107,13 @@ def run_automation(
             result = {"status": "failed", "error": str(error), "steps": []}
 
     run.status = "completed" if result.get("status") == "ok" else "failed"
+    # Reload a dismissal made by another request while the AI was running.
+    db.session.refresh(run, attribute_names=["event_context"])
+    result["review_refs"] = capture_review_refs(result)
     run.result = result
+    if (run.event_context or {}).get("review_dismissed"):
+        for pending in pending_for_run(run):
+            db.session.delete(pending)
     run.error = result.get("error")
     run.finished_at = datetime.utcnow()
     automation.last_run_at = run.finished_at

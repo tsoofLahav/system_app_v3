@@ -427,3 +427,5 @@ The bridge serializes and parses inline styles per physical line. Super Editor's
 ## Presentation profiles
 
 Profiles reuse Workspace ownership; no user table or schema migration is needed. Existing data remains in the first workspace (displayed as Personal when named Default). New workspaces start with an empty Home/Daily journal. Requests carry X-Workspace-Id, launch snapshots use workspace-specific filenames, and Home visits already use workspace-specific keys. Unknown profiles fail rather than falling back to personal data. Switching flushes pending editor/object writes, saves the snapshot, then remounts a fresh AppState after keyboard idle.
+
+Pending reviews open once on topic entry via TopicView and the topic-wide review API, including files outside the visible layout. DocumentPane mounting, cycling or editing no longer auto-opens a review. Explicit agent results and complimentary task walkthroughs retain their own guarded entry points.

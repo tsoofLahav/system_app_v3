@@ -55,6 +55,9 @@ Future<void> openComplimentaryReviewQueue(
           );
         }
       }
+      if (topic['id'] is int && status['run_id'] is int) {
+        await state.acknowledgeTopicReview(topic['id'] as int, [status['run_id'] as int]);
+      }
     }
     await state.completeComplimentaryReview(automationId);
   } catch (error) {

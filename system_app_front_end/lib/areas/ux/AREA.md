@@ -255,3 +255,5 @@ List dialogs (connect, choose view, place task, tags, move-file topic, topic typ
 Topic, view, and archive-topic navigation await the editor save barrier before replacing their panes. Offline/conflicted saves must not be reported as successful navigation saves.
 
 Section expiry notices wait while a review dialog or its complete automation walkthrough is active, including the transitions between topics. The walkthrough uses the root navigator so a refreshed task row cannot dispose its navigation context.
+
+Topic entry checks the entire topic review queue once per visit, rather than per file mount or edit. It shares the protected review-session guard with complimentary walkthroughs and acknowledges the topic only after all files have been handled.

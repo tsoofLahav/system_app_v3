@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from models import File, db
+from models import File, Topic, db
 from shared.helpers import get_or_404
 from areas.production_agent.services.runner import run_agent
 from areas.production_agent.services.write_tools import (
@@ -93,3 +93,19 @@ def finish_pending_review(file_id):
         return jsonify(result), 400
     db.session.commit()
     return jsonify(result)
+
+
+@agent_bp.route("/topics/<int:topic_id>/pending-reviews", methods=["GET"])
+def topic_pending_reviews(topic_id):
+    from areas.automations.services.review_tracking import topic_review_state
+    return jsonify(topic_review_state(get_or_404(Topic, topic_id)))
+
+
+@agent_bp.route("/topics/<int:topic_id>/review-complete", methods=["POST"])
+def topic_review_complete(topic_id):
+    from areas.automations.services.review_tracking import acknowledge_topic
+    topic = get_or_404(Topic, topic_id)
+    data = request.get_json(silent=True) or {}
+    acknowledge_topic(topic, data.get("run_ids") or [])
+    db.session.commit()
+    return jsonify({"ok": True})

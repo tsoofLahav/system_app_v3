@@ -54,6 +54,9 @@ def update_task(task_id):
     if data.get("status") == task_ops.PENDING and not task_ops.task_has_view(task):
         raise ValueError("pending tasks need a view")
     if "status" in data:
+        if data["status"] == task_ops.DONE:
+            from areas.automations.services.review_tracking import dismiss_task_reviews
+            dismiss_task_reviews(task)
         task_ops.sync_status_with_memberships(task)
         from areas.objects.services.inner_tasks import sync_inner_tasks_from_outer
 

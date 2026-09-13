@@ -62,8 +62,11 @@ def unmarked_status_for(task: Task, *, has_view: bool | None = None) -> str:
     return ACTIVE if has_view else INACTIVE
 
 
-def set_task_status(task: Task, *, done: bool) -> Task:
+def set_task_status(task: Task, *, done: bool, discard_reviews: bool = True) -> Task:
     if done:
+        from areas.automations.services.review_tracking import dismiss_task_reviews
+        if discard_reviews:
+            dismiss_task_reviews(task)
         task.status = DONE
     else:
         task.status = unmarked_status_for(task)

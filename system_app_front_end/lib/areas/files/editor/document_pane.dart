@@ -5,7 +5,6 @@ import '../../../core/app_state.dart';
 import '../../../core/platform/app_form_factor.dart';
 import '../data/app_file.dart';
 import '../data/topic.dart';
-import '../../production_agent/pending_review_ui.dart';
 import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
@@ -63,9 +62,6 @@ class _DocumentPaneState extends State<DocumentPane> {
     super.initState();
     _titleController = TextEditingController(text: _shownName);
     _titleFocus.addListener(_onTitleFocusChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_maybeOpenPendingReview());
-    });
   }
 
   @override
@@ -73,15 +69,7 @@ class _DocumentPaneState extends State<DocumentPane> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.file.id != widget.file.id) {
       _titleController.text = _shownName;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_maybeOpenPendingReview());
-      });
       return;
-    }
-    if (!oldWidget.autoOpenPendingReview && widget.autoOpenPendingReview) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_maybeOpenPendingReview());
-      });
     }
     // A rename from elsewhere (agent, another device) belongs on screen, but
     // never on top of what the user is in the middle of typing.
@@ -95,11 +83,6 @@ class _DocumentPaneState extends State<DocumentPane> {
     // need a rebuild on focus gain/loss to show it only when renaming.
     if (isPhoneLayout) setState(() {});
     if (!_titleFocus.hasFocus) unawaited(_saveTitle());
-  }
-
-  Future<void> _maybeOpenPendingReview() async {
-    if (!mounted || !widget.autoOpenPendingReview) return;
-    await openPendingReviewForFile(context, widget.state, widget.file.id);
   }
 
   @override

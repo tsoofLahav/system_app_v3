@@ -4322,6 +4322,13 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>> topicPendingReviews(int topicId) async =>
+      Map<String, dynamic>.from(await _api.get('/topics/$topicId/pending-reviews') as Map);
+
+  Future<void> acknowledgeTopicReview(int topicId, List<int> runIds) async {
+    await _api.post('/topics/$topicId/review-complete', {'run_ids': runIds});
+  }
+
   Future<PendingReview?> pendingReviewForFile(int fileId) {
     return _pendingReviews.getForFile(fileId);
   }

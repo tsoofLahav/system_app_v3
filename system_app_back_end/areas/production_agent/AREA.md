@@ -179,3 +179,5 @@ File ORM writes participate in content_revision version checking. Concurrent sta
 ## Transaction ownership (2026-09-12)
 
 Tool writes run inside a savepoint: review/notify and tool errors roll back only those writes. Pending-review persistence uses a separate savepoint; storage failure returns an error rather than an empty successful review. `run_agent(commit=False)` lets automation callers commit the window, run record and reviews together. Manual callers retain the default final commit.
+
+Topic review API: GET `/topics/:id/pending-reviews` lists pending files across the entire live topic and relevant active automation run IDs. POST `/topics/:id/review-complete` with `run_ids` acknowledges that topic only when no owned pending files remain. Ownership is tracked by review ID plus generation key; a later replacement on the same file is not deleted when an older task is dismissed.
