@@ -84,8 +84,9 @@ def resolve_scope(scope: dict | None, *, workspace_id: int) -> dict:
     kind = scope.get("kind")
 
     if kind == TOPIC and scope.get("topic_id") is not None:
-        resolved["topic_ids"] = [int(scope["topic_id"])]
+        resolved["topic_ids"] = live_topic_ids(workspace_id, [int(scope["topic_id"])])
     elif kind == TOPIC_TYPE:
+        resolved["topic_ids"] = []
         if scope.get("topic_type_id") is not None:
             resolved["topic_ids"] = topic_ids_for_type(
                 workspace_id, int(scope["topic_type_id"])
@@ -94,9 +95,9 @@ def resolve_scope(scope: dict | None, *, workspace_id: int) -> dict:
             resolved["topic_ids"] = topic_ids_for_tag(workspace_id, str(scope["tag"]))
     elif kind in (None, ALL):
         # Legacy rows: explicit ids, no kind.
-        if scope.get("topic_ids"):
+        if "topic_ids" in scope:
             resolved["topic_ids"] = [int(i) for i in scope["topic_ids"]]
-        if scope.get("file_ids"):
+        if "file_ids" in scope:
             resolved["file_ids"] = [int(i) for i in scope["file_ids"]]
 
     return resolved
@@ -119,6 +120,6 @@ def describe(scope: dict | None) -> str:
         if scope.get("topic_type_id") is not None:
             return f"topics of type {scope.get('topic_type_id')}"
         return f"topics tagged {scope.get('tag')!r}"
-    if scope.get("topic_ids"):
+    if "topic_ids" in scope:
         return f"topics {list(scope['topic_ids'])}"
     return "the whole workspace"

@@ -9,7 +9,9 @@ from areas.automations.services.scope import describe, resolve_scope, target_top
 
 
 def test_one_topic_resolves_to_that_topic():
-    assert resolve_scope({"kind": "topic", "topic_id": 3}, workspace_id=1) == {
+    with patch.object(scope_mod, "live_topic_ids", return_value=[3]):
+        resolved = resolve_scope({"kind": "topic", "topic_id": 3}, workspace_id=1)
+    assert resolved == {
         "workspace_id": 1,
         "topic_ids": [3],
     }

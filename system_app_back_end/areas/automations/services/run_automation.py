@@ -28,6 +28,9 @@ def run_steps(
     now = now or wall_clock(datetime.utcnow())
     resolved = resolve_scope(scope, workspace_id=workspace_id)
     records: list[dict] = []
+    if resolved.get("topic_ids") == [] or resolved.get("file_ids") == []:
+        return {"status": "ok", "error": None, "steps": [], "scope": resolved,
+                "summary": "No active topics or files in scope; nothing to do."}
 
     for position, step in enumerate(steps or [], 1):
         kind = str(step.get("kind") or "")

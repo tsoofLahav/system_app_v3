@@ -43,6 +43,19 @@ void main() {
     expect(entries.map((e) => e.file.id), [11, 10]);
   });
 
+  test('catalog excludes template and system topic files', () {
+    final entries = buildBringFileCatalog(
+      topics: [
+        home, work,
+        Topic(id: 4, workspaceId: 1, name: 'Template', isTemplate: true),
+        Topic(id: 5, workspaceId: 1, name: 'System', isSystem: true),
+      ],
+      files: [workDoc, _file(20, 4, 'Template file'), _file(21, 5, 'System file')],
+      mainTopic: home,
+    );
+    expect(entries.map((e) => e.file.id), [10]);
+  });
+
   test('first search word matches topic, the rest matches file name', () {
     final entries = buildBringFileCatalog(
       topics: [home, work, notes],

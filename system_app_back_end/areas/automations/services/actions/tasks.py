@@ -23,9 +23,9 @@ def task_list_ids_in_scope(resolved: dict) -> list[int]:
             Topic.is_system.is_(False),
         )
     )
-    if resolved.get("topic_ids"):
+    if "topic_ids" in resolved:
         query = query.filter(File.topic_id.in_([int(i) for i in resolved["topic_ids"]]))
-    if resolved.get("file_ids"):
+    if "file_ids" in resolved:
         query = query.filter(File.id.in_([int(i) for i in resolved["file_ids"]]))
     return sorted({row[0] for row in query.all()})
 

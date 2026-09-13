@@ -27,7 +27,7 @@ List<BrowseFileEntry> buildBringFileCatalog({
     if (file.topicId == mainTopic.id) continue;
     if (excludeFileIds.contains(file.id)) continue;
     final topic = topicById[file.topicId];
-    if (topic == null || topic.isArchived) continue;
+    if (topic == null || topic.isArchived || topic.isTemplate || topic.isSystem) continue;
     entries.add(BrowseFileEntry(topic: topic, file: file));
   }
 

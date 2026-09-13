@@ -98,7 +98,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     _scopeKind = AutomationScope.kindOf(scope);
     _topicId = scope['topic_id'] as int? ?? state.selectedTopic?.id;
     _topicTypeId =
-        AutomationScope.typeIdOf(scope) ?? state.topicTypes.firstOrNull?.id;
+        AutomationScope.typeIdOf(scope) ?? _availableTypes.firstOrNull?.id;
     _schedule = AutomationSchedule.parse(existing?.schedule);
     _viewId = existing?.viewId;
     _sectionKey = existing?.sectionKey;
@@ -113,7 +113,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
 
   Map<String, dynamic> _defaultScope() {
     final topic = state.selectedTopic;
-    return topic == null
+    return topic == null || topic.isTemplate || topic.isArchived || topic.isSystem
         ? AutomationScope.everywhere()
         : AutomationScope.oneTopic(topic.id);
   }
@@ -160,8 +160,8 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
         _steps.isEmpty) {
       return false;
     }
-    if (_scopeKind == AutomationScope.topic && _topicId == null) return false;
-    if (_scopeKind == AutomationScope.topicType && _topicTypeId == null) {
+    if (_scopeKind == AutomationScope.topic && !state.activeTopics.any((t) => t.id == _topicId)) return false;
+    if (_scopeKind == AutomationScope.topicType && !_availableTypes.any((t) => t.id == _topicTypeId)) {
       return false;
     }
     if (_needsComplimentary &&
@@ -189,7 +189,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     if (kind == StepKinds.fillFile) {
       if ((step['document_json'] as String? ?? '').trim().isEmpty) return false;
       if (_scopeKind == AutomationScope.topicType) {
-        return (step['template_slot'] as String? ?? '').trim().isNotEmpty;
+        return _stepFileName(step).isNotEmpty || (step['template_slot'] as String? ?? '').trim().isNotEmpty;
       }
       if (_scopeKind == AutomationScope.topic) {
         return _stepFileName(step).isNotEmpty;
@@ -203,6 +203,12 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     return StepKinds.all.contains(kind);
   }
 
+  List<TopicType> get _availableTypes => [
+    for (final type in state.topicTypes)
+      if (state.allTopics.any((t) => t.topicTypeId == type.id &&
+          !t.isTemplate && !t.isArchived && !t.isSystem)) type,
+  ];
+
   TopicType? get _scopedType => state.topicTypeById(_topicTypeId);
 
   Future<void> _loadTemplateFiles() async {
@@ -215,7 +221,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
     try {
       final files = await state.templateFilesForType(type!);
       if (!mounted) return;
-      setState(() => _templateFiles = files);
+      setState(() { _templateFiles = files; _hydrateStepFileNames(); });
     } catch (_) {
       if (!mounted) return;
       setState(() => _templateFiles = const []);
@@ -289,7 +295,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   }
 
   String _stepFileName(Map<String, dynamic> step) {
-    return stepFileName(step, [..._topicFiles, ..._scopeFiles]) ?? '';
+    return stepFileName(step, [..._topicFiles, ..._scopeFiles, ..._templateFiles]) ?? '';
   }
 
   void _writeFileName(Map<String, dynamic> step, String name) {
@@ -300,6 +306,13 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
 
   void _hydrateStepFileNames() {
     for (final step in _steps) {
+      if (step['kind'] != StepKinds.createFile && step['template_slot'] != null) {
+        final source = _templateFiles.where((f) => f.templateSlot == step['template_slot']).firstOrNull;
+        if (source != null) {
+          step['file_name'] = source.name;
+          step.remove('template_slot');
+        }
+      }
       final name = _stepFileName(step);
       if (name.isEmpty) continue;
       _writeFileName(step, name);
@@ -463,6 +476,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   Future<void> _addBringFileStep() async {
     setState(() => _addMenuOpen = false);
     await _loadScopeFiles();
+    _hydrateStepFileNames();
     if (!mounted) return;
     if (_scopeFiles.isEmpty) {
       ScaffoldMessenger.of(
@@ -590,7 +604,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   }
 
   Future<String?> _pickTopicFile(String? currentName) async {
-    return _pickFileName(uniqueFileNames(_topicFiles), currentName);
+    return _pickFileName(uniqueFileNames(_scopeKind == AutomationScope.topic ? _topicFiles : [..._scopeFiles, ..._templateFiles]), currentName);
   }
 
   Future<String?> _pickScopeFile(String? currentName) async {
@@ -646,7 +660,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   }
 
   Future<int?> _pickTopicType() async {
-    final types = state.topicTypes;
+    final types = _availableTypes;
     var initial = 0;
     for (var i = 0; i < types.length; i++) {
       if (types[i].id == _topicTypeId) {
@@ -718,6 +732,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
   Future<void> _openStepEditor(int index) async {
     if (index < 0 || index >= _steps.length) return;
     await _loadScopeFiles();
+    _hydrateStepFileNames();
     if (!mounted) return;
     final popped = await showAppDialog<_StepEditPop>(
       context: context,
@@ -730,7 +745,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
         slotLabel: _slotLabel,
         fileLabel: _fileLabel,
         templateFiles: _templateFiles,
-        topicFiles: _topicFiles,
+        topicFiles: _scopeKind == AutomationScope.topic ? _topicFiles : [..._scopeFiles, ..._templateFiles],
         scopeFiles: _scopeFiles,
         onPickTopic: _pickTopic,
         onPickAction: _pickSavedAction,
@@ -823,7 +838,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
               value: AutomationScope.topic,
               label: s['scopeOneTopic'],
             ),
-            AppSegmentedOption(
+            if (_availableTypes.isNotEmpty) AppSegmentedOption(
               value: AutomationScope.topicType,
               label: s['scopeTopicType'],
             ),
@@ -856,6 +871,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
               setState(() => _topicId = id);
               await _loadTopicFiles();
               await _loadScopeFiles();
+    _hydrateStepFileNames();
             },
           ),
         ],
@@ -871,6 +887,7 @@ class _AutomationBuilderDialogState extends State<_AutomationBuilderDialog> {
               setState(() => _topicTypeId = id);
               await _loadTemplateFiles();
               await _loadScopeFiles();
+    _hydrateStepFileNames();
             },
           ),
         ],
@@ -1398,7 +1415,7 @@ class _StepEditDialogState extends State<_StepEditDialog> {
         children: [
           if (_kind == StepKinds.ai) _aiFields(),
           if (_kind == StepKinds.createFile) _createFileFields(),
-          if (_kind == StepKinds.archiveFiles) _archiveFields(),
+          if (_kind == StepKinds.archiveFiles) _archiveFilesFields(),
           if (_kind == StepKinds.fillFile) _fillFileFields(),
           if (_kind == StepKinds.bringFile) _bringFileFields(),
           if (_kind == StepKinds.unmarkTasks)
@@ -1544,171 +1561,75 @@ class _StepEditDialogState extends State<_StepEditDialog> {
     );
   }
 
-  Widget _archiveFields() {
-    final slots = [
-      for (final file in widget.templateFiles)
-        if (file.templateSlot != null) file,
-    ];
-    final useSlot =
-        widget.scopeKind == AutomationScope.topicType && slots.isNotEmpty;
-    final useFile =
-        widget.scopeKind == AutomationScope.topic &&
-        widget.topicFiles.isNotEmpty;
+  Widget _archiveFilesFields() {
+    final name = stepFileName(_step, widget.topicFiles) ?? '';
     final days = _step['older_than_days'];
-    final slot = _step['template_slot'] as String?;
-    final fileName = stepFileName(_step, widget.topicFiles) ?? '';
-    final selected = fileName.isNotEmpty && useFile
-        ? 'file'
-        : (slot != null && slot.isNotEmpty && useSlot
-              ? 'slot'
-              : (days == null ? 'all' : 'older'));
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AppDialogChoiceField<String>(
-          label: s['archiveAllOrSlot'],
-          options: [
-            AppSegmentedOption(value: 'all', label: s['archiveAllInScope']),
-            if (useFile)
-              AppSegmentedOption(value: 'file', label: s['archiveThisFile']),
-            if (useSlot)
-              AppSegmentedOption(value: 'slot', label: s['archiveBySlot']),
-            AppSegmentedOption(value: 'older', label: s['archiveOlderThan']),
-          ],
-          selected: selected,
-          onSelected: (mode) {
-            setState(() {
-              _step.remove('older_than_days');
-              _step.remove('template_slot');
-              _step.remove('file_ids');
-              _step.remove('file_id');
-              _step.remove('file_name');
-              if (mode == 'older') _step['older_than_days'] = 30;
-              if (mode == 'slot') {
-                _step['template_slot'] = slots.first.templateSlot;
-              }
-              if (mode == 'file') {
-                final name = uniqueFileNames(widget.topicFiles).firstOrNull;
-                if (name != null) _step['file_name'] = name;
-              }
-            });
-          },
-        ),
-        if (selected == 'older' && days != null) ...[
-          const SizedBox(height: DialogFieldStyle.fieldGap),
-          AppDialogField(
-            label: s['days'],
-            child: _KeepTextField(
-              value: '$days',
-              keyboardType: TextInputType.number,
-              onChanged: (value) {
-                final parsed = int.tryParse(value.trim());
-                if (parsed == null || parsed <= 0) return;
-                _step['older_than_days'] = parsed;
-              },
-            ),
-          ),
+    final selected = name.isNotEmpty ? 'file' : (days == null ? 'all' : 'older');
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      AppDialogChoiceField<String>(
+        label: s['archiveAllOrSlot'],
+        options: [
+          AppSegmentedOption(value: 'all', label: s['archiveAllInScope']),
+          if (widget.topicFiles.isNotEmpty)
+            AppSegmentedOption(value: 'file', label: s['archiveThisFile']),
+          AppSegmentedOption(value: 'older', label: s['archiveOlderThan']),
         ],
-        if (selected == 'slot' && slot != null && slot.isNotEmpty) ...[
-          const SizedBox(height: DialogFieldStyle.fieldGap),
-          AppDialogPickerField(
-            label: s['templateSlot'],
-            preview: const AppIcon(AppIcons.archiveFiles, size: 16),
-            valueLabel: widget.slotLabel(slot),
-            onTap: () async {
-              final picked = await _pickSlot(slot);
-              if (picked == null) return;
-              setState(() => _step['template_slot'] = picked);
-            },
-          ),
-        ],
-        if (selected == 'file') ...[
-          const SizedBox(height: DialogFieldStyle.fieldGap),
-          AppDialogPickerField(
-            label: s['pickTopicFile'],
-            preview: const AppIcon(AppIcons.archiveFiles, size: 16),
-            valueLabel: widget.fileLabel(fileName),
-            onTap: () async {
-              final picked = await widget.onPickFile(fileName);
-              if (picked == null) return;
-              setState(() {
-                _step.remove('file_ids');
-                _step.remove('file_id');
-                _step['file_name'] = picked;
-              });
-            },
-          ),
-        ],
-      ],
-    );
+        selected: selected,
+        onSelected: (mode) => setState(() {
+          for (final key in ['older_than_days','template_slot','file_ids','file_id','file_name']) {
+            _step.remove(key);
+          }
+          if (mode == 'older') _step['older_than_days'] = 30;
+          if (mode == 'file') _step['file_name'] = uniqueFileNames(widget.topicFiles).first;
+        }),
+      ),
+      if (selected == 'older') AppDialogField(
+        label: s['days'],
+        child: _KeepTextField(value: '$days', keyboardType: TextInputType.number,
+          onChanged: (value) {
+            final parsed = int.tryParse(value.trim());
+            if (parsed != null && parsed > 0) _step['older_than_days'] = parsed;
+          }),
+      ),
+      if (selected == 'file') AppDialogPickerField(
+        label: s['pickTopicFile'], preview: const AppIcon(AppIcons.archiveFiles, size: 16),
+        valueLabel: widget.fileLabel(name),
+        onTap: () async {
+          final picked = await widget.onPickFile(name);
+          if (picked != null) setState(() => _step['file_name'] = picked);
+        },
+      ),
+    ]);
   }
 
   Widget _fillFileFields() {
-    final slots = [
-      for (final file in widget.templateFiles)
-        if (file.templateSlot != null) file,
-    ];
-    final useSlot =
-        widget.scopeKind == AutomationScope.topicType && slots.isNotEmpty;
-    final useFile = widget.scopeKind == AutomationScope.topic;
-    final fileName = stepFileName(_step, widget.topicFiles) ?? '';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AppDialogPickerField(
-          label: s['editFillFileContent'],
-          preview: const AppIcon(AppIcons.fillFile, size: 16),
-          valueLabel: s['editFillFileContent'],
-          onTap: () async {
-            final next = await widget.onEditSnippet(_step);
-            if (next == null) return;
-            setState(() {
-              _step['document_json'] = next['document_json'];
-              _step['objects'] = next['objects'] ?? const [];
-            });
-          },
-        ),
-        if (useSlot) ...[
-          const SizedBox(height: DialogFieldStyle.fieldGap),
-          AppDialogPickerField(
-            label: s['templateSlot'],
-            preview: const AppIcon(AppIcons.fillFile, size: 16),
-            valueLabel: widget.slotLabel(_step['template_slot'] as String?),
-            onTap: () async {
-              final picked = await _pickSlot(_step['template_slot'] as String?);
-              if (picked == null) return;
-              setState(() {
-                _step.remove('file_id');
-                _step.remove('file_name');
-                _step['template_slot'] = picked;
-              });
-            },
-          ),
-        ] else if (useFile) ...[
-          const SizedBox(height: DialogFieldStyle.fieldGap),
-          widget.topicFiles.isEmpty
-              ? Text(s['noTemplateFiles'], style: AppTypography.metaStyle)
-              : AppDialogPickerField(
-                  label: s['pickTopicFile'],
-                  preview: const AppIcon(AppIcons.fillFile, size: 16),
-                  valueLabel: widget.fileLabel(fileName),
-                  onTap: () async {
-                    final picked = await widget.onPickFile(fileName);
-                    if (picked == null) return;
-                    setState(() {
-                      _step.remove('template_slot');
-                      _step.remove('file_id');
-                      _step['file_name'] = picked;
-                    });
-                  },
-                ),
-        ] else
-          Padding(
-            padding: const EdgeInsets.only(top: DialogFieldStyle.fieldGap),
-            child: Text(s['fillFileNeedScope'], style: AppTypography.metaStyle),
-          ),
-      ],
-    );
+    final name = stepFileName(_step, widget.topicFiles) ?? '';
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      AppDialogPickerField(label: s['editFillFileContent'],
+        preview: const AppIcon(AppIcons.fillFile, size: 16), valueLabel: s['editFillFileContent'],
+        onTap: () async {
+          final next = await widget.onEditSnippet(_step);
+          if (next == null) return;
+          setState(() {
+            _step['document_json'] = next['document_json'];
+            _step['objects'] = next['objects'] ?? const [];
+          });
+        },
+      ),
+      const SizedBox(height: DialogFieldStyle.fieldGap),
+      AppDialogPickerField(label: s['pickTopicFile'],
+        preview: const AppIcon(AppIcons.fillFile, size: 16), valueLabel: widget.fileLabel(name),
+        onTap: () async {
+          final picked = await widget.onPickFile(name);
+          if (picked == null) return;
+          setState(() {
+            _step.remove('template_slot');
+            _step.remove('file_id');
+            _step['file_name'] = picked;
+          });
+        },
+      ),
+    ]);
   }
 
   Widget _bringFileFields() {

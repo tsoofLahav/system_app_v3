@@ -97,3 +97,6 @@ Results: each AI step goes through `presentAgentRunResult`; other steps snackbar
 The 5s open-app tick requests per-file DocumentSync reconciliation alongside section/placement refresh. Manual automation runs await the mounted-editor/object save barrier before dispatch.
 
 Review walkthrough (2026-09-13): `complimentary_review_queue.dart` owns a single navigator-root queue, protected across topic transitions and file reloads. Every topic gets its name/colour and a file count or explicit no-changes message. File reviews never recursively launch another queue here. Started reviews may finish after window expiry; the leftover modal waits until the entire walkthrough closes. Server `running` drives the same title spinner as input submission. Ready no-change runs stay pressable until acknowledged.
+
+### Active scope and named targets
+The scope picker offers only topic types with at least one live, non-system, non-template topic. Fixed file actions save a reference name and resolve it separately in each topic; template files may provide reference names but are not execution targets. Legacy slot selections are hydrated to names when possible. Create-file template selection remains separate.

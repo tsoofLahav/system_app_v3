@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from models import File, Topic, TopicType, db
-from areas.automations.services.name_match import named_file_error, pick_closest_named
+from areas.automations.services.name_match import pick_closest_named
 from areas.automations.services.scope import live_topic_ids, target_topic_id
 from areas.automations.services.steps import expand_name_tokens
 from areas.files.services import file_ops
@@ -15,7 +15,7 @@ from areas.files.services.clone_topic_skeleton import clone_slot_into_topic
 def _topics_in_scope(resolved: dict) -> list[int]:
     workspace_id = int(resolved["workspace_id"])
     topic_ids = resolved.get("topic_ids")
-    if topic_ids:
+    if topic_ids is not None:
         return live_topic_ids(workspace_id, topic_ids)
     return live_topic_ids(workspace_id)
 
@@ -25,7 +25,7 @@ def files_in_scope(resolved: dict, *, older_than: datetime | None = None):
         File.topic_id.in_(_topics_in_scope(resolved)),
         File.archived_at.is_(None),
     )
-    if resolved.get("file_ids"):
+    if "file_ids" in resolved:
         query = query.filter(File.id.in_([int(i) for i in resolved["file_ids"]]))
     if older_than is not None:
         query = query.filter(File.created_at < older_than)
@@ -101,14 +101,38 @@ def _probe_name(params: dict, files: list) -> str | None:
     return None
 
 
-def _pick_named_in_scope(files: list, params: dict):
+def _pick_named_per_topic(files: list, params: dict, resolved: dict):
     probe = _probe_name(params, files)
+    slot = str(params.get("template_slot") or "").strip()
+    if not probe and slot:
+        # Legacy configurations saved slot IDs. Resolve the reference name once;
+        # matching targets never depends on their inherited slot metadata.
+        for topic_id in _topics_in_scope(resolved):
+            topic = db.session.get(Topic, topic_id)
+            source = _template_source_for(topic) if topic else None
+            candidates = File.query.filter_by(topic_id=source.id).all() if source else []
+            match = next((f for f in candidates if (f.meta or {}).get("template_slot") == slot), None)
+            if match is not None:
+                probe = match.name
+                break
+        if not probe:
+            match = next((f for f in files if (f.meta or {}).get("template_slot") == slot), None)
+            probe = match.name if match else None
     if not probe:
-        return None, None
-    picked = pick_closest_named(probe, files)
-    if picked is None:
-        return None, named_file_error(probe)
-    return picked, None
+        return [], [], {"error": "selected file name could not be resolved"}
+    picked, missing = [], []
+    for topic_id in _topics_in_scope(resolved):
+        match = pick_closest_named(probe, [f for f in files if f.topic_id == topic_id])
+        if match is None:
+            topic = db.session.get(Topic, topic_id)
+            missing.append({"topic_id": topic_id, "topic": topic.name if topic else str(topic_id), "file_name": probe})
+        else:
+            picked.append(match)
+    return picked, missing, None
+
+
+def _missing_summary(missing):
+    return ("; no matching file in: " + ", ".join(m["topic"] for m in missing)) if missing else ""
 
 
 def archive_files(*, workspace_id: int, resolved_scope: dict, params: dict, now: datetime):
@@ -117,25 +141,19 @@ def archive_files(*, workspace_id: int, resolved_scope: dict, params: dict, now:
         older_than = now - timedelta(days=int(params["older_than_days"]))
 
     files = files_in_scope(resolved_scope, older_than=older_than)
-    slot = str(params.get("template_slot") or "").strip()
-    if slot:
-        files = [
-            f
-            for f in files
-            if str((f.meta or {}).get("template_slot") or "") == slot
-        ]
-    elif str(params.get("file_name") or "").strip() or params.get("file_id") is not None or params.get("file_ids"):
-        picked, error = _pick_named_in_scope(files, params)
+    missing = []
+    if any(params.get(k) for k in ("template_slot", "file_name", "file_id", "file_ids")):
+        files, missing, error = _pick_named_per_topic(files, params, resolved_scope)
         if error:
-            return {"error": error}
-        files = [picked] if picked is not None else []
+            return error
     for file in files:
         file_ops.archive_file(file, when=now)
     db.session.flush()
     return {
         "ok": True,
         "file_ids": [f.id for f in files],
-        "summary": f"archived {len(files)} file(s)",
+        "summary": f"archived {len(files)} file(s)" + _missing_summary(missing),
+        "missing_topics": missing,
     }
 
 
@@ -149,18 +167,9 @@ def fill_file(*, workspace_id: int, resolved_scope: dict, params: dict, now: dat
         "objects": params.get("objects") or [],
     }
     files = files_in_scope(resolved_scope)
-    slot = str(params.get("template_slot") or "").strip()
-    if slot:
-        files = [
-            f
-            for f in files
-            if str((f.meta or {}).get("template_slot") or "") == slot
-        ]
-    elif str(params.get("file_name") or "").strip() or params.get("file_id") is not None:
-        picked, error = _pick_named_in_scope(files, params)
-        if error:
-            return {"error": error}
-        files = [picked] if picked is not None else []
+    files, missing, error = _pick_named_per_topic(files, params, resolved_scope)
+    if error:
+        return error
     for file in files:
         save_file_version(file, source="automation")
         apply_snippet_to_file(file, snapshot, append=True)
@@ -168,7 +177,8 @@ def fill_file(*, workspace_id: int, resolved_scope: dict, params: dict, now: dat
     return {
         "ok": True,
         "file_ids": [f.id for f in files],
-        "summary": f"added content to {len(files)} file(s)",
+        "summary": f"added content to {len(files)} file(s)" + _missing_summary(missing),
+        "missing_topics": missing,
     }
 
 
@@ -180,28 +190,18 @@ def bring_file(*, workspace_id: int, resolved_scope: dict, params: dict, now: da
     files = files_in_scope(resolved_scope)
     if not str(params.get("file_name") or "").strip() and params.get("file_id") is None:
         return {"error": "no file to project"}
-    file, error = _pick_named_in_scope(files, params)
+    files, missing, error = _pick_named_per_topic(files, params, resolved_scope)
     if error:
-        return {"error": error}
-    if file is None:
-        return {"error": "no file to project"}
-    topic = db.session.get(Topic, file.topic_id)
-    if is_home_topic(topic):
-        return {"error": "that file already lives on Home"}
+        return error
     workspace = db.session.get(Workspace, int(workspace_id))
     if workspace is None:
         return {"error": "workspace not found"}
-    added = add_home_visit(workspace, file)
+    added = []
+    for file in files:
+        topic = db.session.get(Topic, file.topic_id)
+        if not is_home_topic(topic) and add_home_visit(workspace, file):
+            added.append(file.id)
     db.session.flush()
-    name = file.name or "file"
-    if added:
-        return {
-            "ok": True,
-            "file_id": file.id,
-            "summary": f"projected “{name}” onto Home",
-        }
-    return {
-        "ok": True,
-        "file_id": file.id,
-        "summary": f"“{name}” is already on Home",
-    }
+    return {"ok": True, "file_ids": added,
+            "summary": f"projected {len(added)} file(s) onto Home" + _missing_summary(missing),
+            "missing_topics": missing}

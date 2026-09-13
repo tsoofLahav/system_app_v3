@@ -257,3 +257,5 @@ Topic, view, and archive-topic navigation await the editor save barrier before r
 Section expiry notices wait while a review dialog or its complete automation walkthrough is active, including the transitions between topics. The walkthrough uses the root navigator so a refreshed task row cannot dispose its navigation context.
 
 Topic entry checks the entire topic review queue once per visit, rather than per file mount or edit. It shares the protected review-session guard with complimentary walkthroughs and acknowledges the topic only after all files have been handled.
+
+Bring-file catalog entries exclude template and system topics, as well as archived topics/files and Home files. Template documents are configuration sources, not documents to bring into the user workspace.
