@@ -241,13 +241,13 @@ def submit_automation_input(automation_id):
 
 @automations_bp.route("/automations/<int:automation_id>/clear-leftovers", methods=["POST"])
 def clear_automation_leftovers(automation_id):
-    automation = get_or_404(Automation, automation_id)
+    automation = Automation.query.filter_by(id=automation_id).with_for_update().populate_existing().first_or_404()
     if not automation.pending_clear:
         return jsonify({"error": "nothing to clear"}), 400
     data = request.get_json(silent=True) or {}
     disposition = str(data.get("disposition") or "report").strip()
-    if disposition not in ("report", "dismiss"):
-        return jsonify({"error": "disposition must be report or dismiss"}), 400
+    if disposition not in ("report", "dismiss", "continue"):
+        return jsonify({"error": "disposition must be report, dismiss or continue"}), 400
     result = apply_leftover_clear(automation, disposition=disposition)
     db.session.commit()
     return jsonify({"ok": True, **result})

@@ -198,3 +198,32 @@ def delete_task_description_link(task_id, link_id):
     db.session.delete(link)
     db.session.commit()
     return "", 204
+
+
+@tasks_bp.route("/tasks/<int:task_id>/skip", methods=["POST"])
+def skip_task(task_id):
+    from models import Automation
+    from areas.automations.services.section_windows import (
+        window_is_open, section_name_for_key, close_expired_section_windows)
+    from areas.objects.services.skipped_tasks import record_skip
+    from models import View
+    data = request.get_json(silent=True) or {}
+    window = Automation.query.filter_by(id=data.get("automation_id"),
+        workspace_id=default_workspace_id(), kind="section_window").with_for_update().populate_existing().first_or_404()
+    task = get_or_404(Task, task_id)
+    view = db.session.get(View, window.view_id)
+    name = section_name_for_key(view.layout_config, window.section_key) if view else ""
+    member = ViewTaskMembership.query.filter_by(view_id=window.view_id,
+        section_name=name, task_id=task.id).first()
+    if not member or task.archived_at is not None:
+        raise ValueError("Task does not belong to this section")
+    if task.status == "skipped":
+        return jsonify(task.to_dict())
+    if not window_is_open(window):
+        raise ValueError("Section is not active")
+    if task.status != "active":
+        raise ValueError("Only active tasks can be skipped")
+    record_skip(task, window, name)
+    close_expired_section_windows(window.workspace_id)
+    db.session.commit()
+    return jsonify(task.to_dict())

@@ -79,12 +79,12 @@ def set_task_status(task: Task, *, done: bool, discard_reviews: bool = True) -> 
 def toggle_task(task: Task) -> Task:
     if task.status in (INACTIVE, PENDING):
         return task
-    return set_task_status(task, done=task.status != DONE)
+    return set_task_status(task, done=task.status not in (DONE, "skipped"))
 
 
 def sync_status_with_memberships(task: Task) -> Task:
     """Inactive = no view. Pending needs a view. Done is left alone."""
-    if task.status == DONE:
+    if task.status in (DONE, "skipped"):
         return task
     has_view = task_has_view(task)
     if task.status == PENDING:
@@ -131,7 +131,7 @@ def unmark_tasks_in_lists(task_list_ids) -> list[Task]:
     tasks = (
         Task.query.filter(
             Task.task_list_id.in_(ids),
-            Task.status == DONE,
+            Task.status.in_((DONE, "skipped")),
             Task.archived_at.is_(None),
         )
         .order_by(Task.id)

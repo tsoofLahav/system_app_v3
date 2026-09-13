@@ -156,20 +156,6 @@ def test_cron_handles_section_windows_and_locked_clocks():
     assert "activate_due_pending_tasks" in source
 
 
-def test_leftover_clear_reports_keep_active_and_dismiss_marks_done():
-    source = inspect.getsource(windows.apply_leftover_clear)
-    assert "DISPOSITION_DISMISS" in source
-    assert "set_task_status" in source
-    assert "append_missed_report" in source
-    assert "_archive_one_time_section" in source
-    assert "_recycle_routine_section" not in source
-    assert "CADENCE_ROUTINE" not in source
-    archive = inspect.getsource(windows._archive_one_time_section)
-    assert "CADENCE_ONE_TIME" in archive
-    assert "archived_at" in archive
-    assert "_drop_section_memberships" in archive
-    assert "ONE_TIME_ARCHIVE_KIND" in archive or "_one_time_archive_file" in archive
-
 
 def test_window_should_close_after_duration_even_when_not_open():
     now = datetime(2026, 9, 5, 12, 0, 0)
@@ -194,8 +180,6 @@ def test_missed_report_file_is_archived_on_system_topic():
     source = inspect.getsource(windows._standing_report_file)
     assert "ensure_system_reports_topic" in source
     assert "archive_file" in source
-    missed = inspect.getsource(windows._missed_report_file)
-    assert "MISSED_REPORT_KIND" in missed
     one_time = inspect.getsource(windows._one_time_archive_file)
     assert "ONE_TIME_ARCHIVE_KIND" in one_time
 

@@ -162,3 +162,5 @@ File ORM writes now use `content_revision` as SQLAlchemy version_id_col, atomica
 ## Presentation profiles
 
 Profiles reuse Workspace ownership; no user table or schema migration is needed. Existing data remains in the first workspace (displayed as Personal when named Default). New workspaces start with an empty Home/Daily journal. Requests carry X-Workspace-Id, launch snapshots use workspace-specific filenames, and Home visits already use workspace-specific keys. Unknown profiles fail rather than falling back to personal data. Switching flushes pending editor/object writes, saves the snapshot, then remounts a fresh AppState after keyboard idle.
+
+Agent text task lists preserve skipped tasks in a `SKIPPED:` section, separate from `ACTIVE:` and `DONE:`, so unrelated AI edits do not silently reactivate skipped work.

@@ -31,7 +31,9 @@ class TaskMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final side = compact ? size + 8 : 32.0;
-    final child = _pending ? _clock() : _box();
+    final child = status == 'skipped'
+        ? Icon(Icons.remove_circle_outline, size: size, color: AppColors.textHint)
+        : _pending ? _clock() : _box();
     if (onToggle == null) {
       return SizedBox(
         width: side,

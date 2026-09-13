@@ -4404,13 +4404,38 @@ class AppState extends ChangeNotifier {
     await resolveLeftoverClear(disposition: 'report');
   }
 
-  Future<void> resolveLeftoverClear({required String disposition}) async {
-    final window = pendingTaskResetAcknowledgement;
-    if (window == null) return;
-    await _automations.clearLeftovers(window.id, disposition: disposition);
+  Future<void> resolveLeftoverClear({required String disposition, int? windowId}) async {
+    final id = windowId ?? pendingTaskResetAcknowledgement?.id;
+    if (id == null) return;
+    await _automations.clearLeftovers(id, disposition: disposition);
     await loadAutomations();
     if (isViewMode) await refreshCurrentView();
-    await loadArchive();
+    await _reloadEmbedsForOpenFiles();
+  }
+
+  Automation? activeWindowForTask(Task task) {
+    if (!task.isActive) return null;
+    final view = selectedView;
+    if (view == null) return null;
+    final membership = viewMemberships.where((m) => m.taskId == task.id && m.viewId == view.id).firstOrNull;
+    if (membership == null) return null;
+    final section = ViewLayoutConfig.sections(view.layoutConfig)
+        .where((s) => s.name == membership.sectionName).firstOrNull;
+    if (section?.key == null) return null;
+    final window = sectionWindowFor(viewId: view.id, sectionKey: section!.key!);
+    return window?.windowOpen == true ? window : null;
+  }
+
+  Future<void> skipTaskInActiveSection(Task task) async {
+    final window = activeWindowForTask(task);
+    if (window == null) return;
+    final data = await _api.post('/tasks/${task.id}/skip', {
+      'automation_id': window.id,
+    }) as Map<String, dynamic>;
+    final next = Task.fromJson(data);
+    _patchCachedTask(task.id, status: next.status);
+    await refreshSectionWindows(notifyIfChanged: true);
+    await _reloadEmbedsForOpenFiles();
   }
 
   Future<void> refreshCurrentView() async {

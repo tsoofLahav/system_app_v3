@@ -452,11 +452,12 @@ def _task_list_section(object_id: int, obj: dict[str, Any]) -> str:
     active = [t for t in tasks if t.get("status") == "active"]
     pending = [t for t in tasks if t.get("status") == "pending"]
     inactive = [t for t in tasks if t.get("status") == "inactive"]
+    skipped = [t for t in tasks if t.get("status") == "skipped"]
     done = [t for t in tasks if t.get("status") == "done"]
     other = [
         t
         for t in tasks
-        if t.get("status") not in {"active", "pending", "inactive", "done"}
+        if t.get("status") not in {"active", "pending", "inactive", "done", "skipped"}
     ]
     active = active + other
     task_list = obj.get("task_list") if isinstance(obj.get("task_list"), dict) else {}
@@ -476,6 +477,10 @@ def _task_list_section(object_id: int, obj: dict[str, Any]) -> str:
         lines.append("INACTIVE:")
         for task in sorted(inactive, key=lambda t: (t.get("list_order_index", 0), t.get("id", 0))):
             lines.append(f"- [ ] {task.get('title', '')}")
+    if skipped:
+        lines.append("SKIPPED:")
+        for task in sorted(skipped, key=lambda t: (t.get("list_order_index", 0), t.get("id", 0))):
+            lines.append("- [ ] " + str(task.get("title", "")))
     lines.append("DONE:")
     for task in sorted(done, key=lambda t: (t.get("list_order_index", 0), t.get("id", 0))):
         lines.append(f"- [x] {task.get('title', '')}")
@@ -983,6 +988,9 @@ def _parse_task_list(match: re.Match) -> tuple[dict | None, dict[int, dict]]:
             continue
         if upper == "INACTIVE:":
             section = "inactive"
+            continue
+        if upper == "SKIPPED:":
+            section = "skipped"
             continue
         if upper == "DONE:":
             section = "done"

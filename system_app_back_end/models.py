@@ -183,6 +183,37 @@ class Task(db.Model):
         }
 
 
+class SkippedTask(db.Model):
+    """Immutable occurrence history; snapshot IDs survive source deletion."""
+    __tablename__ = "skipped_tasks"
+    __table_args__ = (
+        db.UniqueConstraint("automation_id", "window_opened_at", "task_id",
+                            name="uq_skipped_task_occurrence"),
+        db.Index("ix_skipped_tasks_workspace_task_time", "workspace_id", "task_id", "skipped_at"),
+        db.Index("ix_skipped_tasks_workspace_topic_time", "workspace_id", "topic_id", "skipped_at"),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    workspace_id = db.Column(db.Integer, nullable=False)
+    task_id = db.Column(db.Integer, nullable=False)
+    task_title = db.Column(db.Text, nullable=False)
+    topic_id = db.Column(db.Integer)
+    topic_name = db.Column(db.Text)
+    task_list_id = db.Column(db.Integer)
+    task_list_title = db.Column(db.Text)
+    view_id = db.Column(db.Integer, nullable=False)
+    view_name = db.Column(db.Text, nullable=False)
+    section_key = db.Column(db.Text, nullable=False)
+    section_name = db.Column(db.Text, nullable=False)
+    automation_id = db.Column(db.Integer, nullable=False)
+    window_opened_at = db.Column(db.DateTime, nullable=False)
+    skipped_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {column.name: (_iso(getattr(self, column.name))
+                if isinstance(column.type, db.DateTime) else getattr(self, column.name))
+                for column in self.__table__.columns}
+
+
 class InformationPiece(db.Model):
     __tablename__ = "information_pieces"
 

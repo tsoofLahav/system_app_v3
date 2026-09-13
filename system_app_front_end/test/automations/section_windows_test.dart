@@ -141,14 +141,14 @@ void main() {
   });
 
   test('leftover dialog copy offers report and dismiss', () {
-    expect(AppStrings.en['leftoverClearReport'], 'Report');
-    expect(AppStrings.en['leftoverClearDismiss'], 'Dismiss');
+    expect(AppStrings.en['leftoverClearReport'], 'Skip and report');
+    expect(AppStrings.en['leftoverClearDismiss'], 'Was done');
     expect(AppStrings.he['leftoverClearReport'], isNotEmpty);
     expect(AppStrings.he['leftoverClearDismiss'], isNotEmpty);
     expect(AppStrings.en.leftoverClearMessage('Daily', 'Focus'), contains('Daily'));
-    expect(AppStrings.en.leftoverClearMessage('Daily', 'Focus'), contains('Report'));
-    expect(AppStrings.en.leftoverClearMessage('Daily', 'Focus'), contains('keeps them to do'));
-    expect(AppStrings.en.leftoverClearMessage('Daily', 'Focus'), contains('Dismiss marks them done'));
+    expect(AppStrings.en.leftoverClearMessage('Daily', 'Focus'), contains('Choose'));
+    expect(AppStrings.en.leftoverClearMessage('Daily', 'Focus'), contains('keeps this section open'));
+    expect(AppStrings.en.leftoverClearMessage('Daily', 'Focus'), contains('until you finish'));
   });
 
   test('each attention section becomes one notification', () {

@@ -72,6 +72,8 @@ class Task {
 
   bool get isDone => status == 'done';
 
+  bool get isSkipped => status == 'skipped';
+
   bool get isInactive => status == 'inactive';
 
   bool get isPending => status == 'pending';
@@ -79,10 +81,10 @@ class Task {
   bool get isActive => status == 'active';
 
   /// Checkbox only toggles active ↔ done.
-  bool get canToggleMark => isActive || isDone;
+  bool get canToggleMark => isActive || isDone || isSkipped;
 
   /// Membership is kept, but pending rows stay off the view page.
-  bool get appearsInView => archivedAt == null && (isActive || isDone);
+  bool get appearsInView => archivedAt == null && (isActive || isDone || isSkipped);
 
   bool get isComplimentaryTask =>
       complimentaryRole == 'input' || complimentaryRole == 'review';

@@ -113,6 +113,8 @@ class ViewFrameTaskListState extends State<ViewFrameTaskList> {
     final s = widget.state.strings;
     return [
       const AppContextMenuDivider(),
+      if (widget.state.activeWindowForTask(task) != null)
+        AppContextMenuItem(value: 'skip_task', label: s['leftoverClearReport']),
       AppContextMenuItem(value: 'view_section', label: s['assignTaskViews']),
       AppContextMenuItem(value: 'topic_list', label: s['placeTopicList']),
       AppContextMenuItem(
@@ -124,6 +126,10 @@ class ViewFrameTaskListState extends State<ViewFrameTaskList> {
   }
 
   Future<void> _onExtraAction(String action, Task task) async {
+    if (action == 'skip_task') {
+      await widget.state.skipTaskInActiveSection(task);
+      return;
+    }
     if (action != 'view_section' && action != 'topic_list') return;
     if (!mounted) return;
     final marked = _surfaceKey.currentState?.markedTaskIds() ?? const <int>[];

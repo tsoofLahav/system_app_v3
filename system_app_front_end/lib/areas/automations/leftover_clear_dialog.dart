@@ -39,16 +39,6 @@ Future<void> showLeftoverClearDialog({
       canPop: false,
       child: AppAdaptiveDialogShell(
         title: Text(s['leftoverClearTitle']),
-        actions: [
-          OutlinedButton(
-            onPressed: () => Navigator.pop(ctx, 'dismiss'),
-            child: Text(s['leftoverClearDismiss']),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, 'report'),
-            child: Text(s['leftoverClearReport']),
-          ),
-        ],
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -65,14 +55,29 @@ Future<void> showLeftoverClearDialog({
                   child: Text('• $title', style: AppTypography.taskRowStyle),
                 ),
             ],
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: () => Navigator.pop(ctx, 'dismiss'),
+              child: Text(s['leftoverClearDismiss']),
+            ),
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, 'continue'),
+              child: Text(s['leftoverClearContinue']),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () => Navigator.pop(ctx, 'report'),
+              child: Text(s['leftoverClearReport']),
+            ),
           ],
         ),
       ),
     ),
   );
-  if (choice != 'report' && choice != 'dismiss') return;
+  if (!['report', 'dismiss', 'continue'].contains(choice)) return;
   try {
-    await state.resolveLeftoverClear(disposition: choice!);
+    await state.resolveLeftoverClear(disposition: choice!, windowId: window.id);
   } catch (_) {
     // pending_clear stays; the next poll shows the modal again.
   }

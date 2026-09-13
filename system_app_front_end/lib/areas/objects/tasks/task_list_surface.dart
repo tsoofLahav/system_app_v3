@@ -75,7 +75,7 @@ bool complimentaryTaskPressable({
   required bool windowOpen,
   required bool processing,
 }) {
-  if (task.isDone || processing || !windowOpen) return false;
+  if (!task.isActive || processing || !windowOpen) return false;
   if (task.isInputComplimentary) return !task.complimentaryInputReceived;
   return (automation?.hasPendingReview ?? false) || (automation?.reviewReady ?? false);
 }

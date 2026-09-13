@@ -23,7 +23,7 @@ def scope_rules(wid):
     tasks = select(m.Task.__table__.c.id).where(or_(m.Task.__table__.c.task_list_id.in_(lists), m.Task.__table__.c.id.in_(view_tasks)))
     rules = [(model, model.workspace_id == wid) for model in
              (m.Topic, m.TopicType, m.Tag, m.Link, m.View, m.AiAction,
-              m.Automation, m.AgentConfig, m.AgentPendingReview)]
+              m.Automation, m.AgentConfig, m.AgentPendingReview, m.SkippedTask)]
     rules += [(m.File, m.File.topic_id.in_(topics)),
               (m.ObjectEmbed, m.ObjectEmbed.file_id.in_(files)),
               (m.TaskList, m.TaskList.id.in_(lists)),

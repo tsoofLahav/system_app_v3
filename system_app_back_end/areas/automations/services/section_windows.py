@@ -35,8 +35,6 @@ ROLE_INPUT = "input"
 ROLE_REVIEW = "review"
 DISPOSITION_REPORT = "report"
 DISPOSITION_DISMISS = "dismiss"
-MISSED_REPORT_KIND = "missed_section_report"
-MISSED_REPORT_FILE_NAME = "Missed tasks"
 ONE_TIME_ARCHIVE_KIND = "one_time_section_archive"
 ONE_TIME_ARCHIVE_FILE_NAME = "One-time tasks"
 _ISRAEL = ZoneInfo("Asia/Jerusalem")
@@ -163,6 +161,12 @@ def close_expired_section_windows(
     ).all()
     closed = 0
     for row in rows:
+        if row.window_opened_at and row.window_closes_at is None and not row.pending_clear:
+            view = db.session.get(View, row.view_id) if row.view_id else None
+            name = section_name_for_key(view.layout_config, row.section_key) if view else ""
+            if not view or not section_has_active_tasks(view.id, name):
+                _close_section_window(row)
+                closed += 1
         if row.pending_clear:
             payload = dict(row.pending_clear)
             remaining = []
@@ -419,7 +423,7 @@ def delete_complimentary_tasks(automation_id: int) -> None:
 
 def recycle_complimentary(automation: Automation) -> None:
     for task in complimentary_tasks_for(automation.id):
-        if task.status == DONE:
+        if task.status in (DONE, "skipped"):
             set_task_status(task, done=False)
         task.complimentary_cycle = {}
     automation.pending_user_input = None
@@ -434,7 +438,7 @@ def _recycle_routine_section(view: View, section_key: str) -> None:
     for task in tasks_in_section(view.id, name):
         if task.complimentary_role:
             continue
-        if task.status == DONE:
+        if task.status in (DONE, "skipped"):
             set_task_status(task, done=False)
 
 
@@ -467,7 +471,7 @@ def sync_linked_schedules(window: Automation) -> None:
 
 def _mark_complimentary(automation: Automation, role: str, *, done: bool) -> None:
     task = complimentary_task(automation.id, role)
-    if task is None:
+    if task is None or task.status == "skipped":
         return
     set_task_status(task, done=done, discard_reviews=False)
 
@@ -603,12 +607,6 @@ def _standing_report_file(workspace_id: int, kind: str, name: str) -> File | Non
     return file
 
 
-def _missed_report_file(workspace_id: int) -> File | None:
-    return _standing_report_file(
-        workspace_id, MISSED_REPORT_KIND, MISSED_REPORT_FILE_NAME
-    )
-
-
 def _one_time_archive_file(workspace_id: int) -> File | None:
     return _standing_report_file(
         workspace_id, ONE_TIME_ARCHIVE_KIND, ONE_TIME_ARCHIVE_FILE_NAME
@@ -630,29 +628,6 @@ def _prepend_editor_text(dest: str | None, snippet: str | None) -> str:
     return wrap_editor_text(f"{snip_body.rstrip()}\n\n{dest_body.lstrip()}")
 
 
-def append_missed_report(automation: Automation, payload: dict, leftovers: list) -> int | None:
-    titles = [
-        str(item.get("title") or "").strip()
-        for item in leftovers
-        if isinstance(item, dict) and str(item.get("title") or "").strip()
-    ]
-    snippet = missed_report_snippet(
-        when=datetime.utcnow(),
-        view_name=str(payload.get("view_name") or ""),
-        section_name=str(payload.get("section_name") or ""),
-        titles=titles,
-    )
-    file = _missed_report_file(automation.workspace_id)
-    if file is None:
-        return None
-    file.document_json = _prepend_editor_text(file.document_json, snippet)
-    from areas.files.services.file_ops import bump_content_revision
-
-    bump_content_revision(file)
-    db.session.add(file)
-    return file.id
-
-
 def _drop_section_memberships(view_id: int, section_name: str, task_ids: set[int]) -> None:
     if not task_ids:
         return
@@ -671,14 +646,14 @@ def _archive_one_time_section(automation: Automation, view: View) -> int:
     tasks = tasks_in_section(view.id, name)
     if not tasks:
         return 0
-    titles = [str(task.title or "").strip() for task in tasks if str(task.title or "").strip()]
+    titles = [str(task.title or "").strip() for task in tasks if task.status != "skipped" and str(task.title or "").strip()]
     snippet = missed_report_snippet(
         when=datetime.utcnow(),
         view_name=view.name or "",
         section_name=name,
         titles=titles,
     )
-    file = _one_time_archive_file(automation.workspace_id)
+    file = _one_time_archive_file(automation.workspace_id) if titles else None
     if file is not None:
         file.document_json = _prepend_editor_text(file.document_json, snippet)
         from areas.files.services.file_ops import bump_content_revision
@@ -703,43 +678,34 @@ def _close_section_window(automation: Automation) -> None:
 def apply_leftover_clear(
     automation: Automation, *, disposition: str = DISPOSITION_REPORT
 ) -> dict:
+    if disposition not in (DISPOSITION_REPORT, DISPOSITION_DISMISS, "continue"):
+        raise ValueError("disposition must be report, dismiss or continue")
     payload = automation.pending_clear or {}
-    leftovers = payload.get("leftovers") or []
-    marked_done = 0
-    report_file_id = None
-    choice = (
-        disposition
-        if disposition in (DISPOSITION_REPORT, DISPOSITION_DISMISS)
-        else DISPOSITION_REPORT
-    )
-
-    if choice == DISPOSITION_DISMISS:
-        for item in leftovers:
-            task_id = item.get("id")
-            if task_id is None:
-                continue
-            task = db.session.get(Task, int(task_id))
-            if task is None or task.archived_at is not None:
-                continue
-            if task.status != DONE:
-                set_task_status(task, done=True)
-                marked_done += 1
-    else:
-        report_file_id = append_missed_report(automation, payload, leftovers)
-
-    archived = 0
+    if not payload:
+        return {"marked_done": 0, "skipped": 0, "disposition": disposition}
     view = db.session.get(View, automation.view_id) if automation.view_id else None
-    if view is not None and automation.section_key:
-        archived = _archive_one_time_section(automation, view)
-    _end_window(automation)
+    name = section_name_for_key(view.layout_config, automation.section_key) if view else ""
+    live = {task.id: task for task in leftover_active_tasks(view.id, name)} if view else {}
+    tasks = [live[item.get("id")] for item in payload.get("leftovers", [])
+             if item.get("id") in live]
+    if disposition == "continue":
+        automation.pending_clear = None
+        automation.window_closes_at = None  # This occurrence only; scheduled duration stays intact.
+        if not live:
+            _close_section_window(automation)
+        db.session.flush()
+        return {"extended": bool(live), "disposition": disposition}
+    from areas.objects.services.skipped_tasks import record_skip
+    for task in tasks:
+        if disposition == DISPOSITION_DISMISS:
+            set_task_status(task, done=True)
+        else:
+            record_skip(task, automation, name)
+    _close_section_window(automation)
     db.session.flush()
-    return {
-        "archived": archived,
-        "unmarked": 0,
-        "marked_done": marked_done,
-        "disposition": choice,
-        "report_file_id": report_file_id,
-    }
+    return {"marked_done": len(tasks) if disposition == DISPOSITION_DISMISS else 0,
+            "skipped": len(tasks) if disposition == DISPOSITION_REPORT else 0,
+            "disposition": disposition}
 
 
 def pending_clears(workspace_id: int) -> list[dict]:
@@ -992,6 +958,8 @@ def ensure_section_windows(workspace_id: int) -> list[Automation]:
 def tick_section_window(automation: Automation, *, now: datetime, action: str, planned) -> None:
     """Advance one section window. `action` is plan_tick's start decision."""
     now = as_utc_naive(now) or now
+    if automation.window_opened_at and automation.window_closes_at is None:
+        close_expired_section_windows(automation.workspace_id, now)
     if window_should_close(automation, now):
         close_window_or_pending(automation, now)
     if action == "run" and not window_is_open(automation, now) and not automation.pending_clear:
