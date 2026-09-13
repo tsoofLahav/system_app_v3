@@ -116,7 +116,10 @@ class _SectionWindowHostState extends State<_SectionWindowHost> {
   }
 
   Future<void> _maybeShow() async {
-    if (!mounted || _showing || !widget.state.appReady) return;
+    if (!mounted || _showing || !widget.state.appReady ||
+        widget.state.reviewInteractionActive) {
+      return;
+    }
     final currentIds = {
       for (final window in widget.state.pendingClearWindows) window.id,
     };
@@ -129,7 +132,7 @@ class _SectionWindowHostState extends State<_SectionWindowHost> {
     _showing = true;
     try {
       for (final window in pending) {
-        if (!mounted) return;
+        if (!mounted || widget.state.reviewInteractionActive) return;
         await showLeftoverClearDialog(
           context: context,
           state: widget.state,

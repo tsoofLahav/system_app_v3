@@ -36,21 +36,27 @@ class LookalikeReviewDialog {
     BuildContext context, {
     required PendingReview pending,
     required AppStrings strings,
-    required Future<void> Function(List<Map<String, String>> decisions) onFinish,
+    required Future<void> Function(List<Map<String, String>> decisions)
+    onFinish,
     required Future<void> Function() onDiscard,
     String? fileName,
+    String? topicName,
     Color? topicAccent,
   }) {
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _LookalikeReviewBody(
-        pending: pending,
-        strings: strings,
-        onFinish: onFinish,
-        onDiscard: onDiscard,
-        fileName: fileName,
-        topicAccent: topicAccent,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: _LookalikeReviewBody(
+          pending: pending,
+          strings: strings,
+          onFinish: onFinish,
+          onDiscard: onDiscard,
+          fileName: fileName,
+          topicName: topicName,
+          topicAccent: topicAccent,
+        ),
       ),
     );
   }
@@ -63,6 +69,7 @@ class _LookalikeReviewBody extends StatefulWidget {
     required this.onFinish,
     required this.onDiscard,
     this.fileName,
+    this.topicName,
     this.topicAccent,
   });
 
@@ -71,6 +78,7 @@ class _LookalikeReviewBody extends StatefulWidget {
   final Future<void> Function(List<Map<String, String>> decisions) onFinish;
   final Future<void> Function() onDiscard;
   final String? fileName;
+  final String? topicName;
   final Color? topicAccent;
 
   @override
@@ -78,11 +86,9 @@ class _LookalikeReviewBody extends StatefulWidget {
 }
 
 const _gutterWidth = 72.0;
-const _bubbleHeight = 82.0;
 
 class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
   final Map<String, ReviewChoice> _choices = {};
-  final _bodyKey = GlobalKey();
   final _oldScroll = ScrollController();
   final _newScroll = ScrollController();
 
@@ -98,7 +104,6 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
   late final Map<int, String> _newCompare;
 
   String? _activeId;
-  double? _bubbleTop;
   var _busy = false;
   var _phoneShowCurrent = true;
 
@@ -138,7 +143,10 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
   /// A hunk can start on a line that is never drawn on its own — a `DONE:`
   /// header, a closing fence, a blank line inside an embed — so the anchor
   /// snaps to the first drawn element inside the hunk, else the one above it.
-  Map<int, String> _anchorLines(List<AgentBlock> blocks, {required bool oldSide}) {
+  Map<int, String> _anchorLines(
+    List<AgentBlock> blocks, {
+    required bool oldSide,
+  }) {
     final drawn = _drawnLines(blocks);
     final anchors = <int, String>{};
     for (final hunk in _hunks) {
@@ -213,17 +221,22 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
     return (oldCompare, newCompare);
   }
 
-  LineDecoration _decorate(int lineStart, int lineEnd, {required bool oldSide}) {
-    final anchorId =
-        (oldSide ? _oldAnchorLines : _newAnchorLines)[lineStart];
-    final anchorKey =
-        anchorId == null ? null : (oldSide ? _oldKeys : _newKeys)[anchorId];
-    final compare =
-        lineStart == lineEnd ? (oldSide ? _oldCompare : _newCompare)[lineStart] : null;
+  LineDecoration _decorate(
+    int lineStart,
+    int lineEnd, {
+    required bool oldSide,
+  }) {
+    final anchorId = (oldSide ? _oldAnchorLines : _newAnchorLines)[lineStart];
+    final anchorKey = anchorId == null
+        ? null
+        : (oldSide ? _oldKeys : _newKeys)[anchorId];
+    final compare = lineStart == lineEnd
+        ? (oldSide ? _oldCompare : _newCompare)[lineStart]
+        : null;
     final spanFor = compare == null
         ? null
         : (String text) =>
-            wordDiffSpan(text, compare, highlightRemoved: oldSide);
+              wordDiffSpan(text, compare, highlightRemoved: oldSide);
 
     final mark = markForRange(
       oldSide ? _oldMarks : _newMarks,
@@ -263,10 +276,11 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
 
   void _decide(ReviewChoice choice) {
     final active = _activeId;
-    if (active == null) return;
+    if (active == null || _busy || _bubbleStoodDown) return;
     setState(() {
       _choices[active] = choice;
-      _activeId = nextUndecidedHunkId(_hunks, _choices, fromId: active) ?? active;
+      _activeId =
+          nextUndecidedHunkId(_hunks, _choices, fromId: active) ?? active;
       _bubbleStoodDown = _allDecided;
     });
     _syncToActive();
@@ -283,11 +297,7 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
   Future<void> _syncToActive() async {
     final id = _activeId;
     if (id == null) return;
-    await Future.wait([
-      _revealIn(_oldKeys[id]),
-      _revealIn(_newKeys[id]),
-    ]);
-    if (mounted) _placeBubble();
+    await Future.wait([_revealIn(_oldKeys[id]), _revealIn(_newKeys[id])]);
   }
 
   Future<void> _revealIn(GlobalKey? key) async {
@@ -301,35 +311,10 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
     );
   }
 
-  /// Park the bubble beside the active change, in the gutter's own space.
-  void _placeBubble() {
-    final id = _activeId;
-    final body = _bodyKey.currentContext?.findRenderObject();
-    if (id == null || body is! RenderBox || !body.hasSize) return;
-    final anchor = (_newKeys[id]?.currentContext ??
-            _oldKeys[id]?.currentContext)
-        ?.findRenderObject();
-    final limit = (body.size.height - _bubbleHeight).clamp(0.0, double.infinity);
-    // With nothing to measure the bubble still shows, centred — the reviewer
-    // must always be able to accept or reject.
-    if (anchor is! RenderBox || !anchor.hasSize) {
-      final centred = limit / 2;
-      if (_bubbleTop != centred) setState(() => _bubbleTop = centred);
-      return;
-    }
-    final dy = anchor.localToGlobal(Offset.zero, ancestor: body).dy;
-    final top =
-        (dy + anchor.size.height / 2 - _bubbleHeight / 2).clamp(0.0, limit);
-    if (_bubbleTop != top) setState(() => _bubbleTop = top);
-  }
-
-  bool get _allDecided => pendingHunksFullyDecided(
-        _hunks.map((h) => h.id),
-        {
-          for (final e in _choices.entries)
-            e.key: e.value == ReviewChoice.accept ? 'accept' : 'reject',
-        },
-      );
+  bool get _allDecided => pendingHunksFullyDecided(_hunks.map((h) => h.id), {
+    for (final e in _choices.entries)
+      e.key: e.value == ReviewChoice.accept ? 'accept' : 'reject',
+  });
 
   Future<void> _finish() async {
     if (!_allDecided || _busy) return;
@@ -339,8 +324,9 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
         for (final h in _hunks)
           {
             'hunk_id': h.id,
-            'choice':
-                _choices[h.id] == ReviewChoice.accept ? 'accept' : 'reject',
+            'choice': _choices[h.id] == ReviewChoice.accept
+                ? 'accept'
+                : 'reject',
           },
       ];
       await widget.onFinish(decisions);
@@ -396,8 +382,8 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
               maxHeight: phone
                   ? size.height - inset.vertical
                   : (size.height - inset.vertical < 720
-                      ? size.height - inset.vertical
-                      : 720),
+                        ? size.height - inset.vertical
+                        : 720),
             ),
             child: GlassSurface.styled(
               style: AppGlassStyle.dialog,
@@ -408,6 +394,18 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if ((widget.topicName ?? '').isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: widget.topicAccent?.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        widget.topicName!,
+                        style: AppTypography.noteTitleStyle,
+                      ),
+                    ),
                   _header(s),
                   const SizedBox(height: AppDialogMetrics.titleGap),
                   if (phone) ...[
@@ -415,10 +413,8 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
                     const SizedBox(height: 8),
                   ],
                   Expanded(child: phone ? _phonePane(s) : _panes(s)),
-                  if (phone) ...[
-                    const SizedBox(height: 8),
-                    _phoneHunkBar(s),
-                  ],
+                  const SizedBox(height: 8),
+                  _phoneHunkBar(s),
                   const SizedBox(height: AppDialogMetrics.actionsGap),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -436,8 +432,9 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
                           boxShadow: _allDecided && !_busy
                               ? [
                                   BoxShadow(
-                                    color: AppColors.primary
-                                        .withValues(alpha: 0.45),
+                                    color: AppColors.primary.withValues(
+                                      alpha: 0.45,
+                                    ),
                                     blurRadius: 16,
                                     spreadRadius: 1,
                                   ),
@@ -497,7 +494,7 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
   }
 
   Widget _phoneHunkBar(AppStrings s) {
-    if (_hunks.isEmpty || _activeId == null) {
+    if (_hunks.isEmpty || _activeId == null || _bubbleStoodDown) {
       return const SizedBox.shrink();
     }
     final index = _hunks.indexWhere((h) => h.id == _activeId) + 1;
@@ -559,43 +556,31 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
 
   Widget _panes(AppStrings s) {
     if (_hunks.isEmpty) {
-      return Center(child: Text(s['reviewNoChanges'], style: AppTypography.metaStyle));
+      return Center(
+        child: Text(s['reviewNoChanges'], style: AppTypography.metaStyle),
+      );
     }
-    return NotificationListener<ScrollNotification>(
-      onNotification: (_) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _placeBubble();
-        });
-        return false;
-      },
-      child: Stack(
-        key: _bodyKey,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _pane(
-                  label: s['reviewPaneCurrent'],
-                  blocks: _oldBlocks,
-                  controller: _oldScroll,
-                  oldSide: true,
-                ),
-              ),
-              const SizedBox(width: _gutterWidth),
-              Expanded(
-                child: _pane(
-                  label: s['reviewPaneSuggested'],
-                  blocks: _newBlocks,
-                  controller: _newScroll,
-                  oldSide: false,
-                ),
-              ),
-            ],
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: _pane(
+            label: s['reviewPaneCurrent'],
+            blocks: _oldBlocks,
+            controller: _oldScroll,
+            oldSide: true,
           ),
-          _bubble(s),
-        ],
-      ),
+        ),
+        const SizedBox(width: _gutterWidth),
+        Expanded(
+          child: _pane(
+            label: s['reviewPaneSuggested'],
+            blocks: _newBlocks,
+            controller: _newScroll,
+            oldSide: false,
+          ),
+        ),
+      ],
     );
   }
 
@@ -636,62 +621,6 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _bubble(AppStrings s) {
-    final top = _bubbleTop;
-    if (top == null || _activeId == null || _bubbleStoodDown) {
-      return const SizedBox.shrink();
-    }
-    final index = _hunks.indexWhere((h) => h.id == _activeId) + 1;
-    return AnimatedPositioned(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
-      top: top,
-      left: 0,
-      right: 0,
-      height: _bubbleHeight,
-      child: Center(
-        child: SizedBox(
-          width: _gutterWidth - 4,
-          child: GlassSurface.styled(
-            style: AppGlassStyle.floating,
-            borderRadius: BorderRadius.circular(AppGlassStyle.floatingRadius),
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  s.reviewCounter(index, _hunks.length),
-                  style: AppTypography.metaStyle.copyWith(fontSize: 11),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _bubbleButton(
-                      tooltip: s['reviewAccept'],
-                      icon: AppIcons.check,
-                      color: AppColors.primary,
-                      selected: _choices[_activeId] == ReviewChoice.accept,
-                      onTap: () => _decide(ReviewChoice.accept),
-                    ),
-                    const SizedBox(width: 4),
-                    _bubbleButton(
-                      tooltip: s['reviewReject'],
-                      icon: AppIcons.close,
-                      color: AppColors.textHint,
-                      selected: _choices[_activeId] == ReviewChoice.reject,
-                      onTap: () => _decide(ReviewChoice.reject),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 

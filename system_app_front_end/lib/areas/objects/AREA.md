@@ -141,3 +141,5 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 ## Sync boundary (2026-09-08)
 
 Mounted info, task, table/chart, and caption editors register with EditorSaveRegistry. Navigation/AI waits for these saves and pending AppState object requests; writes are serialized per object/task key. Info/table acknowledgements retain dirty status if editing continued during the request. Object payload conflict policy remains separate from file-body DocumentSync; it is not covered by the File revision token.
+
+Complimentary review titles use the protected per-topic walkthrough. Server running status shares the input spinner; completed no-change runs can be opened for acknowledgement.

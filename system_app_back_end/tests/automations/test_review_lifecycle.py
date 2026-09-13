@@ -144,3 +144,40 @@ def test_type_scope_activates_per_topic_execution():
         result = run_automation.run_steps(workspace_id=1, scope={'kind': 'topic_type'},
                                           steps=[{'kind': 'ai', 'prompt': 'Review'}])
     assert result['steps'][0]['per_topic'] is True
+
+
+def test_review_groups_include_topics_with_no_changes(database):
+    automation = db.session.get(Automation, 1)
+    db.session.add(Topic(id=2, workspace_id=1, name='Sleep', color='#886644'))
+    db.session.add(AgentPendingReview(id=101, file_id=10, workspace_id=1, topic_id=1))
+    db.session.add(AutomationRun(automation_id=1, status='completed', result={
+        'steps': [{'pending_review_ids': [101]}]}))
+    groups = windows.review_status(automation)['topics']
+    assert [g['name'] for g in groups] == ['Process', 'Sleep']
+    assert groups[0]['files'] == [{'id': 10, 'name': '10'}]
+    assert groups[1]['files'] == []
+    assert groups[1]['color'] == '#886644'
+
+
+def test_finished_review_is_removed_from_deferred_leftovers(database):
+    db.session.add(Task(id=1, title='Reviewed', status='done'))
+    db.session.add(Task(id=2, title='Still open', status='active'))
+    window = Automation(workspace_id=1, name='Window', kind='section_window',
+                        pending_clear={'leftovers': [{'id': 1}, {'id': 2}]})
+    db.session.add(window)
+    windows.close_expired_section_windows(1)
+    assert window.pending_clear['leftovers'] == [{'id': 2}]
+
+
+def test_run_publishes_running_before_ai_and_requires_user_acknowledgement(database):
+    from areas.automations.services import run_automation
+    automation = db.session.get(Automation, 1)
+    def steps(**kwargs):
+        assert windows.enrich_automation(automation)['running'] is True
+        return {'status': 'ok', 'steps': [], 'scope': {}}
+    with patch.object(run_automation, 'run_steps', side_effect=steps), patch.object(windows, '_mark_complimentary') as mark:
+        run = run_automation.run_automation(automation, trigger_source='section_start')
+        assert run.status == 'completed'
+        # Only input is auto-completed. Even no-change reviews await the user.
+        assert all(c.args[1] != windows.ROLE_REVIEW for c in mark.call_args_list)
+    assert windows.enrich_automation(automation)['review_ready'] is True

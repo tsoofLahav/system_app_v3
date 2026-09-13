@@ -273,6 +273,10 @@ class AppState extends ChangeNotifier {
 
   /// File id whose lookalike pending dialog is currently open (anti double-open).
   int? _pendingReviewDialogFileId;
+  bool complimentaryReviewQueueOpen = false;
+  bool get reviewInteractionActive =>
+      complimentaryReviewQueueOpen || _pendingReviewDialogFileId != null;
+
 
   bool tryBeginPendingReviewDialog(int fileId) {
     if (_pendingReviewDialogFileId == fileId) return false;
@@ -4456,7 +4460,8 @@ class AppState extends ChangeNotifier {
   }
 
   bool isComplimentaryProcessing(int automationId) =>
-      complimentaryProcessingIds.contains(automationId);
+      complimentaryProcessingIds.contains(automationId) ||
+      automations.any((a) => a.id == automationId && a.running);
 
   Future<Map<String, dynamic>> submitComplimentaryInput(
     int automationId,

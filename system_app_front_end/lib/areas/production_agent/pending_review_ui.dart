@@ -14,7 +14,12 @@ Future<bool> openPendingReviewForFile(
   AppState state,
   int fileId, {
   List<int>? preferOrder,
+  bool automationQueue = false,
+  String? fileName,
+  String? topicName,
+  Color? topicAccent,
 }) async {
+  if (state.complimentaryReviewQueueOpen && !automationQueue) return false;
   if (!state.tryBeginPendingReviewDialog(fileId)) return false;
   var showed = false;
   try {
@@ -27,19 +32,22 @@ Future<bool> openPendingReviewForFile(
       context,
       pending: pending,
       strings: state.strings,
-      fileName: file?.name,
+      fileName: fileName ?? file?.name,
+      topicName: topicName,
       topicAccent:
-          detail == null ? null : TopicAppearance.accentFor(detail.topic),
+          topicAccent ??
+          (detail == null ? null : TopicAppearance.accentFor(detail.topic)),
       onFinish: (decisions) => state.finishPendingReview(fileId, decisions),
       onDiscard: () => state.discardPendingReview(fileId),
     );
   } catch (_) {
+    if (automationQueue) rethrow;
     return false;
   } finally {
     state.endPendingReviewDialog(fileId);
   }
 
-  if (showed && context.mounted) {
+  if (showed && context.mounted && !automationQueue) {
     await _openNextOnScreenPending(
       context,
       state,
@@ -58,11 +66,7 @@ Future<void> openPendingReviewsQueue(
   AppState state, {
   List<int>? preferOrder,
 }) async {
-  await _openNextOnScreenPending(
-    context,
-    state,
-    preferOrder: preferOrder,
-  );
+  await _openNextOnScreenPending(context, state, preferOrder: preferOrder);
 }
 
 Future<void> _openNextOnScreenPending(

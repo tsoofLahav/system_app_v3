@@ -95,3 +95,5 @@ Results: each AI step goes through `presentAgentRunResult`; other steps snackbar
 ## Sync boundary (2026-09-08)
 
 The 5s open-app tick requests per-file DocumentSync reconciliation alongside section/placement refresh. Manual automation runs await the mounted-editor/object save barrier before dispatch.
+
+Review walkthrough (2026-09-13): `complimentary_review_queue.dart` owns a single navigator-root queue, protected across topic transitions and file reloads. Every topic gets its name/colour and a file count or explicit no-changes message. File reviews never recursively launch another queue here. Started reviews may finish after window expiry; the leftover modal waits until the entire walkthrough closes. Server `running` drives the same title spinner as input submission. Ready no-change runs stay pressable until acknowledged.

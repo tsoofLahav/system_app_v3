@@ -70,9 +70,9 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 - Panes render the shared read-only file ([`file_preview.dart`](../files/editor/file_preview.dart)) — headings, lists, tables, tasks, graphs — never marker text. Agent text is parsed by [`agent_text_blocks.dart`](../files/model/agent_text_blocks.dart).
 - A hunk is mapped to the lines it touches ([`review_marks.dart`](review_marks.dart)). One table row, task or list item is one agent-text line, so a change inside an embed tints that row alone. Consecutive adds are one hunk per line.
 - States: pending (faint op tint), active (stronger tint plus a left rule), accepted (teal with a check), rejected (grey, dimmed, with a cross **and strikethrough on Suggested only** — Current stays unmarked because that is the line that remains). Word marks stay for changed text lines.
-- One bubble in the gutter between the panes carries `n / m` and Accept | Reject. Deciding advances it to the next undecided change and scrolls both panes there. Enter accepts, Backspace rejects, Up/Down walk the changes.
-- On phone the same dialog is full-width with a Current / Suggested toggle and Accept | Reject docked at the bottom (no gutter bubble). It is still not dismissible until Finish or Discard.
-- On the last decision the bubble disappears and Finish lights up, so attention moves to the one thing left to do. Clicking any change brings the bubble back to flip that choice.
+- A stationary decision bar below the panes carries `n / m` and Accept | Reject. Deciding advances it to the next undecided change and scrolls both panes there. Enter accepts, Backspace rejects, Up/Down walk the changes.
+- On phone the same dialog is full-width with a Current / Suggested toggle and Accept | Reject docked at the bottom (the same fixed controls). It is still not dismissible until Finish or Discard.
+- On the last decision the decision bar disappears and Finish lights up, so attention moves to the one thing left to do. Clicking any change brings the controls back to flip that choice.
 - Finish (disabled until all decided) → `POST /files/:id/pending-review/finish` (deep-copy the **old file** into the topic Archive — same list as user-archived files — then merge-apply the live file); Discard → `DELETE /files/:id/pending-review`. Removed or rewritten tasks are not Archive entries.
 
 | File | Role |
@@ -114,3 +114,5 @@ Two file panes on `AppGlassStyle.dialog` glass, each a `NoteCard` in the topic's
 ## Sync boundary (2026-09-08)
 
 Before agent dispatch, flush all mounted document and object text editors and await queued object writes. Required document conflicts show the localized resolve-before-AI instruction. A failed flush prevents dispatch. Document result refreshes enter the per-file DocumentSync coordinator.
+
+Automation walkthroughs pass explicit topic name, accent and file name, and disable automatic on-screen chaining. The dialog blocks back dismissal. Accept/Reject controls stay in a fixed footer on desktop and phone; each choice updates the shared decision map and enables Finish immediately on the last hunk. Topic-level no-change screens are explicit acknowledgements rather than empty file dialogs.

@@ -163,6 +163,18 @@ def close_expired_section_windows(
     ).all()
     closed = 0
     for row in rows:
+        if row.pending_clear:
+            payload = dict(row.pending_clear)
+            remaining = []
+            for item in payload.get("leftovers") or []:
+                task = db.session.get(Task, item.get("id"))
+                if task is not None and task.archived_at is None and task.status == ACTIVE:
+                    remaining.append(item)
+            if remaining:
+                row.pending_clear = {**payload, "leftovers": remaining}
+            else:
+                _close_section_window(row)
+                closed += 1
         if window_should_close(row, now):
             close_window_or_pending(row, now)
             closed += 1
@@ -214,6 +226,10 @@ def enrich_automation(automation: Automation, now: datetime | None = None) -> di
     now = now or datetime.utcnow()
     data["window_open"] = window_is_open(automation, now)
     data["attention"] = attention_for_window(automation, now)
+    latest = (AutomationRun.query.filter_by(automation_id=automation.id)
+              .order_by(AutomationRun.id.desc()).first())
+    data["running"] = bool(latest and latest.status == "running")
+    data["review_ready"] = bool(latest and latest.status == "completed")
     data["has_pending_review"] = False
     if (automation.kind or KIND_STANDARD) == KIND_STANDARD:
         if complimentary_task(automation.id, ROLE_REVIEW) is not None:
@@ -747,7 +763,7 @@ def input_topics(automation: Automation) -> list[dict]:
         Topic.is_template.is_(False),
         Topic.is_system.is_(False),
     )
-    if ids:
+    if "topic_ids" in resolved:
         query = query.filter(Topic.id.in_([int(i) for i in ids]))
     return [
         {"id": t.id, "name": t.name, "color": t.color}
@@ -850,6 +866,22 @@ def review_status(automation: Automation) -> dict:
         ).all()
         by_id = {row.id: row.file_id for row in rows}
         pending = list(dict.fromkeys(by_id[i] for i in review_ids if i in by_id))
+    topics = input_topics(automation)
+    files_by_id = {f.id: f for f in File.query.filter(File.id.in_(pending)).all()} if pending else {}
+    known_topics = {topic["id"] for topic in topics}
+    for file in files_by_id.values():
+        if file.topic_id not in known_topics:
+            topic = db.session.get(Topic, file.topic_id)
+            if topic is not None:
+                topics.append({"id": topic.id, "name": topic.name, "color": topic.color})
+                known_topics.add(topic.id)
+    groups = [
+        {**topic, "files": [
+            {"id": fid, "name": files_by_id[fid].name}
+            for fid in pending if fid in files_by_id and files_by_id[fid].topic_id == topic["id"]
+        ]}
+        for topic in topics
+    ]
     input_task = complimentary_task(automation.id, ROLE_INPUT)
     review_task = complimentary_task(automation.id, ROLE_REVIEW)
     received = False
@@ -859,6 +891,7 @@ def review_status(automation: Automation) -> dict:
         received = True
     return {
         "run_completed": bool(latest and latest.status == "completed"),
+        "topics": groups,
         "has_pending_review": bool(pending),
         "file_ids": pending,
         "input_received": received,

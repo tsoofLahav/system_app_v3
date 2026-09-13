@@ -253,3 +253,5 @@ List dialogs (connect, choose view, place task, tags, move-file topic, topic typ
 ## Sync boundary (2026-09-08)
 
 Topic, view, and archive-topic navigation await the editor save barrier before replacing their panes. Offline/conflicted saves must not be reported as successful navigation saves.
+
+Section expiry notices wait while a review dialog or its complete automation walkthrough is active, including the transitions between topics. The walkthrough uses the root navigator so a refreshed task row cannot dispose its navigation context.

@@ -1,3 +1,4 @@
+import '../../automations/complimentary_review_queue.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -25,7 +26,6 @@ import '../data/object_embed.dart';
 import '../data/task.dart';
 import '../../automations/automation.dart';
 import '../../automations/complimentary_input_dialog.dart';
-import '../../production_agent/pending_review_ui.dart';
 import '../views/assign_task_view_dialog.dart';
 import './pending_task_dialog.dart';
 import './task_drag_data.dart';
@@ -77,7 +77,7 @@ bool complimentaryTaskPressable({
 }) {
   if (task.isDone || processing || !windowOpen) return false;
   if (task.isInputComplimentary) return !task.complimentaryInputReceived;
-  return automation?.hasPendingReview ?? false;
+  return (automation?.hasPendingReview ?? false) || (automation?.reviewReady ?? false);
 }
 
 TextStyle complimentaryTitleStyle({
@@ -1986,18 +1986,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       }
       return;
     }
-    final status = await widget.state.complimentaryReviewStatus(automationId);
-    if (!mounted) return;
-    final fileIds = [
-      for (final id in status['file_ids'] as List? ?? const [])
-        if (id is int) id,
-    ];
-    if (fileIds.isEmpty) return;
-    for (final fileId in fileIds) {
-      if (!mounted) return;
-      await openPendingReviewForFile(context, widget.state, fileId);
-    }
-    await widget.state.completeComplimentaryReview(automationId);
+    await openComplimentaryReviewQueue(context, widget.state, automationId);
   }
 
   @override

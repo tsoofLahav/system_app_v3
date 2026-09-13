@@ -73,7 +73,6 @@ def run_automation(
     """Run it and record it. The caller commits."""
     from areas.automations.services.section_windows import (
         KIND_SECTION_WINDOW,
-        complete_review_if_clear,
         mark_input_done,
     )
 
@@ -84,7 +83,8 @@ def run_automation(
         event_context={"user_input": user_input} if user_input else {},
     )
     db.session.add(run)
-    db.session.flush()
+    # Publish running state (and the opened window) before slow AI work.
+    db.session.commit()
 
     now_utc = datetime.utcnow()
     now = wall_clock(now_utc, automation.timezone)
@@ -109,5 +109,5 @@ def run_automation(
     automation.last_run_at = run.finished_at
     if (automation.kind or "standard") != KIND_SECTION_WINDOW and run.status == "completed":
         mark_input_done(automation)
-        complete_review_if_clear(automation)
+        # The user acknowledges the walkthrough, including topics with no changes.
     return run
