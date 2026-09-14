@@ -202,15 +202,19 @@ class _InfoTextController extends SpanTextEditingController {
         }
       }
     }
-    for (final item in parseInnerTaskLines(bodyPart)) {
-      if (item.done && item.markEnd < item.end) {
-        bodySpans.add({
-          'start': item.markEnd,
-          'end': item.end,
-          'strikethrough': true,
-        });
-      }
-    }
+    // Merge (not append) so a done line's strikethrough doesn't repaint —
+    // and thus visually duplicate — text already covered by another span
+    // (bold, a connected/description-link run, ...).
+    final doneRanges = [
+      for (final item in parseInnerTaskLines(bodyPart))
+        if (item.done && item.markEnd < item.end)
+          (start: item.markEnd, end: item.end),
+    ];
+    final mergedBodySpans = overlaySpansWithStrikethrough(
+      bodySpans,
+      doneRanges,
+      bodyPart.length,
+    );
 
     return TextSpan(
       children: [
@@ -220,7 +224,7 @@ class _InfoTextController extends SpanTextEditingController {
           spans: titleSpans,
         ),
         TextSpan(text: '\n', style: bodyStyle),
-        ..._bodyInlineSpans(bodyPart, bodyStyle, bodySpans),
+        ..._bodyInlineSpans(bodyPart, bodyStyle, mergedBodySpans),
       ],
     );
   }

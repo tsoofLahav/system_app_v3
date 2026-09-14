@@ -367,6 +367,39 @@ bool _marksEqual(Map<String, dynamic> a, Map<String, dynamic> b) {
       a['color'] == b['color'];
 }
 
+/// Paint-only overlay of strikethrough on [ranges], merged per-character with
+/// whatever spans already cover that text (bold, connected links, ...).
+///
+/// Unlike appending a raw overlapping span to the list passed to
+/// [TextSpanBuilder.build] — which walks spans in start order and paints
+/// each one's full range regardless of what an earlier span already
+/// painted, doubling any text a later span overlaps — this merges styles
+/// per character first so the result is non-overlapping.
+List<Map<String, dynamic>> overlaySpansWithStrikethrough(
+  List<Map<String, dynamic>> spans,
+  Iterable<({int start, int end})> ranges,
+  int textLength,
+) {
+  if (textLength <= 0) return spans;
+  var any = false;
+  for (final range in ranges) {
+    if (range.end > range.start) {
+      any = true;
+      break;
+    }
+  }
+  if (!any) return spans;
+  final marks = _marksForLength(textLength, spans);
+  for (final range in ranges) {
+    final start = range.start.clamp(0, textLength);
+    final end = range.end.clamp(0, textLength);
+    for (var i = start; i < end; i++) {
+      marks[i]['strikethrough'] = true;
+    }
+  }
+  return _spansFromMarks(marks, textLength);
+}
+
 /// Paint-only overlay of [linkColorHex] on [ranges]. Does not mutate [spans].
 List<Map<String, dynamic>> paintSpansWithLinkColor(
   List<Map<String, dynamic>> spans,
