@@ -37,6 +37,7 @@ from areas.production_agent.services.create_file_tool import create_file
 from areas.production_agent.services.create_object_tool import create_object
 from areas.production_agent.services.views_tool import views_tool
 from areas.production_agent.services.connect_tool import connect_tool
+from areas.production_agent.services.rename_tool import rename_tool
 from areas.production_agent.services.pending_reviews import upsert_pending_from_proposals
 from areas.production_agent.services.write_tools import (
     WRITE_TOOL_NAMES,
@@ -356,6 +357,49 @@ TOOL_DEFS: list[dict[str, Any]] = [
     },
     {
         "type": "function",
+        "name": "rename",
+        "description": (
+            "Rename a topic or file, or set a topic's type. "
+            "target: topic | file | topic_type. "
+            "target=topic: topic_id + name. target=file: file_id + name. "
+            "target=topic_type: topic_id + topic_type (an existing type name "
+            "from list kind=topics; \"\" clears the topic's type). "
+            "Unused fields are 0 / \"\"."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "description": "topic | file | topic_type",
+                },
+                "topic_id": {
+                    "type": "integer",
+                    "description": "Required for topic/topic_type; 0 for file",
+                },
+                "file_id": {
+                    "type": "integer",
+                    "description": "Required for file; 0 otherwise",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "New name; \"\" when target=topic_type",
+                },
+                "topic_type": {
+                    "type": "string",
+                    "description": (
+                        "Existing type name; \"\" clears it; only for "
+                        "target=topic_type"
+                    ),
+                },
+            },
+            "required": ["target", "topic_id", "file_id", "name", "topic_type"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
         "name": "reference",
         "description": (
             "Load format or tool-usage examples. Call when unsure how agent text "
@@ -557,6 +601,19 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
             target_object_id=_optional_id(args.get("target_object_id")),
             text=str(args.get("text") or ""),
             segment_id=str(args.get("segment_id") or ""),
+        )
+    if name == "rename":
+        if not workspace_id:
+            return {"error": "workspace_id missing from run", "tool": "rename"}
+        write_mode = resolve_write_mode("rename", apply_mode)
+        return rename_tool(
+            workspace_id=workspace_id,
+            target=str(args.get("target") or ""),
+            topic_id=_optional_id(args.get("topic_id")),
+            file_id=_optional_id(args.get("file_id")),
+            name=str(args.get("name") or ""),
+            topic_type=str(args.get("topic_type") or ""),
+            write_mode=write_mode,
         )
     if name in WRITE_TOOL_NAMES or name == "update_file":
         # update_file kept as alias → patch_file for older prompts.

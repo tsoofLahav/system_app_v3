@@ -106,11 +106,15 @@ TOOL_WRITE_DEFAULTS: dict[str, WriteMode] = {
     "create_file": "direct_apply",
     "views": "direct_apply",
     "connect": "direct_apply",
+    "rename": "direct_apply",
 }
 
-# File-body writes only. Membership / link tools are dispatched separately.
+# File-body writes only. Membership / link / rename tools are dispatched
+# separately.
 WRITE_TOOL_NAMES = frozenset(
-    name for name in TOOL_WRITE_DEFAULTS if name not in {"views", "connect"}
+    name
+    for name in TOOL_WRITE_DEFAULTS
+    if name not in {"views", "connect", "rename"}
 )
 
 

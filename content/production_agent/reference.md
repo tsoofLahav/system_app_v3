@@ -238,6 +238,22 @@ Info↔info map edge.
 
 Underlines that phrase on the task title and points it at info 12. For text inside an info or table, pass `source_object_id` (the `[INFO]` / `[TABLE]` id) and the exact `text`. `segment_id` only when the same phrase is in more than one table cell (`embed:N#c0:1`). Description and related stay separate. Links stay on the host when you edit its fence — do not recreate an object to change its wording.
 
+### `rename`
+
+```json
+{ "target": "topic", "topic_id": 5, "file_id": 0, "name": "Q3 Planning", "topic_type": "" }
+```
+
+```json
+{ "target": "file", "topic_id": 0, "file_id": 12, "name": "Meeting notes", "topic_type": "" }
+```
+
+```json
+{ "target": "topic_type", "topic_id": 5, "file_id": 0, "name": "", "topic_type": "Project" }
+```
+
+Renames a topic or file, or sets a topic's type. `topic_type` must be an existing type name from `list` `kind=topics`; `""` clears the topic's type. System topics cannot be renamed or retyped.
+
 ### `reference`
 
 This help. `section`: `agent_text` | `tools` | `all`.
