@@ -359,12 +359,13 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "type": "function",
         "name": "rename",
         "description": (
-            "Rename a topic or file, or set a topic's type. "
-            "target: topic | file | topic_type. "
+            "Rename a topic, file, or view, or set a topic's type. "
+            "target: topic | file | view | topic_type. "
             "target=topic: topic_id + name. target=file: file_id + name. "
-            "target=topic_type: topic_id + topic_type (an existing type name "
-            "from list kind=topics; \"\" clears the topic's type). "
-            "Unused fields are 0 / \"\"."
+            "target=view: view_id + name (view_id from the views tool's "
+            "action=list). target=topic_type: topic_id + topic_type (an "
+            "existing type name from list kind=topics; \"\" clears the "
+            "topic's type). Unused fields are 0 / \"\"."
         ),
         "strict": True,
         "parameters": {
@@ -372,15 +373,19 @@ TOOL_DEFS: list[dict[str, Any]] = [
             "properties": {
                 "target": {
                     "type": "string",
-                    "description": "topic | file | topic_type",
+                    "description": "topic | file | view | topic_type",
                 },
                 "topic_id": {
                     "type": "integer",
-                    "description": "Required for topic/topic_type; 0 for file",
+                    "description": "Required for topic/topic_type; 0 otherwise",
                 },
                 "file_id": {
                     "type": "integer",
                     "description": "Required for file; 0 otherwise",
+                },
+                "view_id": {
+                    "type": "integer",
+                    "description": "Required for view; 0 otherwise",
                 },
                 "name": {
                     "type": "string",
@@ -394,7 +399,14 @@ TOOL_DEFS: list[dict[str, Any]] = [
                     ),
                 },
             },
-            "required": ["target", "topic_id", "file_id", "name", "topic_type"],
+            "required": [
+                "target",
+                "topic_id",
+                "file_id",
+                "view_id",
+                "name",
+                "topic_type",
+            ],
             "additionalProperties": False,
         },
     },
@@ -611,6 +623,7 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
             target=str(args.get("target") or ""),
             topic_id=_optional_id(args.get("topic_id")),
             file_id=_optional_id(args.get("file_id")),
+            view_id=_optional_id(args.get("view_id")),
             name=str(args.get("name") or ""),
             topic_type=str(args.get("topic_type") or ""),
             write_mode=write_mode,

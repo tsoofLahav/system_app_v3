@@ -241,18 +241,22 @@ Underlines that phrase on the task title and points it at info 12. For text insi
 ### `rename`
 
 ```json
-{ "target": "topic", "topic_id": 5, "file_id": 0, "name": "Q3 Planning", "topic_type": "" }
+{ "target": "topic", "topic_id": 5, "file_id": 0, "view_id": 0, "name": "Q3 Planning", "topic_type": "" }
 ```
 
 ```json
-{ "target": "file", "topic_id": 0, "file_id": 12, "name": "Meeting notes", "topic_type": "" }
+{ "target": "file", "topic_id": 0, "file_id": 12, "view_id": 0, "name": "Meeting notes", "topic_type": "" }
 ```
 
 ```json
-{ "target": "topic_type", "topic_id": 5, "file_id": 0, "name": "", "topic_type": "Project" }
+{ "target": "view", "topic_id": 0, "file_id": 0, "view_id": 3, "name": "Weekly Focus", "topic_type": "" }
 ```
 
-Renames a topic or file, or sets a topic's type. `topic_type` must be an existing type name from `list` `kind=topics`; `""` clears the topic's type. System topics cannot be renamed or retyped.
+```json
+{ "target": "topic_type", "topic_id": 5, "file_id": 0, "view_id": 0, "name": "", "topic_type": "Project" }
+```
+
+Renames a topic, file, or view, or sets a topic's type. `view_id` comes from the `views` tool's `action=list`. `topic_type` must be an existing type name from `list` `kind=topics`; `""` clears the topic's type. System topics cannot be renamed or retyped.
 
 ### `reference`
 
