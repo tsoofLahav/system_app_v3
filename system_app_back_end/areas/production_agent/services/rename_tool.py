@@ -67,7 +67,7 @@ def _rename_topic(
     if write_mode in ("notify_only", "review"):
         return {**result, "applied": False}
     topic.name = clean_name
-    db.session.commit()
+    db.session.flush()
     return {**result, "applied": True}
 
 
@@ -95,7 +95,7 @@ def _rename_file(
     if write_mode in ("notify_only", "review"):
         return {**result, "applied": False}
     file.name = clean_name
-    db.session.commit()
+    db.session.flush()
     return {**result, "applied": True}
 
 
@@ -126,7 +126,7 @@ def _rename_view(
     from areas.automations.services.section_windows import ensure_section_windows
 
     ensure_section_windows(view.workspace_id)
-    db.session.commit()
+    db.session.flush()
     return {**result, "applied": True}
 
 
@@ -169,5 +169,5 @@ def _set_topic_type(
     if write_mode in ("notify_only", "review"):
         return {**result, "applied": False}
     topic.topic_type_id = type_row.id if type_row else None
-    db.session.commit()
+    db.session.flush()
     return {**result, "applied": True}
