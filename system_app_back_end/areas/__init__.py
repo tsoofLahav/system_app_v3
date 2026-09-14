@@ -7,6 +7,7 @@ leaf module (e.g. a service) does not pull in every route in every area.
 
 def register_blueprints(app):
     from areas.automations.routes.automations import automations_bp
+    from areas.automations.routes.push_devices import push_devices_bp
     from areas.files.routes.file_versions import file_versions_bp
     from areas.files.routes.files import files_bp
     from areas.files.routes.topic_types import topic_types_bp
@@ -37,5 +38,6 @@ def register_blueprints(app):
     app.register_blueprint(agent_bp)
     app.register_blueprint(ai_actions_bp)
     app.register_blueprint(automations_bp)
+    app.register_blueprint(push_devices_bp)
     app.register_blueprint(tags_bp)
     app.register_blueprint(upload_bp)

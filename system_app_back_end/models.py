@@ -620,3 +620,21 @@ class AgentPendingReview(db.Model):
             "tool": self.tool or "patch_file",
             "created_at": _iso(self.created_at),
         }
+
+
+class PushDevice(db.Model):
+    """One installation follows exactly one presentation workspace at a time."""
+    __tablename__ = "push_devices"
+    id = db.Column(db.Integer, primary_key=True)
+    installation_id = db.Column(db.String(36), unique=True, nullable=False)
+    workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    token = db.Column(db.Text, nullable=False)
+    environment = db.Column(db.String(10), nullable=False)
+    language = db.Column(db.String(2), nullable=False, default="en")
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    last_keys = db.Column(JSONB, nullable=False, default=list)
+    last_badge = db.Column(db.Integer, nullable=False, default=-1)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {"active": self.active, "workspace_id": self.workspace_id}
