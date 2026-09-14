@@ -24,6 +24,7 @@ import './models/archive_index.dart';
 import './models/block.dart';
 import '../areas/objects/data/inner_tasks.dart';
 import '../areas/objects/data/object_embed.dart';
+import '../areas/files/rich_text/text_formatting.dart';
 import './models/tag.dart';
 import '../areas/objects/data/task.dart';
 import '../areas/files/data/topic.dart';
@@ -3407,6 +3408,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
                 if (s is Map) Map<String, dynamic>.from(s),
             ]
           : <Map<String, dynamic>>[];
+      // `setAllInnerTasks` rewrites each checkbox line from its parsed parts,
+      // which shortens a legacy `- [ ] ` line to `☐ ` — remap so connected
+      // spans after it don't drift onto the wrong text.
+      final remappedSpans = remapSpansForTextEdit(spans, body, next);
       final titleSpans = meta is Map && meta['title_spans'] is List
           ? [
               for (final s in meta['title_spans'])
@@ -3420,7 +3425,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
           embed,
           title: title,
           body: next,
-          spans: spans,
+          spans: remappedSpans,
           titleSpans: titleSpans,
         ),
       );
@@ -3455,11 +3460,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
               if (s is Map) Map<String, dynamic>.from(s),
           ]
         : <Map<String, dynamic>>[];
+    // A toggled legacy `- [ ] ` line shortens to `☐ ` — remap so connected
+    // spans after it don't drift onto the wrong text.
+    final remappedSpans = remapSpansForTextEdit(spans, body, next);
     await updateInfoObject(
       embed,
       title: title,
       body: next,
-      spans: spans,
+      spans: remappedSpans,
       titleSpans: titleSpans,
     );
     _patchDescriptionPeerBody(infoObjectId, next);
@@ -3468,7 +3476,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         embed,
         title: title,
         body: next,
-        spans: spans,
+        spans: remappedSpans,
         titleSpans: titleSpans,
       );
     }
