@@ -25,7 +25,7 @@ from models import (
 )
 from areas.automations.services.automation_schedule import as_utc_naive
 from areas.automations.services.scope import resolve_scope
-from areas.objects.services.task_ops import ACTIVE, DONE, set_task_status
+from areas.objects.services.task_ops import ACTIVE, DONE, PENDING, set_task_status
 
 KIND_STANDARD = "standard"
 KIND_SECTION_WINDOW = "section_window"
@@ -646,7 +646,13 @@ def _archive_one_time_section(automation: Automation, view: View) -> int:
     tasks = tasks_in_section(view.id, name)
     if not tasks:
         return 0
-    titles = [str(task.title or "").strip() for task in tasks if task.status != "skipped" and str(task.title or "").strip()]
+    # Pending tasks (scheduled for a future day) haven't been missed and
+    # haven't had a chance to activate yet — leave their membership and
+    # row alone so they survive this window closing.
+    disposable = [task for task in tasks if task.status != PENDING]
+    if not disposable:
+        return 0
+    titles = [str(task.title or "").strip() for task in disposable if task.status != "skipped" and str(task.title or "").strip()]
     snippet = missed_report_snippet(
         when=datetime.utcnow(),
         view_name=view.name or "",
@@ -661,11 +667,11 @@ def _archive_one_time_section(automation: Automation, view: View) -> int:
         bump_content_revision(file)
         db.session.add(file)
     now = datetime.utcnow()
-    _drop_section_memberships(view.id, name, {task.id for task in tasks})
-    for task in tasks:
+    _drop_section_memberships(view.id, name, {task.id for task in disposable})
+    for task in disposable:
         if task.task_list_id is None and task.archived_at is None:
             task.archived_at = now
-    return len(tasks)
+    return len(disposable)
 
 
 def _close_section_window(automation: Automation) -> None:
