@@ -104,10 +104,16 @@ Future<void> dispatchShortcutAction(
       });
       return;
     case ShortcutActionIds.cycleMainFiles:
-      await _cycleTopicFiles(context, state);
+      // Cmd+[ pushes the last file to the front in LTR, and the opposite in
+      // RTL, so it always reads as "backward" relative to reading direction.
+      await _cycleTopicFiles(context, state,
+          reverse: Directionality.of(context) == TextDirection.rtl);
       return;
     case ShortcutActionIds.cycleMainFilesBack:
-      await _cycleTopicFiles(context, state, reverse: true);
+      // Cmd+] pushes the first file to the back in LTR, and the opposite in
+      // RTL, so it always reads as "forward" relative to reading direction.
+      await _cycleTopicFiles(context, state,
+          reverse: Directionality.of(context) != TextDirection.rtl);
       return;
     case ShortcutActionIds.addTopic:
       await createTopicFromDialog(context, state);

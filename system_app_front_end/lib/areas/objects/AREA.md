@@ -88,7 +88,7 @@ Connect info on a task row works in the file **and** in a view (same `TaskListSu
 - Description: right-click marked text / caret line in an object field → Connect info… (empty-title infos are hidden, including ones the graph used to label `Info`). Offers: **Without**, then names similar to the marked text, then infos in the same topic, then the rest. Searching by name drops the similar-text offers and lists the topic first, then everywhere else. Dark-teal **italic** glyphs (no underline); strikethrough from a done task still combines. Hover bubble (stays open while the pointer is on the connected text or the bubble, and the bubble scrolls), double-click / double-tap opens the target info in its file. On phone, double-tap marks the word (same as the file body). The object-field mark bar matches the file body (same Cupertino Cut / Copy / Paste / **More**; **Info** when the mark overlaps a connected span) and opens that bubble as a modal (outside tap or ×) without dropping writing focus — not a double-tap on the connected glyphs. Right-click a connected span for **Remove connection**. Unconnecting or reconnecting a mark cuts only that range — the rest of a connected sentence stays. Typing before a connected span moves the paint with those glyphs (anchors remap onto the live text, including on the view page, and PATCH).
 - **Objects map** ([`interactive_graph_view`](https://pub.dev/packages/interactive_graph_view)): info nodes + related edges; pan/zoom; drag to move — the same while cards are open. The package has no layout or persistence — we own `NodeWidget.position`. Coordinates live on the object (`diagram_x` / `diagram_y`); unsaved nodes get a connected layout (layers along links, then spring forces) so related objects sit near each other. **Arrange by links** (map chip, or Graph configuration) throws every saved spot away and writes that connected layout; a later drag is saved until Arrange is pressed again. The stored point is the **center of the circle that fits the card**. Double-click a chip opens a content-tight card on that same center (several may be open); every other closed node moves out along its ray by `R_open − R_closed`. The open card is a pane overlay that follows the chip — not a larger graph node. Close with × (that card) or **Close all**. Isolated objects stay off the map unless Graph configuration shows them. Tag filter above the bottom bar lists object tags only (not topic types); topic/tag color modes. Right-click a chip or open card: **Add connection…** (related, infos only) and **Go to source**. Linked spans on an open card: double-click / double-tap pans to the target chip at the current zoom, then opens it the same way as a chip double-click. Cards stay editable.
 
-In-file editing of the unified info text is presentation (files).
+In-file editing of the unified info text is presentation (files). Info Enter / phone Return inserts a newline and keeps focus; Escape leaves. Cmd+Enter remains a plain newline. Checklist Enter keeps its existing continuation behavior.
 
 ## Image and table (data)
 
@@ -141,6 +141,16 @@ In-file embed widgets: [`../files/editor/embeds/`](../files/editor/embeds/).
 ## Sync boundary (2026-09-08)
 
 Mounted info, task, table/chart, and caption editors register with EditorSaveRegistry. Navigation/AI waits for these saves and pending AppState object requests; writes are serialized per object/task key. Info/table acknowledgements retain dirty status if editing continued during the request. Object payload conflict policy remains separate from file-body DocumentSync; it is not covered by the File revision token.
+
+### Rich field direction and inner-task boundary
+
+Info, task, and table rich fields persist an optional whole-field `direction`
+(`rtl`/`ltr`) in existing span metadata; empty fields retain a zero-length
+metadata record. See [rich text](../files/rich_text/RICH_TEXT.md) for inheritance
+and [RTL](../files/rich_text/rtl/RTL.md) for layout. This does not change task or
+object identity. `promoteBareDashToCheckbox` ignores a caret at/before the body
+start or beyond the body; Enter at the title/body boundary must not call
+`lastIndexOf` with a negative index. Covered by `inner_tasks_test.dart`.
 
 Complimentary review titles use the protected per-topic walkthrough. Server running status shares the input spinner; completed no-change runs can be opened for acknowledgement.
 

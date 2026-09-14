@@ -98,6 +98,7 @@ class _PhoneTopicViewState extends State<PhoneTopicView> {
     final page = _currentPage.clamp(0, widget.files.length - 1);
     PhoneVisibleFile.setName(
       state.fileDisplayName(widget.files[page].name),
+      source: state.canvasTopicFor(widget.topic, widget.files[page]),
     );
   }
 

@@ -19,18 +19,24 @@ class ApiService {
   ApiService({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;
+  int? workspaceId;
+  Map<String, String> get headers => {
+    'Content-Type': 'application/json',
+    if (workspaceId != null) 'X-Workspace-Id': '$workspaceId',
+  };
 
   Uri _uri(String path) => Uri.parse('${ApiConfig.baseUrl}$path');
 
   Future<dynamic> get(String path) async {
-    final response = await _client.get(_uri(path));
+    final response = await _client.get(_uri(path), headers: headers)
+        .timeout(const Duration(seconds: 30));
     return _decode(response);
   }
 
   Future<dynamic> post(String path, Map<String, dynamic> body) async {
     final response = await _client.post(
       _uri(path),
-      headers: {'Content-Type': 'application/json'},
+      headers: headers,
       body: jsonEncode(body),
     );
     return _decode(response);
@@ -39,7 +45,7 @@ class ApiService {
   Future<dynamic> patch(String path, Map<String, dynamic> body) async {
     final response = await _client.patch(
       _uri(path),
-      headers: {'Content-Type': 'application/json'},
+      headers: headers,
       body: jsonEncode(body),
     );
     return _decode(response);
@@ -48,7 +54,7 @@ class ApiService {
   Future<dynamic> put(String path, Map<String, dynamic> body) async {
     final response = await _client.put(
       _uri(path),
-      headers: {'Content-Type': 'application/json'},
+      headers: headers,
       body: jsonEncode(body),
     );
     return _decode(response);
@@ -57,7 +63,7 @@ class ApiService {
   Future<void> delete(String path, {Map<String, dynamic>? body}) async {
     final response = await _client.delete(
       _uri(path),
-      headers: body == null ? null : {'Content-Type': 'application/json'},
+      headers: headers,
       body: body == null ? null : jsonEncode(body),
     );
     if (response.statusCode == 204) return;
@@ -66,6 +72,7 @@ class ApiService {
 
   Future<Map<String, dynamic>> uploadImage(String filePath, List<int> bytes) async {
     final request = http.MultipartRequest('POST', _uri('/upload-image'));
+    request.headers.addAll(headers..remove('Content-Type'));
     request.files.add(
       http.MultipartFile.fromBytes('image', bytes, filename: filePath),
     );

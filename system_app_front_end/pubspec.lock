@@ -553,7 +553,7 @@ packages:
     source: hosted
     version: "3.1.14+2"
   markdown:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: markdown
       sha256: ee85086ad7698b42522c6ad42fe195f1b9898e4d974a1af4576c1a3a176cada9
@@ -950,7 +950,7 @@ packages:
     source: hosted
     version: "0.3.1"
   super_text_layout:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: super_text_layout
       sha256: "203409387b44c85e1d0a8e365c8a8791199b99440411f221ad02fa9fb07530b1"

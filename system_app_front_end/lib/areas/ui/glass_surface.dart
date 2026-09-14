@@ -41,13 +41,13 @@ abstract final class AppGlassStyle {
       );
 
   static BoxBorder get _opaqueChromeBorder => Border.all(
-        color: AppColors.noteBorder.withValues(alpha: 0.48),
-        width: AppColors.filePaneBorderWidth,
+        color: AppColors.sidebarBorder.withValues(alpha: 0.9),
+        width: 0.85,
       );
 
   static BoxBorder aiBorder([double alpha = 0.45]) => Border.all(
         color: AppColors.aiCyan.withValues(alpha: alpha),
-        width: AppColors.filePaneBorderWidth,
+        width: 1.1,
       );
 
   static const dialog = GlassStyleSpec(
@@ -99,7 +99,7 @@ abstract final class AppGlassStyle {
     tintOpacity: 1,
     showTopHighlight: false,
     elevation: 0,
-    border: aiBorder(0.44),
+    border: aiBorder(0.72),
     opaqueChrome: true,
   );
 
@@ -196,7 +196,7 @@ class GlassSurface extends StatelessWidget {
 
   static List<BoxShadow> get _opaqueChromeShadow => [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.11),
+          color: Colors.black.withValues(alpha: 0.14),
           blurRadius: 20,
           offset: const Offset(0, 5),
         ),
@@ -440,7 +440,16 @@ class GlassBarSegment extends StatelessWidget {
       style: resolvedStyle,
       borderRadius: BorderRadius.circular(AppGlassStyle.pillRadius),
       padding: padding,
-      boxShadow: tightShadow ? GlassSurface._opaqueChromeShadowNone : null,
+      boxShadow: identical(resolvedStyle, AppGlassStyle.aiAccent)
+          ? [
+              BoxShadow(
+                color: AppColors.aiCyan.withValues(alpha: 0.16),
+                blurRadius: 14,
+                spreadRadius: 1,
+              ),
+              ...GlassSurface._opaqueChromeShadow,
+            ]
+          : tightShadow ? GlassSurface._opaqueChromeShadowNone : null,
       child: height != null
           ? SizedBox(height: height, child: child)
           : child,
@@ -476,8 +485,8 @@ class _OutlineSegmentLabel extends StatelessWidget {
     return Text(
       text,
       style: AppTypography.metaStyle.copyWith(
-        fontSize: 9,
-        letterSpacing: 0.6,
+        fontSize: 13,
+        letterSpacing: 0.8,
         color: AppColors.aiCyan.withValues(alpha: 0.85),
         fontWeight: FontWeight.w500,
         height: 1,
@@ -565,7 +574,7 @@ class GlassCircleButton extends StatelessWidget {
                 child: AppIcon(
                   icon,
                   size: iconSize,
-                  color: AppColors.text.withValues(alpha: 0.78),
+                  color: AppColors.text.withValues(alpha: 0.9),
                 ),
               ),
             ),

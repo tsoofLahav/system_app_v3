@@ -9,6 +9,7 @@ class TextSpanMark {
     this.size,
     this.color,
     this.link,
+    this.direction,
   });
 
   final int start;
@@ -20,6 +21,7 @@ class TextSpanMark {
   final double? size;
   final String? color;
   final String? link;
+  final String? direction;
 
   TextSpanMark copyWith({
     int? start,
@@ -31,6 +33,7 @@ class TextSpanMark {
     double? size,
     String? color,
     String? link,
+    String? direction,
   }) {
     return TextSpanMark(
       start: start ?? this.start,
@@ -42,6 +45,7 @@ class TextSpanMark {
       size: size ?? this.size,
       color: color ?? this.color,
       link: link ?? this.link,
+      direction: direction ?? this.direction,
     );
   }
 
@@ -55,6 +59,7 @@ class TextSpanMark {
     if (size != null) 'size': size,
     if (color != null && color!.isNotEmpty) 'color': color,
     if (link != null) 'link': link,
+    if (direction == 'rtl' || direction == 'ltr') 'direction': direction,
   };
 
   factory TextSpanMark.fromJson(Map<String, dynamic> json) {
@@ -68,6 +73,7 @@ class TextSpanMark {
       size: (json['size'] as num?)?.toDouble(),
       color: json['color'] as String?,
       link: json['link'] as String?,
+      direction: json['direction'] as String?,
     );
   }
 }
@@ -126,7 +132,10 @@ class DocumentTableCell {
   final List<TextSpanMark> spans;
 
   DocumentTableCell copyWith({String? text, List<TextSpanMark>? spans}) {
-    return DocumentTableCell(text: text ?? this.text, spans: spans ?? this.spans);
+    return DocumentTableCell(
+      text: text ?? this.text,
+      spans: spans ?? this.spans,
+    );
   }
 
   Map<String, dynamic> toJson() => {
@@ -181,7 +190,8 @@ class ParagraphNode extends DocumentNode {
   }
 
   @override
-  ParagraphNode copyWithId(String newId) => ParagraphNode(id: newId, text: text, spans: spans);
+  ParagraphNode copyWithId(String newId) =>
+      ParagraphNode(id: newId, text: text, spans: spans);
 
   @override
   Map<String, dynamic> toJson() => {
@@ -254,7 +264,8 @@ class ListNode extends DocumentNode {
   }
 
   @override
-  ListNode copyWithId(String newId) => ListNode(id: newId, items: items, listStyle: listStyle);
+  ListNode copyWithId(String newId) =>
+      ListNode(id: newId, items: items, listStyle: listStyle);
 
   @override
   Map<String, dynamic> toJson() => {
@@ -283,19 +294,12 @@ class TableNode extends DocumentNode {
   Map<String, dynamic> toJson() => {
     'id': id,
     'type': type,
-    'rows': [
-      for (final row in rows)
-        row.map((c) => c.toJson()).toList(),
-    ],
+    'rows': [for (final row in rows) row.map((c) => c.toJson()).toList()],
   };
 }
 
 class EmbedNode extends DocumentNode {
-  const EmbedNode({
-    required super.id,
-    required this.objectId,
-    this.objectType,
-  });
+  const EmbedNode({required super.id, required this.objectId, this.objectType});
 
   final int objectId;
 
@@ -314,11 +318,8 @@ class EmbedNode extends DocumentNode {
   }
 
   @override
-  EmbedNode copyWithId(String newId) => EmbedNode(
-        id: newId,
-        objectId: objectId,
-        objectType: objectType,
-      );
+  EmbedNode copyWithId(String newId) =>
+      EmbedNode(id: newId, objectId: objectId, objectType: objectType);
 
   @override
   Map<String, dynamic> toJson() => {

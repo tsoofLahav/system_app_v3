@@ -5,6 +5,7 @@ import '../../ui/app_colors.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_typography.dart';
 import '../model/agent_text_blocks.dart';
+import '../model/text_direction_marker.dart';
 import './embeds/table_chart.dart';
 
 /// How one element of the document should be dressed.
@@ -74,71 +75,100 @@ class ReadOnlyDocumentView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final block in blocks) _buildBlock(context, block),
-      ],
+      children: [for (final block in blocks) _buildBlock(context, block)],
     );
   }
 
   Widget _buildBlock(BuildContext context, AgentBlock block) {
     return switch (block) {
       AgentHeadingBlock() => _line(
-          block.lineStart,
-          block.lineEnd,
-          Padding(
-            padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: 2),
-            child: _text(
-              block.text,
-              AppTypography.documentHeadingStyle(block.level),
-              block.lineStart,
-              block.lineEnd,
-            ),
-          ),
-        ),
-      AgentParagraphBlock() => _line(
-          block.lineStart,
-          block.lineEnd,
-          _text(
+        block.lineStart,
+        block.lineEnd,
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: 2),
+          child: _text(
             block.text,
-            AppTypography.documentParagraphStyle,
+            AppTypography.documentHeadingStyle(block.level),
             block.lineStart,
             block.lineEnd,
           ),
         ),
-      AgentSpacerBlock() => SizedBox(height: 6.0 * block.count.clamp(1, 6)),
-      AgentListBlock() => _list(block),
-      AgentTaskListBlock() => _embedCard(block.lineStart, block.lineEnd, _tasks(block)),
-      AgentInfoBlock() => _embedCard(block.lineStart, block.lineEnd, _info(block)),
-      AgentTableBlock() => _embedCard(block.lineStart, block.lineEnd, _table(block)),
-      AgentGraphBlock() =>
-        _embedCard(block.lineStart, block.lineEnd, _graph(context, block)),
-      AgentImageBlock() => _embedCard(block.lineStart, block.lineEnd, _image(block)),
-      AgentUnknownBlock() => _line(
+      ),
+      AgentParagraphBlock() => _line(
+        block.lineStart,
+        block.lineEnd,
+        _text(
+          block.text,
+          AppTypography.documentParagraphStyle,
           block.lineStart,
           block.lineEnd,
-          block.isMarker
-              ? _structureRule()
-              : _text(
-                  block.text,
-                  AppTypography.documentParagraphStyle
-                      .copyWith(color: AppColors.textHint),
-                  block.lineStart,
-                  block.lineEnd,
-                ),
         ),
+      ),
+      AgentSpacerBlock() => SizedBox(height: 6.0 * block.count.clamp(1, 6)),
+      AgentListBlock() => _list(block),
+      AgentTaskListBlock() => _embedCard(
+        block.lineStart,
+        block.lineEnd,
+        _tasks(block),
+      ),
+      AgentInfoBlock() => _embedCard(
+        block.lineStart,
+        block.lineEnd,
+        _info(block),
+      ),
+      AgentTableBlock() => _embedCard(
+        block.lineStart,
+        block.lineEnd,
+        _table(block),
+      ),
+      AgentGraphBlock() => _embedCard(
+        block.lineStart,
+        block.lineEnd,
+        _graph(context, block),
+      ),
+      AgentImageBlock() => _embedCard(
+        block.lineStart,
+        block.lineEnd,
+        _image(block),
+      ),
+      AgentUnknownBlock() => _line(
+        block.lineStart,
+        block.lineEnd,
+        block.isMarker
+            ? _structureRule()
+            : _text(
+                block.text,
+                AppTypography.documentParagraphStyle.copyWith(
+                  color: AppColors.textHint,
+                ),
+                block.lineStart,
+                block.lineEnd,
+              ),
+      ),
     };
   }
 
   Widget _text(String text, TextStyle style, int lineStart, int lineEnd) {
+    final direction = TextDirectionMarker.direction(text);
+    text = TextDirectionMarker.strip(text);
+    final textDirection = direction == 'rtl'
+        ? TextDirection.rtl
+        : direction == 'ltr'
+        ? TextDirection.ltr
+        : null;
     final d = decorate(lineStart, lineEnd);
     final resolved = d.strikethrough
         ? style.copyWith(decoration: TextDecoration.lineThrough)
         : style;
     final span = d.spanFor;
     if (span == null) {
-      return Text(text.isEmpty ? ' ' : text, style: resolved);
+      return Text(
+        text.isEmpty ? ' ' : text,
+        style: resolved,
+        textDirection: textDirection,
+      );
     }
-    return Text.rich(span(text), style: resolved);
+    return Text.rich(span(text), style: resolved, textDirection: textDirection);
   }
 
   /// Wrap one element in its decoration: tint, active rule, decided glyph.
@@ -200,7 +230,9 @@ class ReadOnlyDocumentView extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.noteTop.withValues(alpha: 0.72),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.noteBorder.withValues(alpha: 0.7)),
+            border: Border.all(
+              color: AppColors.noteBorder.withValues(alpha: 0.7),
+            ),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -226,7 +258,10 @@ class ReadOnlyDocumentView extends StatelessWidget {
                 children: [
                   SizedBox(
                     width: block.ordered ? 20 : 12,
-                    child: Text(item.marker, style: AppTypography.listItemStyle),
+                    child: Text(
+                      item.marker,
+                      style: AppTypography.listItemStyle,
+                    ),
                   ),
                   Expanded(
                     child: _text(
@@ -317,12 +352,7 @@ class ReadOnlyDocumentView extends StatelessWidget {
           _line(
             body.line,
             body.line,
-            _text(
-              body.text,
-              AppTypography.noteBodyStyle,
-              body.line,
-              body.line,
-            ),
+            _text(body.text, AppTypography.noteBodyStyle, body.line, body.line),
           ),
       ],
     );
@@ -338,14 +368,9 @@ class ReadOnlyDocumentView extends StatelessWidget {
       width: 0.5,
     );
     return Table(
-      border: TableBorder(
-        horizontalInside: border,
-        verticalInside: border,
-      ),
+      border: TableBorder(horizontalInside: border, verticalInside: border),
       defaultColumnWidth: const IntrinsicColumnWidth(flex: 1),
-      children: [
-        for (final row in block.rows) _tableRow(row, columns),
-      ],
+      children: [for (final row in block.rows) _tableRow(row, columns)],
     );
   }
 
@@ -356,12 +381,7 @@ class ReadOnlyDocumentView extends StatelessWidget {
       final text = c < row.cells.length ? row.cells[c] : '';
       Widget cell = Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        child: _text(
-          text,
-          AppTypography.noteBodyStyle,
-          row.line,
-          row.line,
-        ),
+        child: _text(text, AppTypography.noteBodyStyle, row.line, row.line),
       );
       if (d.opacity != 1) cell = Opacity(opacity: d.opacity, child: cell);
       if (c == 0) {
@@ -440,8 +460,8 @@ class ReadOnlyDocumentView extends StatelessWidget {
       final url = item.url.isEmpty
           ? null
           : (item.url.startsWith('http')
-              ? item.url
-              : '${ApiConfig.baseUrl}${item.url}');
+                ? item.url
+                : '${ApiConfig.baseUrl}${item.url}');
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

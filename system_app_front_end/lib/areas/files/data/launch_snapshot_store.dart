@@ -105,6 +105,7 @@ class LaunchSnapshotStore {
   static const fileName = 'launch_snapshot.json';
 
   final Directory? _directory;
+  int? workspaceId;
 
   Future<LaunchSnapshot?> load() async {
     try {
@@ -128,7 +129,8 @@ class LaunchSnapshotStore {
 
   Future<File> _snapshotFile() async {
     final dir = _directory ?? await getApplicationDocumentsDirectory();
-    return File('${dir.path}/$fileName');
+    final name = workspaceId == null ? fileName : 'launch_snapshot_$workspaceId.json';
+    return File('${dir.path}/$name');
   }
 }
 

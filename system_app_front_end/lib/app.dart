@@ -3,17 +3,38 @@ import 'package:provider/provider.dart';
 
 import './areas/ui/app_theme.dart';
 import './core/app_state.dart';
+import './areas/files/editor/editor_key_handoff.dart';
+import 'dart:async';
 import './core/document_text_size.dart';
 import './core/l10n/app_language.dart';
 import './areas/ux/shell/app_shell.dart';
 
-class SystemApp extends StatelessWidget {
+class SystemApp extends StatefulWidget {
   const SystemApp({super.key});
+
+  @override
+  State<SystemApp> createState() => _SystemAppState();
+}
+
+class _SystemAppState extends State<SystemApp> {
+  int _profileGeneration = 0;
+
+  Future<void> _switchProfile(int id) async {
+    final done = Completer<void>();
+    runWhenKeyboardIdle(() {
+      if (mounted) setState(() => _profileGeneration++);
+      done.complete();
+    });
+    await done.future;
+  }
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => AppState()..initialize(),
+      key: ValueKey(_profileGeneration),
+      create: (_) => AppState()
+        ..onProfileSelected = _switchProfile
+        ..initialize(),
       child: const _SystemAppView(),
     );
   }

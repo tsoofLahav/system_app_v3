@@ -237,8 +237,7 @@ class TableEmbedState extends State<TableEmbed>
       rows: [
         for (final row in rows)
           [
-            for (final cell in row)
-              DocumentTableCell(text: '${cell['text'] ?? ''}'),
+            for (final cell in row) DocumentTableCell.fromJson(cell),
           ],
       ],
     );
@@ -284,7 +283,7 @@ class TableEmbedState extends State<TableEmbed>
     final rows = [
       for (final row in node.rows)
         [
-          for (final cell in row) {'text': cell.text},
+          for (final cell in row) cell.toJson(),
         ],
     ];
     final next = Map<String, dynamic>.from(_payload)..['rows'] = rows;

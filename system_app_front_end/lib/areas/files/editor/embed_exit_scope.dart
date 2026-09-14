@@ -1,8 +1,7 @@
 import 'package:flutter/widgets.dart';
 
-/// Inner fields read this so Escape (and Enter in info) can leave the object
-/// instead of inserting a newline. Shift+Enter / ⌘Enter / Ctrl+Enter still
-/// insert a line.
+/// Inner fields read this so Escape can leave the object. Info Enter inserts
+/// a newline; task/table structure Enter remains owned by those fields.
 class EmbedExitScope extends InheritedWidget {
   const EmbedExitScope({
     super.key,

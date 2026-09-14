@@ -157,26 +157,11 @@ class AppShellCanvas extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        const DecoratedBox(
-          decoration: BoxDecoration(gradient: AppColors.neutralCanvasGradient),
-        ),
-        if (topicAccent != null)
-          Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            height: 220,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: AppColors.topicTopVeil(
-                    accent: topicAccent!,
-                    isMainTopic: isMainTopic,
-                  ),
-                ),
-              ),
-            ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: AppColors.workspaceGradient(topicAccent, isMainTopic),
           ),
+        ),
         const Positioned(
           left: 0,
           right: 0,

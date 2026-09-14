@@ -7,6 +7,10 @@ import './app_colors.dart';
 
 /// One font family, restrained weights, one soft text color.
 abstract final class AppTypography {
+  static const phoneHeaderLineHeight = 1.1;
+  static const phoneHeaderProjectedRowGap = 1.0;
+  static const phoneHeaderEmojiLift = -2.0;
+
   static const FontWeight weight = FontWeight.w400;
   static const FontWeight titleWeight = FontWeight.w500;
   static AppLanguage language = AppLanguage.en;
@@ -138,7 +142,8 @@ abstract final class AppTypography {
       _style(size: 12, color: AppColors.textHint, height: 1.4);
 
   /// Sidebar section headers (Projects, Processes, Areas).
-  static TextStyle get sidebarSectionStyle => _style(size: 13, height: 1.35);
+  static TextStyle get sidebarSectionStyle =>
+      _style(size: 13, height: 1.35).copyWith(fontWeight: FontWeight.w400);
 
   /// Sidebar topic rows — smaller than section headers.
   static TextStyle get sidebarItemStyle => _style(size: 11, height: 1.4);

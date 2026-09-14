@@ -26,7 +26,7 @@ import './preferences_dialog.dart';
 import '../../objects/views/view_chrome_menu.dart';
 
 abstract final class AppBottomBarMetrics {
-  static const barHeight = 44.0;
+  static const barHeight = 48.0;
   static const floatMargin = 12.0;
   static const scrollInset = 72.0;
 
@@ -61,7 +61,7 @@ abstract final class AppTopicHeaderMetrics {
   static const scrollTopInset = 38.0;
 }
 
-const _iconSize = 24.0;
+const _iconSize = 25.0;
 const _iconTapPadding = 4.0;
 const _segmentPadding = EdgeInsets.symmetric(horizontal: 4);
 

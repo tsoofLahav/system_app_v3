@@ -9,7 +9,7 @@ library;
 import 'package:flutter/widgets.dart';
 import 'package:super_editor/super_editor.dart';
 
-import './paragraph_text_direction.dart';
+import './text_direction_policy.dart';
 
 /// Patches [TextComponentViewModel.textDirection] after a stock SE builder runs.
 class AmbientTextDirectionBuilder implements ComponentBuilder {
@@ -29,8 +29,12 @@ class AmbientTextDirectionBuilder implements ComponentBuilder {
     final vm = inner.createViewModel(document, node);
     if (vm == null) return null;
     if (vm is TextComponentViewModel && node is TextNode) {
-      vm.textDirection =
-          detectParagraphTextDirection(node.text.toPlainText()) ?? ambient;
+      final explicit = node.getMetadataValue('writingDirection');
+      vm.textDirection = explicit == 'rtl'
+          ? TextDirection.rtl
+          : explicit == 'ltr'
+          ? TextDirection.ltr
+          : WritingDirection.resolve(node.text.toPlainText(), ambient);
     }
     return vm;
   }

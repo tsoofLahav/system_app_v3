@@ -58,7 +58,7 @@ Only **one** of those owns typing at a time (`DocumentCaretOwner.document` vs `e
 | Silent saves (`notify: false`); stable widget keys; skip reseed while the field is focused | Remount or `setRichState` a focused field (caret jumps to the end) |
 | `TextField.style` at least as large as the largest painted run | Body-sized field style under a larger title run (Hebrew hit-test treats glyphs as padding) |
 | One [`DocumentTextFlow`](system_app_front_end/lib/areas/files/editor/document_text_flow.dart) per **multi-field** object | A flow on a single-field object (info); marks across objects or into the file body |
-| File pane owns scrolling; object fields never call `ensureVisible` and never propagate `showOnScreen` | `ensureVisible` / `showOnScreen` on focus or Shift+arrows (the text hops up then down) |
+| File pane owns scrolling; object fields never call `ensureVisible` and never propagate `showOnScreen`. Desktop local typing may reveal only caret overflow below the viewport via `typing_caret_reveal.dart` | `ensureVisible` / `showOnScreen` on focus or Shift+arrows (the text hops up then down) |
 | Install `onKeyEvent` **once**; visual ←/→ via `Actions` | Re-wrap `onKeyEvent` on rebuild; reimplement arrows in `onKeyEvent` |
 | Keyboard safety in [`NOTES.md`](NOTES.md#editor-keyboard-safety) | `notifyListeners` from a keystroke |
 
@@ -74,7 +74,7 @@ Only **one** surface owns writing, and only **one** mark is painted. Super Edito
 | Click or right-click an **inner field** | That field | Super Editor caret and mark are cleared (`adoptEmbed`). Right-click focuses the field first, then freezes the mark or caret line. |
 | Right-click **object chrome** (not text) | Block / chrome menu | Whole-object menu. Inner-field mark is not the target. |
 | **Shift+Enter** on the block | Opens the object | Same as §4. |
-| **Enter** inside | Leave (info) or next item; Escape leaves from any field; Shift+Enter / ⌘Enter is a newline | Same as §4. |
+| **Enter** inside | Newline (info) or next item; Escape leaves from any field; Shift+Enter / ⌘Enter is a newline | Same as §4. |
 | Tap **canvas** outside the file card | Nobody | Hide caret, clear every mark. |
 | Tap **empty space in the file** (below the last line) | Super Editor body | Caret at the **end** of the last block. |
 
@@ -82,7 +82,7 @@ Never paint an object-field wash and a Super Editor line wash at the same time. 
 
 A **new** right-click, anywhere, retargets even while the previous right-click menu is still open: close that freeze (`beginNewPointerAim`), mark the new line, open the new menu. The first menu’s `openMenuSession` completing later must not keep the old freeze or restore the old caret. Putting the caret in another file or object while that menu is open (or as it closes) drops the auto-marked line — the freeze belongs to the field that opened the menu, not whoever owns writing now.
 
-Enter inside info leaves the object. **Escape** leaves from any inner field. **Shift+Enter** / **⌘Enter** / Ctrl+Enter inserts a newline. Tasks / table cells keep structural Enter; those same modifiers insert a newline in that field. Shift+Enter on the object **block** still opens it.
+Enter inside info inserts a newline (continues an inner checklist when applicable); it never leaves the object. **Escape** leaves from any inner field. **Shift+Enter** / **⌘Enter** / Ctrl+Enter inserts a newline. Tasks / table cells keep structural Enter; those same modifiers insert a newline in that field. Shift+Enter on the object **block** still opens it.
 
 ### Per type
 
@@ -126,8 +126,8 @@ Objects are **atomic Super Editor blocks**. Arrows do **not** auto-enter or auto
 | Click / right-click a paragraph | Body owns writing; object mark and caret are forgotten |
 | Right-click an inner field | Field owns writing (focus + caret at the pointer); Super Editor caret is cleared |
 | **Enter** on the block | New paragraph **below** the object |
-| **Enter** inside info | Unfocus the field; place Super Editor caret on a text node **after** the object (insert an empty paragraph if needed); `requestFocus` next frame |
-| **Escape** inside | Same leave as info Enter, from any inner field (tasks, cells, captions) |
+| **Enter** inside info | Insert a newline inside the same field; retain writing focus |
+| **Escape** inside | Unfocus the field and place the SE caret on a text node after the object (insert if needed), using the keyboard-idle handoff |
 | **Shift+Enter** / **⌘Enter** inside | Newline in the field |
 | ↑/↓ inside an open object | Stay inside that object’s lines |
 | Image | Captions are inner fields; the picture is block only |
@@ -246,13 +246,13 @@ A newly inserted list or table gets the caret in its first bullet or top-left ce
 
 **RTL:** only [`rich_text/rtl/`](system_app_front_end/lib/areas/files/rich_text/rtl/). Do not add competing caret math in `DocumentTextFlow` or embed widgets.
 
-- Base direction = first strong character, else ambient UI.
+- Base direction = explicit text override, else the Writing direction preference (first strong character or app language). SE resolves per text node; objects resolve per whole field. Direction changes keep controllers and focus nodes stable and wait for keyboard idle. No automatic spaces or hidden Unicode markers.
 - Visual ←/→ inside a field: flip intents, do not reimplement arrows.
 - Empty padding tap → logical line end in the same event turn (never post-frame).
 - Empty space under the file (the leftover pane below the last block) → logical end of the last part. That area is a `SliverFillRemaining` so it stays tappable; it is not tap-outside.
 - Cmd+arrow / Home / End in Hebrew are a known gap (shared intents; flipping would break Home/End).
 
-Table grid ←/→ is only [`table_grid_nav.dart`](system_app_front_end/lib/areas/files/rich_text/table_grid_nav.dart): physical pad → visual cell. In-cell caret is first-strong RTL, not grid RTL.
+Table grid ←/→ is only [`table_grid_nav.dart`](system_app_front_end/lib/areas/files/rich_text/table_grid_nav.dart): physical pad → visual cell. In-cell caret follows the text direction policy/override independently of grid RTL.
 
 ---
 

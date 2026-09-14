@@ -1,19 +1,17 @@
-/// Super Editor tap/drag hit-testing for mixed Hebrew + numbers — [RTL.md].
-///
-/// SE's `getDocumentPositionNearestToOffset` lands on a BiDi boundary (often
-/// after a number run). Same geometry as [bidiAwareOffsetFromBoxes]: padding
-/// beside the line → logical end on a tap; nearer visual edge when marking;
-/// gaps snap to the nearest glyph run.
+/// Super Editor single-tap padding correction — [RTL.md].
+/// Glyph clicks, gaps, Shift-click and selection drags stay native to SE.
 library;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:super_editor/super_editor.dart';
+import 'package:super_text_layout/super_text_layout.dart';
 
 import './empty_space_caret.dart';
 
 SuperEditorContentTapDelegateFactory superEditorBidiCaretTapHandlerFactory =
-    (SuperEditorContext editContext) => SuperEditorBidiCaretTapHandler(editContext);
+    (SuperEditorContext editContext) =>
+        SuperEditorBidiCaretTapHandler(editContext);
 
 /// Same as [superEditorBidiCaretTapHandlerFactory], plus a hook when the tap
 /// lands on body text so an open object can hand writing back to Super Editor.
@@ -28,29 +26,34 @@ SuperEditorContentTapDelegateFactory bidiCaretTapHandler({
   );
 }
 
-/// Document position under a pointer, corrected for Hebrew + numbers.
+/// Corrected position only for empty padding beside a text line.
 ///
-/// Returns null when the hit is not a text node (embeds, empty layout) so
+/// Returns null on glyphs, inter-run gaps, and non-text components so
 /// Super Editor can keep its own handling.
-DocumentPosition? bidiDocumentPosition({
+DocumentPosition? paddingDocumentPosition({
   required Document document,
   required DocumentLayout layout,
   required Offset layoutOffset,
   required Offset globalOffset,
-  required bool paddingGoesToLineEnd,
 }) {
   final nearest = layout.getDocumentPositionNearestToOffset(layoutOffset);
   if (nearest == null) return null;
   final node = document.getNodeById(nearest.nodeId);
-  if (node is! TextNode) return nearest;
+  if (node is! TextNode) return null;
 
-  final component = layout.getComponentByNodeId(node.id);
-  if (component is! TextComponentState) return nearest;
+  // Paragraphs and list items expose proxy components, not TextComponentState.
+  // Resolve the leaf and use its coordinate space for both boxes and taps.
+  Object? candidate = layout.getComponentByNodeId(node.id);
+  while (candidate is ProxyTextComposable) {
+    candidate = candidate.childTextComposable;
+  }
+  final component = candidate;
+  if (component is! TextComponentState) return null;
   final renderObject = component.context.findRenderObject();
-  if (renderObject is! RenderBox) return nearest;
+  if (renderObject is! RenderBox) return null;
 
   final textLength = node.text.toPlainText().length;
-  if (textLength <= 0) return nearest;
+  if (textLength <= 0) return null;
 
   List<Rect> boxes;
   try {
@@ -61,65 +64,68 @@ DocumentPosition? bidiDocumentPosition({
         Rect.fromLTRB(box.left, box.top, box.right, box.bottom),
     ];
   } catch (_) {
-    return nearest;
+    return null;
   }
   final local = renderObject.globalToLocal(globalOffset);
-  final offset = bidiAwareOffsetFromBoxes(
+  final offset = emptySpaceCaretOffsetFromBoxes(
     boxes: boxes,
     local: local,
     textLength: textLength,
-    paddingGoesToLineEnd: paddingGoesToLineEnd,
-    offsetAt: (probe) => _offsetAtLocal(
-      layout: layout,
-      box: renderObject,
-      nodeId: node.id,
-      local: probe,
-      textLength: textLength,
-    ),
-    logicalLineEndAt: (probeOnLine) => _lineEndAtLocal(
+    logicalLineEndAt: (probe) => _lineEndAtLocal(
       component: component,
-      local: probeOnLine,
-      textLength: textLength,
+      local: probe,
+      text: node.text.toPlainText(),
     ),
   );
-  if (offset == null) return nearest;
+  if (offset == null) return null;
   return DocumentPosition(
     nodeId: node.id,
-    nodePosition: TextNodePosition(offset: offset),
+    nodePosition: TextNodePosition(
+      offset: offset,
+      affinity: TextAffinity.upstream,
+    ),
   );
-}
-
-int _offsetAtLocal({
-  required DocumentLayout layout,
-  required RenderBox box,
-  required String nodeId,
-  required Offset local,
-  required int textLength,
-}) {
-  final layoutOffset = layout.getDocumentOffsetFromAncestorOffset(
-    box.localToGlobal(local),
-  );
-  final pos = layout.getDocumentPositionNearestToOffset(layoutOffset);
-  if (pos == null || pos.nodeId != nodeId) return textLength;
-  final nodePos = pos.nodePosition;
-  if (nodePos is! TextNodePosition) return textLength;
-  return nodePos.offset.clamp(0, textLength);
 }
 
 int _lineEndAtLocal({
   required TextComponentState component,
   required Offset local,
-  required int textLength,
-}) {
-  try {
-    final pos = component.textLayout.getPositionNearestToOffset(local);
-    return component.textLayout
-        .getPositionAtEndOfLine(pos)
-        .offset
-        .clamp(0, textLength);
-  } catch (_) {
-    return textLength;
+  required String text,
+}) => logicalLineEndForTextLayout(component.textLayout, text, local);
+
+/// SE's getPositionAtEndOfLine probes the physical right edge. That is the
+/// logical start for Hebrew. Resolve the last logical grapheme on the aimed
+/// visual line from the renderer's own selection boxes instead.
+int logicalLineEndForTextLayout(TextLayout layout, String text, Offset local) {
+  if (text.isEmpty) return 0;
+  var offset = 0;
+  var result = 0;
+  var bestDistance = double.infinity;
+  for (final grapheme in text.characters) {
+    final end = offset + grapheme.length;
+    if (grapheme != '\n' && grapheme != '\r\n') {
+      final boxes = layout.getBoxesForSelection(
+        TextSelection(baseOffset: offset, extentOffset: end),
+      );
+      for (final box in boxes) {
+        final distance = local.dy < box.top
+            ? box.top - local.dy
+            : local.dy > box.bottom
+            ? local.dy - box.bottom
+            : 0.0;
+        if (distance < bestDistance - 0.5) {
+          bestDistance = distance;
+          result = end;
+        } else if ((distance - bestDistance).abs() <= 0.5 && end > result) {
+          result = end;
+        }
+      }
+    }
+    offset = end;
   }
+  return bestDistance.isFinite
+      ? result
+      : layout.getPositionNearestToOffset(local).offset.clamp(0, text.length);
 }
 
 class SuperEditorBidiCaretTapHandler extends ContentTapDelegate {
@@ -142,10 +148,27 @@ class SuperEditorBidiCaretTapHandler extends ContentTapDelegate {
 
   @override
   TapHandlingInstruction onTap(DocumentTapDetails details) {
-    if (HardwareKeyboard.instance.isShiftPressed) {
-      return _place(details, paddingGoesToLineEnd: false, extend: true);
+    final nearest = details.documentLayout.getDocumentPositionNearestToOffset(
+      details.layoutOffset,
+    );
+    if (nearest != null &&
+        editContext.document.getNodeById(nearest.nodeId) is TextNode) {
+      onBodyTextTap?.call();
     }
-    return _place(details, paddingGoesToLineEnd: true, extend: false);
+    if (HardwareKeyboard.instance.isShiftPressed)
+      return TapHandlingInstruction.continueHandling;
+    final pos = paddingDocumentPosition(
+      document: editContext.document,
+      layout: details.documentLayout,
+      layoutOffset: details.layoutOffset,
+      globalOffset: details.globalOffset,
+    );
+    if (pos == null) return TapHandlingInstruction.continueHandling;
+    _setSelection(
+      DocumentSelection.collapsed(position: pos),
+      SelectionChangeType.placeCaret,
+    );
+    return TapHandlingInstruction.halt;
   }
 
   @override
@@ -164,59 +187,15 @@ class SuperEditorBidiCaretTapHandler extends ContentTapDelegate {
 
   /// Desktop mouse drag is not routed through [ContentTapDelegate]. Pan
   /// handlers stay [TapHandlingInstruction.continueHandling] so iOS handle
-  /// drags are not stolen; [SuperDocumentEditor] corrects drag geometry.
+  /// drags and desktop selection stay native to Super Editor.
   @override
   TapHandlingInstruction onPanStart(DocumentTapDetails details) {
     return TapHandlingInstruction.continueHandling;
   }
 
-  TapHandlingInstruction _place(
-    DocumentTapDetails details, {
-    required bool paddingGoesToLineEnd,
-    required bool extend,
-  }) {
-    final pos = bidiDocumentPosition(
-      document: editContext.document,
-      layout: details.documentLayout,
-      layoutOffset: details.layoutOffset,
-      globalOffset: details.globalOffset,
-      paddingGoesToLineEnd: paddingGoesToLineEnd,
-    );
-    if (pos == null) return TapHandlingInstruction.continueHandling;
-    final node = editContext.document.getNodeById(pos.nodeId);
-    if (node is! TextNode) {
-      return TapHandlingInstruction.continueHandling;
-    }
-    onBodyTextTap?.call();
-    if (extend) {
-      final current = editContext.composer.selection;
-      if (current == null) {
-        _setSelection(
-          DocumentSelection.collapsed(position: pos),
-          SelectionChangeType.placeCaret,
-        );
-      } else {
-        _setSelection(
-          DocumentSelection(base: current.base, extent: pos),
-          SelectionChangeType.expandSelection,
-        );
-      }
-    } else {
-      _setSelection(
-        DocumentSelection.collapsed(position: pos),
-        SelectionChangeType.placeCaret,
-      );
-    }
-    return TapHandlingInstruction.halt;
-  }
-
   void _setSelection(DocumentSelection selection, SelectionChangeType type) {
     editContext.editor.execute([
-      ChangeSelectionRequest(
-        selection,
-        type,
-        SelectionReason.userInteraction,
-      ),
+      ChangeSelectionRequest(selection, type, SelectionReason.userInteraction),
       const ClearComposingRegionRequest(),
     ]);
   }

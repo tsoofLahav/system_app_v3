@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
+import '../../files/rich_text/rtl/text_direction_policy.dart';
 import '../../../core/document_text_size.dart';
 import '../../../core/l10n/app_language.dart';
 import '../../../core/platform/app_form_factor.dart';
@@ -9,6 +10,7 @@ import '../../ui/app_segmented_toggle.dart';
 import '../../ui/dialog_field_style.dart';
 import '../topic_types/topic_type_dialog.dart';
 import './shortcut_preferences_dialog.dart';
+import './profile_dialog.dart';
 
 Future<void> showPreferencesDialog({
   required BuildContext context,
@@ -44,6 +46,17 @@ class PreferencesDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              AppDialogField(
+                label: s['profiles'],
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton(
+                    onPressed: () => showProfileDialog(context, state),
+                    child: Text(s['switchProfile']),
+                  ),
+                ),
+              ),
+              const SizedBox(height: DialogFieldStyle.fieldGap),
               AppDialogChoiceField<AppLanguage>(
                 label: s['language'],
                 options: [
@@ -51,23 +64,33 @@ class PreferencesDialog extends StatelessWidget {
                     value: AppLanguage.en,
                     label: s['english'],
                   ),
-                  AppSegmentedOption(
-                    value: AppLanguage.he,
-                    label: s['hebrew'],
-                  ),
+                  AppSegmentedOption(value: AppLanguage.he, label: s['hebrew']),
                 ],
                 selected: state.language,
                 onSelected: state.setLanguage,
+              ),
+              const SizedBox(height: DialogFieldStyle.fieldGap),
+              AppDialogChoiceField<TextDirectionPolicy>(
+                label: s['writingDirection'],
+                options: [
+                  AppSegmentedOption(
+                    value: TextDirectionPolicy.firstStrong,
+                    label: s['directionFirstStrong'],
+                  ),
+                  AppSegmentedOption(
+                    value: TextDirectionPolicy.appLanguage,
+                    label: s['directionAppLanguage'],
+                  ),
+                ],
+                selected: state.writingDirection,
+                onSelected: state.setWritingDirection,
               ),
               const SizedBox(height: DialogFieldStyle.fieldGap),
               AppDialogChoiceField<DocumentTextSize>(
                 label: s['documentTextSize'],
                 options: [
                   for (final size in DocumentTextSize.values)
-                    AppSegmentedOption(
-                      value: size,
-                      label: size.label,
-                    ),
+                    AppSegmentedOption(value: size, label: size.label),
                 ],
                 selected: state.documentTextSize,
                 onSelected: state.setDocumentTextSize,

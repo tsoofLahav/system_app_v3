@@ -16,21 +16,23 @@ library;
 
 import 'package:flutter/widgets.dart';
 
-import './paragraph_text_direction.dart';
+import './text_direction_policy.dart';
 import './rtl_caret_motion.dart';
 
 export './empty_space_caret.dart';
 export './embed_caret_hit.dart';
 export './ios_visual_handles.dart';
 export './paragraph_text_direction.dart';
+export './text_direction_policy.dart';
 export './rtl_caret_motion.dart';
 export './super_editor_bidi_caret.dart';
 export './super_editor_text_direction.dart';
+export './super_editor_direction_action.dart';
 export './super_editor_visual_caret.dart';
 
 /// Paragraph [textDirection]: first strong character, else [ambient] UI locale.
 TextDirection resolveFieldTextDirection(String text, TextDirection ambient) {
-  return detectParagraphTextDirection(text) ?? ambient;
+  return WritingDirection.resolve(text, ambient);
 }
 
 /// Collapsed caret at a logical end (line / part). Upstream affinity keeps

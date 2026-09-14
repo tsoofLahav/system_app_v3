@@ -41,6 +41,12 @@ Spec: [`content/production_agent/system_prompt.md`](content/production_agent/sys
 
 ## Files — frontend (editor)
 
+**Deferred by user, 2026-09-08:** SE and object-field caret behavior still differs
+at number/English endings in RTL lines. Not optimal; revisit consistency later.
+For now retain object improvements and native SE glyph-click/selection handling,
+with SE correction limited to single taps in empty line padding. Details:
+[RTL.md](system_app_front_end/lib/areas/files/rich_text/rtl/RTL.md).
+
 Code: [`areas/files/`](system_app_front_end/lib/areas/files/)
 
 | # | Sev | Issue |

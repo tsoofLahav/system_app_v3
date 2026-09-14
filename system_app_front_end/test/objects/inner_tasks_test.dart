@@ -2,6 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/objects/data/inner_tasks.dart';
 
 void main() {
+  test(
+    'bare dash promotion accepts an empty body boundary without throwing',
+    () {
+      expect(promoteBareDashToCheckbox('Title\n', 6), isNull);
+      expect(promoteBareDashToCheckbox('Title\ntext', 6), isNull);
+      expect(promoteBareDashToCheckbox('Title\ntext', 100), isNull);
+    },
+  );
   test('parse and unanimous ignore prose', () {
     const body = '- [ ] one\nkeep prose\n- [x] two';
     final items = parseInnerTaskLines(body);
@@ -69,10 +77,7 @@ void main() {
   });
 
   test('canonicalize strips dash and rewrites brackets', () {
-    expect(
-      canonicalizeInnerTaskMarks('- [ ] a\n- [x] b'),
-      '☐ a\n☑ b',
-    );
+    expect(canonicalizeInnerTaskMarks('- [ ] a\n- [x] b'), '☐ a\n☑ b');
     expect(canonicalizeInnerTaskMarks('- ☐ a\n- ☑ b'), '☐ a\n☑ b');
     expect(canonicalizeInnerTaskMarks('☐ a\n☑ b'), '☐ a\n☑ b');
   });

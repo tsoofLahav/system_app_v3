@@ -5,13 +5,19 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import './section_attention_notices.dart';
+import './push_registration.dart';
 
 /// iOS local notifications for open section-window attention.
 ///
 /// Each notice is its own notification. The app-icon badge is the count.
 /// No-op on anything that is not native iOS.
 class SectionAttentionNotifications {
-  SectionAttentionNotifications._();
+  SectionAttentionNotifications._() : _supported = !kIsWeb && Platform.isIOS;
+
+  @visibleForTesting
+  SectionAttentionNotifications.forTesting() : _supported = true;
+
+  final bool _supported;
 
   static final instance = SectionAttentionNotifications._();
 
@@ -21,28 +27,48 @@ class SectionAttentionNotifications {
   final _plugin = FlutterLocalNotificationsPlugin();
   final _shownIds = <int>{};
   var _ready = false;
+  int? _badgeCount;
+  Future<void> _syncTail = Future<void>.value();
 
   Future<void> sync({
     required List<SectionAttentionNotice> notices,
     required String body,
+    bool remoteEnabled = false,
+  }) {
+    // Polls and task updates can overlap while the plugin awaits native work.
+    final snapshot = List<SectionAttentionNotice>.of(notices);
+    return _syncTail = _syncTail.then(
+      (_) => _sync(notices: snapshot, body: body, remoteEnabled: remoteEnabled),
+    );
+  }
+
+  Future<void> _sync({
+    required List<SectionAttentionNotice> notices,
+    required String body,
+    required bool remoteEnabled,
   }) async {
-    if (kIsWeb || !Platform.isIOS) return;
+    if (!_supported) return;
     try {
       await _ensureReady();
       if (!_ready) return;
       final nextIds = {for (final notice in notices) notice.id};
       for (final id in _shownIds.difference(nextIds)) {
         await _plugin.cancel(id);
+        _shownIds.remove(id);
       }
-      if (notices.isEmpty) {
-        await _setBadge(0);
+      if (remoteEnabled) {
+        // APNs owns banners while closed; native badge reconciliation creates no
+        // local notification and clears stale delivered section banners.
+        for (final id in _shownIds.toList()) { await _plugin.cancel(id); }
         _shownIds.clear();
+        await PushRegistration.channel.invokeMethod('reconcile', {'badge': notices.length});
+        _badgeCount = notices.length;
         return;
       }
       final inForeground =
           WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
       for (final notice in notices) {
-        final isNew = !_shownIds.contains(notice.id);
+        if (_shownIds.contains(notice.id)) continue;
         await _plugin.show(
           notice.id,
           notice.title,
@@ -52,17 +78,19 @@ class SectionAttentionNotifications {
               presentAlert: false,
               presentSound: false,
               presentBadge: true,
-              presentBanner: isNew && !inForeground,
+              presentBanner: !inForeground,
               presentList: true,
               badgeNumber: notices.length,
               threadIdentifier: _thread,
             ),
           ),
         );
+        _shownIds.add(notice.id);
       }
-      _shownIds
-        ..clear()
-        ..addAll(nextIds);
+      if (_badgeCount != nextIds.length) {
+        await _setBadge(nextIds.length);
+        _badgeCount = nextIds.length;
+      }
     } catch (_) {
       // Permission denied or plugin missing — in-app dots still work.
     }

@@ -11,8 +11,16 @@ import 'package:flutter/rendering.dart';
 
 import '../../model/line_range.dart';
 
-/// Hit slop around glyph ink so a tap on a letter in a tall cell stays Flutter.
+/// Vertical tolerance accommodates line leading. Horizontal tolerance must not
+/// swallow padding beside a trailing LTR run in an RTL paragraph.
 const double _kEmptySpaceGlyphSlop = 4;
+const double _kHorizontalGlyphSlop = 0.5;
+
+bool _onGlyphBox(Rect box, Offset point) =>
+    point.dx >= box.left - _kHorizontalGlyphSlop &&
+    point.dx <= box.right + _kHorizontalGlyphSlop &&
+    point.dy >= box.top - _kEmptySpaceGlyphSlop &&
+    point.dy <= box.bottom + _kEmptySpaceGlyphSlop;
 
 /// Caret offset for a tap in empty padding, or null when the tap is on glyphs.
 int? emptySpaceCaretOffset({
@@ -52,7 +60,7 @@ int? emptySpaceCaretOffsetFromBoxes({
   if (boxes.isEmpty) return null;
 
   for (final box in boxes) {
-    if (box.inflate(_kEmptySpaceGlyphSlop).contains(local)) return null;
+    if (_onGlyphBox(box, local)) return null;
   }
 
   final onLine = [
@@ -131,7 +139,7 @@ int? bidiAwareOffsetFromBoxes({
   if (boxes.isEmpty) return offsetAt(local);
 
   for (final box in boxes) {
-    if (box.inflate(_kEmptySpaceGlyphSlop).contains(local)) {
+    if (_onGlyphBox(box, local)) {
       return offsetAt(local);
     }
   }
@@ -174,7 +182,7 @@ Offset? bidiGapCaretProbe({required List<Rect> boxes, required Offset local}) {
   if (boxes.isEmpty) return null;
 
   for (final box in boxes) {
-    if (box.inflate(_kEmptySpaceGlyphSlop).contains(local)) return null;
+    if (_onGlyphBox(box, local)) return null;
   }
 
   final onLine = [

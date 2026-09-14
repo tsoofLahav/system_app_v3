@@ -127,6 +127,7 @@ class TableObjectPayload {
             for (final cell in row)
               {
                 'text': cell is Map ? '${cell['text'] ?? ''}' : '$cell',
+                'spans': cell is Map && cell['spans'] is List ? cell['spans'] : const [],
               },
           ],
     ];
@@ -156,6 +157,7 @@ class TableObjectPayload {
         for (final cell in row)
           {
             'text': cell is Map ? '${cell['text'] ?? ''}' : '$cell',
+            'spans': cell is Map && cell['spans'] is List ? cell['spans'] : const [],
           },
       ]);
     }

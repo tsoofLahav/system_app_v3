@@ -254,8 +254,43 @@ List dialogs (connect, choose view, place task, tags, move-file topic, topic typ
 
 Topic, view, and archive-topic navigation await the editor save barrier before replacing their panes. Offline/conflicted saves must not be reported as successful navigation saves.
 
+### Writing direction preference
+
+Preferences → Writing direction chooses First letter (default) or App language.
+The setting is local to the device, like app language. Both SE and object fields
+use it; an object field has one base direction across all its lines. Changes wait
+for keyboard idle and do not replace text controllers or insert characters.
+The text menu offers Right to left, Left to right, and Use default direction.
+Overrides persist with content: touched SE paragraphs/list items, or the entire
+rich object field. A selection ending at the start of the next SE paragraph does
+not change that paragraph. Plain image captions follow the default policy.
+
+### File access and phone source headers
+
+Desktop Home has a Bring file icon beside Add file, using the same picker as
+the shortcut and phone. Phone headers include topic emoji (Home has none).
+For a visiting file, Home appears above the source-topic · file-name row;
+ordinary files keep one row. `PhoneVisibleFile` publishes the visible source
+topic with its name so paging only updates chrome. Header coverage:
+`test/ux/phone_header_origin_test.dart`.
+
+Phone projected headers keep their two name rows tightly grouped at the top of
+the header slot so the source/file row stays out of document content. A middle
+dot separates topic and file for both ordinary and projected files.
+
+### Compact journal hierarchy (2026-09-12)
+
+Sidebar child topics and saved views use a 42px directional inset (mirrored in Hebrew) to distinguish them from regular-weight section headings; darker dividers separate groups. Full journal entries and existing inter-file gaps remain unchanged; styling must not turn the dashboard into truncated previews. Visual treatment is specified in the UI area.
+
+## Presentation profile switcher
+
+Preferences → Profiles lists workspaces and creates a blank named journal. Profiles are remembered locally, without passwords. Switching uses a fresh app state after saves and keyboard-idle handoff; caches, search results, and AI state are not shared. This is a trusted-device demo feature, not authentication.
+
 Section expiry notices wait while a review dialog or its complete automation walkthrough is active, including the transitions between topics. The walkthrough uses the root navigator so a refreshed task row cannot dispose its navigation context.
 
 Topic entry checks the entire topic review queue once per visit, rather than per file mount or edit. It shares the protected review-session guard with complimentary walkthroughs and acknowledges the topic only after all files have been handled.
 
 Bring-file catalog entries exclude template and system topics, as well as archived topics/files and Home files. Template documents are configuration sources, not documents to bring into the user workspace.
+
+## Cached launch and foreground synchronization
+AppState exposes a separate `refreshing` listenable for phone sidebar loading, keeping cached content visible without remounting the canvas. Full navigation refresh happens at launch, on foreground resume, and once a minute inside the existing serialized five-second poll. Requests arriving during a poll queue one full refresh. Background/retired states do not start polls; stale topic/view responses cannot replace a newly navigated page. Metadata reads run together and publish after completion. The hardware-keyboard launch reset runs before cached content becomes interactive, never a second time after the user can type.

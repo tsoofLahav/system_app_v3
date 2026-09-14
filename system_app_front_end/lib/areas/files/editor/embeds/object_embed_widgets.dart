@@ -83,14 +83,17 @@ List<Map<String, dynamic>> infoSpansToCombined(
     // Title-only info: spans are stored as title spans (or legacy body key).
     return [
       for (final s in [...titleSpans, ...bodySpans])
-        if ((s['end'] as int) > (s['start'] as int))
+        if ((s['end'] as int) > (s['start'] as int) ||
+            s['direction'] == 'rtl' ||
+            s['direction'] == 'ltr')
           Map<String, dynamic>.from(s),
     ];
   }
   final offset = nl + 1;
   return [
     for (final s in titleSpans)
-      if ((s['end'] as int) > 0 && (s['start'] as int) < nl)
+      if (((s['end'] as int) > 0 && (s['start'] as int) < nl) ||
+          (nl == 0 && (s['direction'] == 'rtl' || s['direction'] == 'ltr')))
         {
           ...s,
           'start': (s['start'] as int).clamp(0, nl),
@@ -113,7 +116,9 @@ infoSpansForApi(List<Map<String, dynamic>> combinedSpans, String combined) {
     return (
       title: [
         for (final s in combinedSpans)
-          if ((s['end'] as int) > (s['start'] as int))
+          if ((s['end'] as int) > (s['start'] as int) ||
+              s['direction'] == 'rtl' ||
+              s['direction'] == 'ltr')
             Map<String, dynamic>.from(s),
       ],
       body: const <Map<String, dynamic>>[],
@@ -126,7 +131,8 @@ infoSpansForApi(List<Map<String, dynamic>> combinedSpans, String combined) {
   for (final s in combinedSpans) {
     var start = s['start'] as int;
     var end = s['end'] as int;
-    if (end > 0 && start < nl) {
+    if ((end > 0 && start < nl) ||
+        (nl == 0 && (s['direction'] == 'rtl' || s['direction'] == 'ltr'))) {
       title.add({...s, 'start': start.clamp(0, nl), 'end': end.clamp(0, nl)});
     }
     if (end <= offset) continue;
@@ -716,9 +722,15 @@ class InfoEmbedState extends State<InfoEmbed>
       _applyInnerEdit(next);
       return;
     }
-    final exit = EmbedExitScope.maybeOf(context);
-    if (exit != null) exit.onExit(exit.nodeId);
-    widget.onExitBelow?.call();
+    final selection = _controller.selection;
+    final start = selection.isValid ? selection.start : _controller.text.length;
+    final end = selection.isValid ? selection.end : start;
+    _applyInnerEdit(
+      InnerTaskEdit(
+        text: _controller.text.replaceRange(start, end, '\n'),
+        caret: start + 1,
+      ),
+    );
   }
 
   /// Menu / ⌘T while this info has the caret — convert the mark, or insert.
@@ -818,6 +830,11 @@ class InfoEmbedState extends State<InfoEmbed>
   Widget build(BuildContext context) {
     final tags = widget.embed.tags;
     final look = ObjectLook.infoOf(widget.embed.payload);
+    final persistedInfo = widget.embed.information ?? const <String, dynamic>{};
+    final descriptionBaseText = composeInfoText(
+      persistedInfo['title'] as String? ?? '',
+      canonicalizeInnerTaskMarks(persistedInfo['body'] as String? ?? ''),
+    );
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -840,6 +857,7 @@ class InfoEmbedState extends State<InfoEmbed>
             fileId: widget.embed.fileId,
             segmentId: infoTextSegmentId(widget.blockId),
           ),
+          descriptionRangesBaseText: descriptionBaseText,
           onDescriptionActivate: (range) =>
               openDescriptionTarget(state: widget.state, link: range.link),
           onDescriptionAnchorsChanged: (ranges) {

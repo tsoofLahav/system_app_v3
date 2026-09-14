@@ -1,3 +1,4 @@
+import './remote_selection.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -35,6 +36,7 @@ import '../../production_agent/lookalike_review_dialog.dart';
 import '../../production_agent/pending_review_service.dart';
 import '../../ux/topic/topic_appearance.dart';
 import './document_caret_session.dart';
+import './typing_caret_reveal.dart';
 import './document_editor_controller.dart';
 import './document_hunks.dart';
 import './document_secondary_tap.dart';
@@ -144,10 +146,10 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   /// Lookalike closed; remount + PATCH in progress (blocks input briefly).
   var _settlingMerge = false;
+  var _restoringRemote = false;
   final _phoneObjectGate = PhoneObjectGateSignal();
   var _applyingRemote = false;
   var _snappingComposerGraphemes = false;
-  Offset? _bidiDragDownGlobal;
 
   /// Object ids currently present as embed nodes — used to cascade-delete
   /// when Super Editor removes a pointer without going through [_deleteObject].
@@ -162,6 +164,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   late final DocumentCaretSession _caretSession;
   late final SuperEditorIosControlsController _iosControls;
   final _scroll = ScrollController();
+  final _scrollViewportKey = GlobalKey();
+  bool _typingRevealScheduled = false;
   var _phoneCaretMenuWanted = false;
 
   /// Bumped when [_reloadFromStored] swaps [Editor]. Forces a full SuperEditor
@@ -198,6 +202,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   @override
   void initState() {
     super.initState();
+    WritingDirection.policy.addListener(_onWritingDirectionChanged);
     _embedsSnapshot =
         widget.state.embedsByFileId[widget.file.id] ?? widget.embeds;
     _focusNode = FocusNode();
@@ -298,8 +303,15 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     });
   }
 
+  void _onWritingDirectionChanged() {
+    runWhenKeyboardIdle(() {
+      if (mounted) setState(() {});
+    });
+  }
+
   @override
   void dispose() {
+    WritingDirection.policy.removeListener(_onWritingDirectionChanged);
     _removeMoveBubble();
     _saveTimer?.cancel();
     UnsavedEmbedEdits.fileConflictPending = false;
@@ -549,6 +561,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
 
   void _onDocumentChange(DocumentChangeLog changeLog) {
     if (_applyingRemote) return;
+    _scheduleTypingCaretReveal();
     final live = _objectIdsInDocument();
     final removed = _trackedObjectIds.difference(live);
     _trackedObjectIds = live;
@@ -562,6 +575,35 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     if (removed.isNotEmpty) {
       unawaited(_cascadeDeleteRemovedObjects(removed));
     }
+  }
+
+  void _scheduleTypingCaretReveal() {
+    if (isPhoneLayout || !_focusNode.hasPrimaryFocus || _typingRevealScheduled)
+      return;
+    _typingRevealScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _typingRevealScheduled = false;
+      if (!mounted || !_focusNode.hasPrimaryFocus || !_scroll.hasClients)
+        return;
+      final selection = _composer.selection;
+      final layout = _docLayoutKey.currentState as DocumentLayout?;
+      final viewportContext = _scrollViewportKey.currentContext;
+      if (selection == null ||
+          !selection.isCollapsed ||
+          layout == null ||
+          viewportContext == null)
+        return;
+      final caret = layout.getRectForPosition(selection.extent);
+      if (caret == null) return;
+      revealTypingCaretBelow(
+        viewportContext: viewportContext,
+        position: _scroll.position,
+        globalCaret: Rect.fromPoints(
+          layout.getGlobalOffsetFromDocumentOffset(caret.topLeft),
+          layout.getGlobalOffsetFromDocumentOffset(caret.bottomRight),
+        ),
+      );
+    });
   }
 
   Set<int> _objectIdsInDocument() {
@@ -1170,13 +1212,17 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     int? contentRevision,
     bool fromSync = false,
   }) {
+    final next = markerTextToMutableDocument(json);
+    final savedSelection = remapRemoteSelection(_doc, next, _composer.selection);
+    final hadKeyboard = _focusNode.hasPrimaryFocus &&
+        (!phoneMarksWithHandlesOnly || MediaQuery.viewInsetsOf(context).bottom > 0);
+    _restoringRemote = true;
     _applyingRemote = true;
     _displayedSyncBody = json ?? '';
     _doc.removeListener(_onDocumentChange);
     // Drop any selection before swapping documents — shared composer notifies
     // the still-mounted (old) SuperEditor/IME during the swap otherwise.
     _composer.clearSelection();
-    final next = markerTextToMutableDocument(json);
     // Replace nodes in place via editor reset pattern: rebuild editor.
     _editor = createDefaultDocumentEditor(
       document: next,
@@ -1209,7 +1255,36 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _applyingRemote = false;
     // Remount SuperEditor so the prior DocumentImeInputClient is disposed.
     _superEditorEpoch++;
+    final epoch = _superEditorEpoch;
     if (mounted) setState(() {});
+    runNextFrame(() {
+      if (!mounted || epoch != _superEditorEpoch) return;
+      runWhenKeyboardIdle(() {
+        if (!mounted || epoch != _superEditorEpoch) return;
+        // Passive restore must not open a dismissed phone keyboard. An active
+        // writing session can reconnect at its previous position instead.
+        void restore() {
+          if (!mounted || epoch != _superEditorEpoch) return;
+          if (_composer.selection == null) {
+            _composer.setSelectionWithReason(savedSelection, SelectionReason.contentChange);
+          }
+        }
+        if (hadKeyboard) {
+          setState(() => _restoringRemote = false);
+          // Apply the updated IME policy before reconnecting the live session.
+          runNextFrame(() => runWhenKeyboardIdle(restore));
+        } else {
+          restore();
+          runNextFrame(() {
+            if (mounted && epoch == _superEditorEpoch) {
+              runWhenKeyboardIdle(() {
+                if (mounted) setState(() => _restoringRemote = false);
+              });
+            }
+          });
+        }
+      });
+    });
   }
 
   Future<void> _migrateLegacyTablesIfNeeded() async {
@@ -1595,6 +1670,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       documentPadding: EdgeInsets.only(
         top: topPresentationInset,
         bottom: bottomPresentationInset,
+        left: isPhoneLayout ? 0 : AppSpacing.lg,
+        right: isPhoneLayout ? 0 : AppSpacing.lg,
       ),
       inlineTextStyler: (attributions, existing) {
         var style = defaultInlineTextStyler(attributions, existing);
@@ -1703,21 +1780,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   /// Right-click aims at the pointer. An existing mark is kept only when the
   /// click is inside it.
   void _aimCaretAtPointer(Offset global) {
-    final layout = _docLayoutKey.currentState as DocumentLayout?;
-    if (layout == null) return;
-    DocumentPosition? pos;
-    try {
-      final local = layout.getDocumentOffsetFromAncestorOffset(global);
-      pos = bidiDocumentPosition(
-        document: _doc,
-        layout: layout,
-        layoutOffset: local,
-        globalOffset: global,
-        paddingGoesToLineEnd: true,
-      );
-    } catch (_) {
-      pos = _positionAtGlobalOffset(global);
-    }
+    final pos = _positionAtGlobalOffset(global);
     if (pos == null) return;
     final sel = _composer.selection;
     if (sel != null && !sel.isCollapsed && sel.containsPosition(_doc, pos)) {
@@ -1731,81 +1794,6 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       ),
       const ClearComposingRegionRequest(),
     ]);
-  }
-
-  void _onBidiMarkPointerDown(PointerDownEvent event) {
-    if ((event.buttons & kPrimaryButton) == 0) return;
-    if (event.kind == PointerDeviceKind.trackpad) return;
-    _bidiDragDownGlobal = event.position;
-  }
-
-  void _onBidiMarkPointerMove(PointerMoveEvent event) {
-    if (phoneMarksWithHandlesOnly) return;
-    final down = _bidiDragDownGlobal;
-    if (down == null) return;
-    if ((event.buttons & kPrimaryButton) == 0) return;
-    if (event.kind == PointerDeviceKind.trackpad) return;
-    if (_caretSession.owner == DocumentCaretOwner.embed) return;
-    if (!_focusNode.hasPrimaryFocus) return;
-    if ((event.position - down).distance <= kTouchSlop) return;
-    _applyBidiDragSelection(down: down, current: event.position);
-  }
-
-  void _clearBidiMarkPointer() {
-    _bidiDragDownGlobal = null;
-  }
-
-  void _applyBidiDragSelection({
-    required Offset down,
-    required Offset current,
-  }) {
-    final layout = _docLayoutKey.currentState as DocumentLayout?;
-    if (layout == null) return;
-    try {
-      final downLocal = layout.getDocumentOffsetFromAncestorOffset(down);
-      final currentLocal = layout.getDocumentOffsetFromAncestorOffset(current);
-      final extent = bidiDocumentPosition(
-        document: _doc,
-        layout: layout,
-        layoutOffset: currentLocal,
-        globalOffset: current,
-        paddingGoesToLineEnd: false,
-      );
-      if (extent == null) return;
-      final DocumentPosition basePos;
-      if (HardwareKeyboard.instance.isShiftPressed) {
-        basePos =
-            _composer.selection?.base ??
-            bidiDocumentPosition(
-              document: _doc,
-              layout: layout,
-              layoutOffset: downLocal,
-              globalOffset: down,
-              paddingGoesToLineEnd: false,
-            ) ??
-            extent;
-      } else {
-        final fromDown = bidiDocumentPosition(
-          document: _doc,
-          layout: layout,
-          layoutOffset: downLocal,
-          globalOffset: down,
-          paddingGoesToLineEnd: false,
-        );
-        if (fromDown == null) return;
-        basePos = fromDown;
-      }
-      final next = DocumentSelection(base: basePos, extent: extent);
-      if (_composer.selection == next) return;
-      _editor.execute([
-        ChangeSelectionRequest(
-          next,
-          SelectionChangeType.expandSelection,
-          SelectionReason.userInteraction,
-        ),
-        const ClearComposingRegionRequest(),
-      ]);
-    } catch (_) {}
   }
 
   /// Body claimed typing: forget the object mark and caret, then focus SE.
@@ -2311,6 +2299,17 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   Future<void> _handleTextMenuAction(String action) async {
+    if (action.startsWith('text:direction:')) {
+      final selection = _composer.selection;
+      if (selection == null) return;
+      final direction = action.substring('text:direction:'.length);
+      if (!['rtl', 'ltr', 'auto'].contains(direction)) return;
+      await whenKeyboardIdle();
+      if (!mounted) return;
+      final requests = paragraphDirectionRequests(_doc, selection, direction);
+      if (requests.isNotEmpty) _editor.execute(requests);
+      return;
+    }
     final expandsLine =
         action != 'text:paste' && !action.startsWith('text:emoji:');
     if (expandsLine) _expandCollapsedToCaretLine();
@@ -2614,15 +2613,12 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
                   if ((event.buttons & kSecondaryMouseButton) != 0) {
                     DocumentSecondaryTap.notePointer(event.pointer);
                   }
-                  _onBidiMarkPointerDown(event);
                 },
-                onPointerMove: _onBidiMarkPointerMove,
-                onPointerUp: (_) => _clearBidiMarkPointer(),
-                onPointerCancel: (_) => _clearBidiMarkPointer(),
                 child: GestureDetector(
                   onSecondaryTapDown: _onSecondaryTap,
                   behavior: HitTestBehavior.translucent,
                   child: CustomScrollView(
+                    key: _scrollViewportKey,
                     controller: _scroll,
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
@@ -2665,15 +2661,17 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
                           ambient: ambient,
                         ),
                         shrinkWrap: true,
-                        imePolicies: const SuperEditorImePolicies(
+                        imePolicies: SuperEditorImePolicies(
                           openImeOnNonPrimaryFocusGain: false,
                           closeKeyboardOnLosePrimaryFocus: true,
-                          openKeyboardOnGainPrimaryFocus: true,
-                          openKeyboardOnSelectionChange: true,
+                          openKeyboardOnGainPrimaryFocus: !_restoringRemote,
+                          openKeyboardOnSelectionChange: !_restoringRemote,
                           closeKeyboardOnSelectionLost: true,
                         ),
                         imeConfiguration: kFileEditorImeConfiguration,
                         selectionPolicies: const SuperEditorSelectionPolicies(
+                          placeCaretAtEndOfDocumentOnGainFocus: false,
+                          restorePreviousSelectionOnGainFocus: false,
                           clearSelectionWhenEditorLosesFocus: false,
                           clearSelectionWhenImeConnectionCloses: false,
                         ),
@@ -2690,7 +2688,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
                   ),
                 ),
               ),
-              if (_settlingMerge)
+              if (_settlingMerge || _restoringRemote)
                 const Positioned.fill(
                   child: AbsorbPointer(
                     child: ColoredBox(

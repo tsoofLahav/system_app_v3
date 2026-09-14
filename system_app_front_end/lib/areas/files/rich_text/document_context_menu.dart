@@ -9,6 +9,7 @@ import '../editor/document_secondary_tap.dart';
 import '../editor/editor_key_handoff.dart';
 import '../editor/embeds/image_display_size.dart';
 import './block_text_focus.dart';
+import './span_text_editing_controller.dart';
 
 typedef DocumentMenuHandler = Future<void> Function(String action);
 
@@ -22,6 +23,23 @@ class DocumentContextMenu {
     bool includeMakeList = false,
     bool includeAddChecklist = false,
   }) => [
+    if (BlockTextFocusRegistry.activeController == null ||
+        BlockTextFocusRegistry.activeController
+            is SpanTextEditingController) ...[
+      AppContextMenuItem(
+        value: 'text:direction:rtl',
+        label: strings['directionRtl'],
+      ),
+      AppContextMenuItem(
+        value: 'text:direction:ltr',
+        label: strings['directionLtr'],
+      ),
+      AppContextMenuItem(
+        value: 'text:direction:auto',
+        label: strings['directionDefault'],
+      ),
+      const AppContextMenuDivider(),
+    ],
     AppContextMenuItem(value: 'text:bold', label: strings['bold'] ?? 'Bold'),
     AppContextMenuItem(
       value: 'text:italic',

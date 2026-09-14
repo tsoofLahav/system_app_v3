@@ -8,6 +8,7 @@ import '../../ui/app_typography.dart';
 import '../../ui/glass_surface.dart';
 import '../shell/app_bottom_bar.dart';
 import '../widgets/topic_emoji.dart';
+import '../bring_file/bring_file_picker_dialog.dart';
 
 /// The strip at the top of a topic: which topic this is, and the one button
 /// that belongs to the topic itself.
@@ -66,6 +67,24 @@ class TopicHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppTopicHeaderMetrics.headerGap),
+              if (isMain) ...[
+                Opacity(
+                  opacity: addEnabled ? 1 : 0.35,
+                  child: GlassCircleButton(
+                    tooltip: s['bringFile'],
+                    icon: AppIcons.bringFile,
+                    onPressed: addEnabled
+                        ? () => showBringFilePicker(
+                            context: context,
+                            state: state,
+                          )
+                        : () {},
+                    size: AppTopicHeaderMetrics.addButtonSize,
+                    iconSize: 20,
+                  ),
+                ),
+                const SizedBox(width: AppTopicHeaderMetrics.headerGap),
+              ],
               Opacity(
                 opacity: addEnabled ? 1 : 0.35,
                 child: GlassCircleButton(
@@ -73,7 +92,7 @@ class TopicHeader extends StatelessWidget {
                   icon: AppIcons.add,
                   onPressed: addEnabled ? onAddFile : () {},
                   size: AppTopicHeaderMetrics.addButtonSize,
-                  iconSize: 15,
+                  iconSize: 20,
                 ),
               ),
             ],

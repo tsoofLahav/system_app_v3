@@ -12,7 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:super_editor/super_editor.dart';
 
-import './paragraph_text_direction.dart';
+import './text_direction_policy.dart';
 
 /// True when the extent node's text resolves to RTL (first strong / ambient).
 bool isSuperEditorCaretRtl(
@@ -23,7 +23,12 @@ bool isSuperEditorCaretRtl(
   if (selection == null) return ambient == TextDirection.rtl;
   final node = editContext.document.getNodeById(selection.extent.nodeId);
   if (node is! TextNode) return ambient == TextDirection.rtl;
-  final dir = detectParagraphTextDirection(node.text.toPlainText()) ?? ambient;
+  final explicit = node.getMetadataValue('writingDirection');
+  final dir = explicit == 'rtl'
+      ? TextDirection.rtl
+      : explicit == 'ltr'
+      ? TextDirection.ltr
+      : WritingDirection.resolve(node.text.toPlainText(), ambient);
   return dir == TextDirection.rtl;
 }
 

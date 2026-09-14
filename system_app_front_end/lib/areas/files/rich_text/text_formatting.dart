@@ -38,7 +38,10 @@ class TextSpanBuilder {
     }
     if (cursor < text.length) {
       children.add(
-        TextSpan(text: safeSubstring(text, cursor, text.length), style: baseStyle),
+        TextSpan(
+          text: safeSubstring(text, cursor, text.length),
+          style: baseStyle,
+        ),
       );
     }
     return TextSpan(children: children);
@@ -72,8 +75,7 @@ class TextSpanBuilder {
       }
     }
     final isDescription = span['descriptionLink'] == true;
-    final isUrl =
-        span['link'] is String && (span['link'] as String).isNotEmpty;
+    final isUrl = span['link'] is String && (span['link'] as String).isNotEmpty;
     if (isDescription) {
       style = style.copyWith(
         color: AppColors.descriptionLink,
@@ -212,7 +214,13 @@ List<Map<String, dynamic>> normalizeSpans(
       start = snapped.$1;
       end = snapped.$2;
     }
-    if (end <= start) continue;
+    if (end <= start) {
+      if (textLength == 0 &&
+          (span['direction'] == 'rtl' || span['direction'] == 'ltr')) {
+        cleaned.add({'start': 0, 'end': 0, 'direction': span['direction']});
+      }
+      continue;
+    }
     if (!_spanHasStyle(span)) continue;
     cleaned.add({...span, 'start': start, 'end': end});
   }
@@ -221,7 +229,9 @@ List<Map<String, dynamic>> normalizeSpans(
 }
 
 bool _spanHasStyle(Map<String, dynamic> span) {
-  return span['bold'] == true ||
+  return span['direction'] == 'rtl' ||
+      span['direction'] == 'ltr' ||
+      span['bold'] == true ||
       span['italic'] == true ||
       span['underline'] == true ||
       span['strikethrough'] == true ||
@@ -300,6 +310,8 @@ List<Map<String, dynamic>> _marksForLength(
 
 Map<String, dynamic> _markFromSpan(Map<String, dynamic> span) {
   final mark = <String, dynamic>{};
+  if (span['direction'] == 'rtl' || span['direction'] == 'ltr')
+    mark['direction'] = span['direction'];
   if (span['bold'] == true) mark['bold'] = true;
   if (span['italic'] == true) mark['italic'] = true;
   if (span['underline'] == true) mark['underline'] = true;
@@ -344,7 +356,8 @@ Map<String, dynamic> _uniformMarkInRange(
 }
 
 bool _marksEqual(Map<String, dynamic> a, Map<String, dynamic> b) {
-  return a['bold'] == b['bold'] &&
+  return a['direction'] == b['direction'] &&
+      a['bold'] == b['bold'] &&
       a['italic'] == b['italic'] &&
       a['underline'] == b['underline'] &&
       a['strikethrough'] == b['strikethrough'] &&
@@ -565,6 +578,15 @@ void applyActionToMark(
   String action,
   double baseFontSize,
 ) {
+  if (action.startsWith('text:direction:')) {
+    final direction = action.substring('text:direction:'.length);
+    if (direction == 'rtl' || direction == 'ltr') {
+      mark['direction'] = direction;
+    } else if (direction == 'auto') {
+      mark.remove('direction');
+    }
+    return;
+  }
   switch (action) {
     case 'text:bold':
       if (mark['bold'] == true) {
@@ -701,7 +723,8 @@ List<Map<String, dynamic>> coalesceSpans(List<Map<String, dynamic>> spans) {
 }
 
 bool _sameStyle(Map<String, dynamic> a, Map<String, dynamic> b) {
-  return a['bold'] == b['bold'] &&
+  return a['direction'] == b['direction'] &&
+      a['bold'] == b['bold'] &&
       a['italic'] == b['italic'] &&
       a['underline'] == b['underline'] &&
       a['strikethrough'] == b['strikethrough'] &&

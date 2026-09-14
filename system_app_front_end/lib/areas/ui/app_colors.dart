@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 /// Cross-app color tokens. Use via [AppColors] helpers — not raw Material colors in UI.
 abstract final class AppColors {
-  // Neutrals (main / home) — almost white, slightly cooler than note surfaces
-  static const canvasNeutralTop = Color(0xFFFFFEFE);
-  static const canvasNeutralBottom = Color(0xFFFAFAF8);
+  // Cool neutral canvas separates the white and pastel journal surfaces.
+  static const canvasNeutralTop = Color(0xFFEBEEF3);
+  static const canvasNeutralBottom = Color(0xFFE0E4EB);
 
   // Note surfaces
   static const noteTop = Color(0xFFFCFBF7);
@@ -15,8 +15,8 @@ abstract final class AppColors {
   static const noteShadow = Color(0x0F000000);
 
   // All app text — one soft charcoal (headers and body share this)
-  static const text = Color(0xFF5E5B56);
-  static const textHint = Color(0xFF9D988F);
+  static const text = Color(0xFF514E49);
+  static const textHint = Color(0xFF89847B);
 
   // Legacy aliases — prefer [text]
   static const noteTitle = text;
@@ -65,6 +65,19 @@ abstract final class AppColors {
     colors: [canvasNeutralTop, canvasNeutralBottom],
   );
 
+  /// One opaque ombre: pastel topic colour and cool grey are peer stops.
+  static LinearGradient workspaceGradient(Color? accent, bool isMainTopic) {
+    final topic = accent == null || isMainTopic
+        ? canvasNeutralTop
+        : Color.lerp(Colors.white, accent, 0.24)!;
+    return LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [topic, Color.lerp(topic, canvasNeutralBottom, 0.55)!, canvasNeutralBottom],
+      stops: const [0, 0.48, 1],
+    );
+  }
+
   /// Soft topic wash from the top of the window.
   ///
   /// Painted full-bleed behind the sidebar and the bottom bar so the topic
@@ -78,7 +91,7 @@ abstract final class AppColors {
       (isMainTopic ? text : accent).withValues(
         alpha: tintAlpha ?? (isMainTopic ? 0.02 : 0.08),
       ),
-      Colors.white,
+      canvasNeutralTop,
     );
     return LinearGradient(
       begin: Alignment.topCenter,
@@ -105,7 +118,7 @@ abstract final class AppColors {
 
   /// Lightest and heaviest a file pane wears its topic color.
   static const minFileTint = 0.045;
-  static const maxFileTint = 0.17;
+  static const maxFileTint = 0.13;
 
   /// How strongly one file wears its topic color.
   ///
@@ -281,9 +294,7 @@ abstract final class AppColors {
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
       colors: atTop ? [solid, mid, clear] : [clear, mid, solid],
-      stops: atTop
-          ? const [0.0, 0.42, 1.0]
-          : const [0.0, 0.58, 1.0],
+      stops: atTop ? const [0.0, 0.42, 1.0] : const [0.0, 0.58, 1.0],
     );
   }
 

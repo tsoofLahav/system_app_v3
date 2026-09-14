@@ -10,6 +10,8 @@
 /// line, so a change can be marked exactly where it happened.
 library;
 
+import 'text_direction_marker.dart';
+
 sealed class AgentBlock {
   const AgentBlock({required this.lineStart, required this.lineEnd});
 
@@ -154,8 +156,10 @@ class AgentTableBlock extends AgentBlock {
   final int? objectId;
   final List<AgentTableRow> rows;
 
-  int get columnCount =>
-      rows.fold(0, (max, row) => row.cells.length > max ? row.cells.length : max);
+  int get columnCount => rows.fold(
+    0,
+    (max, row) => row.cells.length > max ? row.cells.length : max,
+  );
 }
 
 class AgentGraphBlock extends AgentBlock {
@@ -217,13 +221,19 @@ class AgentUnknownBlock extends AgentBlock {
 }
 
 final _headingRe = RegExp(r'^(#{1,6})\s*(.*)$');
-final _spacerRe = RegExp(r'^\[SPACER(?:\s+n="(\d+)")?\]$', caseSensitive: false);
+final _spacerRe = RegExp(
+  r'^\[SPACER(?:\s+n="(\d+)")?\]$',
+  caseSensitive: false,
+);
 final _taskListOpenRe = RegExp(
   r'^\[TASK_LIST\s+id="(\d+)"(?:\s+title="([^"]*)")?\]$',
   caseSensitive: false,
 );
 final _infoOpenRe = RegExp(r'^\[INFO\s+id="(\d+)"\]$', caseSensitive: false);
-final _tableOpenRe = RegExp(r'^\[TABLE(?:\s+id="(\d+)")?\]$', caseSensitive: false);
+final _tableOpenRe = RegExp(
+  r'^\[TABLE(?:\s+id="(\d+)")?\]$',
+  caseSensitive: false,
+);
 final _graphOpenRe = RegExp(
   r'^\[GRAPH\s+id="(\d+)"(?:\s+chartType="([^"]*)")?(?:\s+title="[^"]*")?\]$',
   caseSensitive: false,
@@ -265,11 +275,12 @@ List<AgentBlock> parseAgentTextBlocks(String text) {
   var i = 0;
   while (i < lines.length) {
     final raw = lines[i];
-    final line = raw.trim();
+    final line = TextDirectionMarker.strip(raw).trim();
 
     if (line.isEmpty) {
       final start = i;
-      while (i < lines.length && lines[i].trim().isEmpty) {
+      while (i < lines.length &&
+          TextDirectionMarker.strip(lines[i]).trim().isEmpty) {
         i++;
       }
       blocks.add(
@@ -378,7 +389,10 @@ List<AgentBlock> parseAgentTextBlocks(String text) {
       blocks.add(
         AgentHeadingBlock(
           level: heading.group(1)!.length.clamp(1, 6),
-          text: heading.group(2)!.trim(),
+          text: TextDirectionMarker.encode(
+            heading.group(2)!.trim(),
+            TextDirectionMarker.direction(raw),
+          ),
           lineStart: i,
           lineEnd: i,
         ),
@@ -389,12 +403,7 @@ List<AgentBlock> parseAgentTextBlocks(String text) {
 
     if (_markerResidueRe.hasMatch(line)) {
       blocks.add(
-        AgentUnknownBlock(
-          text: line,
-          lineStart: i,
-          lineEnd: i,
-          isMarker: true,
-        ),
+        AgentUnknownBlock(text: line, lineStart: i, lineEnd: i, isMarker: true),
       );
       i++;
       continue;
@@ -593,8 +602,9 @@ int _readList(
   for (var i = open + 1; i < (close == -1 ? lines.length : close); i++) {
     final line = lines[i];
     if (line.trim().isEmpty) continue;
-    final match =
-        ordered ? _orderedItemRe.firstMatch(line) : _bulletItemRe.firstMatch(line);
+    final match = ordered
+        ? _orderedItemRe.firstMatch(line)
+        : _bulletItemRe.firstMatch(line);
     if (match == null) continue;
     final indent = match.group(1)!.length ~/ 2;
     items.add(

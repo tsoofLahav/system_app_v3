@@ -117,9 +117,16 @@ Before merging any rich-text PR:
 Block content fields:
 
 - `text` — plain string
-- `spans` — `[{start, end, bold?, italic?, underline?, strikethrough?, size?, color?, link?}]` (half-open ranges). `link` is a web URL; description-link paint is not stored.
+- `spans` — `[{start, end, bold?, italic?, underline?, strikethrough?, size?, color?, link?, direction?}]` (half-open ranges). `link` is a web URL; description-link paint is not stored.
+- `direction` is `rtl` or `ltr`: whole-field layout metadata, not an inline glyph style. `text:direction:auto` clears it. Applying direction preserves every other style property. Unlike inline styles, it persists through full replacement and applies to newly typed text. An empty field retains a single `{start: 0, end: 0, direction: ...}` record; info and table codecs must preserve it. Plain image captions have no rich span payload and use the default policy.
 - `compose_style`, `parchment`, `text_style` — legacy; cleared on save
 
 ## Tests
 
 Run `flutter test test/files/description_range_remap_test.dart` after any change to span shifting, format application, or selection overlay.
+
+### Object pointer selection (2026-09-13)
+
+Object fields use rendered grapheme boxes (`rtl/editable_pointer_selection.dart`) for mouse range endpoints and phone word selection. Mouse corrections run after Flutter's gesture callback in the same event turn, before paint; no correction runs while typing. Linked fields have no parent double-tap recognizer: a completed desktop double-click may open the hit link, while ordinary drags keep native focus and selection. Link hover bubbles close on pointer-down.
+
+On iOS, single taps snap to the nearest word boundary, double-taps select the word, and swipes remain scrolling. Native handles still resize ranges. `rtl/editable_selection_controls.dart` adjusts their anchors to logical boundary graphemes instead of the visual order of mixed RTL/number boxes. The native caret is retained. Tests: `test/files/object_selection_regression_test.dart` (real Hebrew font via `RTL_TEST_FONT`, macOS Arial fallback), plus phone toolbar and cross-field selection tests. Physical-device font/IME behavior still needs smoke checking.

@@ -8,6 +8,8 @@ import '../../ui/glass_surface.dart';
 import './app_bottom_bar.dart';
 import './dismiss_focus_on_outside_tap.dart';
 import './phone_visible_file.dart';
+import '../../files/data/topic.dart';
+import '../widgets/topic_emoji.dart';
 
 /// Floating phone header: icon pills + bold topic/file names on the ombre.
 class PhoneTopBar extends StatelessWidget {
@@ -32,6 +34,7 @@ class PhoneTopBar extends StatelessWidget {
 
   static final _nameStyle = AppTypography.noteTitleStyle.copyWith(
     fontSize: 13,
+    height: AppTypography.phoneHeaderLineHeight,
     fontWeight: FontWeight.w700,
     color: AppColors.text.withValues(alpha: 0.96),
   );
@@ -40,10 +43,23 @@ class PhoneTopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return KeepEditorFocus(
       child: ListenableBuilder(
-        listenable: PhoneVisibleFile.name,
+        listenable: Listenable.merge([
+          PhoneVisibleFile.name,
+          PhoneVisibleFile.source,
+        ]),
         builder: (context, _) {
           final fileName = PhoneVisibleFile.name.value;
           final hasFile = fileName != null && fileName.isNotEmpty;
+          final currentTopic = state.isViewMode || state.isDiagramMode
+              ? null
+              : state.isArchiveMode
+              ? state.selectedArchiveTopic
+              : state.selectedTopic;
+          final source = hasFile ? PhoneVisibleFile.sourceTopic : null;
+          final projected =
+              source != null &&
+              currentTopic != null &&
+              source.id != currentTopic.id;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
@@ -54,34 +70,63 @@ class PhoneTopBar extends StatelessWidget {
                   onPressed: onOpenMenu,
                 ),
                 Expanded(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          title,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: _nameStyle,
-                        ),
-                      ),
-                      if (hasFile) ...[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          child: Text('·', style: _nameStyle),
-                        ),
-                        Flexible(
-                          child: Text(
-                            fileName,
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: _nameStyle,
+                  child: SizedBox(
+                    height: AppBottomBarMetrics.phoneSegmentHeight,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        if (projected)
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            child: _topicLabel(title, currentTopic),
+                          ),
+                        Align(
+                          alignment: projected
+                              ? Alignment.topCenter
+                              : Alignment.center,
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              top: projected
+                                  ? 13 * AppTypography.phoneHeaderLineHeight +
+                                        AppTypography.phoneHeaderProjectedRowGap
+                                  : 0,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Flexible(
+                                  child: _topicLabel(
+                                    projected
+                                        ? state.topicHeadline(source)
+                                        : title,
+                                    projected ? source : currentTopic,
+                                  ),
+                                ),
+                                if (hasFile) ...[
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                    ),
+                                    child: Text('·', style: _nameStyle),
+                                  ),
+                                  Flexible(
+                                    child: Text(
+                                      fileName,
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: _nameStyle,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                         ),
                       ],
-                    ],
+                    ),
                   ),
                 ),
                 Row(
@@ -109,6 +154,29 @@ class PhoneTopBar extends StatelessWidget {
       ),
     );
   }
+
+  Widget _topicLabel(String label, Topic? topic) => Row(
+    mainAxisSize: MainAxisSize.min,
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      if (topic != null && !topic.isMain) ...[
+        Transform.translate(
+          offset: const Offset(0, AppTypography.phoneHeaderEmojiLift),
+          child: TopicEmoji(value: topic.icon, size: 14),
+        ),
+        const SizedBox(width: 4),
+      ],
+      Flexible(
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: _nameStyle,
+        ),
+      ),
+    ],
+  );
 }
 
 class _TopIconPill extends StatelessWidget {

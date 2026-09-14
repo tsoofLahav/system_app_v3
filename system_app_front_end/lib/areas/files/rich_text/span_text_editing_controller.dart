@@ -26,6 +26,14 @@ class SpanTextEditingController extends TextEditingController {
 
   List<Map<String, dynamic>> get spans => _spans;
 
+  TextDirection? get directionOverride {
+    for (final span in _spans) {
+      if (span['direction'] == 'rtl') return TextDirection.rtl;
+      if (span['direction'] == 'ltr') return TextDirection.ltr;
+    }
+    return null;
+  }
+
   /// Persisted spans with description-link colour applied for painting only.
   List<Map<String, dynamic>> get displaySpans => paintSpansWithLinkColor(
     _spans,
@@ -118,7 +126,9 @@ class SpanTextEditingController extends TextEditingController {
     final oldText = _previousText;
     if (newText == oldText) return;
 
+    final direction = directionOverride;
     _spans = remapSpansForTextEdit(_spans, oldText, newText);
+    if (direction != null) _applyDirection(direction.name);
     _descriptionPaintRanges = [
       for (final range in _descriptionPaintRanges)
         ?remapOffsetRange(
@@ -140,11 +150,38 @@ class SpanTextEditingController extends TextEditingController {
     super.dispose();
   }
 
+  void _applyDirection(String direction) {
+    if (text.isEmpty) {
+      _spans = direction == 'auto'
+          ? []
+          : [
+              {'start': 0, 'end': 0, 'direction': direction},
+            ];
+      return;
+    }
+    _spans = applyFormatActionToRange(
+      _spans,
+      start: 0,
+      end: text.length,
+      textLength: text.length,
+      action: 'text:direction:$direction',
+      baseFontSize: 14,
+      sourceText: text,
+    );
+  }
+
   void applyFormatAction(
     String action, {
     required FormatRange range,
     required double baseFontSize,
   }) {
+    if (action.startsWith('text:direction:')) {
+      final direction = action.substring('text:direction:'.length);
+      if (!['rtl', 'ltr', 'auto'].contains(direction)) return;
+      _applyDirection(direction);
+      notifyListeners();
+      return;
+    }
     if (!range.isValid) return;
 
     _spans = applyFormatActionToRange(

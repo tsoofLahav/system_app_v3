@@ -12,8 +12,11 @@ import '../areas/files/model/document_codec.dart';
 import '../areas/files/model/document_model.dart';
 import './document_text_size.dart';
 import './l10n/app_language.dart';
+import '../areas/files/rich_text/rtl/text_direction_policy.dart';
+import '../areas/files/editor/editor_key_handoff.dart';
 import './l10n/app_strings.dart';
 import '../areas/automations/automation.dart';
+import '../areas/automations/push_registration.dart';
 import '../areas/automations/section_attention_notices.dart';
 import '../areas/automations/section_attention_notifications.dart';
 import '../areas/objects/data/app_view.dart';
@@ -74,8 +77,9 @@ class _TypeTemplateEdit {
 
 enum ViewDisplayMode { bySection, byTopic, flat }
 
-class AppState extends ChangeNotifier {
-  AppState() : _api = ApiService() {
+class AppState extends ChangeNotifier with WidgetsBindingObserver {
+  AppState({ApiService? api, DateTime Function()? clock})
+      : _api = api ?? ApiService(), _clock = clock ?? DateTime.now {
     _bootstrap = BootstrapService(_api);
     _topics = TopicService(_api);
     _topicTypes = TopicTypeService(_api);
@@ -89,9 +93,60 @@ class AppState extends ChangeNotifier {
     _automations = AutomationService(_api);
     _aiActions = AiActionService(_api);
     _images = ImageService(_api);
+    _pushRegistration = PushRegistration(_api);
+    WidgetsBinding.instance.addObserver(this);
   }
 
   final ApiService _api;
+  final DateTime Function() _clock;
+  late final PushRegistration _pushRegistration;
+  static const profilePrefsKey = 'selected_workspace_profile';
+  Future<void> Function(int workspaceId)? onProfileSelected;
+  bool _retired = false;
+  bool profileSwitching = false;
+
+  Future<List<Map<String, dynamic>>> profiles() async {
+    final rows = await ApiService().get('/workspaces') as List;
+    return rows.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+  }
+
+  Future<int> createProfile(String name) async {
+    final row = await ApiService().post('/workspaces', {'name': name.trim()}) as Map;
+    return row['id'] as int;
+  }
+
+  Future<void> selectProfile(int id) async {
+    if (id == workspaceId || profileSwitching) return;
+    profileSwitching = true;
+    try {
+      await _flushEditors();
+      await _writeLaunchSnapshot();
+      await ApiService().get('/workspaces/$id');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(profilePrefsKey, id);
+      await onProfileSelected?.call(id);
+    } finally {
+      profileSwitching = false;
+    }
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_retired) super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _retired = true;
+    _pushRegistration.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _archiveSearchDebounce?.cancel();
+    _launchSnapshotWriteTimer?.cancel();
+    _sectionWindowPoll?.cancel();
+    refreshing.dispose();
+    super.dispose();
+  }
+
   late final BootstrapService _bootstrap;
   late final TopicService _topics;
   late final TopicTypeService _topicTypes;
@@ -433,17 +488,43 @@ class AppState extends ChangeNotifier {
   List<AppTag> get objectTags =>
       objectTagsExcludingTopicTypes(tags: allTags, topicTypes: topicTypes);
 
+  final refreshing = ValueNotifier<bool>(false);
+  bool _initializing = true;
+  bool _foreground = true;
+  bool _fullRefreshRequested = false;
+  DateTime? _lastFullRefresh;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground) {
+      _fullRefreshRequested = true;
+      if (!_initializing) unawaited(refreshSectionWindows(full: true));
+    }
+  }
+
   Future<void> initialize() async {
+    refreshing.value = true;
     loading = true;
     error = null;
     notifyListeners();
     try {
       await _loadLanguage();
       await _loadDocumentTextSize();
+      final directionPrefs = await SharedPreferences.getInstance();
+      WritingDirection.policy.value =
+          directionPrefs.getString('writing_direction') == 'appLanguage'
+          ? TextDirectionPolicy.appLanguage
+          : TextDirectionPolicy.firstStrong;
       await _loadDiagramPrefs();
       await shortcutBindings.restore();
       shortcutRebuildListenable.notifyListeners();
-      final paintedFromSnapshot = await _hydrateLaunchSnapshot();
+      final profilePrefs = await SharedPreferences.getInstance();
+      workspaceId = profilePrefs.getInt(profilePrefsKey);
+      _api.workspaceId = workspaceId;
+      // Restore only the selected profile's offline snapshot.
+      launchSnapshotStore.workspaceId = workspaceId;
+      final paintedFromSnapshot = workspaceId != null && await _hydrateLaunchSnapshot();
       if (paintedFromSnapshot) {
         await settleHardwareKeyboardForLaunch();
         appReady = true;
@@ -453,14 +534,19 @@ class AppState extends ChangeNotifier {
       await _bootstrap.bootstrap();
       final status = await _bootstrap.status();
       workspaceId = status['workspace_id'] as int?;
+      if (workspaceId == null) throw StateError('Workspace is not ready');
+      _api.workspaceId = workspaceId;
+      launchSnapshotStore.workspaceId = workspaceId;
+      await profilePrefs.setInt(profilePrefsKey, workspaceId!);
       await _reloadAll();
       await _migrateImplicitSingleLayouts();
       await _restoreBroughtFile();
-      await settleHardwareKeyboardForLaunch();
+      if (!paintedFromSnapshot) await settleHardwareKeyboardForLaunch();
       appReady = true;
       await loadAiActions();
+      unawaited(_registerPush());
       await loadAutomations();
-      _startSectionWindowPoll();
+
       if (selectedTopic == null && allTopics.isNotEmpty) {
         final home =
             allTopics.where((t) => t.isMain).firstOrNull ??
@@ -485,16 +571,30 @@ class AppState extends ChangeNotifier {
       error = e.toString();
     } finally {
       loading = false;
+      _initializing = false;
+      if (!_retired) refreshing.value = false;
+      _lastFullRefresh = _clock();
+      _startSectionWindowPoll();
+      _syncSectionAttentionNotifications();
+      if (_fullRefreshRequested) unawaited(refreshSectionWindows(full: true));
       notifyListeners();
     }
   }
 
-  Future<void> _reloadAll() async {
-    allTopics = await _topics.listTopics(workspaceId: workspaceId);
-    topicTypes = await _topicTypes.list(workspaceId: workspaceId);
-    allTags = await _tags.listTags(workspaceId: workspaceId);
-    userViews = await _views.listViews(workspaceId: workspaceId);
-    await loadArchive();
+  Future<void> _reloadAll({bool includeArchive = true}) async {
+    final wid = workspaceId;
+    final result = await Future.wait<dynamic>([
+      _topics.listTopics(workspaceId: wid),
+      _topicTypes.list(workspaceId: wid),
+      _tags.listTags(workspaceId: wid),
+      _views.listViews(workspaceId: wid),
+    ]);
+    if (_retired || workspaceId != wid) return;
+    allTopics = result[0] as List<Topic>;
+    topicTypes = result[1] as List<TopicType>;
+    allTags = result[2] as List<AppTag>;
+    userViews = result[3] as List<AppView>;
+    if (includeArchive) await loadArchive();
   }
 
   String? takeAutomationNotice() {
@@ -508,6 +608,21 @@ class AppState extends ChangeNotifier {
     _language = language;
     notifyListeners();
     unawaited(_persistLanguage(language));
+  }
+
+  TextDirectionPolicy get writingDirection => WritingDirection.policy.value;
+
+  void setWritingDirection(TextDirectionPolicy policy) {
+    runWhenKeyboardIdle(() {
+      WritingDirection.policy.value = policy;
+      notifyListeners();
+      unawaited(_persistWritingDirection(policy));
+    });
+  }
+
+  Future<void> _persistWritingDirection(TextDirectionPolicy policy) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('writing_direction', policy.name);
   }
 
   void setDocumentTextSize(DocumentTextSize size) {
@@ -630,6 +745,8 @@ class AppState extends ChangeNotifier {
       await selectArchiveTopic(topic);
       return;
     }
+    final entering = !preservePainted &&
+        (selectedDetail?.topic.id != topic.id || isViewMode || isArchiveMode || isDiagramMode);
     await _flushEditors();
     _gridLayoutPeek.forgetIfLeft(topic.id);
     if (_typeTemplateEdit != null && topic.id != _typeTemplateEdit!.topicId) {
@@ -650,6 +767,7 @@ class AppState extends ChangeNotifier {
     }
     try {
       final files = await _files.listFilesForTopic(topic.id);
+      if (_retired || selectedTopic?.id != topic.id || isViewMode || isArchiveMode || isDiagramMode) return;
       for (final file in files) {
         _rememberFile(_mergeInboundFile(file));
       }
@@ -662,7 +780,8 @@ class AppState extends ChangeNotifier {
         await _loadEmbedsForFileMergingDirty(file.id);
       }
       if (topic.isMain) await _refreshVisitFiles();
-      if (pendingFocusFileId == null && selectedDetail != null) {
+      if (_retired || selectedTopic?.id != topic.id || isViewMode || isArchiveMode || isDiagramMode) return;
+      if (entering && pendingFocusFileId == null && selectedDetail != null) {
         final ordered = orderedFilesFor(topic, selectedDetail!.files);
         if (ordered.isNotEmpty) pendingFocusFileId = ordered.first.id;
       }
@@ -1899,50 +2018,80 @@ class AppState extends ChangeNotifier {
   }
 
   void _startSectionWindowPoll() {
+    if (_retired) return;
     _sectionWindowPoll?.cancel();
     _sectionWindowPoll = Timer.periodic(const Duration(seconds: 5), (_) {
       unawaited(refreshSectionWindows(notifyIfChanged: true));
     });
   }
 
-  Future<void> refreshSectionWindows({bool notifyIfChanged = false}) async {
-    if (workspaceId == null) return;
-    if (_sectionRefreshRunning) return;
+  Future<void> refreshSectionWindows({bool notifyIfChanged = false, bool full = false}) async {
+    if (_retired || workspaceId == null) return;
+    _fullRefreshRequested |= full;
+    if (_initializing || !_foreground || _sectionRefreshRunning) return;
     _sectionRefreshRunning = true;
+    final refreshAll = _fullRefreshRequested || _lastFullRefresh == null ||
+        _clock().difference(_lastFullRefresh!) >= const Duration(minutes: 1);
+    _fullRefreshRequested = false;
+    if (refreshAll) refreshing.value = true;
     try {
-      var changed = false;
-      try {
-        final next = await _automations.list(workspaceId: workspaceId);
-        changed =
-            _automationAttentionSignature(next) !=
-            _automationAttentionSignature(automations);
-        automations = next;
-        if (changed && isViewMode) {
-          try {
-            await _refreshViewMemberships();
-          } catch (_) {}
+      if (refreshAll) {
+        await _reloadAll(includeArchive: isArchiveMode);
+        if (_retired) return;
+        final topic = allTopics.where((t) => t.id == selectedTopic?.id).firstOrNull;
+        if (topic != null) {
+          selectedTopic = topic;
+          if (selectedDetail?.topic.id == topic.id) {
+            selectedDetail = TopicDetail(topic: topic, files: selectedDetail!.files);
+          }
         }
-      } catch (_) {
-        // A poll must not take the app down; the next tick retries.
+        final view = userViews.where((v) => v.id == selectedView?.id).firstOrNull;
+        if (view != null) selectedView = view;
+        await loadAiActions();
+        unawaited(_registerPush());
       }
-      try {
-        changed = await _refreshSharedFileOrder() || changed;
-      } catch (_) {}
-      try {
-        await DocumentEditorRegistry.synchronizeAll();
-      } catch (e) {
-        error = e.toString();
+      final next = await _automations.list(workspaceId: workspaceId);
+      if (_retired) return;
+      var changed = refreshAll ||
+          _automationAttentionSignature(next) != _automationAttentionSignature(automations);
+      // Memberships also change on another device without an attention transition.
+      if (isViewMode) {
+        await _refreshViewMemberships();
+        changed = true;
       }
+      automations = next;
+      changed = await _refreshSharedFileOrder() || changed;
+      if (_retired) return;
+      await DocumentEditorRegistry.synchronizeAll();
+      if (_retired) return;
       _syncSectionAttentionNotifications();
-      if (changed || !notifyIfChanged) notifyListeners();
+      if (refreshAll) {
+        _lastFullRefresh = _clock();
+        _scheduleLaunchSnapshotWrite();
+      }
+      if (changed || !notifyIfChanged) runWhenKeyboardIdle(notifyListeners);
+    } catch (e) {
+      // Keep cached content/drafts usable offline; retry on the next tick.
+      if (!_retired) error = e.toString();
     } finally {
       _sectionRefreshRunning = false;
+      if (!_retired) refreshing.value = false;
+      if (!_retired && _foreground && _fullRefreshRequested) {
+        unawaited(refreshSectionWindows(full: true));
+      }
     }
   }
 
+  Future<void> _registerPush() async {
+    await _pushRegistration.register(language.name);
+    if (!_retired) _syncSectionAttentionNotifications();
+  }
+
   void _syncSectionAttentionNotifications() {
+    if (_retired || !_foreground || _initializing || !_pushRegistration.ready) return;
     unawaited(
       sectionAttentionNotifications.sync(
+        remoteEnabled: _pushRegistration.enabled,
         notices: sectionAttentionNotices(
           automations: automations,
           titleOf: automationDisplayName,
@@ -1980,6 +2129,7 @@ class AppState extends ChangeNotifier {
     final detail = selectedDetail;
     if (detail == null) return false;
     final inbound = await _files.listFilesForTopic(detail.topic.id);
+    if (_retired || selectedDetail?.topic.id != detail.topic.id) return false;
     var changed = false;
     for (final file in inbound) {
       final local = filesById[file.id];
@@ -2010,6 +2160,7 @@ class AppState extends ChangeNotifier {
       if (await _refreshEmbedsIfChanged(file.id)) changed = true;
     }
     final nextFiles = [for (final file in inbound) filesById[file.id]!];
+    if (_retired || selectedDetail?.topic.id != detail.topic.id) return false;
     if (!_sameFilePlacement(detail.files, nextFiles)) {
       selectedDetail = TopicDetail(topic: detail.topic, files: nextFiles);
       changed = true;
@@ -2073,7 +2224,7 @@ class AppState extends ChangeNotifier {
 
   Future<bool> _refreshHomeCanvasOrder() async {
     final payload = await _fetchHomeVisits();
-    if (payload == null) return false;
+    if (_retired || payload == null) return false;
     final beforeVisits = List<int>.from(_broughtFileIds);
     final beforeCanvas = List<int>.from(homeCanvasOrderIds);
     _applyServerVisitIds(payload.fileIds, serverCanvas: payload.canvasOrder);
@@ -2465,7 +2616,7 @@ class AppState extends ChangeNotifier {
 
   Future<bool> _hydrateLaunchSnapshot() async {
     final snap = await launchSnapshotStore.load();
-    if (snap == null) return false;
+    if (snap == null || snap.workspaceId != workspaceId) return false;
     workspaceId = snap.workspaceId;
     allTopics = snap.topics;
     filesById
@@ -2506,6 +2657,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _scheduleLaunchSnapshotWrite() {
+    if (_retired) return;
     _launchSnapshotWriteTimer?.cancel();
     _launchSnapshotWriteTimer = Timer(const Duration(milliseconds: 450), () {
       unawaited(_writeLaunchSnapshot());
@@ -3234,8 +3386,9 @@ class AppState extends ChangeNotifier {
   }
 
   /// Outer done/active writes every inner checkbox on connected infos.
-  void applyInnerTasksFromOuter(Task task) {
+  Future<void> applyInnerTasksFromOuter(Task task) async {
     if (!task.isActive && !task.isDone) return;
+    final updates = <Future<void>>[];
     for (final link in task.descriptionLinks) {
       final objectId = _infoObjectIdFromLink(link);
       if (objectId == null) continue;
@@ -3260,14 +3413,19 @@ class AppState extends ChangeNotifier {
                 if (s is Map) Map<String, dynamic>.from(s),
             ]
           : <Map<String, dynamic>>[];
-      patchInfoObjectCache(
-        embed,
-        title: title,
-        body: next,
-        spans: spans,
-        titleSpans: titleSpans,
+      // Persist (not just cache-patch) so the reload below picks up the new
+      // body instead of clobbering the toggle with the still-stale server copy.
+      updates.add(
+        updateInfoObject(
+          embed,
+          title: title,
+          body: next,
+          spans: spans,
+          titleSpans: titleSpans,
+        ),
       );
     }
+    if (updates.isNotEmpty) await Future.wait(updates);
   }
 
   /// Toggle one inner checkbox on a description-linked info (bubble / modal).
@@ -3372,7 +3530,7 @@ class AppState extends ChangeNotifier {
         await _api.post('/tasks/${task.id}/toggle', {}) as Map<String, dynamic>;
     final next = Task.fromJson(data);
     _patchCachedTask(task.id, status: next.status, dueDate: next.dueDate);
-    applyInnerTasksFromOuter(next);
+    await applyInnerTasksFromOuter(next);
     await refreshSectionWindows(notifyIfChanged: true);
     await _reloadEmbedsForOpenFiles(notify: notify);
   }
@@ -3417,7 +3575,7 @@ class AppState extends ChangeNotifier {
       insertIndexInZone: insertIndexInZone,
       targetDone: targetDone,
     );
-    applyInnerTasksFromOuter(
+    await applyInnerTasksFromOuter(
       task.copyWith(status: targetDone ? 'done' : 'active'),
     );
     await _reloadEmbedsForOpenFiles(notify: notify);
@@ -3487,8 +3645,10 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _refreshViewMemberships() async {
-    if (selectedView == null) return;
-    _applyViewMemberships(await _views.listMemberships(selectedView!.id));
+    final id = selectedView?.id;
+    if (id == null) return;
+    final rows = await _views.listMemberships(id);
+    if (!_retired && selectedView?.id == id) _applyViewMemberships(rows);
   }
 
   void _patchCachedTask(

@@ -301,7 +301,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Right-click on embed text | Same text menu as paragraphs (`DocumentMark`) plus **Connect info…** on object fields (info / task / table) and **Make link**. The picker searches by name, starts with **Without** (clear that span), and hides infos with no title (including empty ones the graph used to send as `Info`). A connected span also gets **Remove connection**. One span, one info — choosing another info replaces the previous on the marked range only (caret with no mark = that line). Connected spans paint in `AppColors.descriptionLink` (dark teal italic glyphs, no underline; strikethrough from a done task still combines). URL `link` spans keep the same teal plus a 1px underline. The hover bubble stays open while the pointer is on the connected text or the bubble (the bubble scrolls); it closes when the pointer is on neither. Typing before a connected span moves the paint with those glyphs (view titles remap the same way). Description-link colour is paint-only; URL `link` is stored on the field span. Double-click / double-tap a description span opens the target info in its file; a single click only places the caret. Click / tap still opens a web URL. Text colour opens the shared spectrum picker ([`../ui/color_dialog.dart`](../ui/color_dialog.dart)), not a fixed palette. Tables/charts: see **[Tables & charts](#tables--charts)**. Task lists add **Add to view…** and **Reorder tasks**. Info **chrome** (not a field) is **Design…** / Add tag / Add connection / **Move object**. Image and table/graph chrome also have **Design…** (look samples; graphs add chart type and colour-set samples). Super Editor body paragraphs do not offer Connect info. |
 | Move Mode | Object chrome menu **Move object**, or **⌘⇧O** when the caret / last-interacted embed is an object → glass frame on the object + floating glass bubble ([`embed_move_bubble.dart`](editor/embed_move_bubble.dart), no scrim; drag to reposition). Double-click selects a word in inner fields, like body text. Arrows (↑/← previous, ↓/→ next; hold to repeat) and the bubble arrows nudge the object and **stay in Move Mode**; Done, Enter, Esc, or tap outside the bubble ends it and restores writing focus on that object. After move/delete, adjacent paragraphs **coalesce** (blank/`\n`-only stubs dropped, including next to embeds). |
 | Empty object + Backspace | Same fluent rule as an empty list bullet / table row: last empty unit + Backspace **removes the object** (cascade-delete). |
-| Object block + Shift+Enter | Opens the object (first inner field). **Escape** inside leaves to the line after the object. **Enter** inside info also leaves; in tasks / cells it advances. **Shift+Enter** / **⌘Enter** inside insert a newline. On phone, those keys are not on the keyboard — the first bottom-bar pill is arrows plus enter/leave. **Enter** on the block inserts a paragraph below. Arrows do not auto-enter/leave objects. Phone long-press / secondary tap opens the object chrome menu (Move Mode lives there). |
+| Object block + Shift+Enter | Opens the object (first inner field). **Escape** inside leaves to the line after the object. **Enter** inside info inserts a newline; in tasks / cells it advances. **Shift+Enter** / **⌘Enter** inside insert a newline. On phone, those keys are not on the keyboard — the first bottom-bar pill is arrows plus enter/leave. **Enter** on the block inserts a paragraph below. Arrows do not auto-enter/leave objects. Phone long-press / secondary tap opens the object chrome menu (Move Mode lives there). |
 | Task Reorder Mode | Owned by `TaskListSurface` (objects): right-click → Reorder tasks → glass per task; **tap outside the list** ends it |
 
 ### Segment id
@@ -315,7 +315,7 @@ Deleting an embed (empty Backspace, or selecting the block / cutting it out of t
 
 ### Object enter / exit
 
-Objects are atomic SE blocks. ↑/↓ move onto the block; **Shift+Enter** (or click) opens it; **Escape** (any inner field) or **Enter** inside info places the caret after the object; **Enter** (and typing) on the block insert a line **above** the object when the caret is on its leading edge, **below** when it is on the trailing edge. **Shift+Enter** / **⌘Enter** inside insert a newline. On phone the first bottom-bar pill is **arrows + enter/leave** (no Escape / Shift+Enter key). Arrows inside an object stay inside; on the block they move to the next/previous block. Inside an object, phone Return and empty delete are the same structure keys as desktop Enter / empty Backspace (`FormattedTextField` maps the IME — iOS will not send those as `KeyEvent`s). Insert, delete, and add-part must keep the writing session (no Super Editor remount on payload refresh). Insert bar and **Insert object** shortcuts create an object then put the caret in its first field without a shell-wide notify (so Hebrew/Latin IME keeps working).
+Objects are atomic SE blocks. ↑/↓ move onto the block; **Shift+Enter** (or click) opens it; **Escape** (any inner field) places the caret after the object; **Enter** (and typing) on the block insert a line **above** the object when the caret is on its leading edge, **below** when it is on the trailing edge. **Shift+Enter** / **⌘Enter** inside insert a newline. On phone the first bottom-bar pill is **arrows + enter/leave** (no Escape / Shift+Enter key). Arrows inside an object stay inside; on the block they move to the next/previous block. Inside an object, phone Return and empty delete are the same structure keys as desktop Enter / empty Backspace (`FormattedTextField` maps the IME — iOS will not send those as `KeyEvent`s). Insert, delete, and add-part must keep the writing session (no Super Editor remount on payload refresh). Insert bar and **Insert object** shortcuts create an object then put the caret in its first field without a shell-wide notify (so Hebrew/Latin IME keeps working).
 
 **Phone mark toolbar.** File body and object fields share one iOS bar: **Cut / Copy / Paste**, optional **Info**, **More** ([`phoneMarkToolbarButtons`](editor/phone_mark_toolbar.dart) — the same `CupertinoTextSelectionToolbarButton`s). The bar is shown whenever a mark exists (not only after some gestures). Super Editor’s bar is a [Follower] child — do not self-position it with `AdaptiveTextSelectionToolbar` or it lands off-screen; paint the Cupertino pill only. Object fields keep `AdaptiveTextSelectionToolbar` for anchors. **More** opens that text’s right-click menu as a modal without dropping writing focus. **Info** (object fields only, when the mark overlaps a connected info) opens the description bubble as a modal (outside tap or ×) — phone double-tap marks the word and does **not** open the target info. Marking: tap places a caret; long-press or double-tap starts a word mark (object fields included, even if the finger wiggles); **handles** enlarge it. Double-tap on an empty spot / collapsed caret still opens the same bar (Paste and the rest) without inventing a mark. Body drag does not mark — vertical drag scrolls the file, horizontal drag swipes the topic `PageView`. iOS handles keep Super Editor upstream/downstream identity and snap to the tight wash so Hebrew stems sit on the glyphs ([`rtl/ios_visual_handles.dart`](rich_text/rtl/ios_visual_handles.dart)). Object-field word marks use the same BiDi geometry as the caret ([`phoneObjectWordMarkFromBoxes`](rich_text/rtl/empty_space_caret.dart)) — not Flutter’s `getWordBoundary`, which jumps to the English/number run.
 
@@ -326,7 +326,7 @@ Objects are atomic SE blocks. ↑/↓ move onto the block; **Shift+Enter** (or c
 | Type | In the document |
 |------|-----------------|
 | Task list | Active then Done; Enter adds in the same zone; **Escape** leaves the object; **Shift+Enter** / **⌘Enter** / Ctrl+Enter inserts a newline in the title; **insert lands on the list header** (then tasks); right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title stays blank |
-| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); **Escape** or **Enter** leaves to SE block (Enter on an inner-task line adds the next checkbox instead); **Shift+Enter** / **⌘Enter** / Ctrl+Enter adds lines; field right-click → text + Connect info / Remove connection; chrome → **Design…** / Add tag / Add connection (⌘L in the field is Connect info; otherwise ⌘L inserts a list) |
+| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); **Escape** leaves to SE; **Enter** inserts a newline (on an inner-task line it continues the checklist); **Shift+Enter** / **⌘Enter** / Ctrl+Enter adds lines; field right-click → text + Connect info / Remove connection; chrome → **Design…** / Add tag / Add connection (⌘L in the field is Connect info; otherwise ⌘L inserts a list) |
 | Table / chart | See **[Tables & charts](#tables--charts)** |
 | Image | Display + caption; chrome **Design…** (card / glass / lines / fill / plain, plus greyscale); **Merge with next** when the following Super Editor node is also an image (folds it into `payload.images` and cascade-deletes the second object — Super Editor cannot put two image blocks on one line). Right-click **Make smaller / larger** (steps of 10% of the pane) or **Tiny / Quarter / Half / Full size** (size is the row as a whole). Width is `payload.width` 0–1 of the file pane; aspect ratio stays (`BoxFit.contain`) |
 
@@ -404,7 +404,7 @@ Smoke after edits: type fast in paragraph + info + task + table/chart cell; Shif
 - Never store agent-expanded text in `document_json`; SoT is marker/pointer editor text.
 - Never show marker/editor text to the user. Read-only surfaces go through [`FilePreview`](editor/file_preview.dart).
 - Never rebuild the whole editor on a keystroke; save silently and keep focus. Follow [Keyboard / focus safety](#keyboard--focus-safety-recurring-bug-class).
-- An empty list item, table row, or trailing object unit (empty final task / info line / graph column) plus Enter exits that structure **without destroying it**.
+- An empty list item, table row, or trailing object unit (empty final task / graph column) plus Enter exits that structure **without destroying it**.
 - An empty object (empty info, last empty task, last empty graph column) plus Backspace **removes the object** and coalesces surrounding text — no leftover blank paragraph.
 - Embed node ids are stable (`embed:<objectId>`); do not remount embeds under regenerated `p0`/`p1` keys.
 - Design-dialog callbacks persist payload and must not `setState` after the embed is disposed (palette / look / chart type).
@@ -424,8 +424,78 @@ Smoke after edits: type fast in paragraph + info + task + table/chart cell; Shif
 
 The bridge serializes and parses inline styles per physical line. Super Editor's general Markdown serializer emits hard-break syntax that its inline reader does not restore; using the pair on a whole multiline paragraph collapsed newlines. Paragraph edge spaces and authored leading empty paragraphs are retained. Two soft breaks emit an explicit SPACER so loading does not collapse a blank into only a block boundary. A lone empty initial paragraph remains the empty-document sentinel. Three-way merges process end insertions once and retain all-SPACER documents. Regression coverage: `test/files/sync_whitespace_regression_test.dart`.
 
+### RTL rendered regressions (2026-09-08)
+
+`test/files/rtl_rendered_geometry_test.dart` exercises the mounted object field
+and Super Editor's real text layout with a Hebrew-capable font supplied through
+`--dart-define=RTL_TEST_FONT=/path/to/font.ttf` (skipped without a font; none is
+bundled). macOS Arial reproduced two failures: a tap 2px beside `שלום 123`
+returned offset 5 instead of 8 in objects, and SE's physical-right line-end
+helper returned 0 instead of 8. Shared horizontal glyph tolerance is now 0.5px;
+vertical leading tolerance remains 4px. SE logical ends come from rendered
+whole-grapheme boxes, with upstream affinity for soft-wrapped line endings.
+Object tap sequences use an expiring timer and proximity, rather than wall-clock
+comparisons. Tests include actual pointer taps and all three newline-separated
+object lines. The reported native vertical/caret painting displacement remains
+unconfirmed; do not add a pixel shift based on these tests.
+
+Preferences offers **First letter** (default) or **App language**, persisted per
+device as `writing_direction`. Both SE and object fields read `WritingDirection`.
+Preference changes rebuild mounted fields after keyboard idle, without replacing
+controllers or modifying text. Objects intentionally use one direction per field
+for this release. The text menu offers RTL, LTR, and Use default direction. SE
+applies this to touched paragraphs/list items (undoable); rich object fields apply
+it to the whole field. SE saves `[DIR rtl]` / `[DIR ltr]` prefixes; objects keep
+`direction` in their existing spans. See [storage grammar](editor/DOCUMENT_TEXT.md)
+and [span rules](rich_text/RICH_TEXT.md). Plain image captions use the default
+policy only. Regression coverage includes overrides, reload, undo, and previews
+in `test/files/text_direction_override_test.dart`.
+
+SE padding correction unwraps `ProxyTextComposable` (paragraphs and list items)
+to the actual `TextComponentState`. Hit boxes and pointer coordinates both use
+that leaf's coordinate space, including indented lists. Checking only the outer
+component silently bypassed correction and placed the caret before trailing
+numbers. The rendered regression now dispatches real SE taps and checks both
+the logical offset and painted caret at number/English endings on multiple lines.
+
+### Typing visibility and scrollbar clearance
+
+Desktop SE local document edits and object `onChanged` / Return schedule a
+post-layout check via `editor/typing_caret_reveal.dart`. Only a collapsed caret
+below the viewport moves its scroll position, by the exact overflow. Selection,
+focus, and inbound updates do not request this reveal; no centering or focus
+handoff occurs. The existing object `showOnScreen` absorber stays. Desktop file
+content reserves `AppSpacing.lg` on both sides for the automatic scrollbar's hit
+area (including RTL); phone file spacing is unchanged. Info Return, including
+phone IME Return, inserts a line and retains focus; Escape leaves. Cmd+Return
+continues to insert a plain newline. Tests: `info_enter_and_typing_scroll_test.dart`.
+
+### Click affinity and strikethrough edge spaces
+
+SE glyph/gap clicks and selection use native handling, including affinity.
+Only empty-padding single taps use the logical-end correction with upstream
+affinity. The custom outer drag-selection rewrite has been removed.
+The marker bridge accepts serializer-produced single/double tilde strike spans
+with edge whitespace, retaining all characters and nested inline styles. Escaped
+tildes and code remain literal. Regression tests: `rtl_rendered_geometry_test.dart`
+and `marker_strikethrough_roundtrip_test.dart`.
+
+**Deferred RTL parity:** SE and object fields still differ at number/English
+endings in RTL lines. This is not optimal, but further alignment is explicitly
+postponed by the user. Preserve object behavior and native SE glyph/selection
+handling for now; see [RTL known difference](rich_text/rtl/RTL.md#known-difference--deferred-by-user-2026-09-08).
+
 ## Presentation profiles
 
 Profiles reuse Workspace ownership; no user table or schema migration is needed. Existing data remains in the first workspace (displayed as Personal when named Default). New workspaces start with an empty Home/Daily journal. Requests carry X-Workspace-Id, launch snapshots use workspace-specific filenames, and Home visits already use workspace-specific keys. Unknown profiles fail rather than falling back to personal data. Switching flushes pending editor/object writes, saves the snapshot, then remounts a fresh AppState after keyboard idle.
 
 Pending reviews open once on topic entry via TopicView and the topic-wide review API, including files outside the visible layout. DocumentPane mounting, cycling or editing no longer auto-opens a review. Explicit agent results and complimentary task walkthroughs retain their own guarded entry points.
+
+### Object pointer selection (2026-09-13)
+
+Object fields use rendered grapheme boxes (`rtl/editable_pointer_selection.dart`) for mouse range endpoints and phone word selection. Mouse corrections run after Flutter's gesture callback in the same event turn, before paint; no correction runs while typing. Linked fields have no parent double-tap recognizer: a completed desktop double-click may open the hit link, while ordinary drags keep native focus and selection. Link hover bubbles close on pointer-down.
+
+On iOS, single taps snap to the nearest word boundary, double-taps select the word, and swipes remain scrolling. Native handles still resize ranges. `rtl/editable_selection_controls.dart` adjusts their anchors to logical boundary graphemes instead of the visual order of mixed RTL/number boxes. The native caret is retained. Tests: `test/files/object_selection_regression_test.dart` (real Hebrew font via `RTL_TEST_FONT`, macOS Arial fallback), plus phone toolbar and cross-field selection tests. Physical-device font/IME behavior still needs smoke checking.
+
+## Remote replacement versus entry
+End-of-file focus is an explicit navigation intent, never Super Editor's default focus-gain policy. Refreshing the existing topic does not seed a new pending focus. Remote body replacement keeps DocumentSync's guarded merge, maps the selection to the nearest unchanged paragraph (or clamps its old position), and uses a brief editor-only loading overlay. A passive remount does not request focus or reopen a dismissed keyboard. Payload-only changes still avoid remounts.

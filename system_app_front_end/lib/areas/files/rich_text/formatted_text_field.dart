@@ -20,6 +20,7 @@ import '../editor/document_text_flow.dart';
 import '../editor/phone_mark_toolbar.dart';
 import '../editor/editor_key_handoff.dart';
 import '../editor/embed_exit_scope.dart';
+import '../editor/typing_caret_reveal.dart';
 import '../model/line_range.dart';
 import './block_text_focus.dart';
 import './connect_info.dart';
@@ -27,6 +28,8 @@ import './format_range.dart';
 import './list_text_parse.dart';
 import './frozen_selection_painter.dart';
 import './rtl/rtl.dart';
+import './rtl/editable_pointer_selection.dart';
+import './rtl/editable_selection_controls.dart';
 import './span_text_editing_controller.dart';
 import './text_formatting.dart';
 import './text_links.dart';
@@ -61,7 +64,7 @@ class DescriptionTextRange {
 /// [embedCaretForTap] on a collapsed click; [bidiAwareOffsetForEditable] on
 /// a drag or Shift+click. See `CARET_AND_WRITING_FOCUS.md` § Writing in objects.
 ///
-/// Enter advances (new item / leave info). Shift+Enter / ⌘Enter / Ctrl+Enter
+/// Enter follows the host (new item / newline in info). Shift+Enter / ⌘Enter / Ctrl+Enter
 /// inserts a newline. Escape leaves the object.
 
 bool isHardwareEnterKey(LogicalKeyboardKey key) =>
@@ -204,9 +207,12 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   bool _applyingFlowSelection = false;
   TextDirection? _detectedDirection;
   Offset? _pendingTapGlobal;
+  Offset? _pointerDownGlobal;
+  int? _activePointer;
   var _pointerMovedBeyondSlop = false;
   int? _markBaseOffset;
-  DateTime? _lastTapAt;
+  Timer? _tapSequenceExpiry;
+  Offset? _lastTapPosition;
   var _consecutiveTapCount = 0;
   late final Map<Type, Action<Intent>> _rtlMotionActions;
   bool _mutatingImeSentinel = false;
@@ -222,10 +228,12 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   List<DescriptionTextRange> _liveDescriptionRanges = const [];
   String _descriptionHostText = '';
   late final ScrollController _fieldScroll;
+  late final _phoneSelectionControls = ObjectCupertinoSelectionControls(_renderEditable, () => widget.controller.text);
 
   @override
   void initState() {
     super.initState();
+    WritingDirection.policy.addListener(_onWritingDirectionChanged);
     if (widget.focusNode != null) {
       _focusNode = widget.focusNode!;
     } else {
@@ -255,9 +263,9 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   /// RTL solution: keep [TextField.textDirection] on the first strong character
   /// (see `rtl/RTL.md`).
   void _syncParagraphDirection() {
-    final next = detectParagraphTextDirection(
-      imeVisibleText(widget.controller.text),
-    );
+    final next =
+        _directionOverride ??
+        detectParagraphTextDirection(imeVisibleText(widget.controller.text));
     if (next == _detectedDirection) return;
     setState(() => _detectedDirection = next);
   }
@@ -267,11 +275,19 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     BlockTextFocusRegistry.noteEmojiPickerCaret(widget.controller);
   }
 
+  TextDirection? get _directionOverride {
+    final controller = widget.controller;
+    return controller is SpanTextEditingController
+        ? controller.directionOverride
+        : null;
+  }
+
   TextDirection _resolvedTextDirection(BuildContext context) {
-    return resolveFieldTextDirection(
-      widget.controller.text,
-      Directionality.of(context),
-    );
+    return _directionOverride ??
+        resolveFieldTextDirection(
+          widget.controller.text,
+          Directionality.of(context),
+        );
   }
 
   bool _shouldFlipVisualArrows() {
@@ -432,12 +448,16 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   }
 
   void _mergeParentDescriptionLinks() {
-    final parentIds = {for (final range in widget.descriptionRanges) range.link['id']};
+    final parentIds = {
+      for (final range in widget.descriptionRanges) range.link['id'],
+    };
     _liveDescriptionRanges = [
       for (final range in _liveDescriptionRanges)
         if (parentIds.contains(range.link['id'])) range,
     ];
-    final liveIds = {for (final range in _liveDescriptionRanges) range.link['id']};
+    final liveIds = {
+      for (final range in _liveDescriptionRanges) range.link['id'],
+    };
     for (final range in _rangesOnCurrentText(widget.descriptionRanges)) {
       if (liveIds.contains(range.link['id'])) continue;
       _liveDescriptionRanges = [..._liveDescriptionRanges, range];
@@ -481,8 +501,16 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     });
   }
 
+  void _onWritingDirectionChanged() {
+    runWhenKeyboardIdle(() {
+      if (mounted) setState(() {});
+    });
+  }
+
   @override
   void dispose() {
+    _tapSequenceExpiry?.cancel();
+    WritingDirection.policy.removeListener(_onWritingDirectionChanged);
     if (_focusNode.onKeyEvent == _installedKeyHandler) {
       _focusNode.onKeyEvent = _editableKeyHandler;
     }
@@ -588,6 +616,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
 
   void _notifyChanged() {
     if (_mutatingImeSentinel) return;
+    _scheduleTypingCaretReveal();
     final controller = widget.controller;
     if (controller.text == imeEmptySentinel) {
       widget.onChanged?.call('');
@@ -597,6 +626,34 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
       controller.ensureSpansMatchText();
     }
     widget.onChanged?.call(imeVisibleText(controller.text));
+  }
+
+  bool _typingRevealScheduled = false;
+
+  void _scheduleTypingCaretReveal() {
+    if (isPhoneLayout || !_focusNode.hasFocus || _typingRevealScheduled) return;
+    _typingRevealScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _typingRevealScheduled = false;
+      if (!mounted || !_focusNode.hasFocus) return;
+      final selection = widget.controller.selection;
+      final editable = _renderEditable();
+      final scrollable = Scrollable.maybeOf(context);
+      if (!selection.isValid ||
+          !selection.isCollapsed ||
+          editable == null ||
+          scrollable == null)
+        return;
+      final caret = editable.getLocalRectForCaret(selection.extent);
+      revealTypingCaretBelow(
+        viewportContext: scrollable.context,
+        position: scrollable.position,
+        globalCaret: Rect.fromPoints(
+          editable.localToGlobal(caret.topLeft),
+          editable.localToGlobal(caret.bottomRight),
+        ),
+      );
+    });
   }
 
   bool get _handlesStructureEnter =>
@@ -660,6 +717,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     _stripEmptyImeSentinel();
     if (widget.onEnter != null) {
       widget.onEnter!();
+      _scheduleTypingCaretReveal();
       return;
     }
     final host = widget.hostKeyEvent;
@@ -1090,13 +1148,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     final editable = _findRenderEditable(host);
     if (editable == null) return null;
     final textLength = widget.controller.text.length;
-    return bidiAwareOffsetForEditable(
-          editable: editable,
-          globalPosition: global,
-          textLength: textLength,
-          paddingGoesToLineEnd: paddingGoesToLineEnd,
-        ) ??
-        editable.getPositionForPoint(global).offset.clamp(0, textLength);
+    if (paddingGoesToLineEnd) {
+      return embedCaretForTap(editable: editable, globalPosition: global, textLength: textLength).extentOffset;
+    }
+    return editablePointerSelection(editable: editable, text: widget.controller.text, global: global).extentOffset;
   }
 
   bool _clickIsInsideExistingMark(int offset) {
@@ -1232,15 +1287,18 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     }
   }
 
-  int _registerConsecutiveTap() {
-    final now = DateTime.now();
-    final last = _lastTapAt;
-    _lastTapAt = now;
-    if (last != null && now.difference(last) < kDoubleTapTimeout) {
-      _consecutiveTapCount += 1;
-    } else {
-      _consecutiveTapCount = 1;
-    }
+  int _registerConsecutiveTap(Offset position) {
+    final closeToLast =
+        _lastTapPosition != null &&
+        (position - _lastTapPosition!).distance <= kDoubleTapSlop;
+    _consecutiveTapCount = _tapSequenceExpiry?.isActive == true && closeToLast
+        ? _consecutiveTapCount + 1
+        : 1;
+    _lastTapPosition = position;
+    _tapSequenceExpiry?.cancel();
+    _tapSequenceExpiry = Timer(kDoubleTapTimeout, () {
+      _consecutiveTapCount = 0;
+    });
     return _consecutiveTapCount;
   }
 
@@ -1533,13 +1591,16 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
         behavior: HitTestBehavior.translucent,
         onPointerDown: (event) {
           if (event.buttons == kPrimaryButton) {
+            _activePointer = event.pointer;
+            _pointerDownGlobal = event.position;
+            _hideDescriptionBubble();
             _pendingTapGlobal = event.position;
             _pointerMovedBeyondSlop = false;
             _markBaseOffset = _offsetForGlobal(
               event.position,
               paddingGoesToLineEnd: false,
             );
-            _registerConsecutiveTap();
+            _registerConsecutiveTap(event.position);
           }
           final isSecondary = (event.buttons & kSecondaryMouseButton) != 0;
           if (isSecondary) {
@@ -1588,40 +1649,46 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
             paddingGoesToLineEnd: false,
           );
           if (base == null || extent == null) return;
-          widget.controller.selection = TextSelection(
-            baseOffset: base,
-            extentOffset: extent,
-          );
+          scheduleMicrotask(() {
+            if (!mounted || _activePointer != event.pointer) return;
+            widget.controller.selection = TextSelection(baseOffset: base, extentOffset: extent);
+          });
         },
         onPointerUp: (event) {
-          if (!phoneMarksWithHandlesOnly) return;
-          final down = _pendingTapGlobal;
-          final travel = down == null
-              ? 0.0
-              : (event.position - down).distance;
-          // Finger wiggle on a double-tap is still a word mark. A swipe
-          // (file scroll / page) is not.
-          if (travel > 48) {
-            _consecutiveTapCount = 0;
-            return;
-          }
-          final global = down ?? event.position;
-          final wantWord = _consecutiveTapCount >= 2;
-          final longPressMark =
-              !wantWord &&
-              widget.controller.selection.isValid &&
-              !widget.controller.selection.isCollapsed;
-          if (!wantWord && !longPressMark) return;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            if (_applyPhoneWordMark(global)) return;
-            if (wantWord) {
-              _phoneCaretMenuWanted = true;
-              _syncPhoneFieldToolbar();
+          final down = _pointerDownGlobal;
+          final dragged = down != null && (event.position - down).distance > kTouchSlop;
+          final count = _consecutiveTapCount;
+          final base = _markBaseOffset;
+          _activePointer = null;
+          _pointerDownGlobal = null;
+          scheduleMicrotask(() {
+            if (!mounted || down == null) return;
+            if (!phoneMarksWithHandlesOnly) {
+              if (dragged && count < 2 && base != null) {
+                final extent = _offsetForGlobal(event.position, paddingGoesToLineEnd: false);
+                if (extent != null) {
+                  widget.controller.selection = TextSelection(baseOffset: base, extentOffset: extent);
+                }
+              } else if (!dragged && count == 2) {
+                final box = context.findRenderObject();
+                final hit = box is RenderBox ? _descriptionAt(box.globalToLocal(down)) : null;
+                if (hit != null) _activateDescription(hit);
+              }
+              return;
+            }
+            if (dragged) return; // Swipes remain scrolling; handles stay native.
+            if (count >= 2) {
+              _applyPhoneWordMark(down);
+            } else if (widget.controller.selection.isCollapsed) {
+              final editable = _renderEditable();
+              if (editable != null) widget.controller.selection = editablePointerSelection(
+                editable: editable, text: widget.controller.text, global: down, wordBoundariesOnly: true);
             }
           });
         },
         onPointerCancel: (_) {
+          _activePointer = null;
+          _pointerDownGlobal = null;
           _pendingTapGlobal = null;
           _pointerMovedBeyondSlop = false;
           _markBaseOffset = null;
@@ -1637,16 +1704,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                   _pointerOnDescriptionSpan = false;
                   _scheduleDescriptionBubbleHide();
                 },
-          child: GestureDetector(
-            onDoubleTapDown:
-                (!phoneMarksWithHandlesOnly &&
-                    widget.descriptionRanges.isNotEmpty)
-                ? (details) {
-                    final hit = _descriptionAt(details.localPosition);
-                    if (hit != null) _activateDescription(hit);
-                  }
-                : null,
-            child: AnimatedBuilder(
+          child: AnimatedBuilder(
               animation: Listenable.merge([
                 BlockTextFocusRegistry.menuSessionListenable,
                 ?_flow,
@@ -1686,6 +1744,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                     // each line's wash to the paragraph width — in RTL that is
                     // the trail to the left edge. Tight matches Super Editor.
                     selectionWidthStyle: BoxWidthStyle.tight,
+                    selectionControls: phoneMarksWithHandlesOnly ? _phoneSelectionControls : null,
                     // Color-emoji in the type fallback must not steal line
                     // metrics (that shifts the wash on lines with no emoji).
                     strutStyle: AppTypography.fieldStrut(style),
@@ -1720,6 +1779,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                       }
                       widget.onSubmitted?.call(value);
                     },
+                    onTapAlwaysCalled: true,
                     onTap: () {
                       _onFocusChanged();
                       _handleTap();
@@ -1773,7 +1833,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                 );
               },
             ),
-          ),
         ),
       ),
     );
@@ -1839,22 +1898,6 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
   }
 
   TextSelection? _phoneWordMarkAt(Offset global) {
-    final host = context.findRenderObject();
-    final editable = host == null ? null : _findRenderEditable(host);
-    if (editable != null) {
-      try {
-        final offset = bidiAwareOffsetForEditable(
-          editable: editable,
-          globalPosition: global,
-          textLength: widget.controller.text.length,
-          paddingGoesToLineEnd: false,
-        );
-        if (offset != null) {
-          final next = wordSelectionAround(widget.controller.text, offset);
-          if (!next.isCollapsed) return next;
-        }
-      } catch (_) {}
-    }
     final offset = _offsetForGlobal(global, paddingGoesToLineEnd: false);
     if (offset == null) return null;
     final next = wordSelectionAround(widget.controller.text, offset);
@@ -1952,7 +1995,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     final controller = widget.controller;
     if (controller is! SpanTextEditingController) return;
     final position = editable.getPositionForPoint(
-      editable.localToGlobal(local),
+      (host as RenderBox).localToGlobal(local),
     );
     final url = urlAtSpanOffset(controller.spans, position.offset);
     if (url == null) return;
@@ -1964,10 +2007,8 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     if (host == null) return null;
     final editable = _findRenderEditable(host);
     if (editable == null) return null;
-    final position = editable.getPositionForPoint(
-      editable.localToGlobal(local),
-    );
-    final offset = position.offset;
+    final offset = _offsetForGlobal((host as RenderBox).localToGlobal(local), paddingGoesToLineEnd: false);
+    if (offset == null) return null;
     for (final range in _liveDescriptionRanges) {
       if (offset >= range.start && offset < range.end) return range;
     }

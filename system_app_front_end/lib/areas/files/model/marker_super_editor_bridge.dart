@@ -4,10 +4,12 @@
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:markdown/markdown.dart' as md;
 import 'package:super_editor/super_editor.dart';
 
 import '../rich_text/list_text_parse.dart';
 import './document_text_codec.dart';
+import './text_direction_marker.dart';
 import './object_embed_node.dart';
 
 /// Convert wrapped or bare editor text into a Super Editor document.
@@ -21,7 +23,9 @@ MutableDocument markerTextToMutableDocument(String? raw) {
 
   final nodes = <DocumentNode>[];
   final parts = body.split('\n\n');
-  for (final part in parts) {
+  for (final rawPart in parts) {
+    final direction = TextDirectionMarker.direction(rawPart);
+    final part = TextDirectionMarker.strip(rawPart);
     final trimmed = part.trim();
     final info = DocumentTextCodec.classifyTopLevel(trimmed);
     switch (info.kind) {
@@ -68,7 +72,10 @@ MutableDocument markerTextToMutableDocument(String? raw) {
           ParagraphNode(
             id: Editor.createNodeId(),
             text: markerLineToAttributedText(text),
-            metadata: {'blockType': _headerAttribution(level)},
+            metadata: {
+              'blockType': _headerAttribution(level),
+              if (direction != null) 'writingDirection': direction,
+            },
           ),
         );
       case MarkerPartKind.paragraph:
@@ -76,6 +83,7 @@ MutableDocument markerTextToMutableDocument(String? raw) {
           ParagraphNode(
             id: Editor.createNodeId(),
             text: markerLineToAttributedText(part),
+            metadata: {if (direction != null) 'writingDirection': direction},
           ),
         );
     }
@@ -135,7 +143,12 @@ String mutableDocumentToMarkerText(Document document) {
       final tag = ordered ? 'ORDERED_LIST' : 'BULLET_LIST';
       final body = [
         for (var k = 0; k < items.length; k++)
-          listItemClipboardLine(items[k], k, ordered: ordered),
+          listItemClipboardLine(
+            items[k],
+            k,
+            ordered: ordered,
+            includeDirection: true,
+          ),
       ].join('\n');
       if (body.isNotEmpty) {
         lines.add('[$tag]\n$body\n[/$tag]');
@@ -148,19 +161,30 @@ String mutableDocumentToMarkerText(Document document) {
       final blockType = node.getMetadataValue('blockType');
       final level = _headingLevel(blockType);
       final text = attributedTextToMarkerLine(node.text);
+      final direction = node.getMetadataValue('writingDirection');
+      String encode(String value) =>
+          TextDirectionMarker.encode(value, direction);
       if (level != null) {
-        lines.add('${'#' * level} $text');
+        lines.add(encode('${'#' * level} $text'));
       } else if (text.isEmpty) {
         // Keep authored empty paragraphs, including leading ones. A lone
         // initial empty paragraph is the canonical new-document sentinel.
-        if (nodeCount > 1) lines.add('[SPACER n="1"]');
+        if (direction != null) {
+          lines.add(encode(''));
+        } else if (nodeCount > 1) {
+          lines.add('[SPACER n="1"]');
+        }
       } else {
         // Two soft breaks contain an authored blank line. Bare double
         // newlines delimit marker blocks, so make that blank explicit.
         final parts = text.split('\n\n');
         for (var j = 0; j < parts.length; j++) {
           if (j > 0) lines.add('[SPACER n="1"]');
-          lines.add(parts[j].isEmpty ? '[SPACER n="1"]' : parts[j]);
+          lines.add(
+            parts[j].isEmpty
+                ? (direction == null ? '[SPACER n="1"]' : encode(''))
+                : encode(parts[j]),
+          );
         }
       }
       i++;
@@ -278,18 +302,22 @@ List<ListItemNode> listItemsFromMarkerBody(
     final m = itemRe.firstMatch(line);
     if (m == null) continue;
     final spaces = m.group(1)?.length ?? 0;
-    final text = m.group(2) ?? '';
+    final rawText = m.group(2) ?? '';
+    final text = TextDirectionMarker.strip(rawText);
+    final direction = TextDirectionMarker.direction(rawText);
     items.add(
       ordered
           ? ListItemNode.ordered(
               id: Editor.createNodeId(),
               text: markerLineToAttributedText(text),
               indent: spaces ~/ 2,
+              metadata: {if (direction != null) 'writingDirection': direction},
             )
           : ListItemNode.unordered(
               id: Editor.createNodeId(),
               text: markerLineToAttributedText(text),
               indent: spaces ~/ 2,
+              metadata: {if (direction != null) 'writingDirection': direction},
             ),
     );
   }
@@ -313,9 +341,13 @@ String listItemClipboardLine(
   ListItemNode item,
   int index, {
   required bool ordered,
+  bool includeDirection = false,
 }) {
   final indent = '  ' * item.indent;
-  final text = attributedTextToMarkerLine(item.text);
+  final text = TextDirectionMarker.encode(
+    attributedTextToMarkerLine(item.text),
+    includeDirection ? item.getMetadataValue('writingDirection') : null,
+  );
   if (ordered) return '$indent${index + 1}. $text';
   return '$indent- $text';
 }
@@ -351,9 +383,34 @@ AttributedText markerLineToAttributedText(String line) {
   final lines = line.split('\n');
   for (var i = 0; i < lines.length; i++) {
     if (i > 0) result = result.copyAndAppend(AttributedText('\n'));
-    result = result.copyAndAppend(parseInlineMarkdown(lines[i]));
+    result = result.copyAndAppend(
+      parseInlineMarkdown(
+        lines[i],
+        inlineMarkdownSyntaxes: [
+          _SpacedStrikethroughSyntax(),
+          ...defaultSuperEditorInlineSyntaxes,
+        ],
+      ),
+    );
   }
   return result;
+}
+
+/// The serializer may enclose selected edge spaces in ~...~. CommonMark's
+/// delimiter-flanking rules reject that output. Accept this storage form while
+/// leaving ordinary valid Markdown (and escapes/code) to the standard parser.
+class _SpacedStrikethroughSyntax extends md.InlineSyntax {
+  _SpacedStrikethroughSyntax()
+    : super(r'(~{1,2})(?!~)((?:[ \t][^~\n]*|[^~\n]*[ \t]))\1(?!~)');
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final inner = match[2]!;
+    parser.addNode(
+      md.Element('del', md.InlineParser(inner, parser.document).parse()),
+    );
+    return true;
+  }
 }
 
 String listItemClipboardPrefix({required bool ordered, required int index}) {

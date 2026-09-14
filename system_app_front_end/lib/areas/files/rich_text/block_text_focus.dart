@@ -426,7 +426,8 @@ class BlockTextFocusRegistry {
     // Collapse the field the menu froze — not whoever owns writing now.
     // A mark that covered several parts stays if that same field still has
     // the caret; otherwise the old wash is leftover and must go.
-    final keepMultiPart = mark != null &&
+    final keepMultiPart =
+        mark != null &&
         mark.spansParts &&
         identical(frozenController, controller);
     if (!keepMultiPart &&
@@ -474,10 +475,11 @@ class BlockTextFocusRegistry {
   /// later click into an object can still freeze that field.
   static void beginEmojiPickerSession({bool allowUnfocusedRecent = false}) {
     if (_emojiPickerSessionDepth == 0) {
-      final controller = activeController ??
+      final controller =
+          activeController ??
           (allowUnfocusedRecent ? _recentTarget?.controller : null);
-      final changed = onChanged ??
-          (allowUnfocusedRecent ? _recentTarget?.onChanged : null);
+      final changed =
+          onChanged ?? (allowUnfocusedRecent ? _recentTarget?.onChanged : null);
       if (controller != null && changed != null) {
         _emojiPickerTarget = _EmojiPickerTarget(
           controller: controller,
@@ -662,7 +664,8 @@ class BlockTextFocusRegistry {
     if (text.isEmpty) return;
 
     final target = _emojiPickerTarget;
-    final liveOwnsWriting = activeController != null &&
+    final liveOwnsWriting =
+        activeController != null &&
         onChanged != null &&
         activeFocusNode?.hasFocus == true;
     final controller = liveOwnsWriting
@@ -684,8 +687,7 @@ class BlockTextFocusRegistry {
       );
     }
 
-    final fieldFocused = liveOwnsWriting ||
-        target?.focusNode?.hasFocus == true;
+    final fieldFocused = liveOwnsWriting || target?.focusNode?.hasFocus == true;
     final selection = fieldFocused
         ? controller.selection
         : (target?.selection ?? controller.selection);
@@ -765,6 +767,33 @@ class BlockTextFocusRegistry {
 
   static void applyTextFormat(String action) {
     final mark = resolveMark();
+    if (action.startsWith('text:direction:')) {
+      final targets = <SpanTextEditingController>{
+        for (final span in mark.spans)
+          if (span.spanController != null) span.spanController!,
+      };
+      final active = activeController;
+      if (targets.isEmpty && active is SpanTextEditingController)
+        targets.add(active);
+      for (final target in targets) {
+        target.applyFormatAction(
+          action,
+          range: FormatRange(start: 0, end: target.text.length),
+          baseFontSize: baseFontSize,
+        );
+      }
+      final callbacks = <VoidCallback>{
+        for (final span in mark.spans)
+          if (span.onChanged != null) span.onChanged!,
+        if (onChanged != null) onChanged!,
+      };
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        for (final callback in callbacks) {
+          callback();
+        }
+      });
+      return;
+    }
 
     // Formatting spans the whole mark, so it reaches every part the user marked.
     if (mark.isValid && mark.spans.any((s) => s.spanController != null)) {

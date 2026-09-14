@@ -16,7 +16,7 @@ Loudest last:
 
 | Surface | Treatment |
 |---------|-----------|
-| **Canvas** — the window behind everything | Near-white neutral gradient, with the topic's soft top wash painted full-bleed on desktop (including behind the sidebar). Phone: the file fills the screen on a cooler grey peek (`phoneCanvas`). Thin, fairly solid top and bottom ombres (`phoneEdgeOmbre`) — that same grey on Home / views, topic-tinted otherwise. Floating tool bars sit on that fade with a lift shadow |
+| **Canvas** — the window behind everything | Cool grey ombré with a pastel topic colour as the first opaque gradient stop, painted full-bleed on desktop (including behind the sidebar). Phone: the file fills the screen on a cooler grey peek (`phoneCanvas`). Thin, fairly solid top and bottom ombres (`phoneEdgeOmbre`) — that same grey on Home / views, topic-tinted otherwise. Floating tool bars sit on that fade with a lift shadow |
 | **File panes** — the working surfaces | Topic colour at a gentle strength, thin saturated topic border, card shadow. Same frames on phone and desktop |
 | **View list frames** — section/topic cards on the view page | Same file-pane treatment (`NoteCard` / `filePaneDecoration`); topic frames use topic colour, section frames use optional section colour |
 | **Sidebar** | Soft glass floating above the canvas — never paints the topic wash itself |
@@ -32,15 +32,15 @@ All of them live in [`app_colors.dart`](app_colors.dart). Nothing outside this f
 
 | Token | Value | Used for |
 |-------|-------|----------|
-| `canvasNeutralTop` / `canvasNeutralBottom` | `#FFFEFE` → `#FAFAF8` | The window gradient |
+| `canvasNeutralTop` / `canvasNeutralBottom` | `#EBEEF3` → `#E0E4EB` | The window gradient |
 | `phoneStripe` | `#F5F3ED` | Legacy; phone chrome no longer uses a solid stripe |
 | `phoneCanvas` | `#E8E9ED` | Phone peek around the file, and the default ombre edge — brighter, colder grey |
 | `noteTop` / `noteBottom` | `#FCFBF7` → `#F4F2EC` | Untinted cards |
 | `mainNoteTop` / `mainNoteBottom` | `#FFFFFF` | Panes in the main topic |
 | `noteBorder` | `#DCD8CF` | Card edges |
 | `noteShadow` | black 6% | Every card shadow |
-| `text` | `#5E5B56` | **All** text — titles and body share one soft charcoal |
-| `textHint` | `#9D988F` | Hints, meta, secondary labels |
+| `text` | `#514E49` | **All** text — titles and body share one soft charcoal |
+| `textHint` | `#89847B` | Hints, meta, secondary labels |
 | `sidebarBg` / `sidebarBorder` | `#F1EFE8` / `#D8D4CB` | Sidebar panel |
 
 There is no black and no pure grey. Warm charcoal on warm off-white is what keeps long reading comfortable.
@@ -81,7 +81,7 @@ A topic carries any `#RRGGBB` colour (picked in [`color_dialog.dart`](color_dial
 |------|-----|
 | The canvas stays neutral | A tinted window would fight the panes and tire the eye |
 | The main topic's panes stay pure white | Home is the neutral place |
-| The fill is a gentle wash, `minFileTint` 4.5% to `maxFileTint` 17% | Enough to read as coloured paper, never enough to compete with text |
+| The fill is a gentle wash, `minFileTint` 4.5% to `maxFileTint` 13% | Enough to read as coloured paper, never enough to compete with text |
 | The border is the same colour, saturated, at `filePaneBorderWidth` 0.5px | A hairline is what makes the tint look intentional |
 | **Each file's strength is fixed to its id** | See below |
 
@@ -207,7 +207,9 @@ The `⋯` on a file opens `AppContextMenu` at the button — the same bubble as 
 
 ## App logo
 
-The OS launcher icon (home screen, dock, Finder) is the writing-cat illustration. Source art is [`icon.png`](../../../icon.png); [`icon_launcher.png`](../../../icon_launcher.png) is the same image with the white corners filled so Apple’s mask does not leave a white ring. Regenerated into iOS and macOS `AppIcon` asset catalogs with `dart run flutter_launcher_icons`.
+The iOS and macOS app name is **Mind System**. iOS declares it in `Runner/Info.plist`; macOS uses `PRODUCT_NAME` in `Runner/Configs/AppInfo.xcconfig`, with matching product, scheme, and test-host paths. Bundle identifiers remain unchanged.
+
+The OS launcher icon (home screen, dock, Finder) uses [`logo_launcher.png`](../../../logo_launcher.png), the exact user-supplied blue/teal diamond image from September 9, 2026. Generate at full image bounds: do not add padding, borders, or an inset tile. Any background/corners already in the supplied artwork are preserved. Both iOS and macOS `AppIcon` asset catalogs are generated from this source with `dart run flutter_launcher_icons`; iOS alpha is removed by the generator. The older `new_logo.png`, `icon.png`, and `icon_launcher.png` are no longer launcher inputs.
 
 ## Icons
 
@@ -252,3 +254,24 @@ Every surface must work in English (LTR) and Hebrew (RTL). Use [`bilingual_layou
 ## Where the style is still not honest
 
 Tracked as **U1–U5** in [`BACKLOG.md`](../../../../BACKLOG.md): the context menu and hover bubble keep some local blur values instead of an `AppGlassStyle` preset, the legacy AI diff dialog and its shell bypass `AppGlassDialog` and `AppTypography`, document heading sizes still derive from a formula (now named as `documentHeadingStyle`), and some Material icons remain among the Lucide ones in older surfaces.
+
+### Desktop file scrollbar gutter
+
+Editable desktop file content reserves `AppSpacing.lg` on both horizontal edges
+so the native scrollbar hit area cannot cover text in either reading direction.
+The gutter is presentation only; it adds no document characters. Phone header
+source/current-topic rows remain within the existing floating bar height and
+use the existing topic emoji and bold title style.
+
+Phone header titles use a middle dot between topic and file, line height 1.1,
+and a 2px upward emoji paint offset. Projected headers pack the source/file row
+1px beneath the current-topic row, anchored at the top of the existing 42px
+slot. Metrics live in `AppTypography`; icons and the bar height stay unchanged.
+
+### Journal surface balance (2026-09-12)
+
+Keep file spacing compact and full journal entries visible. Separate paper from the cool grey canvas through restrained pastel fills and soft charcoal text. Sidebar glass uses 90% tint on desktop; section headings use regular weight and child rows use a 42px directional start inset. White tool pills have a 0.85px warm border at 90% opacity and a slightly stronger 14% lift shadow, with no added saturation or animation.
+
+Desktop workspace ombré is one opaque gradient: topic colour mixed 24% into white → a blend with the cool grey → cool grey. It is not a translucent topic veil over grey. Desktop tool bars are 48px high with 25px icons; upper file controls use 20px icons at the same 90% charcoal strength. The desktop AI pill uses a 1.1px outline at 72% cyan and a static 16% cyan soft glow (14px blur), not animation.
+
+Sidebar headings, Home, map entry, and subheadings use regular weight; hierarchy comes from indentation and size. Main section dividers use sidebar-border colour at 85% opacity; view-group dividers use 65%. The canvas is slightly brighter at the same cool hue.

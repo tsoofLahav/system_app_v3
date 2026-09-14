@@ -119,7 +119,7 @@ class _AppSidebarState extends State<AppSidebar> {
                 child: GlassSurface(
                   borderRadius: borderRadius,
                   blurSigma: widget.isPhone ? 0 : 22,
-                  tintOpacity: widget.isPhone ? 1 : 0.76,
+                  tintOpacity: widget.isPhone ? 1 : 0.9,
                   tintColor: _panelTint,
                   elevation: 0,
                   border: widget.isPhone
@@ -159,7 +159,7 @@ class _AppSidebarState extends State<AppSidebar> {
                       ),
                       child: Align(
                         alignment: AlignmentDirectional.centerStart,
-                        child: Text(s['main'], overflow: TextOverflow.ellipsis),
+                        child: Text(s['main'], style: AppTypography.sidebarSectionStyle, overflow: TextOverflow.ellipsis),
                       ),
                     ),
                   ),
@@ -305,7 +305,7 @@ class _DiagramEntry extends StatelessWidget {
           alignment: AlignmentDirectional.centerStart,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         ),
-        child: Text(s['objectsMap'], overflow: TextOverflow.ellipsis),
+        child: Text(s['objectsMap'], style: AppTypography.sidebarSectionStyle, overflow: TextOverflow.ellipsis),
       ),
     );
   }
@@ -321,7 +321,7 @@ class _SidebarDivider extends StatelessWidget {
       child: Divider(
         height: 1,
         thickness: 1,
-        color: AppColors.noteBorder.withValues(alpha: 0.45),
+        color: AppColors.sidebarBorder.withValues(alpha: 0.85),
       ),
     );
   }
@@ -466,7 +466,7 @@ class _ViewTypeDivider extends StatelessWidget {
       child: Divider(
         height: 1,
         thickness: 1,
-        color: AppColors.noteBorder.withValues(alpha: 0.28),
+        color: AppColors.sidebarBorder.withValues(alpha: 0.65),
       ),
     );
   }
@@ -531,7 +531,7 @@ class _ViewTile extends StatelessWidget {
         onSecondaryTapDown: (details) =>
             _showContextMenu(context, details.globalPosition),
         child: Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(20, 3, 4, 3),
+          padding: const EdgeInsetsDirectional.fromSTEB(42, 3, 4, 3),
           child: Row(
             children: [
               Expanded(
@@ -703,7 +703,7 @@ class _ArchiveTopicGroup extends StatelessWidget {
                   child: Text(
                     title,
                     style: AppTypography.metaStyle.copyWith(
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w400,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -926,7 +926,7 @@ class _TopicTile extends StatelessWidget {
         onSecondaryTapDown: (details) =>
             _showContextMenu(context, details.globalPosition),
         child: Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(20, 3, 4, 3),
+          padding: const EdgeInsetsDirectional.fromSTEB(42, 3, 4, 3),
           child: Row(
             children: [
               TopicEmoji(value: topic.icon, size: 14),

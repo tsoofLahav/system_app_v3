@@ -54,7 +54,20 @@ Object **content** lives in object tables / `objects.payload`. Deleting a pointe
 
 ### Links and inline styles
 
-Bold / italic / underline / strikethrough and `http(s)://` / `www.` URLs round-trip in paragraph / heading / list-item text (`**` / `*` / `¬` / `~` / `[label](url)`). Load restores Super Editor attributions. Do not put markdown on pointer lines. Font size and colour are not encoded yet.
+Bold / italic / underline / strikethrough and `http(s)://` / `www.` URLs round-trip in paragraph / heading / list-item text (`**` / `*` / `¬` / `~` / `[label](url)`). Load restores Super Editor attributions. A storage-only inline syntax accepts `~text  ~` / `~~ text ~~` emitted for selections with edge spaces; standard Markdown flanking rules reject these. Spaces are retained, nested formatting is parsed, and escaped tildes/code stay literal. Do not put markdown on pointer lines. Font size and colour are not encoded yet.
+
+### Explicit writing direction
+
+`[DIR rtl]` or `[DIR ltr]` prefixes a paragraph or heading, or follows the list
+item marker: `[DIR rtl]hello`, `[DIR ltr]# שלום`, `- [DIR rtl]hello`.
+A bare `[DIR rtl]` preserves an empty paragraph with that override. The bridge
+strips the prefix before creating editable text and stores `writingDirection`
+in node metadata; serialization restores it. Read-only previews also hide it.
+Use default direction removes the prefix. Normal clipboard text excludes it.
+This extends v4 syntax without a migration; existing backend text conversion
+preserves these lines. No automatic spaces or Unicode direction marks are added.
+Object field overrides instead live in their span payloads; see
+[RICH_TEXT.md](../rich_text/RICH_TEXT.md).
 
 ### Move
 

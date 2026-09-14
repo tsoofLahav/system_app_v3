@@ -159,11 +159,10 @@ class AppStrings {
 
   String monthlyMultiCaption(
     List<({String placementKey, String dayKey})> slots,
-  ) =>
-      this['monthlyMultiCaption'].replaceAll(
-        '{slots}',
-        _monthlySlotsPhrase(slots),
-      );
+  ) => this['monthlyMultiCaption'].replaceAll(
+    '{slots}',
+    _monthlySlotsPhrase(slots),
+  );
 
   String everyNMonthsCaption(int n, String placementKey, String dayKey) {
     return this['everyNMonthsCaption']
@@ -175,17 +174,18 @@ class AppStrings {
   String everyNMonthsMultiCaption(
     int n,
     List<({String placementKey, String dayKey})> slots,
-  ) =>
-      this['everyNMonthsMultiCaption']
-          .replaceAll('{n}', '$n')
-          .replaceAll('{slots}', _monthlySlotsPhrase(slots));
+  ) => this['everyNMonthsMultiCaption']
+      .replaceAll('{n}', '$n')
+      .replaceAll('{slots}', _monthlySlotsPhrase(slots));
 
   String joinList(List<String> items) {
     if (items.isEmpty) return '';
     if (items.length == 1) return items.first;
     final last = items.last;
     final rest = items.sublist(0, items.length - 1).join(this['listComma']);
-    return this['listAnd'].replaceAll('{rest}', rest).replaceAll('{last}', last);
+    return this['listAnd']
+        .replaceAll('{rest}', rest)
+        .replaceAll('{last}', last);
   }
 
   String _placementWord(String placementKey) {
@@ -498,8 +498,10 @@ class AppStrings {
     'actionIconChoose': 'Choose an icon',
     'actionPlace': 'Where it lives',
     'actionPlaceMenu': 'In the menu',
-    'actionPlaceHint': 'The agent and seven saved actions sit on the bar (⌘1–⌘8). A topic can add two more on ⌘9 and ⌘0.',
-    'actionPlaceTopicHint': 'Shows on this topic — one of two extra spots, only while you are here.',
+    'actionPlaceHint':
+        'The agent and seven saved actions sit on the bar (⌘1–⌘8). A topic can add two more on ⌘9 and ⌘0.',
+    'actionPlaceTopicHint':
+        'Shows on this topic — one of two extra spots, only while you are here.',
     'actionTopicSlotsFull': 'This topic already has two specific actions.',
     'actionReplacesBody': 'Takes the seat of {name}.',
     'editActionTitle': 'Editing {name}',
@@ -713,7 +715,8 @@ class AppStrings {
     'deleteViewBody': 'Delete "{name}"? Tasks stay in their files.',
     'deleteFileTitle': 'Delete file?',
     'deleteFileBody': 'Delete "{name}"?',
-    'taskSavePending': 'The task list is still updating. Please try again shortly.',
+    'taskSavePending':
+        'The task list is still updating. Please try again shortly.',
     'aiSyncConflict': 'Resolve this conflict before using the AI action',
     'editConflictTitle': 'You and the agent both changed this file',
     'editConflictBody':
@@ -884,11 +887,24 @@ class AppStrings {
     'clearColor': 'Clear color',
     'choose': 'Choose',
     'language': 'Language',
+    'writingDirection': 'Writing direction',
+    'directionRtl': 'Right to left',
+    'directionLtr': 'Left to right',
+    'directionDefault': 'Use default direction',
+    'directionFirstStrong': 'First letter',
+    'directionAppLanguage': 'App language',
     'documentTextSize': 'Text size',
     'documentTextSizeSmall': 'Small',
     'documentTextSizeMedium': 'Medium',
     'documentTextSizeLarge': 'Large',
     'preferences': 'Preferences',
+    'profiles': 'Profiles',
+    'switchProfile': 'Switch profile',
+    'personalProfile': 'Personal',
+    'demoProfile': 'Demo',
+    'profileName': 'New profile name',
+    'createBlankProfile': 'Create blank profile',
+    'profilesHint': 'Separate journals for personal use and demos. No login or password.',
     'manageTopicTypes': 'Manage types…',
     'reorderSidebar': 'Sidebar order',
     'reorderSidebarHint':
@@ -1186,8 +1202,7 @@ class AppStrings {
     'taskPending': 'ממתין…',
     'taskPendingTitle': 'ממתין',
     'taskPendingDate': 'הפעלה בתאריך',
-    'taskPendingHint':
-        'נשארת בתצוגה, אבל לא מופיעה שם עד לתאריך זה.',
+    'taskPendingHint': 'נשארת בתצוגה, אבל לא מופיעה שם עד לתאריך זה.',
     'noViewsYet': 'אין תצוגות עדיין — צרו אחת מהתפריט הצדדי.',
     'noView': 'ללא תצוגה',
     'mixedValues': 'מעורב',
@@ -1273,8 +1288,10 @@ class AppStrings {
     'actionIconChoose': 'בחר אייקון',
     'actionPlace': 'איפה היא תשב',
     'actionPlaceMenu': 'בתפריט',
-    'actionPlaceHint': 'הסוכן ושבע פעולות שמורות יושבים בסרגל (⌘1–⌘8). לנושא אפשר להוסיף עוד שתיים ב-⌘9 ו-⌘0.',
-    'actionPlaceTopicHint': 'מוצג בנושא הזה — אחד משני מקומות נוספים, רק כל עוד אתה כאן.',
+    'actionPlaceHint':
+        'הסוכן ושבע פעולות שמורות יושבים בסרגל (⌘1–⌘8). לנושא אפשר להוסיף עוד שתיים ב-⌘9 ו-⌘0.',
+    'actionPlaceTopicHint':
+        'מוצג בנושא הזה — אחד משני מקומות נוספים, רק כל עוד אתה כאן.',
     'actionTopicSlotsFull': 'לנושא הזה כבר יש שתי פעולות ייעודיות.',
     'actionReplacesBody': 'תופסת את מקומה של {name}.',
     'editActionTitle': 'עריכת {name}',
@@ -1327,8 +1344,7 @@ class AppStrings {
     'searchByName': 'חיפוש לפי שם',
     'searchByNameHint': 'שם',
     'noMatchingAutomations': 'אין שמות שמתאימים לחיפוש.',
-    'noSectionWindowsHint':
-        'חלונות מדור נוצרים כשמוסיפים מדור לתצוגה.',
+    'noSectionWindowsHint': 'חלונות מדור נוצרים כשמוסיפים מדור לתצוגה.',
     'windowDuration': 'משך אחרי ההתחלה',
     'durationHours': 'שעות',
     'durationMinutes': 'דקות',
@@ -1343,8 +1359,7 @@ class AppStrings {
     'placeInSection': 'מקם משימות משלימות',
     'pickView': 'בחר תצוגה',
     'pickRoutineSection': 'בחר מדור שגרתי',
-    'scheduleLockedToSection':
-        'השעון הזה עוקב אחרי חלון המדור. שנו אותו שם.',
+    'scheduleLockedToSection': 'השעון הזה עוקב אחרי חלון המדור. שנו אותו שם.',
     'sectionWindowOffHint':
         'חלון המדור כבוי, ולכן האוטומציה לא תירוץ לפי השעון.',
     'complimentaryInputTitle': '{name} משימת אוטומציה',
@@ -1655,11 +1670,24 @@ class AppStrings {
     'clearColor': 'נקה צבע',
     'choose': 'בחר',
     'language': 'שפה',
+    'writingDirection': 'כיוון כתיבה',
+    'directionRtl': 'מימין לשמאל',
+    'directionLtr': 'משמאל לימין',
+    'directionDefault': 'כיוון ברירת מחדל',
+    'directionFirstStrong': 'לפי האות הראשונה',
+    'directionAppLanguage': 'לפי שפת האפליקציה',
     'documentTextSize': 'גודל טקסט',
     'documentTextSizeSmall': 'קטן',
     'documentTextSizeMedium': 'בינוני',
     'documentTextSizeLarge': 'גדול',
     'preferences': 'העדפות',
+    'profiles': 'פרופילים',
+    'switchProfile': 'החלפת פרופיל',
+    'personalProfile': 'אישי',
+    'demoProfile': 'הדגמה',
+    'profileName': 'שם הפרופיל החדש',
+    'createBlankProfile': 'יצירת פרופיל ריק',
+    'profilesHint': 'יומנים נפרדים לשימוש אישי ולהדגמה. ללא התחברות או סיסמה.',
     'manageTopicTypes': 'ניהול סוגים…',
     'reorderSidebar': 'סדר סרגל הצד',
     'reorderSidebarHint': 'ידיות גרירה בנושאים ובתצוגות עד שמכבים את זה.',

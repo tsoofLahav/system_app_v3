@@ -4,9 +4,7 @@
 /// inner task. Preferred storage is the glyph alone — no list dash.
 library;
 
-final _line = RegExp(
-  r'^(\s*)(?:([-*])\s+)?(?:\[([ xX])\]|([☐☑]))\s?(.*)$',
-);
+final _line = RegExp(r'^(\s*)(?:([-*])\s+)?(?:\[([ xX])\]|([☐☑]))\s?(.*)$');
 
 class InnerTaskLine {
   const InnerTaskLine({
@@ -159,9 +157,7 @@ String? toggleInnerTaskAt(String body, int offset) {
   final flipped = hit;
   for (final raw in body.split('\n')) {
     final item = byStart[cursor];
-    out.add(
-      item == flipped ? _renderLine(flipped, done: !flipped.done) : raw,
-    );
+    out.add(item == flipped ? _renderLine(flipped, done: !flipped.done) : raw);
     cursor += raw.length + 1;
   }
   return out.join('\n');
@@ -346,6 +342,7 @@ InnerTaskEdit? promoteBareDashToCheckbox(String combined, int caret) {
   if (bodyAt < 0 || caret < bodyAt) return null;
   final body = combined.substring(bodyAt);
   final local = caret - bodyAt;
+  if (local <= 0 || local > body.length) return null;
   final lineStart = body.lastIndexOf('\n', local - 1) + 1;
   final lineEnd = body.indexOf('\n', lineStart);
   final end = lineEnd < 0 ? body.length : lineEnd;

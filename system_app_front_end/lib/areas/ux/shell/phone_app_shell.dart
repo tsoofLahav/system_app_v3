@@ -120,7 +120,22 @@ class _PhoneAppShellState extends State<PhoneAppShell> {
                           AppSidebarMetrics.phoneWidthFraction)
                       .clamp(200.0, AppSidebarMetrics.phoneMaxWidth),
               backgroundColor: Colors.transparent,
-              child: AppSidebar(state: state, isPhone: true),
+              child: ValueListenableBuilder<bool>(
+                valueListenable: state.refreshing,
+                child: AppSidebar(state: state, isPhone: true),
+                builder: (context, busy, child) => Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    child!,
+                    if (busy) Positioned.fill(child: AbsorbPointer(
+                      child: ColoredBox(
+                        color: Colors.white.withValues(alpha: 0.55),
+                        child: const Center(child: CircularProgressIndicator()),
+                      ),
+                    )),
+                  ],
+                ),
+              ),
             ),
             body: Stack(
               fit: StackFit.expand,
