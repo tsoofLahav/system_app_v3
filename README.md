@@ -20,9 +20,9 @@ Built around **capture first, organize later**, the app is designed to reduce me
 Build a home for your projects, routines, and knowledge. Topics bring related documents together, with flexible layouts that keep the right context in view. Inside each document, continuous writing flows around tasks, information cards, images, tables, and charts—with formatting and visual styles to make each space your own.
 
 <p align="center">
-  <a href="docs/media/workspace-project.png"><img src="docs/media/workspace-project.png" alt="Project workspace with rich documents, images, information cards, and tasks" width="32%" /></a>
-  <a href="docs/media/workspace-mindset.png"><img src="docs/media/workspace-mindset.png" alt="Mindset topic with images, goals, and formatted notes" width="32%" /></a>
-  <a href="docs/media/workspace-life-area.png"><img src="docs/media/workspace-life-area.png" alt="Cat Care topic with tasks, charts, tables, and information cards" width="32%" /></a>
+  <a href="docs/media/workspace-project.png"><img src="docs/media/workspace-project.png" alt="Project workspace with rich documents, images, information cards, and tasks" width="40%" /></a>
+  <a href="docs/media/workspace-mindset.png"><img src="docs/media/workspace-mindset.png" alt="Mindset topic with images, goals, and formatted notes" width="40%" /></a>
+  <a href="docs/media/workspace-life-area.png"><img src="docs/media/workspace-life-area.png" alt="Cat Care topic with tasks, charts, tables, and information cards" width="40%" /></a>
 </p>
 <p align="center"><sub>Project workspace · Personal process · Life area — click any image to enlarge</sub></p>
 
@@ -31,9 +31,9 @@ Build a home for your projects, routines, and knowledge. Topics bring related do
 **Write a prompt** to ask the agent to find information or update your documents—for example, “Go over all my processes and update the plan and tasks using my notes.” **Create an AI action** to save a recurring instruction with its own name, icon, and shortcut, such as finding the right file for a new note. **Review the diff dialog** to compare current and suggested content and accept or reject individual changes, or choose direct application when running the action.
 
 <p align="center">
-  <a href="docs/media/agent-prompt.png"><img src="docs/media/agent-prompt.png" alt="Writing a natural-language prompt to the agent" width="32%" /></a>
-  <a href="docs/media/agent-action.png"><img src="docs/media/agent-action.png" alt="Creating a reusable AI action with a name, icon, and shortcut" width="32%" /></a>
-  <a href="docs/media/agent-diff.png"><img src="docs/media/agent-diff.png" alt="Diff dialog comparing current and suggested document content" width="32%" /></a>
+  <a href="docs/media/agent-prompt.png"><img src="docs/media/agent-prompt.png" alt="Writing a natural-language prompt to the agent" width="40%" /></a>
+  <a href="docs/media/agent-action.png"><img src="docs/media/agent-action.png" alt="Creating a reusable AI action with a name, icon, and shortcut" width="40%" /></a>
+  <a href="docs/media/agent-diff.png"><img src="docs/media/agent-diff.png" alt="Diff dialog comparing current and suggested document content" width="40%" /></a>
 </p>
 <p align="center"><sub>Write a prompt · Create an AI action · Review the diff</sub></p>
 
@@ -46,9 +46,9 @@ Build a home for your projects, routines, and knowledge. Topics bring related do
 **Object mapping.** Explore linked information across documents in an interactive map. Arrange nodes, filter by tags, and open editable cards while keeping every idea connected to its source.
 
 <p align="center">
-  <a href="docs/media/task-views.png"><img src="docs/media/task-views.png" alt="Weekly task view with routine sections and completed tasks" width="32%" /></a>
-  <a href="docs/media/automations.png"><img src="docs/media/automations.png" alt="Automation builder with a weekly schedule and ordered actions" width="32%" /></a>
-  <a href="docs/media/object-map.png"><img src="docs/media/object-map.png" alt="Connected information map with an expanded editable card" width="32%" /></a>
+  <a href="docs/media/task-views.png"><img src="docs/media/task-views.png" alt="Weekly task view with routine sections and completed tasks" width="40%" /></a>
+  <a href="docs/media/automations.png"><img src="docs/media/automations.png" alt="Automation builder with a weekly schedule and ordered actions" width="40%" /></a>
+  <a href="docs/media/object-map.png"><img src="docs/media/object-map.png" alt="Connected information map with an expanded editable card" width="40%" /></a>
 </p>
 <p align="center"><sub>Task views · Automations · Object mapping</sub></p>
 
@@ -59,9 +59,9 @@ Take the workspace with you through a dedicated iOS interface: drawer navigation
 Section reminders and an app-icon badge surface tasks that need attention. With remote notifications configured, reminders can arrive while the app is closed; the badge reflects the number of sections needing attention and updates as work is completed. The app refreshes current content when you return.
 
 <p align="center">
-  <a href="docs/media/phone-documents.png"><img src="docs/media/phone-documents.png" alt="Browsing workspace documents on iPhone" width="32%" /></a>
-  <a href="docs/media/phone-navigation.png"><img src="docs/media/phone-navigation.png" alt="iPhone navigation drawer with topics and task views" width="32%" /></a>
-  <a href="docs/media/phone-editing.png"><img src="docs/media/phone-editing.png" alt="Editing task text on iPhone with the Hebrew keyboard" width="32%" /></a>
+  <a href="docs/media/phone-documents.png"><img src="docs/media/phone-documents.png" alt="Browsing workspace documents on iPhone" width="23%" /></a>
+  <a href="docs/media/phone-navigation.png"><img src="docs/media/phone-navigation.png" alt="iPhone navigation drawer with topics and task views" width="23%" /></a>
+  <a href="docs/media/phone-editing.png"><img src="docs/media/phone-editing.png" alt="Editing task text on iPhone with the Hebrew keyboard" width="23%" /></a>
 </p>
 <p align="center"><sub>Documents on the go · Topic and view navigation · Touch editing</sub></p>
 
