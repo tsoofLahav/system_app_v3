@@ -67,50 +67,71 @@ Section reminders and an app-icon badge surface tasks that need attention. With 
 
 ## Architecture
 
-Two views connect the product experience to its implementation. **Blue** represents the client, **purple** application logic and AI, **green** persistent data, and **amber** scheduling or review decisions.
+Two views explain how the system fits together: its main parts and content structure, followed by the AI and automation execution flow.
 
-### 1 · System and document architecture
+### 1 · System structure
 
-The Flutter client connects to a Flask API organized by product area. PostgreSQL stores the workspace hierarchy and object relationships: documents own text and placement, while embedded objects own their content. Task views reference existing tasks, and knowledge links connect information across files.
+The workspace connects three layers: **documents that hold context**, **views that surface tasks and knowledge**, and **AI tools that work across that content**. The diagram shows the product structure; arrows describe containment or how one part uses another.
 
 ```mermaid
 flowchart TB
-    Client["Flutter · macOS + iOS<br/>Editor · Task views · Objects map"]
-    Sync["AppState + document synchronization"]
-    API["Flask REST API · Render<br/>Files · Objects · Agent · Automations"]
-    Client <--> Sync
-    Sync <-->|HTTP / JSON| API
+    Workspace["Workspace"]
 
-    subgraph Storage["PostgreSQL · shared data model"]
-        Topics["Workspace → Topics → Files<br/>Text + embedded object pointers"]
-        Objects["Object records<br/>Tasks · Information · Images · Tables / charts"]
-        Links["Task-view memberships<br/>Knowledge links"]
-        Runtime["AI configuration · Pending reviews<br/>Automations · Run history · Push devices"]
-        Topics -->|References| Objects
-        Links -->|Shared identities| Objects
+    subgraph Content["Documents and content"]
+        Topics["Topics<br/>Projects · Processes · Life areas"]
+        Files["Files<br/>Plans · Journals · Notes · Logs"]
+        Text["Continuous text<br/>Headings · Formatting · Lists"]
+        Embeds["Embedded objects"]
+        Tasks["Task lists + tasks"]
+        Info["Information cards"]
+        Media["Images · Tables · Charts"]
+        Topics -->|Contain| Files
+        Files -->|Combine| Text
+        Files -->|Reference| Embeds
+        Embeds --> Tasks
+        Embeds --> Info
+        Embeds --> Media
     end
 
-    API <--> Topics
-    API <--> Objects
-    API <--> Links
-    API <--> Runtime
-    API <--> Assets[("Upload storage<br/>Image files")]
-    Push["Notification cron"] -->|Read section attention| Storage
-    Push --> APNs["Apple Push Notification service"]
-    APNs -->|Reminders + badge| Client
+    subgraph Views["Focus and navigation"]
+        Home["Home<br/>Journal + files brought from topics"]
+        TaskViews["Task views<br/>Sections · Routines · One-time work"]
+        Map["Objects map<br/>Linked information across files"]
+    end
 
-    classDef client fill:#DBEAFE,stroke:#2563EB,color:#172554
-    classDef logic fill:#EDE9FE,stroke:#7C3AED,color:#2E1065
-    classDef data fill:#D1FAE5,stroke:#059669,color:#064E3B
+    subgraph Intelligence["AI and recurring work"]
+        Agent["Agent + saved AI actions<br/>Find · Create · Edit · Review"]
+        Automations["Automations<br/>Schedules + ordered steps"]
+        Automations -->|Run AI steps through| Agent
+    end
+
+    Workspace --> Topics
+    Workspace --> Home
+    Workspace --> TaskViews
+    Workspace --> Map
+    Workspace --> Automations
+    Home -.->|Shows existing files| Files
+    TaskViews -.->|Organize the same tasks| Tasks
+    Map -.->|Connects| Info
+    Agent -.->|Works across| Files
+    Automations -.->|Create, fill, archive| Files
+
+    classDef structure fill:#DBEAFE,stroke:#2563EB,color:#172554
+    classDef content fill:#D1FAE5,stroke:#059669,color:#064E3B
+    classDef ai fill:#EDE9FE,stroke:#7C3AED,color:#2E1065
     classDef workflow fill:#FEF3C7,stroke:#D97706,color:#78350F
-    class Client,Sync client
-    class API,APNs logic
-    class Topics,Objects,Links,Runtime,Assets data
-    class Push workflow
-    style Storage fill:#F0FDF4,stroke:#059669,color:#064E3B
+    class Workspace,Topics,Files,Home,TaskViews,Map structure
+    class Text,Embeds,Tasks,Info,Media content
+    class Agent ai
+    class Automations workflow
+    style Content fill:#F0FDF4,stroke:#059669,color:#064E3B
+    style Views fill:#EFF6FF,stroke:#2563EB,color:#172554
+    style Intelligence fill:#FAF5FF,stroke:#7C3AED,color:#2E1065
 ```
 
-The document synchronization coordinator reconciles local and remote text; revision checks reject stale file writes so the client can fetch and merge again. A separate notification dispatcher delivers section attention through APNs independently of longer-running AI work.
+**One connected content model.** Files store text and object references; each object owns its content. Home displays existing files, task views reference existing tasks, and the objects map connects information cards across documents.
+
+**Implementation.** Flutter provides the macOS and iOS interfaces. A Flask API on Render connects the client to PostgreSQL and image storage; shared domain services support editing, AI actions, and scheduled workflows. Document synchronization merges local and remote text, with revision checks guarding against stale file writes.
 
 ### 2 · AI actions and scheduled workflows
 
