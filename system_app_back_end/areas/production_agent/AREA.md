@@ -177,6 +177,7 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 - Rejecting a `create_object` hunk (or discarding its review) does not delete the now-orphaned embed row — it just stays unreferenced
 - Two proposed changes to the **same file** in one run clobber each other in `upsert_pending_from_proposals` (last one wins) instead of merging cumulatively
 - `agent_configs.tool_allowlist` is not yet honored
+- `rename` under `review` (or `notify_only`) is a silent no-op: it returns before touching anything and carries no `review` payload, so a rename request made on a review-mode run neither applies nor becomes a reviewable proposal — it just vanishes with no error. Not yet reported as user-visible; noted here since `create_object` and `create_file` turned out to have the same "review-mode result carries neither `review` nor `applied`, so it never reaches `proposed_changes`" shape before being fixed.
 
 ## Sync boundary (2026-09-08)
 
