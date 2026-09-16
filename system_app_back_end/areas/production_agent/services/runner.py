@@ -33,6 +33,7 @@ from areas.production_agent.services.browse_tools import (
     list_archived_files,
     list_entities,
 )
+from areas.production_agent.services.archive_file_tool import archive_file_tool
 from areas.production_agent.services.create_file_tool import create_file
 from areas.production_agent.services.create_object_tool import create_object
 from areas.production_agent.services.views_tool import views_tool
@@ -412,6 +413,24 @@ TOOL_DEFS: list[dict[str, Any]] = [
     },
     {
         "type": "function",
+        "name": "archive_file",
+        "description": (
+            "Move a live file to archive. This is a file-lifecycle action, "
+            "not a content edit — it always applies immediately, even on a "
+            "review-mode run; it is never held for the user's review."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_id": {"type": "integer"},
+            },
+            "required": ["file_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
         "name": "reference",
         "description": (
             "Load format or tool-usage examples. Call when unsure how agent text "
@@ -614,6 +633,15 @@ def _dispatch_tool(name: str, args: dict, scope: dict, apply_mode: str) -> Any:
             text=str(args.get("text") or ""),
             segment_id=str(args.get("segment_id") or ""),
         )
+    if name == "archive_file":
+        try:
+            file_id = int(args["file_id"])
+        except (KeyError, TypeError, ValueError):
+            return {"error": "file_id required", "tool": "archive_file"}
+        # Deliberately not resolve_write_mode: archiving always applies
+        # immediately, regardless of the run's apply_mode.
+        write_mode = "notify_only" if apply_mode == "notify_only" else "direct_apply"
+        return archive_file_tool(file_id=file_id, scope=scope, write_mode=write_mode)
     if name == "rename":
         if not workspace_id:
             return {"error": "workspace_id missing from run", "tool": "rename"}
@@ -806,6 +834,7 @@ def run_agent(
                         or result_tool == "views"
                         or result_tool == "connect"
                         or result_tool == "rename"
+                        or result_tool == "archive_file"
                     )
                     and (result.get("review") or result.get("applied"))
                 ):
@@ -860,8 +889,17 @@ def run_agent(
     applied = any(
         isinstance(c, dict) and c.get("applied") for c in proposed_changes
     )
+    # A create_object call always allocates a real row — even under review
+    # mode — so its content can be rendered into the pending review's diff.
+    # That row must survive regardless of whether anything else in the run
+    # was directly applied, or the reviewed proposal would have nothing to
+    # point at once the transaction below rolls back.
+    created_objects = any(
+        isinstance(c, dict) and c.get("tool") == "create_object"
+        for c in proposed_changes
+    )
     # Never roll back the scheduler/window transaction along with tool writes.
-    if applied:
+    if applied or created_objects:
         tool_transaction.commit()
     else:
         tool_transaction.rollback()

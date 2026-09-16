@@ -15,7 +15,11 @@ from areas.production_agent.services.browse_tools import (
     file_allowed,
 )
 from areas.production_agent.services.openai_service import generate_image
-from areas.production_agent.services.write_tools import WriteMode, resolve_write_mode
+from areas.production_agent.services.write_tools import (
+    WriteMode,
+    compute_diff,
+    resolve_write_mode,
+)
 from shared.routes.upload import store_image_bytes
 
 
@@ -53,10 +57,7 @@ def _create_result(
         result["filled_existing"] = True
     if write_mode == "notify_only":
         return {**result, "applied": False}
-    if write_mode == "review":
-        # Still flushed in-session so later open_file/patch see the id; run may roll back.
-        return {**result, "applied": False}
-    return {**result, "applied": True}
+    return {**result, "applied": write_mode != "review"}
 
 
 def create_object(
@@ -117,6 +118,7 @@ def create_object(
                 filled_existing=True,
             )
 
+    old_document_json = file.document_json or ""
     try:
         embed = create_embed_in_file(
             file,
@@ -129,13 +131,31 @@ def create_object(
     except ValueError as err:
         return {"error": str(err), "tool": "create_object"}
 
-    return _create_result(
+    result = _create_result(
         file_id=file.id,
         object_id=embed.id,
         type_=type_,
         write_mode=write_mode,
         payload=payload,
     )
+    if write_mode == "review":
+        # The user sees this the same way as any other edit: the new object,
+        # fully rendered, appears as an added part of the file's text — not a
+        # separate creation step. So the object row is real (its content has
+        # to exist to be rendered), but the live file must not show it yet;
+        # hold the pointer back and let it flow through the normal
+        # accept/reject review like any other change.
+        new_document_json = file.document_json or ""
+        review = compute_diff(old_document_json, new_document_json, file_id=file.id)
+        file.document_json = old_document_json
+        result = {
+            **result,
+            "old_document_json": old_document_json,
+            "new_document_json": new_document_json,
+            "document_text": review["new_document_text"],
+            "review": review,
+        }
+    return result
 
 
 def create_object_write_mode(run_apply_mode: str) -> WriteMode:

@@ -37,7 +37,7 @@ Reasoning models take `reasoning.effort` (env `OPENAI_REASONING_EFFORT`, default
 |-------|----------|
 | **instructions** | `agent_configs.system_prompt` + operational suffix (attached on each Responses turn) |
 | **First user input** | `prompt` + client `scope` (open topic/files as context) + optional tiny `hints` — **no file bodies** |
-| **Tools** | `list`, `list_archived`, `find_file`, `find_object`, `open_file`, `create_file`, `create_object`, `views`, `connect`, `rename`, `reference`, `patch_file`, `rewrite_file` |
+| **Tools** | `list`, `list_archived`, `find_file`, `find_object`, `open_file`, `create_file`, `create_object`, `archive_file`, `views`, `connect`, `rename`, `reference`, `patch_file`, `rewrite_file` |
 | **Follow-up input** | Tool results only (`function_call_output` items) |
 
 Tools authorize by **workspace membership** (run `workspace_id`), not the FE allow-list. Client `scope` / `hints` are preferred context (`focused_file_id`, open topic). Archived files stay read-only on writes.
@@ -76,6 +76,7 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 | `views` | `action=list` — views with named sections. `action=assign` — put a task on one view (or `view_id` 0 to remove). `section_name` `""` = Uncategorized. Task by `task_id` or `[TASK_LIST]` `object_id` + title. Membership write; typical outcome **apply**. Service: [`services/views_tool.py`](services/views_tool.py) |
 | `connect` | `action=related` — info↔info map edge (`source_object_id` + `target_object_id`). `action=description` — underline `text` on a host and point it at an info. Host is `source_task_id` (task title) or `source_object_id` (info / table / task-list title). `segment_id` when the same text appears in more than one table cell. Description does not create related. Typical outcome **apply**. Service: [`services/connect_tool.py`](services/connect_tool.py) |
 | `rename` | Rename a topic, file, or view, or set a topic's type. Directly applied rename results count as writes so the run commits the tool savepoint. Home and system topics cannot be renamed or retyped. Service: [`services/rename_tool.py`](services/rename_tool.py) |
+| `archive_file` | Move a live file to archive. A lifecycle action, not a content edit — always applies immediately regardless of the run's `apply_mode` (`notify_only` is the one exception: no side effects). Archiving a file with an open pending review discards that review — it can never finish against a now-read-only file. Service: [`services/archive_file_tool.py`](services/archive_file_tool.py) |
 | `reference` | On-demand examples from `content/production_agent/reference.md` (`agent_text` / `tools` / `all`) |
 | `patch_file` | **Partial edits** with `op` add / remove / replace on `document_lines`; typical outcome **review** |
 | `rewrite_file` | Full new agent text for a true whole-file rewrite; typical outcome **apply** when run allows |
@@ -84,7 +85,7 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 
 Browse helpers: [`services/browse_tools.py`](services/browse_tools.py). Create file: [`services/create_file_tool.py`](services/create_file_tool.py) + [`areas/files/services/file_ops.py`](../files/services/file_ops.py). Create object: [`services/create_object_tool.py`](services/create_object_tool.py) + shared [`areas/objects/services/create_embed.py`](../objects/services/create_embed.py). Views: [`services/views_tool.py`](services/views_tool.py). Connect: [`services/connect_tool.py`](services/connect_tool.py). `open_file` payload: [`services/open_file_tool.py`](services/open_file_tool.py). Writes: [`services/write_tools.py`](services/write_tools.py).
 
-**Apply vs review:** the run’s `apply_mode` wins (`review` / `direct_apply` / `notify_only`). Defaults live in **one place**: [`shared/run_config.py`](../../shared/run_config.py) (`DEFAULT_MANUAL_APPLY_MODE`, `DEFAULT_AUTOMATION_APPLY_MODE`). Routes/runner/models import those — do not hardcode fallback strings. Manual **Consult** sends `apply_mode` from the FE toggle (default apply directly). A saved AI action stores its own mode. An automation `ai` step stores its own mode, default review — nobody is watching at 2am. The model does not choose the dialog.
+**Apply vs review:** the run’s `apply_mode` wins (`review` / `direct_apply` / `notify_only`). Defaults live in **one place**: [`shared/run_config.py`](../../shared/run_config.py) (`DEFAULT_MANUAL_APPLY_MODE`, `DEFAULT_AUTOMATION_APPLY_MODE`). Routes/runner/models import those — do not hardcode fallback strings. Manual **Consult** sends `apply_mode` from the FE toggle (default apply directly). A saved AI action stores its own mode. An automation `ai` step stores its own mode, default review — nobody is watching at 2am. The model does not choose the dialog. `archive_file` is the one deliberate exception: it is a file-lifecycle action, not a content edit, so it ignores `apply_mode` and always applies (`notify_only` still holds it back — that mode means no side effects at all).
 
 The agent never sees or writes raw JSON. It reads and writes **agent text**; the [files area](../files/AREA.md) converts in both directions.
 
@@ -116,7 +117,9 @@ Table `agent_pending_reviews` (one open row per `file_id`; newest run replaces).
 | POST | `/files/:id/pending-review/finish` | Per-hunk decisions → archive deep-copy of old file → apply merged agent text → delete pending |
 | DELETE | `/files/:id/pending-review` | Discard |
 
-Finish archives as `"{name} {created_at date}"` (the live file's creation date, `YYYY-MM-DD`) with deep-copied embeds, then `apply_agent_text` on the live file. That archived row is a **file** on the topic Archive page (`list_archived`) — not a removed task. `create_object` proposals are not queued for line-merge pending (direct_apply only this pass).
+Finish archives as `"{name} {created_at date}"` (the live file's creation date, `YYYY-MM-DD`) with deep-copied embeds, then `apply_agent_text` on the live file. That archived row is a **file** on the topic Archive page (`list_archived`) — not a removed task.
+
+`create_object` under `review` participates in the same pending review as any other edit — from the user's side there is no such thing as "objects", only file content. The embed row is created for real (its content has to exist to be rendered into the diff) but the pointer insertion into `file.document_json` is held back and reverted immediately after the diff is computed, so the live file shows nothing until the reviewer accepts that hunk. The row must survive the tool savepoint regardless of whether anything else in the run was directly applied (`runner.py` commits the savepoint whenever any proposed change is a `create_object`, not only when something was `applied`) — otherwise the row created purely to render the diff would vanish along with it. Rejecting that hunk leaves the row as an inert, unreferenced orphan rather than losing anything; there is no cleanup pass for that yet (see Known gaps).
 
 Standing prompt facts the model cannot discover: a `[TASK_LIST]` write updates the same task rows (views stay); only an omitted checkbox line deletes that task (membership + its description links); connections stay on the same object/task ids when a fence is edited; description underlines remap with host-text edits; Archive is files only.
 
@@ -148,6 +151,7 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 | [`services/open_file_tool.py`](services/open_file_tool.py) | `open_file` payload (agent text + extras) |
 | [`services/create_file_tool.py`](services/create_file_tool.py) | Empty file in a topic, placed first |
 | [`services/create_object_tool.py`](services/create_object_tool.py) | Embed + pointer; image generation |
+| [`services/archive_file_tool.py`](services/archive_file_tool.py) | Move a file to archive; ignores the run's `apply_mode` (except `notify_only`) |
 | [`services/views_tool.py`](services/views_tool.py) | List views/sections; assign a task to one view (or remove) |
 | [`services/connect_tool.py`](services/connect_tool.py) | Related info↔info; description text→info |
 | [`services/prompt.py`](services/prompt.py) | Load/seed/sync the system prompt from the DB |
@@ -170,7 +174,8 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 ## Known gaps (later)
 
 - Undo for `create_object` alone / long-lived DB undo
-- Per-hunk review of `create_object`
+- Rejecting a `create_object` hunk (or discarding its review) does not delete the now-orphaned embed row — it just stays unreferenced
+- Two proposed changes to the **same file** in one run clobber each other in `upsert_pending_from_proposals` (last one wins) instead of merging cumulatively
 - `agent_configs.tool_allowlist` is not yet honored
 
 ## Sync boundary (2026-09-08)
