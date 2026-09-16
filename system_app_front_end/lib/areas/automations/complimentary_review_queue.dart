@@ -36,10 +36,7 @@ Future<void> openComplimentaryReviewQueue(
       );
       for (final file in files) {
         if (!host.mounted) return;
-        // A file can lose its pending review between the status fetch above
-        // and this open (raced by another action, or already resolved) —
-        // just move on to the next real file rather than announcing it.
-        await openPendingReviewForFile(
+        final shown = await openPendingReviewForFile(
           host,
           state,
           file['id'] as int,
@@ -48,6 +45,15 @@ Future<void> openComplimentaryReviewQueue(
           topicName: name,
           topicAccent: accent,
         );
+        if (!shown && host.mounted) {
+          await _topicNotice(
+            host,
+            state,
+            name,
+            accent,
+            '${file['name'] ?? ''}: ${state.strings['reviewNoChanges']}',
+          );
+        }
       }
       if (topic['id'] is int && status['run_id'] is int) {
         await state.acknowledgeTopicReview(topic['id'] as int, [status['run_id'] as int]);

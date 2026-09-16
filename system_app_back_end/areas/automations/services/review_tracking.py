@@ -1,6 +1,5 @@
 """Review ownership and acknowledgements, stored on the existing run JSON."""
 from models import db, Automation, AutomationRun, AgentPendingReview, File, Topic, Task
-from areas.production_agent.services.pending_reviews import build_hunks
 
 
 def pending_for_run(run):
@@ -53,9 +52,7 @@ def dismiss_task_reviews(task):
 def topic_review_state(topic):
     files = File.query.filter_by(topic_id=topic.id).filter(File.archived_at.is_(None)).all()
     pending = AgentPendingReview.query.filter_by(topic_id=topic.id, workspace_id=topic.workspace_id).all()
-    # Only files with an actual line-level diff belong in the review walkthrough —
-    # a pending row can be a stale/no-op leftover with nothing to decide on.
-    pending_ids = {p.file_id for p in pending if build_hunks(p.old_agent_text, p.new_agent_text)}
+    pending_ids = {p.file_id for p in pending}
     runs = []
     for run in (AutomationRun.query.join(Automation, Automation.id == AutomationRun.automation_id)
                 .filter(Automation.workspace_id == topic.workspace_id, AutomationRun.status == 'completed').all()):

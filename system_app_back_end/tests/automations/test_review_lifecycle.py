@@ -34,9 +34,9 @@ def database():
 def test_review_ids_and_completion(database):
     automation = db.session.get(Automation, 1)
     db.session.add_all([
-        AgentPendingReview(id=101, file_id=10, workspace_id=1, topic_id=1, old_agent_text='old', new_agent_text='new'),
-        AgentPendingReview(id=102, file_id=20, workspace_id=1, topic_id=1, old_agent_text='old', new_agent_text='new'),
-        AgentPendingReview(id=103, file_id=101, workspace_id=1, topic_id=1, old_agent_text='old', new_agent_text='new'),
+        AgentPendingReview(id=101, file_id=10, workspace_id=1, topic_id=1),
+        AgentPendingReview(id=102, file_id=20, workspace_id=1, topic_id=1),
+        AgentPendingReview(id=103, file_id=101, workspace_id=1, topic_id=1),
         AutomationRun(automation_id=1, status='completed', result={
             'steps': [{'pending_review_ids': [102, 101, 102]}]}),
     ])
@@ -84,7 +84,7 @@ def test_rollback_preserves_window_run_and_attention(database, failure, mode):
         return {'tool': 'patch_file', 'review': mode == 'review',
                 'applied': mode == 'direct_apply', 'file_id': 10}
     def persist(**kwargs):
-        db.session.add(AgentPendingReview(id=101, file_id=10, workspace_id=1, topic_id=1, old_agent_text='old', new_agent_text='new'))
+        db.session.add(AgentPendingReview(id=101, file_id=10, workspace_id=1, topic_id=1))
         db.session.flush()
         if failure == 'persist':
             raise RuntimeError('review storage failed')
@@ -149,7 +149,7 @@ def test_type_scope_activates_per_topic_execution():
 def test_review_groups_include_topics_with_no_changes(database):
     automation = db.session.get(Automation, 1)
     db.session.add(Topic(id=2, workspace_id=1, name='Sleep', color='#886644'))
-    db.session.add(AgentPendingReview(id=101, file_id=10, workspace_id=1, topic_id=1, old_agent_text='old', new_agent_text='new'))
+    db.session.add(AgentPendingReview(id=101, file_id=10, workspace_id=1, topic_id=1))
     db.session.add(AutomationRun(automation_id=1, status='completed', result={
         'steps': [{'pending_review_ids': [101]}]}))
     groups = windows.review_status(automation)['topics']

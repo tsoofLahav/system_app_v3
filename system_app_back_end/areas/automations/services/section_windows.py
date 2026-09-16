@@ -841,21 +841,6 @@ def review_status(automation: Automation) -> dict:
     if latest and "review_refs" in (latest.result or {}):
         from .review_tracking import pending_for_run
         pending = [row.file_id for row in pending_for_run(latest)]
-    if pending:
-        from areas.production_agent.services.pending_reviews import build_hunks
-        rows_by_file = {
-            row.file_id: row
-            for row in AgentPendingReview.query.filter(
-                AgentPendingReview.file_id.in_(pending),
-                AgentPendingReview.workspace_id == automation.workspace_id,
-            ).all()
-        }
-        # Only files with an actual line-level diff belong in the review
-        # walkthrough — a pending row can be a stale/no-op leftover.
-        pending = [
-            fid for fid in pending
-            if fid in rows_by_file and build_hunks(rows_by_file[fid].old_agent_text, rows_by_file[fid].new_agent_text)
-        ]
     context = (latest.event_context or {}) if latest else {}
     handled = set(context.get("reviewed_topic_ids", []))
     topics = [t for t in input_topics(automation) if t["id"] not in handled]
