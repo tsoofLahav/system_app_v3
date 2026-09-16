@@ -6,6 +6,7 @@ from typing import Any
 
 from models import File, Topic, TopicType, View, db
 from areas.files.services.system_topics import is_system_topic
+from areas.files.services.home_visits import is_home_topic
 from areas.production_agent.services.browse_tools import file_allowed
 from areas.production_agent.services.write_tools import WriteMode
 
@@ -53,6 +54,8 @@ def _rename_topic(
         return {"error": "topic not found", "tool": "rename"}
     if is_system_topic(topic):
         return {"error": "system topics cannot be renamed", "tool": "rename"}
+    if is_home_topic(topic):
+        return {"error": "Home cannot be renamed", "tool": "rename"}
     clean_name = _clean(name)
     if not clean_name:
         return {"error": "name required", "tool": "rename"}
@@ -140,6 +143,8 @@ def _set_topic_type(
         return {"error": "topic not found", "tool": "rename"}
     if is_system_topic(topic):
         return {"error": "system topics cannot be edited", "tool": "rename"}
+    if is_home_topic(topic):
+        return {"error": "Home cannot be retyped", "tool": "rename"}
 
     clean_type = _clean(topic_type)
     type_row: TopicType | None = None

@@ -8,6 +8,7 @@ from areas.files.services.system_topics import (
     ensure_system_reports_topic,
     is_system_topic,
 )
+from areas.files.services.home_visits import is_home_topic, restore_home_topic
 from areas.objects.services.delete_cascade import delete_topic_cascade
 
 topics_bp = Blueprint("topics", __name__)
@@ -35,6 +36,7 @@ def list_topics():
     query = active_query(Topic)
     workspace_id = request.args.get("workspace_id", type=int)
     if workspace_id:
+        restore_home_topic(workspace_id)
         query = query.filter_by(workspace_id=workspace_id)
         ensure_system_reports_topic(workspace_id)
         db.session.commit()
@@ -116,6 +118,10 @@ def update_topic(topic_id):
     if is_system_topic(topic):
         return jsonify({"error": "system topics cannot be edited"}), 400
     data = request.get_json(silent=True) or {}
+    if is_home_topic(topic) and any(
+        key in data for key in ("name", "icon", "color", "topic_type_id", "archived_at", "tag_ids")
+    ):
+        return jsonify({"error": "Home identity and appearance cannot be edited"}), 400
     apply_updates(
         topic,
         data,
@@ -153,6 +159,8 @@ def delete_topic(topic_id):
     topic = get_or_404(Topic, topic_id)
     if is_system_topic(topic):
         return jsonify({"error": "system topics cannot be deleted"}), 400
+    if is_home_topic(topic):
+        return jsonify({"error": "Home cannot be deleted"}), 400
     delete_topic_cascade(topic_id)
     db.session.commit()
     return "", 204

@@ -16,7 +16,39 @@ from models import File, Topic, Workspace, db
 def is_home_topic(topic: Topic | None) -> bool:
     if topic is None:
         return False
-    return str(topic.name or "").strip().lower() == "home"
+    if topic.id is None:
+        return str(topic.name or "").strip().lower() == "home"
+    home = home_topic_for_workspace(topic.workspace_id)
+    return home is not None and home.id == topic.id
+
+
+def home_topic_for_workspace(workspace_id: int) -> Topic | None:
+    """Find Home by its bootstrapped Daily file, even after a rename."""
+    rows = (
+        db.session.query(File, Topic)
+        .join(Topic, File.topic_id == Topic.id)
+        .filter(Topic.workspace_id == workspace_id)
+        .order_by(Topic.id, File.id)
+        .all()
+    )
+    for file, topic in rows:
+        if (file.meta or {}).get("automation_anchor") == "daily" and not topic.is_system:
+            return topic
+    return (
+        Topic.query.filter_by(workspace_id=workspace_id)
+        .filter(db.func.lower(Topic.name) == "home")
+        .first()
+    )
+
+
+def restore_home_topic(workspace_id: int) -> Topic | None:
+    """Repair the name and appearance expected by existing app clients."""
+    topic = home_topic_for_workspace(workspace_id)
+    if topic is not None:
+        topic.name = "Home"
+        topic.color = None
+        topic.topic_type_id = None
+    return topic
 
 
 def _id_list(raw) -> list[int]:

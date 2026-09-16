@@ -30,7 +30,7 @@ def create_workspace():
     from models import Topic, File
     from areas.files.services.document_v3 import empty_document_json
     from areas.production_agent.services.prompt import ensure_agent_config
-    home = Topic(workspace_id=workspace.id, name="Home", icon="🏠", color="#6366F1", order_index=0)
+    home = Topic(workspace_id=workspace.id, name="Home", icon="🏠", color=None, order_index=0)
     db.session.add(home)
     db.session.flush()
     db.session.add(File(topic_id=home.id, name="Daily", document_json=empty_document_json(), order_index=0, meta={"automation_anchor": "daily"}))

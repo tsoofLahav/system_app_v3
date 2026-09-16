@@ -24,9 +24,11 @@ def database():
         db.session.add(Workspace(id=1, name="Personal"))
         db.session.add(Topic(id=1, workspace_id=1, name="Projects"))
         db.session.add(Topic(id=2, workspace_id=1, name="System", is_system=True))
+        db.session.add(Topic(id=4, workspace_id=1, name="בית", color="#6366F1"))
         db.session.add(Workspace(id=2, name="Other"))
         db.session.add(Topic(id=3, workspace_id=2, name="Outside"))
         db.session.add(File(id=10, topic_id=1, name="Notes", document_json="{}"))
+        db.session.add(File(id=11, topic_id=4, name="Daily", document_json="{}", meta={"automation_anchor": "daily"}))
         db.session.add(TopicType(id=1, workspace_id=1, name="Project", name_he="פרויקט"))
         db.session.add(View(id=1, workspace_id=1, name="Weekly", layout_config={
             "sections": [{"key": "focus", "name": "Focus"}],
@@ -67,6 +69,12 @@ def test_rename_topic_rejects_system_topic(database):
     result = _call(target="topic", topic_id=2, name="Hacked")
     assert "error" in result
     assert db.session.get(Topic, 2).name == "System"
+
+
+def test_rename_topic_rejects_translated_home(database):
+    result = _call(target="topic", topic_id=4, name="Another name")
+    assert result["error"] == "Home cannot be renamed"
+    assert db.session.get(Topic, 4).name == "בית"
 
 
 def test_rename_topic_rejects_out_of_workspace(database):
@@ -171,3 +179,9 @@ def test_clear_topic_type(database):
     result = _call(target="topic_type", topic_id=1, topic_type="")
     assert result["applied"] is True
     assert db.session.get(Topic, 1).topic_type_id is None
+
+
+def test_retype_rejects_translated_home(database):
+    result = _call(target="topic_type", topic_id=4, topic_type="Project")
+    assert result["error"] == "Home cannot be retyped"
+    assert db.session.get(Topic, 4).topic_type_id is None

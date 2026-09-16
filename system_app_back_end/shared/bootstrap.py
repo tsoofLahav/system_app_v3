@@ -8,6 +8,8 @@ def bootstrap_if_empty() -> dict:
     selected = selected_workspace_id()
     workspace = db.session.get(Workspace, selected) if selected else Workspace.query.order_by(Workspace.id).first()
     if workspace is not None:
+        from areas.files.services.home_visits import restore_home_topic
+        restore_home_topic(workspace.id)
         ensure_agent_config(workspace.id)
         db.session.commit()
         return {"ready": True, "workspace_id": workspace.id, "created": False}
@@ -20,7 +22,7 @@ def bootstrap_if_empty() -> dict:
         workspace_id=workspace.id,
         name="Home",
         icon="🏠",
-        color="#6366F1",
+        color=None,
         order_index=0,
     )
     db.session.add(home)
