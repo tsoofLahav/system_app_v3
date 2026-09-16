@@ -37,7 +37,7 @@ Reasoning models take `reasoning.effort` (env `OPENAI_REASONING_EFFORT`, default
 |-------|----------|
 | **instructions** | `agent_configs.system_prompt` + operational suffix (attached on each Responses turn) |
 | **First user input** | `prompt` + client `scope` (open topic/files as context) + optional tiny `hints` — **no file bodies** |
-| **Tools** | `list`, `list_archived`, `find_file`, `find_object`, `open_file`, `create_file`, `create_object`, `views`, `connect`, `reference`, `patch_file`, `rewrite_file` |
+| **Tools** | `list`, `list_archived`, `find_file`, `find_object`, `open_file`, `create_file`, `create_object`, `views`, `connect`, `rename`, `reference`, `patch_file`, `rewrite_file` |
 | **Follow-up input** | Tool results only (`function_call_output` items) |
 
 Tools authorize by **workspace membership** (run `workspace_id`), not the FE allow-list. Client `scope` / `hints` are preferred context (`focused_file_id`, open topic). Archived files stay read-only on writes.
@@ -75,6 +75,7 @@ Short-term memory is the OpenAI conversation for that run only. It is dropped wh
 | `create_object` | Create embed + pointer (`task_list` \| `info` \| `table` \| `graph` \| `image`); returns `object_id`. **Image:** `body` is the generation prompt; the tool writes PNG bytes to the upload folder and stores `payload.url` — an empty image object is a missing prompt, not a later patch |
 | `views` | `action=list` — views with named sections. `action=assign` — put a task on one view (or `view_id` 0 to remove). `section_name` `""` = Uncategorized. Task by `task_id` or `[TASK_LIST]` `object_id` + title. Membership write; typical outcome **apply**. Service: [`services/views_tool.py`](services/views_tool.py) |
 | `connect` | `action=related` — info↔info map edge (`source_object_id` + `target_object_id`). `action=description` — underline `text` on a host and point it at an info. Host is `source_task_id` (task title) or `source_object_id` (info / table / task-list title). `segment_id` when the same text appears in more than one table cell. Description does not create related. Typical outcome **apply**. Service: [`services/connect_tool.py`](services/connect_tool.py) |
+| `rename` | Rename a topic, file, or view, or set a topic's type. Directly applied rename results count as writes so the run commits the tool savepoint. System topics cannot be renamed or retyped. Service: [`services/rename_tool.py`](services/rename_tool.py) |
 | `reference` | On-demand examples from `content/production_agent/reference.md` (`agent_text` / `tools` / `all`) |
 | `patch_file` | **Partial edits** with `op` add / remove / replace on `document_lines`; typical outcome **review** |
 | `rewrite_file` | Full new agent text for a true whole-file rewrite; typical outcome **apply** when run allows |

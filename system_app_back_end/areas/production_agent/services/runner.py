@@ -805,6 +805,7 @@ def run_agent(
                         or name == "update_file"
                         or result_tool == "views"
                         or result_tool == "connect"
+                        or result_tool == "rename"
                     )
                     and (result.get("review") or result.get("applied"))
                 ):

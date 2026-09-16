@@ -1,10 +1,12 @@
 from datetime import datetime
+from unittest.mock import patch
 import pytest
 from flask import Flask
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.dialects.postgresql import JSONB
 from models import db, Workspace, Topic, File, TopicType, View, Automation
 from areas.production_agent.services.rename_tool import rename_tool
+from areas.production_agent.services import runner
 
 
 @compiles(JSONB, "sqlite")
@@ -108,6 +110,45 @@ def test_rename_view_requires_name(database):
     result = _call(target="view", view_id=1, name="   ")
     assert "error" in result
     assert db.session.get(View, 1).name == "Weekly"
+
+
+@pytest.mark.parametrize(
+    "target,entity,id_field,entity_id,new_name",
+    [
+        ("topic", Topic, "topic_id", 1, "Planning"),
+        ("view", View, "view_id", 1, "Weekly Focus"),
+    ],
+)
+def test_agent_run_commits_rename(database, target, entity, id_field, entity_id, new_name):
+    arguments = {
+        "target": target,
+        "topic_id": 0,
+        "file_id": 0,
+        "view_id": 0,
+        "name": new_name,
+        "topic_type": "",
+        id_field: entity_id,
+    }
+    with (
+        patch.object(runner, "system_prompt_for_workspace", return_value="test"),
+        patch.object(runner, "_model_for_workspace", return_value="test"),
+        patch.object(runner, "create_conversation", return_value="test-run"),
+        patch.object(runner, "delete_conversation"),
+        patch.object(runner, "create_response", return_value={}),
+        patch.object(runner, "function_calls_from_response", side_effect=[
+            [{"name": "rename", "arguments": arguments, "call_id": "1"}], []
+        ]),
+        patch.object(runner, "output_text_from_response", return_value="Done"),
+    ):
+        result = runner.run_agent(
+            prompt="Rename it", workspace_id=1, scope={}, apply_mode="direct_apply"
+        )
+
+    db.session.expire_all()
+    assert result["status"] == "ok"
+    assert result["applied"] is True
+    assert result["proposed_changes"][0]["target"] == target
+    assert db.session.get(entity, entity_id).name == new_name
 
 
 def test_set_topic_type_by_name_case_insensitive(database):
