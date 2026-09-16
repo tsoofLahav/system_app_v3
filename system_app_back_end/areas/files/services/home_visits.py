@@ -34,6 +34,18 @@ def home_topic_for_workspace(workspace_id: int) -> Topic | None:
     for file, topic in rows:
         if (file.meta or {}).get("automation_anchor") == "daily" and not topic.is_system:
             return topic
+    # Older workspaces may have lost the Daily anchor. Home is their first
+    # house-icon topic; a copy created later has a larger id.
+    house = (
+        Topic.query.filter_by(
+            workspace_id=workspace_id, icon="🏠", is_system=False,
+            is_template=False,
+        )
+        .order_by(Topic.id)
+        .first()
+    )
+    if house is not None:
+        return house
     return (
         Topic.query.filter_by(workspace_id=workspace_id)
         .filter(db.func.lower(Topic.name) == "home")

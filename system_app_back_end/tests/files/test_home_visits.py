@@ -46,6 +46,26 @@ def test_translated_home_is_found_and_repaired_by_daily_anchor():
         db.drop_all()
 
 
+def test_translated_home_without_daily_anchor_uses_house_icon():
+    app = Flask(__name__)
+    app.config.update(SQLALCHEMY_DATABASE_URI="sqlite://", TESTING=True)
+    db.init_app(app)
+    with app.app_context():
+        db.create_all()
+        db.session.add(Workspace(id=1, name="Personal"))
+        db.session.add(Topic(id=1, workspace_id=1, name="בית", icon="🏠"))
+        db.session.add(Topic(id=2, workspace_id=1, name="Other", icon="🏠"))
+        db.session.commit()
+
+        assert home_visits.is_home_topic(db.session.get(Topic, 1))
+        assert not home_visits.is_home_topic(db.session.get(Topic, 2))
+        home_visits.restore_home_topic(1)
+        db.session.commit()
+        assert db.session.get(Topic, 1).name == "Home"
+        db.session.remove()
+        db.drop_all()
+
+
 def test_visit_ids_dedupe_and_skip_junk():
     workspace = Workspace(name="Default")
     workspace.home_visit_file_ids = [3, "3", 7, "x", None]
