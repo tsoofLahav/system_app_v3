@@ -210,10 +210,13 @@ class ReadOnlyDocumentView extends StatelessWidget {
     );
 
     if (d.onTap != null) {
-      row = GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: d.onTap,
-        child: row,
+      row = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: d.onTap,
+          child: row,
+        ),
       );
     }
     return KeyedSubtree(key: d.anchorKey, child: row);

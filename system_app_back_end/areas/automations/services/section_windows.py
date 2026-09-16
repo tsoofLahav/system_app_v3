@@ -841,10 +841,18 @@ def review_status(automation: Automation) -> dict:
     if latest and "review_refs" in (latest.result or {}):
         from .review_tracking import pending_for_run
         pending = [row.file_id for row in pending_for_run(latest)]
+    # A file archived by another step in the same (or a later) run has no
+    # business staying in the walkthrough — it can never finish review.
+    files_by_id = {
+        f.id: f
+        for f in File.query.filter(
+            File.id.in_(pending), File.archived_at.is_(None)
+        ).all()
+    } if pending else {}
+    pending = [fid for fid in pending if fid in files_by_id]
     context = (latest.event_context or {}) if latest else {}
     handled = set(context.get("reviewed_topic_ids", []))
     topics = [t for t in input_topics(automation) if t["id"] not in handled]
-    files_by_id = {f.id: f for f in File.query.filter(File.id.in_(pending)).all()} if pending else {}
     known_topics = {topic["id"] for topic in topics}
     for file in files_by_id.values():
         if file.topic_id not in known_topics:

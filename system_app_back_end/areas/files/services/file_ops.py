@@ -49,6 +49,10 @@ def archive_file(file: File, *, when: datetime | None = None) -> File:
     becomes read-only."""
     if file.archived_at is None:
         file.archived_at = when or datetime.utcnow()
+        # A pending review can't ever finish against a read-only file — drop
+        # it now instead of letting it dangle and fail at Finish time.
+        from areas.production_agent.services.pending_reviews import discard_pending
+        discard_pending(file.id)
     return file
 
 

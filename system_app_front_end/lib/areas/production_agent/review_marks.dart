@@ -84,14 +84,28 @@ LineDecoration decorationForChange({
         onTap: onTap,
         spanFor: spanFor,
       ),
-    ChangeState.accepted => LineDecoration(
-        tint: AppColors.primary.withValues(alpha: 0.10),
-        mark: AppIcons.check,
-        markColor: AppColors.primary,
-        anchorKey: anchorKey,
-        onTap: onTap,
-        spanFor: spanFor,
-      ),
+    // Old-side "accepted" always means this old content is going away
+    // (whether the hunk is a straight removal or the old half of a
+    // replace) — show that as removed, not as confirmed/kept.
+    ChangeState.accepted => oldSide
+        ? LineDecoration(
+            tint: AppColors.destructive.withValues(alpha: 0.10),
+            mark: AppIcons.close,
+            markColor: AppColors.destructive,
+            opacity: 0.55,
+            strikethrough: true,
+            anchorKey: anchorKey,
+            onTap: onTap,
+            spanFor: spanFor,
+          )
+        : LineDecoration(
+            tint: AppColors.primary.withValues(alpha: 0.10),
+            mark: AppIcons.check,
+            markColor: AppColors.primary,
+            anchorKey: anchorKey,
+            onTap: onTap,
+            spanFor: spanFor,
+          ),
     ChangeState.rejected => oldSide
         ? LineDecoration(
             anchorKey: anchorKey,
