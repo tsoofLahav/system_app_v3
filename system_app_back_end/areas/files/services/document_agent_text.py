@@ -277,6 +277,50 @@ def load_objects_by_id(file_id: int) -> dict[int, dict[str, Any]]:
     return by_id
 
 
+def objects_by_id_with_proposed_updates(
+    objects_by_id: dict[int, dict[str, Any]],
+    object_updates: dict[int, dict[str, Any]],
+) -> dict[int, dict[str, Any]]:
+    """Overlay not-yet-applied ``object_updates`` for rendering a review diff.
+
+    A review proposal's "new" text is rendered from live DB objects — but an
+    edit to an *existing* embed's content (a task list's tasks, an info
+    piece's body, a new object's own content) is never written to the DB
+    until the review is finished. Render it as it would look, without
+    touching anything.
+    """
+    if not object_updates:
+        return objects_by_id
+    merged = dict(objects_by_id)
+    for object_id, update in object_updates.items():
+        if not isinstance(update, dict):
+            continue
+        current = dict(merged.get(object_id) or {"type": update.get("type")})
+        update_type = update.get("type")
+        if update_type == "task_list":
+            task_list = dict(current.get("task_list") or {})
+            if "title" in update:
+                task_list["title"] = update.get("title")
+            current["task_list"] = task_list
+            current["tasks"] = update.get("tasks", current.get("tasks") or [])
+        elif update_type == "info":
+            information = dict(current.get("information") or {})
+            if "title" in update:
+                information["title"] = update.get("title")
+            if "body" in update:
+                information["body"] = update.get("body")
+            current["information"] = information
+        elif update_type in {"image", "graph", "table"}:
+            payload = update.get("payload")
+            if payload is not None:
+                if update_type == "image":
+                    current["payload"] = {**(current.get("payload") or {}), **payload}
+                else:
+                    current["payload"] = payload
+        merged[object_id] = current
+    return merged
+
+
 _POINTER_LINE_RE = re.compile(
     r'\[(INFO|TASK_LIST|IMAGE|GRAPH|TABLE|EMBED)\s+id="(\d+)"\s*\]',
     re.IGNORECASE,

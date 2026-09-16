@@ -18,6 +18,7 @@ from areas.files.services.document_agent_text import (
     apply_object_updates,
     document_to_agent_text,
     load_objects_by_id,
+    objects_by_id_with_proposed_updates,
 )
 from areas.files.services.document_promote import promote_legacy_embeds
 from areas.files.services.file_versions import save_file_version
@@ -76,12 +77,19 @@ def compute_diff(
     *,
     file_id: int | None = None,
     objects_by_id: dict[int, dict[str, Any]] | None = None,
+    new_objects_by_id: dict[int, dict[str, Any]] | None = None,
 ) -> dict:
     if objects_by_id is None and file_id is not None:
         objects_by_id = load_objects_by_id(file_id)
     objects_by_id = objects_by_id or {}
+    # A proposal's object_updates aren't written to the DB until the review
+    # finishes — render the "new" side with them overlaid, or an edit to an
+    # existing embed's content (or a freshly created one's) shows no diff at
+    # all, since the object itself hasn't visibly changed yet.
     old_plain = document_to_agent_text(old_document_json, objects_by_id=objects_by_id)
-    new_plain = document_to_agent_text(new_document_json, objects_by_id=objects_by_id)
+    new_plain = document_to_agent_text(
+        new_document_json, objects_by_id=new_objects_by_id or objects_by_id
+    )
     old_lines = old_plain.splitlines(keepends=True)
     new_lines = new_plain.splitlines(keepends=True)
     hunks = list(
@@ -349,11 +357,18 @@ def apply_document_text(
     if write_mode == "notify_only":
         return {**base, "applied": False}
     if write_mode == "review":
+        objects_by_id = load_objects_by_id(file_id)
+        new_objects_by_id = objects_by_id_with_proposed_updates(
+            objects_by_id, object_updates
+        )
         return {
             **base,
             "applied": False,
             "review": compute_diff(
-                old_document, new_document_json or "", file_id=file_id
+                old_document,
+                new_document_json or "",
+                objects_by_id=objects_by_id,
+                new_objects_by_id=new_objects_by_id,
             ),
         }
 
