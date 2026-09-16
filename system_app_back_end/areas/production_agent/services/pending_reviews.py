@@ -200,6 +200,10 @@ def upsert_pending_from_proposals(
         new_doc = str(change.get("new_document_json") or "")
         if not old_agent and not new_agent:
             continue
+        if not build_hunks(old_agent, new_agent):
+            # No actual line change for the reviewer to decide on — finishing
+            # this review would be a no-op, so don't surface it at all.
+            continue
 
         existing = AgentPendingReview.query.filter_by(file_id=file.id).first()
         if existing is None:
@@ -224,8 +228,13 @@ def get_pending_for_file(file_id: int) -> dict[str, Any] | None:
     row = AgentPendingReview.query.filter_by(file_id=int(file_id)).first()
     if row is None:
         return None
+    hunks = build_hunks(row.old_agent_text, row.new_agent_text)
+    if not hunks:
+        # Stale/no-op row (e.g. left over from before this filter existed).
+        # There is nothing for the reviewer to decide on — treat as absent.
+        return None
     data = row.to_dict()
-    data["hunks"] = build_hunks(row.old_agent_text, row.new_agent_text)
+    data["hunks"] = hunks
     return data
 
 

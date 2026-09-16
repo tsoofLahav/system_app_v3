@@ -11,7 +11,7 @@ def seed():
     db.session.get(File, 20).topic_id = 2
     refs = []
     for rid, fid, tid in [(101, 10, 1), (102, 20, 2)]:
-        db.session.add(AgentPendingReview(id=rid, file_id=fid, topic_id=tid, workspace_id=1, run_key='original'))
+        db.session.add(AgentPendingReview(id=rid, file_id=fid, topic_id=tid, workspace_id=1, run_key='original', old_agent_text='old', new_agent_text='new'))
         refs.append({'id': rid, 'file_id': fid, 'topic_id': tid, 'run_key': 'original'})
     run = AutomationRun(automation_id=1, status='completed', result={'review_refs': refs, 'steps': [{'pending_review_ids': [101,102]}]},
                         event_context={'review_topic_ids': [1,2], 'reviewed_topic_ids': []})
@@ -75,7 +75,7 @@ def test_dismissal_during_generation_drops_late_result(database):
         dismiss_task_reviews(task)
         task.status = 'done'
         db.session.commit()  # Dismissal is visible before generation returns.
-        db.session.add(AgentPendingReview(id=101, file_id=10, topic_id=1, workspace_id=1, run_key='late'))
+        db.session.add(AgentPendingReview(id=101, file_id=10, topic_id=1, workspace_id=1, run_key='late', old_agent_text='old', new_agent_text='new'))
         db.session.flush()
         return {'status':'ok', 'steps':[{'pending_review_ids':[101]}]}
     with patch.object(run_automation, 'run_steps', side_effect=steps):

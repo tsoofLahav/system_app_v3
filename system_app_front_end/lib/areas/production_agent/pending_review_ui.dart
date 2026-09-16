@@ -41,7 +41,9 @@ Future<bool> openPendingReviewForFile(
       onDiscard: () => state.discardPendingReview(fileId),
     );
   } catch (_) {
-    if (automationQueue) rethrow;
+    // A stale/raced file id (e.g. its pending review was consumed or the
+    // file itself vanished between the queue's list fetch and this open)
+    // must never abort the rest of a multi-file walkthrough.
     return false;
   } finally {
     state.endPendingReviewDialog(fileId);
