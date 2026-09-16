@@ -836,7 +836,18 @@ def run_agent(
                         or result_tool == "rename"
                         or result_tool == "archive_file"
                     )
-                    and (result.get("review") or result.get("applied"))
+                    and (
+                        result.get("review")
+                        or result.get("applied")
+                        # A brand-new file has nothing to review yet — its own
+                        # result carries neither — but its row still needs to
+                        # reach the create_rows check below so it survives a
+                        # pure review-mode run for a later fill to land in.
+                        or (
+                            result_tool == "create_file"
+                            and result.get("write_mode") == "review"
+                        )
+                    )
                 ):
                     proposed_changes.append(result)
                 tool_outputs.append(
@@ -889,17 +900,18 @@ def run_agent(
     applied = any(
         isinstance(c, dict) and c.get("applied") for c in proposed_changes
     )
-    # A create_object call always allocates a real row — even under review
-    # mode — so its content can be rendered into the pending review's diff.
-    # That row must survive regardless of whether anything else in the run
-    # was directly applied, or the reviewed proposal would have nothing to
-    # point at once the transaction below rolls back.
-    created_objects = any(
-        isinstance(c, dict) and c.get("tool") == "create_object"
+    # create_object / create_file always allocate a real row — even under
+    # review mode — so a later patch_file fill has something real to point
+    # at and render into the pending review's diff. That row must survive
+    # regardless of whether anything else in the run was directly applied,
+    # or the reviewed proposal would have nothing left once the transaction
+    # below rolls back.
+    created_rows = any(
+        isinstance(c, dict) and c.get("tool") in ("create_object", "create_file")
         for c in proposed_changes
     )
     # Never roll back the scheduler/window transaction along with tool writes.
-    if applied or created_objects:
+    if applied or created_rows:
         tool_transaction.commit()
     else:
         tool_transaction.rollback()
