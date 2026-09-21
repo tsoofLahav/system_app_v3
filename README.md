@@ -13,6 +13,10 @@ System App brings notes, knowledge, and responsibilities into one connected work
 
 Built around **capture first, organize later**, the app is designed to reduce mental load: preserve the full context, surface what matters now, and turn information into action without losing where it came from.
 
+<p align="center">
+  <a href="docs/media/architecture-overview.png"><img src="docs/media/architecture-overview.png" alt="System App architecture: Flutter client, Flask backend, AI agent, automation worker, storage, and workspace file structure" width="800" /></a>
+</p>
+
 ## The experience
 
 ### A workspace around your life
