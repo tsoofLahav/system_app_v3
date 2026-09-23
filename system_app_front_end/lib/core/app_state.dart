@@ -2591,12 +2591,13 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// Refresh embeds for [fileId], keeping any still-dirty local payloads so a
   /// poll cannot wipe in-progress object edits. Clean embeds take inbound.
   Future<void> _loadEmbedsForFileMergingDirty(int fileId) async {
-    final current = embedsByFileId[fileId];
     final inbound = await _objects.listForFile(fileId);
     try {
       descriptionLinksByFileId[fileId] = await _objects
           .listFileDescriptionLinks(fileId);
     } catch (_) {}
+    // A save may update the cache while the poll is awaiting its response.
+    final current = embedsByFileId[fileId];
     if (current == null ||
         !current.any((embed) => UnsavedEmbedEdits.isDirty(embed.id))) {
       embedsByFileId[fileId] = inbound;

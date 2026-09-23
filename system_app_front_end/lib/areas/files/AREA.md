@@ -499,3 +499,26 @@ On iOS, single taps snap to the nearest word boundary, double-taps select the wo
 
 ## Remote replacement versus entry
 End-of-file focus is an explicit navigation intent, never Super Editor's default focus-gain policy. Refreshing the existing topic does not seed a new pending focus. Remote body replacement keeps DocumentSync's guarded merge, maps the selection to the nearest unchanged paragraph (or clamps its old position), and uses a brief editor-only loading overlay. A passive remount does not request focus or reopen a dismissed keyboard. Payload-only changes still avoid remounts.
+
+### Object sync rollout — 2026-09-23, phase 1
+
+Tables/charts and information-card text now use `ObjectSaveQueue` in the files
+editor module. One flush drains outstanding edits; simultaneous debounce and
+navigation requests join it. Its pending snapshot is registered before the
+optimistic cache write, so a cache notification containing our own in-flight
+save cannot open a remote-edit dialog. Only successful writes advance the
+baseline; newer typing remains dirty and is saved next. Deferred conflict
+dialogs recheck their snapshots before opening. Dirty baseline registrations
+refresh even when dirty stays true. Poll merging reads the current cache after
+network waits instead of restoring the cache from the start of the request.
+
+This is a frontend acknowledgement fix, not server-side revision protection.
+The queue is editor-owned; durable session-owned drafts, database revisions,
+stale-write rejection, and structured three-way merging remain next phases.
+Task/list/image paths are not migrated yet. Table structural merges must wait
+for stable row/cell identities; never infer identity from position alone.
+
+Regressions: `test/files/object_save_queue_test.dart` (coalescing, typing during
+PATCH, failure/retry), `test/files/table_autosave_echo_test.dart` (real table
+keeps focus and newer text during its own delayed save), plus existing conflict
+and table editing tests.

@@ -1,3 +1,4 @@
+import '../object_save_queue.dart';
 import '../editor_save_registry.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -19,7 +20,6 @@ import '../document_text_flow.dart';
 import '../edit_conflict.dart';
 import '../editor_key_handoff.dart';
 import '../embed_caret_bridge.dart';
-import '../embed_exit_scope.dart';
 import '../../rich_text/block_text_actions.dart';
 import '../../rich_text/block_text_focus.dart';
 import '../../rich_text/connect_info.dart';
@@ -350,7 +350,7 @@ class InfoEmbedState extends State<InfoEmbed>
   late _InfoTextController _controller;
   late final FocusNode _focus;
   Timer? _saveTimer;
-  Future<void>? _saveInFlight;
+  final _saveQueue = ObjectSaveQueue();
   EmbedCaretRegistry? _registry;
   var _dirty = false;
   var _conflictOpen = false;
@@ -522,7 +522,6 @@ class InfoEmbedState extends State<InfoEmbed>
   }
 
   void _setDirty(bool value) {
-    if (_dirty == value) return;
     _dirty = value;
     UnsavedEmbedEdits.mark(
       widget.embed.id,
@@ -562,6 +561,7 @@ class InfoEmbedState extends State<InfoEmbed>
       return;
     }
     final inboundKey = infoSnapshotFromEmbed(inbound);
+    if (_saveQueue.isLocalEcho(inboundKey)) return;
     final decision = decideRemoteEdit(
       localDirty: _dirty,
       inboundEqualsLocal: inboundKey == _localKey,
@@ -603,6 +603,16 @@ class InfoEmbedState extends State<InfoEmbed>
     if (_conflictOpen) return;
     void run() async {
       if (!mounted || _conflictOpen) return;
+      final key = infoSnapshotFromEmbed(inbound);
+      if (_saveQueue.isLocalEcho(key) ||
+          decideRemoteEdit(
+                localDirty: _dirty,
+                inboundEqualsLocal: key == _localKey,
+                inboundEqualsBaseline: key == _baselineKey,
+              ) !=
+              RemoteEditDecision.ask) {
+        return;
+      }
       _conflictOpen = true;
       final choice = await showEditConflictDialog(
         context: context,
@@ -631,39 +641,26 @@ class InfoEmbedState extends State<InfoEmbed>
     });
   }
 
-  Future<void> _save({bool flush = false}) async {
+  Future<void> _save({bool flush = false}) {
     _saveTimer?.cancel();
-    if (_saveInFlight != null) await _saveInFlight;
-    if (!_dirty) return;
-    final (title, body, spans, titleSpans) = _splitForApi();
-    final snapshot = infoEditSnapshot(
-      title: title,
-      body: body,
-      spans: spans,
-      titleSpans: titleSpans,
-    );
-    final pending = widget.state.updateInfoObject(
-      widget.embed,
-      title: title,
-      body: body,
-      spans: spans,
-      titleSpans: titleSpans,
-    );
-    _saveInFlight = pending;
-    try {
-      await pending;
-      _baselineKey = snapshot;
-      if (mounted) {
-        final (t, b, s, ts) = _splitForApi();
-        _setDirty(
-          infoEditSnapshot(title: t, body: b, spans: s, titleSpans: ts) !=
-              snapshot,
+    return _saveQueue.flush(
+      needsSave: () => mounted && _dirty,
+      capture: () => _localKey,
+      write: (snapshot) {
+        final (title, body, spans, titleSpans) = _splitForApi();
+        return widget.state.updateInfoObject(
+          widget.embed,
+          title: title,
+          body: body,
+          spans: spans,
+          titleSpans: titleSpans,
         );
-      }
-    } finally {
-      if (identical(_saveInFlight, pending)) _saveInFlight = null;
-    }
-    if (flush && mounted && _dirty) await _save(flush: true);
+      },
+      acknowledge: (snapshot) {
+        _baselineKey = snapshot;
+        if (mounted) _setDirty(_localKey != snapshot);
+      },
+    );
   }
 
   /// Sync cache only — use before structural rebuild; API can catch up async.

@@ -65,3 +65,10 @@ Manual checks still required: two live devices, keyboard/IME during delayed netw
    - `poll.inbound` — server body/revision in `readDocumentVersion`
    - `reload.in` / `reload.loaded` — `_reloadFromStored` input body and loaded `MutableDocument`
 3. Search the console for `spacerAudit`. The first tag where `spacers=` drops is the stage that lost blanks.
+
+## Object acknowledgement rollout (phase 1)
+
+Table and info editors use `ObjectSaveQueue` to coalesce overlapping flushes and
+recognize their own in-flight cache snapshot. Acknowledgement advances only the
+captured baseline and drains newer edits. This does not yet give object rows
+revision tokens or three-way merging; the file coordinator remains separate.

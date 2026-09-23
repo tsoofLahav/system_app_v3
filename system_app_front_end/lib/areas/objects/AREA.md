@@ -156,3 +156,26 @@ Complimentary review titles use the protected per-topic walkthrough. Server runn
 
 ### Skipped task occurrences
 `skipped` is distinct from `done` and does not count as active work. Skipped tasks stay visible with a minus-circle mark and return to active at the next routine occurrence/reset. A task context menu in an open section offers **Skip and report** for that single task. The write atomically creates `skipped_tasks` history and settles the task, preserving title and ID snapshots even after source deletion. Skipped status never marks linked inner checkboxes completed. See migration `026_skipped_tasks.sql`; timestamps are UTC.
+
+### Object sync rollout — 2026-09-23, phase 1
+
+Tables/charts and information-card text now use `ObjectSaveQueue` in the files
+editor module. One flush drains outstanding edits; simultaneous debounce and
+navigation requests join it. Its pending snapshot is registered before the
+optimistic cache write, so a cache notification containing our own in-flight
+save cannot open a remote-edit dialog. Only successful writes advance the
+baseline; newer typing remains dirty and is saved next. Deferred conflict
+dialogs recheck their snapshots before opening. Dirty baseline registrations
+refresh even when dirty stays true. Poll merging reads the current cache after
+network waits instead of restoring the cache from the start of the request.
+
+This is a frontend acknowledgement fix, not server-side revision protection.
+The queue is editor-owned; durable session-owned drafts, database revisions,
+stale-write rejection, and structured three-way merging remain next phases.
+Task/list/image paths are not migrated yet. Table structural merges must wait
+for stable row/cell identities; never infer identity from position alone.
+
+Regressions: `test/files/object_save_queue_test.dart` (coalescing, typing during
+PATCH, failure/retry), `test/files/table_autosave_echo_test.dart` (real table
+keeps focus and newer text during its own delayed save), plus existing conflict
+and table editing tests.

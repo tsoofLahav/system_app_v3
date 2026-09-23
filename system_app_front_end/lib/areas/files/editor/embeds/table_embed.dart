@@ -1,4 +1,5 @@
 import '../editor_save_registry.dart';
+import '../object_save_queue.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -57,7 +58,7 @@ class TableEmbedState extends State<TableEmbed>
   var _dirty = false;
   var _conflictOpen = false;
   Timer? _saveTimer;
-  Future<void>? _saveInFlight;
+  final _saveQueue = ObjectSaveQueue();
 
   @override
   String get nodeId => widget.blockId;
@@ -145,7 +146,6 @@ class TableEmbedState extends State<TableEmbed>
   }
 
   void _setDirty(bool value) {
-    if (_dirty == value) return;
     _dirty = value;
     UnsavedEmbedEdits.mark(
       widget.embed.id,
@@ -164,6 +164,7 @@ class TableEmbedState extends State<TableEmbed>
   }
 
   void _considerInbound(Map<String, dynamic> inbound) {
+    if (_saveQueue.isLocalEcho(jsonEncode(inbound))) return;
     if (UnsavedEmbedEdits.takeLocalOverInbound && _dirty) {
       UnsavedEmbedEdits.takeLocalOverInbound = false;
       _persistNow();
@@ -211,6 +212,16 @@ class TableEmbedState extends State<TableEmbed>
     if (_conflictOpen) return;
     void run() async {
       if (!mounted || _conflictOpen) return;
+      // The save may have completed while waiting for keyboard/frame idle.
+      if (_saveQueue.isLocalEcho(jsonEncode(inbound)) ||
+          decideRemoteEdit(
+                localDirty: _dirty,
+                inboundEqualsLocal: jsonEquals(inbound, _payload),
+                inboundEqualsBaseline: jsonEquals(inbound, _baseline),
+              ) !=
+              RemoteEditDecision.ask) {
+        return;
+      }
       _conflictOpen = true;
       final choice = await showEditConflictDialog(
         context: context,
@@ -236,9 +247,7 @@ class TableEmbedState extends State<TableEmbed>
       id: widget.blockId,
       rows: [
         for (final row in rows)
-          [
-            for (final cell in row) DocumentTableCell.fromJson(cell),
-          ],
+          [for (final cell in row) DocumentTableCell.fromJson(cell)],
       ],
     );
   }
@@ -262,29 +271,25 @@ class TableEmbedState extends State<TableEmbed>
     );
   }
 
-  Future<void> _flushPayload() async {
+  Future<void> _flushPayload() {
     _saveTimer?.cancel();
-    if (_saveInFlight != null) await _saveInFlight;
-    if (!_dirty) return;
-    final captured = TableObjectPayload.normalize(_payload);
-    final pending = widget.state.updateObjectPayload(widget.embed.id, captured);
-    _saveInFlight = pending;
-    try {
-      await pending;
-      _baseline = captured;
-      _setDirty(jsonEncode(_payload) != jsonEncode(captured));
-    } finally {
-      if (identical(_saveInFlight, pending)) _saveInFlight = null;
-    }
-    if (mounted && _dirty) await _flushPayload();
+    return _saveQueue.flush(
+      needsSave: () => mounted && _dirty,
+      capture: () => jsonEncode(TableObjectPayload.normalize(_payload)),
+      write: (snapshot) => widget.state.updateObjectPayload(
+        widget.embed.id,
+        Map<String, dynamic>.from(jsonDecode(snapshot) as Map),
+      ),
+      acknowledge: (snapshot) {
+        _baseline = Map<String, dynamic>.from(jsonDecode(snapshot) as Map);
+        if (mounted) _setDirty(jsonEncode(_payload) != snapshot);
+      },
+    );
   }
 
   void _onRowsChanged(TableNode node) {
     final rows = [
-      for (final row in node.rows)
-        [
-          for (final cell in row) cell.toJson(),
-        ],
+      for (final row in node.rows) [for (final cell in row) cell.toJson()],
     ];
     final next = Map<String, dynamic>.from(_payload)..['rows'] = rows;
     if (_chartOn) {
