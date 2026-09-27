@@ -89,6 +89,7 @@ File and task mutations used by the actions live next to their HTTP routes: [`ar
 
 ## Rules
 
+- Complimentary tasks have one membership, in the automation's configured view and section. Saving a placement moves the existing task without resetting its state; list-time reconciliation also removes stale memberships left in previous views.
 - Disabled automations must not run automatically; manual run stays allowed.
 - Schedules are stored as strings and resolved in **Asia/Jerusalem** — never treat the DSL clock as UTC. `{date}` / weekday on a run and pending-task activation use the same Israel day.
 - `plan_tick` compares naive UTC. Postgres may return `next_run_at` timezone-aware; strip that before comparing, or the cron dies. The same strip (`as_utc_naive`) applies to `window_opened_at` / `window_closes_at` — listing automations calls `window_is_open`, so a mixed-aware compare 500s the whole list.

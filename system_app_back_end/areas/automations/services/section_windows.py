@@ -340,6 +340,13 @@ def complimentary_task(automation_id: int, role: str) -> Task | None:
 
 
 def _place_task_in_section(task: Task, view: View, section: dict) -> None:
+    # Complimentary tasks belong only to their automation's configured view.
+    # Reconcile old memberships here so both saves and list-time repair heal
+    # tasks left in multiple views by earlier versions.
+    ViewTaskMembership.query.filter(
+        ViewTaskMembership.task_id == task.id,
+        ViewTaskMembership.view_id != view.id,
+    ).delete(synchronize_session="fetch")
     name = str(section.get("name") or "").strip()
     flag = section.get("flag")
     existing = ViewTaskMembership.query.filter_by(
