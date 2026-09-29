@@ -4,7 +4,7 @@
   <p>Flutter · Dart · Python · Flask · PostgreSQL · OpenAI</p>
   <p>Documents · Connected knowledge · Tasks · AI · Automations</p>
   <a href="https://www.youtube.com/watch?v=OBXt5zYx2eI"><img src="docs/media/main.png" alt="System App personal management workspace on desktop and iPhone" width="900" /></a>
-  <p><a href="https://www.youtube.com/watch?v=OBXt5zYx2eI">Watch on YouTube</a></p>
+  <p><a href="https://www.youtube.com/watch?v=OBXt5zYx2eI">Watch a Demo</a></p>
 </div>
 
 ## The idea
