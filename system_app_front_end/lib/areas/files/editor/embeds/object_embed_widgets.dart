@@ -12,6 +12,7 @@ import '../../../../core/app_state.dart';
 import '../../../objects/data/image_payload.dart';
 import '../../../objects/data/inner_task_mark.dart';
 import '../../../objects/data/inner_tasks.dart';
+import '../../../objects/data/inner_lists.dart';
 import '../../../objects/data/object_embed.dart';
 import '../../../objects/links/add_connection_dialog.dart';
 import '../../../ux/topic/topic_appearance.dart';
@@ -435,7 +436,11 @@ class InfoEmbedState extends State<InfoEmbed>
     };
     _seedFromEmbed(widget.embed);
     _baselineKey = infoSnapshotFromEmbed(widget.embed);
-    EditorSaveRegistry.register(this, () => _save(flush: true));
+    EditorSaveRegistry.register(
+      this,
+      () => _save(flush: true),
+      objectId: widget.embed.id,
+    );
     widget.state.addListener(_onAppState);
   }
 
@@ -571,9 +576,18 @@ class InfoEmbedState extends State<InfoEmbed>
       case RemoteEditDecision.ignore:
         return;
       case RemoteEditDecision.takeRemote:
-        // Do not jump the caret while this field owns typing. Apply on blur
-        // (see _onKeyboardFocus) unless the user chose Take theirs.
-        if (_focus.hasFocus) return;
+        // A clean focused info can accept checkbox-only changes while keeping
+        // its caret. Other remote text still waits for blur.
+        final info = inbound.information ?? const <String, dynamic>{};
+        final nextText = composeInfoText(
+          info['title'] as String? ?? '',
+          info['body'] as String? ?? '',
+        );
+        final marksOnly =
+            nextText != _controller.text &&
+            setAllCombinedInnerTasks(nextText, done: false) ==
+                setAllCombinedInnerTasks(_controller.text, done: false);
+        if (_focus.hasFocus && !marksOnly) return;
         _applyRemote(inbound);
         return;
       case RemoteEditDecision.ask:
@@ -718,7 +732,10 @@ class InfoEmbedState extends State<InfoEmbed>
     final caret = _controller.selection.isValid
         ? _controller.selection.baseOffset
         : _controller.text.length;
-    final next = insertInnerTaskLineOnEnter(_controller.text, caret);
+    final next = _controller.selection.isCollapsed
+        ? (continueInnerList(_controller.text, caret) ??
+              insertInnerTaskLineOnEnter(_controller.text, caret))
+        : null;
     if (next != null) {
       _applyInnerEdit(next);
       return;
@@ -744,7 +761,11 @@ class InfoEmbedState extends State<InfoEmbed>
             sel.isValid ? sel.baseOffset : _controller.text.length,
           );
     _applyInnerEdit(next);
-    if (!_focus.hasFocus) _focus.requestFocus();
+    if (!_focus.hasFocus) {
+      runWhenKeyboardIdle(() {
+        if (mounted) _focus.requestFocus();
+      });
+    }
   }
 
   bool _consumeInnerTap(int offset) {
@@ -757,6 +778,16 @@ class InfoEmbedState extends State<InfoEmbed>
     );
     _scheduleSave();
     _syncOuterFromInner();
+    unawaited(
+      _save()
+          .then((_) {
+            if (mounted) widget.state.notifyInfoChecklistChanged();
+          })
+          .catchError((Object error) {
+            widget.state.error = error.toString();
+          }),
+    );
+    widget.state.notifyInfoChecklistChanged();
     return true;
   }
 
@@ -768,10 +799,15 @@ class InfoEmbedState extends State<InfoEmbed>
     if (!_controller.selection.isValid || !_controller.selection.isCollapsed) {
       return KeyEventResult.ignored;
     }
-    final next = backspaceInnerTaskPrefix(
-      _controller.text,
-      _controller.selection.baseOffset,
-    );
+    final next =
+        backspaceInnerList(
+          _controller.text,
+          _controller.selection.baseOffset,
+        ) ??
+        backspaceInnerTaskPrefix(
+          _controller.text,
+          _controller.selection.baseOffset,
+        );
     if (next == null) return KeyEventResult.ignored;
     _applyInnerEdit(next);
     return KeyEventResult.handled;
@@ -789,6 +825,26 @@ class InfoEmbedState extends State<InfoEmbed>
       strings: widget.state.strings,
       includeDisconnectInfo: descriptionRangeCoveringMark(ranges) != null,
       onAction: (action) async {
+        if (action == 'info:add_list') {
+          final mark = BlockTextFocusRegistry.resolveMark();
+          final range = mark.spans
+              .where((r) => identical(r.controller, _controller))
+              .firstOrNull;
+          final selection = range == null
+              ? _controller.selection
+              : TextSelection(baseOffset: range.start, extentOffset: range.end);
+          _applyInnerEdit(
+            insertInnerList(
+              _controller.text,
+              selection.isValid ? selection.start : _controller.text.length,
+              selection.isValid ? selection.end : _controller.text.length,
+            ),
+          );
+          runWhenKeyboardIdle(() {
+            if (mounted) _focus.requestFocus();
+          });
+          return;
+        }
         if (action == 'info:add_checklist') {
           insertInnerChecklist();
           return;

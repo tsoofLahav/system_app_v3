@@ -31,6 +31,7 @@ Future<void> showInfoDescriptionModal({
           clipBehavior: Clip.none,
           children: [
             InfoDescriptionBubble(
+              toggleErrorText: strings['checklistSaveFailed'],
               title: title,
               body: body,
               maxHeight: 360,

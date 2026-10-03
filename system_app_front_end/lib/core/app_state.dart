@@ -14,6 +14,7 @@ import './document_text_size.dart';
 import './l10n/app_language.dart';
 import '../areas/files/rich_text/rtl/text_direction_policy.dart';
 import '../areas/files/editor/editor_key_handoff.dart';
+import '../areas/files/editor/editor_save_registry.dart';
 import './l10n/app_strings.dart';
 import '../areas/automations/automation.dart';
 import '../areas/automations/push_registration.dart';
@@ -258,7 +259,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   bool isTaskWritePending(int taskId) =>
-      _objectWrites.containsKey('task:$taskId');
+      _objectWrites.containsKey('task:$taskId') ||
+      _pendingTaskMarks.contains(taskId);
 
   Future<void> _flushEditors() async {
     await DocumentEditorRegistry.flushAll();
@@ -2591,29 +2593,24 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// Refresh embeds for [fileId], keeping any still-dirty local payloads so a
   /// poll cannot wipe in-progress object edits. Clean embeds take inbound.
   Future<void> _loadEmbedsForFileMergingDirty(int fileId) async {
+    final infoVersions = Map<int, int>.of(_infoCacheVersions);
+    final taskVersions = Map<int, int>.of(_taskCacheVersions);
     final inbound = await _objects.listForFile(fileId);
     try {
       descriptionLinksByFileId[fileId] = await _objects
           .listFileDescriptionLinks(fileId);
     } catch (_) {}
-    // A save may update the cache while the poll is awaiting its response.
-    final current = embedsByFileId[fileId];
-    if (current == null ||
-        !current.any((embed) => UnsavedEmbedEdits.isDirty(embed.id))) {
-      embedsByFileId[fileId] = inbound;
-      _ingestTasks([for (final embed in inbound) ...?embed.tasks]);
-      return;
-    }
-    final localById = {for (final embed in current) embed.id: embed};
-    final merged = <ObjectEmbed>[
-      for (final embed in inbound)
-        if (UnsavedEmbedEdits.isDirty(embed.id) && localById[embed.id] != null)
-          localById[embed.id]!
-        else
-          embed,
-    ];
+    // Consult the current cache after awaits: a checkbox or editor save may
+    // have started while the poll was reading the previous server state.
+    final merged = _mergePendingEmbedMarks(
+      fileId,
+      inbound,
+      infoVersions,
+      taskVersions,
+    );
     embedsByFileId[fileId] = merged;
     _ingestTasks([for (final embed in merged) ...?embed.tasks]);
+    _restorePendingDescriptionBodies(infoVersions: infoVersions);
   }
 
   Future<bool> _hydrateLaunchSnapshot() async {
@@ -2791,15 +2788,24 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     int fileId, {
     bool notify = true,
   }) async {
-    final embeds = await _objects.listForFile(fileId);
-    embedsByFileId[fileId] = embeds;
-    _ingestTasks([for (final embed in embeds) ...?embed.tasks]);
+    final infoVersions = Map<int, int>.of(_infoCacheVersions);
+    final taskVersions = Map<int, int>.of(_taskCacheVersions);
+    final inbound = await _objects.listForFile(fileId);
     try {
       descriptionLinksByFileId[fileId] = await _objects
           .listFileDescriptionLinks(fileId);
     } catch (_) {
       // Older backends without description-links still load embeds.
     }
+    final embeds = _mergePendingEmbedMarks(
+      fileId,
+      inbound,
+      infoVersions,
+      taskVersions,
+    );
+    embedsByFileId[fileId] = embeds;
+    _ingestTasks([for (final embed in embeds) ...?embed.tasks]);
+    _restorePendingDescriptionBodies(infoVersions: infoVersions);
     if (notify) notifyListeners();
     return embeds;
   }
@@ -3284,23 +3290,24 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     List<Map<String, dynamic>>? titleSpans,
     bool notify = false,
   }) async {
+    if (embed.informationId == null) return;
+    // Patch cache *before* the network round-trip so a remount during drag/drop
+    // never re-seeds from stale empty title/body.
+    patchInfoObjectCache(
+      embed,
+      title: title,
+      body: body,
+      spans: spans,
+      titleSpans: titleSpans,
+    );
+    _patchDescriptionPeerBody(embed.id, body);
+    applyOuterTaskMarksFromInfo(infoObjectId: embed.id, body: body);
     return _serializeObjectWrite('info:${embed.id}', () async {
-      if (embed.informationId == null) return;
-      // Patch cache *before* the network round-trip so a remount during drag/drop
-      // never re-seeds from stale empty title/body.
-      patchInfoObjectCache(
-        embed,
-        title: title,
-        body: body,
-        spans: spans,
-        titleSpans: titleSpans,
-      );
       await _api.patch('/information/${embed.informationId}', {
         'title': title,
         'body': body,
         'metadata': {'spans': spans ?? [], 'title_spans': titleSpans ?? []},
       });
-      applyOuterTaskMarksFromInfo(infoObjectId: embed.id, body: body);
       if (notify) {
         await loadEmbedsForFile(embed.fileId);
       }
@@ -3316,11 +3323,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     List<Map<String, dynamic>>? spans,
     List<Map<String, dynamic>>? titleSpans,
   }) {
-    final list = embedsByFileId[embed.fileId];
-    if (list == null) return;
+    _infoCacheVersions.update(
+      embed.id,
+      (value) => value + 1,
+      ifAbsent: () => 1,
+    );
+    final list = embedsByFileId[embed.fileId] ?? const <ObjectEmbed>[];
     final i = list.indexWhere((e) => e.id == embed.id);
-    if (i < 0) return;
-    final current = list[i];
+    final current = i < 0 ? (_descriptionInfos[embed.id] ?? embed) : list[i];
     final prevInfo = current.information ?? const <String, dynamic>{};
     final prevMeta = prevInfo['metadata'];
     final meta = prevMeta is Map
@@ -3329,6 +3339,17 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     meta['spans'] = spans ?? [];
     if (titleSpans != null) {
       meta['title_spans'] = titleSpans;
+    }
+    if (i < 0) {
+      _descriptionInfos[embed.id] = current.copyWith(
+        information: {
+          ...prevInfo,
+          'title': title,
+          'body': body,
+          'metadata': meta,
+        },
+      );
+      return;
     }
     embedsByFileId[embed.fileId] = [
       for (var j = 0; j < list.length; j++)
@@ -3345,13 +3366,62 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     ];
   }
 
+  final Map<int, ObjectEmbed> _descriptionInfos = {};
+  final Map<int, int> _infoCacheVersions = {};
+  final Map<int, int> _taskCacheVersions = {};
+  final Set<int> _pendingInfoMarks = {};
+  final Set<int> _pendingTaskMarks = {};
+
+  bool _keepLocalEmbed(ObjectEmbed embed) =>
+      UnsavedEmbedEdits.isDirty(embed.id) ||
+      _objectWrites.containsKey('info:${embed.id}') ||
+      _pendingInfoMarks.contains(embed.id);
+
+  List<ObjectEmbed> _mergePendingEmbedMarks(
+    int fileId,
+    List<ObjectEmbed> incoming,
+    Map<int, int> infoVersions,
+    Map<int, int> taskVersions,
+  ) {
+    final local = {
+      for (final embed in embedsByFileId[fileId] ?? <ObjectEmbed>[])
+        embed.id: embed,
+    };
+    return [
+      for (final embed in incoming)
+        if (local[embed.id] != null &&
+            (_keepLocalEmbed(local[embed.id]!) ||
+                _infoCacheVersions[embed.id] != infoVersions[embed.id]))
+          local[embed.id]!
+        else if (embed.tasks != null)
+          embed.copyWith(
+            tasks: [
+              for (final task in embed.tasks!)
+                (_pendingTaskMarks.contains(task.id) ||
+                        _taskCacheVersions[task.id] != taskVersions[task.id])
+                    ? (tasksById[task.id] ?? task)
+                    : task,
+            ],
+          )
+        else
+          embed,
+    ];
+  }
+
+  /// Pointer actions may refresh task marks without rebuilding the editor on keys.
+  void notifyInfoChecklistChanged() {
+    runWhenKeyboardIdle(() {
+      if (!_retired) notifyListeners();
+    });
+  }
+
   ObjectEmbed? _embedById(int objectId) {
     for (final list in embedsByFileId.values) {
       for (final embed in list) {
         if (embed.id == objectId) return embed;
       }
     }
-    return null;
+    return _descriptionInfos[objectId];
   }
 
   int? _infoObjectIdFromLink(Map<String, dynamic> link) {
@@ -3376,9 +3446,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }) {
     final verdict = innerTasksUnanimous(body);
     if (verdict == null) return;
-    for (final task in tasksById.values) {
+    for (final task in tasksById.values.toList()) {
       if (!_taskDescribesInfo(task, infoObjectId)) continue;
-      if (!task.canToggleMark) continue;
+      if (!task.isActive && !task.isDone) continue;
       if (verdict && !task.isDone) {
         _patchCachedTask(task.id, status: 'done');
       } else if (!verdict && task.isDone) {
@@ -3387,15 +3457,24 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// Outer done/active writes every inner checkbox on connected infos.
+  /// Mirror outer marks locally; the task endpoint persists the inner marks.
   Future<void> applyInnerTasksFromOuter(Task task) async {
     if (!task.isActive && !task.isDone) return;
-    final updates = <Future<void>>[];
     for (final link in task.descriptionLinks) {
       final objectId = _infoObjectIdFromLink(link);
       if (objectId == null) continue;
       final embed = _embedById(objectId);
-      if (embed == null || embed.type != 'info') continue;
+      if (embed == null) {
+        final peer = link['peer'];
+        if (peer is Map && peer['body'] is String) {
+          _patchDescriptionPeerBody(
+            objectId,
+            setAllInnerTasks(peer['body'] as String, done: task.isDone),
+          );
+        }
+        continue;
+      }
+      if (embed.type != 'info') continue;
       if (UnsavedEmbedEdits.isDirty(embed.id)) continue;
       final info = embed.information ?? const <String, dynamic>{};
       final title = info['title'] as String? ?? '';
@@ -3419,19 +3498,15 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
                 if (s is Map) Map<String, dynamic>.from(s),
             ]
           : <Map<String, dynamic>>[];
-      // Persist (not just cache-patch) so the reload below picks up the new
-      // body instead of clobbering the toggle with the still-stale server copy.
-      updates.add(
-        updateInfoObject(
-          embed,
-          title: title,
-          body: next,
-          spans: remappedSpans,
-          titleSpans: titleSpans,
-        ),
+      patchInfoObjectCache(
+        embed,
+        title: title,
+        body: next,
+        spans: remappedSpans,
+        titleSpans: titleSpans,
       );
+      _patchDescriptionPeerBody(objectId, next);
     }
-    if (updates.isNotEmpty) await Future.wait(updates);
   }
 
   /// Toggle one inner checkbox on a description-linked info (bubble / modal).
@@ -3440,49 +3515,117 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     required String body,
     required int markOffset,
   }) async {
-    final next = toggleInnerTaskAt(body, markOffset);
-    if (next == null || next == body) return null;
-    final embed = _embedById(infoObjectId);
-    if (embed == null || embed.type != 'info' || embed.informationId == null) {
-      return null;
-    }
-    final info = embed.information ?? const <String, dynamic>{};
-    final title = info['title'] as String? ?? '';
-    final meta = info['metadata'];
-    final spans = meta is Map && meta['spans'] is List
-        ? [
-            for (final s in meta['spans'])
-              if (s is Map) Map<String, dynamic>.from(s),
-          ]
-        : <Map<String, dynamic>>[];
-    final titleSpans = meta is Map && meta['title_spans'] is List
-        ? [
-            for (final s in meta['title_spans'])
-              if (s is Map) Map<String, dynamic>.from(s),
-          ]
-        : <Map<String, dynamic>>[];
-    // A toggled legacy `- [ ] ` line shortens to `☐ ` — remap so connected
-    // spans after it don't drift onto the wrong text.
-    final remappedSpans = remapSpansForTextEdit(spans, body, next);
-    await updateInfoObject(
-      embed,
-      title: title,
-      body: next,
-      spans: remappedSpans,
-      titleSpans: titleSpans,
+    final requested = parseInnerTaskLines(body);
+    final index = requested.indexWhere(
+      (item) => markOffset >= item.markStart && markOffset < item.markEnd,
     );
-    _patchDescriptionPeerBody(infoObjectId, next);
-    if (!UnsavedEmbedEdits.isDirty(embed.id)) {
-      patchInfoObjectCache(
-        embed,
-        title: title,
-        body: next,
-        spans: remappedSpans,
-        titleSpans: titleSpans,
-      );
+    if (index < 0) return null;
+    // Flush an open info's draft before reading its body. Never overwrite typing
+    // with the older text captured when the hover bubble opened.
+    await EditorSaveRegistry.flushObject(infoObjectId);
+    String? result;
+    await _serializeObjectWrite(
+      'checklist-marks',
+      () => _serializeObjectWrite('info:$infoObjectId', () async {
+        final embed =
+            embedsByFileId.values
+                .expand((list) => list)
+                .where((e) => e.id == infoObjectId)
+                .firstOrNull ??
+            await _objects.getObject(infoObjectId);
+        if (embed.type != 'info' || embed.informationId == null) return;
+        if (UnsavedEmbedEdits.isDirty(infoObjectId)) return;
+        final info = embed.information ?? const <String, dynamic>{};
+        final currentBody = info['body'] as String? ?? '';
+        final items = parseInnerTaskLines(currentBody);
+        // Offsets can change after legacy normalization. Match by position and
+        // text, and refuse a stale preview if its checklist structure changed.
+        if (items.length != requested.length ||
+            !List.generate(
+              items.length,
+              (i) => items[i].title == requested[i].title,
+            ).every((same) => same)) {
+          return;
+        }
+        final item = items[index];
+        final done = !requested[index].done;
+        final next = item.done == done
+            ? currentBody
+            : toggleInnerTaskAt(currentBody, item.markStart)!;
+        final title = info['title'] as String? ?? '';
+        final rawMeta = info['metadata'];
+        final metadata = rawMeta is Map
+            ? Map<String, dynamic>.from(rawMeta)
+            : <String, dynamic>{};
+        final spans = <Map<String, dynamic>>[
+          for (final span in (metadata['spans'] as List? ?? const []))
+            if (span is Map) Map<String, dynamic>.from(span),
+        ];
+        final remapped = remapSpansForTextEdit(spans, currentBody, next);
+        final titleSpans = <Map<String, dynamic>>[
+          for (final span in (metadata['title_spans'] as List? ?? const []))
+            if (span is Map) Map<String, dynamic>.from(span),
+        ];
+        final outerStatuses = {
+          for (final task in tasksById.values)
+            if (_taskDescribesInfo(task, infoObjectId)) task.id: task.status,
+        };
+        _pendingInfoMarks.add(infoObjectId);
+        _pendingTaskMarks.addAll(outerStatuses.keys);
+        patchInfoObjectCache(
+          embed,
+          title: title,
+          body: next,
+          spans: remapped,
+          titleSpans: titleSpans,
+        );
+        _patchDescriptionPeerBody(infoObjectId, next);
+        applyOuterTaskMarksFromInfo(infoObjectId: infoObjectId, body: next);
+        notifyInfoChecklistChanged();
+        try {
+          await _api.patch('/information/${embed.informationId}', {
+            'body': next,
+            'metadata': {...metadata, 'spans': remapped},
+          });
+          result = next;
+          _scheduleLaunchSnapshotWrite();
+        } catch (e) {
+          if (!UnsavedEmbedEdits.isDirty(infoObjectId)) {
+            patchInfoObjectCache(
+              embed,
+              title: title,
+              body: currentBody,
+              spans: spans,
+              titleSpans: titleSpans,
+            );
+            _patchDescriptionPeerBody(infoObjectId, currentBody);
+            for (final entry in outerStatuses.entries) {
+              _patchCachedTask(entry.key, status: entry.value);
+            }
+          }
+          error = e.toString();
+          notifyInfoChecklistChanged();
+          rethrow;
+        } finally {
+          _pendingInfoMarks.remove(infoObjectId);
+          _pendingTaskMarks.removeAll(outerStatuses.keys);
+        }
+      }),
+    );
+    return result;
+  }
+
+  void _restorePendingDescriptionBodies({
+    Map<int, int> infoVersions = const {},
+  }) {
+    for (final id in {
+      ..._pendingInfoMarks,
+      for (final entry in _infoCacheVersions.entries)
+        if (entry.value != infoVersions[entry.key]) entry.key,
+    }) {
+      final body = _embedById(id)?.information?['body'];
+      if (body is String) _patchDescriptionPeerBody(id, body);
     }
-    notifyListeners();
-    return next;
   }
 
   void _patchDescriptionPeerBody(int infoObjectId, String body) {
@@ -3533,15 +3676,80 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     await addRelatedObjectLink(embed, targetObjectId: targetId);
   }
 
-  Future<void> toggleTaskStatus(Task task, {bool notify = true}) async {
-    if (!task.canToggleMark) return;
-    final data =
-        await _api.post('/tasks/${task.id}/toggle', {}) as Map<String, dynamic>;
-    final next = Task.fromJson(data);
-    _patchCachedTask(task.id, status: next.status, dueDate: next.dueDate);
-    await applyInnerTasksFromOuter(next);
-    await refreshSectionWindows(notifyIfChanged: true);
-    await _reloadEmbedsForOpenFiles(notify: notify);
+  Future<void> toggleTaskStatus(Task task, {bool notify = true}) {
+    if (!task.canToggleMark) return Future<void>.value();
+    final status = task.isDone ? 'active' : 'done';
+    return _writeOuterTaskMark(task, status, () async {
+      final data =
+          await _api.patch('/tasks/${task.id}', {'status': status})
+              as Map<String, dynamic>;
+      final next = Task.fromJson(data);
+      _patchCachedTask(task.id, status: next.status, dueDate: next.dueDate);
+      await applyInnerTasksFromOuter(next);
+    }, notify: notify);
+  }
+
+  Future<void> _writeOuterTaskMark(
+    Task task,
+    String status,
+    Future<void> Function() write, {
+    required bool notify,
+  }) {
+    return _serializeObjectWrite(
+      task.descriptionLinks.isEmpty ? 'task:${task.id}' : 'checklist-marks',
+      () async {
+        for (final link in task.descriptionLinks) {
+          final id = _infoObjectIdFromLink(link);
+          if (id != null) await EditorSaveRegistry.flushObject(id);
+        }
+        final before = tasksById[task.id] ?? task;
+        final infoSnapshots = <int, ObjectEmbed>{
+          for (final link in before.descriptionLinks)
+            if (_infoObjectIdFromLink(link) case final int id)
+              if (_embedById(id) case final ObjectEmbed embed) id: embed,
+        };
+        _pendingTaskMarks.add(task.id);
+        _pendingInfoMarks.addAll(infoSnapshots.keys);
+        _patchCachedTask(task.id, status: status);
+        await applyInnerTasksFromOuter(before.copyWith(status: status));
+        notifyInfoChecklistChanged();
+        try {
+          await write();
+        } catch (_) {
+          _patchCachedTask(
+            task.id,
+            status: before.status,
+            descriptionLinks: before.descriptionLinks,
+          );
+          for (final embed in infoSnapshots.values) {
+            if (UnsavedEmbedEdits.isDirty(embed.id)) continue;
+            final info = embed.information!;
+            final list = embedsByFileId[embed.fileId];
+            if (list != null) {
+              embedsByFileId[embed.fileId] = [
+                for (final e in list) e.id == embed.id ? embed : e,
+              ];
+            }
+            _descriptionInfos[embed.id] = embed;
+            _patchDescriptionPeerBody(embed.id, info['body'] as String? ?? '');
+          }
+          for (final link in before.descriptionLinks) {
+            final id = _infoObjectIdFromLink(link);
+            final peer = link['peer'];
+            if (id != null && peer is Map && peer['body'] is String) {
+              _patchDescriptionPeerBody(id, peer['body'] as String);
+            }
+          }
+          notifyInfoChecklistChanged();
+          rethrow;
+        } finally {
+          _pendingTaskMarks.remove(task.id);
+          _pendingInfoMarks.removeAll(infoSnapshots.keys);
+        }
+        await refreshSectionWindows(notifyIfChanged: true);
+        await _reloadEmbedsForOpenFiles(notify: notify);
+      },
+    );
   }
 
   Future<void> setTasksPending(
@@ -3578,16 +3786,16 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }) async {
     final listId = task.taskListId;
     if (listId == null) return;
-    await _tasks.moveToListZone(
-      taskId: task.id,
-      targetTaskListId: listId,
-      insertIndexInZone: insertIndexInZone,
-      targetDone: targetDone,
-    );
-    await applyInnerTasksFromOuter(
-      task.copyWith(status: targetDone ? 'done' : 'active'),
-    );
-    await _reloadEmbedsForOpenFiles(notify: notify);
+    // Moving within the non-done zone must preserve inactive/pending/skipped.
+    final status = targetDone ? 'done' : (task.isDone ? 'active' : task.status);
+    await _writeOuterTaskMark(task, status, () async {
+      await _tasks.moveToListZone(
+        taskId: task.id,
+        targetTaskListId: listId,
+        insertIndexInZone: insertIndexInZone,
+        targetDone: targetDone,
+      );
+    }, notify: notify);
   }
 
   Future<void> updateTaskTitle(
@@ -3633,7 +3841,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   void _ingestTasks(Iterable<Task> tasks) {
     for (final task in tasks) {
-      _ingestTask(task);
+      if (!_pendingTaskMarks.contains(task.id)) _ingestTask(task);
     }
   }
 
@@ -3644,7 +3852,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   void _ingestMembershipTasks() {
     for (final membership in viewMemberships) {
       if (membership.task == null) continue;
-      _ingestTask(Task.fromJson(membership.task!));
+      final task = Task.fromJson(membership.task!);
+      if (!_pendingTaskMarks.contains(task.id)) _ingestTask(task);
     }
   }
 
@@ -3670,6 +3879,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     int? taskListId,
     String? taskListTitle,
   }) {
+    _taskCacheVersions.update(taskId, (value) => value + 1, ifAbsent: () => 1);
     final prev = tasksById[taskId];
     final next =
         (prev ??

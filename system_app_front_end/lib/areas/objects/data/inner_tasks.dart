@@ -230,7 +230,7 @@ String _lineToInnerTask(String raw) {
   final indent = RegExp(r'^(\s*)').firstMatch(raw)?.group(1) ?? '';
   var content = raw.substring(indent.length);
   if (content.trim().isEmpty) return raw;
-  final bare = RegExp(r'^[-*]\s+(.*)$').firstMatch(content);
+  final bare = RegExp(r'^[-*•]\s+(.*)$').firstMatch(content);
   if (bare != null) content = bare.group(1) ?? '';
   return '$indent☐${content.isEmpty ? '' : ' $content'}';
 }

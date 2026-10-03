@@ -2085,6 +2085,7 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
               child: InfoDescriptionBubble(
                 title: title,
                 body: body,
+                toggleErrorText: appState?.strings['checklistSaveFailed'],
                 onToggleInner: peerId == null || appState == null
                     ? null
                     : (currentBody, markOffset) =>

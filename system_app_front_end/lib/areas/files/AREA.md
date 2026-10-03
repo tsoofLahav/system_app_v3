@@ -285,7 +285,7 @@ Embed widgets live here and call into objects through a **thin overlay** (models
 | Embed | Widget | Flow role |
 |-------|--------|-----------|
 | Task list | [`embeds/inline_task_list.dart`](editor/embeds/inline_task_list.dart) | Thin host: document segments + Move Mode; rows via objects [`TaskListSurface`](../objects/tasks/task_list_surface.dart) |
-| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); body lines `☐` / `☑` are inner tasks (round checklist mark, not the square task mark; Enter continues the list; **Add checklist** / ⌘T inserts one or converts a multi-line mark); tag chips; **field** right-click → formatting + **Connect info…** / **Remove connection** / **Add checklist**; **chrome** (block caret) → **Design…** / Add tag / Add connection (related) |
+| Info | [`embeds/object_embed_widgets.dart`](editor/embeds/object_embed_widgets.dart) | One text field (first line = title); body lines `☐` / `☑` are inner tasks (round checklist mark, not the square task mark; Enter continues the list; **Add checklist** / ⌘T inserts one or converts a multi-line mark); **Add list** inserts ordinary `•` bullets or converts marked body lines; Enter continues/splits bullets and exits empty ones; tag chips; **field** right-click → formatting + **Connect info…** / **Remove connection** / **Add checklist**; **chrome** (block caret) → **Design…** / Add tag / Add connection (related) |
 | Image | same | Atomic unit; caption field; chrome **Design…** + size |
 | Table (+ chart) | [`embeds/table_embed.dart`](editor/embeds/table_embed.dart) | `RichTableEditor` + optional chart; behaviour in **[Tables & charts](#tables--charts)** |
 | Host | [`embed_block_host.dart`](editor/embed_block_host.dart) | Move Mode; optional atomic `#embed` segment |
@@ -326,7 +326,7 @@ Objects are atomic SE blocks. ↑/↓ move onto the block; **Shift+Enter** (or c
 | Type | In the document |
 |------|-----------------|
 | Task list | Active then Done; Enter adds in the same zone; **Escape** leaves the object; **Shift+Enter** / **⌘Enter** / Ctrl+Enter inserts a newline in the title; **insert lands on the list header** (then tasks); right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title stays blank |
-| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); **Escape** leaves to SE; **Enter** inserts a newline (on an inner-task line it continues the checklist); **Shift+Enter** / **⌘Enter** / Ctrl+Enter adds lines; field right-click → text + Connect info / Remove connection; chrome → **Design…** / Add tag / Add connection (⌘L in the field is Connect info; otherwise ⌘L inserts a list) |
+| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); **Escape** leaves to SE; **Enter** inserts a newline (on an inner-task line it continues the checklist); **Shift+Enter** / **⌘Enter** / Ctrl+Enter adds lines; field right-click → text + Connect info / Remove connection + Add checklist / Add list; chrome → **Design…** / Add tag / Add connection (⌘L in the field is Connect info; otherwise ⌘L inserts a list) |
 | Table / chart | See **[Tables & charts](#tables--charts)** |
 | Image | Display + caption; chrome **Design…** (card / glass / lines / fill / plain, plus greyscale); **Merge with next** when the following Super Editor node is also an image (folds it into `payload.images` and cascade-deletes the second object — Super Editor cannot put two image blocks on one line). Right-click **Make smaller / larger** (steps of 10% of the pane) or **Tiny / Quarter / Half / Full size** (size is the row as a whole). Width is `payload.width` 0–1 of the file pane; aspect ratio stays (`BoxFit.contain`) |
 
@@ -522,3 +522,7 @@ Regressions: `test/files/object_save_queue_test.dart` (coalescing, typing during
 PATCH, failure/retry), `test/files/table_autosave_echo_test.dart` (real table
 keeps focus and newer text during its own delayed save), plus existing conflict
 and table editing tests.
+
+### Info checklist and bullet editing — 2026-10-03
+
+Info bodies support ordinary `•` bullets alongside checklists and prose; both stay in the single text field. Bullet helpers live in objects `data/inner_lists.dart`. Field-menu conversion resolves the frozen document mark, leaving the title intact. Checkbox pointer taps flush immediately through the existing info save queue; typing still uses its 400 ms debounce. A clean focused info accepts checkbox-only inbound changes after keyboard idle with its selection preserved; other remote text waits for blur. `EditorSaveRegistry` can flush a specific info object before a linked task/preview changes its checkboxes, without flushing unrelated task surfaces. Hover previews keep prose read-only and apply only checkbox intents. See the objects area for cache and save ordering.

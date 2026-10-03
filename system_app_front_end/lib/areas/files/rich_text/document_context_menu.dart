@@ -93,6 +93,10 @@ class DocumentContextMenu {
         value: 'info:add_checklist',
         label: strings['addChecklist'] ?? 'Add checklist',
       ),
+      AppContextMenuItem(
+        value: 'info:add_list',
+        label: strings['addInnerList'],
+      ),
     ],
     const AppContextMenuDivider(),
     AppContextMenuItem(value: 'text:cut', label: strings['cut'] ?? 'Cut'),

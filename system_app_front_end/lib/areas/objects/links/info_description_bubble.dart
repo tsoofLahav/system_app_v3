@@ -20,8 +20,10 @@ class InfoDescriptionBubble extends StatefulWidget {
     this.maxHeight = 240,
     this.maxWidth = 320,
     this.onToggleInner,
+    this.toggleErrorText,
   });
 
+  final String? toggleErrorText;
   final String title;
   final String body;
   final double maxHeight;
@@ -40,17 +42,23 @@ class _InfoDescriptionBubbleState extends State<InfoDescriptionBubble> {
   static const _horizontalPadding = 24.0;
 
   late String _body;
+  late String _confirmedBody;
+  int _pendingToggles = 0;
+  Future<void> _toggleQueue = Future<void>.value();
+  bool _toggleFailed = false;
 
   @override
   void initState() {
     super.initState();
-    _body = widget.body;
+    _body = _confirmedBody = widget.body;
   }
 
   @override
   void didUpdateWidget(InfoDescriptionBubble oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.body != widget.body) _body = widget.body;
+    if (_pendingToggles == 0 && oldWidget.body != widget.body) {
+      _body = _confirmedBody = widget.body;
+    }
   }
 
   double _bubbleWidth(BuildContext context) {
@@ -78,23 +86,51 @@ class _InfoDescriptionBubbleState extends State<InfoDescriptionBubble> {
     final checklistWidth = checklist.isEmpty
         ? 0.0
         : checklist
-            .map((item) => measure(item.title, bodyStyle) + 28)
-            .fold<double>(0, math.max);
+              .map((item) => measure(item.title, bodyStyle) + 28)
+              .fold<double>(0, math.max);
 
     final contentWidth = math.max(
       measure(widget.title, titleStyle),
       math.max(measure(_body, bodyStyle, wrap: true), checklistWidth),
     );
     if (contentWidth <= 0) return _minWidth;
-    return (contentWidth + _horizontalPadding).clamp(_minWidth, widget.maxWidth);
+    return (contentWidth + _horizontalPadding).clamp(
+      _minWidth,
+      widget.maxWidth,
+    );
   }
 
-  Future<void> _toggle(InnerTaskLine item) async {
+  void _toggle(InnerTaskLine item) {
     final onToggle = widget.onToggleInner;
     if (onToggle == null) return;
-    final next = await onToggle(_body, item.markStart);
-    if (!mounted || next == null) return;
-    setState(() => _body = next);
+    final before = _body;
+    final next = toggleInnerTaskAt(before, item.markStart);
+    if (next == null) return;
+    setState(() {
+      _body = next;
+      _pendingToggles++;
+      _toggleFailed = false;
+    });
+    // Keep accepting clicks immediately, but save their intent in order.
+    _toggleQueue = _toggleQueue.then((_) async {
+      try {
+        final saved = await onToggle(before, item.markStart);
+        if (saved == null) {
+          _toggleFailed = true;
+        } else {
+          _confirmedBody = saved;
+        }
+      } catch (_) {
+        _toggleFailed = true;
+      } finally {
+        _pendingToggles--;
+        if (mounted) {
+          setState(() {
+            if (_pendingToggles == 0) _body = _confirmedBody;
+          });
+        }
+      }
+    });
   }
 
   List<Widget> _bodyChildren(TextStyle bodyStyle) {
@@ -107,7 +143,9 @@ class _InfoDescriptionBubbleState extends State<InfoDescriptionBubble> {
     var cursor = 0;
     for (final item in items) {
       if (item.start > cursor) {
-        final prose = _body.substring(cursor, item.start).replaceAll(RegExp(r'\n+$'), '');
+        final prose = _body
+            .substring(cursor, item.start)
+            .replaceAll(RegExp(r'\n+$'), '');
         if (prose.trim().isNotEmpty) {
           children.add(Text(prose, style: bodyStyle));
           children.add(const SizedBox(height: 4));
@@ -135,13 +173,15 @@ class _InfoDescriptionBubbleState extends State<InfoDescriptionBubble> {
                           ? TextDecoration.lineThrough
                           : TextDecoration.none,
                       decorationColor: item.done
-                          ? (bodyStyle.color ?? AppColors.text)
-                              .withValues(alpha: 0.55)
+                          ? (bodyStyle.color ?? AppColors.text).withValues(
+                              alpha: 0.55,
+                            )
                           : null,
                       decorationThickness: item.done ? 1.15 : null,
                       color: item.done
-                          ? (bodyStyle.color ?? AppColors.text)
-                              .withValues(alpha: 0.55)
+                          ? (bodyStyle.color ?? AppColors.text).withValues(
+                              alpha: 0.55,
+                            )
                           : bodyStyle.color,
                     ),
                   ),
@@ -201,10 +241,13 @@ class _InfoDescriptionBubbleState extends State<InfoDescriptionBubble> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (widget.title.isNotEmpty) Text(widget.title, style: titleStyle),
+                if (widget.title.isNotEmpty)
+                  Text(widget.title, style: titleStyle),
                 if (widget.title.isNotEmpty && _body.isNotEmpty)
                   const SizedBox(height: 6),
                 if (_body.isNotEmpty) ..._bodyChildren(bodyStyle),
+                if (_toggleFailed && widget.toggleErrorText != null)
+                  Text(widget.toggleErrorText!, style: bodyStyle),
               ],
             ),
           ),
