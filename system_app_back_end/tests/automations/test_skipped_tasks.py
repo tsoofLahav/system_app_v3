@@ -51,8 +51,8 @@ def test_report_records_only_still_active_tasks_without_files(database):
     initial_files = File.query.count()
     result = windows.apply_leftover_clear(window, disposition='report')
     assert result['skipped'] == 1
-    assert db.session.get(Task, 1).status == 'skipped'
-    assert db.session.get(Task, 2).status == 'done'
+    assert db.session.get(Task, 1).status == 'active'
+    assert db.session.get(Task, 2).status == 'active'
     row = SkippedTask.query.one()
     assert (row.task_id, row.topic_id, row.view_name, row.section_name) == (1, 1, 'Weekly', 'Evening')
     assert row.window_opened_at == now
@@ -66,12 +66,12 @@ def test_report_records_only_still_active_tasks_without_files(database):
     assert SkippedTask.query.count() == 2
 
 
-def test_done_is_not_a_skip_and_no_recycling_at_close(database):
+def test_done_is_not_a_skip_and_recycles_at_close(database):
     window, now = setup_window()
     windows.close_window_or_pending(window, now+timedelta(hours=2))
     result = windows.apply_leftover_clear(window, disposition='dismiss')
     assert result['marked_done'] == 2
-    assert all(t.status == 'done' for t in Task.query.all())
+    assert all(t.status == 'active' for t in Task.query.all())
     assert SkippedTask.query.count() == 0
 
 
@@ -150,3 +150,38 @@ def test_late_complimentary_completion_does_not_overwrite_skip(database):
     db.session.flush()
     windows._mark_complimentary(db.session.get(Automation, 1), 'review', done=True)
     assert task.status == 'skipped'
+
+
+def test_clean_close_resets_done_and_skipped_without_resetting_at_start(database):
+    window, now = setup_window()
+    first, second = db.session.get(Task, 1), db.session.get(Task, 2)
+    first.status, second.status = 'done', 'skipped'
+    linked = db.session.get(Automation, 1)
+    linked.view_id, linked.section_key = 1, 'sat'
+    linked.pending_user_input = {'note': 'previous occurrence'}
+    second.source_automation_id, second.complimentary_role = linked.id, 'input'
+    second.complimentary_cycle = {'submitted': True}
+    windows.close_expired_section_windows(1, now + timedelta(hours=2))
+    assert window.window_opened_at is None
+    assert (first.status, second.status) == ('active', 'active')
+    assert second.complimentary_cycle == {}
+    assert linked.pending_user_input is None
+    # A mark made between windows must survive the next opening.
+    first.status = 'done'
+    with patch.object(windows, '_fire_linked_at_start'):
+        windows.open_window(window, now + timedelta(days=7))
+    assert first.status == 'done'
+
+
+def test_pending_leftovers_defer_reset_until_occurrence_is_closed(database):
+    window, now = setup_window()
+    first = db.session.get(Task, 1)
+    first.status = 'done'
+    windows.close_window_or_pending(window, now + timedelta(hours=2))
+    assert window.pending_clear and first.status == 'done'
+    windows.apply_leftover_clear(window, disposition='continue')
+    assert first.status == 'done'
+    set_task_status(db.session.get(Task, 2), done=True)
+    windows.close_expired_section_windows(1)
+    assert window.window_opened_at is None
+    assert all(task.status == 'active' for task in Task.query.all())

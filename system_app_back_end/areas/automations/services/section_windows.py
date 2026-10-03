@@ -450,7 +450,7 @@ def _recycle_routine_section(view: View, section_key: str) -> None:
 
 
 def _end_window(automation: Automation) -> None:
-    """Drop open / close / leftover payload. Tasks stay as they are until the next start."""
+    """Drop open / close / leftover payload after settling this occurrence."""
     automation.window_opened_at = None
     automation.window_closes_at = None
     automation.pending_clear = None
@@ -504,13 +504,6 @@ def open_window(automation: Automation, now: datetime) -> None:
     automation.window_opened_at = now
     automation.window_closes_at = now + timedelta(minutes=max(minutes, 1))
     automation.pending_clear = None
-    view = db.session.get(View, automation.view_id) if automation.view_id else None
-    if view is not None and automation.section_key:
-        name = section_name_for_key(view.layout_config, automation.section_key)
-        for linked in linked_standard_automations(view.id, automation.section_key):
-            recycle_complimentary(linked)
-        if name:
-            _recycle_routine_section(view, automation.section_key)
     _fire_linked_at_start(automation)
 
 
@@ -685,6 +678,9 @@ def _close_section_window(automation: Automation) -> None:
     view = db.session.get(View, automation.view_id) if automation.view_id else None
     if view is not None and automation.section_key:
         _archive_one_time_section(automation, view)
+        for linked in linked_standard_automations(view.id, automation.section_key):
+            recycle_complimentary(linked)
+        _recycle_routine_section(view, automation.section_key)
     _end_window(automation)
 
 

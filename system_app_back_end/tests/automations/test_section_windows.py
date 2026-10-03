@@ -203,7 +203,7 @@ def test_leftovers_are_active_tasks_only():
     assert "status == ACTIVE" in source
 
 
-def test_clean_duration_end_keeps_done_until_next_start():
+def test_clean_duration_end_recycles_tasks():
     source = inspect.getsource(windows.close_window_or_pending)
     assert "leftover_active_tasks" in source
     assert "_close_section_window" in source
@@ -211,7 +211,8 @@ def test_clean_duration_end_keeps_done_until_next_start():
     close = inspect.getsource(windows._close_section_window)
     assert "_archive_one_time_section" in close
     assert "_end_window" in close
-    assert "recycle_complimentary" not in close
+    assert "recycle_complimentary" in close
+    assert "_recycle_routine_section" in close
     end = inspect.getsource(windows._end_window)
     assert "pending_clear = None" in end
     assert "recycle_complimentary" not in end
