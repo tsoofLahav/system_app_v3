@@ -166,3 +166,14 @@ File ORM writes now use `content_revision` as SQLAlchemy version_id_col, atomica
 Profiles reuse Workspace ownership; no user table or schema migration is needed. Existing data remains in the first workspace (displayed as Personal when named Default). New workspaces start with an empty Home/Daily journal. Requests carry X-Workspace-Id, launch snapshots use workspace-specific filenames, and Home visits already use workspace-specific keys. Unknown profiles fail rather than falling back to personal data. Switching flushes pending editor/object writes, saves the snapshot, then remounts a fresh AppState after keyboard idle.
 
 Agent text task lists preserve skipped tasks in a `SKIPPED:` section, separate from `ACTIVE:` and `DONE:`, so unrelated AI edits do not silently reactivate skipped work.
+
+### Copying an object into a file
+
+The object chrome menu offers **Copy object**; Copy with the document caret on
+an object also writes only its marker pointer. Paste a single object pointer in
+the document body to create a fresh independent object at the caret, including
+its content and formatting. Existing paragraph/list paste is unchanged.
+The editor flushes pending source edits, uses the atomic object-clone endpoint,
+and reloads/focuses the new object after keyboard idle. Failed paste shows an
+error without inserting a dangling pointer. See objects `AREA.md` for copied
+fields and relationships.

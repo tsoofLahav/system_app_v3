@@ -3,11 +3,11 @@ import 'package:system_app_front_end/areas/objects/data/inner_tasks.dart';
 
 void main() {
   test(
-    'bare dash promotion accepts an empty body boundary without throwing',
+    'bare star promotion accepts an empty body boundary without throwing',
     () {
-      expect(promoteBareDashToCheckbox('Title\n', 6), isNull);
-      expect(promoteBareDashToCheckbox('Title\ntext', 6), isNull);
-      expect(promoteBareDashToCheckbox('Title\ntext', 100), isNull);
+      expect(promoteBareStarToCheckbox('Title\n', 6), isNull);
+      expect(promoteBareStarToCheckbox('Title\ntext', 6), isNull);
+      expect(promoteBareStarToCheckbox('Title\ntext', 100), isNull);
     },
   );
   test('parse and unanimous ignore prose', () {
@@ -47,8 +47,8 @@ void main() {
     expect(setAllCombinedInnerTasks(combined, done: true), 'Title\n☑ milk');
   });
 
-  test('typing a bare dash becomes a checkbox', () {
-    final next = promoteBareDashToCheckbox('Title\n- ', 8);
+  test('typing a bare star becomes a checkbox', () {
+    final next = promoteBareStarToCheckbox('Title\n* ', 8);
     expect(next, isNotNull);
     expect(next!.text, 'Title\n☐ ');
     expect(next.caret, 'Title\n☐ '.length);

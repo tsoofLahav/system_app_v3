@@ -166,6 +166,22 @@ class ObjectService {
     return ObjectEmbed.fromJson(data);
   }
 
+  Future<ObjectEmbed> cloneObject({
+    required int fileId,
+    required int sourceObjectId,
+    required int baseRevision,
+    required int blockIndex,
+  }) async {
+    final data =
+        await _api.post('/files/$fileId/objects/clone', {
+              'source_object_id': sourceObjectId,
+              'base_revision': baseRevision,
+              'block_index': blockIndex,
+            })
+            as Map<String, dynamic>;
+    return ObjectEmbed.fromJson(data);
+  }
+
   Future<void> deleteEmbed(int objectId) async {
     await _api.delete('/objects/$objectId');
   }

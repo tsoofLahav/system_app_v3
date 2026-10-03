@@ -150,3 +150,17 @@ Explicit completion/dismissal of a complimentary review task discards its owned 
 
 ### Skipped task occurrences
 `skipped` is distinct from `done` and does not count as active work. Skipped tasks stay visible with a minus-circle mark and return to active at the next routine occurrence/reset. A task context menu in an open section offers **Skip and report** for that single task. The write atomically creates `skipped_tasks` history and settles the task, preserving title and ID snapshots even after source deletion. Skipped status never marks linked inner checkboxes completed. See migration `026_skipped_tasks.sql`; timestamps are UTC.
+
+### Clipboard object copies
+
+Copy stores only the marker pointer. `POST /files/:file_id/objects/clone`
+resolves `source_object_id` at paste time, creates independent object/backing
+rows, and inserts the new pointer at `block_index` in one transaction. The
+request requires the destination `base_revision`; cross-workspace sources are
+rejected. No migration or change to deletion semantics.
+
+Copies preserve title/body, rich spans and metadata, payload (including design,
+image references, table/chart data), tags, and task status/order/dates. Tasks get
+new IDs and fresh memberships in the same views, appended under the destination
+topic. Automation ownership and object connections are not copied. Each paste
+reads the latest source, so a deleted source cannot be pasted.

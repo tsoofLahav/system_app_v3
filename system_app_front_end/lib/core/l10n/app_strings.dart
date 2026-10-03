@@ -784,6 +784,9 @@ class AppStrings {
     'switchToPoints': 'Switch to points',
     'cut': 'Cut',
     'copy': 'Copy',
+    'copyObject': 'Copy object',
+    'objectPasteFailed':
+        'Could not paste the object. Check your connection and that the source still exists, then try again.',
     'paste': 'Paste',
     'more': 'More',
     'info': 'Info',
@@ -1569,6 +1572,9 @@ class AppStrings {
     'switchToPoints': 'החלף לנקודות',
     'cut': 'גזור',
     'copy': 'העתק',
+    'copyObject': 'העתק אובייקט',
+    'objectPasteFailed':
+        'לא ניתן להדביק את האובייקט. יש לבדוק את החיבור ושהמקור עדיין קיים, ולנסות שוב.',
     'paste': 'הדבק',
     'more': 'עוד',
     'info': 'מידע',

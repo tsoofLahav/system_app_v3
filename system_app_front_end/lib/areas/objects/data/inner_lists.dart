@@ -99,3 +99,20 @@ InnerTaskEdit? backspaceInnerList(String text, int caret) {
     caret: prefixStart,
   );
 }
+
+/// A dash followed by a space starts an ordinary list in the info body.
+InnerTaskEdit? promoteBareDashToInnerList(String text, int caret) {
+  final bodyAt = text.indexOf('\n') + 1;
+  if (bodyAt == 0 || caret <= bodyAt || caret > text.length) return null;
+  final start = text.lastIndexOf('\n', caret - 1) + 1;
+  final nextBreak = text.indexOf('\n', start);
+  final end = nextBreak < 0 ? text.length : nextBreak;
+  if (caret != end) return null;
+  final match = RegExp(r'^([ \t]*)- $').firstMatch(text.substring(start, end));
+  if (match == null) return null;
+  final line = '${match.group(1)}• ';
+  return InnerTaskEdit(
+    text: text.replaceRange(start, end, line),
+    caret: start + line.length,
+  );
+}

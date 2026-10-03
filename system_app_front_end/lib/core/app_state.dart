@@ -2897,6 +2897,23 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     });
   }
 
+  Future<ObjectEmbed> cloneObjectInDocument(
+    AppFile file, {
+    required int sourceObjectId,
+    required int blockIndex,
+  }) async {
+    await EditorSaveRegistry.flushObject(sourceObjectId);
+    final embed = await _objects.cloneObject(
+      fileId: file.id,
+      sourceObjectId: sourceObjectId,
+      baseRevision: (filesById[file.id] ?? file).contentRevision,
+      blockIndex: blockIndex,
+    );
+    _putFile(await _files.getFile(file.id));
+    await loadEmbedsForFile(file.id, notify: false);
+    return embed;
+  }
+
   Future<ObjectEmbed> createObjectInDocument(
     AppFile file, {
     required String type,

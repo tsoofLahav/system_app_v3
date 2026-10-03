@@ -139,6 +139,31 @@ def create_object(file_id):
     return jsonify(_resolve_embed(embed)), 201
 
 
+@objects_bp.route("/files/<int:file_id>/objects/clone", methods=["POST"])
+def clone_object(file_id):
+    from areas.files.services.file_ops import check_base_revision
+    from areas.objects.services.clone_embed import clone_embed_in_file
+
+    file = get_or_404(File, file_id)
+    data = request.get_json(silent=True) or {}
+    source_id = data.get("source_object_id")
+    block_index = data.get("block_index")
+    if type(source_id) is not int or source_id <= 0:
+        return jsonify({"error": "source_object_id must be a positive integer"}), 400
+    if block_index is not None and (type(block_index) is not int or block_index < 0):
+        return jsonify({"error": "block_index must be a non-negative integer"}), 400
+    source = get_or_404(ObjectEmbed, source_id)
+    topic = get_or_404(Topic, file.topic_id)
+    if _workspace_for_object(source) != topic.workspace_id:
+        return jsonify({"error": "Objects can only be copied within a workspace"}), 400
+    ok, error = check_base_revision(file, data)
+    if not ok:
+        return jsonify({"error": error, "file": file.to_dict()}), 409 if error == "revision conflict" else 400
+    clone = clone_embed_in_file(source, file, block_index=block_index)
+    db.session.commit()
+    return jsonify(_resolve_embed(clone)), 201
+
+
 @objects_bp.route("/objects/<int:object_id>", methods=["GET"])
 def get_object(object_id):
     embed = get_or_404(ObjectEmbed, object_id)

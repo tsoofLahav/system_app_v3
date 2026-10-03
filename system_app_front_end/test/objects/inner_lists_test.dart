@@ -3,6 +3,17 @@ import 'package:system_app_front_end/areas/objects/data/inner_lists.dart';
 import 'package:system_app_front_end/areas/objects/data/inner_tasks.dart';
 
 void main() {
+  test('dash starts bullets, star starts tasks, only at a body line start', () {
+    expect(promoteBareDashToInnerList('Title\n- ', 8)!.text, 'Title\n• ');
+    expect(promoteBareDashToInnerList('Title\n  - ', 10)!.text, 'Title\n  • ');
+    expect(promoteBareStarToCheckbox('Title\n- ', 8), isNull);
+    expect(promoteBareDashToInnerList('Title\n* ', 8), isNull);
+    expect(promoteBareStarToCheckbox('Title\n* ', 8)!.text, 'Title\n☐ ');
+    expect(promoteBareDashToInnerList('- ', 2), isNull);
+    expect(promoteBareDashToInnerList('Title\ntext - ', 13), isNull);
+    expect(promoteBareDashToInnerList('Title\n-', 7), isNull);
+    expect(promoteBareDashToInnerList('Title\n', 6), isNull);
+  });
   test('insert in title or empty body, without modifying title', () {
     expect(insertInnerList('Title', 2, 2).text, 'Title\n• ');
     expect(insertInnerList('Title\n', 6, 6).text, 'Title\n• ');
@@ -36,6 +47,6 @@ void main() {
       convertSelectionToInnerTasks(text, 6, text.length).text,
       'Title\n☐ first\n☐ second',
     );
-    expect(promoteBareDashToCheckbox('Title\n- ', 8)!.text, 'Title\n☐ ');
+    expect(promoteBareStarToCheckbox('Title\n* ', 8)!.text, 'Title\n☐ ');
   });
 }

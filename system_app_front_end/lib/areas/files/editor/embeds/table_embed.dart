@@ -1,3 +1,4 @@
+import '../object_clipboard.dart';
 import '../editor_save_registry.dart';
 import '../object_save_queue.dart';
 import 'dart:async';
@@ -457,6 +458,7 @@ class TableEmbedState extends State<TableEmbed>
   Future<void> _showChartMenu(TapDownDetails details) async {
     DocumentSecondaryTap.markEmbedHandled();
     await DocumentContextMenu.showChartMenu(
+      onCopyObject: () => copyObjectPointer(widget.embed.id, 'graph'),
       context: context,
       globalPosition: details.globalPosition,
       strings: widget.strings,

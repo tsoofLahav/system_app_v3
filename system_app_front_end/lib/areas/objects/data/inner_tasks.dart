@@ -336,8 +336,8 @@ InnerTaskEdit convertSelectionToInnerTasks(
   );
 }
 
-/// `- ` / `* ` at the start of a body line becomes `☐ `.
-InnerTaskEdit? promoteBareDashToCheckbox(String combined, int caret) {
+/// `* ` at the start of a body line becomes `☐ `.
+InnerTaskEdit? promoteBareStarToCheckbox(String combined, int caret) {
   final bodyAt = _bodyOffset(combined);
   if (bodyAt < 0 || caret < bodyAt) return null;
   final body = combined.substring(bodyAt);
@@ -347,7 +347,7 @@ InnerTaskEdit? promoteBareDashToCheckbox(String combined, int caret) {
   final lineEnd = body.indexOf('\n', lineStart);
   final end = lineEnd < 0 ? body.length : lineEnd;
   final line = body.substring(lineStart, end);
-  final match = RegExp(r'^(\s*)([-*])\s$').firstMatch(line);
+  final match = RegExp(r'^([ \t]*)\* $').firstMatch(line);
   if (match == null) return null;
   if (local != lineStart + line.length) return null;
   final indent = match.group(1) ?? '';

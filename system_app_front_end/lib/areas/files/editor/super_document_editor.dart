@@ -1,4 +1,5 @@
 import './remote_selection.dart';
+import './object_clipboard.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -50,6 +51,7 @@ import '../../ux/shell/dismiss_focus_on_outside_tap.dart';
 import './embeds/image_display_size.dart';
 import './embeds/object_design_dialog.dart';
 import './embeds/object_look.dart';
+import './embeds/object_embed_widgets.dart';
 import './cmd_click_link_handler.dart';
 import './file_editor_keyboard_actions.dart';
 import './object_embed_component.dart';
@@ -975,6 +977,17 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   Future<void> _insertAtBlock(String action) async {
+    final info = InfoEmbedState.keyboardFocus;
+    if (info != null && info.widget.embed.fileId == widget.file.id) {
+      if (action == 'list' || action == 'bullet_list') {
+        info.insertInnerBulletList();
+        return;
+      }
+      if (action == 'task_list') {
+        info.insertInnerChecklist();
+        return;
+      }
+    }
     await _flushPendingChanges();
     DocumentEditorRegistry.claim(widget.file.id);
 
@@ -1087,10 +1100,36 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     return true;
   }
 
+  bool _pastingObject = false;
+
   Future<void> _pasteInDocument() async {
     final raw = await getClipboardText();
     if (raw == null) return;
     if (_composer.selection == null) return;
+    final pointer = DocumentTextCodec.pointerRe.firstMatch(raw.trim());
+    if (pointer != null) {
+      if (_pastingObject) return;
+      _pastingObject = true;
+      try {
+        await whenKeyboardIdle();
+        if (!mounted) return;
+        final index = _insertIndexFromSelection();
+        await _insertObject(
+          DocumentTextCodec.objectTypeForTag(pointer.group(1)!) ?? 'embed',
+          markerGapIndexForNodeIndex(_doc, index),
+          sourceObjectId: int.parse(pointer.group(2)!),
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+            SnackBar(content: Text(widget.state.strings['objectPasteFailed'])),
+          );
+        }
+      } finally {
+        _pastingObject = false;
+      }
+      return;
+    }
     if (!clipboardLooksLikeList(raw)) {
       _docOps.paste();
       return;
@@ -1133,7 +1172,11 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     ]);
   }
 
-  Future<void> _insertObject(String type, int blockIndex) async {
+  Future<void> _insertObject(
+    String type,
+    int blockIndex, {
+    int? sourceObjectId,
+  }) async {
     var apiType = type;
     Map<String, dynamic>? payload;
     if (type == 'graph') {
@@ -1150,14 +1193,20 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
     _sync.edit(mutableDocumentToMarkerText(_doc));
     await _flushPendingChanges();
 
-    final embed = await widget.state.createObjectInDocument(
-      _currentFile,
-      type: apiType,
-      title: apiType == 'info' ? '' : null,
-      body: apiType == 'info' ? '' : null,
-      payload: payload,
-      blockIndex: blockIndex,
-    );
+    final embed = sourceObjectId != null
+        ? await widget.state.cloneObjectInDocument(
+            _currentFile,
+            sourceObjectId: sourceObjectId,
+            blockIndex: blockIndex,
+          )
+        : await widget.state.createObjectInDocument(
+            _currentFile,
+            type: apiType,
+            title: apiType == 'info' ? '' : null,
+            body: apiType == 'info' ? '' : null,
+            payload: payload,
+            blockIndex: blockIndex,
+          );
 
     // Silent reload — a shell-wide notify mid-handoff remounts fields and
     // desyncs the IME after the first character.
@@ -1165,6 +1214,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
       widget.file.id,
       notify: false,
     );
+    await whenKeyboardIdle();
+    if (!mounted) return;
     final nodeId = ObjectEmbedNode.idFor(embed.id);
     _embedsSnapshot = widget.state.embedsByFileId[widget.file.id];
     _reloadFromStored(updated.documentJson);
@@ -1943,6 +1994,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           context: context,
           globalPosition: globalPosition,
           strings: strings,
+          onCopyObject: () => copyObjectPointer(node.objectId, node.objectType),
           onAction: (action) async {
             if (action == 'object:move_mode') {
               _toggleMoveModeForNode(node.id);
@@ -1984,6 +2036,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           context: context,
           globalPosition: globalPosition,
           strings: strings,
+          onCopyObject: () => copyObjectPointer(node.objectId, node.objectType),
           includeAssignView: taskId != null,
           onAction: (action) async {
             if (action == 'object:move_mode') {
@@ -2014,6 +2067,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
             context: context,
             globalPosition: globalPosition,
             strings: strings,
+            onCopyObject: () =>
+                copyObjectPointer(node.objectId, node.objectType),
             onAction: (action) async {
               if (action == 'object:move_mode') {
                 _toggleMoveModeForNode(node.id);
@@ -2037,6 +2092,8 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
             context: context,
             globalPosition: globalPosition,
             strings: strings,
+            onCopyObject: () =>
+                copyObjectPointer(node.objectId, node.objectType),
             includeConnectInfo: false,
             includeMoveObject: true,
             onAction: (action) async {
@@ -2089,6 +2146,7 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
           context: context,
           globalPosition: globalPosition,
           strings: strings,
+          onCopyObject: () => copyObjectPointer(node.objectId, node.objectType),
           scale: ImageDisplaySize.scaleOf(embed.payload),
           canMergeNext: _canMergeImageWithNext(embed.id),
           onAction: (action) async {
@@ -2299,6 +2357,18 @@ class _SuperDocumentEditorState extends State<SuperDocumentEditor> {
   }
 
   Future<void> _handleTextMenuAction(String action) async {
+    if (action == 'text:copy') {
+      final selection = _composer.selection;
+      final node = selection == null
+          ? null
+          : _doc.getNodeById(selection.extent.nodeId);
+      if (selection != null &&
+          selection.isCollapsed &&
+          node is ObjectEmbedNode) {
+        await copyObjectPointer(node.objectId, node.objectType);
+        return;
+      }
+    }
     if (action.startsWith('text:direction:')) {
       final selection = _composer.selection;
       if (selection == null) return;

@@ -1,3 +1,4 @@
+import '../object_clipboard.dart';
 import '../object_save_queue.dart';
 import '../editor_save_registry.dart';
 import 'dart:async';
@@ -719,7 +720,9 @@ class InfoEmbedState extends State<InfoEmbed>
     final caret = _controller.selection.isValid
         ? _controller.selection.baseOffset
         : _controller.text.length;
-    final promoted = promoteBareDashToCheckbox(_controller.text, caret);
+    final promoted =
+        promoteBareDashToInnerList(_controller.text, caret) ??
+        promoteBareStarToCheckbox(_controller.text, caret);
     if (promoted != null) {
       _applyInnerEdit(promoted);
       return;
@@ -766,6 +769,27 @@ class InfoEmbedState extends State<InfoEmbed>
         if (mounted) _focus.requestFocus();
       });
     }
+  }
+
+  /// Insert-bar / ⌘L uses the live selection; menus use the frozen mark.
+  void insertInnerBulletList({bool fromMenu = false}) {
+    var selection = _controller.selection;
+    if (fromMenu) {
+      final range = BlockTextFocusRegistry.resolveMark().spans
+          .where((span) => identical(span.controller, _controller))
+          .firstOrNull;
+      if (range != null) selection = range.selection;
+    }
+    _applyInnerEdit(
+      insertInnerList(
+        _controller.text,
+        selection.isValid ? selection.start : _controller.text.length,
+        selection.isValid ? selection.end : _controller.text.length,
+      ),
+    );
+    runWhenKeyboardIdle(() {
+      if (mounted) _focus.requestFocus();
+    });
   }
 
   bool _consumeInnerTap(int offset) {
@@ -826,23 +850,7 @@ class InfoEmbedState extends State<InfoEmbed>
       includeDisconnectInfo: descriptionRangeCoveringMark(ranges) != null,
       onAction: (action) async {
         if (action == 'info:add_list') {
-          final mark = BlockTextFocusRegistry.resolveMark();
-          final range = mark.spans
-              .where((r) => identical(r.controller, _controller))
-              .firstOrNull;
-          final selection = range == null
-              ? _controller.selection
-              : TextSelection(baseOffset: range.start, extentOffset: range.end);
-          _applyInnerEdit(
-            insertInnerList(
-              _controller.text,
-              selection.isValid ? selection.start : _controller.text.length,
-              selection.isValid ? selection.end : _controller.text.length,
-            ),
-          );
-          runWhenKeyboardIdle(() {
-            if (mounted) _focus.requestFocus();
-          });
+          insertInnerBulletList(fromMenu: true);
           return;
         }
         if (action == 'info:add_checklist') {
@@ -1144,6 +1152,7 @@ class _ImageEmbedState extends State<ImageEmbed> {
     DocumentSecondaryTap.markEmbedHandled();
     if (!mounted) return;
     await DocumentContextMenu.showImageMenu(
+      onCopyObject: () => copyObjectPointer(widget.embed.id, 'image'),
       context: context,
       globalPosition: details.globalPosition,
       strings: widget.state.strings,

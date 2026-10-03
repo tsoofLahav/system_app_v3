@@ -326,7 +326,7 @@ Objects are atomic SE blocks. ↑/↓ move onto the block; **Shift+Enter** (or c
 | Type | In the document |
 |------|-----------------|
 | Task list | Active then Done; Enter adds in the same zone; **Escape** leaves the object; **Shift+Enter** / **⌘Enter** / Ctrl+Enter inserts a newline in the title; **insert lands on the list header** (then tasks); right-click → **Choose view…** / **Reorder tasks** (also on block caret); empty title stays blank |
-| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); **Escape** leaves to SE; **Enter** inserts a newline (on an inner-task line it continues the checklist); **Shift+Enter** / **⌘Enter** / Ctrl+Enter adds lines; field right-click → text + Connect info / Remove connection + Add checklist / Add list; chrome → **Design…** / Add tag / Add connection (⌘L in the field is Connect info; otherwise ⌘L inserts a list) |
+| Info | One field; first line = title (diagrams/API `title`, not announced in the UI); **Escape** leaves to SE; **Enter** inserts a newline (on an inner-task line it continues the checklist); **Shift+Enter** / **⌘Enter** / Ctrl+Enter adds lines; field right-click → text + Connect info / Remove connection + Add checklist / Add list; chrome → **Design…** / Add tag / Add connection (⌘L in the field inserts inner bullets; ⌘T inserts an inner checklist) |
 | Table / chart | See **[Tables & charts](#tables--charts)** |
 | Image | Display + caption; chrome **Design…** (card / glass / lines / fill / plain, plus greyscale); **Merge with next** when the following Super Editor node is also an image (folds it into `payload.images` and cascade-deletes the second object — Super Editor cannot put two image blocks on one line). Right-click **Make smaller / larger** (steps of 10% of the pane) or **Tiny / Quarter / Half / Full size** (size is the row as a whole). Width is `payload.width` 0–1 of the file pane; aspect ratio stays (`BoxFit.contain`) |
 
@@ -525,4 +525,15 @@ and table editing tests.
 
 ### Info checklist and bullet editing — 2026-10-03
 
-Info bodies support ordinary `•` bullets alongside checklists and prose; both stay in the single text field. Bullet helpers live in objects `data/inner_lists.dart`. Field-menu conversion resolves the frozen document mark, leaving the title intact. Checkbox pointer taps flush immediately through the existing info save queue; typing still uses its 400 ms debounce. A clean focused info accepts checkbox-only inbound changes after keyboard idle with its selection preserved; other remote text waits for blur. `EditorSaveRegistry` can flush a specific info object before a linked task/preview changes its checkboxes, without flushing unrelated task surfaces. Hover previews keep prose read-only and apply only checkbox intents. See the objects area for cache and save ordering.
+Info bodies support ordinary `•` bullets alongside checklists and prose; typing `- ` starts bullets and `* ` starts checklists; both stay in the single text field. Bullet helpers live in objects `data/inner_lists.dart`. Field-menu conversion resolves the frozen document mark, leaving the title intact. The SE list/task-list buttons route to the focused info before document flush/insertion; ⌘L/⌘T call the same inner editing actions. Checkbox pointer taps flush immediately through the existing info save queue; typing still uses its 400 ms debounce. A clean focused info accepts checkbox-only inbound changes after keyboard idle with its selection preserved; other remote text waits for blur. `EditorSaveRegistry` can flush a specific info object before a linked task/preview changes its checkboxes, without flushing unrelated task surfaces. Hover previews keep prose read-only and apply only checkbox intents. See the objects area for cache and save ordering.
+
+### Copying an object into a file
+
+The object chrome menu offers **Copy object**; Copy with the document caret on
+an object also writes only its marker pointer. Paste a single object pointer in
+the document body to create a fresh independent object at the caret, including
+its content and formatting. Existing paragraph/list paste is unchanged.
+The editor flushes pending source edits, uses the atomic object-clone endpoint,
+and reloads/focuses the new object after keyboard idle. Failed paste shows an
+error without inserting a dangling pointer. See objects `AREA.md` for copied
+fields and relationships.

@@ -172,7 +172,7 @@ Future<void> dispatchShortcutAction(
     case ShortcutActionIds.addConnection:
       final info = InfoEmbedState.keyboardFocus;
       if (info != null) {
-        await info.connectInfoFromShortcut();
+        info.insertInnerBulletList();
         return;
       }
       final list = TaskListSurfaceState.keyboardFocus;

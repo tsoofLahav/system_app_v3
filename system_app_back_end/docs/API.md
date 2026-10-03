@@ -244,3 +244,12 @@ Unchanged: `POST /upload`, static file serving under `/uploads/`.
 ## Local presentation profiles
 
 `GET /workspaces` lists profile names and IDs. `POST /workspaces` with `{"name":"Demo"}` creates an empty Home/Daily workspace. Send `X-Workspace-Id` on subsequent requests, including bootstrap and uploads. ORM reads and recognized resource references are scoped to that workspace. A missing header preserves legacy default behavior; this selector is not authentication. No schema migration is required.
+
+### POST `/files/:file_id/objects/clone`
+
+Body: `{ "source_object_id": 123, "block_index": 0, "base_revision": 4 }`.
+Returns 201 with the resolved independent copy. Creates backing rows and inserts
+its pointer atomically; the source remains unchanged. Same-workspace only.
+404 for a missing source, 409 for a stale destination revision. Copies content,
+formatting, tags and task view assignments, but not automation ownership or
+object connections. Images reuse the asset URL, with independent object data.

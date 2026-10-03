@@ -164,6 +164,7 @@ class DocumentContextMenu {
     required Offset globalPosition,
     required AppStrings strings,
     required DocumentMenuHandler onAction,
+    Future<void> Function()? onCopyObject,
     double scale = ImageDisplaySize.full,
     bool canMergeNext = false,
   }) {
@@ -172,6 +173,7 @@ class DocumentContextMenu {
       globalPosition: globalPosition,
       strings: strings,
       onAction: onAction,
+      onCopyObject: onCopyObject,
       entries: [
         AppContextMenuItem(
           value: 'object:move_mode',
@@ -190,8 +192,16 @@ class DocumentContextMenu {
     required Offset globalPosition,
     required AppStrings strings,
     required DocumentMenuHandler onAction,
+    Future<void> Function()? onCopyObject,
     required List<AppContextMenuEntry> entries,
   }) async {
+    if (onCopyObject != null) {
+      entries = [
+        AppContextMenuItem(value: 'object:copy', label: strings['copyObject']),
+        const AppContextMenuDivider(),
+        ...entries,
+      ];
+    }
     AppContextMenu.dismissActive();
     final session = BlockTextFocusRegistry.openMenuSession();
     try {
@@ -212,7 +222,9 @@ class DocumentContextMenu {
               isRtl: strings.isRtl,
             );
       // Keep the mark frozen while the colour dialog is open.
-      if (value == 'text:color:pick' && context.mounted) {
+      if (value == 'object:copy' && onCopyObject != null) {
+        await onCopyObject();
+      } else if (value == 'text:color:pick' && context.mounted) {
         final hex = await showAppColorDialog(
           context: context,
           strings: strings,
@@ -290,6 +302,7 @@ class DocumentContextMenu {
     required Offset globalPosition,
     required AppStrings strings,
     required DocumentMenuHandler onAction,
+    Future<void> Function()? onCopyObject,
     List<AppContextMenuEntry> extraEntries = const [],
     bool includeAddRow = true,
     bool includeReorderRows = true,
@@ -304,6 +317,7 @@ class DocumentContextMenu {
       globalPosition: globalPosition,
       strings: strings,
       onAction: onAction,
+      onCopyObject: onCopyObject,
       entries: [
         if (includeMoveObject) ...[
           AppContextMenuItem(
@@ -355,12 +369,14 @@ class DocumentContextMenu {
     required Offset globalPosition,
     required AppStrings strings,
     required DocumentMenuHandler onAction,
+    Future<void> Function()? onCopyObject,
   }) {
     return _showMenu(
       context: context,
       globalPosition: globalPosition,
       strings: strings,
       onAction: onAction,
+      onCopyObject: onCopyObject,
       entries: [
         AppContextMenuItem(
           value: 'object:move_mode',
@@ -402,12 +418,14 @@ class DocumentContextMenu {
     required Offset globalPosition,
     required AppStrings strings,
     required DocumentMenuHandler onAction,
+    Future<void> Function()? onCopyObject,
   }) {
     return _showMenu(
       context: context,
       globalPosition: globalPosition,
       strings: strings,
       onAction: onAction,
+      onCopyObject: onCopyObject,
       entries: [
         AppContextMenuItem(
           value: 'object:move_mode',
@@ -446,6 +464,7 @@ class DocumentContextMenu {
     required Offset globalPosition,
     required AppStrings strings,
     required DocumentMenuHandler onAction,
+    Future<void> Function()? onCopyObject,
     List<AppContextMenuEntry> extraEntries = const [],
     bool includeAssignView = true,
     bool includeConnectInfo = false,
@@ -456,6 +475,7 @@ class DocumentContextMenu {
       globalPosition: globalPosition,
       strings: strings,
       onAction: onAction,
+      onCopyObject: onCopyObject,
       entries: [
         AppContextMenuItem(
           value: 'object:move_mode',
