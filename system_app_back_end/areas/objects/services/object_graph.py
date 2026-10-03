@@ -308,6 +308,11 @@ def build_workspace_graph(workspace_id: int) -> dict:
                 "body": (info.body or "") if info is not None else "",
                 "information_id": embed.information_id,
                 "file_id": embed.file_id,
+                "is_archived": bool(
+                    (file_row and file_row.archived_at)
+                    or (topic and topic.archived_at)
+                    or (info and info.archived_at)
+                ),
                 "topic_id": topic.id if topic is not None else None,
                 "topic_color": topic.color if topic is not None else None,
                 "tag_ids": tag_ids_for_object(embed.id),

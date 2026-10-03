@@ -199,3 +199,5 @@ image references, table/chart data), tags, and task status/order/dates. Tasks ge
 new IDs and fresh memberships in the same views, appended under the destination
 topic. Automation ownership and object connections are not copied. Each paste
 reads the latest source, so a deleted source cannot be pasted.
+
+Connect-info choices exclude archived information pieces and info whose file or topic is archived. The graph API exposes `is_archived` for this picker filter; existing links remain intact.

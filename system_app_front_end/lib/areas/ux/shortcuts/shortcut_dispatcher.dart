@@ -175,6 +175,14 @@ Future<void> dispatchShortcutAction(
         info.insertInnerBulletList();
         return;
       }
+      await DocumentEditorRegistry.active?.insertAtBlock('bullet_list');
+      return;
+    case ShortcutActionIds.connectInfo:
+      final info = InfoEmbedState.keyboardFocus;
+      if (info != null) {
+        await info.connectInfoFromShortcut();
+        return;
+      }
       final list = TaskListSurfaceState.keyboardFocus;
       if (list != null) {
         await list.connectInfoFromShortcut();
@@ -183,9 +191,7 @@ Future<void> dispatchShortcutAction(
       final table = RichTableEditorState.keyboardFocus;
       if (table != null) {
         await table.connectInfoFromShortcut();
-        return;
       }
-      await DocumentEditorRegistry.active?.insertAtBlock('bullet_list');
       return;
     case ShortcutActionIds.toggleReorderMode:
       final list = TaskListSurfaceState.keyboardFocus;

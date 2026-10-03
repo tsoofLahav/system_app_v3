@@ -118,6 +118,7 @@ class _AppShortcutsScopeState extends State<AppShortcutsScope> {
         return true;
       default:
         return action.id == ShortcutActionIds.addConnection ||
+            action.id == ShortcutActionIds.connectInfo ||
             action.id == ShortcutActionIds.toggleEmbedMoveMode ||
             action.id == ShortcutActionIds.toggleReorderMode;
     }

@@ -37,6 +37,7 @@ class ObjectGraphNode {
     this.topicColor,
     this.diagramX,
     this.diagramY,
+    this.isArchived = false,
   });
 
   final int objectId;
@@ -50,6 +51,7 @@ class ObjectGraphNode {
   final List<int> tagIds;
   final double? diagramX;
   final double? diagramY;
+  final bool isArchived;
 
   factory ObjectGraphNode.fromJson(Map<String, dynamic> json) {
     return ObjectGraphNode(
@@ -66,6 +68,7 @@ class ObjectGraphNode {
       ],
       diagramX: _readCoord(json['diagram_x']),
       diagramY: _readCoord(json['diagram_y']),
+      isArchived: json['is_archived'] == true,
     );
   }
 
@@ -87,6 +90,7 @@ class ObjectGraphNode {
       tagIds: tagIds,
       diagramX: diagramX ?? this.diagramX,
       diagramY: diagramY ?? this.diagramY,
+      isArchived: isArchived,
     );
   }
 }

@@ -1,7 +1,22 @@
+import 'package:system_app_front_end/areas/objects/data/object_service.dart';
+import 'package:system_app_front_end/areas/objects/links/add_connection_dialog.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:system_app_front_end/areas/objects/links/info_pick_rank.dart';
 
 void main() {
+  test('archive metadata survives parsing and excludes connection choices', () {
+    final archived = ObjectGraphNode.fromJson({
+      'object_id': 10, 'file_id': 1, 'type': 'info',
+      'title': 'Archived info', 'is_archived': true,
+    });
+    final live = ObjectGraphNode.fromJson({
+      'object_id': 11, 'file_id': 2, 'type': 'info', 'title': 'Live info',
+    });
+    expect(archived.copyWith(title: 'Renamed').isArchived, isTrue);
+    expect(namedInfoNodes([archived, live]).map((node) => node.objectId), [11]);
+    expect(namedInfoNodes([archived, live], query: 'Archived'), isEmpty);
+  });
+
   test('same name ranks above a different title', () {
     expect(textSimilarity('Milk', 'Milk'), 1);
     expect(isSimilarName('Buy milk', 'Milk'), isTrue);

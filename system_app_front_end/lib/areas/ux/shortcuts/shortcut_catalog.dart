@@ -88,6 +88,7 @@ abstract final class ShortcutActionIds {
   static const toggleLayoutMode = 'toggle_layout_mode';
   static const toggleLanguage = 'toggle_language';
   static const addConnection = 'add_connection';
+  static const connectInfo = 'connect_info';
   static const toggleReorderMode = 'toggle_reorder_mode';
   static const toggleEmbedMoveMode = 'toggle_embed_move_mode';
 }
@@ -344,6 +345,12 @@ final List<ShortcutAction> kShortcutCatalog = [
     category: ShortcutCategory.navigation,
     labelKey: 'shortcutToggleLanguage',
     defaultBinding: _m(LogicalKeyboardKey.keyE, shift: true),
+  ),
+  ShortcutAction(
+    id: ShortcutActionIds.connectInfo,
+    category: ShortcutCategory.objects,
+    labelKey: 'connectInfo',
+    defaultBinding: _m(LogicalKeyboardKey.keyL, shift: true),
   ),
   ShortcutAction(
     id: ShortcutActionIds.addConnection,

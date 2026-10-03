@@ -61,7 +61,8 @@ List<ObjectGraphNode> namedInfoNodes(
 }) {
   final named = [
     for (final n in nodes)
-      if (n.type == 'info' &&
+      if (!n.isArchived &&
+          n.type == 'info' &&
           !excludeObjectIds.contains(n.objectId) &&
           infoHasName(n.title, body: n.body))
         n,
