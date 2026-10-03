@@ -45,6 +45,7 @@ class DialogFormattedField extends StatelessWidget {
         style: AppTypography.noteBodyStyle,
         minLines: minLines,
         maxLines: maxLines,
+        scrollInternally: maxLines != null,
         hintText: hintText,
         onChanged: onChanged,
         onEnter: onEnter,

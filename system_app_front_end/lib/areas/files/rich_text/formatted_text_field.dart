@@ -99,6 +99,7 @@ class FormattedTextField extends StatefulWidget {
     this.hintText,
     this.maxLines,
     this.minLines = 1,
+    this.scrollInternally = false,
     this.onChanged,
     this.onSubmitted,
     this.onBackspaceAtStart,
@@ -134,6 +135,9 @@ class FormattedTextField extends StatefulWidget {
   final String? hintText;
   final int? maxLines;
   final int minLines;
+
+  /// Bounded dialog fields scroll themselves; document fields use the pane.
+  final bool scrollInternally;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final Future<void> Function()? onBackspaceAtStart;
@@ -537,10 +541,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
     super.dispose();
   }
 
-  /// The file pane owns scrolling. [EditableText.bringIntoView] still jumpTo's
-  /// this field's own controller; keep it pinned at 0.
+  /// Document fields let the file pane scroll; bounded dialogs let
+  /// EditableText reveal the caret using this field's own controller.
   void _lockFieldScroll() {
-    if (!_fieldScroll.hasClients) return;
+    if (widget.scrollInternally || !_fieldScroll.hasClients) return;
     if (_fieldScroll.offset == 0) return;
     _fieldScroll.jumpTo(0);
   }
@@ -1750,8 +1754,10 @@ class _FormattedTextFieldState extends State<FormattedTextField> {
                     strutStyle: AppTypography.fieldStrut(style),
                     maxLines: widget.maxLines,
                     minLines: widget.minLines,
-                    // One scroll owner: the file pane's SingleChildScrollView.
-                    scrollPhysics: const NeverScrollableScrollPhysics(),
+                    // Dialogs with capped height own their internal scroll.
+                    scrollPhysics: widget.scrollInternally
+                        ? const ClampingScrollPhysics()
+                        : const NeverScrollableScrollPhysics(),
                     scrollPadding: EdgeInsets.zero,
                     scrollController: _fieldScroll,
                     decoration: InputDecoration(

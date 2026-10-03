@@ -537,3 +537,5 @@ The editor flushes pending source edits, uses the atomic object-clone endpoint,
 and reloads/focuses the new object after keyboard idle. Failed paste shows an
 error without inserting a dangling pointer. See objects `AREA.md` for copied
 fields and relationships.
+
+Bounded `DialogFormattedField` editors enable internal scrolling in `FormattedTextField`, so long prompts follow the caret beyond `maxLines`. Document object fields retain pane-owned scrolling and the pinned internal offset.
