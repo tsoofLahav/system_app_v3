@@ -85,3 +85,27 @@ def test_filling_an_empty_task_list_shows_the_new_tasks_in_the_diff(database):
 
     tasks = Task.query.filter_by(task_list_id=embed.task_list_id).all()
     assert {t.title for t in tasks} == {"Task A", "Task B"}
+
+
+def test_finish_applies_user_rewrite_to_task_and_archives_old_file(database):
+    file = db.session.get(File, 1)
+    embed = create_embed_in_file(file, type_="task_list", title="Tasks")
+    db.session.commit()
+    result = apply_document_text(
+        1, f'[TASK_LIST id="{embed.id}" title="Tasks"]\nACTIVE:\n- [ ] Suggested task\n[/TASK_LIST]',
+        scope={"workspace_id": 1}, write_mode="review", tool_name="patch_file",
+    )
+    upsert_pending_from_proposals(workspace_id=1, run_key="rewrite-test", proposed_changes=[result])
+    pending = AgentPendingReview.query.filter_by(file_id=1).one()
+    decisions = []
+    for hunk in build_hunks(pending.old_agent_text, pending.new_agent_text):
+        decision = {"hunk_id": hunk["id"], "choice": "accept"}
+        if hunk["new_lines"] == ["- [ ] Suggested task"]:
+            decision["replacement_text"] = "- [ ] My revised task"
+        decisions.append(decision)
+    outcome = finish_pending(1, decisions=decisions)
+    assert outcome.get("ok") is True
+    db.session.commit()
+    assert Task.query.filter_by(task_list_id=embed.task_list_id).one().title == "My revised task"
+    assert AgentPendingReview.query.filter_by(file_id=1).first() is None
+    assert File.query.filter(File.archived_at.isnot(None)).count() == 1

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/platform/app_form_factor.dart';
 import '../files/editor/file_preview.dart';
+import '../files/editor/editor_key_handoff.dart';
 import '../files/editor/read_only_document_view.dart';
 import '../files/model/agent_text_blocks.dart';
 import '../ui/app_colors.dart';
@@ -15,6 +16,7 @@ import '../ui/note_widgets.dart';
 import './agent_message_snackbar.dart';
 import './pending_review_service.dart';
 import './review_marks.dart';
+import './review_text_edit.dart';
 
 /// True when every hunk has accept or reject (empty list counts as decided).
 bool pendingHunksFullyDecided(
@@ -93,7 +95,8 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
   final _newScroll = ScrollController();
 
   late final List<AgentBlock> _oldBlocks;
-  late final List<AgentBlock> _newBlocks;
+  late List<AgentBlock> _newBlocks;
+  final Map<String, String> _rewrites = {};
   late final Map<int, HunkMark> _oldMarks;
   late final Map<int, HunkMark> _newMarks;
   late final Map<int, String> _oldAnchorLines;
@@ -286,6 +289,36 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
     _syncToActive();
   }
 
+  Future<void> _editSuggestion() async {
+    if (_busy || _activeId == null) return;
+    final hunk = _hunks.firstWhere((h) => h.id == _activeId);
+    final edit = reviewTextEdit(widget.pending, hunk);
+    if (edit == null) return;
+    await whenKeyboardIdle();
+    if (!mounted) return;
+    final revised = await showDialog<String>(
+      context: context,
+      builder: (_) => ReviewTextEditDialog(
+        edit: edit,
+        initialLine: _rewrites[hunk.id] ?? hunk.newLines.single,
+        strings: widget.strings,
+      ),
+    );
+    if (!mounted || revised == null) return;
+    setState(() {
+      _rewrites[hunk.id] = revised;
+      final lines = widget.pending.newAgentText.split('\n');
+      for (final h in _hunks) {
+        if (_rewrites.containsKey(h.id)) lines[h.newIndex0] = _rewrites[h.id]!;
+      }
+      _newBlocks = parseAgentTextBlocks(lines.join('\n'));
+      if (hunk.op == 'change' && _oldCompare.containsKey(hunk.oldIndex0)) {
+        _oldCompare[hunk.oldIndex0] = _stripLeadMarker(revised);
+      }
+    });
+    _decide(ReviewChoice.accept);
+  }
+
   /// Move the bubble by [delta] changes, decided or not.
   void _step(int delta) {
     if (_hunks.isEmpty) return;
@@ -324,6 +357,9 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
         for (final h in _hunks)
           {
             'hunk_id': h.id,
+            if (_choices[h.id] == ReviewChoice.accept &&
+                _rewrites.containsKey(h.id))
+              'replacement_text': _rewrites[h.id]!,
             'choice': _choices[h.id] == ReviewChoice.accept
                 ? 'accept'
                 : 'reject',
@@ -360,7 +396,7 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
         ? const EdgeInsets.symmetric(horizontal: 8, vertical: 12)
         : AppDialogMetrics.windowInset;
 
-    // No text fields live here, so raw key handling is safe (see NOTES.md).
+    // Text editing uses its own dialog route, outside these review shortcuts.
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.enter): () =>
@@ -505,6 +541,20 @@ class _LookalikeReviewBodyState extends State<_LookalikeReviewBody> {
           style: AppTypography.metaStyle,
         ),
         const Spacer(),
+        if (reviewTextEdit(
+              widget.pending,
+              _hunks.firstWhere((h) => h.id == _activeId),
+            ) !=
+            null) ...[
+          _bubbleButton(
+            tooltip: s['edit'],
+            icon: Icons.edit_outlined,
+            color: AppColors.primary,
+            selected: _rewrites.containsKey(_activeId),
+            onTap: _editSuggestion,
+          ),
+          const SizedBox(width: 8),
+        ],
         _bubbleButton(
           tooltip: s['reviewAccept'],
           icon: AppIcons.check,

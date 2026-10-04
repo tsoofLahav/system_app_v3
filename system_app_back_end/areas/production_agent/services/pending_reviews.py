@@ -132,13 +132,22 @@ def merge_agent_text(
     new_lines = (new_text or "").splitlines()
     opcodes = normalized_opcodes(old_text, new_text)
     hunks = build_hunks(old_text, new_text)
-    by_id = {str(d.get("hunk_id")): d.get("choice") for d in decisions}
+    if any(not isinstance(d, dict) for d in decisions):
+        return None, "invalid decision"
+    by_id = {str(d.get("hunk_id")): d for d in decisions}
+    if len(by_id) != len(decisions):
+        return None, "duplicate hunk decision"
     if len(hunks) != len(by_id) or any(h["id"] not in by_id for h in hunks):
         return None, "every hunk must have accept or reject"
     for h in hunks:
-        choice = by_id[h["id"]]
+        decision = by_id[h["id"]]
+        choice = decision.get("choice")
         if choice not in {"accept", "reject"}:
             return None, f"invalid choice for hunk {h['id']}"
+
+        if "replacement_text" in decision:
+            if choice != "accept" or not isinstance(decision["replacement_text"], str):
+                return None, "replacement_text requires an accepted hunk and text"
 
     out: list[str] = []
     hunk_iter = iter(hunks)
@@ -147,7 +156,11 @@ def merge_agent_text(
             out.extend(old_lines[i1:i2])
             continue
         hunk = next(hunk_iter)
-        accept = by_id[hunk["id"]] == "accept"
+        decision = by_id[hunk["id"]]
+        accept = decision["choice"] == "accept"
+        if "replacement_text" in decision:
+            out.extend(decision["replacement_text"].splitlines())
+            continue
         if tag == "insert":
             if accept:
                 out.extend(new_lines[j1:j2])

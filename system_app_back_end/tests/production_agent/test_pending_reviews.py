@@ -171,3 +171,37 @@ def test_archive_copy_name_falls_back_to_today():
     name = archive_copy_name("Plan", None)
     assert name.startswith("Plan ")
     assert len(name) == len("Plan YYYY-MM-DD")
+
+
+def test_rewritten_suggestion_replaces_original_and_preserves_other_decisions():
+    old, new = "old\nkeep\nremove", "suggested\nkeep\nadded"
+    hunks = build_hunks(old, new)
+    chosen, error = merge_agent_text(old, new, [
+        {"hunk_id": hunks[0]["id"], "choice": "accept", "replacement_text": "my wording"},
+        {"hunk_id": hunks[1]["id"], "choice": "reject"},
+    ])
+    assert error is None
+    assert chosen == "my wording\nkeep\nremove"
+
+
+def test_rewrite_empty_and_task_line():
+    for rewritten in ("", "- [x] My task"):
+        old, new = "- [x] Old", "- [x] Suggested"
+        hunk = build_hunks(old, new)[0]
+        chosen, error = merge_agent_text(old, new, [{
+            "hunk_id": hunk["id"], "choice": "accept", "replacement_text": rewritten,
+        }])
+        assert error is None
+        assert chosen == rewritten
+
+
+def test_invalid_rewrite_decisions_are_rejected():
+    hunk = build_hunks("old", "new")[0]
+    for decision in (
+        {"hunk_id": hunk["id"], "choice": "reject", "replacement_text": "custom"},
+        {"hunk_id": hunk["id"], "choice": "accept", "replacement_text": None},
+        "invalid",
+    ):
+        chosen, error = merge_agent_text("old", "new", [decision])
+        assert chosen is None
+        assert error
