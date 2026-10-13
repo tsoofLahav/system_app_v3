@@ -220,6 +220,19 @@ def replace_memberships(view_id):
     get_or_404(View, view_id)
     data = request.get_json(silent=True) or {}
     memberships = data.get("memberships") or []
+    # A view rewrite is for ordering/section placement, not moving tasks in
+    # from another view. Reject stale cross-view payloads before deleting any
+    # rows. Explicit moves use the task membership endpoint instead.
+    requested_ids = {item.get("task_id") for item in memberships
+                     if item.get("task_id") is not None}
+    current_ids = {row.task_id for row in
+                   ViewTaskMembership.query.filter_by(view_id=view_id).all()}
+    incoming_ids = requested_ids - current_ids
+    if incoming_ids and ViewTaskMembership.query.filter(
+        ViewTaskMembership.task_id.in_(incoming_ids),
+        ViewTaskMembership.view_id != view_id,
+    ).first() is not None:
+        return jsonify({"error": "Tasks belong to another view; reload this view before saving."}), 409
 
     ViewTaskMembership.query.filter_by(view_id=view_id).delete(
         synchronize_session=False
