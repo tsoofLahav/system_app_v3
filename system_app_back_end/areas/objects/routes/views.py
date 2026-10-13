@@ -1,3 +1,5 @@
+from collections import Counter, defaultdict, deque
+
 from flask import Blueprint, jsonify, request
 
 from models import File, ObjectEmbed, Task, TaskList, Topic, View, ViewTaskMembership, db
@@ -219,34 +221,31 @@ def list_memberships(view_id):
 def replace_memberships(view_id):
     get_or_404(View, view_id)
     data = request.get_json(silent=True) or {}
-    memberships = data.get("memberships") or []
-    # A view rewrite is for ordering/section placement, not moving tasks in
-    # from another view. Reject stale cross-view payloads before deleting any
-    # rows. Explicit moves use the task membership endpoint instead.
-    requested_ids = {item.get("task_id") for item in memberships
-                     if item.get("task_id") is not None}
-    current_ids = {row.task_id for row in
-                   ViewTaskMembership.query.filter_by(view_id=view_id).all()}
-    incoming_ids = requested_ids - current_ids
-    if incoming_ids and ViewTaskMembership.query.filter(
-        ViewTaskMembership.task_id.in_(incoming_ids),
-        ViewTaskMembership.view_id != view_id,
-    ).first() is not None:
-        return jsonify({"error": "Tasks belong to another view; reload this view before saving."}), 409
+    memberships = data.get("memberships")
+    if not isinstance(memberships, list) or any(
+        not isinstance(item, dict) or
+        (item.get("task_id") is not None and type(item.get("task_id")) is not int)
+        for item in memberships
+    ):
+        return jsonify({"error": "memberships must be an array of task placements"}), 400
+    if any(item.get("view_id", view_id) != view_id for item in memberships):
+        return jsonify({"error": "Memberships belong to another view; reload before saving."}), 409
 
-    ViewTaskMembership.query.filter_by(view_id=view_id).delete(
-        synchronize_session=False
-    )
+    rows = ViewTaskMembership.query.filter_by(view_id=view_id).with_for_update().all()
+    # Ordering/section edits must preserve membership identity. A stale list
+    # cannot remove newly added tasks or import tasks from another view.
+    if Counter(item.get("task_id") for item in memberships) != Counter(row.task_id for row in rows):
+        return jsonify({"error": "View tasks changed; reload this view before saving."}), 409
+
+    by_task = defaultdict(deque)
+    for row in rows:
+        by_task[row.task_id].append(row)
     for index, item in enumerate(memberships):
-        row = ViewTaskMembership(
-            view_id=view_id,
-            task_id=item.get("task_id"),
-            section_name=item.get("section_name"),
-            order_index=item.get("order_index", index),
-            topic_order_index=_topic_order_index(item, index),
-            section_flag=item.get("section_flag"),
-            topic_key=item.get("topic_key"),
-        )
-        db.session.add(row)
+        row = by_task[item.get("task_id")].popleft()
+        row.section_name = item.get("section_name")
+        row.order_index = item.get("order_index", index)
+        row.topic_order_index = _topic_order_index(item, index)
+        row.section_flag = item.get("section_flag")
+        row.topic_key = item.get("topic_key")
     db.session.commit()
     return list_memberships(view_id)

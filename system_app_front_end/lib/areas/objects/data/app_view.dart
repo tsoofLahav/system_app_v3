@@ -114,6 +114,7 @@ class ViewMembership {
   }
 
   Map<String, dynamic> toReplaceJson() => {
+        'view_id': viewId,
         'task_id': taskId,
         'section_name': sectionName,
         'order_index': orderIndex,

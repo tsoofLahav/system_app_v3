@@ -836,7 +836,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       layoutConfig: layoutConfig,
     );
     userViews = [for (final v in userViews) v.id == updated.id ? updated : v];
-    selectedView = updated;
+    // Saving an old view must not change the currently selected view.
+    if (selectedView?.id == updated.id) selectedView = updated;
   }
 
   Future<void> selectArchiveTopic(Topic topic) async {
@@ -3053,10 +3054,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     List<Map<String, dynamic>> memberships, {
     bool notify = true,
   }) async {
-    if (selectedView == null) return;
-    _applyViewMemberships(
-      await _views.replaceMemberships(selectedView!.id, memberships),
-    );
+    final viewId = selectedView?.id;
+    if (viewId == null) return;
+    if (memberships.any((row) => row['view_id'] != null && row['view_id'] != viewId)) {
+      throw StateError('Memberships belong to another view; reload before saving.');
+    }
+    final rows = await _views.replaceMemberships(viewId, memberships);
+    if (selectedView?.id != viewId) return;
+    _applyViewMemberships(rows);
     if (notify) notifyListeners();
   }
 
@@ -3875,6 +3880,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _applyViewMemberships(List<ViewMembership> rows) {
+    if (selectedView == null || rows.any((row) => row.viewId != selectedView!.id)) return;
     viewMemberships = rows;
     _ingestMembershipTasks();
   }
@@ -4442,7 +4448,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     required String oldName,
     required ViewSectionDef next,
   }) async {
-    if (selectedView == null) return;
+    final view = selectedView;
+    if (view == null) return;
+    final originalMemberships = List<ViewMembership>.of(viewMemberships);
     final sections = [
       for (final s in sectionsForSelectedView())
         s.name == oldName
@@ -4450,12 +4458,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
             : (next.isDefault ? s.copyWith(isDefault: false) : s),
     ];
     await _persistViewLayout(
-      ViewLayoutConfig.withSections(selectedView!.layoutConfig, sections),
+      ViewLayoutConfig.withSections(view.layoutConfig, sections),
     );
 
     final flag = next.flag;
     final memberships = [
-      for (final m in viewMemberships)
+      for (final m in originalMemberships)
         {
           ...m.toReplaceJson(),
           'section_name': m.sectionName == oldName ? next.name : m.sectionName,
@@ -4464,15 +4472,16 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
               : m.sectionFlag,
         },
     ];
-    _applyViewMemberships(
-      await _views.replaceMemberships(selectedView!.id, memberships),
-    );
+    final rows = await _views.replaceMemberships(view.id, memberships);
+    if (selectedView?.id == view.id) _applyViewMemberships(rows);
     await loadAutomations();
     notifyListeners();
   }
 
   Future<void> deleteViewSection(String section) async {
-    if (selectedView == null) return;
+    final view = selectedView;
+    if (view == null) return;
+    final originalMemberships = List<ViewMembership>.of(viewMemberships);
     final sections = [
       for (final s in sectionsForSelectedView())
         if (s.name != section) s,
@@ -4480,23 +4489,22 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final removedKey = 'section:$section';
     final order = [
       for (final key in ViewLayoutConfig.sectionOrder(
-        selectedView!.layoutConfig,
+        view.layoutConfig,
       ))
         if (key != removedKey) key,
     ];
     var layout = ViewLayoutConfig.withSections(
-      selectedView!.layoutConfig,
+      view.layoutConfig,
       sections,
     );
     layout = ViewLayoutConfig.withSectionOrder(layout, order);
     await _persistViewLayout(layout);
     final memberships = [
-      for (final m in viewMemberships)
+      for (final m in originalMemberships)
         m.copyWith(clearSection: m.sectionName == section).toReplaceJson(),
     ];
-    _applyViewMemberships(
-      await _views.replaceMemberships(selectedView!.id, memberships),
-    );
+    final rows = await _views.replaceMemberships(view.id, memberships);
+    if (selectedView?.id == view.id) _applyViewMemberships(rows);
     await loadAutomations();
     notifyListeners();
   }

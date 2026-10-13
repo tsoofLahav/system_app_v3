@@ -314,6 +314,8 @@ class _TaskViewPaneState extends State<TaskViewPane> {
     required bool targetDone,
     required int indexInZone,
   }) async {
+    final viewId = state.selectedView?.id;
+    if (viewId == null || payload.sourceListId != viewId) return;
     final byTopic = state.viewDisplayMode == ViewDisplayMode.byTopic;
     try {
       if (byTopic) {
@@ -332,10 +334,12 @@ class _TaskViewPaneState extends State<TaskViewPane> {
           notify: false,
         );
       }
+      if (!mounted || state.selectedView?.id != viewId) return;
       if (payload.task.isDone != targetDone) {
         await state.toggleTaskStatus(payload.task, notify: false);
       }
 
+      if (!mounted || state.selectedView?.id != viewId) return;
       final moved = payload.task.copyWith(
         status: targetDone ? 'done' : 'active',
       );

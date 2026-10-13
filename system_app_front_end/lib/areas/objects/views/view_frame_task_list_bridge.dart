@@ -12,7 +12,10 @@ class ViewFrameTaskListBridge extends TaskListBridge {
     required this.sectionFlag,
     required this.topicKey,
     this.confirmDeleteFn,
-  });
+  }) : viewId = state.selectedView?.id;
+
+  final int? viewId;
+  bool get _ownsView => viewId != null && state.selectedView?.id == viewId;
 
   final AppState state;
   List<Task> frameTasks;
@@ -27,7 +30,7 @@ class ViewFrameTaskListBridge extends TaskListBridge {
       ];
 
   @override
-  int get dragGroupId => state.selectedView?.id ?? 0;
+  int get dragGroupId => viewId ?? 0;
 
   @override
   bool get showListTitle => false;
@@ -51,6 +54,7 @@ class ViewFrameTaskListBridge extends TaskListBridge {
     required String status,
     int? afterTaskId,
   }) {
+    if (!_ownsView) throw StateError('View changed; reopen the task list.');
     return state.createTaskInView(
       title: title,
       status: status,
@@ -98,6 +102,7 @@ class ViewFrameTaskListBridge extends TaskListBridge {
     required bool targetDone,
     required int insertIndexInZone,
   }) async {
+    if (!_ownsView) return;
     final zones = TaskZones.fromOrdered(remoteTasks);
     final next = zones.moved(
       taskId: task.id,
@@ -124,7 +129,7 @@ class ViewFrameTaskListBridge extends TaskListBridge {
   }
 
   Future<void> _persistFrameOrder(List<int> frameOrderedIds) async {
-    if (state.selectedView == null) return;
+    if (!_ownsView) return;
     final byTopic = state.viewDisplayMode == ViewDisplayMode.byTopic;
     final frameIndex = {
       for (var i = 0; i < frameOrderedIds.length; i++) frameOrderedIds[i]: i,
