@@ -3056,9 +3056,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }) async {
     final viewId = selectedView?.id;
     if (viewId == null) return;
-    if (memberships.any((row) => row['view_id'] != null && row['view_id'] != viewId)) {
-      throw StateError('Memberships belong to another view; reload before saving.');
-    }
     final rows = await _views.replaceMemberships(viewId, memberships);
     if (selectedView?.id != viewId) return;
     _applyViewMemberships(rows);

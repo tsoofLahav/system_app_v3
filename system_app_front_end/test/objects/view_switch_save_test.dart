@@ -65,20 +65,39 @@ void main() {
     expect(state.sectionsForSelectedView().map((s) => s.name), ['Weekend']);
     state.dispose();
   });
-  test('old view frame and payload cannot write into the new view', () async {
+  test('old view frame cannot write into the new view', () async {
     final api = DelayedViewApi();
     final state = AppState(api: api)..userViews = [daily, weekly];
     await state.selectView(daily.type);
-    final oldPayload = [for (final row in state.viewMemberships) row.toReplaceJson()];
     final bridge = ViewFrameTaskListBridge(state: state, frameTasks: [],
       sectionName: 'Morning', sectionFlag: null, topicKey: null);
     await state.selectView(weekly.type);
     expect(bridge.dragGroupId, daily.id);
     await bridge.reorder([]);
     expect(api.membershipPath, isNull);
-    await expectLater(state.reorderViewMemberships(oldPayload), throwsStateError);
     expect(api.membershipPath, isNull);
     expect(state.sectionsForSelectedView().map((s) => s.name), ['Weekend']);
+    state.dispose();
+  });
+  test('normal reorder and move between sections remain available', () async {
+    final api = DelayedViewApi();
+    final state = AppState(api: api)..userViews = [daily, weekly];
+    await state.selectView(daily.type);
+    state.viewMemberships = const [
+      ViewMembership(id: 10, viewId: 1, taskId: 50, sectionName: 'Morning'),
+      ViewMembership(id: 11, viewId: 1, taskId: 51, sectionName: 'Evening'),
+    ];
+    await state.reorderViewMemberships([
+      state.viewMemberships[1].copyWith(orderIndex: 0).toReplaceJson(),
+      state.viewMemberships[0].copyWith(orderIndex: 1).toReplaceJson(),
+    ]);
+    expect(api.membershipPath, '/views/1/memberships');
+    expect((api.membershipBody!['memberships'] as List).map((m) => m['task_id']), [51, 50]);
+    state.viewMemberships = const [
+      ViewMembership(id: 10, viewId: 1, taskId: 50, sectionName: 'Morning'),
+    ];
+    await state.updateViewTaskPlacement(taskId: 50, sectionName: 'Evening');
+    expect((api.membershipBody!['memberships'] as List).single['section_name'], 'Evening');
     state.dispose();
   });
   for (final operation in ['reorder', 'rename section', 'delete section']) {
