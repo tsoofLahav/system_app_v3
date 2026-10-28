@@ -275,3 +275,5 @@ Keep file spacing compact and full journal entries visible. Separate paper from 
 Desktop workspace ombré is one opaque gradient: topic colour mixed 24% into white → a blend with the cool grey → cool grey. It is not a translucent topic veil over grey. Desktop tool bars are 48px high with 25px icons; upper file controls use 20px icons at the same 90% charcoal strength. The desktop AI pill uses a 1.1px outline at 72% cyan and a static 16% cyan soft glow (14px blur), not animation.
 
 Sidebar headings, Home, map entry, and subheadings use regular weight; hierarchy comes from indentation and size. Main section dividers use sidebar-border colour at 85% opacity; view-group dividers use 65%. The canvas is slightly brighter at the same cool hue.
+
+Desktop bottom toolbars share a transparent horizontal scroll viewport. They keep their own pill surfaces and never overlap when the window narrows. Preferences stay at the start and tools center in the remaining space when they fit; mouse drag and trackpad scrolling reveal overflow.

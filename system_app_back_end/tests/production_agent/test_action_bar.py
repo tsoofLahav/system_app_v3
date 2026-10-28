@@ -4,6 +4,7 @@ import pytest
 
 from areas.production_agent.services.action_bar import (
     AI_BAR_SLOTS,
+    AI_FIXED_SLOTS,
     AI_TOPIC_EXTRA_FIRST,
     AI_TOPIC_EXTRA_LAST,
     first_free_slot,
@@ -18,10 +19,12 @@ def test_slots_from_order_numbers_from_one():
     assert slots_from_order([7, 3, 9]) == {7: 1, 3: 2, 9: 3}
 
 
-def test_slots_from_order_stops_at_the_seventh():
-    slots = slots_from_order(list(range(1, 12)))
+def test_slots_from_order_keeps_twelve_and_reserves_topic_ids():
+    slots = slots_from_order(list(range(1, 15)))
     assert len(slots) == AI_BAR_SLOTS
-    assert 8 not in slots
+    assert list(slots.values()) == list(AI_FIXED_SLOTS)
+    assert 13 not in slots
+    assert slots[8] == 11
 
 
 def test_slots_from_order_rejects_duplicates():
@@ -45,13 +48,13 @@ def test_slot_out_of_range_is_rejected():
     with pytest.raises(ValueError):
         slots_after_claim({}, 1, 0)
     with pytest.raises(ValueError):
-        slots_after_claim({}, 1, AI_BAR_SLOTS + 1)
+        slots_after_claim({}, 1, max(AI_FIXED_SLOTS) + 1)
 
 
 def test_first_free_slot_fills_gaps_then_gives_up():
     assert first_free_slot({1: 1, 2: 3}) == 2
     assert first_free_slot({}) == 1
-    full = {i: i for i in range(1, AI_BAR_SLOTS + 1)}
+    full = {i: i for i in range(1, max(AI_FIXED_SLOTS) + 1)}
     assert first_free_slot(full) is None
 
 
@@ -68,3 +71,11 @@ def test_first_free_topic_extra():
     assert first_free_topic_extra({}) == AI_TOPIC_EXTRA_FIRST
     assert first_free_topic_extra({1: 9}) == AI_TOPIC_EXTRA_LAST
     assert first_free_topic_extra({1: 9, 2: 10}) is None
+
+
+def test_new_fixed_seats_do_not_claim_topic_shortcuts():
+    assert first_free_slot({i: i for i in range(1, 8)}) == 11
+    assert slots_after_claim({}, 42, 15) == {42: 15}
+    for reserved in (8, 9, 10):
+        with pytest.raises(ValueError):
+            slots_after_claim({}, 42, reserved)

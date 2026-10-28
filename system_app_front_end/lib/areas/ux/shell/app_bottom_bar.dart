@@ -23,6 +23,7 @@ import '../../objects/diagram/diagram_tag_filter_bar.dart';
 import './chrome_anchors.dart';
 import './dismiss_focus_on_outside_tap.dart';
 import './preferences_dialog.dart';
+import './scrollable_toolbar_row.dart';
 import '../../objects/views/view_chrome_menu.dart';
 
 abstract final class AppBottomBarMetrics {
@@ -106,40 +107,29 @@ class AppBottomBar extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: 20,
-          vertical: AppBottomBarMetrics.floatMargin,
+          vertical: AppBottomBarMetrics.floatMargin - 8,
         ),
-        child: Row(
-          // Preferences / automations at the start edge (left in English,
-          // right in Hebrew). Insert tools and AI stay in the remaining middle.
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            chrome,
-            const SizedBox(width: 8),
-            Expanded(
-              child: diagramMode
-                  ? DiagramTagFilterBar(state: state)
-                  : Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (state.isViewMode) ...[
-                            ViewEmojiInsertBar(state: state),
-                            if (center.isNotEmpty) const SizedBox(width: 8),
-                          ],
-                          if (hasEditor) ...[
-                            DocumentInsertBar(state: state, embedded: true),
-                            if (center.isNotEmpty) const SizedBox(width: 8),
-                          ],
-                          ...center,
-                        ],
-                      ),
-                    ),
-            ),
-            if (diagramMode && center.isNotEmpty) ...[
-              const SizedBox(width: 8),
+        child: ScrollableToolbarRow(
+          leading: chrome,
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (diagramMode) ...[
+                SizedBox(width: 280, child: DiagramTagFilterBar(state: state)),
+                if (center.isNotEmpty) const SizedBox(width: 8),
+              ] else ...[
+                if (state.isViewMode) ...[
+                  ViewEmojiInsertBar(state: state),
+                  if (center.isNotEmpty) const SizedBox(width: 8),
+                ],
+                if (hasEditor) ...[
+                  DocumentInsertBar(state: state, embedded: true),
+                  if (center.isNotEmpty) const SizedBox(width: 8),
+                ],
+              ],
               ...center,
             ],
-          ],
+          ),
         ),
       ),
     );

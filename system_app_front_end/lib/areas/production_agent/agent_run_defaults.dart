@@ -8,8 +8,9 @@ const defaultAutomationApplyMode = 'review';
 
 /// Fixed saved-action seats on the AI bar (global / type-scoped). Twin of
 /// `AI_BAR_SLOTS` in `areas/production_agent/services/action_bar.py`.
-/// The eight spots on the bar count the agent as ⌘1; these seven are ⌘2…⌘8.
-const aiBarSlotCount = 7;
+/// Preserve legacy seat IDs and shortcuts; five additional seats are unbound.
+const aiFixedBarSlots = <int>[1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 14, 15];
+final aiBarSlotCount = aiFixedBarSlots.length;
 
 /// Extra seats a topic-scoped action occupies only on that topic (⌘9 / ⌘0).
 const aiTopicExtraSlotCount = 2;

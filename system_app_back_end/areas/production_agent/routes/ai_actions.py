@@ -164,7 +164,7 @@ def list_ai_actions():
 
 @ai_actions_bp.route("/ai-actions/bar-order", methods=["PUT"])
 def reorder_ai_action_bar():
-    """Set the fixed AI bar: `ordered_ids` take slots 1..7. Topic extras stay."""
+    """Set the fixed AI bar: `ordered_ids` take the twelve fixed seats. Topic extras stay."""
     data = request.get_json(silent=True) or {}
     workspace_id = data.get("workspace_id") or default_workspace_id()
     if not workspace_id:

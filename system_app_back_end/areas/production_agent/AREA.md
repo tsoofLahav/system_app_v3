@@ -160,7 +160,7 @@ The same `compute_diff` backs `POST /files/:id/diff`.
 | [`services/openai_service.py`](services/openai_service.py) | Responses conversation helpers + legacy chat/image helpers |
 | [`routes/agent.py`](routes/agent.py) | `POST /agent/run`; apply-agent-text; pending-review routes |
 | [`routes/ai_actions.py`](routes/ai_actions.py) | Saved AI actions: CRUD, bar order, run on live scope. English `name` + Hebrew `name_he` (both required). Optional `requires_user_input` / `user_input_prompt` so an automation that uses the action places complimentary input/review tasks. Scope: `topic_id` xor `topic_type_id` xor neither (all) — **bar** visibility only; the ⋯ menu lists every action. At most two actions may be scoped to one topic; those occupy extra seats 9–10 only on that topic. Template topics are never in that scope. Visiting files on Home are a frontend **bar** visibility union — the run still uses live `scope` / `hints` |
-| [`services/action_bar.py`](services/action_bar.py) | Slot rules: fixed 1–7 (workspace-unique among non-topic actions, keys ⌘2–⌘8 with the agent as ⌘1); extra 9–10 unique per topic (⌘9 / ⌘0). A seat is also a keyboard shortcut |
+| [`services/action_bar.py`](services/action_bar.py) | Slot rules: twelve fixed seats, IDs 1–7 and 11–15 (workspace-unique among non-topic actions, keys ⌘2–⌘8 with the agent as ⌘1); extra 9–10 unique per topic (⌘9 / ⌘0). Existing shortcuts stay; the five new seats have no default shortcut. No schema migration is needed |
 
 ## Rules
 

@@ -505,7 +505,7 @@ class AppStrings {
     'actionPlace': 'Where it lives',
     'actionPlaceMenu': 'In the menu',
     'actionPlaceHint':
-        'The agent and seven saved actions sit on the bar (⌘1–⌘8). A topic can add two more on ⌘9 and ⌘0.',
+        'The bar holds the agent and 12 saved actions. Existing shortcuts stay; a topic can add two more on ⌘9 and ⌘0.',
     'actionPlaceTopicHint':
         'Shows on this topic — one of two extra spots, only while you are here.',
     'actionTopicSlotsFull': 'This topic already has two specific actions.',
@@ -1306,7 +1306,7 @@ class AppStrings {
     'actionPlace': 'איפה היא תשב',
     'actionPlaceMenu': 'בתפריט',
     'actionPlaceHint':
-        'הסוכן ושבע פעולות שמורות יושבים בסרגל (⌘1–⌘8). לנושא אפשר להוסיף עוד שתיים ב-⌘9 ו-⌘0.',
+        'בסרגל יש מקום לסוכן ול־12 פעולות שמורות. הקיצורים הקיימים נשמרים; לנושא אפשר להוסיף עוד שתיים ב־⌘9 וב־⌘0.',
     'actionPlaceTopicHint':
         'מוצג בנושא הזה — אחד משני מקומות נוספים, רק כל עוד אתה כאן.',
     'actionTopicSlotsFull': 'לנושא הזה כבר יש שתי פעולות ייעודיות.',

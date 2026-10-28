@@ -204,7 +204,7 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
     final binding = widget.state.shortcutBindings.bindingFor(
       ShortcutActionIds.aiActionSlot(slot),
     );
-    return binding.isValid ? binding.displayLabel() : '$slot';
+    return binding.isValid ? binding.displayLabel() : '${aiFixedBarSlots.indexOf(slot) + 1}';
   }
 
   String? _placeHint(AppStrings s) {
@@ -368,7 +368,7 @@ class _AgentPromptDialogState extends State<AgentPromptDialog> {
                     // and null is what "no slot" means downstream.
                     options: [
                       AppSegmentedOption(value: 0, label: s['actionPlaceMenu']),
-                      for (var slot = 1; slot <= aiBarSlotCount; slot++)
+                      for (final slot in aiFixedBarSlots)
                         AppSegmentedOption(
                           value: slot,
                           label: _slotLabel(slot),

@@ -1,7 +1,7 @@
 import './agent_run_defaults.dart';
 import './ai_action.dart';
 
-bool isFixedAiBarSlot(int slot) => slot >= 1 && slot <= aiBarSlotCount;
+bool isFixedAiBarSlot(int slot) => aiFixedBarSlots.contains(slot);
 
 bool isTopicExtraAiBarSlot(int slot) {
   return slot >= aiTopicExtraFirstSlot &&
@@ -39,7 +39,7 @@ int? firstFreeFixedAiBarSlot(List<AiAction> actions) {
           isFixedAiBarSlot(action.barSlot!))
         action.barSlot!,
   };
-  for (var slot = 1; slot <= aiBarSlotCount; slot++) {
+  for (final slot in aiFixedBarSlots) {
     if (!taken.contains(slot)) return slot;
   }
   return null;

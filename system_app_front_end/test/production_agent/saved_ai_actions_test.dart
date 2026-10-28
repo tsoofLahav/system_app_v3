@@ -381,7 +381,7 @@ void main() {
       final slotActions = kShortcutCatalog
           .where((a) => ShortcutActionIds.slotOfAiAction(a.id) != null)
           .toList();
-      expect(slotActions.length, aiBarSlotCount + aiTopicExtraSlotCount);
+      expect(slotActions.length, 7 + aiTopicExtraSlotCount);
 
       const digits = [
         LogicalKeyboardKey.digit2,
@@ -392,7 +392,7 @@ void main() {
         LogicalKeyboardKey.digit7,
         LogicalKeyboardKey.digit8,
       ];
-      for (var slot = 1; slot <= aiBarSlotCount; slot++) {
+      for (var slot = 1; slot <= 7; slot++) {
         final binding = slotActions[slot - 1].defaultBinding;
         expect(binding.keyId, digits[slot - 1].keyId);
         expect(binding.meta, isTrue);
@@ -427,7 +427,7 @@ void main() {
     });
   });
 
-  group('the bar is seven saved seats plus two extras for the open topic', () {
+  group('the bar is twelve saved seats plus two extras for the open topic', () {
     AiAction action({
       required int id,
       int? barSlot,
@@ -443,6 +443,19 @@ void main() {
           if (topicId != null) 'topic_id': topicId,
           if (topicTypeId != null) 'topic_type_id': topicTypeId,
         });
+
+    test('twelve fixed actions coexist with both topic shortcuts', () {
+      final actions = [
+        for (final slot in aiFixedBarSlots) action(id: slot, barSlot: slot),
+        action(id: 90, barSlot: 9, topicId: 4),
+        action(id: 100, barSlot: 10, topicId: 4),
+      ];
+      expect(aiBarSlotCount, 12);
+      expect(firstFreeFixedAiBarSlot(actions), isNull);
+      expect(composeBarAiActions(actions: actions, openTopicId: 4,
+        openTypeId: null, visitingTopicIds: {}, visitingTypeIds: {}).map((a) => a.id),
+        [...aiFixedBarSlots, 90, 100]);
+    });
 
     test('a topic may have two specific actions and no more', () {
       final actions = [

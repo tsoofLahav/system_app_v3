@@ -32,7 +32,7 @@ class AiAction {
   /// point — the set is ours to change without touching stored rows.
   final String icon;
 
-  /// 1..7 for a fixed AI-bar seat, 9..10 for a topic extra, null for the menu.
+  /// 1..7 and 11..15 for a fixed AI-bar seat, 9..10 for a topic extra, null for the menu.
   final int? barSlot;
 
   /// Null with [topicId] also null = every topic. Set = this type.
