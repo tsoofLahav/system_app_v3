@@ -34,7 +34,7 @@ Every object has a stable id, file id, type, optional typed FKs / payload, and t
 
 Tasks are the richest object type — a sub-part of this area, not a separate one.
 
-**Order.** Every task carries `list_order_index` within its `task_list`. Users reorder freely; order is explicit, not derived from creation time. Reordering rewrites indices for the whole list so they stay dense (`active` ids then `done` ids). Views keep **two** membership orders: `order_index` for section mode and `topic_order_index` for topic mode (`view_task_memberships`). List order, view-by-section, and view-by-topic are independent.
+**Order.** Every task carries `list_order_index` within its `task_list`. Users reorder freely; order is explicit, not derived from creation time. One canonical order spans all statuses; Active and Done are filtered projections. Checkbox changes never write order. Dragging inserts relative to a visible sibling in the canonical sequence and preserves all other relative positions; creation and deletion also preserve that sequence. Reordering rewrites dense indices without grouping by status. Views keep **two** membership orders: `order_index` for section mode and `topic_order_index` for topic mode (`view_task_memberships`). List order, view-by-section, and view-by-topic are independent.
 
 **Done / active / inactive / pending.** `tasks.status` is `active`, `done`, `inactive`, or `pending`. A task exists **once**. Marking it done anywhere updates the single row and is reflected everywhere it appears. List queries and the UI show Active then Done zones; inactive and pending sit with Active. `POST /tasks/:id/move` can place a task into a zone (including the same list) without wiping pending/inactive when the drop stays in the non-done zone.
 

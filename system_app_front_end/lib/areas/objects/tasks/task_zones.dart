@@ -1,111 +1,71 @@
 import '../data/task.dart';
 
-/// Split tasks into Active / Done zones (canonical [Task.status]).
-///
-/// Within each zone, order follows [Task.listOrderIndex] unless [byIds] is
-/// provided (explicit id order, e.g. view membership order).
+/// Active and Done are filtered projections of one context-specific order.
 class TaskZones {
-  const TaskZones({required this.active, required this.done});
+  TaskZones.fromOrdered(List<Task> tasks) : ordered = List.unmodifiable(tasks);
 
-  final List<Task> active;
-  final List<Task> done;
+  final List<Task> ordered;
+  List<Task> get active => ordered.where((t) => !t.isDone).toList();
+  List<Task> get done => ordered.where((t) => t.isDone).toList();
 
+  /// Display order only. Never persist this concatenation.
   List<Task> get all => [...active, ...done];
-
-  List<int> get orderedIds => [for (final t in all) t.id];
+  List<int> get orderedIds => [for (final t in ordered) t.id];
 
   static TaskZones fromTasks(Iterable<Task> tasks) {
-    final list = [...tasks];
-    list.sort((a, b) {
-      final byStatus = (a.isDone ? 1 : 0).compareTo(b.isDone ? 1 : 0);
-      if (byStatus != 0) return byStatus;
-      final byOrder = a.listOrderIndex.compareTo(b.listOrderIndex);
-      if (byOrder != 0) return byOrder;
-      return a.id.compareTo(b.id);
-    });
-    return TaskZones(
-      active: [for (final t in list) if (!t.isDone) t],
-      done: [for (final t in list) if (t.isDone) t],
-    );
+    final list = [...tasks]
+      ..sort((a, b) {
+        final order = a.listOrderIndex.compareTo(b.listOrderIndex);
+        return order != 0 ? order : a.id.compareTo(b.id);
+      });
+    return TaskZones.fromOrdered(list);
   }
 
-  /// Group by status while preserving relative order of [ordered] among each zone.
-  static TaskZones fromOrdered(List<Task> ordered) {
-    return TaskZones(
-      active: [for (final t in ordered) if (!t.isDone) t],
-      done: [for (final t in ordered) if (t.isDone) t],
-    );
-  }
+  TaskZones withStatus(int taskId, bool targetDone) => TaskZones.fromOrdered([
+    for (final task in ordered)
+      task.id == taskId ? _placed(task, targetDone) : task,
+  ]);
 
-  /// Move [taskId] within/across zones. [indexInZone] is the drop index in the
-  /// pre-move zone (insert-before that slot); adjusted when the source sits
-  /// earlier in the same zone.
+  static Task _placed(Task task, bool targetDone) => task.copyWith(
+    status: targetDone
+        ? 'done'
+        : task.isDone
+        ? 'active'
+        : task.status,
+  );
+
+  /// Drop index is in the pre-move visible zone.
   TaskZones moved({
     required int taskId,
     required bool targetDone,
     required int indexInZone,
   }) {
-    Task? moving;
-    var sourceIndex = -1;
-    var sourceDone = false;
-    final nextActive = <Task>[];
-    final nextDone = <Task>[];
-    for (var i = 0; i < active.length; i++) {
-      final t = active[i];
-      if (t.id == taskId) {
-        moving = t;
-        sourceIndex = i;
-        sourceDone = false;
-      } else {
-        nextActive.add(t);
-      }
-    }
-    for (var i = 0; i < done.length; i++) {
-      final t = done[i];
-      if (t.id == taskId) {
-        moving = t;
-        sourceIndex = i;
-        sourceDone = true;
-      } else {
-        nextDone.add(t);
-      }
-    }
-    if (moving == null) return this;
-    final placed = moving.copyWith(
-      status: targetDone
-          ? 'done'
-          : moving.isDone
-              ? 'active'
-              : moving.status,
-    );
-    final zone = targetDone ? nextDone : nextActive;
-    var at = indexInZone;
-    if (sourceDone == targetDone && sourceIndex >= 0 && sourceIndex < at) {
-      at -= 1;
-    }
-    at = at.clamp(0, zone.length);
-    zone.insert(at, placed);
-    return TaskZones(active: nextActive, done: nextDone);
+    final task = ordered.where((t) => t.id == taskId).firstOrNull;
+    if (task == null) return this;
+    final zone = targetDone ? done : active;
+    final sourceIndex = zone.indexWhere((t) => t.id == taskId);
+    final at = sourceIndex >= 0 && sourceIndex < indexInZone
+        ? indexInZone - 1
+        : indexInZone;
+    return inserted(task: task, targetDone: targetDone, indexInZone: at);
   }
 
-  /// Insert [task] into a zone (adding it if it is not already in this set).
+  /// Insert before the target visible sibling, or after its last sibling.
+  /// All other tasks retain their relative canonical order.
   TaskZones inserted({
     required Task task,
     required bool targetDone,
     required int indexInZone,
   }) {
-    final nextActive = [for (final t in active) if (t.id != task.id) t];
-    final nextDone = [for (final t in done) if (t.id != task.id) t];
-    final placed = task.copyWith(
-      status: targetDone
-          ? 'done'
-          : task.isDone
-              ? 'active'
-              : task.status,
-    );
-    final zone = targetDone ? nextDone : nextActive;
+    final next = ordered.where((t) => t.id != task.id).toList();
+    final zone = next.where((t) => t.isDone == targetDone).toList();
     final at = indexInZone.clamp(0, zone.length);
-    zone.insert(at, placed);
-    return TaskZones(active: nextActive, done: nextDone);
+    final position = at < zone.length
+        ? next.indexWhere((t) => t.id == zone[at].id)
+        : zone.isNotEmpty
+        ? next.indexWhere((t) => t.id == zone.last.id) + 1
+        : next.length;
+    next.insert(position, _placed(task, targetDone));
+    return TaskZones.fromOrdered(next);
   }
 }

@@ -3003,38 +3003,15 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       status: status,
     );
     _ingestTask(task);
-    // Insert into the matching zone after [afterTaskId], then the other zone.
     final existing = await _tasks.listForTaskList(taskListId);
-    final others = existing.where((t) => t.id != task.id).toList();
-    final active = others.where((t) => !t.isDone).map((t) => t.id).toList();
-    final done = others.where((t) => t.isDone).map((t) => t.id).toList();
-    final targetDone = status == 'done';
-    final ordered = <int>[];
-    if (targetDone) {
-      ordered.addAll(active);
-      if (afterTaskId != null && done.contains(afterTaskId)) {
-        for (final id in done) {
-          ordered.add(id);
-          if (id == afterTaskId) ordered.add(task.id);
-        }
-      } else {
-        ordered
-          ..addAll(done)
-          ..add(task.id);
-      }
-    } else {
-      if (afterTaskId != null && active.contains(afterTaskId)) {
-        for (final id in active) {
-          ordered.add(id);
-          if (id == afterTaskId) ordered.add(task.id);
-        }
-      } else {
-        ordered
-          ..addAll(active)
-          ..add(task.id);
-      }
-      ordered.addAll(done);
-    }
+    final others = existing.where((t) => t.id != task.id).toList()
+      ..sort((a, b) {
+        final order = a.listOrderIndex.compareTo(b.listOrderIndex);
+        return order != 0 ? order : a.id.compareTo(b.id);
+      });
+    final ordered = others.map((t) => t.id).toList();
+    final after = afterTaskId == null ? -1 : ordered.indexOf(afterTaskId);
+    ordered.insert(after < 0 ? ordered.length : after + 1, task.id);
     await _tasks.reorderInList(taskListId, ordered);
     await _reloadEmbedsForOpenFiles(notify: notify);
     return task;
@@ -3049,7 +3026,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     await _reloadEmbedsForOpenFiles(notify: notify);
   }
 
-  /// Persist view membership order (active ids then done ids among task rows).
+  /// Persist canonical view membership order, independent of status.
   Future<void> reorderViewMemberships(
     List<Map<String, dynamic>> memberships, {
     bool notify = true,

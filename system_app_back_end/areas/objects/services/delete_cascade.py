@@ -43,7 +43,6 @@ def delete_task_cascade(task_id: int) -> None:
             sorted(
                 remaining,
                 key=lambda x: (
-                    1 if x.status == "done" else 0,
                     x.list_order_index,
                     x.id,
                 ),

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from sqlalchemy import case
-
 from models import Task, TaskList, db
 
 
@@ -32,7 +30,6 @@ def tasks_for_list_query(task_list_id: int):
         _active_tasks_query()
         .filter(Task.task_list_id == task_list_id)
         .order_by(
-            case((Task.status == "done", 1), else_=0),
             Task.list_order_index,
             Task.id,
         )
@@ -44,7 +41,7 @@ def tasks_for_list(task_list_id: int) -> list[Task]:
 
 
 def apply_list_task_order(task_list_id: int, ordered_task_ids: list[int]) -> list[Task]:
-    """Set list_order_index 0..n-1 for tasks in ordered_task_ids (active then done)."""
+    """Set list_order_index 0..n-1 for tasks in ordered_task_ids (independent of status)."""
     if not ordered_task_ids:
         return []
     if len(set(ordered_task_ids)) != len(ordered_task_ids):
@@ -73,12 +70,17 @@ def merged_task_ids_after_zone_insert(
     target_done: bool,
     insert_index_in_zone: int,
 ) -> list[int]:
-    active = [t for t in list_tasks if t.status != "done" and t.id != task.id]
-    done = [t for t in list_tasks if t.status == "done" and t.id != task.id]
-    zone = done if target_done else active
+    remaining = [t for t in list_tasks if t.id != task.id]
+    zone = [t for t in remaining if (t.status == "done") == target_done]
     index = max(0, min(insert_index_in_zone, len(zone)))
-    zone.insert(index, task)
-    return [t.id for t in active] + [t.id for t in done]
+    if index < len(zone):
+        position = remaining.index(zone[index])
+    elif zone:
+        position = remaining.index(zone[-1]) + 1
+    else:
+        position = len(remaining)
+    remaining.insert(position, task)
+    return [t.id for t in remaining]
 
 
 def reorder_tasks_in_list(task_list_id: int, ordered_task_ids: list[int]) -> list[Task]:

@@ -110,7 +110,7 @@ class _TaskViewPaneState extends State<TaskViewPane> {
   }
 
   List<Task> _sortFrameTasks(List<Task> tasks) {
-    if (tasks.length <= 1) return TaskZones.fromOrdered(tasks).all;
+    if (tasks.length <= 1) return tasks;
     final byTopic = state.viewDisplayMode == ViewDisplayMode.byTopic;
     final byId = {
       for (final m in state.viewMemberships)
@@ -126,7 +126,7 @@ class _TaskViewPaneState extends State<TaskViewPane> {
       if (c != 0) return c;
       return a.id.compareTo(b.id);
     });
-    return TaskZones.fromOrdered(sorted).all;
+    return sorted;
   }
 
   int _stableSeed(String key) {

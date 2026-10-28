@@ -188,9 +188,11 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
   TaskListBridge get _bridge => widget.bridge;
 
-  List<Task> get _remoteTasks => _bridge.sortRemoteByListOrder
-      ? TaskZones.fromTasks(_bridge.remoteTasks).all
-      : TaskZones.fromOrdered(_bridge.remoteTasks).all;
+  TaskZones get _canonicalZones => _bridge.sortRemoteByListOrder
+      ? TaskZones.fromTasks(_bridge.remoteTasks)
+      : TaskZones.fromOrdered(_bridge.remoteTasks);
+
+  List<Task> get _remoteTasks => _canonicalZones.all;
 
   List<Task> get _displayTasks => _optimistic ?? _remoteTasks;
 
@@ -1334,19 +1336,24 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     final task = _taskById(id);
     if (task == null || !task.canToggleMark) return;
     final targetDone = !_done[index];
-    final zones = TaskZones.fromOrdered(_displayTasks);
-    final next = zones.moved(
-      taskId: id,
-      targetDone: targetDone,
-      indexInZone: targetDone ? zones.done.length : zones.active.length,
-    );
-    _applyOptimistic(next);
-    await _persistMove(
-      task: task,
-      targetDone: targetDone,
-      insertIndexInZone: targetDone ? zones.done.length : zones.active.length,
-      snapshot: zones,
-    );
+    final zones = _canonicalZones;
+    if (_persisting) return;
+    _applyOptimistic(zones.withStatus(id, targetDone));
+    _persisting = true;
+    try {
+      await widget.state.toggleTaskStatus(task, notify: false);
+      await _bridge.refresh();
+    } catch (_) {
+      if (mounted) {
+        _applyOptimistic(zones);
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text(widget.state.strings['reorderFailed'])),
+        );
+      }
+    } finally {
+      _persisting = false;
+      if (mounted) syncFromRemote();
+    }
   }
 
   void _applyOptimistic(TaskZones next) {
@@ -1406,6 +1413,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       }
     } finally {
       _persisting = false;
+      if (mounted) syncFromRemote();
     }
   }
 
@@ -1429,6 +1437,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       }
     } finally {
       _persisting = false;
+      if (mounted) syncFromRemote();
     }
   }
 
@@ -1437,7 +1446,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     required bool targetDone,
     required int indexInZone,
   }) {
-    if (!_bridge.acceptsDrag(payload)) return;
+    if (_persisting || !_bridge.acceptsDrag(payload)) return;
     final localIds = {for (final id in _taskIds) ?id};
     if (!localIds.contains(payload.task.id)) {
       if (_dropBlankUnsavedSeeds()) setState(() {});
@@ -1448,7 +1457,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       );
       return;
     }
-    final zones = TaskZones.fromOrdered(_displayTasks);
+    final zones = _canonicalZones;
     final next = zones.moved(
       taskId: payload.task.id,
       targetDone: targetDone,
