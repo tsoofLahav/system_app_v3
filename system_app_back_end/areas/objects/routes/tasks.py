@@ -40,8 +40,10 @@ def list_tasks():
 
 @tasks_bp.route("/tasks/<int:task_id>", methods=["PATCH"])
 def update_task(task_id):
-    task = get_or_404(Task, task_id)
+    task = Task.query.filter_by(id=task_id).populate_existing().first_or_404()
     data = request.get_json(silent=True) or {}
+    if "base_revision" in data and data["base_revision"] != task.revision:
+        return jsonify({"error": "revision conflict", "task": task.to_dict()}), 409
     apply_updates(
         task,
         data,

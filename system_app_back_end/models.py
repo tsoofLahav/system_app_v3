@@ -159,6 +159,10 @@ class Task(db.Model):
     source_automation_id = db.Column(db.Integer, db.ForeignKey("automations.id"))
     complimentary_role = db.Column(db.Text)
     complimentary_cycle = db.Column(JSONB, nullable=False, default=dict)
+    creation_key = db.Column(db.Text, unique=True)
+    revision = db.Column(db.Integer, nullable=False, default=1)
+    __mapper_args__ = {"version_id_col": revision}
+
     title_spans = db.Column(JSONB, nullable=False, default=list)
 
     def to_dict(self):
@@ -166,6 +170,7 @@ class Task(db.Model):
 
         return {
             "id": self.id,
+            "revision": int(self.revision or 1),
             "task_list_id": self.task_list_id,
             "title": self.title,
             "status": self.status,

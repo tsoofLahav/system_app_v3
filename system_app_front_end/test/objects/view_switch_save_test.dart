@@ -16,18 +16,28 @@ const weekly = AppView(id: 2, workspaceId: 1, name: 'Weekly', layoutConfig: {
 class DelayedViewApi extends ApiService {
   final saved = Completer<dynamic>();
   Completer<dynamic>? delayedMemberships;
+  List<Map<String, dynamic>>? rows;
   String? savedPath;
   Map<String, dynamic>? savedBody;
   String? membershipPath;
   Map<String, dynamic>? membershipBody;
   @override
   Future<dynamic> patch(String path, Map<String, dynamic> body) {
+    if (path.endsWith('/memberships')) {
+      membershipPath = path;
+      membershipBody = body;
+      for (final change in body['changes'] as List) {
+        final row = rows!.firstWhere((r) => r['task_id'] == change['task_id']);
+        row.addAll(Map<String, dynamic>.from(change['patch'] as Map));
+      }
+      return Future.value(rows);
+    }
     savedPath = path;
     savedBody = body;
     return saved.future;
   }
   @override
-  Future<dynamic> get(String path) async => [
+  Future<dynamic> get(String path) async => rows != null && path.contains('/1/memberships') ? rows : [
     if (path.contains('/memberships')) {
       'id': path.contains('/2/') ? 20 : 10,
       'view_id': path.contains('/2/') ? 2 : 1,
@@ -87,17 +97,20 @@ void main() {
       ViewMembership(id: 10, viewId: 1, taskId: 50, sectionName: 'Morning'),
       ViewMembership(id: 11, viewId: 1, taskId: 51, sectionName: 'Evening'),
     ];
+    api.rows = state.viewMemberships.map((m) => {'id': m.id, 'view_id': m.viewId, ...m.toReplaceJson()}).toList();
     await state.reorderViewMemberships([
       state.viewMemberships[1].copyWith(orderIndex: 0).toReplaceJson(),
       state.viewMemberships[0].copyWith(orderIndex: 1).toReplaceJson(),
     ]);
     expect(api.membershipPath, '/views/1/memberships');
-    expect((api.membershipBody!['memberships'] as List).map((m) => m['task_id']), [51, 50]);
+    expect((api.membershipBody!['changes'] as List).single['task_id'], 50);
+    expect((api.membershipBody!['changes'] as List).single['patch']['order_index'], 1);
     state.viewMemberships = const [
       ViewMembership(id: 10, viewId: 1, taskId: 50, sectionName: 'Morning'),
     ];
+    api.rows = state.viewMemberships.map((m) => {'id': m.id, 'view_id': m.viewId, ...m.toReplaceJson()}).toList();
     await state.updateViewTaskPlacement(taskId: 50, sectionName: 'Evening');
-    expect((api.membershipBody!['memberships'] as List).single['section_name'], 'Evening');
+    expect((api.membershipBody!['changes'] as List).single['patch']['section_name'], 'Evening');
     state.dispose();
   });
   for (final operation in ['reorder', 'rename section', 'delete section']) {

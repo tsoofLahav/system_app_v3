@@ -37,6 +37,7 @@ class FileTaskListBridge extends TaskListBridge {
 
   @override
   Future<Task> createAfter({
+    String? creationKey,
     required String title,
     required String status,
     int? afterTaskId,
@@ -48,6 +49,7 @@ class FileTaskListBridge extends TaskListBridge {
     return state.createTaskInList(
       id,
       title: title,
+      creationKey: creationKey,
       afterTaskId: afterTaskId,
       status: status,
       notify: false,

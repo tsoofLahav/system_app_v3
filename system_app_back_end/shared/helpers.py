@@ -64,6 +64,12 @@ def register_error_handlers(app):
             file = db.session.get(File, file_id)
             if file is not None:
                 body["file"] = file.to_dict()
+        task_id = (request.view_args or {}).get("task_id")
+        if task_id is not None:
+            from models import Task
+            task = db.session.get(Task, task_id)
+            if task is not None:
+                body["task"] = task.to_dict()
         return jsonify(body), 409
 
     @app.errorhandler(HTTPException)

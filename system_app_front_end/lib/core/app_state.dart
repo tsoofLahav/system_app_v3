@@ -1,3 +1,5 @@
+import '../areas/objects/tasks/task_zones.dart';
+import '../areas/objects/tasks/task_save_queue.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -258,12 +260,121 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     });
   }
 
+  final Map<int, TaskSaveQueue> _taskSaves = {};
+  final Map<int, int> taskDraftDiscardEpochs = {};
+  final Map<String, List<PendingTaskOrder>> _pendingOrders = {};
+  final Map<String, Future<void>> _orderSaves = {};
+  final Map<int, int> _viewOrderVersions = {};
+
   bool isTaskWritePending(int taskId) =>
+      (_taskSaves[taskId]?.dirty ?? false) ||
+      (_taskSaves[taskId]?.saving ?? false) ||
       _objectWrites.containsKey('task:$taskId') ||
       _pendingTaskMarks.contains(taskId);
 
+  TaskSaveQueue _saveQueue(Task task) {
+    final existing = _taskSaves[task.id];
+    if (existing != null) {
+      existing.observe(hydrateTask(task));
+      return existing;
+    }
+    return _taskSaves.putIfAbsent(task.id, () =>
+    TaskSaveQueue(
+      baseline: hydrateTask(task),
+      read: () async => Task.fromJson(
+        Map<String, dynamic>.from(await _api.get('/tasks/${task.id}') as Map)),
+      write: (patch, revision) async {
+        Task? saved;
+        await _serializeObjectWrite(
+          hydrateTask(task).descriptionLinks.isEmpty ? 'task:${task.id}' : 'checklist-marks',
+          () async {
+            final infoIds = <int>{};
+            if (patch.containsKey('status')) {
+              for (final link in hydrateTask(task).descriptionLinks) {
+                final id = _infoObjectIdFromLink(link);
+                if (id != null) {
+                  await EditorSaveRegistry.flushObject(id);
+                  infoIds.add(id);
+                }
+              }
+              _taskPendingInfoMarks[task.id] = infoIds;
+              await applyInnerTasksFromOuter(hydrateTask(task).copyWith(status: patch['status'] as String));
+              notifyInfoChecklistChanged();
+            }
+            final data = await _api.patch('/tasks/${task.id}', {
+              ...patch, 'base_revision': revision,
+            }) as Map;
+            saved = Task.fromJson(Map<String, dynamic>.from(data));
+            if (patch.containsKey('status')) {
+              await applyInnerTasksFromOuter(saved!);
+              _taskPendingInfoMarks.remove(task.id);
+            }
+          },
+        );
+        return saved!;
+      },
+      publish: (draft, fields) {
+        _patchCachedTask(task.id,
+        title: fields.contains('title') ? draft.title : null,
+        titleSpans: fields.contains('title_spans') ? draft.titleSpans : null,
+        status: fields.contains('status') ? draft.status : null,
+        dueDate: fields.contains('due_date') ? draft.dueDate : null,
+        clearDueDate: fields.contains('due_date') && draft.dueDate == null,
+        revision: draft.revision);
+        if (_taskSaves[task.id]?.dirty == false) _taskPendingInfoMarks.remove(task.id);
+      },
+    ));
+  }
+
+  Future<void> retryTaskSaves() async {
+    final hadPending = _pendingOrders.isNotEmpty || _taskSaves.values.any((q) => q.dirty);
+    for (final queue in _taskSaves.values.toList()) { await queue.flush(); }
+    for (final key in _pendingOrders.keys.toList()) { await _drainOrder(key); }
+    if (hadPending) notifyInfoChecklistChanged();
+  }
+
+  Future<void> resolveTaskSave(int taskId, {required bool keepLocal}) async {
+    await _taskSaves[taskId]?.resolve(keepLocal: keepLocal);
+    if (!keepLocal) taskDraftDiscardEpochs.update(taskId, (v) => v + 1, ifAbsent: () => 1);
+    final task = tasksById[taskId];
+    if (task != null) {
+      await applyInnerTasksFromOuter(task);
+      _taskPendingInfoMarks.remove(taskId);
+    }
+    notifyInfoChecklistChanged();
+  }
+
+  Future<void> _queueOrder(String key, Future<void> Function() write,
+      {required void Function() rebase}) {
+    (_pendingOrders[key] ??= []).add(PendingTaskOrder(write, rebase));
+    return _drainOrder(key);
+  }
+
+  Future<void> _drainOrder(String key) {
+    if (_orderSaves[key] != null) return _orderSaves[key]!;
+    final done = Completer<void>();
+    _orderSaves[key] = done.future;
+    () async {
+      try {
+        while (_pendingOrders.containsKey(key)) {
+          final operation = _pendingOrders[key]!.first;
+          await operation.write();
+          _pendingOrders[key]!.removeAt(0);
+          if (_pendingOrders[key]!.isEmpty) _pendingOrders.remove(key);
+        }
+        done.complete();
+      } catch (e, stack) {
+        done.completeError(e is ApiException && e.statusCode == 409 ? TaskOrderConflict(key) : e, stack);
+      } finally {
+        _orderSaves.remove(key);
+      }
+    }();
+    return done.future;
+  }
+
   Future<void> _flushEditors() async {
-    await DocumentEditorRegistry.flushAll();
+    await DocumentEditorRegistry.flushAll().timeout(const Duration(seconds: 45));
+    await retryTaskSaves();
     while (_objectWrites.isNotEmpty) {
       await Future.wait(List<Future<void>>.from(_objectWrites.values));
     }
@@ -2993,6 +3104,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   Future<Task> createTaskInList(
     int taskListId, {
     String title = '',
+    String? creationKey,
     int? afterTaskId,
     String status = 'inactive',
     bool notify = true,
@@ -3000,6 +3112,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final task = await _tasks.createInList(
       taskListId: taskListId,
       title: title,
+      creationKey: creationKey,
       status: status,
     );
     _ingestTask(task);
@@ -3012,31 +3125,98 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final ordered = others.map((t) => t.id).toList();
     final after = afterTaskId == null ? -1 : ordered.indexOf(afterTaskId);
     ordered.insert(after < 0 ? ordered.length : after + 1, task.id);
-    await _tasks.reorderInList(taskListId, ordered);
-    await _reloadEmbedsForOpenFiles(notify: notify);
+    _ingestTasks(existing);
+    await reorderTasksInList(taskListId, ordered, notify: notify);
     return task;
   }
 
+  final Map<String, Object> _confirmedOrders = {};
+
+  Future<void> resolveOrderSave(String key, {required bool keepLocal}) async {
+    if (keepLocal) {
+      _pendingOrders[key]?.first.rebase();
+      await _drainOrder(key);
+    } else {
+      _pendingOrders.remove(key);
+    }
+    await refreshOpenTaskSurfaces();
+  }
+
   Future<void> reorderTasksInList(
-    int taskListId,
-    List<int> orderedIds, {
-    bool notify = true,
-  }) async {
-    await _tasks.reorderInList(taskListId, orderedIds);
+    int taskListId, List<int> orderedIds, {bool notify = true}
+  ) async {
+    final key = 'list-order:$taskListId';
+    final cached = tasksById.values.where((t) => t.taskListId == taskListId).toList()
+      ..sort((a, b) => a.listOrderIndex.compareTo(b.listOrderIndex));
+    List<int>? base = cached.isEmpty ? null : cached.map((t) => t.id).toList();
+    final desired = List<int>.of(orderedIds);
+    await _queueOrder(key, () async {
+      final rows = await _tasks.listForTaskList(taskListId);
+      final current = rows.map((t) => t.id).toList();
+      if (sameTaskValue(current, desired)) {
+        _ingestTasks(rows);
+        return;
+      }
+      if ((base != null && !sameTaskValue(base, current) &&
+          !sameTaskValue(_confirmedOrders[key], current)) ||
+          current.length != desired.length || !current.toSet().containsAll(desired)) {
+        throw TaskOrderConflict(key);
+      }
+      final saved = await _tasks.reorderInList(taskListId, desired, baseOrder: current);
+      _confirmedOrders[key] = desired;
+      _ingestTasks(saved);
+    }, rebase: () { base = null; });
     await _reloadEmbedsForOpenFiles(notify: notify);
   }
 
-  /// Persist canonical view membership order, independent of status.
+  /// Patch only changed membership fields; never replace the whole view.
   Future<void> reorderViewMemberships(
-    List<Map<String, dynamic>> memberships, {
-    bool notify = true,
-  }) async {
+    List<Map<String, dynamic>> memberships, {bool notify = true}
+  ) async {
     final viewId = selectedView?.id;
     if (viewId == null) return;
-    final rows = await _views.replaceMemberships(viewId, memberships);
-    if (selectedView?.id != viewId) return;
-    _applyViewMemberships(rows);
-    if (notify) notifyListeners();
+    final key = 'view:$viewId';
+    final original = {for (final row in viewMemberships) row.taskId: row.toReplaceJson()};
+    const fields = ['section_name', 'section_flag', 'topic_key', 'order_index', 'topic_order_index'];
+    final changes = <Map<String, dynamic>>[];
+    for (final next in memberships) {
+      final previous = original[next['task_id']];
+      if (previous == null) throw TaskOrderConflict(key);
+      final patch = {for (final field in fields)
+        if (!sameTaskValue(previous[field], next[field])) field: next[field]};
+      if (patch.isNotEmpty) changes.add({
+        'task_id': next['task_id'], 'patch': patch,
+        'base': {for (final field in patch.keys) field: previous[field]},
+      });
+    }
+    if (changes.isEmpty) return;
+    var allowRebase = false;
+    _viewOrderVersions.update(viewId, (v) => v + 1, ifAbsent: () => 1);
+    await _queueOrder(key, () async {
+      final taskVersions = Map<int, int>.of(_taskCacheVersions);
+      final rows = await _views.listMemberships(viewId);
+      final current = {for (final row in rows) row.taskId: row.toReplaceJson()};
+      final pending = <Map<String, dynamic>>[];
+      for (final change in changes) {
+        final row = current[change['task_id']];
+        if (row == null) throw TaskOrderConflict(key);
+        final patch = change['patch'] as Map<String, dynamic>;
+        final base = change['base'] as Map<String, dynamic>;
+        final own = (_confirmedOrders[key] as Map?)?[change['task_id']] as Map?;
+        if (patch.keys.every((f) => sameTaskValue(row[f], patch[f]))) continue;
+        if (!allowRebase && patch.keys.any((f) =>
+            !sameTaskValue(row[f], base[f]) && !sameTaskValue(row[f], patch[f]) &&
+            !(own != null && sameTaskValue(row[f], own[f])))) {
+          throw TaskOrderConflict(key);
+        }
+        pending.add({...change, 'base': {for (final f in patch.keys) f: row[f]}});
+      }
+      final saved = pending.isEmpty ? rows : await _views.patchMemberships(viewId, pending);
+      _confirmedOrders[key] = {for (final row in saved) row.taskId: row.toReplaceJson()};
+      _viewOrderVersions.update(viewId, (v) => v + 1, ifAbsent: () => 1);
+      if (selectedView?.id == viewId) _applyViewMemberships(saved, taskVersions: taskVersions);
+    }, rebase: () { allowRebase = true; });
+    if (notify) notifyInfoChecklistChanged();
   }
 
   /// Update one view membership's section and/or topic placement.
@@ -3366,12 +3546,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   final Map<int, int> _infoCacheVersions = {};
   final Map<int, int> _taskCacheVersions = {};
   final Set<int> _pendingInfoMarks = {};
+  final Map<int, Set<int>> _taskPendingInfoMarks = {};
   final Set<int> _pendingTaskMarks = {};
 
   bool _keepLocalEmbed(ObjectEmbed embed) =>
       UnsavedEmbedEdits.isDirty(embed.id) ||
       _objectWrites.containsKey('info:${embed.id}') ||
-      _pendingInfoMarks.contains(embed.id);
+      _pendingInfoMarks.contains(embed.id) ||
+      _taskPendingInfoMarks.values.any((ids) => ids.contains(embed.id));
 
   List<ObjectEmbed> _mergePendingEmbedMarks(
     int fileId,
@@ -3393,7 +3575,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
           embed.copyWith(
             tasks: [
               for (final task in embed.tasks!)
-                (_pendingTaskMarks.contains(task.id) ||
+                (isTaskWritePending(task.id) ||
                         _taskCacheVersions[task.id] != taskVersions[task.id])
                     ? (tasksById[task.id] ?? task)
                     : task,
@@ -3616,6 +3798,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }) {
     for (final id in {
       ..._pendingInfoMarks,
+      for (final ids in _taskPendingInfoMarks.values) ...ids,
       for (final entry in _infoCacheVersions.entries)
         if (entry.value != infoVersions[entry.key]) entry.key,
     }) {
@@ -3672,80 +3855,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     await addRelatedObjectLink(embed, targetObjectId: targetId);
   }
 
-  Future<void> toggleTaskStatus(Task task, {bool notify = true}) {
-    if (!task.canToggleMark) return Future<void>.value();
-    final status = task.isDone ? 'active' : 'done';
-    return _writeOuterTaskMark(task, status, () async {
-      final data =
-          await _api.patch('/tasks/${task.id}', {'status': status})
-              as Map<String, dynamic>;
-      final next = Task.fromJson(data);
-      _patchCachedTask(task.id, status: next.status, dueDate: next.dueDate);
-      await applyInnerTasksFromOuter(next);
-    }, notify: notify);
-  }
-
-  Future<void> _writeOuterTaskMark(
-    Task task,
-    String status,
-    Future<void> Function() write, {
-    required bool notify,
-  }) {
-    return _serializeObjectWrite(
-      task.descriptionLinks.isEmpty ? 'task:${task.id}' : 'checklist-marks',
-      () async {
-        for (final link in task.descriptionLinks) {
-          final id = _infoObjectIdFromLink(link);
-          if (id != null) await EditorSaveRegistry.flushObject(id);
-        }
-        final before = tasksById[task.id] ?? task;
-        final infoSnapshots = <int, ObjectEmbed>{
-          for (final link in before.descriptionLinks)
-            if (_infoObjectIdFromLink(link) case final int id)
-              if (_embedById(id) case final ObjectEmbed embed) id: embed,
-        };
-        _pendingTaskMarks.add(task.id);
-        _pendingInfoMarks.addAll(infoSnapshots.keys);
-        _patchCachedTask(task.id, status: status);
-        await applyInnerTasksFromOuter(before.copyWith(status: status));
-        notifyInfoChecklistChanged();
-        try {
-          await write();
-        } catch (_) {
-          _patchCachedTask(
-            task.id,
-            status: before.status,
-            descriptionLinks: before.descriptionLinks,
-          );
-          for (final embed in infoSnapshots.values) {
-            if (UnsavedEmbedEdits.isDirty(embed.id)) continue;
-            final info = embed.information!;
-            final list = embedsByFileId[embed.fileId];
-            if (list != null) {
-              embedsByFileId[embed.fileId] = [
-                for (final e in list) e.id == embed.id ? embed : e,
-              ];
-            }
-            _descriptionInfos[embed.id] = embed;
-            _patchDescriptionPeerBody(embed.id, info['body'] as String? ?? '');
-          }
-          for (final link in before.descriptionLinks) {
-            final id = _infoObjectIdFromLink(link);
-            final peer = link['peer'];
-            if (id != null && peer is Map && peer['body'] is String) {
-              _patchDescriptionPeerBody(id, peer['body'] as String);
-            }
-          }
-          notifyInfoChecklistChanged();
-          rethrow;
-        } finally {
-          _pendingTaskMarks.remove(task.id);
-          _pendingInfoMarks.removeAll(infoSnapshots.keys);
-        }
-        await refreshSectionWindows(notifyIfChanged: true);
-        await _reloadEmbedsForOpenFiles(notify: notify);
-      },
-    );
+  Future<void> toggleTaskStatus(Task task, {bool notify = true}) async {
+    final current = hydrateTask(task);
+    if (!current.canToggleMark) return;
+    await _saveQueue(current).edit({'status': current.isDone ? 'active' : 'done'});
+    if (notify) notifyInfoChecklistChanged();
   }
 
   Future<void> setTasksPending(
@@ -3761,11 +3875,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         '${day.day.toString().padLeft(2, '0')}';
     final status = day.isAfter(today) ? 'pending' : 'active';
     for (final id in taskIds) {
-      final next = await _tasks.updateTask(id, {
+      final task = tasksById[id] ?? Task.fromJson(
+          Map<String, dynamic>.from(await _api.get('/tasks/$id') as Map));
+      await _saveQueue(task).edit({
         'status': status,
         'due_date': '${iso}T00:00:00',
       });
-      _patchCachedTask(id, status: next.status, dueDate: next.dueDate);
     }
     if (isViewMode && selectedView != null) {
       await _refreshViewMemberships();
@@ -3775,46 +3890,29 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Place [task] at [insertIndexInZone] in the Active/Done zone of its list.
   Future<void> moveTaskInListZone({
-    required Task task,
-    required bool targetDone,
-    required int insertIndexInZone,
-    bool notify = true,
+    required Task task, required bool targetDone,
+    required int insertIndexInZone, bool notify = true,
   }) async {
     final listId = task.taskListId;
     if (listId == null) return;
-    // Moving within the non-done zone must preserve inactive/pending/skipped.
-    final status = targetDone ? 'done' : (task.isDone ? 'active' : task.status);
-    await _writeOuterTaskMark(task, status, () async {
-      await _tasks.moveToListZone(
-        taskId: task.id,
-        targetTaskListId: listId,
-        insertIndexInZone: insertIndexInZone,
-        targetDone: targetDone,
-      );
-    }, notify: notify);
+    final current = hydrateTask(task);
+    final zones = TaskZones.fromTasks(tasksById.values.where((t) => t.taskListId == listId));
+    final desired = zones.moved(taskId: task.id, targetDone: targetDone,
+        indexInZone: insertIndexInZone).orderedIds;
+    if (current.isDone != targetDone) {
+      await _saveQueue(current).edit({'status': targetDone ? 'done' : 'active'});
+    }
+    await reorderTasksInList(listId, desired, notify: notify);
   }
 
   Future<void> updateTaskTitle(
-    Task task,
-    String title, {
-    List<Map<String, dynamic>>? titleSpans,
-    bool notify = false,
+    Task task, String title, {
+    List<Map<String, dynamic>>? titleSpans, bool notify = false,
   }) async {
-    return _serializeObjectWrite('task:${task.id}', () async {
-      try {
-        await _api.patch('/tasks/${task.id}', {
-          'title': title,
-          if (titleSpans != null) 'title_spans': titleSpans,
-        });
-      } on ApiException catch (e) {
-        if (e.statusCode == 404) return;
-        rethrow;
-      }
-      // Patch caches in place — never reload embeds mid-keystroke (that rebuilds
-      // text fields and desyncs HardwareKeyboard: KeyDownEvent already pressed).
-      _patchCachedTask(task.id, title: title, titleSpans: titleSpans);
-      if (notify) notifyListeners();
+    await _saveQueue(task).edit({
+      'title': title, if (titleSpans != null) 'title_spans': titleSpans,
     });
+    if (notify) notifyInfoChecklistChanged();
   }
 
   Task? taskById(int id) => tasksById[id];
@@ -3832,42 +3930,55 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _ingestTask(Task task) {
+    final current = tasksById[task.id];
+    if (current != null && task.revision < current.revision) return;
+    _taskSaves[task.id]?.observe(task);
     tasksById[task.id] = task;
   }
 
   void _ingestTasks(Iterable<Task> tasks) {
     for (final task in tasks) {
-      if (!_pendingTaskMarks.contains(task.id)) _ingestTask(task);
+      if (!isTaskWritePending(task.id)) _ingestTask(task);
     }
   }
 
   void _dropCachedTask(int taskId) {
+    _taskSaves.remove(taskId);
     tasksById.remove(taskId);
   }
 
-  void _ingestMembershipTasks() {
+  void _ingestMembershipTasks({Map<int, int>? taskVersions}) {
     for (final membership in viewMemberships) {
       if (membership.task == null) continue;
       final task = Task.fromJson(membership.task!);
-      if (!_pendingTaskMarks.contains(task.id)) _ingestTask(task);
+      if (!isTaskWritePending(task.id) &&
+          (taskVersions == null || taskVersions[task.id] == _taskCacheVersions[task.id])) {
+        _ingestTask(task);
+      }
     }
   }
 
-  void _applyViewMemberships(List<ViewMembership> rows) {
+  void _applyViewMemberships(List<ViewMembership> rows, {Map<int, int>? taskVersions}) {
     if (selectedView == null || rows.any((row) => row.viewId != selectedView!.id)) return;
     viewMemberships = rows;
-    _ingestMembershipTasks();
+    _ingestMembershipTasks(taskVersions: taskVersions);
   }
 
   Future<void> _refreshViewMemberships() async {
     final id = selectedView?.id;
     if (id == null) return;
+    final versions = Map<int, int>.of(_taskCacheVersions);
+    final orderVersion = _viewOrderVersions[id];
     final rows = await _views.listMemberships(id);
-    if (!_retired && selectedView?.id == id) _applyViewMemberships(rows);
+    if (_retired || selectedView?.id != id ||
+        orderVersion != _viewOrderVersions[id] || _pendingOrders.containsKey('view:$id')) return;
+    _applyViewMemberships(rows, taskVersions: versions);
   }
 
   void _patchCachedTask(
     int taskId, {
+    int? revision,
+    bool clearDueDate = false,
     String? title,
     String? status,
     String? dueDate,
@@ -3886,6 +3997,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
                   status: status ?? 'active',
                 ))
             .copyWith(
+              revision: revision,
+              clearDueDate: clearDueDate,
               title: title,
               status: status,
               dueDate: dueDate,
@@ -3894,7 +4007,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
               taskListId: taskListId,
               taskListTitle: taskListTitle,
             );
-    _ingestTask(next);
+    tasksById[taskId] = next;
     for (final entry in embedsByFileId.entries.toList()) {
       final embeds = entry.value;
       var changed = false;
@@ -3944,6 +4057,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> deleteTask(Task task, {bool notify = true}) async {
+    await _taskSaves[task.id]?.flush();
     try {
       await _tasks.deleteTask(task.id);
     } on ApiException catch (e) {
@@ -3964,6 +4078,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// placing into a home list that already appears in the same frame.
   Future<Task> createTaskInView({
     String title = '',
+    String? creationKey,
     String status = 'active',
     int? afterTaskId,
     int? taskListId,
@@ -3978,6 +4093,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final task = await _views.createTaskInView(
       selectedView!.id,
       title: title,
+      creationKey: creationKey,
       status: status,
       afterTaskId: afterTaskId,
       taskListId: taskListId,

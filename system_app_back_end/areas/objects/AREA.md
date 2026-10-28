@@ -30,6 +30,29 @@ Every object has a stable id, file id, type, optional typed FKs / payload, and t
 | Create inserts the block | `POST /files/:id/objects` (and agent `create_object`) create the row **and** insert the embed at `block_index` via [`services/create_embed.py`](services/create_embed.py) |
 | Delete cascades | `delete_object_embed_cascade` removes the object and strips the embed from `document_json` |
 
+## Task save concurrency
+
+Apply `migrations/028_task_revision.sql` **before deploying** this backend. It
+adds `tasks.revision` and the nullable unique `creation_key`. No production
+migration is performed by the client or these changes.
+
+Task serialization includes `revision`; task PATCH accepts `base_revision`.
+A mismatch returns 409 with the latest task. SQLAlchemy's version column also
+checks/increments revisions for other ORM writers (agents, automations, inner
+checklist sync), with `StaleDataError` handled as 409. Legacy clients may omit
+the base for rollout compatibility; the new task queue always sends it.
+
+List reorder accepts the complete `base_order` and compares the canonical ID
+sequence under locks before writing. A new `PATCH /views/:id/memberships`
+accepts per-task `{base, patch}` fields and checks them under row locks; it
+preserves unrelated memberships and the other ordering dimension. Legacy PUT
+replacement remains for membership lifecycle operations.
+
+Task creation accepts a stable client `creation_key`, namespaced by list/view.
+A unique constraint and savepoint make retries return the same task, including
+when the first response was lost. Duplicate view creates do not add a second
+membership. Tests: `tests/objects/test_task_sync.py`.
+
 ## Tasks
 
 Tasks are the richest object type — a sub-part of this area, not a separate one.

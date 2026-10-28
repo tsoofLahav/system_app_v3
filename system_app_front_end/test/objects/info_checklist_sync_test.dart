@@ -8,6 +8,7 @@ import 'package:system_app_front_end/areas/objects/data/task.dart';
 
 class ChecklistApi extends ApiService {
   String body = '☐ first\n☐ second\n• ordinary';
+  int revision = 1;
   String status = 'active';
   final writes = <String>[];
   Completer<void>? hold;
@@ -31,6 +32,7 @@ class ChecklistApi extends ApiService {
   };
   @override
   Future<dynamic> get(String path) async {
+    if (path == '/tasks/1') return {'id': 1, 'title': 'Task', 'status': status, 'revision': revision, 'description_links': task.descriptionLinks};
     if (path == '/objects/10') return object;
     if (path == '/files/2/objects') {
       final snapshot = object;
@@ -51,9 +53,11 @@ class ChecklistApi extends ApiService {
     }
     if (path == '/tasks/1') {
       status = data['status'] as String;
+      revision++;
       return {
         'id': 1,
         'title': 'Task',
+        'revision': revision,
         'status': status,
         'description_links': task.descriptionLinks,
       };
@@ -63,6 +67,7 @@ class ChecklistApi extends ApiService {
 
   Task get task => Task(
     id: 1,
+    revision: revision,
     title: 'Task',
     status: status,
     descriptionLinks: [

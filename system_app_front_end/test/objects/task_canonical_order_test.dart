@@ -1,3 +1,4 @@
+import 'package:system_app_front_end/areas/files/editor/editor_save_registry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,6 +10,11 @@ import 'package:system_app_front_end/areas/objects/views/view_frame_task_list_br
 
 class _State extends AppState {
   final toggled = <int>[];
+  @override
+  Future<void> updateTaskTitle(Task task, String title, {
+    List<Map<String, dynamic>>? titleSpans, bool notify = false,
+  }) async { fail('Discarded local text must not be saved again'); }
+
   @override
   Future<void> toggleTaskStatus(Task task, {bool notify = true}) async {
     toggled.add(task.id);
@@ -44,6 +50,22 @@ class _Bridge extends ViewFrameTaskListBridge {
 }
 
 void main() {
+  testWidgets('use-server resolution replaces a dirty controller before navigation flush', (tester) async {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    final state = _State();
+    const task = Task(id: 1, title: 'Saved title', status: 'active');
+    state.tasksById[1] = task;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: TaskListSurface(
+      state: state, bridge: _Bridge(state, [task]), allowEmptyList: true,
+    ))));
+    tester.widget<EditableText>(find.byType(EditableText)).controller.text = 'Discard this';
+    state.taskDraftDiscardEpochs[1] = 1;
+    await EditorSaveRegistry.flushAll();
+    expect(tester.widget<EditableText>(find.byType(EditableText)).controller.text, 'Saved title');
+    await tester.pumpWidget(const SizedBox());
+    state.dispose();
+  });
+
   testWidgets('checkbox preserves view order through mark and unmark', (
     tester,
   ) async {

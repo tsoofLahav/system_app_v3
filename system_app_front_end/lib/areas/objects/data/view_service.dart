@@ -70,9 +70,19 @@ class ViewService {
         .toList();
   }
 
+  Future<List<ViewMembership>> patchMemberships(
+    int viewId, List<Map<String, dynamic>> changes,
+  ) async {
+    final data = await _api.patch('/views/$viewId/memberships', {
+      'changes': changes,
+    }) as List;
+    return data.map((e) => ViewMembership.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+  }
+
   Future<Task> createTaskInView(
     int viewId, {
     String title = '',
+    String? creationKey,
     String status = 'active',
     int? afterTaskId,
     int? taskListId,
@@ -82,6 +92,7 @@ class ViewService {
   }) async {
     final data = await _api.post('/views/$viewId/tasks', {
       'title': title,
+      if (creationKey != null) 'creation_key': creationKey,
       'status': status,
       if (afterTaskId != null) 'after_task_id': afterTaskId,
       if (taskListId != null) 'task_list_id': taskListId,

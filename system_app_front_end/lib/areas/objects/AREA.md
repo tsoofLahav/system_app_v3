@@ -167,6 +167,33 @@ Complimentary review titles use the protected per-topic walkthrough. Server runn
 ### Skipped task occurrences
 `skipped` is distinct from `done` and does not count as active work. Skipped tasks stay visible with a minus-circle mark and return to active when the routine section window closes. A task context menu in an open section offers **Skip and report** for that single task. The write atomically creates `skipped_tasks` history and settles the task, preserving title and ID snapshots even after source deletion. Skipped status never marks linked inner checkboxes completed. See migration `026_skipped_tasks.sql`; timestamps are UTC.
 
+### Task sync — 2026-10-28
+
+`tasks/task_save_queue.dart` owns session-local task drafts in AppState. Title,
+formatting, status and due-date patches coalesce per task; only fields actually
+sent are acknowledged. New typing/clicks remain pending. Task revisions and
+view-refresh generation checks reject older inbound state. Publishing a title
+acknowledgement must not replace a concurrently changed completion status.
+Linked outer/inner marks still use the shared checklist write ordering.
+
+Reorders queue per list/view, retain failures for retry, and use server
+compare-and-swap checks. View reorders PATCH changed membership fields rather
+than replacing the whole view; section/topic orders remain independent.
+Checkboxes remain status-only; cross-zone drags explicitly save status and order.
+
+Task/view and linked-object writes have a 30-second request timeout; editor
+flush has a 45-second navigation bound. A timeout is not cancellation: the task
+queue reads the server before retrying, acknowledges an already-saved result,
+and only rebases non-overlapping changes automatically. Same-field conflicts
+offer Keep my changes / Use saved version. Drafts remain in memory on failure;
+they are not yet a durable offline store. Task creation uses a stable row key
+so retry cannot duplicate a committed create.
+
+Sidebar navigation reports saving and offers recovery rather than silently
+abandoning a switch. Tests cover rapid edits, stale polls, lost responses,
+linked marks, order serialization, navigation failure/retry, and checkbox order.
+Deploy backend migration 028 before using the new client.
+
 ### Object sync rollout — 2026-09-23, phase 1
 
 Tables/charts and information-card text now use `ObjectSaveQueue` in the files
@@ -182,7 +209,7 @@ network waits instead of restoring the cache from the start of the request.
 This is a frontend acknowledgement fix, not server-side revision protection.
 The queue is editor-owned; durable session-owned drafts, database revisions,
 stale-write rejection, and structured three-way merging remain next phases.
-Task/list/image paths are not migrated yet. Table structural merges must wait
+Task edits now use the session queue described above. List-title/image paths are not migrated yet. Table structural merges must wait
 for stable row/cell identities; never infer identity from position alone.
 
 Regressions: `test/files/object_save_queue_test.dart` (coalescing, typing during

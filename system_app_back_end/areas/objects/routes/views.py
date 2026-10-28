@@ -121,7 +121,7 @@ def create_view_task(view_id):
     Uncategorized, empty/null ``topic_key`` is No topic. ``after_task_id``
     is insert order — never copy the sibling's section, topic, or list.
     """
-    get_or_404(View, view_id)
+    View.query.filter_by(id=view_id).with_for_update().first_or_404()
     data = request.get_json(silent=True) or {}
     title = (
         ""
@@ -149,8 +149,11 @@ def create_view_task(view_id):
         source_automation_id=data.get("source_automation_id"),
         complimentary_role=_blank_text(data.get("complimentary_role")),
     )
-    db.session.add(task)
-    db.session.flush()
+    from areas.objects.services.task_creation import allocate_task
+    task, reused = allocate_task(task, data, f"view:{view_id}")
+    if reused:
+        db.session.commit()
+        return jsonify(_task_dict_with_topic(task)), 200
 
     insert_at = None
     topic_insert_at = None
@@ -217,7 +220,7 @@ def list_memberships(view_id):
 
 @views_bp.route("/views/<int:view_id>/memberships", methods=["PUT"])
 def replace_memberships(view_id):
-    get_or_404(View, view_id)
+    View.query.filter_by(id=view_id).with_for_update().first_or_404()
     data = request.get_json(silent=True) or {}
     memberships = data.get("memberships") or []
 
@@ -235,5 +238,29 @@ def replace_memberships(view_id):
             topic_key=item.get("topic_key"),
         )
         db.session.add(row)
+    db.session.commit()
+    return list_memberships(view_id)
+
+
+@views_bp.route("/views/<int:view_id>/memberships", methods=["PATCH"])
+def patch_memberships(view_id):
+    View.query.filter_by(id=view_id).with_for_update().first_or_404()
+    data = request.get_json(silent=True) or {}
+    changes = data.get("changes", [])
+    allowed = {"order_index", "topic_order_index", "section_name", "section_flag", "topic_key"}
+    rows = ViewTaskMembership.query.filter_by(view_id=view_id).order_by(
+        ViewTaskMembership.id).with_for_update().populate_existing().all()
+    by_task = {row.task_id: row for row in rows}
+    for change in changes:
+        row = by_task.get(change.get("task_id"))
+        base, patch = change.get("base", {}), change.get("patch", {})
+        if not patch or set(patch) - allowed or set(base) != set(patch):
+            raise ValueError("membership patch requires matching base fields")
+        if row is None or any(getattr(row, key) != value for key, value in base.items()):
+            return jsonify({"error": "membership order conflict"}), 409
+    for change in changes:
+        row = by_task[change["task_id"]]
+        for key, value in change["patch"].items():
+            setattr(row, key, value)
     db.session.commit()
     return list_memberships(view_id)

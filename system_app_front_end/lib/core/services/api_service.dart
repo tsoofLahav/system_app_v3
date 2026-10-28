@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:http/http.dart' as http;
 
@@ -16,7 +17,22 @@ class ApiException implements Exception {
 }
 
 class ApiService {
-  ApiService({http.Client? client}) : _client = client ?? http.Client();
+  ApiService({
+    http.Client? client,
+    this.saveTimeout = const Duration(seconds: 30),
+  }) : _client = client ?? http.Client();
+
+  final Duration saveTimeout;
+
+  Future<T> _bounded<T>(String path, Future<T> request) {
+    final taskSave =
+        path.startsWith('/tasks/') ||
+        path.startsWith('/task-lists/') ||
+        path.startsWith('/views/') ||
+        path.startsWith('/information/') ||
+        path.startsWith('/objects/');
+    return taskSave ? request.timeout(saveTimeout) : request;
+  }
 
   final http.Client _client;
   int? workspaceId;
@@ -28,49 +44,53 @@ class ApiService {
   Uri _uri(String path) => Uri.parse('${ApiConfig.baseUrl}$path');
 
   Future<dynamic> get(String path) async {
-    final response = await _client.get(_uri(path), headers: headers)
+    final response = await _client
+        .get(_uri(path), headers: headers)
         .timeout(const Duration(seconds: 30));
     return _decode(response);
   }
 
   Future<dynamic> post(String path, Map<String, dynamic> body) async {
-    final response = await _client.post(
-      _uri(path),
-      headers: headers,
-      body: jsonEncode(body),
+    final response = await _bounded(
+      path,
+      _client.post(_uri(path), headers: headers, body: jsonEncode(body)),
     );
     return _decode(response);
   }
 
   Future<dynamic> patch(String path, Map<String, dynamic> body) async {
-    final response = await _client.patch(
-      _uri(path),
-      headers: headers,
-      body: jsonEncode(body),
+    final response = await _bounded(
+      path,
+      _client.patch(_uri(path), headers: headers, body: jsonEncode(body)),
     );
     return _decode(response);
   }
 
   Future<dynamic> put(String path, Map<String, dynamic> body) async {
-    final response = await _client.put(
-      _uri(path),
-      headers: headers,
-      body: jsonEncode(body),
+    final response = await _bounded(
+      path,
+      _client.put(_uri(path), headers: headers, body: jsonEncode(body)),
     );
     return _decode(response);
   }
 
   Future<void> delete(String path, {Map<String, dynamic>? body}) async {
-    final response = await _client.delete(
-      _uri(path),
-      headers: headers,
-      body: body == null ? null : jsonEncode(body),
+    final response = await _bounded(
+      path,
+      _client.delete(
+        _uri(path),
+        headers: headers,
+        body: body == null ? null : jsonEncode(body),
+      ),
     );
     if (response.statusCode == 204) return;
     _decode(response);
   }
 
-  Future<Map<String, dynamic>> uploadImage(String filePath, List<int> bytes) async {
+  Future<Map<String, dynamic>> uploadImage(
+    String filePath,
+    List<int> bytes,
+  ) async {
     final request = http.MultipartRequest('POST', _uri('/upload-image'));
     request.headers.addAll(headers..remove('Content-Type'));
     request.files.add(
@@ -96,10 +116,6 @@ class ApiService {
         message = body['error']?.toString() ?? message;
       }
     } catch (_) {}
-    throw ApiException(
-      message,
-      statusCode: response.statusCode,
-      body: body,
-    );
+    throw ApiException(message, statusCode: response.statusCode, body: body);
   }
 }

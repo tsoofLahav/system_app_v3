@@ -15,11 +15,13 @@ class TaskService {
   Future<Task> createInList({
     required int taskListId,
     required String title,
+    String? creationKey,
     String status = 'inactive',
     int? listOrderIndex,
   }) async {
     final data = await _api.post('/task-lists/$taskListId/tasks', {
       'title': title,
+      if (creationKey != null) 'creation_key': creationKey,
       'status': status,
       if (listOrderIndex != null) 'list_order_index': listOrderIndex,
     }) as Map<String, dynamic>;
@@ -35,9 +37,10 @@ class TaskService {
     await _api.delete('/tasks/$id');
   }
 
-  Future<List<Task>> reorderInList(int taskListId, List<int> taskIds) async {
+  Future<List<Task>> reorderInList(int taskListId, List<int> taskIds, {List<int>? baseOrder}) async {
     final data = await _api.put('/task-lists/$taskListId/tasks/order', {
       'ordered_task_ids': taskIds,
+      if (baseOrder != null) 'base_order': baseOrder,
     }) as List<dynamic>;
     return data.map((e) => Task.fromJson(e as Map<String, dynamic>)).toList();
   }

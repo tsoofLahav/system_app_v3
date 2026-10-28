@@ -50,6 +50,7 @@ class ViewFrameTaskListBridge extends TaskListBridge {
 
   @override
   Future<Task> createAfter({
+    String? creationKey,
     required String title,
     required String status,
     int? afterTaskId,
@@ -57,6 +58,7 @@ class ViewFrameTaskListBridge extends TaskListBridge {
     if (!_ownsView) throw StateError('View changed; reopen the task list.');
     return state.createTaskInView(
       title: title,
+      creationKey: creationKey,
       status: status,
       afterTaskId: afterTaskId,
       sectionName: sectionName,

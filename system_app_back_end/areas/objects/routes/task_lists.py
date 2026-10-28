@@ -39,7 +39,7 @@ def list_tasks(task_list_id):
 
 @task_lists_bp.route("/task-lists/<int:task_list_id>/tasks", methods=["POST"])
 def create_task(task_list_id):
-    get_or_404(TaskList, task_list_id)
+    TaskList.query.filter_by(id=task_list_id).with_for_update().first_or_404()
     data = request.get_json(silent=True) or {}
     # Empty string is allowed (blank row to type into); only missing title defaults.
     title = "" if "title" not in data or data.get("title") is None else str(data.get("title"))
@@ -54,16 +54,23 @@ def create_task(task_list_id):
         status=status,
         list_order_index=order_index,
     )
-    db.session.add(task)
+    from areas.objects.services.task_creation import allocate_task
+    task, reused = allocate_task(task, data, f"list:{task_list_id}")
     db.session.commit()
-    return jsonify(task.to_dict()), 201
+    return jsonify(task.to_dict()), 200 if reused else 201
 
 
 @task_lists_bp.route("/task-lists/<int:task_list_id>/tasks/order", methods=["PUT"])
 def reorder_tasks(task_list_id):
-    get_or_404(TaskList, task_list_id)
+    TaskList.query.filter_by(id=task_list_id).with_for_update().first_or_404()
     data = request.get_json(silent=True) or {}
     ordered_ids = data.get("ordered_task_ids") or []
+    current = Task.query.filter_by(task_list_id=task_list_id).filter(
+        Task.archived_at.is_(None)).order_by(Task.list_order_index, Task.id).with_for_update().populate_existing().all()
+    if "base_order" in data and data["base_order"] != [t.id for t in current]:
+        return jsonify({"error": "order conflict", "tasks": [t.to_dict() for t in current]}), 409
+    if "base_order" in data and set(ordered_ids) != {t.id for t in current}:
+        return jsonify({"error": "task membership changed"}), 409
     try:
         tasks = reorder_tasks_in_list(task_list_id, ordered_ids)
     except ValueError as error:

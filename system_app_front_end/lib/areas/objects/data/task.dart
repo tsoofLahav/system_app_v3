@@ -4,6 +4,7 @@ import './view_pane_sync_context.dart';
 class Task {
   const Task({
     required this.id,
+    this.revision = 0,
     this.taskListId,
     this.blockId,
     required this.title,
@@ -38,6 +39,7 @@ class Task {
   });
 
   final int id;
+  final int revision;
   final int? taskListId;
   final int? blockId;
   final String title;
@@ -125,6 +127,7 @@ class Task {
 
   Task copyWith({
     int? id,
+    int? revision,
     int? taskListId,
     int? blockId,
     String? title,
@@ -163,6 +166,7 @@ class Task {
   }) {
     return Task(
       id: id ?? this.id,
+      revision: revision ?? this.revision,
       taskListId: taskListId ?? this.taskListId,
       blockId: blockId ?? this.blockId,
       title: title ?? this.title,
@@ -205,6 +209,7 @@ class Task {
   factory Task.fromJson(Map<String, dynamic> json) {
     return Task(
       id: json['id'] as int,
+      revision: json['revision'] as int? ?? 0,
       taskListId: json['task_list_id'] as int?,
       blockId: json['block_id'] as int?,
       title: json['title'] as String,
@@ -247,6 +252,7 @@ class Task {
   }
 
   Map<String, dynamic> toJson() => {
+    'revision': revision,
     if (blockId != null) 'block_id': blockId,
     'title': title,
     'status': status,

@@ -129,6 +129,15 @@ Do not wrap `MaterialApp` or the topic canvas in `Consumer<AppState>` / a shell 
 
 [`MainPaneLoader`](widgets/main_pane_loader.dart) (until `appReady`, and while a topic is stale) drops Flutter’s startup-seeded pressed keys so the editor does not open into a looping `KeyDownEvent … already pressed`. Details: [`NOTES.md` § Editor keyboard safety](../../../../NOTES.md#editor-keyboard-safety). First install with no snapshot still waits on the API.
 
+## Navigation save feedback
+
+Sidebar topic/view/Home navigation joins pending task and order saves. A delayed
+switch shows a saving message; failure retains the current page and drafts with
+Retry, and concurrent-change conflicts offer a local/server choice. Task writes
+are bounded and reconciled after timeout; navigation's editor flush is bounded
+to 45 seconds without treating that timeout as cancellation. Implementation:
+`../objects/tasks/task_save_feedback.dart` and the AppState save queues.
+
 ## Sections
 
 | Section | Entry | Main pane |

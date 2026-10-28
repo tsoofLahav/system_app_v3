@@ -1,3 +1,4 @@
+import '../../objects/tasks/task_save_feedback.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/app_state.dart';
@@ -74,20 +75,19 @@ class _AppSidebarState extends State<AppSidebar> {
     Navigator.of(context).pop();
   }
 
-  void _goHome() {
+  Future<void> _navigate(Future<void> Function() action) async {
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
     _closeDrawerIfOpen();
-    widget.state.goHome();
+    await navigateAfterTaskSaves(rootContext, widget.state, action);
   }
 
-  Future<void> _selectTopic(Topic topic) async {
-    _closeDrawerIfOpen();
-    await widget.state.selectTopic(topic);
-  }
+  void _goHome() => _navigate(widget.state.goHome);
 
-  Future<void> _selectView(String viewType) async {
-    _closeDrawerIfOpen();
-    await widget.state.selectView(viewType);
-  }
+  Future<void> _selectTopic(Topic topic) =>
+      _navigate(() => widget.state.selectTopic(topic));
+
+  Future<void> _selectView(String viewType) =>
+      _navigate(() => widget.state.selectView(viewType));
 
   @override
   Widget build(BuildContext context) {

@@ -22,6 +22,7 @@ abstract class TaskListBridge {
   Future<void> refresh();
 
   Future<Task> createAfter({
+    String? creationKey,
     required String title,
     required String status,
     int? afterTaskId,

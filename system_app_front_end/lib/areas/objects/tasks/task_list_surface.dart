@@ -1,3 +1,5 @@
+import 'task_save_feedback.dart';
+import 'dart:math';
 import '../../automations/complimentary_review_queue.dart';
 import 'dart:async';
 
@@ -176,10 +178,32 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   final _done = <bool>[];
   final _saveTimers = <Timer?>[];
   final _rowKeys = <Object>[];
+  final _creationKeys = <Object, String>{};
+  final _discardEpochs = <int, int>{};
+
+  bool _takeExplicitDiscard(int index) {
+    if (index >= _taskIds.length) return false;
+    final id = _taskIds[index];
+    if (id == null) return false;
+    final epoch = widget.state.taskDraftDiscardEpochs[id] ?? 0;
+    if (epoch == (_discardEpochs[id] ?? 0)) return false;
+    _discardEpochs[id] = epoch;
+    final remote = widget.state.taskById(id);
+    if (remote == null) return false;
+    _saveTimers[index]?.cancel();
+    _controllers[index].setRichState(text: remote.title,
+        spans: remote.titleSpans, preserveSelection: true);
+    _optimistic = null;
+    return true;
+  }
+
+  String _creationKey(int index) => _creationKeys.putIfAbsent(_rowKeys[index],
+      () => '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}');
   int? _pendingFocusIndex;
   int? _pasteTargetIndex;
   var _ensuringSeed = false;
   var _persisting = false;
+  Future<void>? _surfaceSave;
   Completer<void>? _taskCreation;
   var _reorderMode = false;
   int? _reorderResumeIndex;
@@ -321,6 +345,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   }
 
   void _syncRowsFromRemote({bool notify = false}) {
+    for (var i = 0; i < _taskIds.length; i++) { _takeExplicitDiscard(i); }
     final tasks = _displayTasks;
     if (tasks.isNotEmpty) _dropBlankUnsavedSeeds();
     if (!_rowsNeedAdopt(tasks)) {
@@ -757,6 +782,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
   Future<void> _flushAllText() async {
     await _taskCreation?.future;
+    await _surfaceSave;
     if (_persisting) throw StateError(widget.state.strings['taskSavePending']);
     await _flushTitleHeader(reportErrors: true);
     for (var i = 0; i < _controllers.length; i++) {
@@ -869,12 +895,18 @@ class TaskListSurfaceState extends State<TaskListSurface> {
   Future<void> _flushTitle(int index, {bool reportErrors = false}) async {
     if (!mounted) return;
     if (index < 0 || index >= _taskIds.length) return;
+    if (_takeExplicitDiscard(index)) return;
     if (_taskIds[index] == null) {
       if (_persisting) {
         _scheduleSave(index);
         return;
       }
-      await _persistUnsavedRow(index);
+      try {
+        await _persistUnsavedRow(index);
+      } catch (error) {
+        if (reportErrors) rethrow;
+        if (mounted) await showTaskSaveError(context, widget.state, error, _flushAllText);
+      }
       return;
     }
     final id = _taskIds[index]!;
@@ -890,8 +922,10 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     if (task.title == title && _sameTaskSpans(task.titleSpans, spans)) return;
     try {
       await _bridge.updateTitle(task, title, titleSpans: spans);
-    } catch (_) {
+    } catch (error) {
       if (reportErrors) rethrow;
+      if (mounted) unawaited(showTaskSaveError(context, widget.state, error,
+          () async { await _flushAllText(); await widget.state.retryTaskSaves(); }));
     }
   }
 
@@ -928,7 +962,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     _taskCreation = completed;
     try {
       final created = await _bridge.createAfter(
-        title: title,
+        creationKey: _creationKey(index),
+          title: title,
         status: _createStatus(done: _done[index]),
         afterTaskId: index > 0 ? _taskIds[index - 1] : null,
       );
@@ -1149,6 +1184,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       for (var i = 0; i < titles.length; i++) {
         final at = start + i;
         final created = await _bridge.createAfter(
+          creationKey: _creationKey(at),
           title: titles[i],
           afterTaskId: afterId,
           status: _createStatus(done: asDone),
@@ -1193,7 +1229,8 @@ class TaskListSurfaceState extends State<TaskListSurface> {
 
     try {
       final created = await _bridge.createAfter(
-        title: '',
+        creationKey: _creationKey(newIndex),
+          title: '',
         afterTaskId: afterId,
         status: _createStatus(done: asDone),
       );
@@ -1296,6 +1333,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingFocus());
       try {
         final created = await _bridge.createAfter(
+          creationKey: _creationKey(0),
           title: '',
           afterTaskId: null,
           status: _createStatus(done: false),
@@ -1337,21 +1375,15 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     if (task == null || !task.canToggleMark) return;
     final targetDone = !_done[index];
     final zones = _canonicalZones;
-    if (_persisting) return;
     _applyOptimistic(zones.withStatus(id, targetDone));
-    _persisting = true;
     try {
       await widget.state.toggleTaskStatus(task, notify: false);
       await _bridge.refresh();
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        _applyOptimistic(zones);
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(content: Text(widget.state.strings['reorderFailed'])),
-        );
+        await showTaskSaveError(context, widget.state, error, widget.state.retryTaskSaves);
       }
     } finally {
-      _persisting = false;
       if (mounted) syncFromRemote();
     }
   }
@@ -1399,7 +1431,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       );
       if (!mounted) return;
       await _bridge.refresh();
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _optimistic = null;
@@ -1407,9 +1439,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         _syncFromTasks(snapshot.all);
       });
       if (mounted) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(content: Text(widget.state.strings['reorderFailed'])),
-        );
+        await showTaskSaveError(context, widget.state, error, widget.state.retryTaskSaves);
       }
     } finally {
       _persisting = false;
@@ -1423,7 +1453,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       await _bridge.reorder(next.orderedIds);
       if (!mounted) return;
       await _bridge.refresh();
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _optimistic = null;
@@ -1431,9 +1461,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         _syncFromTasks(snapshot.all);
       });
       if (mounted) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(content: Text(widget.state.strings['reorderFailed'])),
-        );
+        await showTaskSaveError(context, widget.state, error, widget.state.retryTaskSaves);
       }
     } finally {
       _persisting = false;
@@ -1470,16 +1498,14 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     _applyOptimistic(next);
     final task = payload.task;
     if (payload.sourceDone != targetDone) {
-      unawaited(
-        _persistMove(
+      _surfaceSave = _persistMove(
           task: task,
           targetDone: targetDone,
           insertIndexInZone: indexInZone,
           snapshot: zones,
-        ),
-      );
+        );
     } else {
-      unawaited(_persistReorder(next, zones));
+      _surfaceSave = _persistReorder(next, zones);
     }
   }
 
