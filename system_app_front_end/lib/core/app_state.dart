@@ -4979,10 +4979,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     return _automations.reviewStatus(automationId);
   }
 
-  Future<List<Map<String, dynamic>>> complimentaryInputTopics(
-    int automationId,
-  ) {
-    return _automations.inputTopics(automationId);
+  Future<Map<String, dynamic>> complimentaryInputFields(int automationId) {
+    return _automations.inputFields(automationId);
   }
 
   bool isComplimentaryProcessing(int automationId) =>

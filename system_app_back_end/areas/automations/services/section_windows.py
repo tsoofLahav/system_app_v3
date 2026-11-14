@@ -7,6 +7,8 @@ window and place complimentary tasks in a repeating view.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -263,16 +265,31 @@ def linked_standard_automations(view_id: int, section_key: str) -> list[Automati
     )
 
 
-def _step_requires_user_input(step: dict) -> bool:
-    if step.get("kind") != "ai":
-        return False
-    if step.get("requires_user_input"):
-        return True
-    action_id = step.get("action_id")
-    if action_id is None:
-        return False
-    action = db.session.get(AiAction, int(action_id))
-    return bool(action and action.requires_user_input)
+def _steps_requiring_input(automation: Automation):
+    for position, step in enumerate(automation.steps or [], 1):
+        if step.get("kind") != "ai":
+            continue
+        action_id = step.get("action_id")
+        action = db.session.get(AiAction, int(action_id)) if action_id is not None else None
+        if step.get("requires_user_input") or (action and action.requires_user_input):
+            yield position, action
+
+
+def input_steps(automation: Automation) -> list[dict]:
+    return [
+        {
+            "position": position,
+            "name": action.name if action else "",
+            "name_he": action.name_he if action else "",
+            "prompt": (action.user_input_prompt or "") if action else "",
+        }
+        for position, action in _steps_requiring_input(automation)
+    ]
+
+
+def input_steps_version(steps: list[dict]) -> str:
+    serialized = json.dumps(steps, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode()).hexdigest()
 
 
 def _step_needs_review(step: dict) -> bool:
@@ -288,7 +305,7 @@ def _step_needs_review(step: dict) -> bool:
 
 
 def automation_requires_user_input(automation: Automation) -> bool:
-    return any(_step_requires_user_input(step) for step in (automation.steps or []))
+    return next(_steps_requiring_input(automation), None) is not None
 
 
 def automation_needs_review(automation: Automation) -> bool:
@@ -759,18 +776,38 @@ def cleaned_user_input_text(value: object) -> str:
     return text
 
 
-def store_user_input(automation: Automation, payload: dict) -> dict:
+def _clean_input_note(payload: dict) -> dict:
     text = cleaned_user_input_text(payload.get("text"))
     by_topic = payload.get("by_topic") or {}
-    cleaned = {}
-    if isinstance(by_topic, dict):
-        for key, value in by_topic.items():
-            cleaned[str(key)] = cleaned_user_input_text(value)
-    stored = {
+    return {
         "text": text,
-        "by_topic": cleaned,
-        "submitted_at": datetime.utcnow().isoformat(),
+        "by_topic": {
+            str(key): cleaned_user_input_text(value)
+            for key, value in by_topic.items()
+        } if isinstance(by_topic, dict) else {},
     }
+
+
+def store_user_input(automation: Automation, payload: dict) -> dict:
+    if "by_step" in payload:
+        version = input_steps_version(automation.steps or [])
+        expected = {str(position) for position, _ in _steps_requiring_input(automation)}
+        answers = payload["by_step"]
+        if payload.get("steps_version") != version:
+            raise ValueError("automation steps changed; reopen the input dialog")
+        if (
+            not isinstance(answers, dict)
+            or set(answers) != expected
+            or any(not isinstance(note, dict) for note in answers.values())
+        ):
+            raise ValueError("input must match the AI steps that request it")
+        stored = {
+            "steps_version": version,
+            "by_step": {key: _clean_input_note(note) for key, note in answers.items()},
+        }
+    else:
+        stored = _clean_input_note(payload)
+    stored["submitted_at"] = datetime.utcnow().isoformat()
     automation.pending_user_input = stored
     task = complimentary_task(automation.id, ROLE_INPUT)
     if task is not None:

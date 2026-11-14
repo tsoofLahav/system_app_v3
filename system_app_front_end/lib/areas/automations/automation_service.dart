@@ -120,11 +120,8 @@ class AutomationService {
     return Map<String, dynamic>.from(data);
   }
 
-  Future<List<Map<String, dynamic>>> inputTopics(int id) async {
-    final data = await _api.get('/automations/$id/input-topics') as List<dynamic>;
-    return [
-      for (final item in data)
-        if (item is Map) Map<String, dynamic>.from(item),
-    ];
+  Future<Map<String, dynamic>> inputFields(int id) async {
+    final data = await _api.get('/automations/$id/input-fields');
+    return Map<String, dynamic>.from(data as Map);
   }
 }

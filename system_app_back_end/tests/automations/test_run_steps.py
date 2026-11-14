@@ -76,3 +76,44 @@ def test_an_unknown_kind_stops_the_series():
     result = _run([{"kind": "nope"}], {})
     assert result["status"] == "failed"
     assert result["steps"][0]["error"] == "unknown step"
+
+
+def test_step_input_routes_by_position_even_for_repeated_actions():
+    from areas.automations.services.section_windows import input_steps_version
+
+    steps = [
+        {"kind": "ai", "action_id": 1, "requires_user_input": True},
+        {"kind": "ai", "action_id": 2},
+        {"kind": "ai", "action_id": 1, "requires_user_input": True},
+    ]
+    notes = {"1": {"text": "first"}, "3": {"by_topic": {"4": "third"}}}
+    seen = []
+
+    def action(**kwargs):
+        seen.append(kwargs["params"].get("user_input"))
+        return {"ok": True}
+
+    payload = {"by_step": notes, "steps_version": input_steps_version(steps)}
+    with (
+        patch.object(runner, "ACTIONS", {"ai": action}),
+        patch.object(runner, "resolve_scope", return_value={"workspace_id": 1}),
+    ):
+        result = runner.run_steps(
+            workspace_id=1, scope={}, steps=steps, user_input=payload
+        )
+        assert result["status"] == "ok"
+        assert seen == [notes["1"], None, notes["3"]]
+
+        seen.clear()
+        result = runner.run_steps(
+            workspace_id=1, scope={}, steps=steps[1:], user_input=payload
+        )
+        assert result["status"] == "failed"
+        assert seen == []
+
+        legacy = {"text": "shared"}
+        result = runner.run_steps(
+            workspace_id=1, scope={}, steps=steps, user_input=legacy
+        )
+        assert result["status"] == "ok"
+        assert seen == [legacy, legacy, legacy]

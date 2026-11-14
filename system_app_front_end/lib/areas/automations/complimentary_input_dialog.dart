@@ -19,19 +19,43 @@ Future<Map<String, dynamic>?> showComplimentaryInputDialog({
   required AppState state,
   required Automation automation,
 }) async {
-  final topics = await state.complimentaryInputTopics(automation.id);
+  final Map<String, dynamic> fields;
+  try {
+    fields = await state.complimentaryInputFields(automation.id);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+    return null;
+  }
   if (!context.mounted) return null;
+  final steps = (fields['steps'] as List).cast<Map<String, dynamic>>();
+  if (steps.isEmpty) return null;
   return showAppDialog<Map<String, dynamic>>(
     context: context,
-    builder: (ctx) => _ComplimentaryInputDialog(state: state, topics: topics),
+    builder: (ctx) => _ComplimentaryInputDialog(
+      state: state,
+      topics: (fields['topics'] as List).cast<Map<String, dynamic>>(),
+      steps: steps,
+      stepsVersion: fields['steps_version'] as String,
+    ),
   );
 }
 
 class _ComplimentaryInputDialog extends StatefulWidget {
-  const _ComplimentaryInputDialog({required this.state, required this.topics});
+  const _ComplimentaryInputDialog({
+    required this.state,
+    required this.topics,
+    required this.steps,
+    required this.stepsVersion,
+  });
 
   final AppState state;
   final List<Map<String, dynamic>> topics;
+  final List<Map<String, dynamic>> steps;
+  final String stepsVersion;
 
   @override
   State<_ComplimentaryInputDialog> createState() =>
@@ -39,9 +63,9 @@ class _ComplimentaryInputDialog extends StatefulWidget {
 }
 
 class _ComplimentaryInputDialogState extends State<_ComplimentaryInputDialog> {
-  late final TextEditingController _text;
-  late final FocusNode _focus;
-  final _answers = <int, String>{};
+  late final List<TextEditingController> _controllers;
+  final _firstFocus = FocusNode();
+  final _answers = <int, List<String>>{};
   var _index = 0;
   var _closing = false;
 
@@ -59,24 +83,29 @@ class _ComplimentaryInputDialogState extends State<_ComplimentaryInputDialog> {
     return null;
   }
 
-  int get _charCount => _text.text.trim().length;
-
-  bool get _overLimit => _charCount > complimentaryInputMaxChars;
+  bool get _overLimit => _controllers.any(
+    (controller) => controller.text.trim().length > complimentaryInputMaxChars,
+  );
 
   @override
   void initState() {
     super.initState();
-    _text = TextEditingController();
-    _text.addListener(_onTextChanged);
-    _focus = FocusNode();
-    _focusField();
+    _controllers = [
+      for (final _ in widget.steps)
+        TextEditingController()..addListener(_onTextChanged),
+    ];
+    runWhenKeyboardIdle(() {
+      if (mounted) _firstFocus.requestFocus();
+    });
   }
 
   @override
   void dispose() {
-    _text.removeListener(_onTextChanged);
-    _text.dispose();
-    _focus.dispose();
+    for (final controller in _controllers) {
+      controller.removeListener(_onTextChanged);
+      controller.dispose();
+    }
+    _firstFocus.dispose();
     super.dispose();
   }
 
@@ -85,52 +114,52 @@ class _ComplimentaryInputDialogState extends State<_ComplimentaryInputDialog> {
   }
 
   void _storeCurrent() {
-    final topic = _currentTopic;
-    if (topic != null && topic['id'] is int) {
-      _answers[topic['id'] as int] = _text.text.trim();
-    }
-  }
-
-  void _focusField() {
-    runWhenKeyboardIdle(() {
-      if (!mounted) return;
-      _focus.requestFocus();
-      _text.selection = TextSelection.collapsed(offset: _text.text.length);
-    });
+    _answers[_index] = [
+      for (final controller in _controllers) controller.text.trim(),
+    ];
   }
 
   void _showIndex(int index) {
-    _index = index;
-    final topic = widget.topics[index];
-    final id = topic['id'];
-    _text.text = id is int ? (_answers[id] ?? '') : '';
-    _focusField();
+    final currentIndex = _index;
+    runWhenKeyboardIdle(() {
+      if (!mounted || _closing || _overLimit || _index != currentIndex) return;
+      _storeCurrent();
+      setState(() => _index = index);
+      final answers = _answers[index];
+      for (final (field, controller) in _controllers.indexed) {
+        final text = answers?[field] ?? '';
+        controller.value = TextEditingValue(
+          text: text,
+          selection: TextSelection.collapsed(offset: text.length),
+        );
+      }
+      _firstFocus.requestFocus();
+    });
   }
 
-  Map<String, dynamic> _body() {
-    if (_perTopic || widget.topics.length == 1) {
-      return {
-        'by_topic': {
-          for (final topic in widget.topics)
-            if (topic['id'] is int)
-              '${topic['id']}': _answers[topic['id'] as int] ?? '',
-        },
-      };
-    }
-    return {'text': _text.text.trim()};
-  }
+  Map<String, dynamic> _body() => {
+    'steps_version': widget.stepsVersion,
+    'by_step': {
+      for (final (field, step) in widget.steps.indexed)
+        '${step['position']}': widget.topics.isEmpty
+            ? {'text': _answers[0]![field]}
+            : {
+                'by_topic': {
+                  for (final (page, topic) in widget.topics.indexed)
+                    '${topic['id']}': _answers[page]![field],
+                },
+              },
+    },
+  };
 
   void _finish() {
     if (_closing || _overLimit) return;
     _closing = true;
-    _storeCurrent();
-    Navigator.pop(context, _body());
-  }
-
-  void _next() {
-    if (_overLimit) return;
-    _storeCurrent();
-    setState(() => _showIndex(_index + 1));
+    runWhenKeyboardIdle(() {
+      if (!mounted) return;
+      _storeCurrent();
+      Navigator.pop(context, _body());
+    });
   }
 
   String _titleLabel() {
@@ -170,57 +199,85 @@ class _ComplimentaryInputDialogState extends State<_ComplimentaryInputDialog> {
         ),
         if (_perTopic && _index > 0)
           TextButton(
-            onPressed: _closing
-                ? null
-                : () {
-                    _storeCurrent();
-                    setState(() => _showIndex(_index - 1));
-                  },
+            onPressed: _closing ? null : () => _showIndex(_index - 1),
             child: Text(s['back']),
           ),
         FilledButton(
-          onPressed: _closing || over ? null : (last ? _finish : _next),
+          onPressed: _closing || over
+              ? null
+              : (last ? _finish : () => _showIndex(_index + 1)),
           child: Text(last ? s['submitInput'] : s['next']),
         ),
       ],
-      child: AppDialogField(
-        label: s['userInputTitle'],
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DialogFormattedField(
-              controller: _text,
-              focusNode: _focus,
-              strings: s,
-              minLines: 3,
-              maxLines: 12,
-              onEnter: () {
-                if (_closing || over) return;
-                if (last) {
-                  _finish();
-                } else {
-                  _next();
-                }
-              },
-            ),
-            const SizedBox(height: 4),
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(
-                over
-                    ? s.userInputOverLimit(complimentaryInputMaxChars)
-                    : s.userInputCharCount(
-                        _charCount,
-                        complimentaryInputMaxChars,
-                      ),
-                style: DialogFieldStyle.labelStyle.copyWith(
-                  color: over ? AppColors.destructive : AppColors.textHint,
-                ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (index, step) in widget.steps.indexed) ...[
+            if (index > 0) const SizedBox(height: 16),
+            _buildField(index, step, last: last),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildField(
+    int index,
+    Map<String, dynamic> step, {
+    required bool last,
+  }) {
+    final s = widget.state.strings;
+    final controller = _controllers[index];
+    final count = controller.text.trim().length;
+    final over = count > complimentaryInputMaxChars;
+    final name = (step[s.isRtl ? 'name_he' : 'name'] as String?)?.trim();
+    final fallbackName = (step['name'] as String?)?.trim();
+    final position = step['position'];
+    final label = name != null && name.isNotEmpty
+        ? name
+        : (fallbackName != null && fallbackName.isNotEmpty
+              ? fallbackName
+              : (s.isRtl ? 'פעולת AI $position' : 'AI step $position'));
+    final prompt = (step['prompt'] as String?)?.trim() ?? '';
+
+    return AppDialogField(
+      label: label,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (prompt.isNotEmpty) ...[Text(prompt), const SizedBox(height: 8)],
+          DialogFormattedField(
+            controller: controller,
+            focusNode: index == 0 ? _firstFocus : null,
+            strings: s,
+            minLines: 3,
+            maxLines: 12,
+            onEnter: widget.steps.length == 1
+                ? () {
+                    if (_closing || _overLimit) return;
+                    if (last) {
+                      _finish();
+                    } else {
+                      _showIndex(_index + 1);
+                    }
+                  }
+                : null,
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              over
+                  ? s.userInputOverLimit(complimentaryInputMaxChars)
+                  : s.userInputCharCount(count, complimentaryInputMaxChars),
+              style: DialogFieldStyle.labelStyle.copyWith(
+                color: over ? AppColors.destructive : AppColors.textHint,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

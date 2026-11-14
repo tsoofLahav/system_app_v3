@@ -25,6 +25,8 @@ from areas.automations.services.section_windows import (
     enrich_automation,
     ensure_complimentary_tasks,
     ensure_section_windows,
+    input_steps,
+    input_steps_version,
     input_topics,
     needs_complimentary_placement,
     pending_clears,
@@ -271,3 +273,14 @@ def automation_complete_review(automation_id):
 def automation_input_topics(automation_id):
     automation = get_or_404(Automation, automation_id)
     return jsonify(input_topics(automation))
+
+
+
+@automations_bp.route("/automations/<int:automation_id>/input-fields", methods=["GET"])
+def automation_input_fields(automation_id):
+    automation = get_or_404(Automation, automation_id)
+    return jsonify({
+        "topics": input_topics(automation),
+        "steps": input_steps(automation),
+        "steps_version": input_steps_version(automation.steps or []),
+    })

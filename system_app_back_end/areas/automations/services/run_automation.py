@@ -32,6 +32,21 @@ def run_steps(
         return {"status": "ok", "error": None, "steps": [], "scope": resolved,
                 "summary": "No active topics or files in scope; nothing to do."}
 
+    by_step = user_input.get("by_step") if isinstance(user_input, dict) else None
+    if by_step is not None:
+        from areas.automations.services.section_windows import input_steps_version
+
+        if (
+            not isinstance(by_step, dict)
+            or user_input.get("steps_version") != input_steps_version(steps or [])
+        ):
+            return {
+                "status": "failed",
+                "error": "automation steps changed; reopen the input dialog",
+                "steps": [],
+                "scope": resolved,
+            }
+
     for position, step in enumerate(steps or [], 1):
         kind = str(step.get("kind") or "")
         action = ACTIONS.get(kind)
@@ -42,8 +57,9 @@ def run_steps(
         params = {k: v for k, v in step.items() if k != "kind"}
         if kind == "ai" and (scope or {}).get("kind") == "topic_type":
             params["per_topic"] = True
-        if user_input:
-            params = {**params, "user_input": user_input}
+        step_input = by_step.get(str(position)) if by_step is not None else user_input
+        if step_input and (by_step is None or kind == "ai"):
+            params["user_input"] = step_input
         try:
             outcome = action(
                 workspace_id=workspace_id,
