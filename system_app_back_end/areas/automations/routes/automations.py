@@ -6,14 +6,15 @@ ever shared this table because both stored a prompt.
 
 from flask import Blueprint, jsonify, request
 
-from models import Automation, db
+from models import Automation, AutomationRun, db
 from shared.bootstrap import default_workspace_id
 from shared.helpers import apply_updates, get_or_404
 from areas.objects.services.delete_cascade import delete_automation_cascade
 from areas.automations.services.automation_schedule import (
     DEFAULT_AUTOMATION_TIMEZONE,
 )
-from areas.automations.services.run_automation import run_automation
+from areas.automations.services.run_automation import new_run, run_automation
+from areas.automations.services.input_queue import active_input_run, reconcile_input_runs
 from areas.automations.services.steps import StepError, validate_steps
 from areas.automations.services.section_windows import (
     KIND_SECTION_WINDOW,
@@ -75,6 +76,7 @@ def list_automations():
     workspace_id = _workspace_id_from_request()
     if workspace_id:
         ensure_section_windows(workspace_id)
+        reconcile_input_runs(workspace_id)
         close_expired_section_windows(workspace_id)
         db.session.commit()
     query = Automation.query
@@ -230,15 +232,31 @@ def run_automation_now(automation_id):
 
 @automations_bp.route("/automations/<int:automation_id>/submit-input", methods=["POST"])
 def submit_automation_input(automation_id):
-    automation = get_or_404(Automation, automation_id)
+    automation = Automation.query.filter_by(id=automation_id).with_for_update().first_or_404()
     data = request.get_json(silent=True) or {}
+    submission_id = data.get("submission_id")
+    if submission_id is not None:
+        if not isinstance(submission_id, str) or len(submission_id) != 32:
+            return jsonify({"error": "invalid submission identifier"}), 400
+        previous = AutomationRun.query.filter_by(
+            automation_id=automation_id, trigger_source="user_input",
+        ).filter(
+            AutomationRun.event_context["submission_id"].as_string() == submission_id,
+        ).first()
+        if previous is not None:
+            return jsonify({"run": previous.to_dict()}), 202
+    if active_input_run(automation_id) is not None:
+        return jsonify({"error": "The automation is already processing input"}), 409
     try:
         stored = store_user_input(automation, data)
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
-    run = run_automation(automation, trigger_source="user_input", user_input=stored)
+    run = new_run(automation, "user_input", stored, status="queued")
+    run.event_context = {
+        **run.event_context, "queued_input": True, "submission_id": submission_id,
+    }
     db.session.commit()
-    return jsonify({"run": run.to_dict(), "user_input": stored})
+    return jsonify({"run": run.to_dict(), "user_input": stored}), 202
 
 
 @automations_bp.route("/automations/<int:automation_id>/clear-leftovers", methods=["POST"])

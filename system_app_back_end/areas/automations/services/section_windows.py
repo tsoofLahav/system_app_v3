@@ -234,7 +234,10 @@ def enrich_automation(automation: Automation, now: datetime | None = None) -> di
     data["attention"] = attention_for_window(automation, now)
     latest = (AutomationRun.query.filter_by(automation_id=automation.id)
               .order_by(AutomationRun.id.desc()).first())
-    data["running"] = bool(latest and latest.status == "running")
+    data["running"] = bool(latest and latest.status in ("queued", "running"))
+    data["input_run_failed"] = bool(
+        latest and latest.trigger_source == "user_input" and latest.status == "failed"
+    )
     data["review_ready"] = bool(latest and latest.status == "completed")
     data["has_pending_review"] = False
     if (automation.kind or KIND_STANDARD) == KIND_STANDARD:
@@ -938,6 +941,21 @@ def complete_review_if_clear(automation: Automation) -> bool:
         return False
     _mark_complimentary(automation, ROLE_REVIEW, done=True)
     return True
+
+
+def finish_input_run(automation: Automation, run: AutomationRun) -> None:
+    # A window reset or a newer submission can replace this occurrence's input.
+    db.session.refresh(automation, attribute_names=["pending_user_input"])
+    if automation.pending_user_input != (run.event_context or {}).get("user_input"):
+        return
+    if run.status == "completed":
+        mark_input_done(automation)
+        return
+    task = complimentary_task(automation.id, ROLE_INPUT)
+    if task is not None:
+        cycle = dict(task.complimentary_cycle or {})
+        cycle.pop("input_received", None)
+        task.complimentary_cycle = cycle
 
 
 def mark_input_done(automation: Automation) -> None:

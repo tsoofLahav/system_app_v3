@@ -90,25 +90,34 @@ def run_automation(
     user_input: dict | None = None,
 ) -> AutomationRun:
     """Run it and record it. The caller commits."""
-    from areas.automations.services.section_windows import (
-        KIND_SECTION_WINDOW,
-        mark_input_done,
-    )
+    run = new_run(automation, trigger_source, user_input, status="running")
+    # Publish the running record before slow AI work.
+    db.session.commit()
+    return execute_run(automation, run)
 
+
+def new_run(automation, trigger_source, user_input=None, *, status):
     from .section_windows import input_topics
-    from .review_tracking import capture_review_refs, pending_for_run
+
     run = AutomationRun(
         automation_id=automation.id,
-        status="running",
+        status=status,
         trigger_source=trigger_source,
-        event_context={"user_input": user_input,
-                       "review_topic_ids": [t["id"] for t in input_topics(automation)],
-                       "reviewed_topic_ids": []},
+        event_context={
+            "user_input": user_input,
+            "review_topic_ids": [t["id"] for t in input_topics(automation)],
+            "reviewed_topic_ids": [],
+        },
     )
     db.session.add(run)
-    # Publish running state (and the opened window) before slow AI work.
-    db.session.commit()
+    return run
 
+
+def execute_run(automation: Automation, run: AutomationRun) -> AutomationRun:
+    from .section_windows import KIND_SECTION_WINDOW, finish_input_run, mark_input_done
+    from .review_tracking import capture_review_refs, pending_for_run
+
+    user_input = (run.event_context or {}).get("user_input")
     now_utc = datetime.utcnow()
     now = wall_clock(now_utc, automation.timezone)
     if (automation.kind or "standard") == KIND_SECTION_WINDOW:
@@ -136,7 +145,8 @@ def run_automation(
     run.error = result.get("error")
     run.finished_at = datetime.utcnow()
     automation.last_run_at = run.finished_at
-    if (automation.kind or "standard") != KIND_SECTION_WINDOW and run.status == "completed":
+    if run.trigger_source == "user_input":
+        finish_input_run(automation, run)
+    elif (automation.kind or "standard") != KIND_SECTION_WINDOW and run.status == "completed":
         mark_input_done(automation)
-        # The user acknowledges the walkthrough, including topics with no changes.
     return run

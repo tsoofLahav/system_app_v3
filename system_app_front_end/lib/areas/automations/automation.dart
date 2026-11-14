@@ -17,6 +17,7 @@ class Automation {
     required this.name,
     this.nameHe = '',
     this.running = false,
+    this.inputRunFailed = false,
     this.reviewReady = false,
     this.trigger = const {},
     this.scope = const {},
@@ -40,6 +41,7 @@ class Automation {
   });
 
   final bool running;
+  final bool inputRunFailed;
   final bool reviewReady;
   final int id;
   final int workspaceId;
@@ -84,6 +86,7 @@ class Automation {
     final steps = json['steps'];
     return Automation(
       running: json['running'] == true,
+      inputRunFailed: json['input_run_failed'] == true,
       reviewReady: json['review_ready'] == true,
       id: json['id'] as int,
       workspaceId: json['workspace_id'] as int,

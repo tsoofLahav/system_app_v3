@@ -147,6 +147,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     _archiveSearchDebounce?.cancel();
     _launchSnapshotWriteTimer?.cancel();
     _sectionWindowPoll?.cancel();
+    _automationStatusExpiry?.cancel();
     refreshing.dispose();
     super.dispose();
   }
@@ -234,6 +235,19 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   final Set<int> archiveDeleteSelection = {};
   Map<String, dynamic>? pendingAgentReview;
   final Set<int> complimentaryProcessingIds = {};
+  final complimentaryInputDrafts = <int, Map<String, dynamic>>{};
+  Timer? _automationStatusExpiry;
+  bool automationStatusUnavailable = false;
+
+  void _confirmAutomationStatus() {
+    _automationStatusExpiry?.cancel();
+    automationStatusUnavailable = false;
+    if (!automations.any((automation) => automation.running)) return;
+    _automationStatusExpiry = Timer(const Duration(seconds: 60), () {
+      automationStatusUnavailable = true;
+      runWhenKeyboardIdle(notifyListeners);
+    });
+  }
   _TypeTemplateEdit? _typeTemplateEdit;
 
   /// Live file records by id. Topic lists and Home visits are views of this —
@@ -2167,7 +2181,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       }
       final next = await _automations.list(workspaceId: workspaceId);
       if (_retired) return;
-      var changed = refreshAll ||
+      var changed = refreshAll || automationStatusUnavailable ||
           _automationAttentionSignature(next) != _automationAttentionSignature(automations);
       // Memberships also change on another device without an attention transition.
       if (isViewMode) {
@@ -2175,6 +2189,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         changed = true;
       }
       automations = next;
+      _confirmAutomationStatus();
       changed = await _refreshSharedFileOrder() || changed;
       if (_retired) return;
       await DocumentEditorRegistry.synchronizeAll();
@@ -2364,13 +2379,15 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   String _automationAttentionSignature(List<Automation> rows) {
     return [
       for (final a in rows)
-        '${a.id}:${a.attention}:${a.windowOpen}:${a.hasPendingClear}:${a.hasPendingReview}:${a.enabled}:${a.schedule}',
+        '${a.id}:${a.running}:${a.inputRunFailed}:${a.attention}:${a.windowOpen}:${a.hasPendingClear}:${a.hasPendingReview}:${a.enabled}:${a.schedule}',
     ].join('|');
   }
 
   Future<void> loadAutomations() async {
     if (workspaceId == null) return;
     automations = await _automations.list(workspaceId: workspaceId);
+    if (_retired) return;
+    _confirmAutomationStatus();
     _syncSectionAttentionNotifications();
     notifyListeners();
   }
@@ -4985,18 +5002,20 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   bool isComplimentaryProcessing(int automationId) =>
       complimentaryProcessingIds.contains(automationId) ||
-      automations.any((a) => a.id == automationId && a.running);
+      (!automationStatusUnavailable &&
+          automations.any((a) => a.id == automationId && a.running));
 
   Future<Map<String, dynamic>> submitComplimentaryInput(
     int automationId,
     Map<String, dynamic> body,
   ) async {
+    complimentaryInputDrafts[automationId] = body;
     complimentaryProcessingIds.add(automationId);
     notifyListeners();
     try {
       final result = await _automations.submitInput(automationId, body);
-      await loadAutomations();
-      if (isViewMode) await refreshCurrentView();
+      complimentaryInputDrafts.remove(automationId);
+      unawaited(refreshSectionWindows());
       return result;
     } finally {
       complimentaryProcessingIds.remove(automationId);

@@ -584,6 +584,9 @@ class AppStrings {
     'complimentaryInputTitle': '{name} automation task',
     'complimentaryReviewTitle': '{name} review task',
     'inputAlreadyReceived': 'User input was already received',
+    'automationInputFailed': 'The automation did not finish. Open the task to try again.',
+    'automationStatusUnavailable': 'Unable to verify the automation status.',
+    'automationInputUnconfirmed': 'No confirmation received. Your input is available when you reopen the task.',
     'reviewInProcess': 'Review is in process',
     'leftoverClearTitle': 'Unfinished tasks',
     'leftoverClearBody':
@@ -1382,6 +1385,9 @@ class AppStrings {
     'complimentaryInputTitle': '{name} משימת אוטומציה',
     'complimentaryReviewTitle': '{name} משימת סקירה',
     'inputAlreadyReceived': 'הקלט מהמשתמש כבר התקבל',
+    'automationInputFailed': 'האוטומציה לא הסתיימה. אפשר לפתוח את המשימה ולנסות שוב.',
+    'automationStatusUnavailable': 'לא ניתן לבדוק את מצב האוטומציה.',
+    'automationInputUnconfirmed': 'לא התקבל אישור מהשרת. הקלט זמין בפתיחה חוזרת של המשימה.',
     'reviewInProcess': 'הסקירה בתהליך',
     'leftoverClearTitle': 'משימות שלא הסתיימו',
     'leftoverClearBody':

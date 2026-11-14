@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
@@ -33,13 +36,21 @@ Future<Map<String, dynamic>?> showComplimentaryInputDialog({
   if (!context.mounted) return null;
   final steps = (fields['steps'] as List).cast<Map<String, dynamic>>();
   if (steps.isEmpty) return null;
+  final version = fields['steps_version'] as String;
+  final localDraft = state.complimentaryInputDrafts[automation.id];
+  final savedInput = automation.inputRunFailed
+      ? automation.pendingUserInput
+      : null;
+  final draft = localDraft ?? savedInput;
   return showAppDialog<Map<String, dynamic>>(
     context: context,
     builder: (ctx) => _ComplimentaryInputDialog(
       state: state,
       topics: (fields['topics'] as List).cast<Map<String, dynamic>>(),
       steps: steps,
-      stepsVersion: fields['steps_version'] as String,
+      stepsVersion: version,
+      draft: draft?['steps_version'] == version ? draft : null,
+      retrySubmission: localDraft != null && !automation.inputRunFailed,
     ),
   );
 }
@@ -50,12 +61,16 @@ class _ComplimentaryInputDialog extends StatefulWidget {
     required this.topics,
     required this.steps,
     required this.stepsVersion,
+    required this.draft,
+    required this.retrySubmission,
   });
 
   final AppState state;
   final List<Map<String, dynamic>> topics;
   final List<Map<String, dynamic>> steps;
   final String stepsVersion;
+  final Map<String, dynamic>? draft;
+  final bool retrySubmission;
 
   @override
   State<_ComplimentaryInputDialog> createState() =>
@@ -90,9 +105,16 @@ class _ComplimentaryInputDialogState extends State<_ComplimentaryInputDialog> {
   @override
   void initState() {
     super.initState();
+    final notes = widget.draft?['by_step'] as Map?;
+    for (var page = 0; page < max(1, widget.topics.length); page++) {
+      _answers[page] = [
+        for (final step in widget.steps)
+          _draftText(notes?['${step['position']}'], page),
+      ];
+    }
     _controllers = [
-      for (final _ in widget.steps)
-        TextEditingController()..addListener(_onTextChanged),
+      for (final text in _answers[0]!)
+        TextEditingController(text: text)..addListener(_onTextChanged),
     ];
     runWhenKeyboardIdle(() {
       if (mounted) _firstFocus.requestFocus();
@@ -107,6 +129,13 @@ class _ComplimentaryInputDialogState extends State<_ComplimentaryInputDialog> {
     }
     _firstFocus.dispose();
     super.dispose();
+  }
+
+  String _draftText(Object? note, int page) {
+    if (note is! Map) return '';
+    if (widget.topics.isEmpty) return note['text'] as String? ?? '';
+    final topic = widget.topics[page];
+    return (note['by_topic'] as Map?)?['${topic['id']}'] as String? ?? '';
   }
 
   void _onTextChanged() {
@@ -158,7 +187,20 @@ class _ComplimentaryInputDialogState extends State<_ComplimentaryInputDialog> {
     runWhenKeyboardIdle(() {
       if (!mounted) return;
       _storeCurrent();
-      Navigator.pop(context, _body());
+      final body = _body();
+      final sameInput =
+          jsonEncode(widget.draft?['by_step']) == jsonEncode(body['by_step']);
+      body['submission_id'] = widget.retrySubmission && sameInput
+          ? (widget.draft?['submission_id'])
+          : null;
+      if (body['submission_id'] == null) {
+        final random = Random.secure();
+        body['submission_id'] = List.generate(
+          16,
+          (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+        ).join();
+      }
+      Navigator.pop(context, body);
     });
   }
 

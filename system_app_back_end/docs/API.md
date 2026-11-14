@@ -203,7 +203,7 @@ A scope, a trigger, and an ordered series of steps. Saved AI actions are a diffe
 | PATCH | `/automations/<id>` | Partial update of those fields |
 | DELETE | `/automations/<id>` | Delete (cascades runs and complimentary tasks) |
 | POST | `/automations/<id>/run` | Run now on the **stored** scope — same walk the clock would do |
-| POST | `/automations/<id>/submit-input` | Store user input and run. Accepts `steps_version` and `by_step` (position to `{text}` or `{by_topic}`), or a legacy shared note. |
+| POST | `/automations/<id>/submit-input` | Store user input, enqueue a background run and return HTTP 202. A repeated `submission_id` returns the original run. Accepts `steps_version` and `by_step` (position to `{text}` or `{by_topic}`), or a legacy shared note. |
 | POST | `/automations/<id>/clear-leftovers` | Approve leftover recycle / archive |
 | GET | `/automations/<id>/review-status` | Pending review file ids for complimentary review |
 | POST | `/automations/<id>/complete-review` | Mark the review task done if nothing is pending |

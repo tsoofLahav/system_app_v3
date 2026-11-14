@@ -232,3 +232,5 @@ topic. Automation ownership and object connections are not copied. Each paste
 reads the latest source, so a deleted source cannot be pasted.
 
 Connect-info choices exclude archived information pieces and info whose file or topic is archived. The graph API exposes `is_archived` for this picker filter; existing links remain intact.
+
+Complimentary task titles display an error indicator for failed input runs or unavailable run status. Within an open window, a failed input run can reopen the input dialog with the saved answers.

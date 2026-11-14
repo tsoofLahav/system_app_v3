@@ -89,7 +89,9 @@ class AutomationService {
     Map<String, dynamic> body,
   ) async {
     final data =
-        await _api.post('/automations/$id/submit-input', body)
+        await _api
+                .post('/automations/$id/submit-input', body)
+                .timeout(const Duration(seconds: 20))
             as Map<String, dynamic>;
     return Map<String, dynamic>.from(data);
   }

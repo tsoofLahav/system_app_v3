@@ -22,6 +22,7 @@ from areas.automations.services.automation_schedule import (
     plan_tick,
 )
 from areas.automations.services.run_automation import run_automation
+from areas.automations.services.input_queue import drain_input_queue
 from areas.automations.services.section_windows import (
     KIND_SECTION_WINDOW,
     KIND_STANDARD,
@@ -137,6 +138,7 @@ def tick(now: datetime | None = None) -> int:
 def main() -> int:
     with app.app_context():
         tick()
+        drain_input_queue()
     return 0
 
 

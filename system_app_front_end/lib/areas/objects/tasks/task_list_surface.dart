@@ -78,7 +78,9 @@ bool complimentaryTaskPressable({
   required bool processing,
 }) {
   if (!task.isActive || processing || !windowOpen) return false;
-  if (task.isInputComplimentary) return !task.complimentaryInputReceived;
+  if (task.isInputComplimentary) {
+    return !task.complimentaryInputReceived || (automation?.inputRunFailed ?? false);
+  }
   return (automation?.hasPendingReview ?? false) || (automation?.reviewReady ?? false);
 }
 
@@ -1944,7 +1946,15 @@ class TaskListSurfaceState extends State<TaskListSurface> {
       processing: processing,
     );
     final reviewPending = automation?.hasPendingReview ?? false;
-    final tooltip = task.isInputComplimentary
+    final statusUnavailable = widget.state.automationStatusUnavailable &&
+        (automation?.running ?? false);
+    final inputFailed = task.isInputComplimentary &&
+        (automation?.inputRunFailed ?? false);
+    final tooltip = inputFailed
+        ? s['automationInputFailed']
+        : statusUnavailable
+        ? s['automationStatusUnavailable']
+        : task.isInputComplimentary
         ? (task.complimentaryInputReceived || task.isDone
               ? s['inputAlreadyReceived']
               : null)
@@ -1963,6 +1973,12 @@ class TaskListSurfaceState extends State<TaskListSurface> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(child: text),
+            if (!processing && (inputFailed || statusUnavailable))
+              Padding(
+                padding: const EdgeInsetsDirectional.only(start: 8),
+                child: Icon(Icons.error_outline, size: 14,
+                    color: Theme.of(context).colorScheme.error),
+              ),
             if (processing)
               const Padding(
                 padding: EdgeInsetsDirectional.only(start: 8),
@@ -2001,7 +2017,7 @@ class TaskListSurfaceState extends State<TaskListSurface> {
     if (automation == null) return;
     if (task.isInputComplimentary) {
       if (task.isDone ||
-          task.complimentaryInputReceived ||
+          (task.complimentaryInputReceived && !automation.inputRunFailed) ||
           widget.state.isComplimentaryProcessing(automationId)) {
         return;
       }
@@ -2017,7 +2033,9 @@ class TaskListSurfaceState extends State<TaskListSurface> {
         if (!mounted) return;
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('$e')));
+        ).showSnackBar(SnackBar(content: Text(e is TimeoutException
+              ? widget.state.strings['automationInputUnconfirmed']
+              : '$e')));
       }
       return;
     }
